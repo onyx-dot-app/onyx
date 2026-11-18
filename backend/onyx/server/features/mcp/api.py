@@ -277,9 +277,10 @@ def _apply_access(
                     row.plugin_id,
                     PluginAccessUpdate(user_shares=[], group_shares=[]),
                     db_session,
+                    token_may_manage=True,
                 )
                 affected |= publish_plugin_for_user__no_commit(
-                    user, row.plugin_id, db_session
+                    user, row.plugin_id, db_session, token_may_manage=True
                 )
             continue
         if row.in_organization_library:
@@ -307,6 +308,7 @@ def _apply_access(
                 ],
             ),
             db_session,
+            token_may_manage=True,
         )
         if row.author_user_id is not None and row.author_user_id in users:
             add_author_share__no_commit(row.plugin_id, row.author_user_id, db_session)
