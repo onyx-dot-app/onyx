@@ -944,8 +944,6 @@ async def test_resolve_context_null_row_config_returns_none(
 def test_discovery_under_contention_works_on_each_new_event_loop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The sync refresh runs each call on a new event loop. A discovery lock
-    that waited on one loop must not break the discovery on the next one."""
     config_url = "https://idp.example.com/.well-known/openid-configuration"
 
     async def slow_get(*_args: Any, **_kwargs: Any) -> MagicMock:

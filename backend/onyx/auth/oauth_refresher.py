@@ -68,7 +68,6 @@ _OIDC_DISCOVERY_LOCKS_GUARD = threading.Lock()
 
 
 def _get_discovery_lock(config_url: str) -> asyncio.Lock:
-    """Get-or-create the discovery lock of the running loop for one URL."""
     loop = asyncio.get_running_loop()
     with _OIDC_DISCOVERY_LOCKS_GUARD:
         locks = _OIDC_DISCOVERY_LOCKS.setdefault(loop, {})
