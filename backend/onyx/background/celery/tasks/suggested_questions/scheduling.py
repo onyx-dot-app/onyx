@@ -197,6 +197,13 @@ def topup_allowed(record: UserRecord, now: datetime) -> bool:
     )
 
 
+def fresh_document_ids(pool: QuestionPool, now: datetime) -> set[str]:
+    """Documents with a question young enough to show. A document whose
+    question expired may get a new one."""
+    max_age = timedelta(days=SQ_QUESTION_MAX_AGE_DAYS)
+    return {q.document_id for q in pool.questions if now - q.created_at < max_age}
+
+
 def count_usable_questions(
     pool: QuestionPool, live_document_ids: set[str], now: datetime
 ) -> int:

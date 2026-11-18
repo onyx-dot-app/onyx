@@ -11,7 +11,7 @@ documents instead and must fail the search test.
 import json
 import re
 import sys
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any
@@ -35,6 +35,7 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.indexing.models import ChunkEmbedding
 from onyx.key_value_store.factory import get_kv_store
+from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.llm.decisions.models import (
     ChoiceAnswer,
     DecisionAnswer,
@@ -118,52 +119,63 @@ def seeded(
     dim = search_settings.final_embedding_dim
     pair = make_cc_pair(db_session)
     index = get_default_document_index(search_settings, None)
-    now = datetime.now(UTC)
-    for name, _, _ in DOCS:
-        db_session.add(
-            DbDocument(
-                id=ids[name], semantic_id=ids[name], chunk_count=1, last_synced=now
-            )
-        )
-    db_session.commit()
-    upsert_document_by_connector_credential_pair(
-        db_session, pair.connector_id, pair.credential_id, list(ids.values())
-    )
-    access = get_access_for_documents(list(ids.values()), db_session)
-    cc_pair_ids = get_cc_pair_ids_for_documents(db_session, list(ids.values()))
-    for name, slot, text in DOCS:
-        doc_id = ids[name]
-        vector = [1.0 if i == slot else 0.0 for i in range(dim)]
-        chunk = make_chunk(doc_id, content=text)
-        chunk = chunk.model_copy(
-            update={
-                # The title the triage and writing prompts show.
-                "source_document": chunk.source_document.model_copy(
-                    update={"semantic_identifier": doc_id}
-                ),
-                "access": access[doc_id],
-                "cc_pair_ids": cc_pair_ids.get(doc_id),
-                "embeddings": ChunkEmbedding(
-                    full_embedding=vector, mini_chunk_embeddings=[]
-                ),
-            }
-        )
-        index.index(
-            chunks=[chunk], indexing_metadata=make_indexing_metadata([doc_id], [0], [1])
-        )
-    OpenSearchIndexClient(index_name=search_settings.index_name).refresh_index()
-    _clear_pool()
+    # Clean up whatever setup created, even if setup fails part way.
     try:
+        _clear_pool()
+        now = datetime.now(UTC)
+        for name, _, _ in DOCS:
+            db_session.add(
+                DbDocument(
+                    id=ids[name], semantic_id=ids[name], chunk_count=1, last_synced=now
+                )
+            )
+        db_session.commit()
+        upsert_document_by_connector_credential_pair(
+            db_session, pair.connector_id, pair.credential_id, list(ids.values())
+        )
+        access = get_access_for_documents(list(ids.values()), db_session)
+        cc_pair_ids = get_cc_pair_ids_for_documents(db_session, list(ids.values()))
+        for name, slot, text in DOCS:
+            doc_id = ids[name]
+            vector = [1.0 if i == slot else 0.0 for i in range(dim)]
+            chunk = make_chunk(doc_id, content=text)
+            chunk = chunk.model_copy(
+                update={
+                    # The title the triage and writing prompts show.
+                    "source_document": chunk.source_document.model_copy(
+                        update={"semantic_identifier": doc_id}
+                    ),
+                    "access": access[doc_id],
+                    "cc_pair_ids": cc_pair_ids.get(doc_id),
+                    "embeddings": ChunkEmbedding(
+                        full_embedding=vector, mini_chunk_embeddings=[]
+                    ),
+                }
+            )
+            index.index(
+                chunks=[chunk],
+                indexing_metadata=make_indexing_metadata([doc_id], [0], [1]),
+            )
+        OpenSearchIndexClient(index_name=search_settings.index_name).refresh_index()
         yield {"ids": ids, "dim": dim}
     finally:
-        _clear_pool()
-        for doc_id in ids.values():
-            index.delete(doc_id)
-        cleanup_cc_pair(db_session, pair)
+        # Each step runs even if an earlier one fails; failures are reported.
+        steps: list[Callable[[], object]] = [_clear_pool]
+        steps += [lambda d=doc_id: index.delete(d) for doc_id in ids.values()]
+        steps.append(lambda: cleanup_cc_pair(db_session, pair))
+        errors = []
+        for step in steps:
+            try:
+                step()
+            except Exception as e:
+                errors.append(e)
+        if errors:
+            raise ExceptionGroup("suggested-questions test cleanup failed", errors)
 
 
 def _clear_pool() -> None:
-    with suppress(Exception):
+    # Only a missing pool is fine; any other error must stop the test.
+    with suppress(KvKeyNotFoundError):
         get_kv_store().delete(KV_SUGGESTED_QUESTIONS_POOL_KEY)
 
 
@@ -233,6 +245,16 @@ def models(seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> dict[str,
         "EmbeddingModel",
         MagicMock(from_db_model=MagicMock(return_value=embedder)),
     )
+    # Spy on the real search, to see what each question actually returned.
+    real_search = verification._search_everything
+    state["searched"] = {}
+
+    def spy(query: str, *args: Any) -> Any:
+        chunks = real_search(query, *args)
+        state["searched"][query] = [chunk.document_id for chunk in chunks]
+        return chunks
+
+    monkeypatch.setattr(verification, "_search_everything", spy)
     monkeypatch.setattr(tasks, "build_triage_clients", lambda: [decision_client])
     monkeypatch.setattr(tasks, "build_writing_llms", lambda: [llm])
     monkeypatch.setattr(tasks, "is_enabled", lambda: True)
@@ -261,7 +283,9 @@ def test_a_pool_run_keeps_answerable_questions_and_never_shows_private_text(
     # Each answerable question found its own document first.
     assert {ids[n] for n in QUESTIONS} <= set(by_document)
     assert all(by_document[ids[n]].search_position == 0 for n in QUESTIONS)
-    # The off-topic question found only decoys, so it failed the search test.
+    # The off-topic search ran and found only decoys, so it failed the test.
+    top_three = list(dict.fromkeys(models["searched"][OFF_TOPIC]))[:3]
+    assert set(top_three) == {ids[n] for n in ("decoy-a", "decoy-b", "decoy-c")}
     assert OFF_TOPIC not in {q.text for q in pool.questions}
     # Triage dropped the salary chunk before the writing call.
     assert all("Jordan Reyes" not in prompt for prompt in models["prompts"])

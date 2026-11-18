@@ -1,5 +1,5 @@
 from contextlib import nullcontext
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -68,15 +68,21 @@ def run(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     set_(tasks, "choose_documents", lambda *_a, **_kw: state["candidates"])
     set_(tasks, "fetch_chunks", lambda *_a: [])
     set_(tasks, "build_triage_clients", list)
-    set_(tasks, "triage_chunks", MagicMock(return_value=[]))
+    state["triage"] = MagicMock(return_value=[])
+    set_(tasks, "triage_chunks", state["triage"])
     set_(tasks, "best_chunks_per_document", lambda t: t)
     set_(tasks, "build_writing_llms", lambda: [MagicMock()])
     state["write"] = MagicMock(return_value=[])
     set_(tasks, "write_questions", state["write"])
     set_(tasks, "load_settings", lambda: MagicMock(company_name="Acme"))
 
-    def search(drafts: list[Any], user: User | None) -> list[PoolQuestion]:  # noqa: ARG001
+    def search(
+        drafts: list[Any],  # noqa: ARG001
+        user: User | None,
+        timeout_s: float | None = None,
+    ) -> list[PoolQuestion]:
         state["search_user"] = user
+        state["search_timeout"] = timeout_s
         return [_question("new")]
 
     set_(tasks, "run_search_test", search)
@@ -109,6 +115,7 @@ def test_pool_run_skipped_makes_no_model_call(run: dict[str, Any]) -> None:
 
     _pool_task()
 
+    run["triage"].assert_not_called()
     run["write"].assert_not_called()
     assert run["saved"] is None
 
@@ -207,6 +214,7 @@ def test_topup_stops_before_any_model_call(
 
     _topup(person)
 
+    run["triage"].assert_not_called()
     run["write"].assert_not_called()
     assert run["topups"] == []
     assert run["saved"] is None
@@ -239,3 +247,87 @@ def test_an_unknown_trial_status_skips_the_run_quietly(
 
     assert run["saved"] is None
     retry.assert_not_called()
+
+
+def _old_question(document_id: str) -> PoolQuestion:
+    question = _question(document_id)
+    return question.model_copy(
+        update={"created_at": question.created_at - timedelta(days=8)}
+    )
+
+
+def test_expired_questions_free_their_documents(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run["pool"] = QuestionPool(questions=[_question("fresh"), _old_question("expired")])
+    excluded: list[set[str]] = []
+    monkeypatch.setattr(
+        tasks,
+        "choose_documents",
+        lambda _s, _people, exclude, **_kw: (
+            excluded.append(set(exclude)) or run["candidates"]
+        ),
+    )
+
+    _pool_task()
+
+    assert excluded == [{"fresh"}]
+    assert {q.document_id for q in run["saved"].questions} == {"fresh", "new"}
+
+
+def test_passages_keep_the_candidates_order(run: dict[str, Any]) -> None:
+    run["candidates"] = [
+        CandidateDocument(document_id=d, kind=QuestionKind.DOCUMENT)
+        for d in ("private", "shared")
+    ]
+    passages = [
+        MagicMock(chunk=MagicMock(document_id=d)) for d in ("shared", "private")
+    ]
+    run["triage"].return_value = passages
+
+    _pool_task()
+
+    written = run["write"].call_args.args[0]
+    assert [p.chunk.document_id for p in written] == ["private", "shared"]
+    assert run["search_timeout"] is not None
+
+
+def test_no_save_when_the_pool_lock_may_have_expired(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(tasks, "SQ_POOL_LOCK_HELD_S", 0.0)
+    monkeypatch.setattr(tasks, "SQ_SAVE_MARGIN_S", 0.0)
+    retry = MagicMock(side_effect=Retry())
+    monkeypatch.setattr(tasks.generate_suggested_questions_pool, "retry", retry)
+
+    with pytest.raises(Retry):
+        _pool_task()
+
+    assert run["saved"] is None
+
+
+def test_a_retry_finishes_its_recorded_topup(
+    run: dict[str, Any], person: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The first attempt recorded the top-up, so the gap check would refuse it.
+    monkeypatch.setattr(tasks, "topup_allowed", lambda *_a: False)
+    topup_task: Any = tasks.generate_suggested_questions_for_user
+
+    topup_task.run(tenant_id="tenant", user_id=str(person.id), recorded=True)
+
+    assert run["topups"] == []  # not counted twice
+    assert run["saved"] is not None
+
+
+def test_a_failed_topup_retries_as_recorded(
+    run: dict[str, Any], person: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run["write"].side_effect = RuntimeError("no model")
+    retry = MagicMock(side_effect=Retry())
+    monkeypatch.setattr(tasks.generate_suggested_questions_for_user, "retry", retry)
+
+    with pytest.raises(Retry):
+        _topup(person)
+
+    assert run["topups"] == [person.id]
+    assert retry.call_args.kwargs["kwargs"]["recorded"] is True
