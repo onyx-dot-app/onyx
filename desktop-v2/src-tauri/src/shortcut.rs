@@ -11,7 +11,11 @@ pub fn register(app: &AppHandle, accelerator: &str) -> Result<(), String> {
                 windows::toggle_launcher(app);
             }
         })
-        .map_err(|e| format!("Could not use {accelerator} as the shortcut: {e}"))
+        .map_err(|e| {
+            // The library's message is for the log, not the settings window.
+            log::warn!("could not register {accelerator}: {e}");
+            "That shortcut is not available. Try a different one.".to_string()
+        })
 }
 
 pub fn is_registered(app: &AppHandle, accelerator: &str) -> bool {

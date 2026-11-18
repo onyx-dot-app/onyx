@@ -29,25 +29,37 @@ pub struct SearchHit {
 pub struct AuthMethods {
     pub password: bool,
     pub sso: Vec<SsoOption>,
-    /// The server's OAuth sign-in (`/api/auth/oauth/authorize`) is configured,
-    /// so SSO can run in the system browser.
-    pub browser_sso: bool,
 }
+
+/// The legacy built-in Google sign-in, configured by environment variables.
+pub const LEGACY_OAUTH_AUTHORIZE: &str = "/api/auth/oauth/authorize";
 
 /// One SSO button on the login window.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SsoOption {
     pub label: String,
-    /// True for the server's built-in Google sign-in, which runs in the
-    /// system browser; false for sign-in on the server's own login page in an
-    /// app window (provider rows, and cloud workspaces).
+    /// True when sign-in runs in the system browser, which already has the
+    /// user's identity provider session; false for sign-in on the server's
+    /// login page in an app window.
     pub browser: bool,
+    /// The provider row this button starts (`None` for the legacy Google
+    /// sign-in and for the server's login page).
+    pub provider: Option<String>,
+    /// Server path that starts the browser sign-in. Kept in the app: the page
+    /// only names the button it was given.
+    #[serde(skip)]
+    pub authorize_path: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct SsoProvider {
+    name: String,
     display_name: String,
+    authorize_url: String,
+    /// Set by servers whose provider sign-in takes the native-app parameters.
+    #[serde(default)]
+    native_app_sso: bool,
 }
 
 #[derive(Deserialize)]
@@ -60,6 +72,52 @@ struct AuthTypeResponse {
     oauth_enabled: bool,
     #[serde(default)]
     sso_providers: Vec<SsoProvider>,
+}
+
+/// The SSO buttons for a server's `GET /api/auth/type` answer.
+fn sso_options(parsed: &AuthTypeResponse) -> Vec<SsoOption> {
+    // Cloud (multi-tenant) servers can require a CAPTCHA before the OAuth
+    // callback, which only their login page can pass, so cloud sign-in
+    // always uses that page in an app window.
+    let browser_allowed = !parsed.multi_tenant;
+    let mut sso: Vec<SsoOption> = parsed
+        .sso_providers
+        .iter()
+        .map(|p| {
+            // Only the OIDC router's authorize path takes the app parameters.
+            let browser = browser_allowed
+                && p.native_app_sso
+                && p.authorize_url.starts_with("/api/auth/oidc/");
+            SsoOption {
+                label: p.display_name.clone(),
+                browser,
+                provider: Some(p.name.clone()),
+                authorize_path: browser.then(|| p.authorize_url.clone()),
+            }
+        })
+        .collect();
+    // `oauth_enabled` is the legacy built-in Google sign-in. Servers that
+    // list provider rows serve Google through a row instead.
+    if browser_allowed && parsed.oauth_enabled && parsed.sso_providers.is_empty() {
+        sso.push(SsoOption {
+            label: "Continue with Google".into(),
+            browser: true,
+            provider: None,
+            authorize_path: Some(LEGACY_OAUTH_AUTHORIZE.into()),
+        });
+    }
+    // Cloud workspaces list no providers here; the server's login page
+    // offers Google and finds a workspace's OIDC or SAML sign-in from the
+    // email address.
+    if parsed.multi_tenant {
+        sso.push(SsoOption {
+            label: "Continue with Google or SSO".into(),
+            browser: false,
+            provider: None,
+            authorize_path: None,
+        });
+    }
+    sso
 }
 
 fn default_true() -> bool {
@@ -234,41 +292,9 @@ impl Api {
             .json::<AuthTypeResponse>()
             .await
             .map_err(|e| format!("Unexpected response: {e}"))?;
-        // `oauth_enabled` is the built-in Google sign-in, the only flow with
-        // the mobile parameters the browser sign-in needs. Provider rows (OIDC,
-        // SAML) have their own routes and use the in-app window instead.
-        // Cloud (multi-tenant) servers can require a CAPTCHA before the OAuth
-        // callback, which only their login page can pass, so cloud sign-in
-        // always uses that page in an app window.
-        let browser_sso =
-            parsed.oauth_enabled && parsed.sso_providers.is_empty() && !parsed.multi_tenant;
-        let mut sso: Vec<SsoOption> = parsed
-            .sso_providers
-            .into_iter()
-            .map(|p| SsoOption {
-                label: p.display_name,
-                browser: false,
-            })
-            .collect();
-        if browser_sso {
-            sso.push(SsoOption {
-                label: "Continue with Google".into(),
-                browser: true,
-            });
-        }
-        // Cloud workspaces list no providers here; the server's login page
-        // offers Google and finds a workspace's OIDC or SAML sign-in from the
-        // email address.
-        if parsed.multi_tenant {
-            sso.push(SsoOption {
-                label: "Continue with Google or SSO".into(),
-                browser: false,
-            });
-        }
         Ok(AuthMethods {
             password: parsed.password_auth_enabled,
-            sso,
-            browser_sso,
+            sso: sso_options(&parsed),
         })
     }
 
@@ -471,7 +497,60 @@ impl Api {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_server_url;
+    use super::{normalize_server_url, sso_options, AuthTypeResponse};
+
+    fn options(json: &str) -> Vec<(String, bool, Option<String>)> {
+        let parsed: AuthTypeResponse = serde_json::from_str(json).unwrap();
+        sso_options(&parsed)
+            .into_iter()
+            .map(|o| (o.label, o.browser, o.authorize_path))
+            .collect()
+    }
+
+    #[test]
+    fn provider_rows_use_the_browser_only_when_the_server_says_so() {
+        let row = |flag: &str| {
+            format!(
+                r#"{{"oauth_enabled":true,"sso_providers":[{{"name":"google","display_name":"Continue with Google","authorize_url":"/api/auth/oidc/google/authorize"{flag}}}]}}"#
+            )
+        };
+        assert_eq!(
+            options(&row(r#","native_app_sso":true"#)),
+            vec![(
+                "Continue with Google".into(),
+                true,
+                Some("/api/auth/oidc/google/authorize".into())
+            )]
+        );
+        // An older server: its provider routes ignore the app parameters.
+        assert_eq!(
+            options(&row("")),
+            vec![("Continue with Google".into(), false, None)]
+        );
+    }
+
+    #[test]
+    fn saml_and_cloud_stay_in_the_window() {
+        let saml = r#"{"sso_providers":[{"name":"okta","display_name":"Okta","authorize_url":"/api/auth/saml/okta/authorize","native_app_sso":true}]}"#;
+        assert_eq!(options(saml), vec![("Okta".into(), false, None)]);
+        let cloud = r#"{"multi_tenant":true,"oauth_enabled":true}"#;
+        assert_eq!(
+            options(cloud),
+            vec![("Continue with Google or SSO".into(), false, None)]
+        );
+    }
+
+    #[test]
+    fn legacy_google_uses_the_browser() {
+        assert_eq!(
+            options(r#"{"oauth_enabled":true}"#),
+            vec![(
+                "Continue with Google".into(),
+                true,
+                Some(super::LEGACY_OAUTH_AUTHORIZE.into())
+            )]
+        );
+    }
 
     #[test]
     fn normalizes_server_urls() {

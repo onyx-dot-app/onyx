@@ -38,8 +38,10 @@ shipping unchanged and stays the default desktop app. v2 has its own bundle ID
   server's normal OAuth flow with Onyx's mobile SSO parameters and PKCE, and the server ends it
   with `onyx://auth/callback?code=..`. The app swaps the one-time code for a session token
   (`src-tauri/src/sso.rs`). The identity provider needs no new redirect URI: the flow returns
-  to the web callback that is already registered. Servers without this flow fall back to the
-  web login page in an app window.
+  to the web callback that is already registered. It works for the legacy Google sign-in and
+  for Google and OIDC providers set up in the admin panel, when the server lists them with
+  `native_app_sso`. SAML, cloud workspaces and older servers use the web login page in an app
+  window.
 - The app renews the session on launch and every 12 hours, so regular use never signs you out.
 
 Closing the main window keeps the app running in the menu bar; the Dock icon, the tray's
