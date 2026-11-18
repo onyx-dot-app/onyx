@@ -137,6 +137,7 @@ function mockApi({
   availableTools = [searchTool, imageTool, fileReaderTool],
   holdTools = false,
   toolError = false,
+  preferencesError = false,
   agentPluginIds = [],
 }: {
   preferences?: Record<
@@ -154,6 +155,7 @@ function mockApi({
   availableTools?: (ToolSnapshot & { plugin_ids?: string[] })[];
   holdTools?: boolean;
   toolError?: boolean;
+  preferencesError?: boolean;
   // The plugins the server says the agent runs.
   agentPluginIds?: string[];
 } = {}) {
@@ -213,6 +215,8 @@ function mockApi({
       };
       return holdPatch ? patchGate.then(apply) : Promise.resolve(apply());
     }
+    if (preferencesError)
+      return Promise.reject(new Error("Preferences unavailable"));
     if (holdPreferences) return gate.then(() => ({ ...stored }));
     return Promise.resolve({ ...stored });
   });
@@ -474,6 +478,20 @@ describe("useComposerToolsState", () => {
       api.releasePreferences();
     });
     await waitFor(() => expect(result.current.toolOptionsReady).toBe(true));
+  });
+
+  it("offers a retry that loads the saved switches after a failed load", async () => {
+    mockApi({ preferencesError: true });
+    const { result } = renderTools();
+    await waitFor(() => expect(result.current.toolOptionsFailed).toBe(true));
+    expect(result.current.toolOptionsReady).toBe(false);
+
+    mockApi();
+    await act(async () => {
+      result.current.retryToolOptions();
+    });
+    await waitFor(() => expect(result.current.toolOptionsReady).toBe(true));
+    expect(result.current.toolOptionsFailed).toBe(false);
   });
 
   it("sends at once when nothing is switched off, before the plugin list loads", async () => {
