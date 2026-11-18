@@ -72,6 +72,7 @@ def _acquire_user_file_locks(db_session: Session, user_file_ids: list[str]) -> b
 
 
 class UserFileIndexingAdapter:
+    index_attempt_metadata = None
     connector_id: int | None = None
     credential_id: int | None = None
 

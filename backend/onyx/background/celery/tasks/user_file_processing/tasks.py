@@ -421,7 +421,6 @@ def _process_user_file_with_indexing(
                 db_session=db_session,
                 tenant_id=tenant_id,
                 document_batch=documents,
-                request_id=None,
                 adapter=adapter,
                 written_search_settings_id=current_search_settings.id,
             )
@@ -504,7 +503,6 @@ def _index_user_file_to_secondary(
                 db_session=db_session,
                 tenant_id=tenant_id,
                 document_batch=documents,
-                request_id=None,
                 adapter=adapter,
                 written_search_settings_id=bound_secondary.id,
             )

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import Document
+from onyx.connectors.models import Document, IndexAttemptMetadata
 from onyx.db.enums import SwitchoverType, VectorQuantization
 from onyx.utils.logger import setup_logger
 from onyx.utils.pydantic_util import shallow_model_dump
@@ -257,8 +257,14 @@ class ChunkEnrichmentContext(Protocol):
 
 
 class IndexingBatchAdapter(Protocol):
-    connector_id: int | None
-    credential_id: int | None
+    @property
+    def index_attempt_metadata(self) -> IndexAttemptMetadata | None: ...
+
+    @property
+    def connector_id(self) -> int | None: ...
+
+    @property
+    def credential_id(self) -> int | None: ...
 
     def prepare(
         self,

@@ -299,7 +299,6 @@ def _rechunk_batch(
             skip_document_row_writes=True,
             tenant_id=tenant_id,
             document_batch=documents,
-            request_id=metadata.request_id,
             adapter=_RechunkAdapter(
                 connector_id=connector_id,
                 credential_id=credential_id,

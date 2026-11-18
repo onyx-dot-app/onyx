@@ -140,7 +140,6 @@ def _run_indexing_pipeline_with_mocks(
 
     run_indexing_pipeline(
         document_batch=[],
-        request_id=None,
         embedder=MagicMock(),
         document_index=MagicMock(),
         db_session=db_session,

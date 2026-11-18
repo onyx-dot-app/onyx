@@ -33,7 +33,6 @@ from onyx.indexing.models import (
     DocAwareChunk,
     DocMetadataAwareIndexChunk,
     IndexChunk,
-    IndexingBatchAdapter,
     UpdatableChunkData,
 )
 from onyx.redis.redis_hierarchy import (
@@ -48,7 +47,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
+class DocumentIndexingBatchAdapter:
     """Default adapter: handles DB prep, locking, metadata enrichment, and finalize.
 
     Keeps orchestration logic in the pipeline and side-effects in the adapter.
