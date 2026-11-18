@@ -81,11 +81,11 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
 
 ## React Compiler lint
 
-Oxlint reports React Compiler diagnostics as errors. The React Compiler baseline in
-`.oxlintrc.json` lists files that warn for a specific rule. Remove a file from that rule's
-baseline once it is clean. Never add a file.
-
-Production builds use the React Compiler. Set `ENABLE_REACT_COMPILER=1` for local browser checks.
+Production builds run the React Compiler. `next dev` does not, so set `ENABLE_REACT_COMPILER=1`
+to check compiled behavior locally. Oxlint fails on the compiler rules that make the compiler skip
+a component or change its behavior. Files that broke a rule when it landed are in that rule's
+React Compiler baseline in `.oxlintrc.json`, where they only warn. Remove a file once it is clean.
+Never add one.
 
 ## Style
 
