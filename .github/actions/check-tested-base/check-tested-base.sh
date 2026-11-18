@@ -91,35 +91,46 @@ too_deep() {
   return 1
 }
 
-# Waits until the merge queue entries of the PRs in $1 (space separated) pass
-# their checks. GitHub merges the lower PRs of a stack even when an entry above
-# them fails, and the stack tip's entry can pass while a PR below it fails. So a
-# lower PR that relies on the tip's verdict waits for every PR up to the tip.
-# The waits clear from the top down, one poll for each level. 80 polls of 20
-# seconds stay under the queue's 30-minute check timeout.
+# Waits until the merge queue entries of the PRs in $1 pass their checks. $1
+# lists "number:head sha" pairs, space separated; a PR whose head changed since
+# the check counts as failed. GitHub merges the lower PRs of a stack even when
+# an entry above them fails, and the stack tip's entry can pass while a PR
+# below it fails. So a lower PR that relies on the tip's verdict waits for
+# every PR up to the tip. The waits clear from the top down, one poll for each
+# level. 80 polls of 20 seconds stay under the queue's 30-minute check timeout.
+# Sets WAIT_FAILURE when it returns 1.
+WAIT_FAILURE=""
 wait_for_entries() {
-  local prs="$1" entries state pending pr attempt
+  local pairs="$1" entries line pending pair pr sha attempt
   for attempt in $(seq 1 80); do
     # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
     entries="$(gh api graphql \
       -f query='query($owner: String!, $name: String!, $branch: String!) {
         repository(owner: $owner, name: $name) {
-          mergeQueue(branch: $branch) { entries(first: 100) { nodes { state pullRequest { number } } } }
+          mergeQueue(branch: $branch) {
+            entries(first: 100) { nodes { state pullRequest { number headRefOid } } }
+          }
         }
       }' \
       -f owner="${REPO%%/*}" -f name="${REPO#*/}" -f branch="${TARGET}" \
-      --jq '.data.repository.mergeQueue.entries.nodes[] | "\(.pullRequest.number) \(.state)"')"
+      --jq '.data.repository.mergeQueue.entries.nodes[] | "\(.pullRequest.number) \(.state) \(.pullRequest.headRefOid)"')"
     pending=""
-    for pr in ${prs}; do
-      state="$(awk -v pr="${pr}" '$1 == pr { print $2 }' <<<"${entries}")"
-      case "${state}" in
+    for pair in ${pairs}; do
+      pr="${pair%%:*}"
+      sha="${pair#*:}"
+      line="$(awk -v pr="${pr}" '$1 == pr' <<<"${entries}")"
+      if [[ -z "${line}" ]]; then
+        WAIT_FAILURE="PR #${pr} left the merge queue."
+        return 1
+      fi
+      if [[ "${line##* }" != "${sha}" ]]; then
+        WAIT_FAILURE="PR #${pr} changed its head while in the merge queue."
+        return 1
+      fi
+      case "$(cut -d' ' -f2 <<<"${line}")" in
         MERGEABLE | LOCKED) ;;
         UNMERGEABLE)
-          echo "::error::PR #${pr} failed its merge queue checks, so PR #${PR_NUMBER} does not merge without it."
-          return 1
-          ;;
-        "")
-          echo "::error::PR #${pr} left the merge queue, so PR #${PR_NUMBER} does not merge without it."
+          WAIT_FAILURE="PR #${pr} failed its merge queue checks."
           return 1
           ;;
         *) pending+=" #${pr}" ;;
@@ -132,7 +143,7 @@ wait_for_entries() {
     echo "Waiting in the merge queue for${pending} (${attempt}/80)"
     sleep 20
   done
-  echo "::error::These PRs did not pass their merge queue checks in time:${pending}."
+  WAIT_FAILURE="These PRs did not pass their merge queue checks in time:${pending}."
   return 1
 }
 
@@ -276,6 +287,7 @@ descendants() {
 # descendant, so it covers this PR only when all of them are in the queue. This
 # also covers a chain of PRs that is not a GitHub stack.
 not_queued=""
+not_passed=""
 while IFS=$'\t' read -r number head_sha chain; do
   [[ -z "${number}" ]] && continue
   record="$(verdict_on "${head_sha}")"
@@ -297,10 +309,23 @@ while IFS=$'\t' read -r number head_sha chain; do
     not_queued+=" #${number}"
     continue
   fi
-  wait_for_entries "${chain}" || exit 1
+  pairs=""
+  for pr in ${chain}; do
+    pairs+="${pr}:$(jq -r --argjson n "${pr}" '.[] | select(.number == $n) | .headRefOid' <<<"${OPEN_PRS}") "
+  done
+  if ! wait_for_entries "${pairs}"; then
+    echo "PR #${number} tested this PR, but ${WAIT_FAILURE}"
+    not_passed+=" ${WAIT_FAILURE}"
+    continue
+  fi
   echo "${CONTEXT} for PR #${PR_NUMBER} accepted: descendant PR #${number} tested ${head_sha}, which contains ${HEAD_SHA}, and passed in the merge queue with it."
   exit 0
 done < <(descendants)
+
+if [[ -n "${not_passed}" ]]; then
+  echo "::error::PR #${PR_NUMBER} has no ${CONTEXT} verdict of its own, because it is in a stack, so it merges only when every PR up to the stack tip passes in the merge queue.${not_passed} Nothing in the stack merges. Fix the failing PR and merge the stack again: gh stack merge <stack number>."
+  exit 1
+fi
 
 if [[ -n "${not_queued}" ]]; then
   echo "::error::PR #${PR_NUMBER} has no ${CONTEXT} verdict of its own, because it is in a stack. The run of${not_queued} tested it together with the PRs above it, so it can merge only with them. Merge the stack up to that PR as one unit: gh stack merge <PR number>."
