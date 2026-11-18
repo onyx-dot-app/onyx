@@ -88,7 +88,7 @@ from onyx.server.features.persona.models import (
     PersonaSnapshot,
     PersonaUpsertRequest,
 )
-from onyx.server.features.tool.api import openapi_tool_snapshot
+from onyx.server.features.tool.api import openapi_tool_snapshots
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.manage.llm.api import get_valid_model_configuration_ids_for_persona
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
@@ -770,10 +770,7 @@ def get_persona(
     }
     snapshot.tools = (
         [tool for tool in snapshot.tools if tool.in_code_tool_id is not None]
-        + [
-            openapi_tool_snapshot(tool, integration, db_session)
-            for tool, integration in custom_tools.values()
-        ]
+        + openapi_tool_snapshots(list(custom_tools.values()), db_session)
         + list(mcp_tools.values())
     )
     # Hide a pinned model this viewer cannot use. The check is viewer-relative, so
