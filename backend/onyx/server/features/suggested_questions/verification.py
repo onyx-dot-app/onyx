@@ -51,9 +51,12 @@ def run_search_test(
     """Search each question and keep it when its document is among the first
     SQ_TOP_K_DOCS distinct documents. The searches run in parallel.
 
-    A pool run passes no user and searches the whole index: a document in the
-    top 3 of all documents is in the top 3 for anyone who sees fewer, so one
-    test covers everyone. A top-up passes the person and searches as them."""
+    A pool run passes no user and searches the whole index, so one test serves
+    everyone. It is not a guarantee per person: scores are normalised over the
+    documents a search can see, so a person's access filter can reorder what
+    is left. Removing documents usually moves the source document up, and
+    chat's own search reads more than 3 documents, so the answer still comes
+    from it. A top-up passes the person and searches as them."""
     if not drafts:
         return []
     with get_session_with_current_tenant() as db_session:
