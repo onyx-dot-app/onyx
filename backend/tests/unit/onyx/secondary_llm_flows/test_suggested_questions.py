@@ -311,3 +311,53 @@ def test_write_questions_raises_on_invalid_output(text: str) -> None:
 
     with pytest.raises(ValueError):
         sq.write_questions(_passages(1), llm, None, [])
+
+
+@pytest.mark.parametrize(
+    "question, kept",
+    [
+        ("Am I eligible for parental leave?", False),
+        ("May I carry over unused leave?", False),
+        ("Must I get approval for a trip abroad?", False),
+        ("Shall we use the new deploy pipeline?", False),
+        ("Isn't the office closed on Fridays?", False),
+        ("Can't I expense a home desk?", False),
+        ("How many days of leave do we get?", True),
+        ("Which team owns the deploy pipeline?", True),
+        ("Mayor's office: who is the contact?", True),
+        ("Docs for the API: where do they live?", True),
+    ],
+)
+def test_write_questions_drops_yes_no_questions(question: str, kept: bool) -> None:
+    llm = _llm([{"passage": 1, "question": question, "best_for": "hr"}])
+
+    drafts = sq.write_questions(_passages(1), llm, None, [])
+
+    assert bool(drafts) is kept
+
+
+@pytest.mark.parametrize(
+    "best_for, expected",
+    [
+        ("hr", UseCase.HR),
+        (" Sales ", UseCase.SALES),
+        ("ENGINEERING", UseCase.ENGINEERING),
+        ("any", None),
+        ("other", None),
+        ("finance", None),
+        (None, None),
+        (3, None),
+    ],
+)
+def test_best_for_never_fails_the_output(best_for: Any, expected: Any) -> None:
+    llm = _llm(
+        [
+            {"passage": 1, "question": "Who approves leave?", "best_for": best_for},
+            # No best_for at all.
+            {"passage": 1, "question": "How long is parental leave?"},
+        ]
+    )
+
+    drafts = sq.write_questions(_passages(1), llm, None, [])
+
+    assert [draft.best_for for draft in drafts] == [expected, None]

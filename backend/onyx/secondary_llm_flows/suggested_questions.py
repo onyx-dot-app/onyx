@@ -13,7 +13,6 @@ import re
 from collections import Counter
 
 import httpx
-from pydantic import BaseModel
 
 from onyx.context.search.models import InferenceChunk
 from onyx.error_handling.exceptions import OnyxError
@@ -73,6 +72,8 @@ from onyx.server.features.suggested_questions.models import (
     DraftQuestion,
     TriagedChunk,
     UseCase,
+    WritingOutput,
+    WrittenQuestion,
 )
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
@@ -266,19 +267,12 @@ def _triage_by_rules(chunk: InferenceChunk) -> TriagedChunk:
     )
 
 
-class _WrittenQuestion(BaseModel):
-    passage: int
-    question: str
-    best_for: str
-
-
-class _WritingOutput(BaseModel):
-    questions: list[_WrittenQuestion]
-
-
 # A question that starts like this is answered by yes or no.
 _YES_NO_START = re.compile(
-    r"^(is|are|was|were|do|does|did|can|could|will|would|should|has|have)\b",
+    r"^(am|is|are|was|were|do|does|did|has|have|had|can|could|will|would|"
+    r"shall|should|may|might|must|"
+    r"isn't|aren't|wasn't|weren't|don't|doesn't|didn't|hasn't|haven't|"
+    r"can't|couldn't|won't|wouldn't|shouldn't)\b",
     re.IGNORECASE,
 )
 _MENTIONS_SOURCE = re.compile(
@@ -333,7 +327,7 @@ def write_questions(
     parsed = parse_llm_json_response(response.text)
     if parsed is None:
         raise ValueError("The writing call returned no JSON object")
-    written = _WritingOutput.model_validate(parsed).questions
+    written = WritingOutput.model_validate(parsed).questions
     drafts = _keep_valid_questions(written, passages)
     logger.info(
         "Suggested questions: wrote %d questions from %d passages, kept %d",
@@ -345,7 +339,7 @@ def write_questions(
 
 
 def _keep_valid_questions(
-    written: list[_WrittenQuestion], passages: list[TriagedChunk]
+    written: list[WrittenQuestion], passages: list[TriagedChunk]
 ) -> list[DraftQuestion]:
     drafts: list[DraftQuestion] = []
     seen: set[str] = set()
@@ -368,11 +362,7 @@ def _keep_valid_questions(
             DraftQuestion(
                 text=text,
                 chunk=passages[item.passage - 1].chunk,
-                best_for=(
-                    UseCase(item.best_for)
-                    if item.best_for in UseCase and item.best_for != UseCase.OTHER
-                    else None
-                ),
+                best_for=item.best_for,
             )
         )
         if len(drafts) >= SQ_QUESTIONS_PER_RUN:
