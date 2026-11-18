@@ -241,7 +241,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastStepHasCollapsedContent,
     lastStepIsResearchAgent,
     finalAnswerComing,
-    awaitingApproval,
+    awaitingUser: awaitingUser !== null,
   });
 
   const headerIsInteractive = useMemo(() => {
