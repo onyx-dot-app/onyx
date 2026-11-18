@@ -157,7 +157,7 @@ until the folder's node arrives.
 
 **Shared API budget.** With `ENABLE_SOURCE_API_LIMITER` (off by default),
 `connectors/factory.py:instantiate_connector` passes the connector a
-`SourceApiLimiter` (`background/indexing/source_api_limiter.py`). The gateway
+`SourceApiLimiter` (`connectors/source_api_limiter.py`). The gateway
 spends from it before each Drive and Docs request
 (`connectors/google_drive/source_operations.py:attach_source_api_limiter`) and
 reports a rate-limit answer with its scope
@@ -169,6 +169,10 @@ requests quota model, and reports each refused file. The budgets live in Redis
 (`redis/redis_rate_window.py`), so every worker that uses the credential shares
 them. Connector code does not import Redis. Each per-minute budget is enforced
 in a 10 s window at the same rate, so a full minute cannot go in one burst. A
+second window of the full minute holds the configured budget. The budgets are
+not a hard quota cap: one request always fits an empty window, so a single
+batch larger than a budget goes through, and a call goes on with no slot when
+Redis cannot be reached or after it waited 300 s (`MAX_WAIT_SECONDS`). A
 window cuts only when the refused share of its requests in the last 30 s is at
 least 2 % with at least 10 refusals: by 0.8, or in a storm (10 % or more) by
 the accepted share, at most 0.5. A cut holds for 60 s, but a storm can cut again

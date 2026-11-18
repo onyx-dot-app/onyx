@@ -11,15 +11,15 @@ from uuid import uuid4
 import pytest
 from prometheus_client import REGISTRY
 
-from onyx.background.indexing.source_api_limiter import (
-    RedisSourceApiLimiter,
-    SourceApiBudget,
-)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_drive import parallel_listing
 from onyx.connectors.google_drive.quota import DriveQuotaApi
 from onyx.connectors.google_drive.source_operations import GoogleDriveHttpError
 from onyx.connectors.interfaces import SourceApiLimiter
+from onyx.connectors.source_api_limiter import (
+    RedisSourceApiLimiter,
+    SourceApiBudget,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.metrics.source_api_metrics import RequestOutcome
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
