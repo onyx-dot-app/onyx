@@ -844,6 +844,28 @@ def _apply_config(
     return False
 
 
+def _updated_header_template(
+    integration: Integration,
+    request: IntegrationUpdate,
+    auth_method: IntegrationAuthMethod | None,
+) -> dict[str, str] | None:
+    if "header_template" in request.model_fields_set:
+        return (
+            keep_masked_values(
+                request.header_template, integration.header_template or {}
+            )
+            if request.header_template is not None
+            else None
+        )
+    if (
+        integration.auth_method is IntegrationAuthMethod.API_KEY
+        and auth_method is not IntegrationAuthMethod.API_KEY
+    ):
+        # The API key placeholders cannot be filled with another method.
+        return None
+    return integration.header_template
+
+
 def update_integration__no_commit(
     user: User,
     integration_id: int,
@@ -897,13 +919,8 @@ def update_integration__no_commit(
     )
     if auth_mode is IntegrationAuthMode.NONE:
         auth_method = None
-    header_template = integration.header_template
-    if "header_template" in fields:
-        header_template = (
-            keep_masked_values(request.header_template, header_template or {})
-            if request.header_template is not None
-            else None
-        )
+    header_template = _updated_header_template(integration, request, auth_method)
+    header_template_changed = header_template != integration.header_template
     if auth_method is not integration.auth_method or fields & {
         "config",
         "header_template",
@@ -921,17 +938,13 @@ def update_integration__no_commit(
     integration.auth_mode = auth_mode
     integration.auth_method = auth_method
     integration.header_template = header_template
-    if "credential_fields" in fields or "header_template" in fields:
-        integration.credential_fields = (
-            _credential_fields_json(
-                request.credential_fields,
-                header_template,
-                None
-                if "credential_fields" in fields
-                else integration.credential_fields,
-            )
-            if auth_method is IntegrationAuthMethod.API_KEY
-            else None
+    if auth_method is not IntegrationAuthMethod.API_KEY:
+        integration.credential_fields = None
+    elif "credential_fields" in fields or "header_template" in fields:
+        integration.credential_fields = _credential_fields_json(
+            request.credential_fields,
+            header_template,
+            None if "credential_fields" in fields else integration.credential_fields,
         )
 
     if auth_method is not IntegrationAuthMethod.OAUTH2:
@@ -952,7 +965,7 @@ def update_integration__no_commit(
         needs_sync = _apply_config(
             integration, shape, request.config, request.oauth_client, db_session
         )
-    if shape is IntegrationShape.CUSTOM and "header_template" in fields:
+    if shape is IntegrationShape.CUSTOM and header_template_changed:
         app = get_external_app_for_integration(integration.id, db_session)
         if app is not None:
             app.auth_template = dict(header_template or {})
