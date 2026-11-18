@@ -60,30 +60,42 @@ if config.config_file_name is not None and config.attributes.get(
     # See: https://pytest-alembic.readthedocs.io/en/latest/setup.html#caplog-issues
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
-# The old sign-in, policy and preference tables (oauth_user_token,
-# external_app_user_credential, workspace_action_policy and others) and the
-# old app to skill link (external_app__skill) have no model, so autogenerate
-# proposes to drop them. Keep them out of migrations.
 target_metadata = [Base.metadata, ResultModelBase.metadata]
 
 # Tables that stay in the database for rollback after their model was deleted.
 # Without this filter, autogenerate proposes to drop them.
-_TABLES_KEPT_WITHOUT_MODEL = frozenset({"external_app__skill"})
+_TABLES_KEPT_WITHOUT_MODEL = frozenset(
+    {
+        "external_app__skill",
+        "external_app_user_credential",
+        "mcp_server__user",
+        "mcp_server_user_preference",
+        "oauth_user_token",
+        "scheduled_task_action_policy",
+        "scheduled_task_enabled_app",
+        "tool_user_preference",
+        "user_action_policy",
+        "workspace_action_policy",
+    }
+)
 
 
 def include_object(
-    _object: SchemaItem,
+    object_: SchemaItem,
     name: str | None,
     type_: str,
     reflected: bool,
     compare_to: SchemaItem | None,
 ) -> bool:
-    return not (
-        type_ == "table"
-        and reflected
-        and compare_to is None
-        and name in _TABLES_KEPT_WITHOUT_MODEL
+    if not reflected or compare_to is not None:
+        return True
+    # An index or constraint names its table through `.table`.
+    table_name = (
+        name
+        if type_ == "table"
+        else getattr(getattr(object_, "table", None), "name", None)
     )
+    return table_name not in _TABLES_KEPT_WITHOUT_MODEL
 
 
 logger = logging.getLogger(__name__)
