@@ -41,16 +41,18 @@ test("reports each effect call, including named aliases and member calls", async
   const result = await lint(`
     import React, { useEffect, useLayoutEffect as useMeasure } from "react";
     import * as Hooks from "react";
+    import { default as ReactAlias } from "react";
     export function Panel() {
       useEffect(() => {}, []);
       useMeasure(() => {}, []);
       React.useLayoutEffect(() => {}, []);
       Hooks["useEffect"](() => {}, []);
+      ReactAlias.useEffect(() => {}, []);
       return null;
     }
   `);
   expect(result).toMatchObject({
-    diagnostics: Array.from({ length: 4 }, () => ({
+    diagnostics: Array.from({ length: 5 }, () => ({
       code: effectDiagnostic,
       severity: "error",
     })),
@@ -69,6 +71,45 @@ test("ignores comments, lookalike names, and references without a call", async (
     }
   `);
   expect(result).toMatchObject({ diagnostics: [] });
+});
+
+test("ignores unrelated methods and shadowed React bindings", async () => {
+  const result = await lint(`
+    import React, { useEffect } from "react";
+    import { useLayoutEffect } from "./non-react";
+    const service = { useEffect() {} };
+    service.useEffect();
+    export function Panel(
+      useEffect: () => void,
+      React: { useLayoutEffect: () => void }
+    ) {
+      useEffect();
+      React.useLayoutEffect();
+    }
+    export function OtherPanel() {
+      useLayoutEffect();
+    }
+    export const references = [React, useEffect];
+  `);
+  expect(result).toMatchObject({ diagnostics: [] });
+});
+
+test("reports hooks loaded through require and Jest's requireActual", async () => {
+  const result = await lint(`
+    const Hooks = require("react");
+    const { useEffect: useTestEffect } = jest.requireActual("react");
+    export function TestPanel() {
+      Hooks.useLayoutEffect(() => {}, []);
+      useTestEffect(() => {}, []);
+      return null;
+    }
+  `);
+  expect(result).toMatchObject({
+    diagnostics: Array.from({ length: 2 }, () => ({
+      code: effectDiagnostic,
+      severity: "error",
+    })),
+  });
 });
 
 test.each([
