@@ -810,32 +810,9 @@
     // React Compiler baseline. Remove a file once it is clean for that rule. Never add one.
     {
       "files": [
-        "src/app/admin/billing/page.tsx",
-        "src/app/app/message/MultiModelResponseView.tsx",
-        "src/app/craft/components/IntroBackground.tsx",
-        "src/components/EditableStringFieldDisplay.tsx",
-        "src/components/tools/CSVContent.tsx",
-        "src/hooks/useChatSessionController.ts",
-        "src/providers/VoiceModeProvider.tsx",
-        "src/sections/chat/ChatUI.tsx",
-        "src/sections/chat/ScrollContainerContext.tsx",
-        "src/sections/input/AppInputBar.tsx",
-        "src/sections/modals/NewTeamModal.tsx",
-        "src/sections/modals/languageModels/BifrostModal.tsx",
-        "src/sections/modals/languageModels/NebiusTokenfactoryModal.tsx",
-        "src/sections/modals/languageModels/PortkeyModal.tsx"
-      ],
-      "rules": {
-        "react/immutability": "warn"
-      }
-    },
-    {
-      "files": [
         "lib/opal/src/components/shadow-div/components.tsx",
-        "src/app/app/message/MultiModelResponseView.tsx",
         "src/app/app/message/messageComponents/timeline/renderers/code/PythonToolRenderer.tsx",
         "src/lib/connectors/checks/hooks.ts",
-        "src/sections/input/AppInputBar.tsx",
         "src/sections/modals/skills/ShareSkillModal.tsx",
         "src/sections/model-selector/ModelSelector.tsx",
         "src/views/admin/WebSearchPage/index.tsx",
@@ -848,10 +825,6 @@
     {
       "files": [
         "src/app/admin/billing/BillingDetailsView.tsx",
-        "src/app/app/components/tools/GeneratingImageDisplay.tsx",
-        "src/app/app/message/Resubmit.tsx",
-        "src/ee/hooks/useHookExecutionLogs.ts",
-        "src/lib/auth/hooks.ts",
         "src/sections/usage/AnalyticsChart.tsx"
       ],
       "rules": {
@@ -884,7 +857,6 @@
         "src/lib/common/components.tsx",
         "src/refresh-components/commandmenu/CommandMenu.tsx",
         "src/sections/actions/modals/AddOpenAPIActionModal.tsx",
-        "src/sections/chat/ChatUI.tsx",
         "src/sections/input/InputChipStrip.tsx",
         "src/views/AgentsCatalogPage/page.tsx",
         "src/views/admin/connectors/ConnectorDetailPage/StatusCard.tsx"

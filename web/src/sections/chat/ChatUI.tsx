@@ -6,6 +6,7 @@ import React, {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { Message } from "@/app/app/types";
 import type { ComposedMessage } from "@/lib/chat/types";
@@ -126,7 +127,7 @@ const ChatUI = React.memo(
     // Stable fallbacks to avoid changing prop identities on each render
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
-    const rowHeightCache = useRef(new Map<string, number>()).current;
+    const [rowHeightCache] = useState(() => new Map<string, number>());
     const hasOlderMessages = useHasOlderMessages();
     const scrollContainerRef = useOptionalScrollContainer()?.scrollContainerRef;
 
@@ -149,7 +150,8 @@ const ChatUI = React.memo(
     const firstRowRef = useRef<{ nodeId: number; top: number } | null>(null);
     const firstNodeId = messages[0]?.nodeId;
     useLayoutEffect(() => {
-      const root = scrollContainerRef?.current;
+      if (!scrollContainerRef) return;
+      const root = scrollContainerRef.current;
       if (!root || firstNodeId === undefined) return;
 
       const previous = firstRowRef.current;

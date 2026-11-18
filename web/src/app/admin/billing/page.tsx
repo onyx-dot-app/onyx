@@ -138,6 +138,11 @@ export default function BillingPage() {
   // Stripe-dependent actions (manage plan, update seats) won't work
   const isManualLicenseOnly = !!(hasManualLicense && !hasSubscription);
 
+  const changeView = (newView: "plans" | "details" | "checkout") => {
+    if (newView === view) return;
+    setView(newView);
+  };
+
   // Set initial view based on subscription status (only once when data first loads)
   useEffect(() => {
     if (!isLoading && view === null) {
@@ -415,11 +420,6 @@ export default function BillingPage() {
   };
 
   const viewConfig = getViewConfig();
-
-  const changeView = (newView: "plans" | "details" | "checkout") => {
-    if (newView === view) return;
-    setView(newView);
-  };
 
   const handleBack = () => {
     const hasEntitlement =

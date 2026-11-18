@@ -174,7 +174,8 @@ export function useTokenRefresh(
   authTypeMetadataLoading: boolean,
   onRefreshFail: () => Promise<void>
 ) {
-  const lastAttemptRef = useRef<number>(Date.now());
+  const [mountedAt] = useState(() => Date.now());
+  const lastAttemptRef = useRef<number>(mountedAt);
   const isFirstLoadRef = useRef(true);
 
   useEffect(() => {

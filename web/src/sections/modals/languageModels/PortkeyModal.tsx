@@ -217,7 +217,7 @@ export default function PortkeyModal({
 
   const onClose = () => onOpenChange?.(false);
 
-  const initialValues: PortkeyModalValues = useInitialValues(
+  const baseValues = useInitialValues(
     isOnboarding,
     LLMProviderName.PORTKEY,
     existingLlmProvider
@@ -229,14 +229,15 @@ export default function PortkeyModal({
     (existingLlmProvider?.custom_config?.[PORTKEY_API_MODE_KEY] as
       | PortkeyApiMode
       | undefined) ?? DEFAULT_API_MODE;
-  initialValues.custom_config = { [PORTKEY_API_MODE_KEY]: initialMode };
-
-  if (!initialValues.api_base) {
-    initialValues.api_base = defaultBaseForMode(initialMode);
-  }
-  if (!isOnboarding && !initialValues.name) {
-    initialValues.name = DEFAULT_DISPLAY_NAME;
-  }
+  const initialValues: PortkeyModalValues = {
+    ...baseValues,
+    custom_config: { [PORTKEY_API_MODE_KEY]: initialMode },
+    api_base: baseValues.api_base || defaultBaseForMode(initialMode),
+    name:
+      !isOnboarding && !baseValues.name
+        ? DEFAULT_DISPLAY_NAME
+        : baseValues.name,
+  };
 
   const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiBase: true,

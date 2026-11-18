@@ -104,13 +104,14 @@ export default function MultiModelResponseView({
   const preferredIndexFromTree = useMemo(() => {
     if (parentMessage?.preferredResponseId == null) return null;
     const match = responses.find(
-      (r) => r.messageId === parentMessage.preferredResponseId
+      (r) => r.messageId === parentMessage?.preferredResponseId
     );
     return match?.modelIndex ?? null;
   }, [parentMessage?.preferredResponseId, responses]);
   const [preferredIndex, setPreferredIndex] = useState<number | null>(
     preferredIndexFromTree
   );
+  const mountedRef = useRef(false);
   // Re-sync when the preference lands after mount (session hydration, or the
   // implicit pick made at send time), scrolling an off-screen pick into view.
   // Deselect's animation owns clearing, so only non-null values sync in.
@@ -133,9 +134,8 @@ export default function MultiModelResponseView({
       });
     }
   }, [preferredIndexFromTree]);
-  // Declared after the sync effect so its mount run still sees false and
-  // skips the scroll for a preference that was already set at mount.
-  const mountedRef = useRef(false);
+  // Runs after the sync effect so the sync effect's mount run still sees false
+  // and skips the scroll for a preference that was already set at mount.
   useEffect(() => {
     mountedRef.current = true;
   }, []);
@@ -470,6 +470,13 @@ export default function MultiModelResponseView({
     }, 450);
   }, [showNarrowCarousel, clearPreferredInTree, preferredIndex, hiddenPanels]);
 
+  // Track whether selection mode was ever entered — once it has been,
+  // we stay in the selection layout (even after deselect) to avoid a
+  // jarring DOM swap between the two layout strategies.
+  const [hasEnteredSelection, setHasEnteredSelection] = useState(
+    () => preferredIndex !== null
+  );
+
   // Clear preferred selection when generation starts
   // Reset selection state when generation restarts
   useEffect(() => {
@@ -483,13 +490,6 @@ export default function MultiModelResponseView({
   // Find preferred panel position — used for both the selection guard and carousel layout
   const preferredIdx = responses.findIndex(
     (r) => r.modelIndex === preferredIndex
-  );
-
-  // Track whether selection mode was ever entered — once it has been,
-  // we stay in the selection layout (even after deselect) to avoid a
-  // jarring DOM swap between the two layout strategies.
-  const [hasEnteredSelection, setHasEnteredSelection] = useState(
-    () => preferredIndex !== null
   );
 
   const isActivelySelected =

@@ -134,7 +134,7 @@ export default function NebiusTokenfactoryModal({
 
   const onClose = () => onOpenChange?.(false);
 
-  const initialValues: NebiusTokenfactoryModalValues = useInitialValues(
+  const baseValues = useInitialValues(
     isOnboarding,
     LLMProviderName.NEBIUS_TOKENFACTORY,
     existingLlmProvider
@@ -143,9 +143,10 @@ export default function NebiusTokenfactoryModal({
   // Nebius TokenFactory always uses the same base; default it whenever it's
   // missing (new provider, or an edit where the base wasn't persisted) so the
   // model refetch always has a valid endpoint.
-  if (!initialValues.api_base) {
-    initialValues.api_base = DEFAULT_API_BASE;
-  }
+  const initialValues: NebiusTokenfactoryModalValues = {
+    ...baseValues,
+    api_base: baseValues.api_base || DEFAULT_API_BASE,
+  };
 
   const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiBase: true,

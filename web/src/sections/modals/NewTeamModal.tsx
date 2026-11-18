@@ -47,32 +47,6 @@ export default function NewTeamModal() {
   const settingsLoaded = is_playground !== undefined;
   const isPlayground = is_playground === true;
 
-  useEffect(() => {
-    const hasNewTeamParam = searchParams?.has("new_team");
-    if (hasNewTeamParam && settingsLoaded) {
-      if (!isPlayground) {
-        setShowNewTeamModal(true);
-        fetchTenantInfo();
-      }
-
-      // Remove the new_team parameter from the URL without page reload
-      const newParams = new URLSearchParams(searchParams?.toString() || "");
-      newParams.delete("new_team");
-      const newUrl =
-        window.location.pathname +
-        (newParams.toString() ? `?${newParams.toString()}` : "");
-      // SAFETY: the current pathname with its query trimmed is a page of the
-      // app.
-      navigation.go(newUrl as Route, { replace: true, shallow: true });
-    }
-  }, [
-    searchParams,
-    setShowNewTeamModal,
-    navigation,
-    isPlayground,
-    settingsLoaded,
-  ]);
-
   const fetchTenantInfo = async () => {
     setIsLoading(true);
     setError(null);
@@ -98,6 +72,32 @@ export default function NewTeamModal() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const hasNewTeamParam = searchParams?.has("new_team");
+    if (hasNewTeamParam && settingsLoaded) {
+      if (!isPlayground) {
+        setShowNewTeamModal(true);
+        fetchTenantInfo();
+      }
+
+      // Remove the new_team parameter from the URL without page reload
+      const newParams = new URLSearchParams(searchParams?.toString() || "");
+      newParams.delete("new_team");
+      const newUrl =
+        window.location.pathname +
+        (newParams.toString() ? `?${newParams.toString()}` : "");
+      // SAFETY: the current pathname with its query trimmed is a page of the
+      // app.
+      navigation.go(newUrl as Route, { replace: true, shallow: true });
+    }
+  }, [
+    searchParams,
+    setShowNewTeamModal,
+    navigation,
+    isPlayground,
+    settingsLoaded,
+  ]);
 
   const handleRequestInvite = async () => {
     if (!existingTenant) return;

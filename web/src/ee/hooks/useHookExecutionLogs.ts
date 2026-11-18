@@ -19,19 +19,22 @@ export function useHookExecutionLogs(
 ): UseHookExecutionLogsResult {
   const { data, isLoading, error } = useSWR(
     ["hook-execution-logs", hookId, limit],
-    () => fetchExecutionLogs(hookId, limit),
+    async () => ({
+      logs: await fetchExecutionLogs(hookId, limit),
+      fetchedAt: Date.now(),
+    }),
     { refreshInterval: 60_000 }
   );
 
-  const now = Date.now();
+  const now = data?.fetchedAt ?? 0;
 
   const recentErrors =
-    data?.filter(
+    data?.logs.filter(
       (log) => now - new Date(log.created_at).getTime() < ONE_HOUR_MS
     ) ?? [];
 
   const olderErrors =
-    data?.filter((log) => {
+    data?.logs.filter((log) => {
       const age = now - new Date(log.created_at).getTime();
       return age >= ONE_HOUR_MS && age < THIRTY_DAYS_MS;
     }) ?? [];
