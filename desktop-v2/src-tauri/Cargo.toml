@@ -30,6 +30,7 @@ url = "2.5"
 keyring = { version = "3", features = ["apple-native"] }
 rfd = "0.15"
 log = "0.4"
+libc = "0.2" # QA harness: checks its directory's owner (geteuid)
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-nspanel = "2.1.1"
