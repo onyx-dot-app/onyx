@@ -148,38 +148,46 @@ pub fn cancel(app: &AppHandle) {
     }
 }
 
-/// Starts SSO in the system browser. Returns `Ok(false)` when the server's SSO
-/// has no browser flow, so the caller can fall back to the in-app window.
+/// Starts SSO for `provider` (a provider row, or `None` for the legacy Google
+/// sign-in) in the system browser. Returns `Ok(false)` when it has no browser
+/// flow, so the caller can fall back to the in-app window.
 ///
-/// The browser itself opens the server's built-in OAuth authorize URL
-/// (`redirect=true`), so it receives the CSRF and PKCE cookies and the identity
+/// The browser itself opens the provider's authorize URL (`redirect=true`), so it receives the CSRF and PKCE cookies and the identity
 /// provider returns to the web callback that is already registered. The mobile
 /// parameters make that callback finish with `onyx://auth/callback?code=..`
 /// instead of a web session, so no extra redirect URI is needed at the IdP.
 /// Starting again replaces the previous attempt.
-pub async fn start_in_browser(app: &AppHandle, server: &str) -> Result<bool, String> {
+pub async fn start_in_browser(
+    app: &AppHandle,
+    server: &str,
+    provider: Option<&str>,
+) -> Result<bool, String> {
     let state = app.state::<AppState>();
     let epoch = state.epoch();
     let methods = state.api.auth_methods(server).await?;
     if state.epoch() != epoch {
         return Err("Sign-in was cancelled.".into());
     }
-    if !methods.browser_sso {
+    // The path comes from the server's own list, never from the page.
+    let Some(path) = methods
+        .sso
+        .into_iter()
+        .find(|o| o.browser && o.provider.as_deref() == provider)
+        .and_then(|o| o.authorize_path)
+    else {
         return Ok(false);
-    }
+    };
     let verifier = random_token();
     let app_state = random_token();
     let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-    let authorize = Url::parse_with_params(
-        &format!("{server}/api/auth/oauth/authorize"),
-        &[
-            ("redirect", "true"),
-            ("mobile_redirect_uri", CALLBACK),
-            ("app_state", app_state.as_str()),
-            ("app_code_challenge", challenge.as_str()),
-        ],
-    )
-    .map_err(|e| e.to_string())?;
+    // Appended, not joined: a server under a path prefix keeps it.
+    let mut authorize = Url::parse(&format!("{server}{path}")).map_err(|e| e.to_string())?;
+    authorize
+        .query_pairs_mut()
+        .append_pair("redirect", "true")
+        .append_pair("mobile_redirect_uri", CALLBACK)
+        .append_pair("app_state", &app_state)
+        .append_pair("app_code_challenge", &challenge);
     let attempt = ATTEMPT.fetch_add(1, Ordering::SeqCst) + 1;
     *PENDING.lock().unwrap_or_else(|p| p.into_inner()) = Some(PendingBrowserSignIn {
         server: server.to_string(),

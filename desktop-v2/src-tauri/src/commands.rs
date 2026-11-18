@@ -57,11 +57,12 @@ pub async fn get_auth_methods(state: State<'_, AppState>) -> Result<AuthMethods,
 #[tauri::command]
 pub async fn sign_in_with_sso(
     browser: bool,
+    provider: Option<String>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let server = state.server()?;
-    if browser && crate::sso::start_in_browser(&app, &server).await? {
+    if browser && crate::sso::start_in_browser(&app, &server, provider.as_deref()).await? {
         return Ok("browser".into());
     }
     crate::sso::open(&app, &server)?;

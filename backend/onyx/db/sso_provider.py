@@ -178,6 +178,13 @@ def sso_authorize_path(provider: SSOProvider) -> str:
     return f"/api/auth/{router}/{provider.name}/authorize"
 
 
+def sso_supports_native_app(provider: SSOProvider) -> bool:
+    """Its authorize URL takes the native-app SSO parameters, so a desktop or
+    mobile app can sign in through the system browser. The OIDC router does;
+    the SAML router does not yet."""
+    return _AUTHORIZE_ROUTER_BY_TYPE[provider.provider_type] == "oidc"
+
+
 def validate_sso_provider_name(name: str) -> None:
     if not _PROVIDER_NAME_PATTERN.fullmatch(name):
         raise ValueError(

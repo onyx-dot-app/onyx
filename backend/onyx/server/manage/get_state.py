@@ -20,7 +20,11 @@ from onyx.configs.constants import (
 )
 from onyx.db.auth import get_user_count
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
-from onyx.db.sso_provider import fetch_sso_providers, sso_authorize_path
+from onyx.db.sso_provider import (
+    fetch_sso_providers,
+    sso_authorize_path,
+    sso_supports_native_app,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, onyx_error_to_json_response
 from onyx.server.manage.models import (
@@ -79,6 +83,7 @@ def _fetch_sso_provider_options() -> list[SSOProviderOption]:
                     display_name=provider.display_name,
                     provider_type=provider.provider_type,
                     authorize_url=sso_authorize_path(provider),
+                    native_app_sso=sso_supports_native_app(provider),
                 )
                 for provider in fetch_sso_providers(db_session, enabled_only=True)
             ]

@@ -65,6 +65,9 @@ class SSOProviderOption(BaseModel):
     display_name: str
     provider_type: SSOProviderType
     authorize_url: str
+    # The authorize URL takes the native-app SSO parameters (desktop, mobile), so
+    # an app can sign in through the system browser. SAML cannot yet.
+    native_app_sso: bool
 
 
 class AuthConfigResponse(BaseModel):

@@ -34,7 +34,7 @@ function Login() {
     getAuthMethods()
       .then(setMethods)
       .catch((e) => {
-        setMethods({ password: true, sso: [], browserSso: false });
+        setMethods({ password: true, sso: [] });
         setDiscoveryError(errorMessage(e));
       });
   }
@@ -64,12 +64,12 @@ function Login() {
     }
   }
 
-  async function onSso(browser: boolean) {
+  async function onSso(browser: boolean, provider: string | null = null) {
     setError(null);
     setStartingSso(true);
     if (browser) setBrowserTried(true);
     try {
-      setWaitingForSso(await signInWithSso(browser));
+      setWaitingForSso(await signInWithSso(browser, provider));
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -90,7 +90,7 @@ function Login() {
                 prominence="secondary"
                 width="full"
                 disabled={startingSso}
-                onClick={() => void onSso(option.browser)}
+                onClick={() => void onSso(option.browser, option.provider)}
               >
                 {waitingForSso === "browser" && option.browser
                   ? "Start again in your browser"
