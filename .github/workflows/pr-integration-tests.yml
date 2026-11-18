@@ -71,13 +71,9 @@ jobs:
     outputs:
       integration: ${{ github.event_name != 'pull_request' && 'true' || (steps.filter.outputs.integration == 'true' || steps.backend_src.outputs.backend == 'true') && 'true' || 'false' }}
       gateway: ${{ steps.filter.outputs.gateway || 'true' }}
-      # The live Slack suite shares its workspaces' rate limits across all CI runs,
-      # so PRs run it only for related changes. Main and tag runs include it
-      # whenever the integration suite runs.
-      slack: ${{ github.event_name == 'pull_request' && steps.filter.outputs.slack || 'true' }}
-      # The live OneDrive suite indexes one shared Microsoft tenant, and Graph
-      # throttles it when many PRs run at once. Same rule as Slack.
-      onedrive: ${{ github.event_name == 'pull_request' && steps.filter.outputs.onedrive || 'true' }}
+      # Live connector suites that this run skips. See the "Pick live connector
+      # suites" step.
+      skipped_connector_suites: ${{ steps.connectors.outputs.skipped }}
       # The reindex port suite is slow (each test waits for a full re-embed and
       # swap). PRs run it only for related changes, and main runs skip it; the
       # daily run and tag runs always include it.
@@ -119,8 +115,10 @@ jobs:
             gateway:
               - 'backend/onyx/server/gateway/**'
               - 'backend/tests/integration/tests/gateway_clients/**'
-            slack:
-              - 'backend/onyx/connectors/slack/**'
+            # The live connector suites call real third-party APIs, so they are
+            # slow and share rate limits across all CI runs. PRs run each one
+            # only for related changes. Main and tag runs include all of them.
+            connector_shared: &connector_shared
               - 'backend/onyx/connectors/*.py'
               - 'backend/onyx/connectors/capability_checks/**'
               - 'backend/onyx/utils/retry_after.py'
@@ -128,29 +126,55 @@ jobs:
               - 'backend/onyx/access/**'
               - 'backend/ee/onyx/access/**'
               - 'backend/ee/onyx/external_permissions/*.py'
-              - 'backend/ee/onyx/external_permissions/slack/**'
               - 'backend/ee/onyx/background/celery/tasks/doc_permission_syncing/**'
               - 'backend/ee/onyx/background/celery/tasks/external_group_syncing/**'
-              - 'backend/tests/integration/connector_job_tests/slack/**'
+              - 'backend/tests/integration/common_utils/managers/cc_pair.py'
+              - 'backend/tests/integration/common_utils/document_acl.py'
               - '.github/workflows/pr-integration-tests.yml'
-            onedrive:
-              - 'backend/onyx/connectors/onedrive/**'
+            connector_microsoft: &connector_microsoft
               - 'backend/onyx/connectors/microsoft_utils/**'
               - 'backend/onyx/connectors/microsoft_credential.py'
-              - 'backend/onyx/connectors/*.py'
-              - 'backend/onyx/connectors/capability_checks/**'
-              - 'backend/onyx/utils/retry_after.py'
-              - 'backend/ee/onyx/db/external_perm.py'
-              - 'backend/onyx/access/**'
-              - 'backend/ee/onyx/access/**'
-              - 'backend/ee/onyx/external_permissions/*.py'
-              - 'backend/ee/onyx/external_permissions/onedrive/**'
               - 'backend/ee/onyx/external_permissions/microsoft_utils/**'
-              - 'backend/ee/onyx/background/celery/tasks/doc_permission_syncing/**'
-              - 'backend/ee/onyx/background/celery/tasks/external_group_syncing/**'
+            azure_datalake:
+              - *connector_shared
+              - *connector_microsoft
+              - 'backend/onyx/connectors/azure_datalake/**'
+              - 'backend/ee/onyx/external_permissions/azure_datalake/**'
+              - 'backend/tests/integration/connector_job_tests/azure_datalake/**'
+            github:
+              - *connector_shared
+              - 'backend/onyx/connectors/github/**'
+              - 'backend/ee/onyx/external_permissions/github/**'
+              - 'backend/tests/integration/connector_job_tests/github/**'
+            google:
+              - *connector_shared
+              - 'backend/onyx/connectors/google_drive/**'
+              - 'backend/onyx/connectors/google_utils/**'
+              - 'backend/ee/onyx/external_permissions/google_drive/**'
+              - 'backend/tests/integration/connector_job_tests/google/**'
+            jira:
+              - *connector_shared
+              - 'backend/onyx/connectors/jira/**'
+              - 'backend/ee/onyx/external_permissions/jira/**'
+              - 'backend/tests/integration/connector_job_tests/jira/**'
+            onedrive:
+              - *connector_shared
+              - *connector_microsoft
+              - 'backend/onyx/connectors/onedrive/**'
+              - 'backend/ee/onyx/external_permissions/onedrive/**'
               - 'backend/tests/integration/connector_job_tests/onedrive/**'
-              - 'backend/tests/integration/common_utils/managers/cc_pair.py'
-              - '.github/workflows/pr-integration-tests.yml'
+              - 'backend/tests/utils/onedrive_fixture.py'
+            sharepoint:
+              - *connector_shared
+              - *connector_microsoft
+              - 'backend/onyx/connectors/sharepoint/**'
+              - 'backend/ee/onyx/external_permissions/sharepoint/**'
+              - 'backend/tests/integration/connector_job_tests/sharepoint/**'
+            slack:
+              - *connector_shared
+              - 'backend/onyx/connectors/slack/**'
+              - 'backend/ee/onyx/external_permissions/slack/**'
+              - 'backend/tests/integration/connector_job_tests/slack/**'
             reindex_port:
               - 'backend/onyx/background/celery/tasks/port/**'
               - 'backend/onyx/background/celery/tasks/docprocessing/**'
@@ -166,6 +190,22 @@ jobs:
               - 'backend/onyx/indexing/**'
               - 'backend/tests/integration/tests/reindex_port/**'
               - '.github/workflows/pr-integration-tests.yml'
+
+      - name: Pick live connector suites
+        id: connectors
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
+        run: |
+          skipped=""
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            for suite in azure_datalake github google jira onedrive sharepoint slack; do
+              if [[ "$(jq -r --arg suite "$suite" '.[$suite] // "false"' <<< "$FILTER_OUTPUTS")" != "true" ]]; then
+                skipped="$skipped $suite"
+              fi
+            done
+          fi
+          echo "skipped=${skipped# }" >> "$GITHUB_OUTPUT"
 
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -186,8 +226,7 @@ jobs:
         id: set-matrix
         env:
           GATEWAY_CHANGED: ${{ needs.changes.outputs.gateway }}
-          SLACK_CHANGED: ${{ needs.changes.outputs.slack }}
-          ONEDRIVE_CHANGED: ${{ needs.changes.outputs.onedrive }}
+          SKIPPED_CONNECTOR_SUITES: ${{ needs.changes.outputs.skipped_connector_suites }}
           REINDEX_PORT_CHANGED: ${{ needs.changes.outputs.reindex_port }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
@@ -200,13 +239,12 @@ jobs:
           if [[ "$REINDEX_PORT_CHANGED" == "true" ]]; then
             tests_dirs="$tests_dirs reindex_port"
           fi
-          connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "slack" ! -name "onedrive" -exec basename {} \; | sort)
-          if [[ "$SLACK_CHANGED" == "true" ]]; then
-            connector_dirs="$connector_dirs slack"
-          fi
-          if [[ "$ONEDRIVE_CHANGED" == "true" ]]; then
-            connector_dirs="$connector_dirs onedrive"
-          fi
+          connector_dirs=""
+          for dir in $(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort); do
+            if [[ " $SKIPPED_CONNECTOR_SUITES " != *" $dir "* ]]; then
+              connector_dirs="$connector_dirs $dir"
+            fi
+          done
           # The chat suites run a second time with code mode on, where the model
           # calls most tools from `execute_code` programs.
           code_mode_dirs="chat llm_workflows streaming_endpoints tools"
