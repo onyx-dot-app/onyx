@@ -339,8 +339,12 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   inside the session with a device and inode identity, or why there is none:
   missing, escapes, loop; at most 8 links per path; up to 1,000 paths and
   1 MiB of path bytes per call; an older root drive fails with a message
-  that it updates after a restart) and `delete_file` for apply_patch,
-  `publish_artifact`, and busy signals (turn and parked-approval marks).
+  that it updates after a restart) and `delete_file` for apply_patch, and
+  busy signals (turn and parked-approval marks). `read_file` and
+  `write_onyx_file` also take an absolute path under `ONYX_VM_FILES_ROOT`
+  (`/tmp/onyx`, `server/features/build/sandbox/harness_base.py:onyx_vm_path`), which the daemon confines
+  to its onyx root with no session; `read_file` refuses every other path
+  outside the session directory. `publish_files` reads through it.
   Each chat session works in `SESSION_WORKSPACE_ROOT/<session_id>`
   (`/home/onyx/workspaces`); file calls take paths by
   `session_relative_path`. For a missing file, `read_file` raises
@@ -409,7 +413,7 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   commit): a Craft session delete
   (`backend/onyx/server/features/build/session/api.py:delete_session`)
   deletes that session's save, its directory on the running VM and its
-  exec records; its artifacts stay. A user's chat delete, hard or soft
+  exec records. A user's chat delete, hard or soft
   (`backend/onyx/server/query_and_chat/chat_backend.py:delete_chat_session_by_id`;
   `delete_all_chat_sessions` purges in a background thread) does the same for
   the chat session: no one can restore a soft-deleted chat. The API routes
@@ -418,7 +422,7 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   session the harness has no record of (save, instance mark or exec record)
   costs only cache reads. A user delete (`delete_user_from_db`
   in a background thread, `UserManager.delete`) and the last-admin tenant
-  delete stop the VM and delete every save, artifact and record of the
+  delete stop the VM and delete every save and record of the
   sandbox. At the end of each chat retention chain
   (`backend/ee/onyx/background/celery/tasks/ttl_management/tasks.py`),
   `purge_expired_harness_sessions_task` runs on the `sandbox` queue (the
@@ -426,8 +430,9 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   100 saved sessions whose chat session is gone or whose build session had
   no activity in the window.
   A purge mark makes a save in progress drop its archive instead of
-  committing. Saves and artifacts are indexed per sandbox in the tenant
-  cache.
+  committing. Saves are indexed per sandbox in the tenant cache. A chat's
+  published files are chat files, not sandbox state: the chat delete
+  deletes them ([[chat-persistence]]).
 
 ---
 

@@ -24,6 +24,7 @@ from onyx.tools.models import (
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchResult,
+    PublishedFiles,
     SandboxExecResult,
 )
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
@@ -39,7 +40,8 @@ CodeModeCallDetails = Annotated[
     | MemoryUpdated
     | ToolExecutionError
     | SandboxExecResult
-    | ApplyPatchResult,
+    | ApplyPatchResult
+    | PublishedFiles,
     Field(discriminator="type"),
 ]
 CODE_MODE_CALL_DETAIL_TYPES: tuple[type[BaseModel], ...] = get_args(

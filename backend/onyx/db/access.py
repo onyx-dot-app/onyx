@@ -7,7 +7,7 @@ from sqlalchemy import cast as sa_cast
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import CHAT_OUTPUT_FILE_ORIGINS, FileOrigin
 from onyx.db.models import (
     ChatMessage,
     ChatSession,
@@ -89,16 +89,16 @@ def user_can_access_chat_message_file(
     return db_session.execute(chat_file_stmt).first() is not None
 
 
-def get_chat_image_gen_file_metadata_row(
+def get_chat_output_file_row(
     db_session: Session, file_id: str
-) -> Row[tuple[JSON_ro]] | None:
-    """Return None when `file_id` is not a `CHAT_IMAGE_GEN` file. The row is
-    returned, not its value, because the metadata itself can be NULL.
-    """
+) -> Row[tuple[FileOrigin, JSON_ro]] | None:
+    """The origin and metadata of a chat output file
+    (`CHAT_OUTPUT_FILE_ORIGINS`); None for any other file. The row is
+    returned, not its values, because the metadata itself can be NULL."""
     return db_session.execute(
-        select(FileRecord.file_metadata).where(
+        select(FileRecord.file_origin, FileRecord.file_metadata).where(
             FileRecord.file_id == file_id,
-            FileRecord.file_origin == FileOrigin.CHAT_IMAGE_GEN,
+            FileRecord.file_origin.in_(CHAT_OUTPUT_FILE_ORIGINS),
         )
     ).first()
 

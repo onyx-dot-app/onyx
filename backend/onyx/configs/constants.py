@@ -477,13 +477,16 @@ class FileStoreType(str, Enum):
 
 
 # Key in FileRecord.file_metadata naming the chat session that produced a
-# CHAT_IMAGE_GEN file. user_can_access_chat_file scopes the file by it.
+# chat output file (CHAT_OUTPUT_FILE_ORIGINS). user_can_access_chat_file gives
+# the file to the session's readers.
 CHAT_SESSION_ID_FILE_METADATA_KEY = "chat_session_id"
 
 
 class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"
+    # A file that the model published from its sandbox (publish_files).
+    CHAT_ARTIFACT = "chat_artifact"
     CONNECTOR = "connector"
     CONNECTOR_FILE_UPLOAD = "connector_file_upload"
     CONNECTOR_METADATA = "connector_metadata"
@@ -498,6 +501,13 @@ class FileOrigin(str, Enum):
     SANDBOX_SNAPSHOT = "sandbox_snapshot"
     SKILL_BUNDLE = "skill_bundle"
     USER_FILE = "user_file"
+
+
+# Files that a chat produced for its readers: generated images and code
+# interpreter outputs, and the files that the model published from its sandbox.
+CHAT_OUTPUT_FILE_ORIGINS = frozenset(
+    {FileOrigin.CHAT_IMAGE_GEN, FileOrigin.CHAT_ARTIFACT}
+)
 
 
 class FileType(str, Enum):

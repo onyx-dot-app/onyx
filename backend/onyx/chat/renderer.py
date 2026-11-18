@@ -98,6 +98,7 @@ from onyx.tools.tool_implementations.question.models import (
 )
 from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchResult,
+    PublishedFiles,
     SandboxExecResult,
     WriteStdinArguments,
 )
@@ -106,6 +107,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ApplyPatchTool,
     EditTool,
     ExecCommandTool,
+    PublishFilesTool,
     WriteStdinTool,
     WriteTool,
 )
@@ -729,6 +731,18 @@ class ToolRenderer:
                     tool_name=WriteTool.NAME,
                 )
             ]
+        elif name == PublishFilesTool.NAME:
+            # Invalid or interrupted arguments still show the publish card.
+            try:
+                start = packets.PublishFilesStart.model_validate(
+                    {
+                        "files": args.get("files", []),
+                        "description": args.get("description"),
+                    }
+                )
+            except ValidationError:
+                start = packets.PublishFilesStart()
+            objects = [start]
         elif name == FileReaderTool.NAME:
             objects = [packets.FileReaderStart()]
         elif name == MemoryTool.NAME:
@@ -798,7 +812,8 @@ class ToolRenderer:
         """Render result details; content already rendered is skipped."""
         objects: list[packets.PacketObj] = []
         if isinstance(
-            details, (SandboxOutputDelta, SandboxExecResult, ApplyPatchResult)
+            details,
+            (SandboxOutputDelta, SandboxExecResult, ApplyPatchResult, PublishedFiles),
         ):
             return self._sandbox_packets(details)
         if isinstance(details, PythonExecutionDelta):
@@ -941,7 +956,11 @@ class ToolRenderer:
         return [packets.Packet(placement=self.placement, obj=obj) for obj in objects]
 
     def _sandbox_packets(
-        self, details: SandboxOutputDelta | SandboxExecResult | ApplyPatchResult
+        self,
+        details: SandboxOutputDelta
+        | SandboxExecResult
+        | ApplyPatchResult
+        | PublishedFiles,
     ) -> list[packets.Packet]:
         """Every output delta renders; a result renders once."""
         if isinstance(details, SandboxOutputDelta):
@@ -951,6 +970,9 @@ class ToolRenderer:
         elif isinstance(details, ApplyPatchResult):
             self._last_details = details
             obj = packets.ApplyPatchEnd(files=details.files)
+        elif isinstance(details, PublishedFiles):
+            self._last_details = details
+            obj = packets.PublishFilesEnd(files=details.files)
         else:
             self._last_details = details
             obj = packets.ExecEnd(
@@ -1004,7 +1026,8 @@ class ToolRenderer:
             and result.is_error
             and not isinstance(result.details, (SandboxExecResult, ApplyPatchResult))
         ):
-            # A failed sandbox call has no process result or file changes.
+            # A failed sandbox call has no process result, file changes or
+            # published files.
             if self.call.name in EXEC_TOOL_NAMES:
                 return [
                     packets.Packet(
@@ -1017,6 +1040,13 @@ class ToolRenderer:
                     packets.Packet(
                         placement=self.placement,
                         obj=packets.ApplyPatchEnd(error=result.text),
+                    )
+                ]
+            if self.call.name == PublishFilesTool.NAME:
+                return [
+                    packets.Packet(
+                        placement=self.placement,
+                        obj=packets.PublishFilesEnd(error=result.text),
                     )
                 ]
         if result is not None:

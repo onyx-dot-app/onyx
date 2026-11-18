@@ -3,8 +3,8 @@
 > Runs code for the user: `run_python` and the coding agent's `bash` send code
 > to an external Code Interpreter service, code mode's `execute_code` runs
 > a Python program that calls the other chat tools in local Monty sandbox
-> workers, and the sandbox tools run commands and edit files in the user's
-> Firecracker VM.
+> workers, and the sandbox tools run commands, edit files and publish files
+> in the user's Firecracker VM.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
@@ -55,7 +55,10 @@
   per agent, and users cannot pick or force them. Commands run in the user's
   private VM, in the chat's session directory, whose files stay for later
   turns. The user sees each command and its output as it streams, and the
-  files that each patch, edit or write changed, on the same patch card.
+  files that each patch, edit or write changed, on the same patch card. Every
+  model also gets `publish_files`, which gives files from the VM to the user
+  as download cards; owners and viewers of a shared chat can download them,
+  and a chat delete deletes them.
 
 ---
 
@@ -66,7 +69,7 @@ its version gates, the one-row settings table with its admin API and page, the
 meaning of `BASH_TOOL_SENTINEL_ID`, and code mode: its sandbox driver, tool
 stubs, program store, model-facing text, `CodeModeTool` and its result
 details, and the sandbox tools (`exec_command`, `write_stdin`,
-`apply_patch`, `edit`, `write`). Code mode's packets and replay belong to [[streaming-protocol]], and
+`apply_patch`, `edit`, `write`, `publish_files`). Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
 
 It does not own:
@@ -215,7 +218,7 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
 ```
 
 ```
-exec_command / write_stdin / apply_patch | edit + write (no tool row; Tool.id is None)
+exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool row; Tool.id is None)
   prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
                                         and not for anonymous users (one VM per user), in
                                         incognito or when the request selects more than
@@ -231,14 +234,16 @@ exec_command / write_stdin / apply_patch | edit + write (no tool row; Tool.id is
                                         LLM's names (model_identity_names) contains "claude"
                                         (model_capabilities.is_claude_model, the one rule that
                                         LLM requests and prompt caching use too), else
-                                        ApplyPatchTool; never both. The reserved-token prompt
+                                        ApplyPatchTool; never both; PublishFilesTool for every
+                                        model. The reserved-token prompt
                                         (calculate_reserved_tokens) names the same set
   prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
                                         (sandbox_tools.py:sandbox_guidance): one use per
                                         SandboxTool that the turn offers, in order, named
                                         as the model calls it (CodeModeTool.called_name in
-                                        code mode); the tool descriptions describe only
-                                        the tools
+                                        code mode), except tools whose USE is None
+                                        (publish_files); the tool descriptions describe
+                                        only the tools
   SandboxTurn.start_call                first call: the user's Sandbox row
                                         (build/db/sandbox.py:get_or_create_sandbox); before
                                         each call: HarnessSandbox.begin_turn (an error is
@@ -286,8 +291,25 @@ exec_command / write_stdin / apply_patch | edit + write (no tool row; Tool.id is
                                         Claude Code's texts. write creates or overwrites
                                         (parents created); no read-first rule, as reads are
                                         not tracked. Both save ApplyPatchResult.
-                                        The three file tools share one sequence_group:
-                                        their calls of one step run one at a time
+                                        The file tools and publish_files share one
+                                        sequence_group: their calls of one step run one at
+                                        a time, so a publish sees the step's earlier edits
+  PublishFilesTool (SEQUENTIAL)         for each file in order: HarnessSandbox.read_file
+                                        (a working-directory path, or an absolute path
+                                        under ONYX_VM_FILES_ROOT; other paths are refused
+                                        with a hint to copy the file into the working
+                                        directory; a regular file of at most
+                                        PUBLISH_FILES_MAX_BYTES, 100 MiB), then
+                                        file_store/utils.save_chat_output_file with
+                                        FileOrigin.CHAT_ARTIFACT and the SandboxTurn's chat
+                                        session (the root chat's: subagents share the turn).
+                                        A failure, or a Stop during or after the copies,
+                                        deletes the files that the call saved: all or none.
+                                        Saves PublishedFiles (file ID, name, title, absolute
+                                        path, size, MIME type); each publish is a new file,
+                                        and files of one name are versions of one file.
+                                        save_chat_turn adds the files to the response's
+                                        ChatMessage.files ([[chat-persistence]])
   Agent.on_drained (root ChatAgent)     SandboxTurn.end: create_chat_agent passes it to the
                                         root chat agent only (bind_run_store: also to a
                                         restored root), not to subagents or deep research
@@ -388,7 +410,7 @@ health calls are not retried.
    able to parse it.
 6. `generated-files-need-session` **Generated files need the chat session ID.**
    `PythonTool` saves them with
-   `file_store/utils.py:chat_image_gen_metadata` and the chat session ID.
+   `file_store/utils.py:save_chat_output_file` and the chat session ID.
    `tools/tool_constructor.py:_require_chat_session_id` raises when a caller
    builds the tool without one. The access rule is in
    [[file-store-and-user-files]].

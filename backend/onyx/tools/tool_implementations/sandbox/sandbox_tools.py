@@ -1,5 +1,5 @@
-"""Tools that run commands and edit files in the user's private sandbox
-(`server/features/build/sandbox/harness_base.py:HarnessSandbox`).
+"""Tools that run commands, edit files and publish files in the user's
+private sandbox (`server/features/build/sandbox/harness_base.py:HarnessSandbox`).
 `sandbox_tools_for_model` gives the set that a turn's model gets.
 
 They have no tool row: a chat turn builds them when it offers the sandbox
@@ -20,6 +20,9 @@ from onyx.agents.tools import (
     ToolInvocation,
     ToolProgress,
 )
+from onyx.configs.constants import FileOrigin
+from onyx.file_store.staging import delete_files_best_effort
+from onyx.file_store.utils import chat_output_file_type, save_chat_output_file
 from onyx.llm.model_capabilities import is_claude_model
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.prompts.sandbox_tools import (
@@ -29,6 +32,7 @@ from onyx.prompts.sandbox_tools import (
     EDIT_USE,
     EXEC_COMMAND_DESCRIPTION,
     EXEC_COMMAND_USE,
+    PUBLISH_FILES_DESCRIPTION,
     SANDBOX_CODE_MODE_NOTE,
     SANDBOX_GUIDANCE,
     WRITE_DESCRIPTION,
@@ -41,6 +45,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     HarnessSandboxError,
     SandboxPathError,
     session_relative_path,
+    session_workspace,
 )
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
@@ -61,6 +66,7 @@ from onyx.tools.models import (
     ToolContext,
 )
 from onyx.tools.tool_implementations.sandbox.models import (
+    PUBLISH_FILES_MAX_BYTES,
     ApplyPatchArguments,
     ApplyPatchFileChange,
     ApplyPatchResult,
@@ -68,6 +74,9 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ExecCommandArguments,
     ExecCommandOutput,
     FileToolName,
+    PublishedFile,
+    PublishedFiles,
+    PublishFilesArguments,
     SandboxExecResult,
     WriteArguments,
     WriteStdinArguments,
@@ -171,8 +180,8 @@ class SandboxTool(Tool):
     DESCRIPTION: str
     ARGUMENTS: type[BaseModel]
     # The tool's use in the system prompt's sandbox section; `{name}` is the
-    # name that the model calls.
-    USE: str
+    # name that the model calls. None: only the tool description names it.
+    USE: str | None
 
     def __init__(self, turn: SandboxTurn) -> None:
         self._turn = turn
@@ -638,18 +647,98 @@ class WriteTool(_FileTool):
         )
 
 
+class PublishFilesTool(_FileTool):
+    """Copies files from the VM to the file store, stamped with the chat
+    session, so that everyone who can read the chat can download them
+    (`access/access.py:user_can_access_chat_file`). The response's save
+    attaches them to its message (`db/chat_response.py:save_chat_turn`), so
+    a chat delete deletes them. A call publishes all of its files or none.
+    It takes turns with the file tools, so it publishes their changes."""
+
+    NAME = "publish_files"
+    # The tool description is its only instruction to the model.
+    USE = None
+    DESCRIPTION = PUBLISH_FILES_DESCRIPTION
+    ARGUMENTS = PublishFilesArguments
+    display_name = "Publish Files"
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return _FILE_TOOL_RESULT
+
+    def tool_definition(self) -> ToolDefinition:
+        # Not strict: the file entries are `$defs` references.
+        return tool_definition_from_arguments(
+            self.name, self.description, PublishFilesArguments
+        )
+
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
+        arguments = parse_tool_arguments(PublishFilesArguments, invocation.arguments)
+        sandbox = self._turn.sandbox
+        published: list[PublishedFile] = []
+        try:
+            with _sandbox_errors_as_tool_errors():
+                # The turn's chat session is the root chat's, whose readers
+                # may download the files; subagent runs share it.
+                ref = self._turn.start_call()
+                for requested in arguments.files:
+                    invocation.cancellation.check()
+                    data = sandbox.read_file(
+                        ref, requested.path, max_bytes=PUBLISH_FILES_MAX_BYTES
+                    )
+                    path = posixpath.normpath(
+                        posixpath.join(
+                            session_workspace(ref.session_id), requested.path
+                        )
+                    )
+                    name = posixpath.basename(path)
+                    mime_type = chat_output_file_type(name)
+                    published.append(
+                        PublishedFile(
+                            file_id=save_chat_output_file(
+                                data,
+                                display_name=name,
+                                file_type=mime_type,
+                                file_origin=FileOrigin.CHAT_ARTIFACT,
+                                chat_session_id=ref.session_id,
+                            ),
+                            name=name,
+                            title=requested.title,
+                            path=path,
+                            size=len(data),
+                            mime_type=mime_type,
+                        )
+                    )
+                # A Stop during the last copy publishes nothing.
+                invocation.cancellation.check()
+        except BaseException:
+            delete_files_best_effort(
+                [file.file_id for file in published], "unpublished sandbox files"
+            )
+            raise
+        listed = "\n".join(
+            f"- {file.path}: file ID {file.file_id}, {file.size} bytes, {file.mime_type}"
+            for file in published
+        )
+        return ToolResult(
+            content="Published. The user sees a download card for each file; "
+            f"do not repeat their contents.\n{listed}",
+            details=PublishedFiles(files=published),
+        )
+
+
 def sandbox_tools_for_model(
     model_names: Sequence[str],
 ) -> tuple[type[SandboxTool], ...]:
     """The sandbox tools of a chat turn whose model has these names
     (model_identity_names), in the order the prompt names them: Claude models
     edit files with edit and write, the tools they are trained on; the others
-    with apply_patch. The turn builds them, and its prompt and token estimate
-    name them."""
+    with apply_patch. Every model gets publish_files. The turn builds them,
+    and its prompt and token estimate name them."""
     file_tools = (
         (EditTool, WriteTool) if is_claude_model(model_names) else (ApplyPatchTool,)
     )
-    return (ExecCommandTool, WriteStdinTool, *file_tools)
+    return (ExecCommandTool, WriteStdinTool, *file_tools, PublishFilesTool)
 
 
 def sandbox_guidance(
@@ -661,7 +750,11 @@ def sandbox_guidance(
     """The system prompt's sandbox section: the use of each of `tools`, in
     order, by the name that `called_name` gives for its tool name; None
     without any."""
-    uses = [tool.USE.format(name=f"`{called_name(tool.NAME)}`") for tool in tools]
+    uses = [
+        tool.USE.format(name=f"`{called_name(tool.NAME)}`")
+        for tool in tools
+        if tool.USE is not None
+    ]
     if not uses:
         return None
     listed = uses[0] if len(uses) == 1 else f"{', '.join(uses[:-1])} and {uses[-1]}"

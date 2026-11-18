@@ -183,6 +183,7 @@ from onyx.tools.tool_implementations.images.models import FinalImageGenerationRe
 from onyx.tools.tool_implementations.question.models import QuestionToolDetails
 from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchResult,
+    PublishedFiles,
     SandboxExecResult,
 )
 from onyx.tools.tool_implementations.subagents.models import (
@@ -4047,6 +4048,7 @@ SavedToolResultDetails = Annotated[
     | AgentWaitDetails
     | SandboxExecResult
     | ApplyPatchResult
+    | PublishedFiles
     | QuestionToolDetails,
     Field(discriminator="type"),
 ]

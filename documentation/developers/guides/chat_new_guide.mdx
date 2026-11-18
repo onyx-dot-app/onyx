@@ -156,6 +156,8 @@ class StreamingType(Enum):
     EXEC_END = "exec_end"
     APPLY_PATCH_START = "apply_patch_start"
     APPLY_PATCH_END = "apply_patch_end"
+    PUBLISH_FILES_START = "publish_files_start"
+    PUBLISH_FILES_END = "publish_files_end"
 ```
 
 ### Non-streaming Response
@@ -182,6 +184,9 @@ class ChatFullResponse(BaseModel):
     # Not empty when the response stopped to wait for approval decisions
     pending_tool_approvals: list[ToolApprovalRequest] = []
 ```
+
+Each `ToolCallResponse` of a `publish_files` call lists the files it published in `published_files`,
+with the same fields as the `publish_files_end` packet.
 
 ## Tool Approvals
 

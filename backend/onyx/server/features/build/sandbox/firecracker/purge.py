@@ -6,9 +6,9 @@ is deleted. They do nothing unless harness sandboxes run on Firecracker
 raise: a failure is logged. The heavy client stack loads only when enabled.
 
 - Session: its save archive, its directory on the running VM and its exec
-  records. Its published artifacts stay.
+  records.
 - Sandbox (user or tenant delete): the VM is stopped (the node agent removes
-  its disk), and every save archive, artifact and record of the sandbox goes.
+  its disk), and every save archive and record of the sandbox goes.
 - Chat retention: each saved session that retention no longer keeps is
   purged as on session delete.
 """
