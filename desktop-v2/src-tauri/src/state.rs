@@ -150,7 +150,8 @@ impl AppState {
     }
 
     /// Clears a token the server rejected, unless a new sign-in replaced it.
-    pub fn clear_rejected_token(&self, server: &str, rejected: &str) -> Result<(), String> {
+    /// Returns whether the rejected token was still the session.
+    pub fn clear_rejected_token(&self, server: &str, rejected: &str) -> Result<bool, String> {
         // Held until the keychain entry is gone, so a concurrent `token()`
         // cannot load the old token back into the cache.
         let mut cache = self.token.lock().unwrap_or_else(|p| p.into_inner());
@@ -159,10 +160,10 @@ impl AppState {
             _ => session_store::load(server),
         };
         if current.as_deref() != Some(rejected) {
-            return Ok(());
+            return Ok(false);
         }
         *cache = None;
-        session_store::clear(server)
+        session_store::clear(server).map(|()| true)
     }
 
     /// The server and token for an authenticated call.
