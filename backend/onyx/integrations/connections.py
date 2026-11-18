@@ -91,6 +91,7 @@ from onyx.server.features.mcp.oauth import (
     make_integration_oauth_provider,
     oauth_error_from_response,
     oauth_token_from_response,
+    oauth_token_from_secret,
 )
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_url
@@ -635,7 +636,7 @@ def _refresh_connection(
         return
 
     try:
-        grant = _request_refreshed_grant(integration, connection, secret, db_session)
+        grant = _request_refreshed_grant(integration, connection, record, db_session)
     except _RefreshTemporaryError as error:
         logger.warning(
             "integration_connection.refresh.temporary connection_id=%s error=%s",
@@ -680,14 +681,17 @@ def _refresh_connection(
 def _request_refreshed_grant(
     integration: Integration,
     connection: IntegrationConnection,
-    secret: ConnectionSecret,
+    record: ConnectionRecord,
     db_session: Session,
 ) -> RefreshedGrant:
+    secret = record.secret
     oauth_client = get_oauth_client(db_session, integration.id)
     if oauth_client is None:
         raise _RefreshTemporaryError("the integration has no OAuth client")
     if integration.kind is IntegrationKind.MCP:
-        return _refresh_with_mcp_sdk(integration, connection, oauth_client, db_session)
+        return _refresh_with_mcp_sdk(
+            integration, connection, record, oauth_client, db_session
+        )
     if oauth_client.provider_mode is IntegrationOAuthProviderMode.PRESET:
         return _refresh_with_preset(integration, secret, oauth_client, db_session)
     return _refresh_with_token_url(secret, oauth_client)
@@ -910,6 +914,7 @@ def _refresh_with_preset(
 def _refresh_with_mcp_sdk(
     integration: Integration,
     connection: IntegrationConnection,
+    record: ConnectionRecord,
     oauth_client: IntegrationOAuthClient,
     db_session: Session,
 ) -> RefreshedGrant:
@@ -924,7 +929,11 @@ def _refresh_with_mcp_sdk(
         storage,
     )
     try:
-        request = run_async_sync_no_cancel(provider.build_refresh_request())
+        request = run_async_sync_no_cancel(
+            provider.build_refresh_request(
+                oauth_token_from_secret(record.secret, record.granted_scopes)
+            )
+        )
     except Exception as error:
         raise _RefreshTemporaryError(f"could not build refresh: {error}") from error
     if request is None:

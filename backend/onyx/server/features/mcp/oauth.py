@@ -491,10 +491,15 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
             await storage.set_tokens(tokens)
         return tokens
 
-    async def build_refresh_request(self) -> httpx.Request | None:
-        """Load the stored grant and build the SDK refresh request, or None
-        when the grant cannot refresh."""
+    async def build_refresh_request(
+        self, tokens: OAuthToken | None = None
+    ) -> httpx.Request | None:
+        """Build the SDK refresh request for ``tokens``, the grant that the
+        caller read, or for the stored grant. None when the grant cannot
+        refresh."""
         await self._initialize()
+        if tokens is not None:
+            self.context.current_tokens = tokens
         if not self.context.can_refresh_token():
             return None
         return await self._refresh_token()
@@ -654,7 +659,7 @@ def make_oauth_provider_with_storage(
     return provider
 
 
-def _oauth_token_from_secret(
+def oauth_token_from_secret(
     secret: ConnectionSecret, granted_scopes: list[str] | None
 ) -> OAuthToken | None:
     if not secret.access_token:
@@ -747,7 +752,7 @@ class IntegrationTokenStorage(TokenStorage):
                 or record.status is IntegrationConnectionStatus.NEEDS_RECONNECT
             ):
                 return None
-            return _oauth_token_from_secret(record.secret, record.granted_scopes)
+            return oauth_token_from_secret(record.secret, record.granted_scopes)
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
         await self._persist_tokens(tokens, keep_refresh=True)
