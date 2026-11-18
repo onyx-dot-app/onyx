@@ -7,9 +7,9 @@ from uuid import uuid4
 import pytest
 from fastapi import Request
 
-from onyx.server.gateway import craft_session, tracing
-from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
-from onyx.server.gateway.craft_session import (
+from onyx.server.features.build import request_context as craft_session
+from onyx.server.features.build.configs import CRAFT_SESSION_HEADER
+from onyx.server.features.build.request_context import (
     CRAFT_SESSION_ID_CONTEXTVAR,
     craft_session_binder,
     resolve_craft_session_id,
@@ -25,25 +25,9 @@ def _request(header: str | None) -> Request:
     return Request({"type": "http", "method": "POST", "path": "/", "headers": headers})
 
 
-def test_no_header_means_no_session() -> None:
-    assert resolve_craft_session_id(_request(None), MagicMock(), MagicMock()) is None
-
-
-def test_malformed_header_is_ignored() -> None:
-    with patch.object(craft_session, "get_build_session") as lookup:
-        assert (
-            resolve_craft_session_id(_request("not-a-uuid"), MagicMock(), MagicMock())
-            is None
-        )
-    lookup.assert_not_called()
-
-
 def test_session_of_another_user_is_ignored() -> None:
     with patch.object(craft_session, "get_build_session", return_value=None):
-        assert (
-            resolve_craft_session_id(_request(str(uuid4())), MagicMock(), MagicMock())
-            is None
-        )
+        assert resolve_craft_session_id(uuid4(), MagicMock(), MagicMock()) is None
 
 
 def test_owned_session_is_returned() -> None:
@@ -53,9 +37,7 @@ def test_owned_session_is_returned() -> None:
     with patch.object(
         craft_session, "get_build_session", return_value=object()
     ) as lookup:
-        assert resolve_craft_session_id(_request(str(session_id)), user, db) == str(
-            session_id
-        )
+        assert resolve_craft_session_id(session_id, user, db) == str(session_id)
     lookup.assert_called_once_with(session_id, user.id, db)
 
 
@@ -109,7 +91,7 @@ def test_unowned_session_cannot_bind_a_turn_trace() -> None:
         with (
             patch.object(craft_session, "get_session_with_current_tenant"),
             patch.object(craft_session, "get_build_session", return_value=None),
-            patch.object(tracing, "get_craft_turn_trace_id") as lookup,
+            patch.object(craft_session, "get_craft_turn_trace_id") as lookup,
         ):
             dependency = bind(_request(str(uuid4())), MagicMock())
             await dependency.__anext__()
@@ -140,7 +122,7 @@ def test_ownership_connection_is_released_before_cache_lookup() -> None:
             ),
             patch.object(craft_session, "get_build_session", return_value=object()),
             patch.object(
-                tracing, "get_craft_turn_trace_id", side_effect=read_turn_trace
+                craft_session, "get_craft_turn_trace_id", side_effect=read_turn_trace
             ),
         ):
             dependency = bind(_request(str(uuid4())), MagicMock())
@@ -160,11 +142,15 @@ def test_binder_skips_database_for_invalid_claims(header: str | None) -> None:
     bind = craft_session_binder(lambda: MagicMock())
 
     async def scenario() -> None:
-        with patch.object(craft_session, "get_session_with_current_tenant") as database:
+        with (
+            patch.object(craft_session, "get_session_with_current_tenant") as database,
+            patch.object(craft_session, "run_in_threadpool") as worker,
+        ):
             dependency = bind(_request(header), MagicMock())
             await dependency.__anext__()
             with pytest.raises(StopAsyncIteration):
                 await dependency.__anext__()
             database.assert_not_called()
+            worker.assert_not_called()
 
     asyncio.run(scenario())

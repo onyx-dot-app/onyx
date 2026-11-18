@@ -122,7 +122,7 @@ error, drains trailing usage within a chunk and time limit, closes the
 upstream, and records the span.
 
 **Craft attribution.** opencode sends `X-Onyx-Craft-Session` on every call.
-`server/gateway/craft_session.py:resolve_craft_session_id` keeps the id only
+`server/features/build/request_context.py:resolve_craft_session_id` keeps the id only
 when the caller owns that build session, and
 `server/gateway/tracing.py:llm_gateway_trace` tags the trace with it. The
 header is a hint, not an identity claim, because the sandbox can edit its own

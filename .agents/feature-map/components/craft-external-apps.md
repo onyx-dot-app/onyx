@@ -200,7 +200,9 @@ integration change reloads running Craft sessions through
 resolvers claim a request by host or by the gate's attribution, never by the
 placeholder value. `sandbox_proxy/server.py:build_resolvers` registers the
 resolvers. `backend/onyx/sandbox_proxy/resolvers/onyx_pat.py:OnyxPatResolver` claims the Onyx API host
-and injects the Craft PAT. `backend/onyx/sandbox_proxy/resolvers/integration.py:IntegrationResolver`
+and injects the Craft PAT. It also forwards the session tag as
+`X-Onyx-Craft-Session` unless the request already has that header. The Onyx
+API verifies ownership before using this hint for trace attribution. `backend/onyx/sandbox_proxy/resolvers/integration.py:IntegrationResolver`
 injects the credential of the matched integration through
 `integrations/call_credentials.py:resolve_call_credentials`: `resolve_connection`
 (which refreshes a token that expires soon) and `render_headers`; an OAuth

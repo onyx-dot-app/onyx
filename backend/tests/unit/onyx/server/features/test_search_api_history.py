@@ -61,7 +61,10 @@ def test_search_preserves_history_and_explicit_query(
     monkeypatch.setattr(api, "SearchTool", factory)
 
     response = api.search(
-        request, user=MagicMock(spec=User), db_session=MagicMock(spec=Session)
+        request,
+        user=MagicMock(spec=User),
+        db_session=MagicMock(spec=Session),
+        trace_metadata={},
     )
 
     assert factory.call_args.kwargs["include_link"] is True

@@ -56,8 +56,8 @@ from onyx.llm.multi_llm import LitellmLLM
 from onyx.server.auth_check import check_router_auth
 from onyx.server.features.build import craft_gateway
 from onyx.server.features.build.craft_gateway import gateway_request_flow
+from onyx.server.features.build.request_context import CRAFT_SESSION_ID_CONTEXTVAR
 from onyx.server.gateway.configs import GATEWAY_PATH_PREFIX
-from onyx.server.gateway.craft_session import CRAFT_SESSION_ID_CONTEXTVAR
 from onyx.server.gateway.models import (
     AnthropicCountTokensRequest,
     AnthropicMessagesRequest,

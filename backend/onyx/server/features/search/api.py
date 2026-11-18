@@ -17,6 +17,7 @@ from functools import partial
 from typing import cast
 
 from fastapi import APIRouter, Depends
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
@@ -43,6 +44,11 @@ from onyx.llm.factory import (
     llm_from_provider,
 )
 from onyx.server.api_key_usage import check_api_key_usage
+from onyx.server.features.build.request_context import (
+    CRAFT_SESSION_ID_CONTEXTVAR,
+    craft_session_binder,
+    craft_trace_metadata,
+)
 from onyx.server.features.search.models import (
     BaseSearchRequest,
     RawSearchRequest,
@@ -70,14 +76,29 @@ from onyx.tracing.framework.spans import SpanError
 from onyx.utils.fleet_query_telemetry import QueryMode, telemetry_query
 from shared_configs.contextvars import get_current_tenant_id
 
-router = APIRouter(prefix="/search")
+
+async def _search_trace_metadata() -> dict[str, str]:
+    # Resolve before usage checks or handlers reserve a schema-bound connection.
+    if CRAFT_SESSION_ID_CONTEXTVAR.get() is None:
+        return {}
+    return await run_in_threadpool(craft_trace_metadata)
+
+
+_search_user = require_permission(Permission.READ_SEARCH)
+router = APIRouter(
+    prefix="/search",
+    dependencies=[
+        Depends(require_vector_db),
+        Depends(craft_session_binder(_search_user)),
+        Depends(_search_trace_metadata),
+    ],
+)
 
 
 @router.post(
     "",
     # Budgets run before check_api_key_usage so rejected calls aren't counted.
     dependencies=[
-        Depends(require_vector_db),
         Depends(check_token_rate_limits),
         Depends(check_api_key_usage),
     ],
@@ -86,7 +107,8 @@ router = APIRouter(prefix="/search")
 @telemetry_query(mode=QueryMode.SEARCH)
 def search(
     request: SearchRequest,
-    user: User = Depends(require_permission(Permission.READ_SEARCH)),
+    user: User = Depends(_search_user),
+    trace_metadata: dict[str, str] = Depends(_search_trace_metadata),
     db_session: Session = Depends(get_session),
 ) -> SearchResponse:
     """
@@ -167,6 +189,7 @@ def search(
         request,
         user,
         trace_name="search_api",
+        trace_metadata=trace_metadata,
         message_history=request.message_history,
         context=ToolContext(skip_search_query_expansion=request.skip_query_expansion),
     )
@@ -175,13 +198,14 @@ def search(
 @router.post(
     "/raw",
     # Raw search spends no LLM tokens, so no token budget applies.
-    dependencies=[Depends(require_vector_db), Depends(check_api_key_usage)],
+    dependencies=[Depends(check_api_key_usage)],
     tags=PUBLIC_API_TAGS,
 )
 @telemetry_query(mode=QueryMode.SEARCH)
 def raw_search(
     request: RawSearchRequest,
-    user: User = Depends(require_permission(Permission.READ_SEARCH)),
+    user: User = Depends(_search_user),
+    trace_metadata: dict[str, str] = Depends(_search_trace_metadata),
     db_session: Session = Depends(get_session),
 ) -> SearchResponse:
     """
@@ -219,6 +243,7 @@ def raw_search(
         request,
         user,
         trace_name="raw_search_api",
+        trace_metadata=trace_metadata,
         message_history=None,
         context=ToolContext(),
     )
@@ -285,6 +310,7 @@ def _run_search(
     request: BaseSearchRequest,
     user: User,
     trace_name: str,
+    trace_metadata: dict[str, str],
     message_history: list[ChatMinimalTextMessage] | None,
     context: ToolContext,
 ) -> SearchResponse:
@@ -292,10 +318,13 @@ def _run_search(
     with (
         trace(
             trace_name,
-            metadata=SearchTraceMetadata(
-                user_id=str(user.id),
-                persona_id=request.persona_id,
-            ).model_dump(),
+            metadata={
+                **SearchTraceMetadata(
+                    user_id=str(user.id),
+                    persona_id=request.persona_id,
+                ).model_dump(),
+                **trace_metadata,
+            },
         ),
         function_span(SearchTool.NAME) as tool_span,
     ):

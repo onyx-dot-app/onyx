@@ -12,12 +12,14 @@ without a pod re-provision.
 from collections.abc import Sequence
 from typing import Any
 
-from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
+from onyx.server.features.build.configs import (
+    CRAFT_SESSION_HEADER,
+    MCP_SESSION_TAG_HEADER,
+)
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
 )
-from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
 
 # The gateway is an OpenAI-compatible endpoint, wired via opencode's
 # openai-compatible SDK package.

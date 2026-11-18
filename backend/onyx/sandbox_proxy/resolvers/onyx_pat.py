@@ -9,6 +9,7 @@ itself, so no separate tenant header is injected.
 from __future__ import annotations
 
 from urllib.parse import urlparse
+from uuid import UUID
 
 from mitmproxy import http
 
@@ -25,7 +26,7 @@ from onyx.sandbox_proxy.credential_injection import (
 )
 from onyx.sandbox_proxy.logging_utils import full_log_id, short_log_id
 from onyx.sandbox_proxy.models import InjectionContext
-from onyx.server.features.build.configs import ONYX_SERVER_URL
+from onyx.server.features.build.configs import CRAFT_SESSION_HEADER, ONYX_SERVER_URL
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -79,4 +80,11 @@ class OnyxPatResolver(CredentialResolver):
             request.host,
         )
         bearer = f"{BEARER_PREFIX}{raw_token}"
-        return {API_KEY_HEADER_NAME: bearer, API_KEY_HEADER_ALTERNATIVE_NAME: bearer}
+        headers = {API_KEY_HEADER_NAME: bearer, API_KEY_HEADER_ALTERNATIVE_NAME: bearer}
+        # Preserve an explicit per-model session header. The API verifies ownership.
+        if ctx.session_tag and CRAFT_SESSION_HEADER not in request.headers:
+            try:
+                headers[CRAFT_SESSION_HEADER] = str(UUID(ctx.session_tag))
+            except ValueError:
+                pass
+        return headers

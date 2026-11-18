@@ -184,7 +184,7 @@ the session's saved model before the turn starts, so the browser sends one only
 after the user picks it ([[craft-frontend#model-only-after-pick]]).
 `reconcile_session_llm_config` runs on every turn and rewrites `opencode.json`
 only when the resolved config changed. opencode sends the session id on every
-gateway call (`server/gateway/configs.py:CRAFT_SESSION_HEADER`), and
+gateway call (`server/features/build/configs.py:CRAFT_SESSION_HEADER`), and
 [[llm-gateway]] uses it for attribution.
 
 **User library.** Library files are ordinary `Document` rows with

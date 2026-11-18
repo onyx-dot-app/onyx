@@ -26,10 +26,16 @@ from fastapi import Request
 import onyx.server.features.build.sandbox.docker.dev_mode_serve as dev_mode_serve
 import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
 from onyx.cache.interface import CacheLockLostError
+from onyx.server.features.build import request_context as craft_session
 from onyx.server.features.build import turn_tracing
 from onyx.server.features.build.configs import (
+    CRAFT_SESSION_HEADER,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
+)
+from onyx.server.features.build.request_context import (
+    CRAFT_SESSION_ID_CONTEXTVAR,
+    craft_session_binder,
 )
 from onyx.server.features.build.sandbox import serve_transport
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
@@ -37,12 +43,6 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
 )
 from onyx.server.features.build.sandbox.models import CraftLLMProviderConfig
 from onyx.server.features.build.session import manager as session_manager
-from onyx.server.gateway import craft_session
-from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
-from onyx.server.gateway.craft_session import (
-    CRAFT_SESSION_ID_CONTEXTVAR,
-    craft_session_binder,
-)
 from onyx.server.gateway.models import GatewayModelDescriptor
 from onyx.server.gateway.tracing import llm_gateway_trace
 from onyx.tracing.flows import LLMFlow

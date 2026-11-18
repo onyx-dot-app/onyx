@@ -58,7 +58,9 @@ from onyx.sandbox_proxy.models import (
     McpProtocolRequest,
 )
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
+from onyx.sandbox_proxy.resolvers import onyx_pat
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
+from onyx.server.features.build.configs import CRAFT_SESSION_HEADER
 from tests.unit.sandbox_proxy.conftest import (
     RecordingCredentialResolver,
     StubResolver,
@@ -2048,3 +2050,52 @@ async def test_inactive_scheduled_session_returns_authorization_error(
     _assert_403(flow, SandboxProxyError.NO_ACTIVE_SESSION)
     assert not spy.approval_ran
     assert spy.dispatched == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tag_source", ["http", "connect", "relay", "missing", "malformed", "explicit"]
+)
+async def test_onyx_api_forward_carries_session_hint(
+    tag_source: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host = "api.onyx.example.com"
+    monkeypatch.setattr(onyx_pat, "ONYX_SERVER_URL", f"https://{host}")
+    monkeypatch.setattr(
+        onyx_pat, "get_session_with_tenant", lambda **_: nullcontext(MagicMock())
+    )
+    sandbox_row = MagicMock()
+    sandbox_row.encrypted_pat.get_value.return_value = "pat-secret"
+    monkeypatch.setattr(onyx_pat, "get_sandbox_by_id", lambda *_: sandbox_row)
+    addon = _build(
+        resolver=StubResolver(sandbox=make_resolved_sandbox()),
+        matcher=_StubMatcher(),
+        credential_resolvers=[onyx_pat.OnyxPatResolver()],
+        policy=parse_destination_policy(f"https://{host}"),
+    )
+    flow = make_flow(host=host, port=443)
+    if tag_source in {"http", "malformed"}:
+        flow.request.headers["Proxy-Authorization"] = _basic_auth(
+            _TAG_UUID if tag_source == "http" else "invalid"
+        )
+    elif tag_source == "connect":
+        addon._conn_session_tags[flow.client_conn.id] = _TAG_UUID
+    elif tag_source == "relay":
+        monkeypatch.setattr(addon, "_session_hint", lambda _: _TAG_UUID)
+
+    explicit_session = str(uuid4())
+    if tag_source == "explicit":
+        flow.request.headers["Proxy-Authorization"] = _basic_auth(_TAG_UUID)
+        flow.request.headers[CRAFT_SESSION_HEADER] = explicit_session
+    await addon.request(flow)
+
+    assert flow.response is None
+    assert flow.request.headers["Authorization"] == "Bearer pat-secret"
+    assert flow.request.headers.get(CRAFT_SESSION_HEADER) == (
+        explicit_session
+        if tag_source == "explicit"
+        else None
+        if tag_source in {"missing", "malformed"}
+        else _TAG_UUID
+    )
+    assert "Proxy-Authorization" not in flow.request.headers

@@ -34,6 +34,7 @@ class InjectionContext(BaseModel):
     sandbox: ResolvedSandbox
     matched_actions: AllMatchedActions | None
     protocol_target: GatedTarget | None = None
+    session_tag: str | None = None
 
     @property
     def target(self) -> GatedTarget | None:

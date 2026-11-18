@@ -86,6 +86,11 @@ SearchTool._run -> SearchTool.search
 The module docstring of `SearchTool` gives the authors' five-step design. Read
 it first.
 
+**Craft trace attribution.** `/search` and `/search/raw` verify the optional
+Craft session header through `server/features/build/request_context.py`.
+Their request traces join the active turn through the same cache identity as
+model calls. Missing, malformed, or unowned sessions retain standalone traces.
+
 **Prefetch, then parallel work.** `search` reads everything it needs from the
 database in one short session. The lane workers use plain objects. This keeps
 parallel lanes from holding connections. Do not pass an ORM object or a session

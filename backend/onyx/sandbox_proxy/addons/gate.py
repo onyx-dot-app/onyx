@@ -1089,6 +1089,7 @@ class GateAddon:
                 sandbox=sandbox,
                 matched_actions=matched_actions,
                 protocol_target=protocol_target,
+                session_tag=self._extract_session_tag(flow, log=False),
             ),
         )
         if result.outcome is InjectionOutcome.BLOCKED:

@@ -331,3 +331,6 @@ USER_LIBRARY_MAX_FILES_PER_UPLOAD = int(
 USER_LIBRARY_CONNECTOR_NAME = "User Library"
 USER_LIBRARY_CREDENTIAL_NAME = "User Library Credential"
 USER_LIBRARY_SOURCE_DIR = "user_library"
+
+# Attribution hint; API handlers verify session ownership.
+CRAFT_SESSION_HEADER = "X-Onyx-Craft-Session"

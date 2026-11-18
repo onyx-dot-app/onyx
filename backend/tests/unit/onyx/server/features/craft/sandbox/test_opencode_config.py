@@ -5,7 +5,10 @@ from typing import Any
 
 import pytest
 
-from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
+from onyx.server.features.build.configs import (
+    CRAFT_SESSION_HEADER,
+    MCP_SESSION_TAG_HEADER,
+)
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
@@ -15,7 +18,6 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
     build_opencode_base_config,
     build_provider_opencode_config,
 )
-from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
 from onyx.server.gateway.models import (
     GatewayModelCapabilities,
     GatewayModelDescriptor,
