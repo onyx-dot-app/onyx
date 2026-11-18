@@ -22,6 +22,26 @@ A floating `latest` tag is risky:
 With a pinned tag, an upgrade occurs only when you change `global.version`. For release notes,
 see the [Changelog](/changelog).
 
+## Replace the bundled ingress controller
+
+Kubernetes [retired Ingress NGINX](https://kubernetes.io/blog/2026/03/30/kubernetes-v1-36-sneak-peek/).
+The bundled controller no longer receives security updates.
+Set up a supported ingress controller before you [turn off the bundled
+controller](/deployment/production/external_services#per-service-notes).
+
+Until you replace the bundled controller, keep HTTP/2 disabled to mitigate CVE-2026-123007 and CVE-2026-123633.
+Chart version 0.9.53 disables HTTP/2 by default. Set the value explicitly if you reuse your previous Helm values:
+
+```yaml values.yaml
+nginx:
+  controller:
+    config:
+      use-http2: "false"
+```
+
+After you upgrade the chart, wait for the controller pods to restart.
+This setting does not update the controller image or fix other NGINX vulnerabilities.
+
 ## Credentials
 
 Every section under `auth` accepts `existingSecret`. The chart then reads from your Secret and does not create one.
