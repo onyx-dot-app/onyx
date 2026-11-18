@@ -90,6 +90,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.question.models import (
     QuestionArguments,
@@ -732,6 +733,8 @@ class ToolRenderer:
             objects = [packets.FileReaderStart()]
         elif name == MemoryTool.NAME:
             objects = [packets.MemoryToolStart()]
+        elif name == PostgresTool.NAME:
+            objects = [packets.PostgresToolStart(query=args)]
         elif name == ImageGenerationTool.NAME:
             objects = [packets.ImageGenerationToolStart()]
         elif name == RESEARCH_AGENT_TOOL_NAME:
@@ -747,6 +750,38 @@ class ToolRenderer:
                     repo=_STRING.validate_python(args.get("github_repo", "")),
                 )
             ]
+        return objects
+
+    def _search_docs_objects(
+        self, details: SearchDocsResponse
+    ) -> list[packets.PacketObj]:
+        docs = (
+            details.displayed_docs
+            if details.displayed_docs is not None
+            else details.search_docs
+        )
+        new_docs = [doc for doc in docs if doc.document_id not in self._documents]
+        self._documents.update(doc.document_id for doc in docs)
+        if self.call.name == OpenURLTool.NAME:
+            return [packets.OpenUrlDocuments(documents=new_docs)] if new_docs else []
+        if self.call.name == PostgresTool.NAME:
+            return (
+                [packets.PostgresToolDocuments(documents=new_docs)] if new_docs else []
+            )
+        objects: list[packets.PacketObj] = []
+        queries = [query for query in details.queries if query not in self._queries]
+        self._queries.update(queries)
+        if queries:
+            objects.append(packets.SearchToolQueriesDelta(queries=queries))
+        objects.append(
+            packets.SearchToolFilterDelta(
+                sources=details.sources,
+                time_filter_start=details.time_filter_start,
+                time_filter_end=details.time_filter_end,
+            )
+        )
+        if new_docs:
+            objects.append(packets.SearchToolDocumentsDelta(documents=new_docs))
         return objects
 
     def update(
@@ -777,32 +812,7 @@ class ToolRenderer:
                 )
             ]
         if isinstance(details, SearchDocsResponse):
-            docs = (
-                details.displayed_docs
-                if details.displayed_docs is not None
-                else details.search_docs
-            )
-            new_docs = [doc for doc in docs if doc.document_id not in self._documents]
-            self._documents.update(doc.document_id for doc in docs)
-            if self.call.name == OpenURLTool.NAME:
-                if new_docs:
-                    objects.append(packets.OpenUrlDocuments(documents=new_docs))
-            else:
-                queries = [
-                    query for query in details.queries if query not in self._queries
-                ]
-                self._queries.update(queries)
-                if queries:
-                    objects.append(packets.SearchToolQueriesDelta(queries=queries))
-                objects.append(
-                    packets.SearchToolFilterDelta(
-                        sources=details.sources,
-                        time_filter_start=details.time_filter_start,
-                        time_filter_end=details.time_filter_end,
-                    )
-                )
-                if new_docs:
-                    objects.append(packets.SearchToolDocumentsDelta(documents=new_docs))
+            objects.extend(self._search_docs_objects(details))
         elif details is not None and details == self._last_details:
             return []
         elif isinstance(details, FileReadResult):
@@ -917,6 +927,7 @@ class ToolRenderer:
             OpenURLTool.NAME,
             ImageGenerationTool.NAME,
             MemoryTool.NAME,
+            PostgresTool.NAME,
         }:
             objects.append(
                 packets.CustomToolDelta(
