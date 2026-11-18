@@ -515,3 +515,87 @@ def test_explicit_service_desk_validates_credentials_and_project_match(
     )
     with pytest.raises(CredentialExpiredError):
         connector.validate_connector_settings()
+
+
+def test_explicit_service_desk_project_lookup_insufficient_permissions_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector = JiraServiceManagementConnector(
+        base_url="https://acme.atlassian.net",
+        project_key="ITSM",
+        service_desk_id="2",
+    )
+    connector.load_credentials(
+        {
+            "jsm_user_email": "bot@acme.com",
+            "jsm_api_token": "secret",
+        }
+    )
+
+    def fake_project_403_fallback_match(
+        url: str, *_args: Any, **_kwargs: Any
+    ) -> MagicMock:
+        if url.endswith("/rest/servicedeskapi/servicedesk/2"):
+            return _fake_response(200, {"id": "2", "projectId": "10002"})
+        if url.endswith("/rest/api/2/project/10002"):
+            return _fake_response(403, {})
+        if url.endswith("/rest/servicedeskapi/servicedesk"):
+            return _fake_response(
+                200, {"isLastPage": True, "values": [{"id": "2", "projectKey": "ITSM"}]}
+            )
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(
+        "onyx.connectors.jira_service_management.connector._rate_limited_jsm_get",
+        fake_project_403_fallback_match,
+    )
+    assert connector._resolve_service_desks() == [("2", "ITSM")]
+    connector.validate_connector_settings()
+
+    def fake_project_403_fallback_mismatch(
+        url: str, *_args: Any, **_kwargs: Any
+    ) -> MagicMock:
+        if url.endswith("/rest/servicedeskapi/servicedesk/2"):
+            return _fake_response(200, {"id": "2", "projectId": "10002"})
+        if url.endswith("/rest/api/2/project/10002"):
+            return _fake_response(403, {})
+        if url.endswith("/rest/servicedeskapi/servicedesk"):
+            return _fake_response(
+                200, {"isLastPage": True, "values": [{"id": "2", "projectKey": "HR"}]}
+            )
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(
+        "onyx.connectors.jira_service_management.connector._rate_limited_jsm_get",
+        fake_project_403_fallback_mismatch,
+    )
+    with pytest.raises(ConnectorValidationError):
+        connector.validate_connector_settings()
+
+    connector_no_project = JiraServiceManagementConnector(
+        base_url="https://acme.atlassian.net",
+        service_desk_id="2",
+    )
+    connector_no_project.load_credentials(
+        {
+            "jsm_user_email": "bot@acme.com",
+            "jsm_api_token": "secret",
+        }
+    )
+
+    def fake_project_403_no_project_key(
+        url: str, *_args: Any, **_kwargs: Any
+    ) -> MagicMock:
+        if url.endswith("/rest/servicedeskapi/servicedesk/2"):
+            return _fake_response(200, {"id": "2", "projectId": "10002"})
+        if url.endswith("/rest/api/2/project/10002"):
+            return _fake_response(403, {})
+        if url.endswith("/rest/servicedeskapi/servicedesk"):
+            return _fake_response(200, {"isLastPage": True, "values": [{"id": "2"}]})
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(
+        "onyx.connectors.jira_service_management.connector._rate_limited_jsm_get",
+        fake_project_403_no_project_key,
+    )
+    assert connector_no_project._resolve_service_desks() == [("2", None)]

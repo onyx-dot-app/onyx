@@ -381,8 +381,11 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             if not desk_project_key:
                 project_id = desk.get("projectId")
                 if project_id is not None:
-                    project = self._get_json(f"/rest/api/2/project/{project_id}")
-                    desk_project_key = project.get("key")
+                    try:
+                        project = self._get_json(f"/rest/api/2/project/{project_id}")
+                        desk_project_key = project.get("key")
+                    except InsufficientPermissionsError:
+                        desk_project_key = None
                 if not desk_project_key:
                     for candidate in self._paginate("/rest/servicedeskapi/servicedesk"):
                         if str(candidate.get("id")) == desk_id and candidate.get("projectKey"):
