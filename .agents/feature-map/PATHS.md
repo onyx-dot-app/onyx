@@ -404,6 +404,7 @@ the admin routes and check that each has a row above, run
 | `web/AGENTS.md` | Frontend standards for every agent. Read it before you work in `web/`. |
 | `web/playwright.config.ts` | Shared Playwright projects, retry settings, and reporters for end-to-end tests. |
 | `backend/AGENTS.md` | Backend standards for every agent: workers, migrations, tests, errors and tracing. Read it before you work in `backend/`. |
+| `AGENTS.md` | Repo-wide agent guidance (`CLAUDE.md` links to it): setup, the hook runner, docs, the feature map, writing and testing rules. |
 | `contributing_guides/best_practices.md` | Code standards for contributors across the repository. |
 | `pyproject.toml`, `uv.lock` | Python dependencies and tool config for the repo: uv, ruff and ty. `uv.lock` pins the resolved versions. The ruff per-file ignores hold the C901 ratchet list, which only shrinks. |
 | `backend/.gitignore` | Git ignore rules for local backend files. No product surface reads it. |
