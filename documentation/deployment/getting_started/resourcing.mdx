@@ -140,6 +140,9 @@ For self-managed OpenSearch, set the heap with `OPENSEARCH_JAVA_OPTS` (Docker Co
 - Keep the heap at or below 31 GB. Above about 32 GB, Java turns off compressed object pointers, and performance drops.
 - When you give OpenSearch more RAM, raise the heap setting to match. The defaults are 2 GB (Docker Compose)
   and 4 GB (Helm).
+- Keep `-XX:-UseBASE64Intrinsics` in the setting, for example `-Xms8g -Xmx8g -XX:-UseBASE64Intrinsics`.
+  The default includes it. It turns off the JVM's native Base64 decoder,
+  which is affected by Java4Shell (CVE-2026-114938), until the OpenSearch image ships a fixed JDK.
 
 Amazon OpenSearch Service sets the heap for you.
 
