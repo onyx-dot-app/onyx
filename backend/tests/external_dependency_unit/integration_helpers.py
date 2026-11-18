@@ -127,7 +127,9 @@ def make_mcp_integration(
                 description=description or f"The {tool} tool.",
                 read_only=(read_only or {}).get(tool),
                 default_policy=mcp_action_default_policy((read_only or {}).get(tool)),
-                input_schema=input_schema or DEFAULT_INPUT_SCHEMA,
+                input_schema=(
+                    input_schema if input_schema is not None else DEFAULT_INPUT_SCHEMA
+                ),
                 output_schema=output_schema,
             )
             for tool in tools
