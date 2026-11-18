@@ -273,32 +273,39 @@ def test_persona_plugins_and_legacy_custom_tool_ids(
     )
     response.raise_for_status()
     persona_id = response.json()["id"]
-    persona = client.get(
-        f"{API_SERVER_URL}/persona/{persona_id}", headers=admin_user.headers
-    ).json()
-    assert [link["plugin_id"] for link in persona["plugins"]] == [plugin_id]
+    try:
+        persona = client.get(
+            f"{API_SERVER_URL}/persona/{persona_id}", headers=admin_user.headers
+        ).json()
+        assert [link["plugin_id"] for link in persona["plugins"]] == [plugin_id]
 
-    body = _persona_body(
-        [],
-        [
-            {
-                "plugin_id": plugin_id,
-                "action_settings": {
-                    "default": "inherit",
-                    "actions": {"set_alert": "blocked"},
-                },
-            }
-        ],
-    )
-    client.patch(
-        f"{API_SERVER_URL}/persona/{persona_id}", json=body, headers=admin_user.headers
-    ).raise_for_status()
-    persona = client.get(
-        f"{API_SERVER_URL}/persona/{persona_id}", headers=admin_user.headers
-    ).json()
-    assert persona["plugins"][0]["action_settings"]["actions"] == {
-        "set_alert": "blocked"
-    }
+        body = _persona_body(
+            [],
+            [
+                {
+                    "plugin_id": plugin_id,
+                    "action_settings": {
+                        "default": "inherit",
+                        "actions": {"set_alert": "blocked"},
+                    },
+                }
+            ],
+        )
+        client.patch(
+            f"{API_SERVER_URL}/persona/{persona_id}",
+            json=body,
+            headers=admin_user.headers,
+        ).raise_for_status()
+        persona = client.get(
+            f"{API_SERVER_URL}/persona/{persona_id}", headers=admin_user.headers
+        ).json()
+        assert persona["plugins"][0]["action_settings"]["actions"] == {
+            "set_alert": "blocked"
+        }
+    finally:
+        client.delete(
+            f"{API_SERVER_URL}/persona/{persona_id}", headers=admin_user.headers
+        )
 
 
 TOOL_SNAPSHOT_KEYS = {
