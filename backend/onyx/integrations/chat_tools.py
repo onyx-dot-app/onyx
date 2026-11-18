@@ -12,7 +12,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import IntegrationAuthMode, IntegrationKind
+from onyx.db.enums import (
+    IntegrationAuthMode,
+    IntegrationKind,
+    PluginInstallationPolicy,
+)
 from onyx.db.integration import (
     list_integration_actions,
     list_integration_actions_by_id,
@@ -22,6 +26,7 @@ from onyx.db.integration import (
 from onyx.db.integration_connection import list_connections
 from onyx.db.integration_policy import list_policy_rows, list_session_granted_actions
 from onyx.db.models import Integration, IntegrationAction, IntegrationConnection, User
+from onyx.db.plugin_access import load_user_plugin_states
 from onyx.integrations.call_credentials import resolve_call_credentials
 from onyx.integrations.connections import ConnectionProblem
 from onyx.integrations.kinds.api import ApiKindHandler
@@ -34,6 +39,7 @@ from onyx.integrations.models import (
     PolicyRows,
 )
 from onyx.integrations.policy import (
+    AgentIntegrationLinks,
     agent_link_settings_by_integration,
     resolve_action_policies,
 )
@@ -135,6 +141,42 @@ def _kept_actions(
     return kept
 
 
+def _keep_required_plugins(
+    db_session: Session,
+    user: User,
+    request: IntegrationChatRequest,
+    held: Mapping[int, AgentIntegrationLinks],
+) -> IntegrationChatRequest:
+    """Add each plugin that the admin made Required for the user to the tool
+    options, with all its actions. A member cannot turn a Required plugin off,
+    so tool options that leave it out cannot drop it."""
+    if request.allowed_plugins is None or user.is_anonymous:
+        return request
+    left_out = {
+        plugin_id
+        for links in held.values()
+        for plugin_id in links.plugin_ids
+        if plugin_id not in request.allowed_plugins
+    }
+    if not left_out:
+        return request
+    required = {
+        state.plugin_id
+        for state in load_user_plugin_states([user.id], db_session, left_out)
+        if state.installation_policy == PluginInstallationPolicy.REQUIRED
+    }
+    if not required:
+        return request
+    return request.model_copy(
+        update={
+            "allowed_plugins": {
+                **request.allowed_plugins,
+                **dict.fromkeys(required),
+            }
+        }
+    )
+
+
 def build_integration_chat_tools(
     db_session: Session, user: User, request: IntegrationChatRequest
 ) -> list[Tool]:
@@ -149,6 +191,7 @@ def build_integration_chat_tools(
         {link.plugin_id: link.action_settings for link in request.plugin_links},
         published_only=user.is_anonymous,
     )
+    request = _keep_required_plugins(db_session, user, request, held)
     # The tool options pick the integrations and actions. The settings of
     # every agent link still apply, so a request cannot drop a Blocked one.
     tools: list[Tool] = []

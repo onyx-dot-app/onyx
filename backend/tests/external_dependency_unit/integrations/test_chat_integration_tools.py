@@ -579,6 +579,27 @@ def test_tool_options_cannot_drop_a_blocked_agent_link(
     assert set(tools) == {f"mcp__{mcp.id}__crm__search"}
 
 
+def test_tool_options_cannot_drop_a_required_plugin(
+    db_session: Session, user: User, integration_ids: list[int]
+) -> None:
+    """A member cannot turn a Required plugin off, so tool options that leave
+    it out still give its actions."""
+    required = _mcp(db_session, integration_ids)
+    other = _openapi(db_session, integration_ids)
+    required_plugin = _plugin(db_session, [required], PluginInstallationPolicy.REQUIRED)
+    other_plugin = _plugin(db_session, [other])
+
+    tools = _build(
+        db_session,
+        user,
+        _configuration({required_plugin.id: {}, other_plugin.id: {}}),
+        tool_options=ToolOptions(allowed=[PluginEntry(plugin_id=other_plugin.id)]),
+    )
+
+    assert any(f"__{required.id}__" in name for name in tools)
+    assert any(f"__{other.id}__" in name for name in tools)
+
+
 def test_an_onyx_login_integration_sends_the_login_token(
     db_session: Session, user: User, integration_ids: list[int]
 ) -> None:
