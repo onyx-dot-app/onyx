@@ -347,6 +347,9 @@ def _start_mcp(
             owner_id,
             load_stored_tokens=False,
             cimd_enabled=oauth_client.cimd_enabled,
+            check_settings_unchanged=lambda session: _lock_and_check_settings_unchanged(
+                integration.id, attempt, session
+            ),
         )
 
     if oauth_client.provider_mode is not IntegrationOAuthProviderMode.DISCOVERY:

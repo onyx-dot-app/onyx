@@ -944,6 +944,8 @@ class IntegrationTokenStorage(TokenStorage):
         self, info: OAuthClientInformationFull
     ) -> None:
         with get_session_with_current_tenant() as db_session:
+            if self.check_settings_unchanged is not None:
+                self.check_settings_unchanged(db_session)
             oauth_client = get_oauth_client(
                 db_session, self.integration_id, for_update=True
             )
