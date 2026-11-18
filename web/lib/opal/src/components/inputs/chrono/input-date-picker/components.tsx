@@ -344,13 +344,15 @@ function InputDatePicker({
                   value={segments[field.part]}
                   onChange={handleSegmentChange(field, SEGMENT_FIELDS[i + 1])}
                   onPaste={handlePaste(field)}
-                  onKeyDown={handleSegmentKeyDown(
-                    field.part,
-                    i > 0 ? segmentRefs[SEGMENT_FIELDS[i - 1]!.part] : null,
-                    i < SEGMENT_FIELDS.length - 1
-                      ? segmentRefs[SEGMENT_FIELDS[i + 1]!.part]
-                      : null
-                  )}
+                  onKeyDown={(e) =>
+                    handleSegmentKeyDown(
+                      field.part,
+                      i > 0 ? segmentRefs[SEGMENT_FIELDS[i - 1]!.part] : null,
+                      i < SEGMENT_FIELDS.length - 1
+                        ? segmentRefs[SEGMENT_FIELDS[i + 1]!.part]
+                        : null
+                    )(e)
+                  }
                 />
               </React.Fragment>
             ))}

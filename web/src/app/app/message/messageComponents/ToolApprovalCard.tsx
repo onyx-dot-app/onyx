@@ -32,7 +32,11 @@ interface ToolApprovalCardProps {
 function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
   const { request } = approval;
   const t = useTranslations("chat.messages.toolApproval");
-  const card = useNudgedCard(request.approval_id);
+  const {
+    ref: cardRef,
+    shaking,
+    onAnimationEnd,
+  } = useNudgedCard(request.approval_id);
   const follow = useFollowUserInput();
 
   // The decided status shows until the resolution packet confirms it.
@@ -69,10 +73,10 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
 
   return (
     <div
-      ref={card.ref}
+      ref={cardRef}
       data-testid="tool-approval-card"
-      className={cn(card.shaking && "motion-safe:animate-shake")}
-      onAnimationEnd={card.onAnimationEnd}
+      className={cn(shaking && "motion-safe:animate-shake")}
+      onAnimationEnd={onAnimationEnd}
     >
       <Section gap={0.5} alignItems="stretch" height="auto">
         {approval.status === "pending" && sourceTitle && (

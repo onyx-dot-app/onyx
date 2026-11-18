@@ -12,7 +12,6 @@ import {
   Text,
   useCreateModal,
 } from "@opal/components";
-import { noProp } from "@/lib/utils";
 import { formatDateTimeLog } from "@/lib/dateUtils";
 import { Content, Section } from "@opal/layouts";
 import {
@@ -200,7 +199,10 @@ export default function HookStatusPopover({
             }
             onMouseEnter={handleTriggerMouseEnter}
             onMouseLeave={handleTriggerMouseLeave}
-            onClick={noProp(handleTriggerClick)}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleTriggerClick();
+            }}
             disabled={isBusy}
           >
             {hook.is_reachable === false
@@ -285,10 +287,11 @@ export default function HookStatusPopover({
                   rounding={2}
                   titleColor="text-03"
                   icon={SvgMaximize2}
-                  onClick={noProp(() => {
+                  onClick={(event) => {
+                    event.stopPropagation();
                     handleOpenChange(false);
                     logsModal.toggle(true);
-                  })}
+                  }}
                   title={t("status.viewMore.label")}
                 />
               </>
@@ -340,10 +343,11 @@ export default function HookStatusPopover({
                   rounding={2}
                   titleColor="text-03"
                   icon={SvgMaximize2}
-                  onClick={noProp(() => {
+                  onClick={(event) => {
+                    event.stopPropagation();
                     handleOpenChange(false);
                     logsModal.toggle(true);
-                  })}
+                  }}
                   title={t("status.viewMore.label")}
                 />
               </>
@@ -367,10 +371,11 @@ export default function HookStatusPopover({
                   rounding={2}
                   titleColor="text-03"
                   icon={SvgMaximize2}
-                  onClick={noProp(() => {
+                  onClick={(event) => {
+                    event.stopPropagation();
                     handleOpenChange(false);
                     logsModal.toggle(true);
-                  })}
+                  }}
                   title={t("status.viewOlder.label")}
                 />
               </>

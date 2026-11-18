@@ -180,11 +180,13 @@ export default function UploadControl({
         {hasValue && !isNonEditable && drag === null && (
           <Button
             icon={SvgX}
-            onClick={noProp(() => {
-              onClear();
-              // The × goes with the value, so focus returns to the control.
-              triggerRef.current?.focus();
-            })}
+            onClick={(event) =>
+              noProp(() => {
+                onClear();
+                // The × goes with the value, so focus returns to the control.
+                triggerRef.current?.focus();
+              })(event)
+            }
             type="button"
             prominence="tertiary"
             size="sm"

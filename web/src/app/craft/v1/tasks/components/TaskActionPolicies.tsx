@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
 import { Text, useCreateModal } from "@opal/components";
@@ -81,7 +81,9 @@ function PluginGroups({ plugins, value, onChange }: PluginGroupsProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   // The settings of a plugin the user turned off, so turning it on again
   // restores them.
-  const turnedOff = useRef<Record<string, TaskActionSettings>>({});
+  const [turnedOff, setTurnedOff] = useState<
+    Record<string, TaskActionSettings>
+  >({});
   const actionsModal = useCreateModal();
   if (!plugins) return <Text font="secondary-body">{t("loading")}</Text>;
   if (plugins.length === 0)
@@ -115,13 +117,16 @@ function PluginGroups({ plugins, value, onChange }: PluginGroupsProps) {
                   save(
                     plugin.plugin_id,
                     link?.action_settings ??
-                      turnedOff.current[plugin.plugin_id] ??
+                      turnedOff[plugin.plugin_id] ??
                       INHERIT_ALL
                   );
                   return;
                 }
                 if (link)
-                  turnedOff.current[plugin.plugin_id] = link.action_settings;
+                  setTurnedOff((prev) => ({
+                    ...prev,
+                    [plugin.plugin_id]: link.action_settings,
+                  }));
                 onChange(
                   value.filter((item) => item.plugin_id !== plugin.plugin_id)
                 );
@@ -137,7 +142,7 @@ function PluginGroups({ plugins, value, onChange }: PluginGroupsProps) {
             plugin={editing}
             settings={
               linkFor(editing.plugin_id)?.action_settings ??
-              turnedOff.current[editing.plugin_id] ??
+              turnedOff[editing.plugin_id] ??
               INHERIT_ALL
             }
             onClose={() => actionsModal.toggle(false)}

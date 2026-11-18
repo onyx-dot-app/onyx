@@ -125,6 +125,7 @@ export function GridSearchInput({
   item,
 }: GridSearchInputProps) {
   const t = useTranslations("common.gridSearch");
+  const { inputRef, onSearchKeyDown } = search;
   const placeholder =
     item === undefined
       ? t("placeholder")
@@ -133,13 +134,13 @@ export function GridSearchInput({
         });
   return (
     <InputTypeIn
-      ref={search.inputRef}
+      ref={inputRef}
       icon="search"
       clearButton
       placeholder={placeholder}
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      onKeyDown={search.onSearchKeyDown}
+      onKeyDown={onSearchKeyDown}
     />
   );
 }

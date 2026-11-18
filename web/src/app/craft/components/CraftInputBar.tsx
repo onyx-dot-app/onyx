@@ -135,7 +135,7 @@ const CraftInputBar = memo(
         restoredKeyRef.current = storageKey;
         if (typeof draft === "string") baseRef.current?.setMessage(draft);
       }, [draft, loaded, storageKey, userId]);
-      const fileInputRef = useRef<HTMLInputElement>(null);
+      const [fileInput, setFileInput] = useState<HTMLInputElement | null>(null);
       const navigation = useNavigation();
 
       const {
@@ -301,7 +301,7 @@ const CraftInputBar = memo(
           buildEntryMenuItems(
             pickerSections,
             {
-              onAttachFiles: () => fileInputRef.current?.click(),
+              onAttachFiles: () => fileInput?.click(),
               onSelectEntry: addEntry,
               onBrowseSkills: () => navigation.go("/craft/v1/skills"),
               onBrowseApps: () => navigation.go("/craft/v1/apps"),
@@ -312,7 +312,14 @@ const CraftInputBar = memo(
             },
             entryMenuT
           ),
-        [pickerSections, addEntry, libraryFiles, navigation, entryMenuT]
+        [
+          pickerSections,
+          fileInput,
+          addEntry,
+          libraryFiles,
+          navigation,
+          entryMenuT,
+        ]
       );
 
       const bottomLeftSlot = (
@@ -336,7 +343,7 @@ const CraftInputBar = memo(
       return (
         <>
           <input
-            ref={fileInputRef}
+            ref={setFileInput}
             type="file"
             className="hidden"
             multiple

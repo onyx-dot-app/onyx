@@ -279,7 +279,8 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
 
   const existingUserIds = useMemo(() => {
     const ids = new Set(draftState?.userShares.map((share) => share.user.id));
-    if (skill?.owner?.id) ids.add(skill.owner.id);
+    const ownerId = skill?.owner?.id;
+    if (ownerId) ids.add(ownerId);
     return ids;
   }, [draftState?.userShares, skill?.owner?.id]);
   const existingGroupIds = useMemo(

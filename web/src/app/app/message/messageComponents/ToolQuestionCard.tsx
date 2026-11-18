@@ -61,7 +61,11 @@ function ToolQuestionCard({ question }: ToolQuestionCardProps) {
   const t = useTranslations("chat.messages.toolQuestion");
   const tCommon = useTranslations("common");
   const format = useFormatter();
-  const card = useNudgedCard(request.question_request_id);
+  const {
+    ref: cardRef,
+    shaking,
+    onAnimationEnd,
+  } = useNudgedCard(request.question_request_id);
   const follow = useFollowUserInput();
   const [choices, setChoices] = useState<ReadonlyMap<string, Choice>>(
     () => new Map()
@@ -145,10 +149,10 @@ function ToolQuestionCard({ question }: ToolQuestionCardProps) {
 
   return (
     <div
-      ref={card.ref}
+      ref={cardRef}
       data-testid="tool-question-card"
-      className={cn(card.shaking && "motion-safe:animate-shake")}
-      onAnimationEnd={card.onAnimationEnd}
+      className={cn(shaking && "motion-safe:animate-shake")}
+      onAnimationEnd={onAnimationEnd}
     >
       {status.kind !== "pending" ? (
         <QuestionRecord questions={request.questions} status={status} />

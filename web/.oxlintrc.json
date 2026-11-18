@@ -810,20 +810,6 @@
     // React Compiler baseline. Remove a file once it is clean for that rule. Never add one.
     {
       "files": [
-        "lib/opal/src/components/shadow-div/components.tsx",
-        "src/app/app/message/messageComponents/timeline/renderers/code/PythonToolRenderer.tsx",
-        "src/lib/connectors/checks/hooks.ts",
-        "src/sections/modals/skills/ShareSkillModal.tsx",
-        "src/sections/model-selector/ModelSelector.tsx",
-        "src/views/admin/WebSearchPage/index.tsx",
-        "src/views/admin/connectors/CatalogPage.tsx"
-      ],
-      "rules": {
-        "react/preserve-manual-memoization": "warn"
-      }
-    },
-    {
-      "files": [
         "src/app/admin/billing/BillingDetailsView.tsx",
         "src/ee/hooks/useHookExecutionLogs.ts",
         "src/sections/usage/AnalyticsChart.tsx"
@@ -834,32 +820,12 @@
     },
     {
       "files": [
-        "lib/opal/src/components/buttons/button/label.tsx",
-        "lib/opal/src/components/dropdown/hooks.ts",
-        "lib/opal/src/components/inputs/chrono/input-date-picker/components.tsx",
-        "lib/opal/src/components/inputs/chrono/input-time/components.tsx",
-        "lib/opal/src/components/inputs/numbers/input-currency/components.tsx",
-        "lib/opal/src/components/inputs/uploads/UploadControl.tsx",
-        "lib/opal/src/components/presence/components.tsx",
-        "lib/opal/src/components/tag/components.tsx",
-        "lib/opal/src/navigation/hooks.ts",
         "src/app/app/message/messageComponents/AgentMessage.tsx",
-        "src/app/app/message/messageComponents/ToolApprovalCard.tsx",
-        "src/app/app/message/messageComponents/ToolQuestionCard.tsx",
         "src/app/app/message/messageComponents/renderers/MessageTextRenderer.tsx",
         "src/app/app/message/messageComponents/timeline/hooks/usePacedTurnGroups.ts",
         "src/app/app/message/messageComponents/timeline/hooks/usePacketProcessor.ts",
         "src/app/app/message/messageComponents/timeline/renderers/search/SearchChipList.tsx",
-        "src/app/craft/components/CraftInputBar.tsx",
-        "src/app/craft/v1/tasks/components/TaskActionPolicies.tsx",
-        "src/ee/views/admin/HooksPage/HookStatusPopover.tsx",
-        "src/hooks/__tests__/useContentEditable.undo.test.tsx",
-        "src/lib/agents/components/ShareAgentModal.tsx",
-        "src/lib/common/components.tsx",
         "src/refresh-components/commandmenu/CommandMenu.tsx",
-        "src/sections/actions/modals/AddOpenAPIActionModal.tsx",
-        "src/sections/input/InputChipStrip.tsx",
-        "src/views/AgentsCatalogPage/page.tsx",
         "src/views/admin/connectors/ConnectorDetailPage/StatusCard.tsx"
       ],
       "rules": {

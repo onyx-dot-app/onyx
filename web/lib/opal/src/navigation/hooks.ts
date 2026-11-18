@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import type { Route } from "next";
 import {
   usePathname,
@@ -291,33 +291,39 @@ export class Navigation {
   }
 }
 
+// One `useNavigation`'s query requests in `queryRequestsInFlight`.
+function createQueryRequestCounter() {
+  let pending = 0;
+  return {
+    start() {
+      pending += 1;
+      queryRequestsInFlight += 1;
+    },
+    settle() {
+      queryRequestsInFlight -= pending;
+      pending = 0;
+    },
+  };
+}
+
 export function useNavigation(): Navigation {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  // This hook's query requests still counted in `queryRequestsInFlight`.
-  const pendingQueryRequests = useRef(0);
+  const [queryRequests] = useState(createQueryRequestCounter);
   const navigation = useMemo(
     () =>
       new Navigation(router, (request) => {
-        pendingQueryRequests.current += 1;
-        queryRequestsInFlight += 1;
+        queryRequests.start();
         startTransition(request);
       }),
-    [router]
+    [router, queryRequests]
   );
   useEffect(() => {
     if (isPending) return;
-    queryRequestsInFlight -= pendingQueryRequests.current;
-    pendingQueryRequests.current = 0;
-  }, [isPending]);
+    queryRequests.settle();
+  }, [isPending, queryRequests]);
   // Unmounting mid-request stops counting it.
-  useEffect(
-    () => () => {
-      queryRequestsInFlight -= pendingQueryRequests.current;
-      pendingQueryRequests.current = 0;
-    },
-    []
-  );
+  useEffect(() => () => queryRequests.settle(), [queryRequests]);
   return navigation;
 }
 

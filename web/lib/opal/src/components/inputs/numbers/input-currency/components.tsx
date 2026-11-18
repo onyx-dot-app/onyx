@@ -442,11 +442,13 @@ function InputCurrency({
               style={{ width: segmentWidth(segments.whole, wholePlaceholder) }}
               onChange={handleWholeChange}
               onPaste={handlePaste("whole")}
-              onKeyDown={handleKeyDown(
-                "whole",
-                null,
-                showFraction ? fractionRef : null
-              )}
+              onKeyDown={(e) =>
+                handleKeyDown(
+                  "whole",
+                  null,
+                  showFraction ? fractionRef : null
+                )(e)
+              }
             />
             {showFraction && (
               <>
@@ -466,7 +468,9 @@ function InputCurrency({
                   }}
                   onChange={handleFractionChange}
                   onPaste={handlePaste("fraction")}
-                  onKeyDown={handleKeyDown("fraction", wholeRef, null)}
+                  onKeyDown={(e) =>
+                    handleKeyDown("fraction", wholeRef, null)(e)
+                  }
                 />
               </>
             )}
