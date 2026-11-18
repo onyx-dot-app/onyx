@@ -57,7 +57,7 @@ export function useAgents() {
  * which is useful when the agent ID isn't known yet.
  */
 export function useAgent(agentId: number | null) {
-  const { data, error, isLoading, mutate } = useSWR<FullAgent>(
+  const { data, error, isLoading, mutate } = useSWR<FullAgent, Error>(
     agentId ? SWR_KEYS.agent(agentId) : null,
     errorHandlingFetcher,
     {

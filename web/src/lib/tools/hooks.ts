@@ -8,6 +8,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import type {
   ChatSearchFilters,
   ChatToolOptions,
+  ActionPreference,
   ToolOptionsEntry,
   ToolSnapshot,
   ToolState,
@@ -18,8 +19,10 @@ import type { MinimalAgent } from "@/lib/agents/types";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import { toast } from "@opal/layouts";
-import { chatPluginIds } from "@/lib/plugins/chat";
-import { useMemberPlugins } from "@/lib/plugins/member";
+import {
+  useAgentPluginIds,
+  useAgentPluginPreferences,
+} from "@/lib/plugins/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
@@ -89,6 +92,8 @@ interface ChatConfiguration {
   tools: ToolConfiguration;
   plugins: PluginConfiguration;
   pluginActions: PluginActions;
+  /** Applies only while no built-in tool is preferred. */
+  preferredAction: ActionPreference | null;
   filters: ChatSearchFilters;
 }
 
@@ -103,6 +108,7 @@ const NEUTRAL: ChatConfiguration = {
   tools: {},
   plugins: {},
   pluginActions: {},
+  preferredAction: null,
   filters: NEUTRAL_FILTERS,
 };
 
@@ -120,6 +126,7 @@ function isNeutralConfiguration(configuration: ChatConfiguration): boolean {
     Object.keys(configuration.tools).length === 0 &&
     Object.keys(configuration.plugins).length === 0 &&
     Object.keys(configuration.pluginActions).length === 0 &&
+    configuration.preferredAction === null &&
     isNeutralFilters(configuration.filters)
   );
 }
@@ -272,6 +279,19 @@ function parsePlugins(entries: Record<string, unknown>): PluginConfiguration {
   return plugins;
 }
 
+/** The preferred action of {@link parseConfiguration}, on an already-checked object. */
+function parsePreferredAction(
+  entries: Record<string, unknown>
+): ActionPreference | null {
+  const value = entries.preferredAction;
+  return isRecord(value) &&
+    value.type === "action" &&
+    typeof value.plugin_id === "string" &&
+    typeof value.action === "string"
+    ? { type: "action", plugin_id: value.plugin_id, action: value.action }
+    : null;
+}
+
 /**
  * Reads a configuration back from untrusted text.
  *
@@ -298,6 +318,7 @@ function parseConfiguration(raw: string): ChatConfiguration {
       tools: parseTools(value.tools),
       plugins: isRecord(value.plugins) ? parsePlugins(value.plugins) : {},
       pluginActions: {},
+      preferredAction: parsePreferredAction(value),
       filters: isRecord(value.filters)
         ? parseFilters(value.filters)
         : NEUTRAL_FILTERS,
@@ -307,6 +328,7 @@ function parseConfiguration(raw: string): ChatConfiguration {
     tools: parseTools(value),
     plugins: {},
     pluginActions: {},
+    preferredAction: null,
     filters: NEUTRAL_FILTERS,
   };
 }
@@ -376,10 +398,12 @@ function effectiveOptions(
 function configurationFrom(
   options: ChatToolOptions,
   agentTools: readonly ToolSnapshot[],
-  pluginIds: readonly string[]
+  pluginIds: readonly string[],
+  preferredPlugins: PluginConfiguration
 ): ChatConfiguration {
   const tools: Record<number, ToolState> = {};
-  const plugins: Record<string, "disabled"> = {};
+  const plugins: Record<string, "disabled"> =
+    options.allowed === null ? { ...preferredPlugins } : {};
   const pluginActions: Record<string, string[] | null> = {};
   const allowed = options.allowed;
   if (allowed !== null) {
@@ -424,6 +448,8 @@ function configurationFrom(
     tools,
     plugins,
     pluginActions: limited,
+    preferredAction:
+      options.preferred?.type === "action" ? options.preferred : null,
     filters: {
       selectedSources: filters?.source_type ?? null,
       documentSets: filters?.document_set ?? [],
@@ -475,25 +501,50 @@ function allowedEntries(
   ];
 }
 
+function preferredToolIdOf(tools: ToolConfiguration): number | null {
+  return (
+    Object.keys(tools)
+      .map(Number)
+      .find((id) => tools[id] === "preferred") ?? null
+  );
+}
+
 /**
- * The tool half of the options, as the user chose it. A preferred tool that
- * is unavailable right now is kept: a send drops it, and a turn the server
- * starts drops it too.
+ * Preferring a built-in tool releases a preferred action, because a message
+ * carries one preference.
+ */
+function withTools(
+  configuration: ChatConfiguration,
+  tools: ToolConfiguration
+): ChatConfiguration {
+  return {
+    ...configuration,
+    tools,
+    preferredAction:
+      preferredToolIdOf(tools) === null ? configuration.preferredAction : null,
+  };
+}
+
+/**
+ * The tool half of the options, as the user chose it. A preferred tool or
+ * action that is unavailable right now is kept: a send drops it, and a turn
+ * the server starts drops it too.
  */
 function toolFields(
-  configuration: Pick<ChatConfiguration, "tools" | "plugins" | "pluginActions">,
+  configuration: Pick<
+    ChatConfiguration,
+    "tools" | "plugins" | "pluginActions" | "preferredAction"
+  >,
   agent: MinimalAgent,
   pluginIds: readonly string[]
 ): Pick<ChatToolOptions, "allowed" | "preferred"> {
-  const { tools, plugins, pluginActions } = configuration;
-  const preferred = Object.keys(tools)
-    .map(Number)
-    .find((id) => tools[id] === "preferred");
+  const { tools, plugins, pluginActions, preferredAction } = configuration;
+  const preferred = preferredToolIdOf(tools);
   return {
     allowed: allowedEntries(tools, plugins, pluginActions, agent, pluginIds),
     preferred:
-      preferred === undefined
-        ? null
+      preferred === null
+        ? preferredAction
         : { type: "capability", tool_id: preferred },
   };
 }
@@ -644,6 +695,8 @@ export interface ToolConfigurationHandle {
   clearPreferredTool: () => void;
   /** The preferred tool for this chat, if any. */
   preferredToolId: number | null;
+  /** The preferred plugin action, saved by another client; the tool wins. */
+  preferredAction: ActionPreference | null;
   /** The built-in tools the model may not use in this chat. */
   disabledToolIds: number[];
   /** Whether a plugin is on for this chat. */
@@ -666,8 +719,9 @@ export interface ToolConfigurationHandle {
   ready: boolean;
 
   /**
-   * False while an existing chat's saved options have not loaded. A send
-   * then would carry no allow-list and turn on what the chat turned off.
+   * False while an existing chat's saved options, or the plugins a new
+   * chat starts with turned off, have not loaded. A send then would carry
+   * no allow-list and turn on what the user turned off.
    */
   optionsLoaded: boolean;
 
@@ -731,6 +785,7 @@ export function useToolConfiguration(
 ): ToolConfigurationHandle {
   const appPosition = useAppPosition();
   const activeAgent = useActiveAgent();
+  const t = useTranslations("actions");
 
   const key = useMemo(() => {
     // A composer for a chat that the URL does not describe says which agent it
@@ -754,6 +809,26 @@ export function useToolConfiguration(
   }, [newChatWithAgentId, appPosition, activeAgent]);
 
   const { user } = useUser();
+  const signedIn = user !== null && !user.is_anonymous_user;
+  // The plugins the user turned off for this agent. A chat that does not
+  // exist yet starts with them; a switch in any chat saves them.
+  const preferences = useAgentPluginPreferences(signedIn);
+  // The agent whose plugins this composer reads and saves: the agent viewer
+  // names its own.
+  const configAgentId = newChatWithAgentId ?? activeAgent?.id;
+  const preferredOff =
+    configAgentId === undefined
+      ? null
+      : preferences.disabledPluginIds(configAgentId);
+  const preferredOffKey = preferredOff === null ? null : preferredOff.join(",");
+  const preferredPlugins = useMemo((): PluginConfiguration | null => {
+    if (preferredOffKey === null) return null;
+    const plugins: Record<string, "disabled"> = {};
+    for (const id of preferredOffKey.split(",")) {
+      if (id !== "") plugins[id] = "disabled";
+    }
+    return plugins;
+  }, [preferredOffKey]);
   const chatSessionId =
     newChatWithAgentId === undefined ? appPosition.chat() : null;
   // The server's copy of an existing chat's options, undefined until its
@@ -771,26 +846,11 @@ export function useToolConfiguration(
       : state.sessions.get(chatSessionId)?.toolOptionsEdits
   );
   const agentTools = activeAgent?.tools;
-  // Every plugin the user can see and every plugin of the agent, null until
-  // both catalogs load. Saved options name plugins in an allow-list, so a
-  // plugin unknown here would be left out.
-  const catalog = useMemberPlugins({ surface: "chat" });
-  const agentCatalog = useMemberPlugins({
-    surface: "chat",
-    agentId: activeAgent?.id,
-  });
-  // A catalog request that failed leaves its plugins out, so the ids stay
-  // unknown and no edit rewrites the allow-list from them.
-  const catalogIncomplete =
-    catalog.loading.servers ||
-    catalog.loading.tools ||
-    agentCatalog.loading.servers ||
-    catalog.errors.servers !== undefined ||
-    catalog.errors.tools !== undefined ||
-    agentCatalog.errors.servers !== undefined;
-  const pluginIdsKey = catalogIncomplete
-    ? null
-    : chatPluginIds([...catalog.plugins, ...agentCatalog.plugins]).join(",");
+  // Every plugin of the agent, null until it loads. Saved options name
+  // plugins in an allow-list, so a plugin unknown here would be left out.
+  const agentPluginIds = useAgentPluginIds(configAgentId).pluginIds;
+  const pluginIdsKey =
+    agentPluginIds === null ? null : agentPluginIds.join(",");
   const pluginIds = useMemo(
     () =>
       pluginIdsKey === null
@@ -852,19 +912,36 @@ export function useToolConfiguration(
     () =>
       chatOptions === undefined || agentTools === undefined
         ? null
-        : configurationFrom(chatOptions, agentTools, pluginIds ?? []),
-    [chatOptions, agentTools, pluginIds]
+        : configurationFrom(
+            chatOptions,
+            agentTools,
+            pluginIds ?? [],
+            preferredPlugins ?? {}
+          ),
+    [chatOptions, agentTools, pluginIds, preferredPlugins]
   );
 
   const isChat = key !== null && isChatKey(key);
+  const newChatConfiguration = useMemo(
+    () =>
+      entry.key !== key
+        ? NEUTRAL
+        : signedIn
+          ? { ...entry.configuration, plugins: preferredPlugins ?? {} }
+          : entry.configuration,
+    [entry, key, signedIn, preferredPlugins]
+  );
   const configuration = isChat
     ? (chatConfiguration ?? NEUTRAL)
-    : entry.key === key
-      ? entry.configuration
-      : NEUTRAL;
+    : newChatConfiguration;
   const ready = isChat
-    ? chatConfiguration !== null && pluginIds !== null
-    : key !== null && entry.key === key && pluginIds !== null;
+    ? chatConfiguration !== null &&
+      pluginIds !== null &&
+      (chatOptions?.allowed !== null || preferredPlugins !== null)
+    : key !== null &&
+      entry.key === key &&
+      pluginIds !== null &&
+      preferredPlugins !== null;
   const savedAllowed =
     isChat && pluginIds === null && chatOptions !== undefined
       ? chatOptions.allowed
@@ -893,14 +970,19 @@ export function useToolConfiguration(
       );
       if (options === undefined) return;
       const fields = change(
-        configurationFrom(options, activeAgent.tools, pluginIds)
+        configurationFrom(
+          options,
+          activeAgent.tools,
+          pluginIds,
+          preferredPlugins ?? {}
+        )
       );
       if (fields === null) return;
       store.updateSessionData(chatSessionId, {
         toolOptionsEdits: { ...session?.toolOptionsEdits, ...fields },
       });
     },
-    [chatSessionId, activeAgent, pluginIds]
+    [chatSessionId, activeAgent, pluginIds, preferredPlugins]
   );
 
   const setToolState = useCallback(
@@ -916,7 +998,7 @@ export function useToolConfiguration(
             activeAgent === undefined ||
             pluginIds === null
             ? null
-            : toolFields({ ...current, tools }, activeAgent, pluginIds);
+            : toolFields(withTools(current, tools), activeAgent, pluginIds);
         });
         return;
       }
@@ -931,15 +1013,20 @@ export function useToolConfiguration(
         // behind. A new one every time is a change to everything reading it,
         // and a caller that writes what it reads would never settle.
         if (tools === current.tools) return previous;
-        return { key, configuration: { ...current, tools } };
+        return { key, configuration: withTools(current, tools) };
       });
     },
     [key, editChat, activeAgent, pluginIds]
   );
 
+  const { setPluginsDisabled } = preferences;
   const setPluginEnabled = useCallback(
     (ids: readonly string[], enabled: boolean) => {
-      if (key === null) return;
+      if (key === null || configAgentId === undefined) return;
+      if (signedIn)
+        setPluginsDisabled(configAgentId, ids, !enabled).catch(() =>
+          toast.error(t("toolsPopover.selectionSaveFailed"))
+        );
       const change = (current: PluginConfiguration): PluginConfiguration => {
         if (ids.every((id) => (current[id] === "disabled") !== enabled)) {
           return current;
@@ -962,6 +1049,8 @@ export function useToolConfiguration(
         });
         return;
       }
+      // A signed-in user's new chat reads the saved choice instead.
+      if (signedIn) return;
       setEntry((previous) => {
         if (previous.key !== key) return previous;
         const current = previous.configuration;
@@ -970,7 +1059,16 @@ export function useToolConfiguration(
         return { key, configuration: { ...current, plugins } };
       });
     },
-    [key, editChat, activeAgent, pluginIds]
+    [
+      key,
+      editChat,
+      activeAgent,
+      configAgentId,
+      pluginIds,
+      signedIn,
+      setPluginsDisabled,
+      t,
+    ]
   );
 
   const setFilters = useCallback(
@@ -1015,8 +1113,7 @@ export function useToolConfiguration(
 
   const handle = useMemo(() => {
     const ids = Object.keys(configuration.tools).map(Number);
-    const preferredToolId =
-      ids.find((toolId) => configuration.tools[toolId] === "preferred") ?? null;
+    const preferredToolId = preferredToolIdOf(configuration.tools);
     return {
       stateOf: (toolId: number) => configuration.tools[toolId] ?? null,
       setToolState,
@@ -1030,10 +1127,14 @@ export function useToolConfiguration(
         }
       },
       preferredToolId,
+      preferredAction: configuration.preferredAction,
       disabledToolIds: ids.filter(
         (toolId) => configuration.tools[toolId] === "disabled"
       ),
+      // A plugin removed from the agent is off, so a saved action of it is
+      // not sent.
       isPluginEnabled: (pluginId: string) =>
+        (pluginIds === null || pluginIds.includes(pluginId)) &&
         configuration.plugins[pluginId] !== "disabled",
       setPluginEnabled,
       allowed:
@@ -1049,7 +1150,7 @@ export function useToolConfiguration(
                 pluginIds ?? []
               ),
       ready,
-      optionsLoaded: !isChat || chatConfiguration !== null,
+      optionsLoaded: isChat ? chatConfiguration !== null : preferences.loaded,
       filters: configuration.filters,
       setFilters,
       handOffTo,
@@ -1060,6 +1161,7 @@ export function useToolConfiguration(
     ready,
     isChat,
     chatConfiguration,
+    preferences.loaded,
     savedAllowed,
     activeAgent,
     pluginIds,
@@ -1072,8 +1174,6 @@ export function useToolConfiguration(
 
   // Edits in an existing chat are saved on the server at once, which decides
   // whether the chat keeps them. Only a signed-in user saves.
-  const t = useTranslations("actions");
-  const signedIn = user !== null && !user.is_anonymous_user;
   useEffect(() => {
     if (chatSessionId === null || !signedIn || optionsEdits === undefined) {
       return;

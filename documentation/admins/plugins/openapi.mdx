@@ -4,11 +4,6 @@ description: "Turn a REST API with an OpenAPI schema into tools for Chat and cus
 icon: "code"
 ---
 
-<Note>
-  In Onyx 5.0, OpenAPI actions moved from their own admin page to **Admin Panel → Plugins**.
-  See [Where things moved](/admins/plugins/overview#where-things-moved-in-onyx-5).
-</Note>
-
 An OpenAPI plugin connects Onyx to a REST API. You give Onyx an [OpenAPI](https://swagger.io/specification/) schema,
 and Onyx turns each operation in the schema into a tool.
 Agents read the operation descriptions and parameters to decide when and how to call the API.
@@ -17,7 +12,7 @@ OpenAPI plugins work in default Chat and in custom agents. They are not availabl
 use an [MCP server](/admins/plugins/mcp) or a [custom Craft App](/admins/plugins/craft_apps#custom-apps).
 
 Users with the **Manage Actions** permission can add and edit OpenAPI plugins.
-Only full admins can change **Enable in default Chat**.
+Only full admins can change default Chat availability.
 
 Use an OpenAPI plugin for internal services, such as a ticket system or an inventory API, when no MCP server exists.
 
@@ -25,10 +20,8 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
 
 <Steps>
   <Step title="Paste the schema">
-    Go to **Admin Panel → Plugins**, click **Add**, then select **OpenAPI**.
-    Paste the schema in **OpenAPI Schema Definition**. Onyx reads the schema and lists its operations below the field.
-
-    <img className="rounded-image" src="/assets/admins/plugins/openapi_add_filled.webp" alt="The Add OpenAPI plugin form with a schema and the operations that Onyx found"/>
+    Go to **Admin Panel → Integrations**, click **Add**, then select **OpenAPI app**. Paste the schema.
+    Onyx reads the schema and lists its operations.
 
     The schema must include:
 
@@ -39,64 +32,42 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
     The Onyx API server must be able to reach the server URL.
   </Step>
 
-  <Step title="Add descriptions">
-    | Field | Who reads it |
-    | --- | --- |
-    | **Description for Humans** | Users, on the Plugins page and in the agent editor. |
-    | **Description for Agents** | The agent. Explain when to use the API and how to choose operations. |
+  <Step title="Name and describe the integration">
+    Enter a **Name** and a **Description**. Users see the description on the plugin card and in the plugin details.
+    The agent reads the operations in the schema, not this description.
   </Step>
 
-  <Step title="Set default Chat availability">
-    Turn on **Enable in default Chat** to make the plugin available in chats without a custom agent.
-    Turn it off to make the plugin available only in the custom agents that you add it to.
+  <Step title="Set the sign-in">
+    Select a **Sign-in Mode** and a **Sign-in Method**. See [Sign-in](#sign-in).
   </Step>
 
-  <Step title="Configure authentication">
-    Select an authentication method. See [Authentication](#authentication). Click **Add Plugin**.
-  </Step>
-</Steps>
-
-## Authentication
-
-| Method | Effect |
-| --- | --- |
-| **No authentication** | Onyx sends requests without credentials. |
-| **Custom Authorization Header** | Onyx adds one or more headers that you set, such as `Authorization: Bearer <token>`, to every request. All users share these credentials. |
-| **OAuth** | Each user signs in with their own account. Onyx sends the user's access token with each request. |
-| **OAuth Pass-through** | Onyx sends the user's Onyx sign-in token to the API. This method shows only when Onyx sign-in uses OAuth, OIDC, or Google OAuth. |
-
-### Custom authorization header
-
-<img className="rounded-image" src="/assets/admins/plugins/openapi_auth_custom_authorization_header.webp" alt="Custom Authorization Header settings with header name and value fields"/>
-
-Enter a header name and value. You can send more than one header.
-
-### OAuth
-
-<img className="rounded-image" src="/assets/admins/plugins/openapi_auth_oauth.webp" alt="OAuth settings with Authorization URL, Token URL, client ID, client secret, scopes, and PKCE"/>
-
-<Steps>
-  <Step title="Create an OAuth client in the provider">
-    Set the client's redirect URI to the **Redirect URI** that Onyx shows:
-
-    ```text
-    https://<your-onyx-domain>/oauth-config/callback
-    ```
-  </Step>
-
-  <Step title="Enter the client details">
-    Enter the **Authorization URL**, **Token URL**, **OAuth Client ID**, and **OAuth Client Secret**. Optionally,
-    enter **Scopes** as a comma-separated list.
-  </Step>
-
-  <Step title="Set PKCE">
-    Turn on PKCE if the provider requires it. Onyx uses the `S256` method.
-    Click **Test connection** to confirm that Onyx can complete the OAuth flow.
+  <Step title="Add the plugin">
+    Select the **Owner** if the dialog shows it, then click **Add**. Onyx puts the integration in a plugin.
+    To make the plugin available in chats without a custom agent,
+    set its install setting to **Default** or **Required** on **Admin Panel → Plugins**.
+    Only full admins can change default Chat availability.
   </Step>
 </Steps>
 
-Each user connects their own account from the [Plugins page](/overview/core_features/plugins)
-before the agent can call the API for them.
+## Sign-in
+
+| Sign-in Mode | Sign-in Method | Effect |
+| --- | --- | --- |
+| **No sign-in** | None | Onyx sends requests without credentials. |
+| **One account for the organization** | **API key** | Onyx adds the headers that you set, such as `Authorization: Bearer {api_key}`, to every request. An admin enters the values on the **Configuration** tab. All users share these credentials. |
+| **One account for the organization** | **OAuth** | An admin connects one account on the **Configuration** tab. |
+| **Each user signs in** | **API key** or **OAuth** | Each user connects their own account from the [Plugins page](/overview/core_features/plugins) before the agent can call the API for them. |
+| **Each user signs in** | **Onyx login** | Onyx sends the user's Onyx sign-in token to the API. Only an admin who manages actions for the whole organization can select it. |
+
+For **API key**, put each credential in braces in the **Header Value**. Each placeholder becomes a credential field.
+
+For **OAuth**, create an OAuth client in the provider with this redirect URI:
+
+```text
+https://<your-onyx-domain>/oauth-config/callback
+```
+
+Then enter the **Authorization URL**, **Token URL**, **Client ID**, and **Client Secret**. Optionally, enter **Scopes**.
 
 ## Request placeholders
 
@@ -114,19 +85,20 @@ Onyx replaces them with the values of the current request at call time.
 
 | Tab | Contents |
 | --- | --- |
-| **Configuration** | Name, descriptions, schema, and **Enable in default Chat**. |
-| **Authentication** | The authentication method and credentials. |
-| **Tools** | The operations that Onyx found in the schema. |
+| **Overview** | Name, description, **Enabled**, the plugins that hold the integration, and **Delete**. |
+| **Configuration** | The schema, the sign-in, and **Users Can Save Always Allow**. |
+| **Actions** | The operations that Onyx found in the schema, each with **Allow**, **Ask**, or **Blocked**. |
 
-<img className="rounded-image" src="/assets/admins/plugins/openapi_tab_tools.webp" alt="The Tools tab with the operations from an OpenAPI schema"/>
+<img className="rounded-image" src="/assets/admins/plugins/integration_openapi_actions_tab.webp" alt="The Actions tab with the operations from an OpenAPI schema"/>
 
-The **Tools** tab is read only. To add, remove, or change an operation, edit the schema in the **Configuration** tab.
+To add, remove, or change an operation, edit the schema on the **Configuration** tab.
+Onyx syncs the actions again when you save a changed schema.
 
-Turning off **Enable in default Chat** does not remove the plugin from custom agents.
-Its credentials and settings stay the same. To remove the plugin from all agents, delete it from the Plugins page.
+Changing the install setting of the plugin does not remove it from custom agents.
+To remove the integration from all agents, delete it on the **Overview** tab.
 
 <Note>
-  In Terraform, `onyx_custom_tool.enabled` sets **Enable in default Chat**. It does not change custom-agent attachments.
+  In Terraform, `onyx_custom_tool.enabled` sets default Chat availability. It does not change custom-agent attachments.
 </Note>
 
 ## Use the plugin in custom agents

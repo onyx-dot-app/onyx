@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.app_skill import built_in_app_skills
 from onyx.db.enums import ExternalAppType
-from onyx.db.external_app import delete_external_app, update_external_app
+from onyx.db.external_app import delete_external_app__no_commit
 from onyx.db.models import (
     ExternalApp,
     Integration,
@@ -174,22 +174,6 @@ def test_invalid_plugin_version_gives_no_built_in_skill(session: Session) -> Non
     assert _app_skills(user, session) == {}
 
 
-def test_app_switch_turns_the_built_in_skill_off_and_on(session: Session) -> None:
-    user = make_user(session)
-    slack_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.SLACK]
-    reset_built_in_skill_row(session, built_in_skill_id=slack_id)
-    app = make_external_app(
-        session, app_type=ExternalAppType.SLACK, auth_template=_AUTH_TEMPLATE
-    )
-    make_app_plugin_for_user(session, app=app, user=user)
-
-    update_external_app(session, app.id, ExternalAppType.SLACK, enabled=False)
-    assert _app_skills(user, session) == {}
-
-    update_external_app(session, app.id, ExternalAppType.SLACK, enabled=True)
-    assert _app_skills(user, session) == {slack_id: app.id}
-
-
 def test_left_out_plugin_gives_no_built_in_skill(session: Session) -> None:
     user = make_user(session)
     slack_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.SLACK]
@@ -259,7 +243,7 @@ def test_app_delete_keeps_custom_skill_plugins(session: Session) -> None:
         skill_id=skill.id, enabled=True, user=user, db_session=session
     )
 
-    delete_external_app(session, app.id)
+    delete_external_app__no_commit(session, app.id)
 
     assert session.get(Plugin, skill.id) is not None
     assert session.get(Skill, skill.id) is not None
@@ -281,7 +265,7 @@ def test_app_delete_removes_the_built_in_row(session: Session) -> None:
     reset_built_in_skill_row(session, built_in_skill_id=built_in_skill_id)
     app = make_external_app(session, app_type=app_type, auth_template={})
 
-    delete_external_app(session, app.id)
+    delete_external_app__no_commit(session, app.id)
 
     assert (
         session.scalar(

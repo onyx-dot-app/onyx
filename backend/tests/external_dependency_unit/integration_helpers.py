@@ -20,6 +20,7 @@ from onyx.db.enums import (
     MCPTransport,
     PluginInstallationPolicy,
 )
+from onyx.db.external_app import delete_external_app__no_commit
 from onyx.db.integration import replace_integration_actions__no_commit
 from onyx.db.models import (
     ExternalApp,
@@ -295,6 +296,8 @@ def delete_integrations(db_session: Session, integration_ids: Sequence[int]) -> 
     server_ids = [i.mcp_server_id for i in integrations if i.mcp_server_id]
     app_ids = [i.external_app_id for i in integrations if i.external_app_id]
     tool_ids = [i.tool_id for i in integrations if i.tool_id]
+    for app_id in app_ids:
+        delete_external_app__no_commit(db_session, app_id)
     db_session.execute(delete(Integration).where(Integration.id.in_(integration_ids)))
     db_session.execute(delete(Tool).where(Tool.id.in_(tool_ids)))
     db_session.execute(delete(MCPServer).where(MCPServer.id.in_(server_ids)))

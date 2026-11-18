@@ -11,6 +11,7 @@ from onyx.db.enums import (
     IntegrationActionSource,
     IntegrationAuthMethod,
     MCPTransport,
+    PluginInstallationPolicy,
 )
 from onyx.external_apps.providers.base import ExternalAppProvider
 
@@ -188,3 +189,29 @@ class UsableIntegrationIds(BaseModel):
     @property
     def visible(self) -> frozenset[int]:
         return frozenset().union(*self.by_visible_plugin.values())
+
+
+class PersonaPluginLink(BaseModel):
+    """A plugin on an agent (``persona__plugin``)."""
+
+    plugin_id: UUID
+    action_settings: ActionSettings = ActionSettings()
+
+
+class PersonaPluginSnapshot(PersonaPluginLink):
+    plugin_name: str
+
+
+class IntegrationPluginRow(BaseModel):
+    """One plugin that holds an integration, with where it lives."""
+
+    model_config = ConfigDict(frozen=True)
+
+    integration_id: int
+    plugin_id: UUID
+    plugin_name: str
+    plugin_description: str
+    in_organization_library: bool
+    author_user_id: UUID | None
+    owner_email: str | None
+    installation_policy: PluginInstallationPolicy | None

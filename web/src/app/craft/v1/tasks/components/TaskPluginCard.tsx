@@ -8,15 +8,11 @@ import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import type {
   TaskActionSettings,
   TaskActionView,
-  TaskEffectivePolicy,
-  TaskLinkValue,
   TaskPluginView,
 } from "@/app/craft/v1/tasks/types";
+import type { LinkValue, PolicyValue } from "@/lib/integrations/types";
 
-function runPolicy(
-  value: TaskLinkValue,
-  action: TaskActionView
-): TaskEffectivePolicy {
+function runPolicy(value: LinkValue, action: TaskActionView): PolicyValue {
   if (value === "blocked" || action.integration_policy === "blocked")
     return "blocked";
   if (value === "inherit" || (value === "allow" && action.locked))
@@ -40,7 +36,7 @@ export default function TaskPluginCard({
   onToggle,
 }: TaskPluginCardProps) {
   const t = useTranslations("craft.actionPolicies");
-  const counts: Record<TaskEffectivePolicy, number> = {
+  const counts: Record<PolicyValue, number> = {
     allow: 0,
     ask: 0,
     blocked: 0,

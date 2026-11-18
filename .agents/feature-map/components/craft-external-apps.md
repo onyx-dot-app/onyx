@@ -21,7 +21,7 @@ When an action is set to Ask, the agent's call waits. An approval card appears
 in the session. The user can approve once, approve that action for the rest of
 the session, or reject. With no decision within the wait window (180 seconds
 by default), the request expires and the agent gets an error. When an action
-is Disabled, the call fails at once with a `policy_denied` error that the agent
+is Blocked, the call fails at once with a `policy_denied` error that the agent
 can read. When the app is not connected, the call fails with a message that
 asks the user to connect it. A proxy restart or deploy expires every open
 approval card, and the agent gets an error.
@@ -32,7 +32,7 @@ already has credentials. It shows Connected only after the decision succeeds,
 and stays retryable after a failure. When the user declines, the agent gets a
 rejection and can choose another way.
 
-The user can set personal Auto-approve, Ask or Disabled choices per action when
+The user can set personal Allow, Ask or Blocked choices per action when
 the admin allows it. A scheduled task has its own choices
 ([[craft-scheduled-tasks]]).
 
@@ -186,10 +186,14 @@ permission on the sandbox: allow for connected, reject for declined.
 writes the MCP integrations whose `integration_status` is connected (or that
 have no sign-in) into the opencode config, with each Blocked action as a
 disabled tool. A session of a scheduled run gets only the task plugins,
-also one that the owner turned off ([[craft-scheduled-tasks]]). `GET /mcp/servers/craft`
-lists the same servers, and
+also one that the owner turned off ([[craft-scheduled-tasks]]). The web reads
+the Craft apps and MCP servers from the member list (`GET /integrations`,
+`web/src/lib/integrations/craft.ts`), and
 `integrations/craft.py:list_connectable_apps` lists the external apps the user
-can still connect. No code reads `mcp_server.available_in_craft`.
+can still connect. No code reads `mcp_server.available_in_craft`. An
+integration change reloads running Craft sessions through
+`backend/onyx/integrations/service.py:reload_craft_sessions`. It restamps
+`mcp_config_hash` and pushes the skill files of the affected users.
 
 **Credentials.** The sandbox holds only the placeholder
 `server/features/build/configs.py:SANDBOX_PROXY_INJECTED_PLACEHOLDER`. The
@@ -209,7 +213,7 @@ a connection problem, it refuses with `CredentialUnavailableError`. An internal 
 when the server belongs to a plugin that the user can see
 (`IntegrationResolver.allows_destination`).
 
-**OAuth connect.** `server/features/build/external_apps/oauth.py` binds each
+**OAuth connect.** `backend/onyx/integrations/oauth.py` binds each
 attempt to the user, app and a fingerprint of the resolved OAuth
 configuration: client, redirect and endpoints. The callback consumes the
 attempt once, rejects it when the configuration changed after the start,
@@ -276,12 +280,14 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    upstream's 413. A streamed body (`raw_content is None`) counts as oversize,
    so a future stream opt-in cannot skip the cap. Turning on request streaming
    anywhere in the chain blocks requests with `body_too_large`.
-7. `unspecified-never-auto` **`unspecified` is never Auto-approve and never
+7. `unspecified-never-auto` **`unspecified` is never Allow and never
    session-granted on an external app.** Personal or task choices cannot make
    an off-catalog request run unattended.
    `sandbox_proxy/addons/gate.py:GateAddon._session_grant` returns false for
    it, and `backend/onyx/server/features/build/approvals/api.py:ApprovalView.can_approve_for_session` refuses
    "approve for session" for any whole-domain action on an external app.
+   The admin Actions tab (`web/src/sections/integrations/IntegrationActionsTab.tsx`)
+   reads `always_asks` on each action and does not offer Allow for it.
 8. `approval-single-writer` **Approval decisions have one writer.** Only
    `backend/onyx/db/action_approval.py:try_record_decision` writes the decision of a
    pending row. It arbitrates between the user, a session grant and proxy
@@ -306,17 +312,17 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     key or the Secret into the sandbox namespace. A CA rotation breaks TLS in
     every running sandbox, because sandboxes install the CA only at boot.
 12. `url-patterns-on-app-row` **URL patterns live on the app row, not the
-    provider.** `db/external_app.py:create_external_app` stores the patterns
-    that the create request submits; the admin form sends the provider's
-    descriptor patterns.
+    provider.** `backend/onyx/db/integration.py:create_external_app_row__no_commit`
+    stores the patterns of the create request; a preset gets the patterns of
+    its provider.
     `sandbox_proxy/usable_integrations.py:load_match_targets` reads the
     patterns from the row. A pattern change in provider code reaches new apps only. Existing
     apps get no credential and no policy gate on the new host until a data
     migration updates their rows. A plain append works only for literal
     patterns. A provider that overrides `resolve_upstream_url_patterns`
     (Zendesk fills `{subdomain}` from organization credentials) needs per-row
-    resolution. `db/external_app.py:update_external_app` resolves the patterns
-    again on each save of credentials or patterns.
+    resolution. `backend/onyx/integrations/service.py:update_integration__no_commit`
+    resolves the patterns again on each save of the preset settings.
 13. `connect-app-idempotent` **A connect-app decision is idempotent and
     retryable.** An expired or answered request is a no-op. When the sandbox is
     unreachable the route returns 502 and keeps the pending record, so the
@@ -395,10 +401,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
   rows ([[#url-patterns-on-app-row]]). Update the app's built-in skill files
   in `backend/onyx/skills/builtin/`; the agent learns the host and helpers
   only from them, and [[skills]] owns how they reach running sandboxes. Escape
-  every dot in the host: an unescaped dot matches any character, and the member
-  app view
-  (`backend/onyx/server/features/build/external_apps/api.py:_to_user_response`)
-  leaves that pattern out of the app's service URLs, with no error.
+  every dot in the host: an unescaped dot matches any character, and
+  `backend/onyx/integrations/craft.py:craft_service_urls` leaves that pattern
+  out of the app's service URLs, with no error.
 - `credential-resolver` **A credential resolver.** Copy `OnyxPatResolver`; list the resolvers with
   `git ls-files backend/onyx/sandbox_proxy/resolvers/`. Register it in
   `build_resolvers`. Claim requests by a disjoint host set. Raise
@@ -410,13 +415,13 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
   approval row, so the session grant in `submit_decision` can cover it.
 - `investigate-app-call-failed` **Investigate "the agent's call to an app failed".** Read the
   response the agent got first: a proxy 403 carries the error code from
-  `backend/onyx/sandbox_proxy/errors.py`. A Disabled action returns
+  `backend/onyx/sandbox_proxy/errors.py`. A Blocked action returns
   `policy_denied` and writes no log line (`sandbox_proxy/addons/gate.py:GateAddon._resolve_and_match`).
   Then find the request in the `sandbox-proxy` log. An `egress_block` line
   carries the `reason`, and an `egress_allow` line carries the credential
   outcome. No response from the proxy and no log line means the request did not
   reach the proxy; check the lockdown in [[craft-sandboxes]].
-- `setup-policy-test` **Set up a policy test.** Set one action to Disabled and one to Ask. The
+- `setup-policy-test` **Set up a policy test.** Set one action to Blocked and one to Ask. The
   first returns 403 `policy_denied` with no proxy log line. The second shows an
   approval card, and after approval the proxy logs the decision as `APPROVED`.
 
@@ -427,9 +432,8 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
 - Proxy: `backend/tests/unit/sandbox_proxy/` and
   `backend/tests/external_dependency_unit/sandbox_proxy/` (includes the
   approval claim race).
-- Matching and policies: `backend/tests/unit/external_apps/`,
-  `backend/tests/external_dependency_unit/permissions/` and
-  `backend/tests/integration/tests/external_apps/`.
+- Matching and policies: `backend/tests/unit/external_apps/` and
+  `backend/tests/external_dependency_unit/integrations/`.
 - Approval routes: `backend/tests/external_dependency_unit/craft/`.
 - End to end with a real sandbox and proxy:
   `backend/tests/integration/tests/craft/docker_e2e/`.

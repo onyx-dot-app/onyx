@@ -1,7 +1,7 @@
 import { NextIntlClientProvider } from "next-intl";
 import { render, screen, setupUser } from "@tests/setup/test-utils";
 import BuildSidebar from "@/app/craft/components/SideBar";
-import { memberPluginMessages } from "@/sections/plugins/__tests__/memberPluginFixtures";
+import englishMessages from "@/i18n/messages/en.json";
 
 const mockReplace = jest.fn();
 const mockAction = jest.fn();
@@ -56,11 +56,11 @@ test("Craft navigation opens Plugins at the unified route", async () => {
     <NextIntlClientProvider
       locale="en"
       messages={{
-        ...memberPluginMessages,
+        ...englishMessages,
         craft: {
-          ...memberPluginMessages.craft,
+          ...englishMessages.craft,
           sideBar: {
-            ...memberPluginMessages.craft.sideBar,
+            ...englishMessages.craft.sideBar,
             plugins: { label: "Plugins" },
           },
         },

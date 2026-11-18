@@ -145,9 +145,11 @@ class ApiKindHandler(IntegrationKindHandler):
         if tool is None or tool.openapi_schema is None:
             return None
         try:
-            base_url = openapi_to_url(tool.openapi_schema)
-        except ValueError as e:
-            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+            base_url: str | None = openapi_to_url(tool.openapi_schema)
+        except ValueError:
+            # A spec with no single server URL matches no request; it must not
+            # break the readers that only need the shape.
+            base_url = None
         return ApiConfig(
             shape=ApiShape.OPENAPI,
             tool_id=tool.id,

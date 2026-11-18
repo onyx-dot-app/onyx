@@ -14,7 +14,7 @@
 A Craft user writes a prompt, picks a schedule (an interval, a daily or weekly
 time, or a cron expression), and chooses which connected apps the task may use.
 New tasks start with every app off. For each enabled app the user can set
-Auto-approve, Ask or Disabled per action, within the limits the admin set.
+Allow, Ask or Blocked per action, within the limits the admin set.
 "Run once" fires the task at once, even when it is paused. Pause stops the
 fires; Resume schedules the next fire from the time of resume, so missed fires
 do not run.
@@ -276,7 +276,7 @@ requests of a run in progress.
   `queued > N min` means the `scheduled_tasks` worker did not pick it up. For other classes, search the logs
   for `Failed to create scheduled-task notification`. The failure notice is
   INFO, so look for it in the notification list, not the banner queue.
-- `setup-task-policy-test` **Set up a task-policy test.** Set one task action to Auto-approve while the
+- `setup-task-policy-test` **Set up a task-policy test.** Set one task action to Allow while the
   personal choice is Ask. Run the task: the action runs with no prompt. After
   the run ends, send a follow-up that uses the same action: the proxy blocks
   it.
@@ -286,7 +286,6 @@ requests of a run in progress.
 ## Verification
 
 - Dispatch, executor and sweeps: `backend/tests/external_dependency_unit/craft/`.
-- Task choices and enablement: `backend/tests/external_dependency_unit/permissions/`.
 - Task context in the proxy: `backend/tests/unit/sandbox_proxy/`.
 - Schedule compilation: `backend/tests/unit/onyx/server/features/craft/scheduled_tasks/`.
 - The API: `backend/tests/integration/tests/craft/`.

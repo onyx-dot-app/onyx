@@ -5,10 +5,13 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from mcp.types import Tool as MCPLibTool
+from mcp.types import ToolAnnotations
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
     IntegrationActionPolicyValue,
+    IntegrationActionSource,
     IntegrationAuthMode,
     IntegrationKind,
     MCPAuthenticationType,
@@ -87,6 +90,48 @@ def _request(
         url=url,
         headers={"content-type": "application/json"},
     )
+
+
+def test_discovered_tools_map_to_actions_with_read_only_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+    integration: Integration,
+    server: MCPServer,  # noqa: ARG001
+) -> None:
+    schema = {"type": "object", "properties": {"q": {"type": "string"}}}
+    tools = [
+        MCPLibTool(
+            name="search",
+            title="Search",
+            description="Find",
+            inputSchema=schema,
+            outputSchema={"type": "object"},
+            annotations=ToolAnnotations(readOnlyHint=True),
+        ),
+        MCPLibTool(name="create", inputSchema={"type": "object"}),
+        MCPLibTool(name="search", title="Dup", inputSchema={"type": "object"}),
+    ]
+    credentials = CallCredentials(
+        integration_id=integration.id,
+        auth_method=None,
+        connection_id=None,
+        connection_user_id=None,
+        headers={},
+    )
+    monkeypatch.setattr(
+        mcp_kind, "resolve_call_credentials", lambda *_a, **_k: credentials
+    )
+    monkeypatch.setattr(mcp_kind, "mcp_oauth_server", lambda *_a, **_k: None)
+    monkeypatch.setattr(mcp_kind, "discover_mcp_tools", lambda *_a, **_k: tools)
+
+    specs = mcp_kind.fetch_mcp_actions(integration, None, DB)
+
+    assert [(s.key, s.display_name, s.read_only, s.default_policy) for s in specs] == [
+        ("search", "Search", True, IntegrationActionPolicyValue.ALLOW),
+        ("create", "create", None, IntegrationActionPolicyValue.ASK),
+    ]
+    assert all(s.source is IntegrationActionSource.MCP for s in specs)
+    assert specs[0].input_schema == schema
+    assert specs[0].output_schema == {"type": "object"}
 
 
 def test_match_tools_call_uses_action_defaults(

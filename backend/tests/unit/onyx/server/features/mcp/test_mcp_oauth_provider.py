@@ -55,23 +55,50 @@ class _MemoryTokenStorage:
         self.client_info = client_info
 
 
-class _RecordingAuthorizationStorage(oauth.OnyxTokenStorage):
+class _RecordingAuthorizationStorage(oauth.IntegrationTokenStorage):
     def __init__(
         self,
         token_endpoint_auth_method: Literal[
             "client_secret_post", "client_secret_basic"
         ] = "client_secret_post",
     ) -> None:
-        super().__init__(connection_config_id=101)
         self.tokens: OAuthToken | None = None
         self.client_info = _client_information(
             token_endpoint_auth_method=token_endpoint_auth_method
         )
         self.persisted_client_information: OAuthClientInformationFull | None = None
 
+    @property
+    def refresh_lock_name(self) -> str:
+        return "test-refresh-lock"
+
+    def bind_oauth_context(self, context: oauth.OAuthContext) -> None:
+        del context
+
+    async def get_tokens(self) -> OAuthToken | None:
+        return self.tokens
+
+    async def get_client_info(self) -> OAuthClientInformationFull | None:
+        return self.client_info
+
+    async def set_client_info(self, info: OAuthClientInformationFull) -> None:
+        self.client_info = info
+
     async def set_tokens(self, tokens: OAuthToken) -> None:
         del tokens
         raise AssertionError("authorization must persist registration with its tokens")
+
+    async def set_refreshed_tokens(
+        self, tokens: OAuthToken, redeemed_refresh_token: str | None
+    ) -> bool:
+        del tokens, redeemed_refresh_token
+        raise AssertionError("no refresh in these tests")
+
+    async def discard_persisted_tokens(
+        self, redeemed_refresh_token: str | None
+    ) -> bool:
+        del redeemed_refresh_token
+        return False
 
     async def set_authorization_result(
         self,
