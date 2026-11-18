@@ -373,3 +373,6 @@ Rules:
 1. Add a new `LLMFlow` enum value before instrumenting a new operation. Don't pass raw strings.
 2. Flow tags name the **operation** (e.g. `IMAGE_EDIT`, `RERANK`) — not the provider. Provider lives in `model_config["model_provider"]`.
 3. Shared calls without a flow emit `LLMFlow.UNTAGGED_INVOKE` or `UNTAGGED_STREAM`. These sentinels indicate missing instrumentation. Fix the call site.
+
+Pre-commit runs `check_import_boundaries.py` to restrict provider SDK imports to adapters and recorded exceptions.
+The check covers import statements. Review HTTP calls and calls through shared clients for flow tags.

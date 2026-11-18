@@ -262,3 +262,77 @@ reason = "Fetch and processing are two stages of one indexing pipeline. Fetch st
 importer = "onyx/background/celery/tasks/docprocessing/tasks.py"
 imports = "onyx.background.celery.tasks.docfetching.task_creation_utils"
 reason = "Fetch and processing are two stages of one indexing pipeline. The processing scheduler creates the next fetch attempt."
+
+[[contract]]
+name = "provider-sdk-boundary"
+rule = "Keep provider SDK imports in the adapters that own provider calls"
+reason = "Application code must call an adapter that records a generation span with an LLMFlow."
+instead = "Use the shared LLM client with a flow or add a tagged span in the provider adapter."
+source = ["onyx/", "ee/", "model_server/", "scripts/"]
+source_exclude = [
+    "onyx/llm/",
+    "onyx/tracing/",
+    "onyx/image_gen/providers/",
+    "onyx/voice/providers/",
+    "onyx/natural_language_processing/search_nlp_models.py",
+    "ee/onyx/server/gateway/",
+]
+external_forbidden = [
+    "anthropic",
+    "azure.cognitiveservices.speech",
+    "cohere",
+    "google.genai",
+    "google.generativeai",
+    "huggingface_hub",
+    "litellm",
+    "openai",
+    "sentence_transformers",
+    "transformers",
+    "vertexai",
+    "voyageai",
+]
+
+[[contract.exception]]
+importer = "onyx/image_gen/interfaces.py"
+imports = "litellm.types.utils.ImageResponse"
+reason = "Uses the SDK response type for annotations."
+
+[[contract.exception]]
+importer = "onyx/server/manage/llm/api.py"
+imports = "litellm"
+reason = "Lists provider names from the SDK registry."
+
+[[contract.exception]]
+importer = "model_server/encoders.py"
+imports = "litellm.exceptions.RateLimitError"
+reason = "Maps the SDK exception to a model-server response."
+
+[[contract.exception]]
+importer = "model_server/encoders.py"
+imports = "sentence_transformers"
+reason = "Uses the local embedding model type."
+
+[[contract.exception]]
+importer = "model_server/main.py"
+imports = "transformers.logging"
+reason = "Configures local model logging."
+
+[[contract.exception]]
+importer = "model_server/embedding_model_loader.py"
+imports = "huggingface_hub"
+reason = "Downloads local embedding model files and checks the cache."
+
+[[contract.exception]]
+importer = "model_server/embedding_model_loader.py"
+imports = "sentence_transformers"
+reason = "Loads local embedding models. The embedding client records the span."
+
+[[contract.exception]]
+importer = "model_server/voyage_nano.py"
+imports = "sentence_transformers"
+reason = "Constructs the local Voyage embedding model. The embedding client records the span."
+
+[[contract.exception]]
+importer = "scripts/test-openapi-key.py"
+imports = "openai.OpenAI"
+reason = "Existing standalone key diagnostic. Its direct SDK call needs a generation span."
