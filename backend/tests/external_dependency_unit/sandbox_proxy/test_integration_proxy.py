@@ -841,6 +841,37 @@ def test_the_task_catalog_shows_that_a_custom_app_always_asks(
     assert action.locked is True
 
 
+def test_the_task_catalog_leaves_out_openapi_integrations(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    host = _host()
+    openapi, _ = make_openapi_integration(
+        db_session,
+        openapi_schema={
+            "openapi": "3.0.0",
+            "info": {"title": "Orders", "description": "Orders", "version": "1"},
+            "servers": [{"url": f"https://{host}/v1"}],
+            "paths": {
+                "/orders": {
+                    "get": {"operationId": "listOrders", "summary": "List orders"}
+                }
+            },
+        },
+    )
+    created.append(openapi.id)
+    mcp = _mcp(db_session, created, f"https://{_host()}/mcp")
+    _run(db_session, [openapi])
+    _run(db_session, [mcp])
+
+    listed = {
+        integration.id
+        for view in list_task_plugin_views(db_session, user, None)
+        for integration in view.integrations
+    }
+    assert mcp.id in listed
+    assert openapi.id not in listed
+
+
 def test_the_task_catalog_ignores_the_owners_always_allow(
     db_session: Session, created: list[int], user: User
 ) -> None:
