@@ -27,6 +27,7 @@ from onyx.db.integration_connection import (
     get_connection,
     get_oauth_client,
     mark_connection_needs_reconnect__no_commit,
+    update_connection_secret__no_commit,
 )
 from onyx.db.models import (
     Integration,
@@ -43,6 +44,7 @@ from onyx.integrations.connection_models import (
     read_oauth_client,
 )
 from onyx.integrations.connections import (
+    _refresh_connection,
     ensure_fresh_connection,
     integration_status,
     mark_sign_in_settings_changed,
@@ -319,6 +321,40 @@ def test_mcp_config_refresh_writes_new_format(
         "new-refresh",
     )
     assert secret.headers == {"X-Route": "eu"}
+
+
+def test_mcp_refresh_redeems_the_captured_grant_not_a_newer_one(
+    db_session: Session,
+    make_test_user: MakeTestUser,
+    token_endpoint: FakeTokenEndpoint,
+) -> None:
+    integration = _mcp_oauth_integration(db_session)
+    user = make_test_user("legacy_mcp_refresh_superseded")
+    connection = _seed(
+        db_session,
+        integration,
+        user.id,
+        IntegrationLegacyFormat.MCP_CONFIG,
+        _mcp_oauth_user_secret(_unix(-timedelta(minutes=5))),
+    )
+    captured = read_connection(connection)
+    update_connection_secret__no_commit(
+        db_session,
+        connection,
+        secret={"access_token": "a2", "refresh_token": "r2", "token_type": "Bearer"},
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        granted_scopes=["read"],
+    )
+    db_session.commit()
+
+    _refresh_connection(connection, captured, integration, db_session)
+
+    assert len(token_endpoint.requests) == 1
+    request = token_endpoint.requests[0]
+    assert parse_qs(request.content.decode())["refresh_token"] == ["r1"]
+    db_session.refresh(connection)
+    secret = read_connection_secret(connection)
+    assert (secret.access_token, secret.refresh_token) == ("a2", "r2")
 
 
 def test_mcp_config_registration_saves_new_format(
