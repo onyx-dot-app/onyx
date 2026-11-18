@@ -69,7 +69,7 @@ function RateLimitBanner({
   details,
 }: RateLimitBannerProps) {
   const t = useTranslations("chat.messages");
-  const [nowMs, setNowMs] = useState(Date.now());
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const resetMs = useMemo(
     () => resolveResetMs(details.reset_at, details.retry_after_seconds),
     [details.reset_at, details.retry_after_seconds]

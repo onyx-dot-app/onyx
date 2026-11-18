@@ -210,7 +210,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   const streamEndedRef = useRef(false);
 
   // Process next chunk from the pending queue
-  const processNextChunk = useCallback(() => {
+  const processNextChunk = useCallback(function processNextChunk() {
     if (
       isAppendingRef.current ||
       pendingChunksRef.current.length === 0 ||
@@ -237,7 +237,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Finalize the media stream when done
-  const finalizeStream = useCallback(() => {
+  const finalizeStream = useCallback(function finalizeStream() {
     if (pendingChunksRef.current.length > 0 || isAppendingRef.current) {
       setTimeout(() => finalizeStream(), FINALIZE_RETRY_DELAY_MS);
       return;

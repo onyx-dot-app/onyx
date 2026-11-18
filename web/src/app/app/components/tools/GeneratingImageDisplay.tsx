@@ -4,7 +4,7 @@ export default function GeneratingImageDisplay({ isCompleted = false }) {
   const [progress, setProgress] = useState(0);
   const progressRef = useRef(0);
   const animationRef = useRef<number | null>(null);
-  const startTimeRef = useRef<number>(Date.now());
+  const startTimeRef = useRef<number>(0);
 
   useEffect(() => {
     // Animation setup

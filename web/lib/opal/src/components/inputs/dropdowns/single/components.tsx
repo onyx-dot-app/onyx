@@ -202,6 +202,8 @@ function SingleSelectFieldInner({
     onValidationError,
   });
 
+  const [invalidCommit, setInvalidCommit] = useState(false);
+
   // Event Handlers
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -294,7 +296,6 @@ function SingleSelectFieldInner({
   // closed mode flags the error variant and keeps the dropdown open; any
   // typing, selection, or close (blur/outside/Tab already close) clears it,
   // and the close-sync effect drops the invalid text back to the selection.
-  const [invalidCommit, setInvalidCommit] = useState(false);
   useEffect(() => {
     if (!isOpen) setInvalidCommit(false);
   }, [isOpen]);

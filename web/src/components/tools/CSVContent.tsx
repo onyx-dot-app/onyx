@@ -28,17 +28,6 @@ const CsvContent: React.FC<ContentComponentProps> = ({
   const cacheKey = fileDescriptor.id;
   const cached = csvCache.get(cacheKey);
 
-  useEffect(() => {
-    if (cached) {
-      setHeaders(cached.headers);
-      setData(cached.data);
-      setIsFetching(false);
-      return;
-    }
-
-    fetchCSV(fileDescriptor.id);
-  }, [fileDescriptor.id]);
-
   const fetchCSV = async (id: string) => {
     setIsFetching(true);
     try {
@@ -92,6 +81,17 @@ const CsvContent: React.FC<ContentComponentProps> = ({
       setIsFetching(false);
     }
   };
+
+  useEffect(() => {
+    if (cached) {
+      setHeaders(cached.headers);
+      setData(cached.data);
+      setIsFetching(false);
+      return;
+    }
+
+    fetchCSV(fileDescriptor.id);
+  }, [fileDescriptor.id]);
 
   if (isFetching) {
     return (

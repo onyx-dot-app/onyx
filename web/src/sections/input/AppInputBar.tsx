@@ -407,6 +407,63 @@ const AppInputBar = React.memo(
     const questionRefusesFiles =
       questionWaits && currentMessageFiles.length > 0;
 
+    // Returned text goes before any newer text, in the composer or, for a chat
+    // that is no longer open, in that chat's own draft.
+    function returnText(sessionId: string, returned: ComposedMessage) {
+      const isOpen =
+        mountedRef.current &&
+        useChatSessionStore.getState().currentSessionId === sessionId;
+      const key = draftKey("chat", sessionId);
+      const newer = isOpen
+        ? composedRef.current
+        : toChatDraft(readDraft<StoredChatDraft>(key) ?? "");
+      const offset = returned.message.length + 2;
+      const combined: ComposedMessage = newer.message.trim()
+        ? {
+            message: `${returned.message}\n\n${newer.message}`,
+            mentions: [
+              ...returned.mentions,
+              ...newer.mentions.map((mention) =>
+                mention.index === undefined
+                  ? mention
+                  : { ...mention, index: mention.index + offset }
+              ),
+            ],
+          }
+        : returned;
+      if (!isOpen) {
+        writeDraft(key, combined, isChatDraftEmpty);
+        return;
+      }
+      // The composer saves its draft after a delay that a chat switch cancels;
+      // the server no longer holds this text, so it is saved at once.
+      writeDraft(chatDraftStorageKey, combined, isChatDraftEmpty);
+      setMessage(combined.message, combined.mentions);
+      setCursorToEnd();
+    }
+
+    // The text leaves the composer while it is sent, and comes back when the
+    // server does not take it.
+    async function answerQuestion(submitted: ComposedMessage) {
+      const sessionId = currentSessionId;
+      if (sessionId === null || disabled || answeringRef.current) return;
+      answeringRef.current = true;
+      stopTTS();
+      clearMessage();
+      clearChatDraft();
+      try {
+        if (
+          !(await answerWithMessage(
+            waitingQuestionIds,
+            submitted.message.trim()
+          ))
+        )
+          returnText(sessionId, submitted);
+      } finally {
+        answeringRef.current = false;
+      }
+    }
+
     function submitMessage(submitted: ComposedMessage) {
       if (!submitted.message.trim()) return;
       if (questionWaits) {
@@ -533,96 +590,6 @@ const AppInputBar = React.memo(
                   : "appInputBar.pendingMessages.sendHint"
     );
 
-    // Returned text goes before any newer text, in the composer or, for a chat
-    // that is no longer open, in that chat's own draft.
-    function returnText(sessionId: string, returned: ComposedMessage) {
-      const isOpen =
-        mountedRef.current &&
-        useChatSessionStore.getState().currentSessionId === sessionId;
-      const key = draftKey("chat", sessionId);
-      const newer = isOpen
-        ? composedRef.current
-        : toChatDraft(readDraft<StoredChatDraft>(key) ?? "");
-      const offset = returned.message.length + 2;
-      const combined: ComposedMessage = newer.message.trim()
-        ? {
-            message: `${returned.message}\n\n${newer.message}`,
-            mentions: [
-              ...returned.mentions,
-              ...newer.mentions.map((mention) =>
-                mention.index === undefined
-                  ? mention
-                  : { ...mention, index: mention.index + offset }
-              ),
-            ],
-          }
-        : returned;
-      if (!isOpen) {
-        writeDraft(key, combined, isChatDraftEmpty);
-        return;
-      }
-      // The composer saves its draft after a delay that a chat switch cancels;
-      // the server no longer holds this text, so it is saved at once.
-      writeDraft(chatDraftStorageKey, combined, isChatDraftEmpty);
-      setMessage(combined.message, combined.mentions);
-      setCursorToEnd();
-    }
-
-    // The text leaves the composer while it is sent, and comes back when the
-    // server does not take it.
-    async function answerQuestion(submitted: ComposedMessage) {
-      const sessionId = currentSessionId;
-      if (sessionId === null || disabled || answeringRef.current) return;
-      answeringRef.current = true;
-      stopTTS();
-      clearMessage();
-      clearChatDraft();
-      try {
-        if (
-          !(await answerWithMessage(
-            waitingQuestionIds,
-            submitted.message.trim()
-          ))
-        )
-          returnText(sessionId, submitted);
-      } finally {
-        answeringRef.current = false;
-      }
-    }
-
-    async function submitPendingMessage(
-      delivery: PendingChatMessage["delivery"]
-    ) {
-      if (!canSubmitPending || !hasPendingInput || disabled || isClassifying)
-        return;
-      const sessionId = currentSessionId;
-      if (sessionId === null) return;
-      if (delivery === "interrupt") stopTTS({ manual: true });
-      clearMessage();
-      clearChatDraft();
-      if (
-        await queue.submit(
-          { ...composed, message: composed.message.trim() },
-          delivery,
-          {
-            deepResearch: deepResearchEnabled && showDeepResearch,
-            // The turn uses the model the picker shows, as a normal send does.
-            llmOverride: {
-              model_provider: llmManager.currentLlm.name,
-              model_version: llmManager.currentLlm.modelName,
-              model_configuration_id:
-                llmManager.currentLlm.modelConfigurationId ?? null,
-              temperature: llmManager.hasTemperatureOverride
-                ? llmManager.temperature
-                : undefined,
-            },
-          }
-        )
-      )
-        return;
-      returnText(sessionId, composed);
-    }
-
     async function withdrawPendingMessage(index: number, edit: boolean) {
       const pending = queue.messages[index];
       const sessionId = currentSessionId;
@@ -742,7 +709,7 @@ const AppInputBar = React.memo(
         setShowPrompts(false);
       }, 50);
       setTabbingIconIndex(0);
-    }, []);
+    }, [setShowPrompts, setTabbingIconIndex]);
 
     function updateInputPrompt(prompt: InputPrompt) {
       hidePrompts();
@@ -810,6 +777,39 @@ const AppInputBar = React.memo(
       activeProject,
       isLoadingProjects,
     ]);
+
+    async function submitPendingMessage(
+      delivery: PendingChatMessage["delivery"]
+    ) {
+      if (!canSubmitPending || !hasPendingInput || disabled || isClassifying)
+        return;
+      const sessionId = currentSessionId;
+      if (sessionId === null) return;
+      if (delivery === "interrupt") stopTTS({ manual: true });
+      clearMessage();
+      clearChatDraft();
+      if (
+        await queue.submit(
+          { ...composed, message: composed.message.trim() },
+          delivery,
+          {
+            deepResearch: deepResearchEnabled && showDeepResearch,
+            // The turn uses the model the picker shows, as a normal send does.
+            llmOverride: {
+              model_provider: llmManager.currentLlm.name,
+              model_version: llmManager.currentLlm.modelName,
+              model_configuration_id:
+                llmManager.currentLlm.modelConfigurationId ?? null,
+              temperature: llmManager.hasTemperatureOverride
+                ? llmManager.temperature
+                : undefined,
+            },
+          }
+        )
+      )
+        return;
+      returnText(sessionId, composed);
+    }
 
     function handleKeyDownForPromptShortcuts(
       e: React.KeyboardEvent<HTMLDivElement>

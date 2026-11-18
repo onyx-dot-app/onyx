@@ -86,7 +86,7 @@ export default function useChatSessionController({
   loadedIdSessionRef,
   chatInputBarRef,
   isInitialLoad,
-  submitOnLoadPerformed,
+  submitOnLoadPerformed: submitOnLoadPerformedRef,
   refreshChatSessions,
   onSubmit,
 }: UseChatSessionControllerProps) {
@@ -180,9 +180,9 @@ export default function useChatSessionController({
         // If we're supposed to submit on initial load, then do that here
         if (
           shouldSubmitOnLoad(searchParams) &&
-          !submitOnLoadPerformed.current
+          !submitOnLoadPerformedRef.current
         ) {
-          submitOnLoadPerformed.current = true;
+          submitOnLoadPerformedRef.current = true;
           await onSubmit({
             message: firstMessage || "",
             mentions: [],
@@ -386,10 +386,10 @@ export default function useChatSessionController({
       // If this is a seeded chat, then kick off the AI message generation
       if (
         newMessageHistory.length === 1 &&
-        !submitOnLoadPerformed.current &&
+        !submitOnLoadPerformedRef.current &&
         searchParams?.get(SEARCH_PARAM_NAMES.SEEDED) === "true"
       ) {
-        submitOnLoadPerformed.current = true;
+        submitOnLoadPerformedRef.current = true;
 
         const seeded = newMessageHistory[0];
         if (!seeded?.message) {

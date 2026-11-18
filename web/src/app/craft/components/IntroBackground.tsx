@@ -281,16 +281,19 @@ export default function BuildModeIntroBackground(
   );
 
   const animate = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const animateFrame = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
-    updateParticles(canvas);
-    drawParticles(ctx);
+      updateParticles(canvas);
+      drawParticles(ctx);
 
-    animationRef.current = requestAnimationFrame(animate);
+      animationRef.current = requestAnimationFrame(animateFrame);
+    };
+    animateFrame();
   }, [updateParticles, drawParticles]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {

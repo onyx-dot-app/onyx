@@ -160,7 +160,7 @@ export default function BifrostModal({
 
   const onClose = () => onOpenChange?.(false);
 
-  const initialValues: BifrostModalValues = useInitialValues(
+  const baseValues = useInitialValues(
     isOnboarding,
     LLMProviderName.BIFROST,
     existingLlmProvider
@@ -172,9 +172,12 @@ export default function BifrostModal({
     (existingLlmProvider?.custom_config?.[BIFROST_API_MODE_KEY] as
       | BifrostApiMode
       | undefined) ?? DEFAULT_API_MODE;
-  initialValues.custom_config = {
-    ...existingLlmProvider?.custom_config,
-    [BIFROST_API_MODE_KEY]: initialMode,
+  const initialValues: BifrostModalValues = {
+    ...baseValues,
+    custom_config: {
+      ...existingLlmProvider?.custom_config,
+      [BIFROST_API_MODE_KEY]: initialMode,
+    },
   };
 
   const validationSchema = buildValidationSchema(t, isOnboarding, {
