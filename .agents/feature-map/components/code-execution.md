@@ -190,6 +190,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         result of each observation Stop interrupted, and one
                                         with a CellClosing for each cell whose last saved
                                         observation is running
+  chat/agent.py:_prepare_step (a run's first step) -> CodeCells.reopen
+                                        empty cells for the next run of the same agent (a
+                                        message or results to an idle child) after finish
   chat/agent.py:_suspended_cells (Agent.on_suspend) -> CodeCells.suspend
                                         the same when the run suspends, with
                                         reason="suspended"; later calls can start cells. A
@@ -390,7 +393,7 @@ health calls are not retried.
    `tools/tool_implementations/coding_agent/coding_agent_tool.py:CodingAgentTool._run`
    builds it with `BASH_TOOL_SENTINEL_ID = 0`. Its calls are saved with the
    coding agent's child run and replay on reload, but they have no `tool_id`.
-   Persona attachment, `Tool.enabled` and `allowed_tool_ids` act on
+   Persona attachment, `Tool.enabled` and the tool options act on
    `CodingAgentTool`, not on `bash`.
 8. `bash-calls-sequential` **Bash calls in one coding-agent call share a file
    system and run in order.** `coding_agent/agent.py:CodingAgent` registers

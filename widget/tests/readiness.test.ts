@@ -16,6 +16,7 @@ import type {
   StreamCursor,
 } from "../src/types/api-types";
 import { mockFetch, mockTimeouts } from "./mocks";
+import { pendingApproval } from "./widget-helpers";
 import { chatStream, idle, offer, runs } from "./session-status";
 import { OnyxChatWidget } from "../src/widget";
 
@@ -578,7 +579,7 @@ describe("widget readiness", () => {
           obj: { type: "user_message", id: "sdk-3", message: "Other tab" },
         };
         yield { obj: approval("b") };
-        pendingOnNewStream = widget["pendingApproval"]?.request.approval_id;
+        pendingOnNewStream = pendingApproval(widget)?.request.approval_id;
         yield { stream_id: 6, next_cursor: 3, replay_complete: true };
         yield { obj: { type: "stop" } };
         return "ended";
@@ -637,7 +638,7 @@ describe("widget readiness", () => {
           obj: { type: "user_message", id: "sdk-3", message: "Other tab" },
         };
         yield { obj: approval("b") };
-        pendingOnNewStream = widget["pendingApproval"]?.request.approval_id;
+        pendingOnNewStream = pendingApproval(widget)?.request.approval_id;
         yield { stream_id: 4, next_cursor: 3, replay_complete: true };
         yield { obj: { type: "stop" } };
         return "ended";
@@ -706,7 +707,7 @@ describe("widget readiness", () => {
         yield { obj: { type: "message_delta", content: "lo" } };
         yield { stream_id: 5, next_cursor: 4, replay_complete: true };
         yield { obj: approval("later") };
-        pendingAfterReattach = widget["pendingApproval"]?.request.approval_id;
+        pendingAfterReattach = pendingApproval(widget)?.request.approval_id;
         yield { stream_id: 5, next_cursor: 5, replay_complete: true };
         yield { obj: { type: "message_delta", content: " world" } };
         yield { obj: { type: "stop" } };

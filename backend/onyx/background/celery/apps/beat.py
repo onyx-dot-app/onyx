@@ -97,7 +97,7 @@ class DynamicTenantScheduler(PersistentScheduler):
             )
             for task in cloud_tasks_to_schedule:
                 task_name = task["name"]
-                cloud_task = {
+                cloud_task = {  # celery-expires: allow (copies an entry, options follow below)
                     "task": task["task"],
                     "schedule": task["schedule"],
                     "kwargs": task.get("kwargs", {}),
@@ -134,7 +134,7 @@ class DynamicTenantScheduler(PersistentScheduler):
                 task_logger.debug(
                     "Creating task configuration for %s", tenant_task_name
                 )
-                tenant_task = {
+                tenant_task = {  # celery-expires: allow (copies an entry, options follow below)
                     "task": task["task"],
                     "schedule": task["schedule"],
                     "kwargs": {"tenant_id": tenant_id},
@@ -250,6 +250,8 @@ class DynamicTenantScheduler(PersistentScheduler):
 @beat_init.connect
 def on_beat_init(sender: Any, **kwargs: Any) -> None:
     task_logger.info("beat_init signal received.")
+
+    app_base.validate_encryption_configuration_or_exit()
 
     # Celery beat shouldn't touch the db at all. But just setting a low minimum here.
     SqlEngine.set_app_name(POSTGRES_CELERY_BEAT_APP_NAME)

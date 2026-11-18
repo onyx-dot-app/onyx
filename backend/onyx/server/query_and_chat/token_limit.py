@@ -15,12 +15,10 @@ from uuid import UUID
 from cachetools import TTLCache
 from fastapi import Depends
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
 from onyx.configs.constants import (
-    TokenRateLimitAction,
     TokenRateLimitPeriod,
     TokenRateLimitScope,
 )
@@ -29,6 +27,7 @@ from onyx.db.llm import fetch_model_configuration_by_id
 from onyx.db.models import TokenRateLimit, User
 from onyx.db.token_limit import (
     UsageBaseline,
+    enforced_token_rate_limit_exists,
     fetch_enforced_token_rate_limits,
     fetch_pool_usage_baselines,
     fetch_user_group_enforced_token_rate_limits,
@@ -382,22 +381,8 @@ def _enforced_limit_exists(is_model_limit: bool) -> bool:
     if cached is not None:
         return cached
 
-    model_filter = (
-        TokenRateLimit.model_configuration_id.is_not(None)
-        if is_model_limit
-        else TokenRateLimit.model_configuration_id.is_(None)
-    )
     with get_session_with_current_tenant() as db_session:
-        exists = (
-            db_session.scalar(
-                select(TokenRateLimit.id).where(
-                    TokenRateLimit.enabled.is_(True),
-                    TokenRateLimit.action == TokenRateLimitAction.BLOCK,
-                    model_filter,
-                )
-            )
-            is not None
-        )
+        exists = enforced_token_rate_limit_exists(db_session, is_model_limit)
 
     with _any_rate_limit_exists_lock:
         _any_rate_limit_exists_cache[key] = exists

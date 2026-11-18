@@ -212,6 +212,11 @@ PERMISSION_SYNC_TASK_EXPIRES = 6 * 60 * 60  # seconds
 # task (e.g. a Redis restart without persistence), so the reaper fails it.
 PERMISSION_SYNC_LOST_TASK_GRACE = 10 * 60  # seconds
 
+# Celery drops a user-started export task that waited longer than this. The
+# hourly export cleanup fails its job once the expiry and the grace have passed.
+USER_EXPORT_TASK_EXPIRES = 60 * 60  # seconds
+USER_JOB_LOST_TASK_GRACE = 5 * 60  # seconds
+
 # how long a task should wait for associated fence to be ready
 CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
 
@@ -260,6 +265,12 @@ CELERY_DOCUMENT_SYNC_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 
 # Generous: a big prune can queue thousands of cleanup tasks on a busy fleet.
 CELERY_DOCUMENT_CLEANUP_TASK_EXPIRES = 6 * 60 * 60  # 6 hours (in seconds)
+
+# The cleanup checks send a task for every stale row on each run and do not
+# track what is queued. A worker drops a copy older than the check interval
+# when it takes it: the next run has sent the row again.
+CELERY_CHECKPOINT_CLEANUP_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
+CELERY_INDEX_ATTEMPT_CLEANUP_TASK_EXPIRES = 30 * 60  # 30 minutes (in seconds)
 
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
 USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
@@ -889,3 +900,40 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.YOUTRACK: "Issues and project tracking",
     DocumentSource.AZURE_DATALAKE: "Files in Azure Data Lake Storage containers",
 }
+
+# Prefix of the file id of a query-history report in the file store.
+QUERY_REPORT_NAME_PREFIX = "query-history"
+# Prefix of the task name of a query-history export.
+QUERY_HISTORY_TASK_NAME_PREFIX = OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK
+
+
+# Values of settings in app_configs.py.
+class AuthBackend(str, Enum):
+    REDIS = "redis"
+    POSTGRES = "postgres"
+    JWT = "jwt"
+
+
+class CacheBackendType(str, Enum):
+    REDIS = "redis"
+    POSTGRES = "postgres"
+
+
+class OpenSearchAuthMethod(str, Enum):
+    """Authentication method for connecting to OpenSearch.
+
+    BASIC uses HTTP basic auth (username/password); the only option for
+    self-hosted / docker-compose OpenSearch. IAM uses AWS SigV4 request signing
+    and is only valid against an AWS managed domain whose fine-grained access
+    control master is an IAM ARN.
+    """
+
+    BASIC = "basic"
+    IAM = "iam"
+
+
+class HtmlBasedConnectorTransformLinksStrategy(str, Enum):
+    # remove links entirely
+    STRIP = "strip"
+    # turn HTML links into markdown links
+    MARKDOWN = "markdown"

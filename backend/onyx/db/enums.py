@@ -515,6 +515,20 @@ class ApprovalDecidedVia(str, PyEnum):
     POLICY = "POLICY"
 
 
+class QuestionOutcome(str, PyEnum):
+    """How a question that the agent asked the user ended; `outcome IS NULL`
+    means it waits."""
+
+    ANSWERED = "ANSWERED"
+    CANCELLED = "CANCELLED"
+
+
+class QuestionAnsweredVia(str, PyEnum):
+    # The question's card, or a message that the user typed in the chat.
+    CARD = "CARD"
+    MESSAGE = "MESSAGE"
+
+
 class ScheduledTaskStatus(str, PyEnum):
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"
@@ -1047,6 +1061,77 @@ class PluginInstallationPolicy(str, PyEnum):
     DEFAULT = "DEFAULT"
     AVAILABLE = "AVAILABLE"
     NOT_AVAILABLE = "NOT_AVAILABLE"
+
+
+class IntegrationKind(str, PyEnum):
+    MCP = "mcp"
+    # An HTTP API: an OpenAPI custom tool or an external app.
+    API = "api"
+
+
+class IntegrationAuthMode(str, PyEnum):
+    NONE = "none"
+    # One connection for the organization.
+    SHARED = "shared"
+    # One connection for each user.
+    INDIVIDUAL = "individual"
+
+
+class IntegrationAuthMethod(str, PyEnum):
+    OAUTH2 = "oauth2"
+    API_KEY = "api_key"
+    # Onyx sends the user's own Onyx login token.
+    ONYX_LOGIN = "onyx_login"
+    MANAGED = "managed"
+
+
+class IntegrationActionSource(str, PyEnum):
+    """Where an integration_action row comes from. A sync from that source
+    rewrites it."""
+
+    # The tool list of an MCP server.
+    MCP = "mcp"
+    # An operation of an OpenAPI spec.
+    OPENAPI = "openapi"
+    # The action catalog of a built-in external app, in code.
+    EXTERNAL_APP = "external_app"
+
+
+class IntegrationOAuthProviderMode(str, PyEnum):
+    # Provider code owns the endpoints (a built-in external app).
+    PRESET = "preset"
+    # The admin entered the endpoints.
+    MANUAL = "manual"
+    # MCP auto-discovery, with dynamic client registration or CIMD.
+    DISCOVERY = "discovery"
+
+
+class IntegrationConnectionStatus(str, PyEnum):
+    CONNECTED = "connected"
+    NEEDS_RECONNECT = "needs_reconnect"
+
+
+class IntegrationLegacyFormat(str, PyEnum):
+    """The old secret format that the integration tables migration copied
+    as it was (``legacy_format``)."""
+
+    # mcp_connection_config.config
+    MCP_CONFIG = "mcp_config"
+    # external_app.organization_credentials
+    EXTERNAL_APP_ORG = "external_app_org"
+    # external_app_user_credential.user_credentials
+    EXTERNAL_APP_USER = "external_app_user"
+    # oauth_user_token.token_data
+    OAUTH_USER_TOKEN = "oauth_user_token"
+    # tool.custom_headers, plain JSON
+    TOOL_HEADERS = "tool_headers"
+
+
+class IntegrationActionPolicyValue(str, PyEnum):
+    ALLOW = "allow"
+    AUTO = "auto"
+    ASK = "ask"
+    BLOCKED = "blocked"
 
 
 class ConnectorEventType(str, PyEnum):

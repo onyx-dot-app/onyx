@@ -16,7 +16,6 @@ from onyx.connectors.google_drive.file_retrieval import (
 from onyx.connectors.google_drive.models import (
     DriveListingState,
     GoogleDriveCheckpoint,
-    GoogleDriveFileType,
     ListingPartition,
     ListingPartitionKind,
     ListingShard,
@@ -30,6 +29,7 @@ from onyx.connectors.google_drive.parallel_listing import (
 from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
 )
+from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.connectors.models import DocumentTypeLabel
 
 _DRIVE = ListingPartition(kind=ListingPartitionKind.SHARED_DRIVE, key="drive_1")

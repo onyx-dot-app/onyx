@@ -7,8 +7,6 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 from fastapi_users_db_sqlalchemy import UUID_ID
-from sqlalchemy import cast
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.usage_export import (
@@ -25,10 +23,10 @@ from ee.onyx.server.reporting.usage_report_branding import load_report_branding
 from ee.onyx.server.reporting.usage_report_data import build_usage_report_data
 from ee.onyx.server.reporting.usage_report_pdf import render_usage_report_pdf
 from onyx.configs.constants import FileOrigin
-from onyx.db.models import User
 from onyx.db.system_usage import SystemUsageExportRow, iter_system_usage_export
+from onyx.db.tasks import complete_started_task__no_commit, is_task_started
 from onyx.db.user_usage import UsageExportRow, iter_usage_export
-from onyx.db.users import get_all_users
+from onyx.db.users import fetch_user_by_id, get_all_users
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.utils.csv_utils import sanitize_csv_cell_or_none
@@ -277,6 +275,7 @@ def create_new_usage_report(
     user_id: UUID_ID | None,  # None = auto-generated
     period: tuple[datetime, datetime] | None,
     report_id: str | None = None,
+    task_id: str | None = None,
 ) -> UsageReportMetadata:
     report_id = report_id or str(uuid.uuid4())
     file_store = get_default_file_store()
@@ -364,7 +363,12 @@ def create_new_usage_report(
 
             zip_buffer.seek(0)
 
-            # store zip blob to file_store
+            if task_id is not None:
+                if not is_task_started(db_session, task_id):
+                    raise RuntimeError("Usage report job has already ended")
+                # End the transaction, so the upload holds no lock.
+                db_session.commit()
+
             report_name = f"{datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')}_{report_id}_usage_report.zip"
             file_store.save_file(
                 content=zip_buffer,
@@ -373,6 +377,15 @@ def create_new_usage_report(
                 file_type=USAGE_REPORT_MEDIA_TYPE,
                 file_id=report_name,
             )
+
+            # Lock the job through the report-row commit. A job that cleanup
+            # failed during the upload cannot publish.
+            if task_id is not None and not complete_started_task__no_commit(
+                db_session, task_id
+            ):
+                db_session.rollback()
+                file_store.delete_file(report_name, error_on_missing=False)
+                raise RuntimeError("Usage report job has already ended")
     finally:
         for file_id in intermediate_file_ids:
             try:
@@ -387,9 +400,7 @@ def create_new_usage_report(
 
     # get user email
     requestor_user = (
-        db_session.query(User)
-        .filter(cast(User.id, UUID) == new_report.requestor_user_id)
-        .one_or_none()
+        fetch_user_by_id(db_session, new_report.requestor_user_id)
         if new_report.requestor_user_id
         else None
     )

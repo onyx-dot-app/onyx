@@ -69,7 +69,11 @@ from onyx.llm.models import (
 )
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.constants import CODING_AGENT_TOOL_ID
-from onyx.tools.models import ChatToolSelection, PersonaToolConfiguration
+from onyx.tools.models import (
+    CapabilityEntry,
+    PersonaToolConfiguration,
+    ToolOptions,
+)
 from tests.unit.fakes import FakeCache
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
@@ -133,7 +137,10 @@ def test_document_set_denial_precedes_session_and_model_creation() -> None:
     from onyx.server.query_and_chat.models import SendMessageRequest
 
     request = SendMessageRequest(
-        message="hello", internal_search_filters=BaseFilters(document_set=["private"])
+        message="hello",
+        tool_options=ToolOptions(
+            internal_search_filters=BaseFilters(document_set=["private"])
+        ),
     )
     user = MagicMock(is_anonymous=False)
     with (
@@ -289,7 +296,7 @@ def _mock_chat_preparation(
     )
     monkeypatch.setattr(
         "onyx.chat.process_message.capture_persona_tool_configuration",
-        lambda _persona: PersonaToolConfiguration(
+        lambda _persona, _db_session: PersonaToolConfiguration(
             persona_id=1,
             persona_name="Assistant",
             tools=[],
@@ -581,7 +588,7 @@ def test_incognito_rejects_a_preferred_coding_agent_before_the_question_is_saved
             SendMessageRequest(
                 message="Question",
                 chat_session_id=chat_session.id,
-                preferred_tool_id=7,
+                tool_options=ToolOptions(preferred=CapabilityEntry(tool_id=7)),
             ),
             User(id=uuid4(), email="reader@example.com"),
             llm_overrides=None,
@@ -598,9 +605,12 @@ def test_a_queued_turn_uses_the_saved_tools_and_search_filters(
     _mock_chat_preparation: None,
 ) -> None:
     filters = BaseFilters(document_set=["Handbook"])
-    chat_session.tool_selection = ChatToolSelection(
-        allowed_tool_ids=[3], preferred_tool_id=3, internal_search_filters=filters
+    saved = ToolOptions(
+        allowed=[CapabilityEntry(tool_id=3)],
+        preferred=CapabilityEntry(tool_id=3),
+        internal_search_filters=filters,
     )
+    chat_session.tool_options = saved
     question = ChatMessage(id=5, message_type=MessageType.USER)
     with (
         patch("onyx.chat.process_message.accept_queued_turn__no_commit"),
@@ -628,20 +638,18 @@ def test_a_queued_turn_uses_the_saved_tools_and_search_filters(
                 ),
             ),
         )
-    assert setup.new_msg_req.allowed_tool_ids == [3]
-    assert setup.new_msg_req.preferred_tool_id == 3
-    assert setup.new_msg_req.internal_search_filters == filters
+    assert setup.new_msg_req.tool_options == saved
+    assert setup.preferred_tool == CapabilityEntry(tool_id=3)
     check_access.assert_called_once_with(ANY, ["Handbook"], ANY)
     setup.admission.release()
 
 
-def test_an_agent_host_uses_the_saved_tool_selection(
+def test_an_agent_host_uses_the_saved_tool_options(
     chat_session: ChatSession,
     _mock_chat_preparation: None,
 ) -> None:
-    chat_session.tool_selection = ChatToolSelection(
-        allowed_tool_ids=[3], preferred_tool_id=None
-    )
+    saved = ToolOptions(allowed=[CapabilityEntry(tool_id=3)])
+    chat_session.tool_options = saved
     with patch("onyx.chat.process_message.check_token_rate_limits"):
         setup = prepare_chat_turn(
             SendMessageRequest(message="", chat_session_id=chat_session.id),
@@ -649,7 +657,7 @@ def test_an_agent_host_uses_the_saved_tool_selection(
             llm_overrides=None,
             agent_host=True,
         )
-    assert setup.new_msg_req.allowed_tool_ids == [3]
+    assert setup.new_msg_req.tool_options == saved
     setup.admission.release()
 
 

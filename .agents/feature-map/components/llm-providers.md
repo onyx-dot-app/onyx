@@ -135,7 +135,9 @@ before retry handling; removing cache options prevents later attempts from addin
 markers again. When a provider 400 names a
 reasoning, temperature, or explicit-cache kwarg, `_completion` retries without it
 (`_retry_attempts`). A cache fallback also removes the breakpoint markers. It
-never drops tools, tool choice or messages during that retry. Separately, final-answer
+never drops tools, tool choice or messages during that retry; the one message
+edit is the removal of rejected `reasoning_items`
+([[#openai-reasoning-items-replay]]). Separately, final-answer
 requests omit tool definitions for native Bedrock and Ollama adapters that cannot
 enforce `NONE`. Prior tool evidence stays in the messages. `_track_llm_cost` counts
 cost only when usage limits are on and the key is Onyx-managed. Per-user usage comes from
@@ -275,6 +277,24 @@ build their own clients.
     model that the catalog does not know, but never turn it off. Chat image
     replay (`chat/prompt_formatting.py:prepare_model_messages`) reads the resolved
     `LLMConfig.supports_images`. Do not remove that read.
+16. `openai-reasoning-items-replay` **OpenAI reasoning items are replayable
+    thinking state.** A Responses API `reasoning` item (id, encrypted content,
+    summary) is kept as `llm/models.py:ReasoningItemBlock` inside the message's
+    `ThinkingContent.blocks`.
+    `llm/model_request.py:format_provider_message` replays it as
+    `reasoning_items`, which LiteLLM's responses bridge turns back into the
+    item. `llm/multi_llm.py` keeps `reasoning_items` only on responses routes
+    (OpenAI and Azure registry models, the `openai_responses` surface, the
+    GPT-5.4+ tool-turn bridge), strips it elsewhere, and sends
+    `include: ["reasoning.encrypted_content"]` with `reasoning` so replay does
+    not depend on server-side storage; an item without encrypted content is
+    not kept. Only the key, deployment and model that issued an item can read
+    it, so when the provider rejects replayed reasoning, `_completion` retries
+    the attempt once with `reasoning_items` removed from the messages.
+    `agents/execution_records.py:messages_for_model` drops an item whose text
+    or tool call did not survive, because the API rejects a lone item. The
+    Anthropic `thinking_blocks` rule is separate: a block type needs the route
+    that can read it.
 
 ---
 

@@ -1,5 +1,6 @@
 from typing import cast
 
+from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 # Safety-net TTL against leaked keys if cleanup() fails silently. Long enough
@@ -68,9 +69,12 @@ class RedisDocprocessing:
     PENDING_PREFIX = "docprocessing_pending"
     IN_FLIGHT_PREFIX = "docprocessing_in_flight"
 
-    def __init__(self, index_attempt_id: int, r: TenantRedisClient) -> None:
+    def __init__(
+        self, index_attempt_id: int, r: TenantRedisClient | None = None
+    ) -> None:
+        """`r` defaults to the current tenant's client."""
         self.index_attempt_id = index_attempt_id
-        self.redis = r
+        self.redis = r if r is not None else get_redis_client()
 
         self.pending_key: str = f"{self.PENDING_PREFIX}_{index_attempt_id}"
         self.in_flight_key: str = f"{self.IN_FLIGHT_PREFIX}_{index_attempt_id}"

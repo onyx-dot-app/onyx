@@ -150,7 +150,8 @@ def fetch_document_sets(
     db_session: Session,
     include_outdated: bool = True,  # Parameter only for versioned implementation, unused  # noqa: ARG001
 ) -> list[tuple[DocumentSet, list[ConnectorCredentialPair]]]:
-    assert user_id is not None
+    if user_id is None:
+        raise ValueError("user_id is required.")
 
     # Public document sets
     public_document_sets = (

@@ -17,10 +17,9 @@ import ipaddress
 from typing import Protocol
 from uuid import UUID
 
-from sqlalchemy import select
-
+from onyx.db.build_session import get_build_session_id_for_user
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.models import BuildSession, Sandbox
+from onyx.db.sandbox import get_sandbox_owner_id
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SandboxIdentity
 from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.utils.logger import setup_logger
@@ -89,9 +88,7 @@ class IdentityResolver(SandboxIdentityResolver):
             return None
 
         with get_session_with_tenant(tenant_id=identity.tenant_id) as db:
-            user_id = db.scalar(
-                select(Sandbox.user_id).where(Sandbox.id == identity.sandbox_id)
-            )
+            user_id = get_sandbox_owner_id(db, identity.sandbox_id)
             if user_id is None:
                 return None
 
@@ -117,12 +114,7 @@ class IdentityResolver(SandboxIdentityResolver):
         originated the egress regardless of its current status.
         """
         with get_session_with_tenant(tenant_id=tenant_id) as db:
-            stmt = (
-                select(BuildSession.id)
-                .where(BuildSession.id == session_id)
-                .where(BuildSession.user_id == user_id)
-            )
-            return db.scalar(stmt)
+            return get_build_session_id_for_user(db, session_id, user_id)
 
 
 def build_ip_lookup() -> SandboxIPLookup:

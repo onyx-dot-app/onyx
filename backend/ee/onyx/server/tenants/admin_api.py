@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Response
 from fastapi_users import exceptions
 
 from ee.onyx.auth.users import current_cloud_superuser
@@ -8,6 +8,8 @@ from onyx.auth.users import User, auth_backend, get_redis_strategy
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.users import get_user_by_email
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.audit import (
     AuditAction,
     AuditActor,
@@ -42,7 +44,9 @@ async def impersonate_user(
             resource_type="user",
             extra={"target_email": impersonate_request.email},
         )
-        raise HTTPException(status_code=422, detail=detail)
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR, detail, status_code_override=422
+        )
 
     # The token must name the impersonated user's workspace. Left to the ambient
     # request tenant it would name the superuser's own.
@@ -82,7 +86,9 @@ async def _issue_impersonation_token(
                     "target_tenant_id": tenant_id,
                 },
             )
-            raise HTTPException(status_code=422, detail=detail)
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR, detail, status_code_override=422
+            )
 
         impersonated_user_id = str(user_to_impersonate.id)
         token = await get_redis_strategy().write_token(user_to_impersonate)

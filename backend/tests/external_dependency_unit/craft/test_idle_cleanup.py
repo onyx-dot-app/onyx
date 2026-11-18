@@ -24,10 +24,10 @@ from onyx.background.celery.tasks.build import tasks as tasks_module
 from onyx.background.celery.tasks.build.tasks import cleanup_idle_sandboxes_task
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import OnyxRedisLocks
+from onyx.db.build_session import session_runtime_stale
 from onyx.db.enums import BuildSessionStatus, SandboxStatus
 from onyx.db.models import BuildSession, Sandbox, Snapshot, User
 from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.db.build_session import session_runtime_stale
 from onyx.server.features.build.preview_activity import (
     _preview_activity_key,
     mark_preview_activity,

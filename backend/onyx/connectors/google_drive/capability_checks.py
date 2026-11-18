@@ -77,7 +77,6 @@ from onyx.connectors.google_drive.models import (
     GDriveMimeType,
     GoogleDirectoryUser,
     GoogleDriveAuth,
-    GoogleDriveFileType,
     GoogleSharedDrive,
 )
 from onyx.connectors.google_drive.source_operations import (
@@ -95,6 +94,7 @@ from onyx.connectors.google_utils.shared_constants import (
     MISSING_SCOPES_ERROR_STR,
     SCOPE_DOC_URL,
     GoogleCredentialKind,
+    GoogleDriveFileType,
     google_credential_kind,
 )
 from onyx.connectors.models import CheckRowText, ConnectorMissingCredentialError

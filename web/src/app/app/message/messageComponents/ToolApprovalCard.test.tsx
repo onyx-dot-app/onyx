@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@tests/setup/test-utils";
 import ToolApprovalCard from "@/app/app/message/messageComponents/ToolApprovalCard";
-import { type ToolApproval, useToolApprovalUi } from "@/lib/chat/toolApprovals";
+import { type ToolApproval, useToolRequestUi } from "@/lib/chat/toolApprovals";
 import {
   PacketType,
   ToolApprovalRequest,
@@ -79,7 +79,7 @@ const statusReads = jest.fn(async () => status(false));
 /** A waiting card as the trailing region renders it: a decision this client
  * made decides its status. */
 function Harness({ agentName = null }: { agentName?: string | null }) {
-  const status = useToolApprovalUi((state) =>
+  const status = useToolRequestUi((state) =>
     state.localStatuses.get(request.approval_id)
   );
   useSWR(SWR_KEYS.chatSessionStatus("session"), statusReads, {
@@ -122,8 +122,9 @@ async function clickApprove() {
 }
 
 beforeEach(() => {
-  useToolApprovalUi.setState({
+  useToolRequestUi.setState({
     localStatuses: new Map(),
+    localAnswers: new Map(),
     nudge: null,
   });
   statusReads.mockClear();
@@ -443,10 +444,10 @@ describe("Blocked send", () => {
       render(<ToolApprovalCard approval={approval} />);
       const card = screen.getByTestId("tool-approval-card");
 
-      act(() => useToolApprovalUi.getState().nudgeApproval("other-approval"));
+      act(() => useToolRequestUi.getState().nudgeRequest("other-approval"));
       expect(scrollIntoView).not.toHaveBeenCalled();
 
-      act(() => useToolApprovalUi.getState().nudgeApproval("approval-1"));
+      act(() => useToolRequestUi.getState().nudgeRequest("approval-1"));
       expect(scrollIntoView).toHaveBeenCalledWith({
         behavior,
         block: "center",
@@ -456,7 +457,7 @@ describe("Blocked send", () => {
       );
 
       // A second nudge removes the class for one frame to restart the shake.
-      act(() => useToolApprovalUi.getState().nudgeApproval("approval-1"));
+      act(() => useToolRequestUi.getState().nudgeRequest("approval-1"));
       expect(card).not.toHaveClass("motion-safe:animate-shake");
       await waitFor(() =>
         expect(card).toHaveClass("motion-safe:animate-shake")
@@ -472,13 +473,13 @@ describe("Blocked send", () => {
     const scrollIntoView = jest.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     const first = render(<ToolApprovalCard approval={approval} />);
-    act(() => useToolApprovalUi.getState().nudgeApproval("approval-1"));
+    act(() => useToolRequestUi.getState().nudgeRequest("approval-1"));
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     first.unmount();
 
     render(<ToolApprovalCard approval={approval} />);
 
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(useToolApprovalUi.getState().nudge).toBeNull();
+    expect(useToolRequestUi.getState().nudge).toBeNull();
   });
 });

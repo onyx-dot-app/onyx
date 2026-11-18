@@ -72,8 +72,9 @@ from onyx.prompts.chat_prompts import (
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatFile, ToolContext
+from onyx.tools.models import ChatFile, ToolContext, ToolPreference
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import with_code_mode
+from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
@@ -91,6 +92,15 @@ from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet
 from onyx.tracing.flows import LLMFlow
 
 
+def _offered_preference(
+    preference: ToolPreference | None, tools: list[Tool]
+) -> ToolPreference | None:
+    # A run saved before tool options can prefer an old MCP or custom tool id.
+    if preference is None or not any(tool.matches(preference) for tool in tools):
+        return None
+    return preference
+
+
 class ChatAgent(Agent, RestorableFeature):
     """Chat step preparation and result handling for the shared runtime."""
 
@@ -105,7 +115,7 @@ class ChatAgent(Agent, RestorableFeature):
         user_memory_context: UserMemoryContext | None,
         llm: LLM,
         token_counter: Callable[[str], int],
-        preferred_tool_id: int | None = None,
+        preferred_tool: ToolPreference | None = None,
         user_identity: LLMUserIdentity | None = None,
         chat_files: list[ChatFile] | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
@@ -122,9 +132,11 @@ class ChatAgent(Agent, RestorableFeature):
         create_subagent: Callable[[], Agent] | None = None,
         can_spawn: bool = True,
         on_drained: Callable[[], None] | None = None,
+        question_tool: QuestionTool | None = None,
     ) -> None:
         """`on_drained`: see Agent; a root agent's runs end per-run tool state
-        there (subagents share the root's tools and pass none)."""
+        there (subagents share the root's tools and pass none). Only a root
+        agent gets `question_tool`."""
         # The fixed system block for the agent's role: a subagent, or a root
         # that can start agents.
         self.agent_instructions = (
@@ -146,7 +158,8 @@ class ChatAgent(Agent, RestorableFeature):
             self.configured_tools, llm.config.max_input_tokens
         )
         self.code_mode = code_mode
-        # Each agent instance has its own cells, so a restored run has none open.
+        # Each agent instance has its own cells, so a restored run has none open;
+        # a later run of this instance reopens them at its first step.
         self.application_tools, self.code_cells = (
             with_code_mode(self.configured_tools)
             if code_mode
@@ -162,7 +175,7 @@ class ChatAgent(Agent, RestorableFeature):
         self.inject_memories = inject_memories_in_prompt
         self.search_context = SearchContext()
         self.started = time.monotonic()
-        self.preferred_tool_id = preferred_tool_id
+        self.preferred_tool = _offered_preference(preferred_tool, self.configured_tools)
         self.chat_files = list(chat_files or [])
         # Only the Python tool reads the files of found documents.
         self.stages_files = any(
@@ -221,6 +234,8 @@ class ChatAgent(Agent, RestorableFeature):
                     ]
                 ),
             ]
+        if question_tool is not None and not is_subagent:
+            self.application_tools = [*self.application_tools, question_tool]
         super().__init__(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.application_tools],
@@ -251,7 +266,7 @@ class ChatAgent(Agent, RestorableFeature):
             reasoning_effort=self.reasoning_effort,
             include_citations=self.include_citations,
             inject_memories=self.inject_memories,
-            preferred_tool_id=self.preferred_tool_id,
+            preferred_tool=self.preferred_tool,
             code_mode=self.code_mode,
             base_prompt=self.base_system_prompt,
             custom_prompt=self.custom_agent_prompt,
@@ -277,7 +292,8 @@ class ChatAgent(Agent, RestorableFeature):
             or saved.reasoning_effort != self.reasoning_effort
             or saved.include_citations != self.include_citations
             or saved.inject_memories != self.inject_memories
-            or saved.preferred_tool_id != self.preferred_tool_id
+            or _offered_preference(saved.preferred_tool, self.configured_tools)
+            != self.preferred_tool
             or saved.code_mode != self.code_mode
             or saved.base_prompt != self.base_system_prompt
             or saved.custom_prompt != self.custom_agent_prompt
@@ -332,6 +348,8 @@ class ChatAgent(Agent, RestorableFeature):
     def _prepare_step(self, state: StepInput) -> PreparedStep:
         previous = state.previous
         if previous is None:
+            if self.code_cells is not None:
+                self.code_cells.reopen()
             self.search_context = SearchContext()
             self.started = time.monotonic()
             self.gathered_documents = list(self.initial_citations.values())
@@ -383,7 +401,7 @@ class ChatAgent(Agent, RestorableFeature):
             previous_results=previous.tool_results if previous else [],
             is_last_step=state.step.is_last,
             has_history_citations=bool(self.citation_processor.citation_to_doc),
-            preferred_tool_id=self.preferred_tool_id,
+            preferred_tool=self.preferred_tool,
         )
         return PreparedStep(
             input_messages=received.messages,
@@ -515,11 +533,12 @@ def build_chat_agent(
     tools: list[Tool],
     inject_memories: bool,
     with_subagents: bool,
-    preferred_tool_id: int | None = None,
+    preferred_tool: ToolPreference | None = None,
     additional_context: str | None = None,
     is_subagent: bool = False,
     depth: int = 0,
     on_drained: Callable[[], None] | None = None,
+    question_tool: QuestionTool | None = None,
 ) -> ChatAgent:
     """Build a chat conversation independently of the current root's feature.
 
@@ -553,7 +572,7 @@ def build_chat_agent(
         user_memory_context=setup.user_memory_context,
         llm=llm,
         token_counter=get_llm_token_counter(llm),
-        preferred_tool_id=preferred_tool_id,
+        preferred_tool=preferred_tool,
         user_identity=setup.user_identity,
         chat_files=setup.chat_files_for_tools,
         reasoning_effort=setup.reasoning_effort,
@@ -561,6 +580,7 @@ def build_chat_agent(
         all_injected_file_metadata=setup.all_injected_file_metadata,
         inject_memories_in_prompt=inject_memories,
         on_drained=on_drained,
+        question_tool=question_tool,
     )
 
 

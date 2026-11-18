@@ -14,12 +14,7 @@ from pydantic import (
 
 from onyx.agents.compaction import is_input_context
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import (
-    CacheBackend,
-    CacheBackendType,
-    CacheLock,
-    CacheLockLostError,
-)
+from onyx.cache.interface import CacheBackend, CacheLock, CacheLockLostError
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.models import (
     IncognitoAgentResponse,
@@ -35,6 +30,7 @@ from onyx.configs.chat_configs import (
     CHAT_STREAM_BUFFER_DONE_TTL_S,
     CHAT_STREAM_BUFFER_TTL_S,
 )
+from onyx.configs.constants import CacheBackendType
 from onyx.file_store.models import FileToolMetadata
 from onyx.llm.models import Message, UserMessage
 from onyx.utils.logger import setup_logger

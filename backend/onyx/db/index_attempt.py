@@ -45,7 +45,6 @@ from onyx.db.models import (
     SearchSettings,
 )
 from onyx.redis.redis_docprocessing import RedisDocprocessing
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -489,7 +488,7 @@ def mark_attempt_succeeded(
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
-            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+            RedisDocprocessing(index_attempt_id).cleanup()
         except Exception:
             logger.debug(
                 "Failed to clean up docprocessing counters for attempt %s",
@@ -521,7 +520,7 @@ def mark_attempt_partially_succeeded(
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
-            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+            RedisDocprocessing(index_attempt_id).cleanup()
         except Exception:
             logger.debug(
                 "Failed to clean up docprocessing counters for attempt %s",
@@ -563,7 +562,7 @@ def mark_attempt_canceled(
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
-            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+            RedisDocprocessing(index_attempt_id).cleanup()
         except Exception:
             logger.debug(
                 "Failed to clean up docprocessing counters for attempt %s",
@@ -607,7 +606,7 @@ def mark_attempt_failed(
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
-            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+            RedisDocprocessing(index_attempt_id).cleanup()
         except Exception:
             logger.debug(
                 "Failed to clean up docprocessing counters for attempt %s",
@@ -651,7 +650,7 @@ def mark_attempt_interrupted(
         # Stale counter keys left by a failed cleanup() are harmless: the monitor
         # skips attempts that are already in a terminal state before reading Redis.
         try:
-            RedisDocprocessing(index_attempt_id, get_redis_client()).cleanup()
+            RedisDocprocessing(index_attempt_id).cleanup()
         except Exception:
             logger.debug(
                 "Failed to clean up docprocessing counters for attempt %s",
@@ -1745,3 +1744,163 @@ def cc_pair_has_successful_index_attempt(db_session: Session, cc_pair_id: int) -
             )
         )
     )
+
+
+def increment_heartbeat_counter__no_commit(
+    db_session: Session, index_attempt_id: int
+) -> None:
+    db_session.execute(
+        update(IndexAttempt)
+        .where(IndexAttempt.id == index_attempt_id)
+        .values(heartbeat_counter=IndexAttempt.heartbeat_counter + 1)
+    )
+
+
+def get_unfinished_index_attempts_for_cc_pair(
+    db_session: Session, cc_pair_id: int
+) -> Sequence[IndexAttempt]:
+    """The pair's attempts that are NOT_STARTED or IN_PROGRESS."""
+    return (
+        db_session.execute(
+            select(IndexAttempt).where(
+                IndexAttempt.connector_credential_pair_id == cc_pair_id,
+                IndexAttempt.status.in_(
+                    [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+                ),
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def get_in_progress_index_attempts_with_task(
+    db_session: Session,
+) -> Sequence[IndexAttempt]:
+    """IN_PROGRESS full-run attempts that have a Celery task id."""
+    return (
+        db_session.execute(
+            select(IndexAttempt).where(
+                IndexAttempt.status.in_([IndexingStatus.IN_PROGRESS]),
+                IndexAttempt.celery_task_id.isnot(None),
+                # Synthetic attempts spawned by the targeted-reindex flow
+                # have their own lifecycle owner and do not increment
+                # the docprocessing heartbeat counter.
+                IndexAttempt.targeted_reindex_job_id.is_(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def get_active_index_attempts(db_session: Session) -> Sequence[IndexAttempt]:
+    """Full-run attempts that are NOT_STARTED or IN_PROGRESS."""
+    return (
+        db_session.execute(
+            select(IndexAttempt).where(
+                IndexAttempt.status.in_(
+                    [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+                ),
+                IndexAttempt.targeted_reindex_job_id.is_(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def has_active_index_attempt(
+    db_session: Session, cc_pair_id: int, search_settings_id: int
+) -> bool:
+    """True when the pair has a NOT_STARTED or IN_PROGRESS attempt for these
+    search settings."""
+    return bool(
+        db_session.execute(
+            select(
+                exists().where(
+                    IndexAttempt.connector_credential_pair_id == cc_pair_id,
+                    IndexAttempt.search_settings_id == search_settings_id,
+                    IndexAttempt.status.in_(
+                        [
+                            IndexingStatus.NOT_STARTED,
+                            IndexingStatus.IN_PROGRESS,
+                        ]
+                    ),
+                )
+            )
+        ).scalar()
+    )
+
+
+def get_oldest_index_attempt_time_created(db_session: Session) -> datetime | None:
+    return db_session.query(func.min(IndexAttempt.time_created)).scalar()
+
+
+def get_index_attempts_with_checkpoint_created_before(
+    db_session: Session, cutoff_date: datetime
+) -> list[IndexAttempt]:
+    """Attempts that hold a checkpoint and were created before `cutoff_date`."""
+    return (
+        db_session.query(IndexAttempt)
+        .filter(
+            and_(
+                IndexAttempt.checkpoint_pointer.isnot(None),
+                IndexAttempt.time_created < cutoff_date,
+            )
+        )
+        .all()
+    )
+
+
+def get_index_attempt_ids_past_retention(
+    db_session: Session, cutoff_date: datetime, num_recent_to_keep: int
+) -> list[int]:
+    """Ids of attempts created before `cutoff_date`, except the latest
+    `num_recent_to_keep` of each connector/search settings pair."""
+    ranked_attempts = (
+        db_session.query(
+            IndexAttempt.id.label("attempt_id"),
+            IndexAttempt.time_created.label("time_created"),
+            func.row_number()
+            .over(
+                partition_by=(
+                    IndexAttempt.connector_credential_pair_id,
+                    IndexAttempt.search_settings_id,
+                ),
+                order_by=IndexAttempt.time_created.desc(),
+            )
+            .label("attempt_rank"),
+        )
+    ).subquery()
+
+    rows = (
+        db_session.query(IndexAttempt.id)
+        .join(
+            ranked_attempts,
+            IndexAttempt.id == ranked_attempts.c.attempt_id,
+        )
+        .filter(
+            ranked_attempts.c.time_created < cutoff_date,
+            ranked_attempts.c.attempt_rank > num_recent_to_keep,
+        )
+        .all()
+    )
+    return [row[0] for row in rows]
+
+
+def delete_index_attempts_by_ids__no_commit(
+    db_session: Session, index_attempt_ids: list[int]
+) -> None:
+    """Deletes the attempts and their error rows."""
+    db_session.query(IndexAttemptError).filter(
+        IndexAttemptError.index_attempt_id.in_(index_attempt_ids)
+    ).delete(synchronize_session=False)
+
+    db_session.query(IndexAttempt).filter(
+        IndexAttempt.id.in_(index_attempt_ids)
+    ).delete(synchronize_session=False)
+
+
+def add_index_attempt__no_commit(db_session: Session, row: IndexAttempt) -> None:
+    db_session.add(row)

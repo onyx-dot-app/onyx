@@ -239,9 +239,31 @@ func parsePacketObj(obj map[string]any, placement *models.Placement) models.Stre
 			Outcome:    jsonString(obj["outcome"]),
 		}
 
+	case "tool_question_request":
+		var event models.ToolQuestionRequestEvent
+		if !decodeObj(obj, &event) {
+			return models.UnknownEvent{Placement: placement, RawData: obj}
+		}
+		event.Placement = placement
+		return event
+
+	case "tool_question_resolved":
+		var event models.ToolQuestionResolvedEvent
+		if !decodeObj(obj, &event) {
+			return models.UnknownEvent{Placement: placement, RawData: obj}
+		}
+		event.Placement = placement
+		return event
+
 	default:
 		return models.UnknownEvent{Placement: placement, RawData: obj}
 	}
+}
+
+// decodeObj decodes a packet object that has nested fields into target.
+func decodeObj(obj map[string]any, target any) bool {
+	data, err := json.Marshal(obj)
+	return err == nil && json.Unmarshal(data, target) == nil
 }
 
 func parseSearchDocs(raw []any) []models.SearchDoc {

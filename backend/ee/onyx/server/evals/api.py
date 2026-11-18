@@ -13,7 +13,7 @@ logger = setup_logger()
 router = APIRouter(prefix="/evals")
 
 
-@router.post("/eval_run", response_model=EvalRunAck)
+@router.post("/eval_run")
 def eval_run(
     request: EvalConfigurationOptions,
     user: User = Depends(current_cloud_superuser),  # noqa: ARG001
@@ -22,7 +22,7 @@ def eval_run(
     Run an evaluation with the given message and optional dataset.
     This endpoint requires a valid API key for authentication.
     """
-    client_app.send_task(
+    client_app.send_task(  # celery-expires: allow (user-started job, nothing sends it again)
         OnyxCeleryTask.EVAL_RUN_TASK,
         kwargs={
             "configuration_dict": request.model_dump(),

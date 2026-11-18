@@ -11,6 +11,7 @@ several workspaces, or maps to a workspace with no SSO all return an empty
 list, so the endpoint cannot be used to tell those cases apart.
 """
 
+import asyncio
 import time
 
 from fastapi import APIRouter, Request
@@ -21,6 +22,7 @@ from onyx.auth.sso_tenant_token import (
     SSO_TENANT_TOKEN_PARAM,
     generate_sso_tenant_token,
 )
+from onyx.cache.factory import get_shared_cache_backend
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import SSOProvider
 from onyx.db.sso_provider import (
@@ -30,7 +32,6 @@ from onyx.db.sso_provider import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.server.manage.models import SSOProviderOption
 from onyx.utils.client_ip import get_client_ip
 from onyx.utils.logger import setup_logger
@@ -68,15 +69,12 @@ async def _enforce_discovery_rate_limit(request: Request) -> None:
     ip = get_client_ip(request) or "unknown"
     key = f"{_REDIS_KEY_PREFIX}{ip}:{int(time.time() // _BUCKET_SECONDS)}"
     try:
-        redis = await get_async_redis_connection()
-        pipe = redis.pipeline()
-        pipe.incr(key)
-        pipe.expire(key, _BUCKET_SECONDS)
-        incr_result, _ = await pipe.execute()
-        count = int(incr_result)
+        count = await asyncio.to_thread(
+            get_shared_cache_backend().incr, key, _BUCKET_SECONDS
+        )
     except Exception as e:
         # Fails closed. This endpoint answers about addresses it has not
-        # authenticated, so losing Redis must cost the lookup, not the probing
+        # authenticated, so losing the cache must cost the lookup, not the probing
         # bound on it.
         logger.exception("SSO discovery rate-limit unavailable, refusing lookup")
         raise OnyxError(

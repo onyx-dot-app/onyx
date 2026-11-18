@@ -3,7 +3,7 @@ import time
 from collections import defaultdict
 from collections.abc import Collection, Generator, Iterable, Sequence
 from datetime import datetime, timezone
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, TypeVar
 from uuid import UUID
 
 from psycopg2.errors import QueryCanceled
@@ -11,6 +11,8 @@ from sqlalchemy import (
     BigInteger,
     CompoundSelect,
     Integer,
+    Result,
+    ScalarResult,
     Select,
     String,
     and_,
@@ -35,6 +37,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import null
 
+from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
 from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -224,6 +227,31 @@ def construct_document_id_select_by_needs_sync_or_secondary_pending() -> Compoun
         ~needs_sync_predicate,
     )
     return needs_sync.union_all(deferred_only)
+
+
+# Row type of a single-column select; untyped builders leave it unknown.
+T = TypeVar("T")
+
+
+def stream_document_ids(
+    db_session: Session,
+    stmt: Select[tuple[T]],
+    yield_per: int = DB_YIELD_PER_DEFAULT,
+) -> ScalarResult[T]:
+    """Runs a `construct_document_id_select_*` statement and streams the ids in
+    batches of `yield_per`. Returns the live result, so the rows load lazily while
+    the caller iterates on `db_session`."""
+    return db_session.scalars(stmt).yield_per(yield_per)
+
+
+def stream_document_ids_with_secondary_pending(
+    db_session: Session,
+    stmt: CompoundSelect,
+    yield_per: int = DB_YIELD_PER_DEFAULT,
+) -> Result[tuple[str, bool]]:
+    """Same as `stream_document_ids`, for the two-column statement of
+    `construct_document_id_select_by_needs_sync_or_secondary_pending`."""
+    return db_session.execute(stmt).yield_per(yield_per)
 
 
 def construct_document_id_select_for_connector_credential_pair(

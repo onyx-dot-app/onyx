@@ -4,7 +4,6 @@ import puremagic
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     Query,
     Request,
     Response,
@@ -33,6 +32,11 @@ from onyx.configs.constants import PUBLIC_API_TAGS, FileOrigin, MilestoneRecordT
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, PermissionAuthority, PersonaSharePermission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
+from onyx.db.integration_policy import (
+    list_persona_mcp_tools,
+    list_persona_openapi_tools,
+    list_persona_plugin_snapshots,
+)
 from onyx.db.models import User
 from onyx.db.persona import (
     can_delete_persona,
@@ -86,6 +90,8 @@ from onyx.server.features.persona.models import (
     PersonaSnapshot,
     PersonaUpsertRequest,
 )
+from onyx.server.features.tool.api import openapi_tool_snapshot
+from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.manage.llm.api import get_valid_model_configuration_ids_for_persona
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.models import DisplayPriorityRequest
@@ -108,9 +114,9 @@ def _validate_user_knowledge_enabled(
         if persona_upsert_request.user_file_ids or getattr(  # ods: ignore[getattr]
             persona_upsert_request, "user_project_ids", None
         ):
-            raise HTTPException(
-                status_code=400,
-                detail=f"User Knowledge is disabled. Cannot {action} assistant with user files or projects.",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"User Knowledge is disabled. Cannot {action} assistant with user files or projects.",
             )
 
 
@@ -127,25 +133,19 @@ def _validate_vector_db_knowledge(
         return
 
     if persona_upsert_request.document_set_ids:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Cannot attach document sets to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set)."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "Cannot attach document sets to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set).",
         )
     if persona_upsert_request.hierarchy_node_ids:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Cannot attach hierarchy nodes to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set)."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "Cannot attach hierarchy nodes to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set).",
         )
     if persona_upsert_request.document_ids:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Cannot attach documents to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set)."
-            ),
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "Cannot attach documents to an assistant when the vector database is disabled (DISABLE_VECTOR_DB is set).",
         )
 
 
@@ -204,7 +204,7 @@ def patch_user_persona_public_status(
         )
     except ValueError as e:
         logger.exception("Failed to update persona public status")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
 
 
 @admin_router.patch("/{persona_id}/featured")
@@ -223,7 +223,7 @@ def patch_persona_featured_status(
         )
     except ValueError as e:
         logger.exception("Failed to update persona featured status")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
 
 
 @admin_agents_router.patch("/display-priorities")
@@ -241,7 +241,7 @@ def patch_agents_display_priorities(
         )
     except ValueError as e:
         logger.exception("Failed to update agent display priorities.")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
 
 
 def _admin_list_get_editable(user: User, get_editable: bool) -> bool:
@@ -378,7 +378,7 @@ def create_persona(
     persona_upsert_request: PersonaUpsertRequest,
     user: User = Depends(require_permission(Permission.ADD_AGENTS, allow_scope=True)),
     db_session: Session = Depends(get_session),
-) -> PersonaSnapshot:
+) -> FullPersonaSnapshot:
     tenant_id = get_current_tenant_id()
 
     _validate_user_knowledge_enabled(persona_upsert_request, "create")
@@ -396,7 +396,7 @@ def create_persona(
         event=MilestoneRecordType.CREATED_ASSISTANT,
     )
 
-    return persona_snapshot
+    return get_persona(persona_snapshot.id, user, db_session)
 
 
 # NOTE: This endpoint cannot update persona configuration options that
@@ -410,7 +410,7 @@ def update_persona(
     # editor-shared user should be able to edit the agent they were granted access to.
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> PersonaSnapshot:
+) -> FullPersonaSnapshot:
     _validate_user_knowledge_enabled(persona_upsert_request, "update")
     _validate_vector_db_knowledge(persona_upsert_request)
 
@@ -423,7 +423,7 @@ def update_persona(
     # The persona's default model is baked into the cached LLM provider listing
     # (see onyx/server/manage/llm/provider_cache.py), so edits must drop it.
     invalidate_provider_listing_cache()
-    return persona_snapshot
+    return get_persona(persona_snapshot.id, user, db_session)
 
 
 class PersonaLabelPatchRequest(BaseModel):
@@ -452,9 +452,9 @@ def create_label(
         label_model = create_assistant_label(name=label.name, db_session=db)
         return PersonaLabelResponse.from_model(label_model)
     except IntegrityError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Label with name '{label.name}' already exists. Please choose a different name.",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Label with name '{label.name}' already exists. Please choose a different name.",
         )
 
 
@@ -551,13 +551,13 @@ def share_persona(
         )
     except PermissionError as e:
         logger.exception("Failed to share persona")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
     except NotImplementedError as e:
         logger.exception("Failed to share persona")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
     except ValueError as e:
         logger.exception("Failed to share persona")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 class TransferPersonaOwnershipRequest(BaseModel):
@@ -585,10 +585,10 @@ def transfer_persona_ownership_endpoint(
         )
     except PermissionError as e:
         logger.exception("Failed to transfer persona ownership")
-        raise HTTPException(status_code=403, detail=str(e))
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, str(e))
     except (ValueError, NotImplementedError) as e:
         logger.exception("Failed to transfer persona ownership")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 @basic_router.delete("/{persona_id}/share/me")
@@ -605,7 +605,7 @@ def leave_persona_shares(
         )
     except ValueError as e:
         logger.exception("Failed to remove user from persona shares")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 @basic_router.delete("/{persona_id}", tags=PUBLIC_API_TAGS)
@@ -758,6 +758,26 @@ def get_persona(
         ) from e
 
     snapshot = FullPersonaSnapshot.from_model(persona)
+    snapshot.plugins = list_persona_plugin_snapshots(persona.id, db_session)
+    # Old custom and MCP tool ids come from the plugin links, so they
+    # round-trip through tool_ids.
+    custom_tools = {
+        tool.id: (tool, integration)
+        for _, tool, integration in list_persona_openapi_tools(persona.id, db_session)
+    }
+    mcp_tools = {
+        tool.id: ToolSnapshot.from_model(tool, plugin_ids=[plugin_id])
+        for plugin_id, tool, selected in list_persona_mcp_tools(persona.id, db_session)
+        if selected
+    }
+    snapshot.tools = (
+        [tool for tool in snapshot.tools if tool.in_code_tool_id is not None]
+        + [
+            openapi_tool_snapshot(tool, integration, db_session)
+            for tool, integration in custom_tools.values()
+        ]
+        + list(mcp_tools.values())
+    )
     # Hide a pinned model this viewer cannot use. The check is viewer-relative, so
     # it changes only the response, never the stored agent.
     if persona.default_model_configuration_id:

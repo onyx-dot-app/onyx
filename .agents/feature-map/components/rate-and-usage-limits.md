@@ -47,7 +47,7 @@ which one you are touching before you change it.
 | Tenant usage limits | Weekly LLM cost, indexed chunks, API calls, non-streaming calls, set by the Onyx control plane | Tenant, trial or paid | `tenant_usage` fixed window | `check_usage_and_raise`, `check_llm_cost_limit_for_provider` |
 | API key and PAT call cap | One tenant usage limit, counted per request | Tenant | `tenant_usage.api_calls` | `check_api_key_usage` |
 | HTTP rate limits | Requests to the auth and OAuth provider routers, and to chat feedback | IP and User-Agent, or user | Redis (`fastapi_limiter`) | `get_auth_rate_limiters`, `get_feedback_rate_limiters` |
-| Signup and invite limits | Scripted abuse on cloud | IP, admin, tenant | Redis, plus `tenant_invite_counter` | `enforce_signup_rate_limit`, `enforce_invite_rate_limit` |
+| Signup and invite limits | Scripted abuse on cloud | IP, admin, tenant | Cache backend, plus `tenant_invite_counter` | `enforce_signup_rate_limit`, `enforce_invite_rate_limit` |
 
 Its neighbours own:
 - [[observability]]: the tracing pipeline that writes `user_usage`.
@@ -165,8 +165,9 @@ trial tenants (`backend/onyx/server/manage/users.py`). The lifetime trial invite
 cap is a Postgres row lock
 (`backend/onyx/db/tenant_invite_counter.py:reserve_trial_invites`), and a
 rejected reservation rolls back. The invite per-minute and per-day buckets are
-Redis keys. One Lua script checks every bucket before it increments any, so a
-rejected request uses no budget. The signup limiter increments first, so a
+cache keys. One cache lock for each tenant covers the check and the increment.
+The limiter checks every bucket before it increments any, so a rejected request
+uses no budget. The signup limiter increments first, so a
 rejected signup attempt still counts.
 
 ---
@@ -284,13 +285,10 @@ rejected signup attempt still counts.
   `open_urls` tools spend web-search provider quota that no check counts
   ([[mcp-server]]).
 - **The signup and invite limiters fail open.** The invite limiter lets a
-  request through on a Redis error, and the signup limiter returns on any error.
-  The Postgres lifetime invite cap still holds during a Redis outage. The Redis
-  buckets stop the invite, remove and invite again cycle, which would send
+  request through on a cache error or a busy lock, and the signup limiter
+  returns on any error. The Postgres lifetime invite cap still holds during a
+  cache outage. The cache buckets stop the invite, remove and invite again cycle, which would send
   unlimited invite emails.
-- **Two limiters call Redis directly.** The signup and invite limiters use Redis,
-  not `CacheBackend` (`backend/AGENTS.md`). They run only on cloud, where Redis
-  exists.
 - **Auth rate limiting is off by default.** It needs both
   `RATE_LIMIT_MAX_REQUESTS` and `RATE_LIMIT_WINDOW_SECONDS`. A new self-hosted
   deployment has no IP throttle on login.

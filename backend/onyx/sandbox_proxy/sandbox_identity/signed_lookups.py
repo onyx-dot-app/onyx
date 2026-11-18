@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from onyx.cache.interface import CacheBackend
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.sandbox import get_sandbox_by_id
 from onyx.microvm.registry import (
     get_node_signing_key,
     get_sandbox_placement,
@@ -21,7 +22,6 @@ from onyx.sandbox_proxy.sandbox_identity.signed import (
     SandboxClaims,
     SandboxPlacementLookup,
 )
-from onyx.server.features.build.db.sandbox import get_sandbox_by_id
 
 # Bounds how long a rotated or expired key keeps verifying.
 _SIGNING_KEY_CACHE_TTL_SECONDS = 30.0

@@ -40,6 +40,8 @@ from onyx.redis.redis_hierarchy import (
     get_ancestors_from_node_id,
     get_ancestors_from_raw_id,
 )
+
+# no-direct-redis: allow hierarchy cache of the Celery indexing pipeline
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
@@ -201,6 +203,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         if not documents:
             return {}
 
+        # no-direct-redis: allow hierarchy cache of the Celery indexing pipeline
         redis_client = get_redis_client(tenant_id=tenant_id)
         result: dict[str, list[int]] = {}
 

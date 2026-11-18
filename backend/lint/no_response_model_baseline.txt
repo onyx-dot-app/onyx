@@ -1,0 +1,8 @@
+# Uses of `response_model=` on FastAPI routes that predate the rule.
+#
+# GENERATED. Do not edit by hand. To regenerate after you remove a use:
+#   python3 backend/lint/check_no_response_model.py --write-baseline
+#
+# Do not regenerate to admit a new use. Type the handler's return instead.
+#
+# One `<count> <path>` per line, sorted by path.

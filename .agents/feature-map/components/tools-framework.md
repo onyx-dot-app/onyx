@@ -83,48 +83,52 @@ chat/presentation.py:ResponsePresenter       tool events -> chat/renderer.py:Too
 ```
 
 **Captured configuration.** `db/tools.py:capture_persona_tool_configuration`
-copies the agent's `Tool` rows into frozen `ToolConfiguration` models before the
-run starts. `construct_tools` opens its own short DB session, so no session
-stays open for a turn that can last minutes. MCP tool schemas come from the
-captured `mcp_input_schema`, not from a live MCP call.
+copies the agent's built-in `Tool` rows into frozen `ToolConfiguration` models,
+and its `persona__plugin` rows into `PluginLinkConfiguration` models (plugin id
+and parsed `action_settings`), before the run starts. The MCP and OpenAPI
+`Tool` rows of the agent are not copied. `construct_tools` opens its own short
+DB session, so no session stays open for a turn that can last minutes.
 
 **Construction per model.** `chat/execution.py:create_chat_agent` calls
 `construct_tools` for each model response, so a multi-model turn has separate
-tool instances. `tools/tool_constructor.py:_construct_tools_impl` walks the
-captured tools in order and applies these gates:
+tool instances. `construct_tools` returns a flat list. For built-in tools,
+`tools/tool_constructor.py:_construct_tools_impl` walks the captured tools in
+order and applies these gates:
 
-1. `server/features/tool/tool_visibility.py:is_tool_available_for_persona`. An
-   MCP or built-in tool with `enabled=False` is skipped for every agent. An
-   OpenAPI tool with `enabled=False` is skipped only in Default Chat.
-2. `allowed_tool_ids`, the per-message list that the web client sends.
-3. For a built-in tool, `is_available(db_session)`. An exception counts as "not
-   available" and is logged.
+1. A tool with `enabled=False` is skipped.
+2. `tool_options.allowed` (`tools/models.py:ToolOptions`), the per-message
+   choice that the client sends or the chat saved. A capability entry keeps a
+   built-in tool by its id. A plugin entry keeps the plugin, and its optional
+   `actions` keep only those action keys
+   (`tools/models.py:IntegrationChatRequest.allowed_plugins`). The options
+   only pick integrations and actions: the settings of every agent link that
+   holds an integration still apply, so a request cannot drop a Blocked link.
+   NULL keeps every tool and plugin of the agent. The web composer
+   (`web/src/lib/tools/hooks.ts`) sends a saved `actions` list back unchanged,
+   and it does not rewrite the allow-list while a plugin catalog request has
+   failed.
+3. `is_available(db_session)`. An exception counts as "not available" and is
+   logged.
 4. A class-specific branch builds the instance, and some branches skip the
    tool with no error:
    - `SearchTool` is skipped when the search usage setting from
      `chat/files.py:determine_search_params` is `DISABLED`.
    - `OpenURLTool` is skipped when web search is off for the message and
      `DISABLE_VECTOR_DB` is set ([[web-search]]).
-   - An OpenAPI tool with `oauth_config_id` or `passthrough_auth` is skipped
-     for an anonymous user, with only a warning in the log.
-   - OpenAPI and MCP rows go through their own branches
-     ([[mcp-and-custom-tools]]). Both first apply the user's plugin
-     preferences ([[plugins]]), which exist only for Default Chat
-     (`DEFAULT_PERSONA_ID`). The MCP branch then applies
-     `user_can_access_mcp_server` in Default Chat only
-     ([[mcp-and-custom-tools#access-grants-default-chat-only]]), resolves
-     credentials once per server, including unavailable servers, and applies
-     the same `can_authenticate_with_headers` gate
-     as execution before building `MCPTool` instances from the captured rows.
-     Missing or rejected credentials exclude the server's tools; refreshable
-     OAuth grants and request-supplied credentials remain usable
-     ([[mcp-and-custom-tools]]).
 
-Two tools are added outside this loop. `SearchTool` is added when the request
-forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is off, and
-the loop did not build it. `MemoryTool` is added when `user.enable_memory_tool`
-is set ([[#memory-tool-bypasses-filters]]). MCP and OpenAPI tools receive stable
-qualified names at construction, independent of the other selected tools.
+Then `integrations/chat_tools.py:build_integration_chat_tools` adds the MCP and
+OpenAPI actions of the integrations that the agent can use, through the
+integration tables ([[mcp-and-custom-tools]]). It drops each action that the
+policy function (`integrations/policy.py:resolve_action_policies`) blocks, and
+each integration whose credential does not resolve.
+
+Two tools are added outside the built-in loop. `SearchTool` is added when the
+request forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is
+off, and the loop did not build it. `MemoryTool` is added when
+`user.enable_memory_tool` is set ([[#memory-tool-bypasses-filters]]). MCP and
+OpenAPI actions receive stable qualified names with the integration id
+(`mcp__<integration id>__<name>__<tool>`, `custom__<integration id>__<operationId>`),
+independent of the other selected tools, and have `id = None`.
 
 **Execution.** A tool implements `_run(invocation, context)` and returns a
 `ToolResult`, or a `ChildRunWait` when it delegates to a sub-agent. Call data,
@@ -166,7 +170,7 @@ work.
 **Chat skill tools.** `chat/execution.py:create_chat_agent` adds `skills_list`
 and `skills_read` (`tools/tool_implementations/skills/skill_tools.py`) to the
 chat agent's configured tools when the turn's user has a chat skill
-([[skills]]): the agent's tools and the request's `allowed_tool_ids` do not
+([[skills]]): the agent's tools and the request's tool options do not
 remove them. Restored and child agents receive them with the other configured
 tools. The tools hold only the user and read the user's current chat skills
 on each call; `skills_read` checks that the user can still see the skill and
@@ -250,8 +254,24 @@ The root can finish its response while background children continue.
 An idle agent starts a follow-up response for unread child results.
 Only the root gets `wait_agents` and the `ROOT_AGENT_INSTRUCTIONS` prompt block; the wait rule is in [[chat-persistence]]. These results
 stay in model history; only the parent's response appears as a chat message.
-Tool replies use concise text. The `agent_id` from spawn/list is the control
-handle; paths are display labels and need not be unique.
+Tool replies use concise text, and models see agent paths, never IDs. `send_message` and
+`interrupt_agent` take a `target`, and `wait_agents` takes `targets`: a path from spawn/list, or
+`..` for the caller's parent (`tools/tool_implementations/subagents/subagent_tools.py:_find_agent`, over `discover_agents`). A path names one agent on the branch: `spawn_agent` refuses a name whose
+path any visible agent holds, finished agents included (`agents/agent_coordination.py:register_child`).
+
+**Question tool.** `tools/tool_implementations/question/question_tool.py:QuestionTool`
+asks the user 1-3 multiple-choice questions and waits for the answers. Only the
+root `ChatAgent` gets it (`question_tool`), after code mode wraps the configured
+tools, so it stays direct and subagents never get it. Its name is
+`ask_user_question` for Claude models and `request_user_input` for others
+(`tools/constants.py:QUESTION_TOOL_NAMES`); a restored root gets it under the
+name its saved step declared (`chat/restoration.py:restore_chat_agent`). Which
+turns offer it, and how its call parks and resumes, is
+[[mcp-and-custom-tools#chat-approval-needs-waiting-client]]. Its arguments are not
+strict: the nested question models are `$defs` references. The model reads a card
+answer as `{"answers": {"<id>": {"answers": ["<label>", "user_note: <text>"]}}}`,
+or the text that the user typed, after the query hook and with nothing added
+(`chat/tool_questions.py:question_answer`).
 
 **Sub-agents.** `DeepResearchAgent`, `ResearchAgent` and `CodingAgent` are
 runtime agents. `DeepResearchAgent` and `CodingAgentTool` spawn a child run and
@@ -269,7 +289,7 @@ Their control functions, such as `think_tool`, `generate_report` and
 
 ## Contracts and traps
 
-1. `memory-tool-bypasses-filters` **`MemoryTool` bypasses `allowed_tool_ids`
+1. `memory-tool-bypasses-filters` **`MemoryTool` bypasses the tool options
    and the agent's tools.** `tools/tool_constructor.py:_construct_tools_impl`
    adds it after the agent tool loop whenever `user.enable_memory_tool` is set.
    A user who turns every tool off for a message can still get a memory write.
@@ -334,7 +354,9 @@ Their control functions, such as `think_tool`, `generate_report` and
    deltas go only to `run_python` and `execute_code`
    (`chat/renderer.py:MessageRenderer.consume`). Code mode calls render with
    `chat/renderer.py:CodeModeRenderer`, a `ToolRenderer` that
-   `tool_renderer` picks by tool name. A result that a run release hook sets
+   `tool_renderer` picks by tool name; question calls render only their card
+   (`chat/renderer.py:QuestionToolRenderer`: `tool_question_request` and
+   `tool_question_resolved`, then a section end). A result that a run release hook sets
    streams through `ToolRenderer.amend`. Only a code mode card renders what
    the amendment added (the cell's closing record), after the call's section
    end, live and on replay. The generic display adds nothing live; replay
@@ -524,14 +546,14 @@ Their control functions, such as `think_tool`, `generate_report` and
   | The deployment cannot run it (no provider, no service) | `is_available` |
   | An admin, per agent | persona attachment (`Persona__Tool`) |
   | An admin, for all agents | `Tool.enabled` ([[mcp-and-custom-tools]]); built-in and MCP tools only |
-  | A user, per message | `allowed_tool_ids`; `TOOL_VISIBILITY_CONFIG` decides whether chat offers the toggle |
+  | A user, per message | `tool_options.allowed`; `TOOL_VISIBILITY_CONFIG` decides whether chat offers the toggle |
 
   Do not inject a tool outside the agent tool loop as `MemoryTool` does, unless
   it is a user-level feature. Such a tool escapes every admin and per-message
   control.
 - `investigate-tool-not-called` **Investigate "the model never calls tool X".** Walk the gates in order.
   Check that the tool is attached to the agent and that `Tool.enabled` is true.
-  Check the `allowed_tool_ids` that the client sent. For a built-in tool, run its
+  Check the `tool_options` that the client sent or the chat saved. For a built-in tool, run its
   `is_available` in a shell, or look for "Failed checking availability" in
   `backend/log/api_server_debug.log`; the "Skipping tool" line is at debug
   level. Check the branch skips in gate 4: search usage `DISABLED`, an
@@ -540,7 +562,9 @@ Their control functions, such as `think_tool`, `generate_report` and
   look for the credential warning. Last, check for a name collision (Known
   issues).
 - `force-tool-call` **Prefer an Action for the current request.** Send
-  `preferred_tool_id` with the message. The trailing reminder names that Action's
+  `tool_options.preferred` with the message: a capability (a built-in tool id) or
+  an action (a plugin id and an action key, matched by `Tool.plugin_action`).
+  The trailing reminder names that Action's
   operations on every model step. The model may call another tool or answer directly;
   the preference does not change tool definitions or execution permissions.
   Use a scripted model to test a required call deterministically, as in

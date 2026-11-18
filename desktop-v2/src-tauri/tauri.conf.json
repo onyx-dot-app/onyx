@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Onyx v2",
+  "version": "0.1.0",
+  "identifier": "app.onyx.desktop.v2",
+  "build": {
+    "beforeDevCommand": "bun run vite:dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "bun run vite:build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "macOSPrivateApi": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'",
+      "freezePrototype": true
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Onyx for desktop",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0"
+    },
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "onyx"
+        ]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFDNTMyMTg5MTVGMDI1RUQKUldUdEpmQVZpU0ZUclBwMDJ2VmtXS2Yxd3Y5eUQ2aWZRRXNSOXFva0VsNjRlRERNdzhteDNDdzEK",
+      "endpoints": [
+        "https://desktop.onyx.app/updates/stable/{{target}}-{{arch}}/latest.json"
+      ]
+    }
+  }
+}

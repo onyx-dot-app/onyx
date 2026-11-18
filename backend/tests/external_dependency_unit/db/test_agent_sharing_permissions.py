@@ -4,7 +4,6 @@ extend edit org-wide, and the computed access level / sharing status helpers
 agree with the SQL filter."""
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
@@ -47,7 +46,7 @@ def _can_fetch(
             get_editable=editable,
         )
         return True
-    except HTTPException:
+    except OnyxError:
         return False
 
 

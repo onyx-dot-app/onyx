@@ -213,9 +213,13 @@ To set it, use the **Vector Quantization** field in the **Embedding Model** sect
 
 | Option | Vector memory | OpenSearch version |
 | --- | --- | --- |
-| **None** (default) | Full 32-bit precision | Any |
+| **None** | Full 32-bit precision | Any |
 | **7-bit** | 4x less | 2.16 or later |
 | **1-bit** | 32x less | 3.6 or later |
+
+A new self-hosted deployment starts with **7-bit** when its OpenSearch is version 2.16 or later.
+Onyx sets it at the first startup, before it creates the index. A deployment that already has an index, documents,
+connectors, or user files keeps its quantization. On Onyx Cloud, the quantization does not change.
 
 When the index is quantized, Onyx rescores the top search results with the full-precision vectors.
 OpenSearch keeps the full-precision vectors on disk for this, so the disk usage increases slightly.

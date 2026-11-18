@@ -40,6 +40,7 @@ from onyx.chat.models import (
     ResponseRecord,
     ResponseReplayData,
     SavedToolApproval,
+    SavedToolQuestion,
     ToolHistorySnapshot,
     ToolReplayData,
     recorded_mentions,
@@ -50,10 +51,12 @@ from onyx.chat.renderer import (
     ResponseLayout,
     ToolRenderer,
     approval_outcome,
+    question_resolved,
     tool_renderer,
 )
 from onyx.chat.response import response_record, tool_arguments_for_display
 from onyx.chat.tool_approvals import ended_answer
+from onyx.chat.tool_questions import question_answer
 from onyx.chat.tool_results import (
     restored_result_details,
     tool_result_parts,
@@ -66,12 +69,13 @@ from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage, UserMessage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
-    AWAITING_APPROVAL,
+    AWAITING_USER,
     OverallStop,
     Packet,
     ReplayEnd,
     ToolApprovalRequest,
     ToolApprovalResolved,
+    ToolQuestionRequest,
     UserMessagePacket,
 )
 from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
@@ -92,6 +96,7 @@ _NO_APPROVALS: Mapping[tuple[str, str], Sequence[SavedToolApproval]] = MappingPr
 _NO_AGENT_APPROVALS: Mapping[tuple[str, str], Sequence[AgentToolApproval]] = (
     MappingProxyType({})
 )
+_NO_QUESTIONS: Mapping[tuple[str, str], SavedToolQuestion] = MappingProxyType({})
 
 
 def _message_identity(message: AssistantMessage) -> str:
@@ -452,6 +457,7 @@ class ResponsePresenter:
             self.layout,
             approvals=replay.approvals,
             agent_approvals=replay.agent_approvals,
+            questions=replay.questions,
             open_calls=self.tools,
         ):
             self.emitter.emit(packet)
@@ -554,9 +560,9 @@ class ResponsePresenter:
 
 def overall_stop(status: RunStatus, failure: RunFailure | None) -> OverallStop:
     """How a top-level response ended: the one mapping for live, replay and Stop.
-    A suspended response waits for the user's approval decisions."""
+    A suspended response waits for the user's approval decisions or answers."""
     if status == RunStatus.SUSPENDED:
-        return OverallStop(stop_reason=AWAITING_APPROVAL)
+        return OverallStop(stop_reason=AWAITING_USER)
     if status != RunStatus.CANCELLED:
         return OverallStop(stop_reason="finished")
     if failure is not None and failure.kind == RunFailureKind.DEADLINE:
@@ -577,6 +583,7 @@ def replay_response(
     agent_approvals: Mapping[
         tuple[str, str], Sequence[AgentToolApproval]
     ] = _NO_AGENT_APPROVALS,
+    questions: Mapping[tuple[str, str], SavedToolQuestion] = _NO_QUESTIONS,
     open_calls: dict[tuple[str, str, str], ToolRenderer] | None = None,
 ) -> list[Packet]:
     """Render saved accepted steps using detached tool records and source documents.
@@ -584,7 +591,9 @@ def replay_response(
     `approvals` holds the response's approval requests by run ID and tool call
     ID; each shows in its call's card, with its decision once it has one.
     `agent_approvals` holds the requests of the background agents that a call
-    started, which show in that call's card the same way. The
+    started, which show in that call's card the same way. `questions` holds
+    the response's questions by run ID and the call that asked, which show
+    the same way. The
     calls of a suspended response that have no result stay open, as its stream
     left them. With `open_calls`, the replay starts a stream that continues the
     response: it collects those calls' renderers, by run, message and call ID,
@@ -675,6 +684,28 @@ def replay_response(
                         ),
                     )
                 )
+            question = questions.get((response.run_id, call.id))
+            if question is not None:
+                packets.append(
+                    Packet(
+                        placement=tool_placement,
+                        obj=ToolQuestionRequest(
+                            question_request_id=str(question.id),
+                            tool_call_id=call.id,
+                            questions=question.questions,
+                        ),
+                    )
+                )
+                if question.outcome is not None:
+                    packets.append(
+                        Packet(
+                            placement=tool_placement,
+                            obj=question_resolved(
+                                str(question.id),
+                                question_answer(question.id, question),
+                            ),
+                        )
+                    )
             for child in response.child_runs:
                 # Agent tools start background runs, whose output arrives separately.
                 if (

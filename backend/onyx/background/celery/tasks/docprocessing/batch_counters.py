@@ -9,11 +9,10 @@ from queue backlogs (in_flight = 0, pending > 0) when the heartbeat stops.
 """
 
 from celery import Task
-from sqlalchemy import update
 
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.models import IndexAttempt
+from onyx.db.index_attempt import increment_heartbeat_counter__no_commit
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
@@ -49,11 +48,7 @@ def on_docprocessing_task_prerun(
     resolved_tenant_id = tenant_id or POSTGRES_DEFAULT_SCHEMA
     try:
         with get_session_with_tenant(tenant_id=resolved_tenant_id) as db_session:
-            db_session.execute(
-                update(IndexAttempt)
-                .where(IndexAttempt.id == index_attempt_id)
-                .values(heartbeat_counter=IndexAttempt.heartbeat_counter + 1)
-            )
+            increment_heartbeat_counter__no_commit(db_session, index_attempt_id)
             db_session.commit()
     except Exception:
         logger.debug(

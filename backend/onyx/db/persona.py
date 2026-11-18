@@ -3,7 +3,6 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import Select, delete, func, not_, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, aliased, selectinload
@@ -23,6 +22,14 @@ from onyx.db.enums import (
     PersonaSharePermission,
 )
 from onyx.db.hierarchy import filter_accessible_hierarchy_node_ids
+from onyx.db.integration_policy import (
+    legacy_tool_plugin_links,
+    list_persona_mcp_tools,
+    list_persona_openapi_tools,
+    list_persona_plugin_links,
+    list_persona_plugin_snapshots,
+    write_persona_plugin_links__no_commit,
+)
 from onyx.db.models import (
     ConnectorCredentialPair,
     Document,
@@ -47,11 +54,15 @@ from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
     persona_ownership_is_vacant,
 )
+from onyx.db.plugin_access import visible_plugin_ids
 from onyx.db.scoped_permissions import (
     fetch_managed_group_ids,
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.models import ActionSettings, LinkValue, PersonaPluginLink
 from onyx.server.features.persona.models import (
     FullPersonaSnapshot,
     MinimalPersonaSnapshot,
@@ -60,7 +71,6 @@ from onyx.server.features.persona.models import (
     PersonaUpsertRequest,
 )
 from onyx.server.features.tool.tool_visibility import (
-    is_openapi_tool,
     should_expose_tool_to_fe,
 )
 from onyx.utils.logger import setup_logger
@@ -190,30 +200,11 @@ def fetch_persona_by_id_for_user(
     stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
     persona = db_session.scalars(stmt).one_or_none()
     if not persona:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Persona with ID {persona_id} does not exist or user is not authorized to access it",
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            f"Persona with ID {persona_id} does not exist or user is not authorized to access it",
         )
     return persona
-
-
-def get_tool_ids_on_editable_personas(user: User, db_session: Session) -> set[int]:
-    """Tools on agents this user may edit. The editor rebuilds an agent's tool_ids
-    from this listing, so anything absent is dropped on the next save."""
-    # _add_user_filters short-circuits anonymous to public+listed before reading get_editable
-    if user.is_anonymous:
-        return set()
-    # deleted agents keep their tool rows, and MANAGE_AGENTS skips _add_user_filters
-    editable_persona_ids = _add_user_filters(
-        select(Persona).where(Persona.deleted.is_(False)), user, get_editable=True
-    ).with_only_columns(Persona.id)
-    return set(
-        db_session.scalars(
-            select(Persona__Tool.tool_id).where(
-                Persona__Tool.persona_id.in_(editable_persona_ids)
-            )
-        )
-    )
 
 
 def get_best_persona_id_for_user(
@@ -659,6 +650,7 @@ def create_update_persona(
             name=create_persona_request.name,
             document_set_ids=create_persona_request.document_set_ids,
             tool_ids=create_persona_request.tool_ids,
+            plugin_links=create_persona_request.plugins,
             is_public=create_persona_request.is_public,
             default_model_configuration_id=create_persona_request.default_model_configuration_id,
             starter_messages=create_persona_request.starter_messages,
@@ -696,7 +688,7 @@ def create_update_persona(
 
     except ValueError as e:
         logger.exception("Failed to create persona")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
     # Eager-load the share relations the snapshot reads so from_model doesn't
     # lazy-load each one separately after the commit expires the instance.
@@ -712,7 +704,9 @@ def create_update_persona(
         )
     ).one()
 
-    return FullPersonaSnapshot.from_model(persona)
+    snapshot = FullPersonaSnapshot.from_model(persona)
+    snapshot.plugins = list_persona_plugin_snapshots(persona.id, db_session)
+    return snapshot
 
 
 def update_persona_shared(
@@ -1574,6 +1568,7 @@ def upsert_persona(
     default_model_configuration_id: int | None = None,
     document_set_ids: list[int] | None = None,
     tool_ids: list[int] | None = None,
+    plugin_links: list[PersonaPluginLink] | None = None,
     persona_id: int | None = None,
     commit: bool = True,
     uploaded_image_id: str | None = None,
@@ -1627,38 +1622,24 @@ def upsert_persona(
             include_deleted=recycling_deleted,
         )
 
-    # Fetch and attach tools by IDs
+    # Built-in tools stay on persona__tool. An old custom or MCP tool id adds
+    # the plugin of its integration; old rows of those tools stay as they are.
     tools = None
+    legacy_links: list[PersonaPluginLink] = []
     if tool_ids is not None:
-        tools = db_session.query(Tool).filter(Tool.id.in_(tool_ids)).all()
-        if not tools and tool_ids:
+        requested = db_session.query(Tool).filter(Tool.id.in_(tool_ids)).all()
+        if not requested and tool_ids:
             raise ValueError("Tools not found")
-
-        # Existing tools survive access revocation; newly attached tools require access.
-        if user is not None:
-            # local import to avoid circular import (mirrors built_in_tools below)
-            from onyx.db.mcp import user_can_access_mcp_server
-
-            existing_tool_ids = (
-                {tool.id for tool in existing_persona.tools}
-                if existing_persona
-                else set()
-            )
-            checked_servers: set[int] = set()
-            for tool in tools:
-                server_id = tool.mcp_server_id
-                if (
-                    tool.id in existing_tool_ids
-                    or server_id is None
-                    or server_id in checked_servers
-                ):
-                    continue
-                checked_servers.add(server_id)
-                if not user_can_access_mcp_server(user, server_id, db_session):
-                    raise ValueError(
-                        "You do not have access to one or more of the "
-                        "selected MCP servers."
-                    )
+        legacy_links = legacy_tool_plugin_links(
+            [tool for tool in requested if tool.in_code_tool_id is None],
+            user.id if user is not None else None,
+            db_session,
+        )
+        tools = [tool for tool in requested if tool.in_code_tool_id is not None]
+        if existing_persona is not None:
+            tools += [
+                tool for tool in existing_persona.tools if tool.in_code_tool_id is None
+            ]
 
     # Fetch and attach document_sets by IDs
     document_sets = None
@@ -1887,13 +1868,80 @@ def upsert_persona(
         if user_files:
             _mark_files_need_persona_sync(db_session, [uf.id for uf in user_files])
         persona = new_persona
+    # flush the session so that the persona has an ID
+    db_session.flush()
+    if plugin_links is not None or tool_ids is not None:
+        _write_persona_plugins(persona.id, user, plugin_links, legacy_links, db_session)
     if commit:
         db_session.commit()
-    else:
-        # flush the session so that the persona has an ID
-        db_session.flush()
 
     return persona
+
+
+def _write_persona_plugins(
+    persona_id: int,
+    user: User | None,
+    plugin_links: list[PersonaPluginLink] | None,
+    legacy_links: list[PersonaPluginLink],
+    db_session: Session,
+) -> None:
+    """Write the plugin links of an agent. A plugin that is new on the
+    agent must be one the user can see. With no ``plugin_links``, the old
+    tool ids replace the links of the plugins that hold a custom tool or an
+    old MCP tool. A link whose MCP tool selection did not change keeps its
+    settings."""
+    rows = list_persona_plugin_links(db_session, persona_id)
+    existing = {row.plugin_id for row in rows}
+    if plugin_links is not None:
+        links = list(plugin_links)
+    else:
+        legacy_ids = {link.plugin_id for link in legacy_links}
+        mcp_tools = list_persona_mcp_tools(persona_id, db_session)
+        selected: dict[UUID, set[str]] = {}
+        for plugin_id, tool, is_selected in mcp_tools:
+            names = selected.setdefault(plugin_id, set())
+            if is_selected:
+                names.add(tool.name)
+        requested = {
+            link.plugin_id: {
+                key
+                for key, value in link.action_settings.actions.items()
+                if value is not LinkValue.BLOCKED
+            }
+            for link in legacy_links
+        }
+        openapi_plugins = {
+            plugin_id
+            for plugin_id, _, _ in list_persona_openapi_tools(persona_id, db_session)
+        }
+        changed_mcp = {
+            plugin_id
+            for plugin_id, names in selected.items()
+            if plugin_id in requested
+            and plugin_id not in openapi_plugins
+            and requested[plugin_id] != names
+        }
+        dropped = (openapi_plugins | selected.keys()) - legacy_ids
+        links = [
+            PersonaPluginLink(
+                plugin_id=row.plugin_id,
+                action_settings=ActionSettings.model_validate(
+                    row.action_settings or {}
+                ),
+            )
+            for row in rows
+            if row.plugin_id not in dropped | changed_mcp
+        ]
+    linked = {link.plugin_id for link in links}
+    links += [link for link in legacy_links if link.plugin_id not in linked]
+    added = {link.plugin_id for link in links} - existing
+    if added and user is not None:
+        visible = set(db_session.scalars(visible_plugin_ids(user.id)).all())
+        if not added <= visible:
+            raise ValueError("You do not have access to one or more of the plugins.")
+    write_persona_plugin_links__no_commit(
+        persona_id, links, replace=True, db_session=db_session
+    )
 
 
 def delete_old_default_personas(
@@ -2142,7 +2190,9 @@ def _get_selectable_tools(db_session: Session, tool_ids: Sequence[int]) -> list[
         tool = tools_by_id.get(tool_id)
         if tool is None:
             raise ValueError(f"Tool with ID {tool_id} not found")
-        if not should_expose_tool_to_fe(tool):
+        # MCP servers and OpenAPI apps reach the default agent through the
+        # install setting of their plugin.
+        if tool.in_code_tool_id is None or not should_expose_tool_to_fe(tool):
             raise ValueError(f"Tool with ID {tool_id} cannot be assigned")
         tools.append(tool)
     return tools
@@ -2158,12 +2208,6 @@ def _attach_default_chat_tools__no_commit(
         .values([{"persona_id": persona.id, "tool_id": tool.id} for tool in tools])
         .on_conflict_do_nothing()
     )
-    for tool in tools:
-        # Inclusion explicitly enables default Chat for a legacy disabled plugin.
-        # Disabled MCP and built-in tools stay attached; tool construction
-        # still excludes them.
-        if is_openapi_tool(tool):
-            tool.enabled = True
 
 
 def set_default_chat_tools__no_commit(
@@ -2179,28 +2223,13 @@ def set_default_chat_tools__no_commit(
         db_session.execute(
             delete(Persona__Tool).where(
                 Persona__Tool.persona_id == persona.id,
-                Persona__Tool.tool_id.in_(tool_ids),
+                Persona__Tool.tool_id.in_(
+                    [tool.id for tool in _get_selectable_tools(db_session, tool_ids)]
+                ),
             )
         )
     db_session.expire(persona, ["tools"])
     return persona
-
-
-def set_default_chat_tool__no_commit(
-    db_session: Session, tool: Tool, enabled: bool
-) -> None:
-    """Change one selection without replacing other plugins' default settings."""
-    persona = lock_default_assistant__no_commit(db_session)
-    if enabled:
-        _attach_default_chat_tools__no_commit(db_session, persona, [tool])
-    else:
-        db_session.execute(
-            delete(Persona__Tool).where(
-                Persona__Tool.persona_id == persona.id,
-                Persona__Tool.tool_id == tool.id,
-            )
-        )
-    db_session.expire(persona, ["tools"])
 
 
 def update_default_assistant_configuration(
@@ -2232,10 +2261,14 @@ def update_default_assistant_configuration(
         tools = _get_selectable_tools(db_session, tool_ids)
         # Core statements: an ORM collection replace fails with StaleDataError
         # when another transaction removed one of the loaded rows first.
+        # Old MCP and OpenAPI rows stay for a rollback.
         db_session.execute(
             delete(Persona__Tool).where(
                 Persona__Tool.persona_id == persona.id,
                 Persona__Tool.tool_id.not_in([tool.id for tool in tools]),
+                Persona__Tool.tool_id.in_(
+                    select(Tool.id).where(Tool.in_code_tool_id.is_not(None))
+                ),
             )
         )
         _attach_default_chat_tools__no_commit(db_session, persona, tools)

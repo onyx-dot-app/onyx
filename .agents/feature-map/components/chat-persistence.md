@@ -496,7 +496,9 @@ Community downgrade clears it ([[billing]]).
    replay and the live stream share `chat/renderer.py:MessageRenderer` and
    `chat/renderer.py:ToolRenderer`, so change rendering there, not in one
    caller. Tool approval records replay from `approval_request` rows through
-   the stream's outcome mapping, `chat/renderer.py:approval_outcome`
+   the stream's outcome mapping, `chat/renderer.py:approval_outcome`, and
+   tool questions from `question_request` rows through
+   `chat/renderer.py:question_resolved`
    ([[mcp-and-custom-tools#chat-approval-records-replay]]).
    Runtime replay uses `chat/presentation.py:overall_stop`: a `CANCELLED`
    response with a `DEADLINE` failure gets `timed_out`; other cancellations get

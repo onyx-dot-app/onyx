@@ -769,7 +769,8 @@ def iter_drive_items_delta(
 
     initial_url = f"{client.graph_api_base}/drives/{drive_id}/root/delta"
     if use_timestamp_token:
-        assert start is not None  # for type-checking
+        if start is None:
+            raise RuntimeError("Delta timestamp token needs a start time.")
         token = quote(start.isoformat(timespec="seconds"))
         initial_url += f"?token={token}"
 

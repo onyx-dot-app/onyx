@@ -1,11 +1,14 @@
 from datetime import timedelta
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import NUM_DAYS_TO_KEEP_INDEX_ATTEMPTS
 from onyx.db.engine.time_utils import get_db_current_time
-from onyx.db.models import IndexAttempt, IndexAttemptError
+from onyx.db.index_attempt import (
+    delete_index_attempts_by_ids__no_commit,
+    get_index_attempt_ids_past_retention,
+    get_oldest_index_attempt_time_created,
+)
 
 # Always retain at least this many attempts per connector/search settings pair
 NUM_RECENT_INDEX_ATTEMPTS_TO_KEEP = 10
@@ -23,48 +26,18 @@ def get_old_index_attempt_ids(
     # Short-circuit using the index on time_created. The window query below
     # cannot use an index (ROW_NUMBER must rank every row before WHERE can
     # filter), so when nothing is old enough to clean we skip it entirely.
-    oldest = db_session.query(func.min(IndexAttempt.time_created)).scalar()
+    oldest = get_oldest_index_attempt_time_created(db_session)
     if oldest is None or oldest >= cutoff_date:
         return []
 
-    ranked_attempts = (
-        db_session.query(
-            IndexAttempt.id.label("attempt_id"),
-            IndexAttempt.time_created.label("time_created"),
-            func.row_number()
-            .over(
-                partition_by=(
-                    IndexAttempt.connector_credential_pair_id,
-                    IndexAttempt.search_settings_id,
-                ),
-                order_by=IndexAttempt.time_created.desc(),
-            )
-            .label("attempt_rank"),
-        )
-    ).subquery()
-
-    rows = (
-        db_session.query(IndexAttempt.id)
-        .join(
-            ranked_attempts,
-            IndexAttempt.id == ranked_attempts.c.attempt_id,
-        )
-        .filter(
-            ranked_attempts.c.time_created < cutoff_date,
-            ranked_attempts.c.attempt_rank > NUM_RECENT_INDEX_ATTEMPTS_TO_KEEP,
-        )
-        .all()
+    return get_index_attempt_ids_past_retention(
+        db_session=db_session,
+        cutoff_date=cutoff_date,
+        num_recent_to_keep=NUM_RECENT_INDEX_ATTEMPTS_TO_KEEP,
     )
-    return [row[0] for row in rows]
 
 
 def cleanup_index_attempts(db_session: Session, index_attempt_ids: list[int]) -> None:
     """Clean up multiple index attempts"""
-    db_session.query(IndexAttemptError).filter(
-        IndexAttemptError.index_attempt_id.in_(index_attempt_ids)
-    ).delete(synchronize_session=False)
-
-    db_session.query(IndexAttempt).filter(
-        IndexAttempt.id.in_(index_attempt_ids)
-    ).delete(synchronize_session=False)
+    delete_index_attempts_by_ids__no_commit(db_session, index_attempt_ids)
     db_session.commit()

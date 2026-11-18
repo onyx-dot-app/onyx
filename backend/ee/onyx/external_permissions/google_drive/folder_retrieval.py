@@ -1,9 +1,9 @@
 from collections.abc import Iterator
 
-from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
 )
+from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 
 
 def get_modified_folders(

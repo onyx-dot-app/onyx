@@ -2,6 +2,13 @@
 
 import { type Page, type Locator, expect } from "@playwright/test";
 
+export type ActionSettingLabel =
+  | "Use the agent default"
+  | "Use the integration setting"
+  | "Allow"
+  | "Ask"
+  | "Blocked";
+
 export class AgentEditorPage {
   readonly page: Page;
   readonly nameInput: Locator;
@@ -97,45 +104,59 @@ export class AgentEditorPage {
     await expect(this.defaultModelListbox).toBeHidden();
   }
 
-  mcpServerSwitch(serverId: number): Locator {
-    return this.page.locator(
-      `button[role="switch"][name="mcp_server_${serverId}.enabled"]`
-    );
+  actionSetting(actionName: string): Locator {
+    return this.page.getByRole("combobox", {
+      name: `Setting for ${actionName}`,
+    });
   }
 
-  firstMcpToolSwitch(serverId: number): Locator {
-    return this.page
-      .locator(`button[role="switch"][name^="mcp_server_${serverId}.tool_"]`)
-      .first();
+  async addPlugin(pluginName: string): Promise<void> {
+    const add = this.page.getByRole("combobox", { name: "Add a plugin" });
+    await add.scrollIntoViewIfNeeded();
+    await add.click();
+    await this.page.getByRole("option", { name: pluginName }).click();
+    await expect(
+      this.page.getByRole("button", { name: `Remove ${pluginName}` })
+    ).toBeVisible();
   }
 
-  async enableMcpServer(serverId: number): Promise<void> {
-    const toggle = this.mcpServerSwitch(serverId);
-    await toggle.scrollIntoViewIfNeeded();
-    if ((await toggle.getAttribute("aria-checked")) !== "true") {
-      await toggle.click();
-    }
-    await expect(toggle).toHaveAttribute("aria-checked", "true");
+  async setActionSetting(
+    actionName: string,
+    setting: ActionSettingLabel
+  ): Promise<void> {
+    const select = this.actionSetting(actionName);
+    await select.scrollIntoViewIfNeeded();
+    await select.click();
+    await this.page.getByRole("option", { name: setting, exact: true }).click();
+    await expect(select).toHaveValue(setting);
   }
 
-  async enableFirstMcpTool(serverId: number): Promise<void> {
-    const toggle = this.firstMcpToolSwitch(serverId);
-    await expect(toggle).toBeVisible();
-    if ((await toggle.getAttribute("aria-checked")) !== "true") {
-      await toggle.click();
-    }
-    await expect(toggle).toHaveAttribute("aria-checked", "true");
+  async expectActionSetting(
+    actionName: string,
+    setting: ActionSettingLabel,
+    applies: string
+  ): Promise<void> {
+    const select = this.actionSetting(actionName);
+    await select.scrollIntoViewIfNeeded();
+    await expect(select).toHaveValue(setting);
+    await expect(this.page.getByText(applies, { exact: true })).toBeVisible();
   }
 
-  async enableOpenApiTool(toolId: number): Promise<void> {
-    const toggle = this.page.locator(
-      `button[role="switch"][name="openapi_tool_${toolId}"]`
-    );
-    await toggle.scrollIntoViewIfNeeded();
-    if ((await toggle.getAttribute("aria-checked")) !== "true") {
-      await toggle.click();
-    }
-    await expect(toggle).toHaveAttribute("aria-checked", "true");
+  /** Opens the setting of an action and checks that a choice is not offered. */
+  async expectSettingNotOffered(
+    actionName: string,
+    setting: ActionSettingLabel
+  ): Promise<void> {
+    const select = this.actionSetting(actionName);
+    await select.scrollIntoViewIfNeeded();
+    await select.click();
+    await expect(
+      this.page.getByRole("option", { name: "Ask", exact: true })
+    ).toBeVisible();
+    await expect(
+      this.page.getByRole("option", { name: setting, exact: true })
+    ).toHaveCount(0);
+    await this.page.keyboard.press("Escape");
   }
 
   /** Submit the form and return the new agent's id (from the resulting URL). */

@@ -21,6 +21,7 @@ from onyx.server.query_and_chat.streaming_models import (
     ChatHeartbeat,
     Packet,
 )
+from onyx.tools.models import ToolOptions
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -85,7 +86,7 @@ def test_resume_replays_and_tails_in_flight_run(
         chat_session_id=session.id,
         message="Explain resume-contract.",
         parent_message_id=None,
-        allowed_tool_ids=[],
+        tool_options=ToolOptions(allowed=[]),
     )
     try:
         with httpx.Client(
@@ -142,7 +143,7 @@ def test_resume_after_completion_returns_404(
     response = ChatSessionManager.send_message(
         chat_session_id=session.id,
         message="completion-contract",
-        allowed_tool_ids=[],
+        tool_options=ToolOptions(allowed=[]),
         user_performing_action=admin_user,
     )
     assert response.error is None
@@ -184,7 +185,7 @@ def test_evicted_resume_buffer_preserves_completion_and_next_turn(
         chat_session_id=session.id,
         message="Explain eviction-contract.",
         parent_message_id=None,
-        allowed_tool_ids=[],
+        tool_options=ToolOptions(allowed=[]),
     )
     try:
         with httpx.Client(
@@ -235,7 +236,7 @@ def test_evicted_resume_buffer_preserves_completion_and_next_turn(
         followup = ChatSessionManager.send_message(
             chat_session_id=session.id,
             message="Continue eviction-contract.",
-            allowed_tool_ids=[],
+            tool_options=ToolOptions(allowed=[]),
             user_performing_action=admin_user,
         )
         assert followup.error is None

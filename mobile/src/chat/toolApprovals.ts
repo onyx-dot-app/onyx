@@ -10,6 +10,7 @@ import {
   ToolApprovalRequest,
   ToolApprovalResolved,
 } from "@/chat/streamingModels";
+import type { ToolCardSpec } from "@/chat/toolCards";
 
 // The send-message error code while a request waits for a decision.
 export const APPROVAL_PENDING_ERROR_CODE = "APPROVAL_PENDING";
@@ -131,30 +132,19 @@ export const useToolApprovalUi = create<ToolApprovalUiState>()((set) => ({
   nudge: () => set((state) => ({ nudgeSeq: state.nudgeSeq + 1 })),
 }));
 
-// A card follows the display groups of its own turn and of every earlier turn.
-export function orderApprovalsByTurn<G extends { turn_index: number }>(
-  displayGroups: G[],
-  approvals: ToolApproval[],
-): (
-  { kind: "display"; group: G } | { kind: "approval"; approval: ToolApproval }
-)[] {
-  const entries: (
-    | { kind: "display"; turnIndex: number; group: G }
-    | { kind: "approval"; turnIndex: number; approval: ToolApproval }
-  )[] = displayGroups.map((group) => ({
-    kind: "display",
-    turnIndex: group.turn_index,
-    group,
-  }));
-  for (const approval of approvals) {
-    const index = entries.findIndex(
-      (entry) => entry.turnIndex > approval.turnIndex,
-    );
-    entries.splice(index === -1 ? entries.length : index, 0, {
-      kind: "approval",
-      turnIndex: approval.turnIndex,
-      approval,
-    });
-  }
-  return entries;
-}
+export const APPROVAL_CARDS: ToolCardSpec<
+  ToolApprovalEntry,
+  ApprovalStatus,
+  ToolApproval
+> = {
+  read: readToolApprovals,
+  id: (entry) => entry.request.approval_id,
+  resolved: (entry) => entry.outcome !== null,
+  useLocalStatuses: useToolApprovalUi,
+  forgetStatuses: (ids) => useToolApprovalUi.getState().forgetStatuses(ids),
+  card: (entry, local) => ({
+    turnIndex: entry.turnIndex,
+    request: entry.request,
+    status: toolApprovalStatus(entry, local),
+  }),
+};

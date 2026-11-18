@@ -6,8 +6,8 @@ one of two kinds —
 - ``SeededBuiltInProvider``: a plain built-in skill whose ``skill`` rows are
   owned by Alembic migrations.
 - ``ExternalAppBuiltInProvider``: a built-in skill backed by a connectable
-  ``ExternalAppType``; rows are created on demand when an admin connects the app
-  (``onyx.db.external_app.create_external_app``).
+  ``ExternalAppType``; rows are created on demand when an admin adds the app
+  (``onyx.db.external_app.associate_built_in_skill__no_commit``).
 
 Both render through the identical disk-backed push path; the kind only governs
 how the ``skill`` row comes to exist and whether an ``app_type`` connects to it.

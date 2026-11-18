@@ -12,9 +12,9 @@ from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.models import (
     DriveListingState,
     GoogleDriveCheckpoint,
-    GoogleDriveFileType,
     RetrievedDriveFile,
 )
+from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.connectors.models import HierarchyNode
 
 _LISTER = "user1@x.com"

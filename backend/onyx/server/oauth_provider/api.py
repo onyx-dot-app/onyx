@@ -14,10 +14,9 @@ from onyx.auth.constants import (
     OAUTH_PROVIDER_SECRET_PATTERN,
 )
 from onyx.auth.permissions import has_global_permission, require_permission
-from onyx.auth.schemas import AuthBackend
 from onyx.auth.users import current_limited_user, get_jwt_strategy
 from onyx.configs import app_configs
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME, AuthBackend
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccountType, Permission
 from onyx.db.models import User

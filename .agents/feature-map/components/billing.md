@@ -156,10 +156,12 @@ one commit (`backend/ee/onyx/db/community_downgrade.py`):
   already in flight can write some rows back; they grant nothing on a public pair.
 - `remove_custom_user_groups__no_commit` deletes the non-default groups directly,
   not through group sync. First it makes their shared agents, document sets, LLM
-  providers, MCP servers and skills public. A skill is published when its plugin
-  has a `plugin__user_group` row with a permission for a removed group and no
-  `NOT_AVAILABLE` setting; a name clash takes the next free name, and the log
-  names each published plugin ([[skills]]). Members who held admin rights through
+  providers, MCP servers and plugins public. A plugin, with or without a skill
+  row, is published when it has a `plugin__user_group` row with a permission
+  for a removed group and no `NOT_AVAILABLE` setting; a name clash takes the
+  next free name, and the log names each published plugin ([[skills]]). A
+  plugin already in the Organization library as `NOT_AVAILABLE` stays so: its
+  group members lose it. Members who held admin rights through
   a removed group join Admin, and members left in no default group join Basic.
 - `disable_paid_features__no_commit` deletes token budgets, marks hooks deleted,
   turns off standard answers, sets every SCIM token inactive and removes API keys
@@ -177,7 +179,7 @@ deletes the custom analytics script and both logo files.
 
 1. `failure-directions-differ` **The failure directions differ on purpose.**
    `backend/ee/onyx/server/middleware/license_enforcement.py:license_enforcement_middleware`
-   fails open on a cache error, so a Redis outage does not lock out every user.
+   fails open on a cache error, so a cache outage does not lock out every user.
    `backend/ee/onyx/server/settings/api.py:apply_license_status_to_settings`
    fails closed, so the UI hides paid features.
    `backend/ee/onyx/utils/tier.py:get_tier` returns `COMMUNITY` on a self-hosted
@@ -259,7 +261,7 @@ deletes the custom analytics script and both logo files.
   groups or private connectors. Public access keeps every document reachable, and
   no user loses read access.
 - **The self-hosted circuit breaker.** A 502, 503 or 504 from the billing
-  information fetch opens a one-hour Redis flag (`billing_circuit_open`). An
+  information fetch opens a one-hour cache flag (`billing_circuit_open`). An
   instance that cannot reach Stripe does not wait on a timeout at each page load.
 
 ---
