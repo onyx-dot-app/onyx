@@ -1553,6 +1553,87 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
     assert _fingerprint(engine, new_tables) == first
 
 
+@pytest.mark.usefixtures("seeded")
+def test_downgrade_deletes_the_plugin_of_an_app_made_integration(
+    engine: Engine,
+) -> None:
+    """The app gives an integration made after the upgrade a random plugin id.
+    A downgrade deletes that plugin, so the next upgrade makes no second one."""
+    _migrate("upgrade", REVISION)
+    name = f"u1-app-made-{uuid4().hex[:8]}"
+    plugin_id = uuid4()
+    version_id = uuid4()
+    with engine.begin() as conn:
+        server = _insert(
+            conn,
+            "INSERT INTO mcp_server (owner, name, server_url, transport, "
+            "auth_type, is_public, created_at, updated_at) VALUES "
+            "('', :name, 'https://app-made.example.com/mcp', 'STREAMABLE_HTTP', "
+            "'NONE', true, now(), now()) RETURNING id",
+            name=name,
+        )
+        integration = _insert(
+            conn,
+            "INSERT INTO integration (kind, name, auth_mode, mcp_server_id) "
+            "VALUES ('mcp', :name, 'none', :server) RETURNING id",
+            name=name,
+            server=server,
+        )
+        conn.execute(
+            text(
+                "INSERT INTO plugin (id, name, description, marketplace_id, "
+                "current_version_id, published_version_id) VALUES "
+                "(:p, :name, '', :m, :v, :v)"
+            ),
+            {
+                "p": plugin_id,
+                "name": name,
+                "m": ORGANIZATION_LIBRARY_ID,
+                "v": version_id,
+            },
+        )
+        conn.execute(
+            text(
+                "INSERT INTO plugin_version (id, plugin_id, version_number) "
+                "VALUES (:v, :p, 1)"
+            ),
+            {"v": version_id, "p": plugin_id},
+        )
+        conn.execute(
+            text("INSERT INTO plugin__integration VALUES (:p, :i)"),
+            {"p": plugin_id, "i": integration},
+        )
+    try:
+        _migrate("downgrade", PREVIOUS_REVISION)
+        with engine.connect() as conn:
+            assert (
+                conn.execute(
+                    text("SELECT count(*) FROM plugin WHERE id = :p"),
+                    {"p": plugin_id},
+                ).scalar_one()
+                == 0
+            )
+
+        _migrate("upgrade", REVISION)
+        with engine.connect() as conn:
+            names = (
+                conn.execute(
+                    text("SELECT name FROM plugin WHERE name LIKE :name"),
+                    {"name": f"{name}%"},
+                )
+                .scalars()
+                .all()
+            )
+        assert names == [name]
+    finally:
+        with engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM plugin WHERE id = :p OR name LIKE :name"),
+                {"p": plugin_id, "name": f"{name}%"},
+            )
+            conn.execute(text("DELETE FROM mcp_server WHERE id = :id"), {"id": server})
+
+
 def test_each_integration_has_one_row_of_its_kind(
     engine: Engine, seeded: Seeded
 ) -> None:

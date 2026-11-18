@@ -1564,6 +1564,21 @@ def downgrade() -> None:
         "WHERE state ? 'tool_options'"
     )
     op.drop_column("chat_session", "tool_options")
+    # A plugin that the app made for a new integration goes too, unless it
+    # holds a skill.
+    op.execute(
+        """
+        DELETE FROM plugin p
+        USING plugin__integration pi
+        WHERE pi.plugin_id = p.id
+          AND NOT EXISTS (SELECT 1 FROM skill WHERE skill.id = p.id)
+          AND NOT EXISTS (
+              SELECT 1 FROM plugin_version v
+              JOIN plugin_skill s ON s.plugin_version_id = v.id
+              WHERE v.plugin_id = p.id
+          )
+        """
+    )
     for table in (
         "plugin__integration",
         "scheduled_task__plugin",
