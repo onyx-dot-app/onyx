@@ -233,7 +233,13 @@ def test_onyx_login_uses_and_refreshes_login_token(
         with (
             patch(
                 "onyx.auth.oauth_refresher._refresh_context_for_provider",
-                AsyncMock(return_value=_RefreshContext("https://idp/token", "c", "s")),
+                AsyncMock(
+                    return_value=_RefreshContext(
+                        token_endpoint="https://idp/token",
+                        client_id="c",
+                        client_secret="s",
+                    )
+                ),
             ),
             patch(
                 "onyx.auth.oauth_refresher._request_login_token_refresh",
@@ -285,7 +291,13 @@ def test_onyx_login_uses_a_refreshed_token_that_has_no_expiry(
         with (
             patch(
                 "onyx.auth.oauth_refresher._refresh_context_for_provider",
-                AsyncMock(return_value=_RefreshContext("https://idp/token", "c", "s")),
+                AsyncMock(
+                    return_value=_RefreshContext(
+                        token_endpoint="https://idp/token",
+                        client_id="c",
+                        client_secret="s",
+                    )
+                ),
             ),
             patch(
                 "onyx.auth.oauth_refresher._request_login_token_refresh",
