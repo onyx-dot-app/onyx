@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from types import UnionType
 from typing import Literal, Union, get_args, get_origin
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, JsonValue, SkipValidation
 
 from onyx.llm.models import ToolResult
 from onyx.tools.interface import Tool
@@ -116,6 +116,8 @@ class ToolFunction(BaseModel):
     required_arguments: frozenset[str]
     nullable_arguments: frozenset[str]
     description: str
+    # The argument schema that the stub was rendered from, kept as is.
+    parameters: SkipValidation[dict[str, JsonValue]]
     # The function as a method of the `tools` class.
     stub: str
     # Declarations of the types that the stub names.
@@ -466,7 +468,8 @@ def _parameters(
     properties = parameters.get("properties")
     if not isinstance(properties, dict):
         return [], {}, extra
-    # OpenAPI-derived schemas omit `required`; every argument is then optional.
+    # Without `required` (as in OpenAPI-derived schemas), every argument is
+    # optional.
     required = _required_names(parameters)
     names = unique_identifiers(properties, str, argument_name)
     result: list[StubParameter] = []
@@ -708,6 +711,7 @@ def tool_function(
         required_arguments=frozenset(p.python_name for p in parameters if p.required),
         nullable_arguments=frozenset(p.python_name for p in parameters if p.nullable),
         description=description,
+        parameters=definition.parameters,
         stub=stub,
         declarations=result.declarations,
     )
@@ -717,11 +721,10 @@ def _searchable(function: ToolFunction) -> SearchableFunction:
     namespace = function.tool.code_mode_function_name.namespace or ""
     stub = "\n\n\n".join([*function.declarations, f"{_TOOLS_CLASS}\n\n{function.stub}"])
     # Property names and descriptions at every depth of the argument schema,
-    # outer ones first; each distinct text once, so a large schema does not
-    # outweigh the name.
+    # outer ones first; each distinct text once, within a fixed size.
     parameter_texts: dict[str, None] = {}
     parameter_chars = 0
-    pending: deque[JsonValue] = deque([function.tool.tool_definition().parameters])
+    pending: deque[JsonValue] = deque([function.parameters])
     while pending and parameter_chars < MAX_TOOL_DESCRIPTION_CHARS:
         node = pending.popleft()
         if isinstance(node, list):
@@ -745,8 +748,8 @@ def _searchable(function: ToolFunction) -> SearchableFunction:
         stub=stub,
         # The name counts twice, so a match on it ranks above a match in prose.
         text=f"{function.function_name} {function.function_name} {namespace} "
-        f"{function.description} "
-        f"{_clip(' '.join(parameter_texts), MAX_TOOL_DESCRIPTION_CHARS)}",
+        f"{function.description}",
+        parameter_text=_clip(" ".join(parameter_texts), MAX_TOOL_DESCRIPTION_CHARS),
     )
 
 

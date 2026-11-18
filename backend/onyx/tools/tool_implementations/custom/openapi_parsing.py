@@ -74,12 +74,16 @@ class MethodSpec(BaseModel):
         if request_body_schema := self.get_request_body_schema():
             properties[REQUEST_BODY] = request_body_schema
         for param in self.get_query_param_schemas() + self.get_path_param_schemas():
-            # OpenAPI puts a parameter's description beside its schema.
+            # OpenAPI puts a parameter's description beside its schema; it wins
+            # over the schema's own, which often comes from a shared component.
             description = param.get("description")
+            schema = param["schema"]
             properties[param["name"]] = (
-                {"description": description, **param["schema"]}
-                if isinstance(description, str) and description
-                else param["schema"]
+                {**schema, "description": description}
+                if isinstance(schema, dict)
+                and isinstance(description, str)
+                and description
+                else schema
             )
         return ToolDefinition(
             name=self.name,

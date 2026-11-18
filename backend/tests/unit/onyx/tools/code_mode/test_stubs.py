@@ -693,6 +693,60 @@ def test_tool_search_matches_argument_names_and_nested_descriptions() -> None:
     ]
 
 
+def test_tool_search_ranks_a_name_match_with_a_large_schema_first() -> None:
+    tools = [
+        FakeTool(
+            "get_issue",
+            _unused,
+            description="Read one record.",
+            exposure=CodeModeExposure.DEFERRED,
+            parameters={
+                "type": "object",
+                "properties": {
+                    f"field_{index}": {
+                        "type": "string",
+                        "description": f"Filter value number {index} for the lookup.",
+                    }
+                    for index in range(50)
+                },
+            },
+        ),
+        FakeTool(
+            "add_label",
+            _unused,
+            description="Tag a record.",
+            exposure=CodeModeExposure.DEFERRED,
+            parameters={
+                "type": "object",
+                "properties": {"issue_number": {"type": "integer"}},
+            },
+        ),
+    ]
+    index = build_tool_stubs(tools).tool_index
+    assert index is not None
+
+    assert [match.name for match in index.search("issue", 8)] == [
+        "get_issue",
+        "add_label",
+    ]
+
+
+def test_tool_search_matches_the_namespace_of_any_deferred_tool() -> None:
+    tools = [
+        FakeTool(
+            "refund",
+            _unused,
+            exposure=CodeModeExposure.DEFERRED,
+            namespace="billing",
+        ),
+        FakeTool("archive", _unused, exposure=CodeModeExposure.DEFERRED),
+    ]
+    index = build_tool_stubs(tools).tool_index
+    assert index is not None
+
+    assert [match.name for match in index.search("billing", 8)] == ["billing__refund"]
+
+
 def test_tool_search_matches_openapi_query_parameter_descriptions() -> None:
     [method] = openapi_to_method_specs(
         {

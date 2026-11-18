@@ -135,9 +135,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         functions, the DEFERRED ones whose names the code
                                         uses, and the imported modules; tool_search()
                                         (tool_search.py, BM25) only when some are DEFERRED,
-                                        over the name, namespace, description, and the
-                                        argument schema's property names and descriptions
-                                        (stubs.py:_searchable)
+                                        over the name, namespace and description; a match
+                                        only on the argument schema's property names and
+                                        descriptions ranks below them (stubs.py:_searchable)
   CodeModeTool._run -> CodeCells.start  MAX_OPEN_CELLS per response, MAX_RUNNING_CELLS per
                                         process (else BUSY_MESSAGE); cell id = 1 + the highest
                                         id in the branch; store snapshot = store.py:store_snapshot
@@ -533,7 +533,8 @@ health calls are not retried.
     named from `mcp__<server id>__<server>__<tool>`
     (`MCPTool.code_mode_function_name`), converted to a Python identifier
     that stays unique among the turn's functions; the description names the
-    MCP servers with deferred functions in one fixed paragraph. Programs call
+    namespaces of deferred functions (an MCP tool's is its server) as tool
+    groups in one fixed paragraph. Programs call
     every function through the `tools` namespace, `await tools.f(...)`: a
     module that every program imports
     (`tools/tool_implementations/code_mode/sandbox.py:TOOLS_NAMESPACE`), which
