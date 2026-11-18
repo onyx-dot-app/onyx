@@ -84,3 +84,35 @@ SQ_SEARCH_LIMIT = 10
 # services (the model server, the decision provider), so keep it small.
 SQ_SEARCH_WORKERS = 4
 SQ_TRIAGE_WORKERS = 4
+
+# When a pool run is worth it. Running low: fewer usable questions than this.
+SQ_POOL_SHORT = 12
+# New material: at least this many new documents since the last run, while the
+# pool has room (fewer than SQ_POOL_MAX questions).
+SQ_MIN_NEW_DOCS = 20
+# No run with fewer documents than this that are not yet in the pool.
+SQ_MIN_CANDIDATE_DOCS = 5
+# Minimum minutes since the last run: when running low, and for new material,
+# so a connector that indexes for hours does not use every run at once.
+SQ_SHORT_GAP_MIN = 10
+SQ_GROWTH_GAP_MIN = 60
+# A safety limit on pool runs per SQ_RUN_WINDOW_HOURS.
+SQ_MAX_POOL_RUNS_PER_DAY = 5
+# A question is not shown, and does not count as usable, after this age.
+SQ_QUESTION_MAX_AGE_DAYS = 7
+
+# Top-ups for one person: at most this many per SQ_RUN_WINDOW_HOURS, and this
+# many minutes apart.
+SQ_TOPUPS_PER_USER_PER_DAY = 5
+SQ_TOPUP_GAP_MIN = 10
+
+# Delay before a new-material run, so a large connector does not request a run
+# per batch. Other runs start at once.
+SQ_GROWTH_DELAY_S = 600
+# A queued task expires this long after it was due, and the queued flag lives
+# as long as the task can wait, so a stale flag cannot block runs.
+SQ_TASK_EXPIRES_S = 1800
+# A run holds the pool lock for at most its own time budget plus a margin.
+SQ_POOL_LOCK_HELD_S = 120.0
+# How long a deletion waits for a running pool run to finish with the pool.
+SQ_POOL_LOCK_WAIT_S = 5.0

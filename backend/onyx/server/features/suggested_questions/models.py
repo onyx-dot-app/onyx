@@ -22,6 +22,24 @@ class UseCase(StrEnum):
     OTHER = "other"
 
 
+class RefreshReason(StrEnum):
+    """Why a pool run was requested. Sets its priority and delay."""
+
+    # The company has no questions yet and its first documents arrived.
+    FIRST_RUN = "first_run"
+    # Fewer usable questions than SQ_POOL_SHORT, or documents were deleted.
+    POOL_SHORT = "pool_short"
+    # New documents were indexed.
+    GROWTH = "growth"
+
+
+class RunDecision(BaseModel):
+    """Whether a pool run should call the models, and why."""
+
+    run: bool
+    reason: str
+
+
 class CandidateDocument(BaseModel):
     """A document a run may write a question about."""
 
