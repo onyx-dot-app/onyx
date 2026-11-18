@@ -26,7 +26,6 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
@@ -35,7 +34,6 @@ _JSM_PAGE_LIMIT = 50
 _DEFAULT_TIMEOUT_SECONDS = 30
 
 
-@retry_builder(tries=3, delay=1, backoff=2)
 def _rate_limited_jsm_get(
     url: str,
     headers: dict[str, str],
@@ -242,9 +240,10 @@ def _create_document_from_request(
     metadata["comment_count"] = str(len(comments))
 
     semantic_id = f"{issue_key}: {summary}" if issue_key else summary
+    doc_id_key = issue_id or issue_key or ticket_url
 
     return Document(
-        id=f"{_JSM_ID_PREFIX}{ticket_url}",
+        id=f"{_JSM_ID_PREFIX}{doc_id_key}",
         sections=[TextSection(link=ticket_url, text="\n\n".join(body_parts))],
         source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
         semantic_identifier=semantic_id,
@@ -376,7 +375,18 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
     def _resolve_service_desks(self) -> list[tuple[str, str | None]]:
         """Return list of (service_desk_id, project_key) pairs in scope."""
         if self.service_desk_id:
-            return [(self.service_desk_id, self.project_key)]
+            desk = self._get_json(f"/rest/servicedeskapi/servicedesk/{self.service_desk_id}")
+            desk_project_key = desk.get("projectKey")
+            if (
+                self.project_key
+                and desk_project_key
+                and str(desk_project_key).lower() != self.project_key.lower()
+            ):
+                raise ConnectorValidationError(
+                    f"Service desk '{self.service_desk_id}' belongs to project "
+                    f"'{desk_project_key}', not '{self.project_key}'"
+                )
+            return [(str(desk.get("id") or self.service_desk_id), desk_project_key or self.project_key)]
 
         desks = list(self._paginate("/rest/servicedeskapi/servicedesk"))
         if self.project_key:

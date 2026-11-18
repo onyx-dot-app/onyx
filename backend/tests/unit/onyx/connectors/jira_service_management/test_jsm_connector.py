@@ -205,6 +205,8 @@ def test_load_from_state_paginates_tickets_and_comments(
                     ],
                 },
             )
+        if url.endswith("/rest/servicedeskapi/servicedesk/1"):
+            return _fake_response(200, {"id": "1", "projectKey": "ITSM"})
         if url.endswith("/rest/servicedeskapi/request"):
             start = (params or {}).get("start", 0)
             if start == 0:
@@ -215,22 +217,24 @@ def test_load_from_state_paginates_tickets_and_comments(
                         "values": [_sample_ticket("ITSM-1", "Laptop won't boot")],
                     },
                 )
-            return _fake_response(
-                200,
-                {
-                    "isLastPage": True,
-                    "values": [
-                        _sample_ticket(
-                            "ITSM-2",
-                            "VPN access",
-                            status="Resolved",
-                            status_category="DONE",
-                            created_iso="2026-01-12T08:00:00+00:00",
-                            status_iso="2026-01-13T09:30:00+00:00",
-                        )
-                    ],
-                },
-            )
+            if start == 1:
+                return _fake_response(
+                    200,
+                    {
+                        "isLastPage": True,
+                        "values": [
+                            _sample_ticket(
+                                "ITSM-2",
+                                "VPN access",
+                                status="Resolved",
+                                status_category="DONE",
+                                created_iso="2026-01-12T08:00:00+00:00",
+                                status_iso="2026-01-13T09:30:00+00:00",
+                            )
+                        ],
+                    },
+                )
+            raise AssertionError(f"Unexpected pagination start offset: {start}")
         if url.endswith("/rest/servicedeskapi/request/ITSM-1/comment"):
             return _fake_response(
                 200,
@@ -275,7 +279,7 @@ def test_load_from_state_paginates_tickets_and_comments(
 
     doc1 = batches[0][0]
     assert doc1.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
-    assert doc1.id == "JSM_https://acme.atlassian.net/browse/ITSM-1"
+    assert doc1.id == "JSM_1"
     assert doc1.semantic_identifier == "ITSM-1: Laptop won't boot"
     assert doc1.metadata["status"] == "Waiting for support"
     assert doc1.metadata["status_category"] == "INDETERMINATE"
@@ -303,6 +307,8 @@ def test_include_internal_comments_enabled(monkeypatch: pytest.MonkeyPatch) -> N
         auth: tuple[str, str] | None,  # noqa: ARG001
         params: dict[str, Any] | None = None,  # noqa: ARG001
     ) -> MagicMock:
+        if url.endswith("/rest/servicedeskapi/servicedesk/1"):
+            return _fake_response(200, {"id": "1", "projectKey": "ITSM"})
         if url.endswith("/rest/servicedeskapi/request"):
             return _fake_response(
                 200,
@@ -350,6 +356,8 @@ def test_poll_source_filters_by_time_window(monkeypatch: pytest.MonkeyPatch) -> 
         auth: tuple[str, str] | None,  # noqa: ARG001
         params: dict[str, Any] | None = None,  # noqa: ARG001
     ) -> MagicMock:
+        if url.endswith("/rest/servicedeskapi/servicedesk/1"):
+            return _fake_response(200, {"id": "1", "projectKey": "ITSM"})
         if url.endswith("/rest/servicedeskapi/request"):
             return _fake_response(
                 200,
@@ -428,9 +436,43 @@ def test_unknown_project_and_auth_errors(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_connector_config_defaults() -> None:
+    from onyx.configs.app_configs import INDEX_BATCH_SIZE
+
     cfg = JiraServiceManagementConnectorConfig(
         base_url="https://acme.atlassian.net", project_key="ITSM"
     )
     assert cfg.project_key == "ITSM"
     assert cfg.include_internal_comments is False
-    assert cfg.batch_size == 100
+    assert cfg.batch_size == INDEX_BATCH_SIZE
+
+
+def test_explicit_service_desk_validates_credentials_and_project_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connector = JiraServiceManagementConnector(
+        base_url="https://acme.atlassian.net",
+        project_key="ITSM",
+        service_desk_id="2",
+    )
+    connector.load_credentials(
+        {
+            "jsm_user_email": "bot@acme.com",
+            "jsm_api_token": "secret",
+        }
+    )
+
+    monkeypatch.setattr(
+        "onyx.connectors.jira_service_management.connector._rate_limited_jsm_get",
+        lambda url, headers, auth, params=None: _fake_response(
+            200, {"id": "2", "projectKey": "HR"}
+        ),
+    )
+    with pytest.raises(ConnectorValidationError):
+        connector.validate_connector_settings()
+
+    monkeypatch.setattr(
+        "onyx.connectors.jira_service_management.connector._rate_limited_jsm_get",
+        lambda url, headers, auth, params=None: _fake_response(401, {}),
+    )
+    with pytest.raises(CredentialExpiredError):
+        connector.validate_connector_settings()
