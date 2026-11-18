@@ -886,6 +886,50 @@ def test_refresh_refuses_actions_of_a_server_url_that_changed_meanwhile(
     ] == ["old"]
 
 
+def test_refresh_refuses_actions_of_a_header_template_that_changed_meanwhile(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    integration, _ = make_mcp_integration(
+        db_session,
+        name=f"mcp-{uuid4().hex[:8]}",
+        tools=("old",),
+        header_template={"X-Team": "blue"},
+    )
+    integration_id = created.add(integration.id)
+    hold_in_plugin(db_session, [integration])
+    spec = IntegrationActionSpec(
+        key="new",
+        source=IntegrationActionSource.MCP,
+        display_name="New",
+        description=None,
+        read_only=None,
+        default_policy=IntegrationActionPolicyValue.ALLOW,
+    )
+
+    def discover_while_the_headers_change(*_: object) -> list[IntegrationActionSpec]:
+        with get_session_with_current_tenant() as other_session:
+            other = other_session.get(Integration, integration_id)
+            assert other is not None
+            other.header_template = {"X-Team": "red"}
+            other_session.commit()
+        return [spec]
+
+    with (
+        patch(
+            "onyx.integrations.service.fetch_mcp_actions",
+            side_effect=discover_while_the_headers_change,
+        ),
+        pytest.raises(OnyxError) as raised,
+    ):
+        admin_api.refresh_integration_actions(integration_id, admin, db_session)
+
+    assert raised.value.error_code is OnyxErrorCode.CONFLICT
+    db_session.rollback()
+    assert [
+        action.key for action in list_integration_actions(integration_id, db_session)
+    ] == ["old"]
+
+
 def _unauthorized(status: int) -> HTTPStatusError:
     request = Request("POST", "https://mcp.example.com/mcp")
     return HTTPStatusError(
