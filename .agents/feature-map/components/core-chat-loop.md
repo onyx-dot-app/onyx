@@ -91,7 +91,9 @@
 - **Bots.** The Slack bot runs the same turn in-process
   (`onyxbot/slack/handlers/handle_regular_answer.py`). The Discord bot calls the
   HTTP endpoint (`onyxbot/discord/api_client.py`). A change here reaches both.
-  Both run Ask tools without approval for now (`ChatTurnSetup.ask_for_approval`).
+  Neither has an approver (`ChatTurnSetup.approval_mode` is `NO_APPROVER`), so
+  an action that is still Ask is not offered
+  ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]).
 
 ---
 
@@ -146,14 +148,17 @@ Processing hook before it saves the user message, only for a new, non-blank
 message, and only when the incognito mode allows hooks
 (`IncognitoRecordMode.fires_hooks`), because the hook sends the query out
 ([[hooks]]). A rejection raises `QUERY_REJECTED`. A regeneration reuses the saved
-user message. A send never changes the chat's saved tools and search filters:
-`chat_session.tool_selection` (`allowed_tool_ids`, `preferred_tool_id`,
-`internal_search_filters`; NULL means the agent's tools) has one writer, the
-`PATCH /chat/chat-session/{session_id}/tool-selection` route
-(`db/chat.py:set_chat_session_tool_selection__no_commit`). It checks
+user message. A send never changes the chat's saved tool options:
+`chat_session.tool_options` (`tools/models.py:ToolOptions`: `allowed`
+capability and plugin entries, `preferred`, `internal_search_filters`; NULL
+means the agent's tools) has one writer, the
+`PATCH /chat/chat-session/{session_id}/tool-options` route
+(`db/chat.py:set_chat_session_tool_options__no_commit`). It checks
 document-set access, saves only the fields the body sets, and stores nothing
 for a chat whose record mode keeps no content. The chat-session detail returns
-the selection to its owner. The chat's model is `current_alternate_model`,
+the options to their owner. The integration tables migration (`730bce2814a0`)
+filled `tool_options` from the old `chat_session.tool_selection` column and
+dropped that column. The chat's model is `current_alternate_model`,
 which the web writes through `PUT /chat/update-chat-session-model` on each
 send. A turn that resumes a suspended response, and an agent host that
 resumes parked agent runs, use the model, tools and search filters that the
@@ -236,7 +241,7 @@ interrupted (`chat/run_store.py:interrupt_ownerless_responses`). It starts a res
 current session settings and fresh authorization checks. A queued turn whose
 owner lost `WRITE_CHAT`, or access to a saved document set, saves an error
 response, which pauses the queue. A turn the server starts uses the chat's
-saved `chat_session.tool_selection` (NULL means the agent's tools). A saved
+saved tool options (NULL means the agent's tools). A saved
 preferred tool that this turn cannot build is dropped, and the turn runs
 without it. Deep Research and the model are choices of each message: a queued
 or interrupting message stores `chat_input.deep_research` and
@@ -437,12 +442,12 @@ termination grace period is much shorter, so it ends running turns first
 
 ## Known issues
 
-- **An unavailable preference fails the message.** `preferred_tool_id` selects an
-  Action from the tools built for this request. Disabled, unavailable, or excluded
+- **An unavailable preference fails the message.** `tool_options.preferred` selects a
+  built-in tool or a plugin action from the tools built for this request. Disabled, unavailable, or excluded
   Actions fail with `BAD_REQUEST` in `chat/execution.py:create_chat_agent`.
   When project context replaces retrieval, preparation omits an enabled, configured, and allowed Search preference
   for that request. Preferences do not grant access. Tool construction applies
-  `allowed_tool_ids` except to MemoryTool, which follows the user's memory setting.
+  `tool_options.allowed` except to MemoryTool, which follows the user's memory setting.
 - **Stop waits for blocked work.** Cancellation takes effect when a provider
   read returns or times out. Tools that honor `ToolInvocation.cancellation` can
   stop earlier; tools that ignore it keep running until they return.

@@ -4,7 +4,7 @@ Covers the bypass where a user could override a persona's configured document
 sets by supplying `internal_search_filters.document_set` on a chat message.
 
 The SearchTool is only invoked when the LLM decides to call it, so these tests
-prefer the call with `preferred_tool_id` and script the mock LLM to make it. They
+prefer the call with `tool_options.preferred` and script the mock LLM to make it. They
 also need a seeded connector because DocumentSetManager rejects creation with
 no connectors.
 """
@@ -102,8 +102,10 @@ def _send_message_with_document_set_filter(
             "message": "hello",
             "chat_session_id": str(chat_session_id),
             "stream": True,
-            "internal_search_filters": {"document_set": document_set_names},
-            "preferred_tool_id": preferred_tool_id,
+            "tool_options": {
+                "internal_search_filters": {"document_set": document_set_names},
+                "preferred": {"type": "capability", "tool_id": preferred_tool_id},
+            },
         },
         headers=user.headers,
         cookies=user.cookies,

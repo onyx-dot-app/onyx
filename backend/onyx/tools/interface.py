@@ -19,15 +19,18 @@ from onyx.configs.constants import MessageType
 from onyx.llm.models import Message, ToolDefinition, ToolResult
 from onyx.tools.models import (
     DEFAULT_CODE_MODE_RESULT,
+    CapabilityEntry,
     ChatMinimalTextMessage,
     CodeModeExposure,
     CodeModeFunctionName,
     CodeModeResultSpec,
+    PluginAction,
     ToolApprovalScope,
     ToolCallException,
     ToolContext,
     ToolExecutionError,
     ToolExecutionException,
+    ToolPreference,
 )
 from onyx.tracing.framework.create import function_span
 from onyx.tracing.framework.spans import SpanError
@@ -196,6 +199,8 @@ class Tool(abc.ABC):
     sequence_group: str | None = None
     # Set on tools whose calls follow an action policy; see onyx/chat/tool_approvals.py.
     approval: ToolApprovalScope | None = None
+    # Set on the tool of an integration action; a preference names it.
+    plugin_action: PluginAction | None = None
 
     @property
     def execution_mode(self) -> ToolExecutionMode:
@@ -206,9 +211,18 @@ class Tool(abc.ABC):
         """Tools that run inside this tool's calls, such as code mode functions."""
         return []
 
-    def operation_names(self, tool_id: int) -> list[str]:
-        """How the model calls the configured tool `tool_id` through this tool."""
-        return [self.name] if self.id == tool_id else []
+    def matches(self, preference: ToolPreference) -> bool:
+        if isinstance(preference, CapabilityEntry):
+            return self.id == preference.tool_id
+        return (
+            self.plugin_action is not None
+            and preference.plugin_id in self.plugin_action.plugin_ids
+            and self.plugin_action.action == preference.action
+        )
+
+    def operation_names(self, preference: ToolPreference) -> list[str]:
+        """How the model calls the preferred tool through this tool."""
+        return [self.name] if self.matches(preference) else []
 
     def inner_call_hint(self, name: str) -> str | None:  # noqa: ARG002
         """For a call of `name` as a tool of its own: how to call it through

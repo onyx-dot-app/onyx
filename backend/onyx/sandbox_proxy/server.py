@@ -32,13 +32,8 @@ from onyx.sandbox_proxy.destination_policy import (
 )
 from onyx.sandbox_proxy.models import DestinationPolicyConfig
 from onyx.sandbox_proxy.relay_tls import RelayTLSConfig, RelayTLSListener, loopback_for
-from onyx.sandbox_proxy.request_evaluator import (
-    CompositeRequestEvaluator,
-    ExternalAppRequestEvaluator,
-    McpRequestEvaluator,
-)
-from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
-from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
+from onyx.sandbox_proxy.request_evaluator import IntegrationRequestEvaluator
+from onyx.sandbox_proxy.resolvers.integration import IntegrationResolver
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
 from onyx.sandbox_proxy.sandbox_identity.resolution import (
     IdentityResolver,
@@ -51,6 +46,7 @@ from onyx.sandbox_proxy.sandbox_identity.signed_lookups import (
     CacheReplayGuard,
     CacheSandboxPlacementLookup,
 )
+from onyx.sandbox_proxy.usable_integrations import UsableIntegrations
 from onyx.server.features.build.configs import (
     ONYX_SERVER_URL,
     SANDBOX_NAMESPACE,
@@ -219,19 +215,22 @@ async def _run_master(master: DumpMaster) -> None:
 
 
 def build_resolvers(
-    mcp_resolver: MCPServerResolver | None = None,
+    integration_resolver: IntegrationResolver | None = None,
 ) -> list[CredentialResolver]:
     """Builds the registered credential resolvers, in first-claim-wins order.
 
-    Host-claim sets are designed to be disjoint (external-app requests are
-    attributed by the matcher; host-only resolvers added later claim their own
-    canonical hosts). Order is a safety net against accidental overlap, not a
+    Host-claim sets are designed to be disjoint (integration requests are
+    attributed by the evaluator; the Onyx PAT resolver claims the Onyx API
+    host). Order is a safety net against accidental overlap, not a
     designed-in priority.
     """
     return [
         OnyxPatResolver(),
-        mcp_resolver if mcp_resolver is not None else MCPServerResolver(),
-        ExternalAppResolver(),
+        (
+            integration_resolver
+            if integration_resolver is not None
+            else IntegrationResolver()
+        ),
     ]
 
 
@@ -367,8 +366,9 @@ def main() -> int:
 
         identity = IdentityResolver(ip_lookup=lookup)
         proxy_instance_id = os.environ.get("HOSTNAME") or str(uuid.uuid4())
-        mcp_resolver = MCPServerResolver()
-        resolvers = build_resolvers(mcp_resolver)
+        usable = UsableIntegrations()
+        integration_resolver = IntegrationResolver(usable)
+        resolvers = build_resolvers(integration_resolver)
         logger.info(
             "Credential resolvers registered: %s",
             [type(r).__name__ for r in resolvers],
@@ -385,13 +385,11 @@ def main() -> int:
             else None
         )
         gate = GateAddon(
-            mcp_resolver=mcp_resolver,
+            integration_resolver=integration_resolver,
             destination_policy=destination_policy,
             identity=identity,
             signed_identity=signed_identity,
-            request_evaluator=CompositeRequestEvaluator(
-                [ExternalAppRequestEvaluator(), McpRequestEvaluator()]
-            ),
+            request_evaluator=IntegrationRequestEvaluator(usable),
             cache_factory=cache_factory,
             proxy_instance_id=proxy_instance_id,
             credential_dispatcher=CredentialInjectionDispatcher(resolvers),

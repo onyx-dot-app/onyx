@@ -33,7 +33,6 @@ from onyx.microvm.registry import (
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
 from onyx.sandbox_proxy.destination_policy import parse_destination_policy
-from onyx.sandbox_proxy.request_evaluator import CompositeRequestEvaluator
 from onyx.sandbox_proxy.sandbox_identity.signed import (
     SignedIdentityError,
     SignedIdentityRejection,
@@ -52,7 +51,11 @@ from onyx.server.features.microvm.api import (
 )
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user
-from tests.unit.sandbox_proxy.conftest import StubResolver, make_flow
+from tests.unit.sandbox_proxy.conftest import (
+    NoMatchedRequest,
+    StubResolver,
+    make_flow,
+)
 
 
 def _public_b64(private_key: Ed25519PrivateKey) -> str:
@@ -260,7 +263,7 @@ async def test_gate_binds_signed_connect_with_real_verifier(
     ip_resolver = StubResolver(sandbox=None)
     addon = GateAddon(
         identity=ip_resolver,
-        request_evaluator=CompositeRequestEvaluator([]),
+        request_evaluator=NoMatchedRequest(),
         destination_policy=parse_destination_policy(""),
         cache_factory=_tenant_cache,
         proxy_instance_id="proxy-test",

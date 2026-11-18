@@ -55,7 +55,13 @@ class _StubVerifier(SignedIdentityVerifier):
 
 
 class _NoMatch(RequestEvaluator):
-    def evaluate(self, request: Any, tenant_id: str, user_id: UUID) -> None:  # noqa: ARG002
+    def evaluate(
+        self,
+        request: Any,  # noqa: ARG002
+        tenant_id: str,  # noqa: ARG002
+        user_id: UUID,  # noqa: ARG002
+        scheduled_task_id: UUID | None,  # noqa: ARG002
+    ) -> None:
         return None
 
 

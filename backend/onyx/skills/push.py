@@ -13,7 +13,6 @@ from onyx.configs.constants import (
     OnyxCeleryQueues,
     OnyxCeleryTask,
 )
-from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.models import Skill, User
 from onyx.db.sandbox import (
     get_sandbox_user_map,
@@ -28,6 +27,7 @@ from onyx.db.skill import (
     persist_skill_validity,
 )
 from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.integrations.craft import list_connectable_apps
 from onyx.server.features.build.configs import ENABLE_CRAFT
 from onyx.server.features.build.sandbox.base import PUSH_PARALLELISM
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
@@ -138,7 +138,7 @@ def _add_static_builtin(
 
 def _render_template(
     files: FileSet,
-    skill: Skill,
+    runtime_skill: RuntimeSkill,
     definition: BuiltInSkillDefinition,
     db_session: Session,
     user: User,
@@ -146,6 +146,7 @@ def _render_template(
     """Overwrite ``{name}/SKILL.md`` with a per-user rendering. company-search
     and external-app built-ins have renderers; any other templated built-in logs
     a warning and ships the static siblings as-is."""
+    skill = runtime_skill.skill
     if definition.built_in_skill_id == COMPANY_SEARCH.built_in_skill_id:
         rendered = render_company_search_skill(
             db_session, user, definition.source_dir.parent
@@ -156,7 +157,7 @@ def _render_template(
     app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
     if app_type is not None:
         rendered = render_external_app_files(
-            db_session, skill, app_type, definition.source_dir
+            db_session, runtime_skill.external_app_id, app_type, definition.source_dir
         )
         for name, content in rendered.items():
             files[f"{skill.name}/{name}"] = content.encode("utf-8")
@@ -344,7 +345,9 @@ def _assemble_skills(
                 continue
             _add_static_builtin(skill_files, skill, definition)
             if definition.has_template:
-                _render_template(skill_files, skill, definition, db_session, user)
+                _render_template(
+                    skill_files, runtime_skill, definition, db_session, user
+                )
         if not _resolve_skill_dir(skill_files, name):
             continue
         size = _larger(size, _usage_of(skill_files))
@@ -397,7 +400,7 @@ def build_user_skills_payload(user: User, db_session: Session) -> UserSkillsPayl
             break
         invalid |= assembled.found_invalid
     connectable_apps_section = build_connectable_apps_list(
-        get_connectable_apps_for_user(db_session, user)
+        list_connectable_apps(db_session, user)
     )
     return UserSkillsPayload(
         connectable_apps_section=connectable_apps_section,

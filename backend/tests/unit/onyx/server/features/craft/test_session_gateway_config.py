@@ -787,7 +787,7 @@ def test_reconcile_parses_stored_gateway_selection() -> None:
     cache.get.return_value = None
     with (
         patch.object(manager_module, "get_cache_backend", return_value=cache),
-        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+        patch.object(manager_module, "list_connectable_apps", return_value=[]),
     ):
         manager.reconcile_session_llm_config(
             cast(Sandbox, MagicMock(id=1)), session, cast(User, MagicMock(spec=User))
@@ -818,7 +818,7 @@ def test_reconcile_forwards_legacy_provider_selection() -> None:
     cache.get.return_value = None
     with (
         patch.object(manager_module, "get_cache_backend", return_value=cache),
-        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+        patch.object(manager_module, "list_connectable_apps", return_value=[]),
     ):
         manager.reconcile_session_llm_config(
             cast(Sandbox, MagicMock(id=1)), session, cast(User, MagicMock(spec=User))
@@ -850,7 +850,7 @@ def test_empty_gateway_session_restarts_instance_for_changed_catalog() -> None:
     cache.get.return_value = None
     with (
         patch.object(manager_module, "get_cache_backend", return_value=cache),
-        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+        patch.object(manager_module, "list_connectable_apps", return_value=[]),
     ):
         manager.reconcile_session_llm_config(sandbox, session, user)
 
@@ -952,7 +952,7 @@ def test_dispose_timeout_after_rewrite_converges_on_next_turn() -> None:
 
     with (
         patch.object(manager_module, "get_cache_backend", return_value=cache),
-        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+        patch.object(manager_module, "list_connectable_apps", return_value=[]),
     ):
         sandbox_manager.read_file.return_value = b"stale"
         sandbox_manager.dispose_opencode_instance.side_effect = httpx.ReadTimeout(
