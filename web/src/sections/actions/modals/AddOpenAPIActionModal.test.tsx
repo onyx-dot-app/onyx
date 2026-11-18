@@ -11,7 +11,7 @@ import {
   waitFor,
 } from "@tests/setup/test-utils";
 import AddOpenAPIActionModal from "@/sections/actions/modals/AddOpenAPIActionModal";
-import type { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
+import type { MethodSpec } from "@/lib/tools/types";
 
 type SchemaModalProps = Partial<ComponentProps<typeof AddOpenAPIActionModal>>;
 
@@ -19,29 +19,13 @@ function SchemaModal(props: SchemaModalProps) {
   return (
     <Modal open>
       <PluginModalContent>
-        {props.existingTool ? (
-          <AddOpenAPIActionModal
-            canManageDefaultChat
-            defaultChatEnabled
-            {...props}
-            presentation="inline"
-            existingTool={props.existingTool}
-            onSaveConfiguration={props.onSaveConfiguration ?? jest.fn()}
-            onConfigureAuthentication={undefined}
-          />
-        ) : (
-          <AddOpenAPIActionModal
-            canManageDefaultChat
-            defaultChatEnabled
-            {...props}
-            presentation="content"
-            existingTool={undefined}
-            onSaveConfiguration={undefined}
-            onConfigureAuthentication={
-              props.onConfigureAuthentication ?? jest.fn()
-            }
-          />
-        )}
+        <AddOpenAPIActionModal
+          title="Add OpenAPI plugin"
+          onClose={jest.fn()}
+          onBusyChange={jest.fn()}
+          onConfigureAuthentication={jest.fn()}
+          {...props}
+        />
       </PluginModalContent>
     </Modal>
   );
@@ -75,119 +59,14 @@ function methods(name: string): MethodSpec[] {
   ];
 }
 
-const tool: ToolSnapshot = {
-  id: 42,
-  name: "Saved",
-  display_name: "Saved",
-  description: "Saved description",
-  definition: definition("Saved"),
-  custom_headers: [{ key: "X-Api-Key", value: "saved-key" }],
-  in_code_tool_id: null,
-  passthrough_auth: false,
-  oauth_config_id: 99,
-  enabled: true,
-  chat_selectable: true,
-  agent_creation_selectable: true,
-  default_enabled: true,
-  permissions: { edit: true, authenticate: true },
-};
-
 function mockSchemaFetch() {
-  const requests = jest.fn<
-    ReturnType<typeof fetch>,
-    Parameters<typeof fetch>
-  >();
-  jest.spyOn(global, "fetch").mockImplementation((input, init) => {
-    if (String(input) === "/api/tool/openapi")
-      return Promise.resolve(new Response(JSON.stringify([tool])));
-    return requests(input, init);
-  });
-  return requests;
+  return jest.spyOn(global, "fetch");
 }
 
 afterEach(() => jest.restoreAllMocks());
 
-describe("inline schema editing", () => {
-  test("saves through the parent footer without a modal provider or closing", async () => {
-    const user = setupUser();
-    const onSaveConfiguration = jest.fn(() => updateResponse.promise);
-    const onClose = jest.fn();
-    const onBusyChange = jest.fn();
-    const updateResponse = deferred<void>();
-    mockSchemaFetch().mockImplementation(async (input, init) => {
-      if (String(input) === "/api/admin/tool/custom/validate")
-        return new Response(JSON.stringify({ methods: methods("getUser") }));
-      throw new Error(`Unexpected request to ${String(input)}`);
-    });
-    const footer = document.createElement("div");
-    document.body.appendChild(footer);
-    const view = render(
-      <AddOpenAPIActionModal
-        canManageDefaultChat
-        defaultChatEnabled
-        presentation="inline"
-        footerTarget={footer}
-        existingTool={tool}
-        onSaveConfiguration={onSaveConfiguration}
-        onClose={onClose}
-        onBusyChange={onBusyChange}
-      />
-    );
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("textbox", { name: /Description for Humans/ })
-    ).toHaveValue("Saved description");
-    expect(screen.queryByText("1 tool detected")).not.toBeInTheDocument();
-    expect(screen.queryByText("getUser")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "View tools" })
-    ).not.toBeInTheDocument();
-    fireEvent.change(
-      screen.getByRole("textbox", { name: /OpenAPI Schema Definition/ }),
-      {
-        target: { value: JSON.stringify(definition("Updated")) },
-      }
-    );
-    const save = screen.getByRole("button", { name: "Save Changes" });
-    expect(footer).toContainElement(save);
-    await user.click(save);
-    await waitFor(() => expect(onBusyChange).toHaveBeenLastCalledWith(true));
-    const editor = screen.getByRole("textbox", {
-      name: /OpenAPI Schema Definition/,
-    });
-    expect(editor).toBeDisabled();
-    await user.type(editor, " later edits");
-    expect(editor).toHaveValue(JSON.stringify(definition("Updated")));
-    await act(async () => {
-      updateResponse.resolve();
-    });
-    await waitFor(() => expect(onSaveConfiguration).toHaveBeenCalled());
-    expect(onClose).not.toHaveBeenCalled();
-    expect(
-      screen.getByRole("textbox", { name: /OpenAPI Schema Definition/ })
-    ).toHaveValue(JSON.stringify(definition("Updated")));
-    expect(screen.getByRole("button", { name: "Save Changes" })).toBeDisabled();
-    expect(onBusyChange).toHaveBeenLastCalledWith(false);
-    expect(editor).toBeEnabled();
-    view.rerender(
-      <AddOpenAPIActionModal
-        canManageDefaultChat
-        defaultChatEnabled
-        presentation="inline"
-        footerTarget={footer}
-        existingTool={tool}
-        active={false}
-        onSaveConfiguration={onSaveConfiguration}
-      />
-    );
-    expect(footer).toBeEmptyDOMElement();
-    view.unmount();
-    footer.remove();
-  });
-});
-
 describe("schema validation request ownership", () => {
-  test("shows descriptions and workspace availability without a server preview", async () => {
+  test("shows descriptions without a server preview", async () => {
     mockSchemaFetch().mockImplementation(
       async () => new Response(JSON.stringify({ methods: methods("getUser") }))
     );
@@ -202,9 +81,6 @@ describe("schema validation request ownership", () => {
     expect(
       screen.queryByText("https://github.example.com")
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("switch", { name: "Enable in default Chat" })
-    ).toBeChecked();
     expect(
       screen.getByRole("textbox", { name: /Description for Humans/ })
     ).toHaveValue("");
@@ -253,9 +129,6 @@ describe("schema validation request ownership", () => {
         name: "True",
         description: "",
         definition: schema,
-        custom_headers: [],
-        passthrough_auth: false,
-        defaultChatEnabled: true,
       })
     );
   });
@@ -268,7 +141,7 @@ describe("schema validation request ownership", () => {
       const fetchSpy = mockSchemaFetch()
         .mockReturnValueOnce(older.promise)
         .mockReturnValueOnce(current.promise);
-      await renderSchemaModal({ existingTool: tool });
+      await renderSchemaModal({ initialDefinition: definition("Saved") });
       await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
       fireEvent.change(
         screen.getByRole("textbox", { name: /OpenAPI Schema Definition/ }),
@@ -384,9 +257,6 @@ describe("explicit schema validation", () => {
         name: "Checking",
         description: "",
         definition: definition("Checking"),
-        custom_headers: [],
-        passthrough_auth: false,
-        defaultChatEnabled: true,
       })
     );
     expect(
@@ -411,9 +281,6 @@ describe("explicit schema validation", () => {
     });
     await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
     expect(screen.queryByText("preview")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("switch", { name: "Enable in default Chat" })
-    ).toBeChecked();
     const rawDefinition = JSON.stringify(definition("Draft")).replace(
       /}$/,
       ",}"
@@ -448,9 +315,6 @@ describe("explicit schema validation", () => {
         name: "Draft",
         description: "",
         definition: definition("Draft"),
-        custom_headers: [],
-        passthrough_auth: false,
-        defaultChatEnabled: true,
       })
     );
     expect(
@@ -505,10 +369,10 @@ test("human descriptions stay separate while agent descriptions sync with the sc
   mockSchemaFetch().mockResolvedValue(
     new Response(JSON.stringify({ methods: [] }))
   );
-  const onSaveConfiguration = jest.fn();
+  const onConfigureAuthentication = jest.fn();
   await renderSchemaModal({
-    existingTool: { ...tool, definition: definition("Draft"), description: "" },
-    onSaveConfiguration,
+    initialDefinition: definition("Draft"),
+    onConfigureAuthentication,
   });
   const human = screen.getByRole("textbox", { name: /Description for Humans/ });
   const agent = screen.getByRole("textbox", { name: /Description for Agents/ });
@@ -539,65 +403,12 @@ test("human descriptions stay separate while agent descriptions sync with the sc
   );
   expect(human).toHaveValue("Display summary");
   fireEvent.change(schema, { target: { value: JSON.stringify(fromSchema) } });
-  await setupUser().click(screen.getByRole("button", { name: "Save Changes" }));
+  await setupUser().click(screen.getByRole("button", { name: "Continue" }));
   await waitFor(() =>
-    expect(onSaveConfiguration).toHaveBeenCalledWith(
-      expect.objectContaining({
-        description: "Display summary",
-        definition: fromSchema,
-      })
-    )
-  );
-});
-
-test("does not save a blank name through implicit form submission", async () => {
-  mockSchemaFetch().mockImplementation(
-    async () => new Response(JSON.stringify({ methods: [] }))
-  );
-  const onSaveConfiguration = jest.fn();
-  await renderSchemaModal({ existingTool: tool, onSaveConfiguration });
-  const name = screen.getByRole("textbox", { name: "Name" });
-  fireEvent.change(name, { target: { value: "   " } });
-  const form = name.closest("form");
-  expect(form).not.toBeNull();
-  if (form) fireEvent.submit(form);
-  await act(async () => undefined);
-  expect(onSaveConfiguration).not.toHaveBeenCalled();
-});
-
-test("retains configuration drafts after a failed save and background refresh", async () => {
-  mockSchemaFetch().mockImplementation(
-    async () => new Response(JSON.stringify({ methods: [] }))
-  );
-  const onSaveConfiguration = jest
-    .fn<Promise<void>, [unknown]>()
-    .mockRejectedValueOnce(new Error("Save failed"))
-    .mockResolvedValueOnce(undefined);
-  const view = await renderSchemaModal({
-    existingTool: tool,
-    onSaveConfiguration,
-  });
-  const raw = JSON.stringify(definition("Draft")).replace(/}$/, ",}");
-  const editor = screen.getByRole("textbox", {
-    name: /OpenAPI Schema Definition/,
-  });
-  fireEvent.change(editor, { target: { value: raw } });
-  await setupUser().click(screen.getByRole("button", { name: "Save Changes" }));
-  await waitFor(() => expect(onSaveConfiguration).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(editor).toBeEnabled());
-  view.rerender(
-    <SchemaModal
-      existingTool={{ ...tool, definition: definition("Background refresh") }}
-      onSaveConfiguration={onSaveConfiguration}
-    />
-  );
-  expect(editor).toHaveValue(raw);
-  await setupUser().click(screen.getByRole("button", { name: "Save Changes" }));
-  await waitFor(() => expect(onSaveConfiguration).toHaveBeenCalledTimes(2));
-  expect(onSaveConfiguration).toHaveBeenLastCalledWith({
-    definition: definition("Draft"),
-  });
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Save Changes" })).toBeDisabled()
+    expect(onConfigureAuthentication).toHaveBeenCalledWith({
+      name: "Draft",
+      description: "Display summary",
+      definition: fromSchema,
+    })
   );
 });

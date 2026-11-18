@@ -12,15 +12,17 @@ from onyx.sandbox_proxy.destination_policy import (
     parse_destination_policy,
     resolve_destination,
 )
+from onyx.sandbox_proxy.resolvers.integration import IntegrationResolver
 from onyx.sandbox_proxy.resolvers.mcp_matching import CraftMCPTarget
-from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
 from onyx.server.security.models import SSRFProtectionLevel
 from tests.unit.sandbox_proxy.conftest import (
     NoMatchedRequest,
     StubResolver,
     make_flow,
     make_resolved_sandbox,
+    mcp_targets,
     unused_cache,
+    usable_ids,
 )
 
 
@@ -49,7 +51,7 @@ async def test_private_mcp_origin(
 ) -> None:
     scheme = "http" if phase.endswith("_http") else "https"
     sandbox = make_resolved_sandbox()
-    resolver = MCPServerResolver()
+    resolver = IntegrationResolver()
     targets = (
         ()
         if case == "disabled"
@@ -65,14 +67,14 @@ async def test_private_mcp_origin(
             ),
         )
     )
-    load_targets = MagicMock(return_value=targets)
+    load_targets = MagicMock(return_value=mcp_targets(*targets))
     load_access = MagicMock(
-        return_value=frozenset() if case == "inaccessible" else frozenset({1})
+        return_value=usable_ids() if case == "inaccessible" else usable_ids(1)
     )
     if case == "db_error":
         load_access.side_effect = RuntimeError("database unavailable")
-    monkeypatch.setattr(resolver, "_load_targets", load_targets)
-    monkeypatch.setattr(resolver, "_load_accessible_ids", load_access)
+    monkeypatch.setattr(resolver._usable, "_load_targets", load_targets)
+    monkeypatch.setattr(resolver._usable, "_load", load_access)
     pin = MagicMock()
     monkeypatch.setattr("onyx.sandbox_proxy.addons.gate.pin_destination", pin)
     addon = GateAddon(
@@ -82,7 +84,7 @@ async def test_private_mcp_origin(
         proxy_instance_id="test",
         credential_dispatcher=CredentialInjectionDispatcher([]),
         destination_policy=parse_destination_policy("https://onyx.test"),
-        mcp_resolver=resolver,
+        integration_resolver=resolver,
     )
     flow = make_flow(host=host, port=8443)
     flow.request.scheme = scheme
@@ -166,7 +168,7 @@ def test_mcp_validates_resolved_addresses(
         )
     monkeypatch.setattr(socket, "getaddrinfo", dns)
     mcp_ssrf_settings.ssrf_protection_level = level
-    resolver = MCPServerResolver()
+    resolver = IntegrationResolver()
     monkeypatch.setattr(resolver, "allows_destination", lambda *_args: True)
     result = resolve_destination(
         parse_destination_policy("https://onyx.test"),
@@ -175,7 +177,7 @@ def test_mcp_validates_resolved_addresses(
         scheme="https",
         peer=("10.0.0.1", 1234),
         identity=StubResolver(sandbox=make_resolved_sandbox()),
-        mcp_resolver=resolver,
+        integration_resolver=resolver,
     )
     allowed = level in {
         SSRFProtectionLevel.ALLOW_PRIVATE_NETWORK,
@@ -198,11 +200,11 @@ def test_mcp_rechecks_tenant_ssrf_settings(
     from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
     sandbox = make_resolved_sandbox(tenant_id="tenant-mcp")
-    resolver = MCPServerResolver()
+    resolver = IntegrationResolver()
     monkeypatch.setattr(
-        resolver,
+        resolver._usable,
         "_load_targets",
-        lambda _tenant: (
+        lambda _tenant: mcp_targets(
             CraftMCPTarget(
                 server_id=1,
                 scheme="https",
@@ -212,9 +214,7 @@ def test_mcp_rechecks_tenant_ssrf_settings(
             ),
         ),
     )
-    monkeypatch.setattr(
-        resolver, "_load_accessible_ids", lambda _tenant, _user: frozenset({1})
-    )
+    monkeypatch.setattr(resolver._usable, "_load", lambda _tenant, _user: usable_ids(1))
 
     def settings(*, allow_fallback: bool = True) -> MagicMock:
         assert not allow_fallback
@@ -241,7 +241,7 @@ def test_mcp_rechecks_tenant_ssrf_settings(
                 scheme="https",
                 peer=("10.0.0.1", 1234),
                 identity=identity,
-                mcp_resolver=resolver,
+                integration_resolver=resolver,
             )
             == expected
         )
@@ -258,7 +258,7 @@ def test_mcp_rechecks_tenant_ssrf_settings(
             scheme="https",
             peer=("10.0.0.1", 1234),
             identity=identity,
-            mcp_resolver=resolver,
+            integration_resolver=resolver,
         )
         is None
     )
@@ -277,9 +277,9 @@ def test_private_mcp_denies_real_settings_read_failure(
     from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
     sandbox = make_resolved_sandbox(tenant_id="tenant-strict")
-    resolver = MCPServerResolver()
+    resolver = IntegrationResolver()
     targets = MagicMock(
-        return_value=(
+        return_value=mcp_targets(
             CraftMCPTarget(
                 server_id=1,
                 scheme="https",
@@ -289,9 +289,9 @@ def test_private_mcp_denies_real_settings_read_failure(
             ),
         )
     )
-    access = MagicMock(return_value=frozenset({1}))
-    monkeypatch.setattr(resolver, "_load_targets", targets)
-    monkeypatch.setattr(resolver, "_load_accessible_ids", access)
+    access = MagicMock(return_value=usable_ids(1))
+    monkeypatch.setattr(resolver._usable, "_load_targets", targets)
+    monkeypatch.setattr(resolver._usable, "_load", access)
     monkeypatch.setattr(store, "_CACHE", TTLCache(maxsize=100, ttl=10))
     monkeypatch.setattr(store, "MULTI_TENANT", False)
     monkeypatch.setattr(store._cfg, "MCP_SERVER_ALLOW_PRIVATE_NETWORK", True)
@@ -318,7 +318,7 @@ def test_private_mcp_denies_real_settings_read_failure(
             scheme="https",
             peer=("10.0.0.1", 1234),
             identity=identity,
-            mcp_resolver=resolver,
+            integration_resolver=resolver,
         )
         is None
     )
@@ -342,7 +342,7 @@ def test_private_mcp_denies_real_settings_read_failure(
                 scheme="https",
                 peer=("10.0.0.1", 1234),
                 identity=identity,
-                mcp_resolver=resolver,
+                integration_resolver=resolver,
             )
             is None
         )
@@ -363,7 +363,7 @@ def test_private_mcp_denies_real_settings_read_failure(
         scheme="https",
         peer=("10.0.0.1", 1234),
         identity=identity,
-        mcp_resolver=resolver,
+        integration_resolver=resolver,
     ) == ("10.1.2.3",)
 
 
@@ -414,7 +414,7 @@ def test_disabled_ssrf_matches_backend_mcp_hostname_policy(
     else:
         with pytest.raises(SSRFException):
             validate_mcp_outbound_url(url)
-    resolver = MCPServerResolver()
+    resolver = IntegrationResolver()
     monkeypatch.setattr(resolver, "allows_destination", lambda *_args: True)
     addresses = resolve_destination(
         parse_destination_policy("https://onyx.test"),
@@ -423,7 +423,7 @@ def test_disabled_ssrf_matches_backend_mcp_hostname_policy(
         scheme="http",
         peer=("10.0.0.1", 1234),
         identity=StubResolver(sandbox=make_resolved_sandbox()),
-        mcp_resolver=resolver,
+        integration_resolver=resolver,
     )
     assert (addresses is not None) == allowed
 
@@ -453,7 +453,7 @@ def test_destination_resolver_uses_one_dns_snapshot(
     identity = StubResolver(sandbox=sandbox)
     lookup = MagicMock(return_value=sandbox)
     monkeypatch.setattr(identity, "resolve_sandbox", lookup)
-    mcp = MCPServerResolver()
+    mcp = IntegrationResolver()
     access = MagicMock(return_value=True)
     monkeypatch.setattr(mcp, "allows_destination", access)
     # A second resolution must not replace the answers that policy checked.
@@ -474,7 +474,7 @@ def test_destination_resolver_uses_one_dns_snapshot(
         scheme="https",
         peer=("::ffff:10.0.0.1", 1234),
         identity=identity,
-        mcp_resolver=mcp,
+        integration_resolver=mcp,
     )
 
     assert result == (tuple(addresses) if allowed else None)
@@ -492,7 +492,7 @@ def test_internal_destination_requires_authorization_context(
     monkeypatch: pytest.MonkeyPatch, missing: str
 ) -> None:
     identity = StubResolver(sandbox=make_resolved_sandbox())
-    mcp = MCPServerResolver()
+    mcp = IntegrationResolver()
     access = MagicMock(return_value=True)
     monkeypatch.setattr(mcp, "allows_destination", access)
 
@@ -504,7 +504,7 @@ def test_internal_destination_requires_authorization_context(
             scheme="" if missing == "scheme" else "https",
             peer=None if missing == "peer" else ("10.0.0.1", 1234),
             identity=None if missing == "identity" else identity,
-            mcp_resolver=None if missing == "mcp_resolver" else mcp,
+            integration_resolver=None if missing == "mcp_resolver" else mcp,
         )
         is None
     )
@@ -525,7 +525,7 @@ async def test_request_checks_pending_and_connected_addresses(
 
     host = "private-mcp.test"
     port = 8443
-    resolver = MCPServerResolver()
+    resolver = IntegrationResolver()
     monkeypatch.setattr(resolver, "allows_destination", lambda *_args: True)
     pin = MagicMock()
     monkeypatch.setattr("onyx.sandbox_proxy.addons.gate.pin_destination", pin)
@@ -543,7 +543,7 @@ async def test_request_checks_pending_and_connected_addresses(
         proxy_instance_id="test",
         credential_dispatcher=CredentialInjectionDispatcher([]),
         destination_policy=parse_destination_policy("https://onyx.test"),
-        mcp_resolver=resolver,
+        integration_resolver=resolver,
     )
     flow = make_flow(host=host, port=port)
     flow.request.scheme = "http"

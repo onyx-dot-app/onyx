@@ -613,9 +613,14 @@ export function useChatController(
           file_descriptors: fileDescriptors,
           deep_research: toolOptions?.deepResearch ?? false,
           origin: "mobile",
-          allowed_tool_ids: toolOptions?.allowedToolIds ?? null,
-          preferred_tool_id: toolOptions?.preferredToolId ?? null,
-          internal_search_filters: toolOptions?.internalSearchFilters ?? null,
+          tool_options: {
+            allowed: toolOptions?.allowed ?? null,
+            preferred:
+              toolOptions?.preferredToolId != null
+                ? { type: "capability", tool_id: toolOptions.preferredToolId }
+                : null,
+            internal_search_filters: toolOptions?.internalSearchFilters ?? null,
+          },
           llm_override: toolOptions?.llmOverride ?? null,
         };
 

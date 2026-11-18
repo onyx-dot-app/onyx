@@ -1,9 +1,6 @@
-import type {
-  ExternalAppType,
-  ExternalAppUserResponse,
-} from "@/app/craft/v1/apps/registry";
+import type { ExternalAppType } from "@/app/craft/v1/apps/registry";
+import type { CraftApp, CraftMcpServer } from "@/lib/integrations/craft";
 import type { SkillsList } from "@/lib/skills/types";
-import type { MCPServer } from "@/lib/mcp/types";
 import type { CaretText } from "@/lib/contentEditable";
 import { CRAFT_APPS_TAB_PARAM } from "@/app/craft/v1/apps/connectableApps";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
@@ -50,12 +47,10 @@ export function compareByName<T extends { name: string }>(a: T, b: T): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 }
 
-// Associated custom skills remain normal per-user selections, with app
-// readiness as an additional runtime requirement.
 export function toPickerSections(
   skillsData: SkillsList | undefined,
-  externalApps: ExternalAppUserResponse[] | undefined,
-  mcpServers?: MCPServer[] | undefined
+  externalApps: CraftApp[] | undefined,
+  mcpServers?: CraftMcpServer[] | undefined
 ): PickerSections {
   if (!skillsData && !externalApps && !mcpServers) return EMPTY_SECTIONS;
 
@@ -73,13 +68,7 @@ export function toPickerSections(
   }
 
   for (const c of skillsData?.customs ?? []) {
-    if (
-      !c.enabled ||
-      c.is_valid === false ||
-      (c.external_app !== null && !c.external_app.ready)
-    ) {
-      continue;
-    }
+    if (!c.enabled || c.is_valid === false) continue;
     skills.push({
       kind: "skill",
       slug: c.name,
@@ -106,7 +95,7 @@ export function toPickerSections(
       serverUrl: server.server_url,
       // Whether Craft can actually authenticate this user against the server,
       // not whether a credential row exists. See `craft_connected`.
-      authenticated: server.craft_connected ?? false,
+      authenticated: server.craft_connected,
     });
   }
 

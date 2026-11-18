@@ -6,76 +6,38 @@ import { useTranslations } from "next-intl";
 import {
   Button,
   CopyButton,
-  Divider,
   InputTextArea,
-  InputTypeIn,
   Modal,
   Tooltip,
 } from "@opal/components";
 import { InputErrorText, InputVertical, toast } from "@opal/layouts";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import PluginAvailabilitySwitch from "@/sections/plugins/PluginAvailabilitySwitch";
 import { Hoverable } from "@opal/core";
-import type { ToolSnapshot } from "@/lib/tools/types";
-import { can } from "@/lib/permissions/resource-actions";
-import { validateToolDefinition, type createCustomTool } from "@/lib/tools/svc";
+import { validateToolDefinition } from "@/lib/tools/svc";
 import debounce from "lodash/debounce";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
-import { Formik, Form, useFormikContext, type FormikHelpers } from "formik";
+import { Formik, Form, useFormikContext } from "formik";
 import * as Yup from "yup";
 import { SvgBracketCurly } from "@opal/icons";
-import MCPFormDirtyObserver from "@/sections/actions/modals/MCPFormDirtyObserver";
 
-export type OpenAPIConfigurationValues = Partial<
-  Pick<ToolSnapshot, "name" | "description">
-> & {
-  definition?: NonNullable<ToolSnapshot["definition"]>;
-  defaultChatEnabled?: boolean;
-};
-
-export type OpenAPICreationDraft = Omit<
-  Parameters<typeof createCustomTool>[0],
-  "enabled"
-> & { defaultChatEnabled: boolean };
-
-interface SharedFormProps {
-  footerTarget?: HTMLElement | null;
-  active?: boolean;
-  onBusyChange?: (busy: boolean) => void;
-  onDirtyChange?: (dirty: boolean) => void;
-  initialDefinition?: ToolSnapshot["definition"];
-  initialDescription?: string;
-  defaultChatEnabled?: boolean;
-  canManageDefaultChat?: boolean;
-  defaultChatReady?: boolean;
-  title?: string | RichStr;
-  onClose?: () => void;
-}
-
-type AddOpenAPIActionModalProps = SharedFormProps &
-  (
-    | {
-        presentation: "inline";
-        existingTool: ToolSnapshot;
-        onSaveConfiguration: (
-          values: OpenAPIConfigurationValues
-        ) => Promise<void>;
-        onConfigureAuthentication?: never;
-      }
-    | {
-        presentation: "content";
-        existingTool?: never;
-        onSaveConfiguration?: never;
-        onConfigureAuthentication: (draft: OpenAPICreationDraft) => void;
-      }
-  );
-
-interface OpenAPIActionFormValues {
+export interface OpenAPICreationDraft {
   name: string;
   description: string;
-  defaultChatEnabled: boolean | null;
+  definition: Record<string, unknown>;
+}
+
+interface AddOpenAPIActionModalProps {
+  title: string | RichStr;
+  onClose: () => void;
+  onBusyChange: (busy: boolean) => void;
+  initialDefinition?: Record<string, unknown>;
+  initialDescription?: string;
+  onConfigureAuthentication: (draft: OpenAPICreationDraft) => void;
+}
+
+interface OpenAPIActionFormValues {
+  description: string;
   definition: string;
 }
 
@@ -99,44 +61,22 @@ function parseJsonWithTrailingCommas(jsonString: string) {
 }
 
 interface FormContentProps {
-  defaultChatEnabled: boolean;
-  canManageDefaultChat: boolean;
-  defaultChatReady: boolean;
-  presentation: "inline" | "content";
-  footerTarget?: HTMLElement | null;
-  active: boolean;
-  onBusyChange?: (busy: boolean) => void;
-  onDirtyChange?: (dirty: boolean) => void;
+  onBusyChange: (busy: boolean) => void;
   handleClose: () => void;
-  existingTool: ToolSnapshot | null;
-  title?: string | RichStr;
+  title: string | RichStr;
 }
 
-function FormContent({
-  defaultChatEnabled,
-  canManageDefaultChat,
-  defaultChatReady,
-  presentation,
-  footerTarget,
-  active,
-  onBusyChange,
-  onDirtyChange,
-  handleClose,
-  existingTool,
-  title,
-}: FormContentProps) {
+function FormContent({ onBusyChange, handleClose, title }: FormContentProps) {
   const t = useTranslations("actions");
-  const fields = useTranslations("agents.editor.general");
-  const canEdit = !existingTool || can(existingTool, "edit");
-  const { values, setFieldValue, dirty, isSubmitting, submitForm } =
+  const { values, setFieldValue, isSubmitting, submitForm } =
     useFormikContext<OpenAPIActionFormValues>();
 
   const validationRequest = useRef(0);
   const [definitionError, setDefinitionError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   useEffect(() => {
-    onBusyChange?.(isSubmitting || checking);
-    return () => onBusyChange?.(false);
+    onBusyChange(isSubmitting || checking);
+    return () => onBusyChange(false);
   }, [isSubmitting, checking, onBusyChange]);
   const editableSchema = useMemo(() => {
     try {
@@ -162,8 +102,6 @@ function FormContent({
     typeof editableSchema.info.description === "string"
       ? editableSchema.info.description
       : "";
-
-  const isEditMode = Boolean(existingTool);
 
   const handleFormat = useCallback(() => {
     if (!values.definition.trim()) {
@@ -215,17 +153,6 @@ function FormContent({
     [validateDefinition]
   );
 
-  const modalTitle = isEditMode
-    ? t("addOpenApiModal.editHeader.title")
-    : t("addOpenApiModal.addHeader.title");
-  const primaryButtonLabel = isSubmitting
-    ? isEditMode
-      ? t("addOpenApiModal.submitButton.savingLabel")
-      : t("addOpenApiModal.submitButton.addingLabel")
-    : isEditMode
-      ? t("addOpenApiModal.submitButton.saveLabel")
-      : t("addOpenApiModal.submitButton.addLabel");
-
   useEffect(() => {
     setDefinitionError(null);
     if (values.definition.trim()) {
@@ -238,112 +165,70 @@ function FormContent({
     };
   }, [values.definition, debouncedValidateDefinition]);
 
-  const inlineSave = (
-    <Button
-      disabled={
-        isSubmitting ||
-        checking ||
-        !dirty ||
-        (isEditMode && !values.name.trim()) ||
-        !canEdit
-      }
-      type="button"
-      onClick={() => void submitForm()}
-    >
-      {primaryButtonLabel}
-    </Button>
-  );
-
-  const definitionField = (
-    <div className="w-full">
-      <InputVertical
-        withLabel="definition"
-        title={t("addOpenApiModal.definition.title")}
-        description={markdown(
-          t("addOpenApiModal.definition.subDescription", {
-            docsUrl: `${DOCS_ADMINS_PATH}/actions/openapi`,
-          })
-        )}
-      >
-        <Hoverable.Root group="definitionField" width="full">
-          <div className="relative w-full">
-            {values.definition.trim() && (
-              <div className="absolute z-100000 top-2 end-2 bg-background-tint-00">
-                <Hoverable.Item
-                  group="definitionField"
-                  variant="appear-on-hover"
-                >
-                  <div className="flex">
-                    <CopyButton
-                      prominence="tertiary"
-                      size="sm"
-                      getCopyText={() => values.definition}
-                      tooltip={t("addOpenApiModal.copyButton.tooltip")}
-                    />
-                    <Button
-                      prominence="tertiary"
-                      size="sm"
-                      icon={SvgBracketCurly}
-                      disabled={checking || isSubmitting || !canEdit}
-                      aria-label={t("addOpenApiModal.formatButton.tooltip")}
-                      tooltip={t("addOpenApiModal.formatButton.tooltip")}
-                      onClick={handleFormat}
-                    />
-                  </div>
-                </Hoverable.Item>
-              </div>
-            )}
-            <div className="font-main-ui-mono">
-              <InputTextAreaField
-                name="definition"
-                variant={
-                  checking || isSubmitting || !canEdit
-                    ? "disabled"
-                    : definitionError
-                      ? "error"
-                      : undefined
-                }
-                rows={8}
-                placeholder={t("addOpenApiModal.definition.placeholder")}
-              />
-            </div>
-          </div>
-        </Hoverable.Root>
-      </InputVertical>
-      {definitionError && (
-        <InputErrorText type="error">{definitionError}</InputErrorText>
-      )}
-    </div>
-  );
-
   return (
     <Form className="contents">
-      {onDirtyChange && <MCPFormDirtyObserver onDirtyChange={onDirtyChange} />}
-      {presentation !== "inline" && (
-        <Modal.Header
-          padding={4}
-          title={title ?? modalTitle}
-          onClose={handleClose}
-        />
-      )}
+      <Modal.Header padding={4} title={title} onClose={handleClose} />
 
-      <Modal.Body
-        twoTone={false}
-        padding={presentation === "inline" ? 0 : 6}
-        gap={4}
-        alignItems="stretch"
-      >
-        {isEditMode && (
-          <InputVertical title={fields("name.title")} withLabel="plugin-name">
-            <InputTypeIn
-              id="plugin-name"
-              value={values.name}
-              onChange={(event) => setFieldValue("name", event.target.value)}
-              variant={isSubmitting || !canEdit ? "disabled" : "primary"}
-            />
+      <Modal.Body twoTone={false} padding={6} gap={4} alignItems="stretch">
+        <div className="w-full">
+          <InputVertical
+            withLabel="definition"
+            title={t("addOpenApiModal.definition.title")}
+            description={markdown(
+              t("addOpenApiModal.definition.subDescription", {
+                docsUrl: `${DOCS_ADMINS_PATH}/actions/openapi`,
+              })
+            )}
+          >
+            <Hoverable.Root group="definitionField" width="full">
+              <div className="relative w-full">
+                {values.definition.trim() && (
+                  <div className="absolute z-100000 top-2 end-2 bg-background-tint-00">
+                    <Hoverable.Item
+                      group="definitionField"
+                      variant="appear-on-hover"
+                    >
+                      <div className="flex">
+                        <CopyButton
+                          prominence="tertiary"
+                          size="sm"
+                          getCopyText={() => values.definition}
+                          tooltip={t("addOpenApiModal.copyButton.tooltip")}
+                        />
+                        <Button
+                          prominence="tertiary"
+                          size="sm"
+                          icon={SvgBracketCurly}
+                          disabled={checking || isSubmitting}
+                          aria-label={t("addOpenApiModal.formatButton.tooltip")}
+                          tooltip={t("addOpenApiModal.formatButton.tooltip")}
+                          onClick={handleFormat}
+                        />
+                      </div>
+                    </Hoverable.Item>
+                  </div>
+                )}
+                <div className="font-main-ui-mono">
+                  <InputTextAreaField
+                    name="definition"
+                    variant={
+                      checking || isSubmitting
+                        ? "disabled"
+                        : definitionError
+                          ? "error"
+                          : undefined
+                    }
+                    rows={8}
+                    placeholder={t("addOpenApiModal.definition.placeholder")}
+                  />
+                </div>
+              </div>
+            </Hoverable.Root>
           </InputVertical>
-        )}
-        {!isEditMode && definitionField}
+          {definitionError && (
+            <InputErrorText type="error">{definitionError}</InputErrorText>
+          )}
+        </div>
         <InputVertical
           title={t("addOpenApiModal.humanDescription.title")}
           suffix="optional"
@@ -356,9 +241,7 @@ function FormContent({
             onChange={(event) =>
               setFieldValue("description", event.target.value)
             }
-            variant={
-              checking || isSubmitting || !canEdit ? "disabled" : "primary"
-            }
+            variant={checking || isSubmitting ? "disabled" : "primary"}
             rows={3}
           />
         </InputVertical>
@@ -397,7 +280,7 @@ function FormContent({
                   );
                 }}
                 variant={
-                  checking || isSubmitting || !canEdit || !editableSchema
+                  checking || isSubmitting || !editableSchema
                     ? "disabled"
                     : "primary"
                 }
@@ -406,86 +289,47 @@ function FormContent({
             </div>
           </Tooltip>
         </InputVertical>
-        {isEditMode && definitionField}
-        <Divider paddingParallel={0} />
-        <Tooltip
-          tooltip={
-            !canManageDefaultChat
-              ? t("plugins.controls.defaultChatAdminOnly")
-              : undefined
-          }
-        >
-          <div className="w-full">
-            <PluginAvailabilitySwitch
-              surface="chat"
-              enabled={values.defaultChatEnabled ?? defaultChatEnabled}
-              onChange={(enabled) =>
-                setFieldValue(
-                  "defaultChatEnabled",
-                  enabled === defaultChatEnabled ? null : enabled
-                )
-              }
-              disabled={
-                isSubmitting || !canManageDefaultChat || !defaultChatReady
-              }
-            />
-          </div>
-        </Tooltip>
       </Modal.Body>
 
-      {presentation === "inline" ? (
-        active &&
-        (footerTarget ? createPortal(inlineSave, footerTarget) : inlineSave)
-      ) : (
-        <Modal.Footer padding={6}>
-          <div className="ms-auto flex items-center gap-2">
-            <Button
-              disabled={isSubmitting || checking}
-              prominence="secondary"
-              type="button"
-              onClick={handleClose}
-            >
-              {t("addOpenApiModal.cancelButton.label")}
-            </Button>
-            <Button
-              type="button"
-              disabled={!values.definition.trim() || checking}
-              onClick={async () => {
-                setChecking(true);
-                debouncedValidateDefinition.cancel();
-                const validation = validateDefinition(values.definition);
-                const request = validationRequest.current;
-                try {
-                  if (await validation) await submitForm();
-                } finally {
-                  if (request === validationRequest.current) setChecking(false);
-                }
-              }}
-            >
-              {checking ? t("mcpSetup.checking") : t("mcpSetup.continue")}
-            </Button>
-          </div>
-        </Modal.Footer>
-      )}
+      <Modal.Footer padding={6}>
+        <div className="ms-auto flex items-center gap-2">
+          <Button
+            disabled={isSubmitting || checking}
+            prominence="secondary"
+            type="button"
+            onClick={handleClose}
+          >
+            {t("addOpenApiModal.cancelButton.label")}
+          </Button>
+          <Button
+            type="button"
+            disabled={!values.definition.trim() || checking}
+            onClick={async () => {
+              setChecking(true);
+              debouncedValidateDefinition.cancel();
+              const validation = validateDefinition(values.definition);
+              const request = validationRequest.current;
+              try {
+                if (await validation) await submitForm();
+              } finally {
+                if (request === validationRequest.current) setChecking(false);
+              }
+            }}
+          >
+            {checking ? t("mcpSetup.checking") : t("mcpSetup.continue")}
+          </Button>
+        </div>
+      </Modal.Footer>
     </Form>
   );
 }
 
 export default function AddOpenAPIActionModal({
-  onSaveConfiguration,
-  presentation,
-  footerTarget,
-  active = true,
-  onBusyChange,
-  onDirtyChange,
-  existingTool,
   onClose,
   title,
+  onBusyChange,
   initialDefinition,
   initialDescription,
-  defaultChatEnabled = false,
-  canManageDefaultChat = false,
-  defaultChatReady = true,
   onConfigureAuthentication,
 }: AddOpenAPIActionModalProps) {
   const t = useTranslations("actions");
@@ -494,67 +338,20 @@ export default function AddOpenAPIActionModal({
     definition: Yup.string().required(t("addOpenApiModal.definition.required")),
   });
 
-  const initialValues: OpenAPIActionFormValues = useMemo(
-    () => ({
-      name: existingTool?.name ?? "",
-      description: existingTool?.description ?? initialDescription ?? "",
-      defaultChatEnabled: null,
-      definition:
-        existingTool?.definition || initialDefinition
-          ? JSON.stringify(
-              existingTool?.definition ?? initialDefinition,
-              null,
-              2
-            )
-          : "",
-    }),
-    [existingTool, initialDefinition, initialDescription]
-  );
+  const initialValues: OpenAPIActionFormValues = {
+    description: initialDescription ?? "",
+    definition: initialDefinition
+      ? JSON.stringify(initialDefinition, null, 2)
+      : "",
+  };
 
-  const configurationBaseline = useRef(initialValues);
-
-  const handleSubmit = async (
-    values: OpenAPIActionFormValues,
-    { resetForm }: FormikHelpers<OpenAPIActionFormValues>
-  ) => {
-    if (onSaveConfiguration) {
-      if (!values.name.trim()) return;
-      try {
-        const changes: OpenAPIConfigurationValues = {};
-        if (values.name !== configurationBaseline.current.name)
-          changes.name = values.name.trim();
-        if (values.description !== configurationBaseline.current.description)
-          changes.description = values.description.trim();
-        if (values.defaultChatEnabled !== null)
-          changes.defaultChatEnabled = values.defaultChatEnabled;
-        if (values.definition !== configurationBaseline.current.definition) {
-          const definition = parseJsonWithTrailingCommas(values.definition);
-          const validation = await validateToolDefinition({ definition });
-          if (validation.error) throw new Error(validation.error);
-          changes.definition = definition;
-        }
-        await onSaveConfiguration(changes);
-        const savedValues = { ...values, defaultChatEnabled: null };
-        configurationBaseline.current = savedValues;
-        resetForm({ values: savedValues });
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : t("addOpenApiModal.toasts.updateFailed")
-        );
-      }
-      return;
-    }
+  const handleSubmit = async (values: OpenAPIActionFormValues) => {
     try {
       const definition = parseJsonWithTrailingCommas(values.definition);
       onConfigureAuthentication({
         name: definition.info.title,
         description: values.description.trim(),
         definition,
-        custom_headers: [],
-        passthrough_auth: false,
-        defaultChatEnabled: values.defaultChatEnabled ?? defaultChatEnabled,
       });
     } catch {
       toast.error(t("addOpenApiModal.toasts.invalidJson"));
@@ -568,16 +365,8 @@ export default function AddOpenAPIActionModal({
       onSubmit={handleSubmit}
     >
       <FormContent
-        defaultChatEnabled={defaultChatEnabled}
-        canManageDefaultChat={canManageDefaultChat}
-        defaultChatReady={defaultChatReady}
-        presentation={presentation}
-        footerTarget={footerTarget}
-        active={active}
         onBusyChange={onBusyChange}
-        onDirtyChange={onDirtyChange}
-        handleClose={() => onClose?.()}
-        existingTool={existingTool ?? null}
+        handleClose={onClose}
         title={title}
       />
     </Formik>

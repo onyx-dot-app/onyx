@@ -71,27 +71,20 @@ import { ConfirmationModalLayout } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
-import { externalAppAdminUrl } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
 import { useSkillLimitCopy } from "@/lib/skills/hooks";
 
 interface SkillEditorPageProps {
   skillId?: string;
   draftId?: string;
-  externalAppId?: number;
-  externalAppName?: string;
 }
 
 export default function SkillEditorPage({
   skillId,
   draftId,
-  externalAppId,
-  externalAppName,
 }: SkillEditorPageProps) {
   const t = useTranslations("skills");
   const { describeError } = useSkillLimitCopy();
   const isCreating = skillId === undefined;
-  const hasAppContext = externalAppId !== undefined;
-  const isCreatingForApp = isCreating && hasAppContext;
   const navigation = useNavigation();
   const { user } = useUser();
   const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
@@ -129,8 +122,6 @@ export default function SkillEditorPage({
       name || t("editor.header.createTitle"),
       user ? { id: user.id, email: user.email } : null
     ),
-    public_permission: isCreatingForApp ? "VIEWER" : null,
-    external_app: isCreatingForApp ? { name: externalAppName ?? "" } : null,
     ...creationSharing,
     name: name || t("editor.header.createTitle"),
   };
@@ -148,9 +139,6 @@ export default function SkillEditorPage({
   const [removingFilePath, setRemovingFilePath] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [conflictingSkillName, setConflictingSkillName] = useState<
-    string | null
-  >(null);
-  const [appConflictingSkillName, setAppConflictingSkillName] = useState<
     string | null
   >(null);
   // A save, upload or file removal started from an older version than the
@@ -235,9 +223,7 @@ export default function SkillEditorPage({
     !isVersionStale;
 
   function leaveEditor() {
-    navigation.go(
-      hasAppContext ? externalAppAdminUrl(externalAppId) : "/craft/v1/skills"
-    );
+    navigation.go("/craft/v1/skills");
   }
 
   function handleCancel() {
@@ -252,7 +238,6 @@ export default function SkillEditorPage({
     event?.preventDefault();
     if (!canSave) return;
     setIsSaving(true);
-    setAppConflictingSkillName(null);
     try {
       if (isCreating) {
         const created = await createCustomSkillFromEditor(
@@ -260,8 +245,7 @@ export default function SkillEditorPage({
             name,
             description,
             instructions_markdown: instructionsMarkdown,
-            auto_enable: isCreatingForApp ? false : !createDisabled,
-            external_app_id: externalAppId,
+            auto_enable: !createDisabled,
             sharing: creationSharing
               ? serializeSkillSharing(creationSharing, canManageOrgSkills)
               : undefined,
@@ -270,28 +254,11 @@ export default function SkillEditorPage({
         );
         nameConflictModal.toggle(false);
         if (draftId) discardSkillCreationDraft(draftId);
-        if (isCreatingForApp) {
-          // The app editor reads this cache as soon as we return. Wait for its
-          // association to refresh so the newly created skill is visible.
-          try {
-            await mutate(SWR_KEYS.buildExternalAppsAdmin);
-          } catch (error) {
-            console.error(
-              "Failed to refresh external app after skill creation",
-              error
-            );
-          }
-        }
         void refreshSkillLists(mutate).catch((error: unknown) => {
           console.error("Failed to refresh skill data after creation", error);
         });
         toast.success(t("editor.toasts.created", { name: created.name }));
-        navigation.go(
-          isCreatingForApp
-            ? externalAppAdminUrl(externalAppId)
-            : "/craft/v1/skills",
-          { replace: true }
-        );
+        navigation.go("/craft/v1/skills", { replace: true });
         return;
       }
 
@@ -322,20 +289,11 @@ export default function SkillEditorPage({
       await refreshSkillLists(mutate);
       toast.success(t("editor.toasts.saved", { name: updated.name }));
     } catch (err) {
-      if (isCreatingForApp && isSkillNameConflict(err)) {
-        setAppConflictingSkillName(name.trim());
-        return;
-      }
       if (!isCreating && isSkillVersionStale(err)) {
         setIsVersionStale(true);
         return;
       }
-      if (
-        isCreating &&
-        !isCreatingForApp &&
-        !createDisabled &&
-        isSkillNameConflict(err)
-      ) {
+      if (isCreating && !createDisabled && isSkillNameConflict(err)) {
         setConflictingSkillName(name.trim());
         nameConflictModal.toggle(true);
         return;
@@ -482,16 +440,6 @@ export default function SkillEditorPage({
     setIsDeleting(true);
     try {
       await deleteUserSkill(skill.id);
-      if (hasAppContext) {
-        try {
-          await mutate(SWR_KEYS.buildExternalAppsAdmin);
-        } catch (error) {
-          console.error(
-            "Failed to refresh external app after skill deletion",
-            error
-          );
-        }
-      }
       // The skill is gone — a transient list-refresh failure must not mask
       // the successful delete or block navigation off the dead editor page.
       void refreshSkillLists(mutate);
@@ -560,12 +508,7 @@ export default function SkillEditorPage({
           }
           description={
             isCreating
-              ? isCreatingForApp
-                ? t("editor.header.createForAppDescription", {
-                    appName:
-                      externalAppName ?? t("editor.header.appFallbackName"),
-                  })
-                : t("editor.header.createDescription")
+              ? t("editor.header.createDescription")
               : t("editor.header.editDescription")
           }
           cancel={handleCancel}
@@ -627,18 +570,6 @@ export default function SkillEditorPage({
                       {t("editor.staleVersion.reload.label")}
                     </Button>
                   }
-                />
-              )}
-
-              {appConflictingSkillName && (
-                <MessageCard
-                  variant="error"
-                  title={t("editor.appConflict.title")}
-                  description={t("editor.appConflict.description", {
-                    appName:
-                      externalAppName ?? t("editor.header.appFallbackName"),
-                    skillName: appConflictingSkillName,
-                  })}
                 />
               )}
 
@@ -714,10 +645,7 @@ export default function SkillEditorPage({
                         id="name"
                         name="name"
                         value={name}
-                        onChange={(event) => {
-                          setName(event.target.value);
-                          setAppConflictingSkillName(null);
-                        }}
+                        onChange={(event) => setName(event.target.value)}
                         placeholder={t("editor.details.name.placeholder")}
                         variant={
                           fieldsLocked || !isCreating ? "disabled" : "primary"

@@ -29,7 +29,6 @@ from onyx.db.models import (
     DocumentSet,
     DocumentSet__User,
     Marketplace,
-    MCPConnectionConfig,
     MCPServer,
     OAuthAccount,
     PermissionGrant,
@@ -680,11 +679,6 @@ def reconcile_user_email__no_commit(
         .where(MCPServer.owner == old_email)
         .values(owner=normalized_new_email)
     )
-    db_session.execute(
-        update(MCPConnectionConfig)
-        .where(MCPConnectionConfig.user_email == old_email)
-        .values(user_email=normalized_new_email)
-    )
     return old_email, prior_emails
 
 
@@ -701,6 +695,13 @@ def fetch_users_by_ids(db_session: Session, user_ids: list[UUID]) -> list[User]:
         .unique()
         .all()
     )
+
+
+def reload_oauth_account(
+    db_session: Session, oauth_account_id: UUID
+) -> OAuthAccount | None:
+    """The login account row as the database has it now."""
+    return db_session.get(OAuthAccount, oauth_account_id, populate_existing=True)
 
 
 def fetch_user_by_id(

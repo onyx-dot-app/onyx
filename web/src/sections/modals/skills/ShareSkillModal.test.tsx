@@ -231,67 +231,56 @@ describe("ShareSkillModal", () => {
     );
   });
 
-  it.each([false, true])(
-    "lets owners revoke public user and group editors (app-associated: %s)",
-    async (associated) => {
-      const user = setupUser();
-      mockLoadSkill.mockResolvedValue(
-        customFixture({
-          user_permission: "OWNER",
-          public_permission: "VIEWER",
-          external_app: associated
-            ? {
-                external_app_id: 1,
-                name: "Discord",
-                enabled: true,
-                ready: true,
-              }
-            : null,
-          user_shares: [
-            {
-              user: { id: "editor", email: "editor@example.com" },
-              permission: "EDITOR",
-            },
-          ],
-          group_shares: [
-            { group_id: 42, group_name: "Editors", permission: "EDITOR" },
-          ],
-        })
-      );
-      render(
-        <ShareSkillModal
-          mode="edit"
-          skillId="custom-1"
-          open
-          onClose={jest.fn()}
-          onSaved={jest.fn()}
-        />
-      );
+  it("lets owners revoke public user and group editors", async () => {
+    const user = setupUser();
+    mockLoadSkill.mockResolvedValue(
+      customFixture({
+        user_permission: "OWNER",
+        public_permission: "VIEWER",
+        user_shares: [
+          {
+            user: { id: "editor", email: "editor@example.com" },
+            permission: "EDITOR",
+          },
+        ],
+        group_shares: [
+          { group_id: 42, group_name: "Editors", permission: "EDITOR" },
+        ],
+      })
+    );
+    render(
+      <ShareSkillModal
+        mode="edit"
+        skillId="custom-1"
+        open
+        onClose={jest.fn()}
+        onSaved={jest.fn()}
+      />
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Manage individual access" })
+    );
+    expect(screen.queryByText("People with access")).not.toBeInTheDocument();
+    for (const name of ["editor@example.com", "Editors"]) {
       await user.click(
-        await screen.findByRole("button", { name: "Manage individual access" })
+        screen.getByRole("button", { name: `Update access for ${name}` })
       );
-      expect(screen.queryByText("People with access")).not.toBeInTheDocument();
-      for (const name of ["editor@example.com", "Editors"]) {
-        await user.click(
-          screen.getByRole("button", { name: `Update access for ${name}` })
-        );
-        fireEvent.click(
-          await screen.findByRole("option", { name: "Remove Access" })
-        );
-      }
-      await user.click(screen.getByRole("button", { name: "Save" }));
-      await waitFor(() =>
-        expect(mockUpdateSkillShares).toHaveBeenCalledWith(
-          "custom-1",
-          expect.objectContaining({
-            public_permission: associated ? undefined : "VIEWER",
-            user_shares: [],
-            group_shares: [],
-          })
-        )
+      fireEvent.click(
+        await screen.findByRole("option", { name: "Remove Access" })
       );
     }
-  );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+        "custom-1",
+        expect.objectContaining({
+          public_permission: "VIEWER",
+          user_shares: [],
+          group_shares: [],
+        })
+      )
+    );
+  });
 
   it("lets a non-admin editor with organization-wide manage:plugins publish", async () => {
     mockIsAdmin = false;

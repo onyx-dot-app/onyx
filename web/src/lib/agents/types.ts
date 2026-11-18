@@ -2,6 +2,7 @@ import { ValidSources } from "@/lib/connectors/types/source";
 import { ToolSnapshot } from "@/lib/tools/types";
 import { DocumentSetSummary, MinimalUserSnapshot } from "@/lib/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
+import type { LinkValue } from "@/lib/integrations/types";
 
 // ── Domain / application types ────────────────────────────────────────────────
 
@@ -56,6 +57,21 @@ export interface PersonaOwnerGroup {
   name: string;
 }
 
+/** `persona__plugin.action_settings`. A missing key inherits. */
+export interface AgentActionSettings {
+  default?: LinkValue;
+  actions?: Record<string, LinkValue>;
+}
+
+export interface AgentPluginInput {
+  plugin_id: string;
+  action_settings: AgentActionSettings;
+}
+
+export interface AgentPluginLink extends AgentPluginInput {
+  plugin_name: string;
+}
+
 export interface MinimalAgent {
   id: number;
   name: string;
@@ -105,6 +121,7 @@ export interface FullAgent extends Agent {
   sharing_status: PersonaSharingStatus;
   admin_count: number;
   ownership_vacant: boolean;
+  plugins: AgentPluginLink[];
 }
 
 // ── Upsert / API parameter types ──────────────────────────────────────────────
@@ -125,6 +142,7 @@ export interface AgentUpsertParameters {
   users?: string[];
   groups?: number[];
   tool_ids: number[];
+  plugins: AgentPluginInput[];
   remove_image?: boolean;
   search_start_date: Date | null;
   uploaded_image_id: string | null;
@@ -149,6 +167,7 @@ export interface AgentUpsertRequest {
   users?: string[];
   groups?: number[];
   tool_ids: number[];
+  plugins: AgentPluginInput[];
   remove_image?: boolean;
   uploaded_image_id: string | null;
   icon_name: string | null;

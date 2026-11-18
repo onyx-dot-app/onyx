@@ -45,7 +45,6 @@ ENDPOINTS: list[Endpoint] = [
     ("GET", "/hierarchy-nodes", None),
     ("GET", "/voice/status", None),
     ("GET", "/federated", None),
-    ("GET", "/user-oauth-token/status", None),
     ("GET", "/manage/indexed-sources", None),
     ("GET", "/document/document-size-info", None),
     # BASIC + GATE 2: the gate admits anyone, update_persona_* enforces ownership.

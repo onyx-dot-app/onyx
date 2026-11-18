@@ -4,63 +4,66 @@ import { useTranslations } from "next-intl";
 import { Button, Card, InputSwitch, SelectCard, Text } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { SvgPlug, SvgSettings } from "@opal/icons";
-import {
-  getAppTypeLogo,
-  type ActionPolicy,
-} from "@/app/craft/v1/apps/registry";
-import type { AppActionPoliciesView } from "@/lib/plugins/types";
-import type { MemberPluginConnection } from "@/lib/plugins/member";
+import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
+import type {
+  TaskActionSettings,
+  TaskActionView,
+  TaskPluginView,
+} from "@/app/craft/v1/tasks/types";
+import type { LinkValue, PolicyValue } from "@/lib/integrations/types";
+
+function runPolicy(value: LinkValue, action: TaskActionView): PolicyValue {
+  if (value === "blocked" || action.integration_policy === "blocked")
+    return "blocked";
+  if (value === "inherit" || (value === "allow" && action.locked))
+    return action.integration_policy;
+  return value;
+}
 
 interface TaskPluginCardProps {
-  app: AppActionPoliciesView;
+  plugin: TaskPluginView;
   enabled: boolean;
-  policies: Record<string, ActionPolicy>;
-  connection: MemberPluginConnection | undefined;
-  onConnect: () => void;
+  settings: TaskActionSettings;
   onEdit: () => void;
   onToggle: (enabled: boolean) => void;
 }
 
 export default function TaskPluginCard({
-  app,
+  plugin,
   enabled,
-  policies,
-  connection,
-  onConnect,
+  settings,
   onEdit,
   onToggle,
 }: TaskPluginCardProps) {
   const t = useTranslations("craft.actionPolicies");
-  const tConnection = useTranslations("actions.memberPlugins.row");
-  const tStatus = useTranslations("actions.memberPlugins.status");
-  const connectionKnown = connection !== undefined;
-  const needsConnection = connectionKnown && connection.kind !== "connected";
-  const unavailable = !connectionKnown && !enabled;
-  const counts = { auto: 0, ask: 0, disabled: 0 };
-  for (const action of app.actions) {
-    const policy = action.editable
-      ? (policies[action.action_id] ?? action.effective_policy)
-      : action.effective_policy;
-    if (policy === "ALWAYS") counts.auto++;
-    else if (policy === "ASK") counts.ask++;
-    else counts.disabled++;
+  const counts: Record<PolicyValue, number> = {
+    allow: 0,
+    ask: 0,
+    blocked: 0,
+  };
+  for (const integration of plugin.integrations) {
+    for (const action of integration.actions) {
+      counts[
+        runPolicy(settings.actions[action.key] ?? settings.default, action)
+      ]++;
+    }
   }
-  const PluginIcon = app.app_type ? getAppTypeLogo(app.app_type) : SvgPlug;
+  const signInProblem = plugin.integrations.find(
+    (integration) => integration.status.state !== "connected"
+  );
+  const appType = plugin.integrations.find(
+    (integration) => integration.app_type !== null
+  )?.app_type;
+  const PluginIcon = appType ? getAppTypeLogo(appType) : SvgPlug;
   return (
     <SelectCard
-      state={
-        enabled && connectionKnown && !needsConnection ? "filled" : "empty"
-      }
-      disabled={unavailable}
-      onClick={() => {
-        if (needsConnection) onConnect();
-        else onEdit();
-      }}
+      state={enabled ? "filled" : "empty"}
+      onClick={onEdit}
       padding={0}
       border="solid"
       rounding={4}
       role="group"
-      aria-label={app.name}
+      aria-label={plugin.plugin_name}
     >
       <Section height="full" alignItems="stretch" gap={0}>
         <Section
@@ -78,84 +81,69 @@ export default function TaskPluginCard({
           <Section
             height="auto"
             alignItems="stretch"
-            gap={3}
+            gap={1}
             className="min-w-0 flex-1"
           >
-            <Section height="auto" alignItems="stretch" gap={1}>
+            <Section
+              height="auto"
+              flexDirection="row"
+              justifyContent="between"
+              gap={3}
+            >
               <Section
+                width="fit"
                 height="auto"
                 flexDirection="row"
-                justifyContent="between"
-                gap={3}
+                gap={2}
+                className="min-w-0"
               >
-                <Section
-                  width="fit"
-                  height="auto"
-                  flexDirection="row"
-                  gap={2}
-                  className="min-w-0"
-                >
-                  <Content font="main-content-emphasis" title={app.name} />
-                  {needsConnection && (
-                    <span
-                      aria-hidden
-                      className="size-2 shrink-0 rounded-full bg-status-warning-05"
-                    />
-                  )}
-                </Section>
-                <Section
-                  width="fit"
-                  height="auto"
-                  flexDirection="row"
-                  gap={2}
-                  className="shrink-0"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <Button
-                    icon={SvgSettings}
-                    size="sm"
-                    prominence="tertiary"
-                    disabled={unavailable || needsConnection}
-                    aria-label={t("manageActions")}
-                    tooltip={
-                      unavailable
-                        ? tStatus("unavailable")
-                        : needsConnection
-                          ? tConnection("connect", { name: app.name })
-                          : t("manageActions")
-                    }
-                    onClick={onEdit}
+                <Content
+                  font="main-content-emphasis"
+                  title={plugin.plugin_name}
+                />
+                {signInProblem && (
+                  <span
+                    aria-hidden
+                    className="size-2 shrink-0 rounded-full bg-status-warning-05"
                   />
-                  {needsConnection && (
-                    <Button
-                      icon={SvgPlug}
-                      size="sm"
-                      prominence="secondary"
-                      aria-label={tConnection("connect", {
-                        name: app.name,
-                      })}
-                      tooltip={tConnection("connect", {
-                        name: app.name,
-                      })}
-                      onClick={onConnect}
-                    />
-                  )}
-                  {(!needsConnection || enabled) && (
-                    <InputSwitch
-                      checked={enabled}
-                      disabled={unavailable}
-                      aria-label={t("enableAppForTask", {
-                        app: app.name,
-                      })}
-                      onCheckedChange={onToggle}
-                    />
-                  )}
-                </Section>
+                )}
               </Section>
-              <Text font="secondary-body" color="text-03">
-                {t(app.kind === "external_app" ? "externalApp" : "mcpServer")}
-              </Text>
+              <Section
+                width="fit"
+                height="auto"
+                flexDirection="row"
+                gap={2}
+                className="shrink-0"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <Button
+                  icon={SvgSettings}
+                  size="sm"
+                  prominence="tertiary"
+                  aria-label={t("manageActions")}
+                  tooltip={t("manageActions")}
+                  onClick={onEdit}
+                />
+                <InputSwitch
+                  checked={enabled}
+                  aria-label={t("enableAppForTask", {
+                    app: plugin.plugin_name,
+                  })}
+                  onCheckedChange={onToggle}
+                />
+              </Section>
             </Section>
+            <Text font="secondary-body" color="text-03">
+              {plugin.integrations
+                .map((integration) => integration.name)
+                .join(", ")}
+            </Text>
+            {signInProblem && (
+              <Text font="secondary-body" color="status-warning-05">
+                {signInProblem.status.reason ??
+                  t("needsSignIn", { name: signInProblem.name })}
+              </Text>
+            )}
           </Section>
         </Section>
         <Section
@@ -166,7 +154,7 @@ export default function TaskPluginCard({
           className="mt-auto"
         >
           <Text font="secondary-body" color="text-03">
-            {enabled ? t("policyCounts", counts) : t("disabledForTask")}
+            {enabled ? t("taskPolicyCounts", counts) : t("disabledForTask")}
           </Text>
         </Section>
       </Section>

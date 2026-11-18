@@ -32,7 +32,7 @@ from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
-    GatedAppKind,
+    IntegrationKind,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -41,6 +41,7 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
+from onyx.integrations.models import ActionSettings
 from onyx.sandbox_proxy import destination_policy
 from onyx.sandbox_proxy.addons import gate
 from onyx.sandbox_proxy.addons.gate import GateAddon, ParkedApprovals
@@ -87,11 +88,16 @@ class _StubMatcher(RequestEvaluator):
         request: http.Request,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
+        scheduled_task_id: UUID | None,  # noqa: ARG002
     ) -> AllMatchedActions | McpProtocolRequest | None:
         self.calls += 1
         if self._exc is not None:
             raise self._exc
         return self._result
+
+
+def _defaults(recognized: AllMatchedActions) -> dict[str, ActionPolicy]:
+    return {action.action_type: action.policy for action in recognized.actions}
 
 
 def _noop_cache_factory(tenant_id: str) -> Any:  # noqa: ARG001
@@ -135,8 +141,8 @@ def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(
         gate,
-        "resolve_action_policies",
-        lambda _db, *, catalog_policies, **_kwargs: catalog_policies,
+        "resolve_gate_policies",
+        lambda _db, *, recognized_actions, **_kwargs: _defaults(recognized_actions),
     )
     monkeypatch.setattr(
         gate.action_approval,
@@ -147,12 +153,10 @@ def _patch_gate_session(monkeypatch: pytest.MonkeyPatch) -> None:
             decided_via=ApprovalDecidedVia.USER,
         ),
     )
-    # The stub sessions can't answer the target → gated_app_id lookup.
-    monkeypatch.setattr(gate, "get_gated_app_id", lambda _db, _kind, _target_id: 1)
     monkeypatch.setattr(
         gate.action_approval,
         "list_session_grant_action_approvals",
-        lambda _db, *, session_id, gated_app_id: [],  # noqa: ARG005
+        lambda _db, *, session_id, integration_id: [],  # noqa: ARG005
     )
 
 
@@ -192,8 +196,8 @@ _MATCH = make_matched_actions(payload={"text": "hi"})
 _MATCH_MCP = AllMatchedActions(
     actions=_MATCH.actions,
     target=GatedTarget(
-        kind=GatedAppKind.MCP_SERVER,
-        id=73,
+        integration_id=73,
+        kind=IntegrationKind.MCP,
         app_name="Linear MCP",
     ),
     payload=_MATCH.payload,
@@ -213,7 +217,7 @@ _MATCH_MULTI_ASK = AllMatchedActions(
             policy=ActionPolicy.ASK,
         ),
     ),
-    target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=42, app_name="Slack"),
+    target=GatedTarget(integration_id=42, kind=IntegrationKind.API, app_name="Slack"),
     payload={"text": "hi"},
 )
 _MATCH_ALWAYS = make_matched_actions(
@@ -494,6 +498,7 @@ def _spy_pipeline(
         *,
         sandbox: ResolvedSandbox,
         matched_actions: AllMatchedActions | None,
+        protocol_target: GatedTarget | None = None,  # noqa: ARG001
     ) -> InjectionOutcome:
         spy.dispatched.append((matched_actions, sandbox.user_id, sandbox.tenant_id))
         return InjectionOutcome.INJECTED
@@ -715,7 +720,7 @@ async def test_session_grant_db_fallback_hydrates_cache(
     monkeypatch.setattr(
         gate.action_approval,
         "list_session_grant_action_approvals",
-        lambda _db, *, session_id, gated_app_id: [grant_source],  # noqa: ARG005
+        lambda _db, *, session_id, integration_id: [grant_source],  # noqa: ARG005
     )
     flow = make_flow(proxy_auth=_basic_auth(_TAG_UUID))
 
@@ -1704,9 +1709,9 @@ async def test_personal_setting_restricts_catalog_auto_approval(
 ) -> None:
     monkeypatch.setattr(
         gate,
-        "resolve_action_policies",
-        lambda _db, *, catalog_policies, **_kwargs: dict.fromkeys(
-            catalog_policies, policy
+        "resolve_gate_policies",
+        lambda _db, *, recognized_actions, **_kwargs: dict.fromkeys(
+            _defaults(recognized_actions), policy
         ),
     )
     addon = _build(
@@ -1744,14 +1749,15 @@ async def test_task_settings_are_read_live_without_grant_cache(
     def resolve(
         _db: Session,
         *,
-        catalog_policies: dict[str, ActionPolicy],
-        scheduled_task_id: UUID | None,
+        recognized_actions: AllMatchedActions,
+        task_id: UUID | None,
         **_kwargs: object,
     ) -> dict[str, ActionPolicy]:
-        owners.append(scheduled_task_id)
+        catalog_policies = _defaults(recognized_actions)
+        owners.append(task_id)
         return dict.fromkeys(catalog_policies, current_policy)
 
-    monkeypatch.setattr(gate, "resolve_action_policies", resolve)
+    monkeypatch.setattr(gate, "resolve_gate_policies", resolve)
     addon = _build(
         resolver=StubResolver(
             sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
@@ -1786,9 +1792,9 @@ async def test_approval_cannot_bypass_changes_during_wait(
     )
     monkeypatch.setattr(
         gate,
-        "resolve_action_policies",
-        lambda _db, *, catalog_policies, **_kwargs: dict.fromkeys(
-            catalog_policies, current_policy
+        "resolve_gate_policies",
+        lambda _db, *, recognized_actions, **_kwargs: dict.fromkeys(
+            _defaults(recognized_actions), current_policy
         ),
     )
     matcher = _StubMatcher(result=_MATCH)
@@ -1833,7 +1839,7 @@ async def test_policy_read_failure_does_not_fall_back_to_catalog(
     def fail(*_args: object, **_kwargs: object) -> dict[str, ActionPolicy]:
         raise RuntimeError("database unavailable")
 
-    monkeypatch.setattr(gate, "resolve_action_policies", fail)
+    monkeypatch.setattr(gate, "resolve_gate_policies", fail)
     addon = _build(
         resolver=StubResolver(
             sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
@@ -1855,9 +1861,9 @@ async def test_disabled_action_cannot_use_session_grant(
     cache = _SessionGrantCache(granted=True)
     monkeypatch.setattr(
         gate,
-        "resolve_action_policies",
-        lambda _db, *, catalog_policies, **_kwargs: dict.fromkeys(
-            catalog_policies, ActionPolicy.DENY
+        "resolve_gate_policies",
+        lambda _db, *, recognized_actions, **_kwargs: dict.fromkeys(
+            _defaults(recognized_actions), ActionPolicy.DENY
         ),
     )
     addon = _build(
@@ -1884,9 +1890,10 @@ async def test_policy_recheck_uses_catalog_defaults_not_previous_effective_choic
     def resolve(
         _db: Session,
         *,
-        catalog_policies: dict[str, ActionPolicy],
+        recognized_actions: AllMatchedActions,
         **_kwargs: object,
     ) -> dict[str, ActionPolicy]:
+        catalog_policies = _defaults(recognized_actions)
         defaults_seen.append(dict(catalog_policies))
         # An explicit personal Ask is reset while the request waits for approval.
         return {
@@ -1894,7 +1901,7 @@ async def test_policy_recheck_uses_catalog_defaults_not_previous_effective_choic
             for action, default in catalog_policies.items()
         }
 
-    monkeypatch.setattr(gate, "resolve_action_policies", resolve)
+    monkeypatch.setattr(gate, "resolve_gate_policies", resolve)
     addon = _build(
         resolver=StubResolver(
             sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
@@ -1919,9 +1926,10 @@ async def test_newly_ask_action_is_not_covered_by_old_session_grant(
     def resolve(
         _db: Session,
         *,
-        catalog_policies: dict[str, ActionPolicy],
+        recognized_actions: AllMatchedActions,
         **_kwargs: object,
     ) -> dict[str, ActionPolicy]:
+        catalog_policies = _defaults(recognized_actions)
         nonlocal resolutions
         resolutions += 1
         return {
@@ -1931,7 +1939,7 @@ async def test_newly_ask_action_is_not_covered_by_old_session_grant(
             for action in catalog_policies
         }
 
-    monkeypatch.setattr(gate, "resolve_action_policies", resolve)
+    monkeypatch.setattr(gate, "resolve_gate_policies", resolve)
     cache = _SessionGrantCache(granted_action_types={first_action.action_type})
     addon = _build(
         resolver=StubResolver(
@@ -1982,7 +1990,9 @@ async def test_mcp_protocol_checks_task_app_without_requesting_approval(
     monkeypatch.setattr(
         gate, "get_active_scheduled_task_context", lambda *_args: (_RUN_ID, uuid4())
     )
-    monkeypatch.setattr(gate, "task_app_enabled", lambda *_args: enabled)
+    monkeypatch.setattr(
+        gate, "task_link_settings", lambda *_args: [ActionSettings()] if enabled else []
+    )
     addon = _build(
         resolver=StubResolver(
             sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)
