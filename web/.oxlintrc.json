@@ -825,6 +825,7 @@
     {
       "files": [
         "src/app/admin/billing/BillingDetailsView.tsx",
+        "src/ee/hooks/useHookExecutionLogs.ts",
         "src/sections/usage/AnalyticsChart.tsx"
       ],
       "rules": {
