@@ -10,6 +10,12 @@ use crate::windows;
 pub const PREFERENCES: &str = "preferences";
 const NEW_CHAT: &str = "new_chat";
 const RELOAD: &str = "reload";
+const ZOOM_RESET: &str = "zoom_reset";
+const ZOOM_IN: &str = "zoom_in";
+const ZOOM_OUT: &str = "zoom_out";
+const BACK: &str = "back";
+const FORWARD: &str = "forward";
+const ZOOM_STEPS: [f64; 9] = [0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75];
 const OPEN: &str = "open";
 const QUIT: &str = "quit";
 
@@ -64,6 +70,12 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         true,
         &[
             &MenuItem::with_id(app, RELOAD, "Reload", true, Some("CmdOrCtrl+R"))?,
+            &MenuItem::with_id(app, BACK, "Back", true, Some("CmdOrCtrl+["))?,
+            &MenuItem::with_id(app, FORWARD, "Forward", true, Some("CmdOrCtrl+]"))?,
+            &separator()?,
+            &MenuItem::with_id(app, ZOOM_RESET, "Actual Size", true, Some("CmdOrCtrl+0"))?,
+            &MenuItem::with_id(app, ZOOM_IN, "Zoom In", true, Some("CmdOrCtrl+="))?,
+            &MenuItem::with_id(app, ZOOM_OUT, "Zoom Out", true, Some("CmdOrCtrl+-"))?,
             &separator()?,
             &PredefinedMenuItem::fullscreen(app, None)?,
         ],
@@ -135,6 +147,46 @@ pub fn handle(app: &AppHandle, id: &str) {
                 }
             }
         }
+        BACK | FORWARD => {
+            if let Some(window) = app.get_webview_window(main_window::LABEL) {
+                let script = if id == BACK {
+                    "history.back()"
+                } else {
+                    "history.forward()"
+                };
+                if let Err(e) = window.eval(script) {
+                    log::warn!("could not go back or forward: {e}");
+                }
+            }
+        }
+        ZOOM_RESET | ZOOM_IN | ZOOM_OUT => set_zoom(app, id),
         _ => {}
     }
+}
+
+/// Steps the main window's zoom like a browser and remembers it.
+fn set_zoom(app: &AppHandle, id: &str) {
+    let state = app.state::<AppState>();
+    let current = state.config.get().zoom();
+    let index = ZOOM_STEPS
+        .iter()
+        .position(|z| (z - current).abs() < 0.01)
+        .unwrap_or(4);
+    let next = match id {
+        ZOOM_IN => ZOOM_STEPS[(index + 1).min(ZOOM_STEPS.len() - 1)],
+        ZOOM_OUT => ZOOM_STEPS[index.saturating_sub(1)],
+        _ => 1.0,
+    };
+    // The page's chrome and the next step both read the saved zoom, so an
+    // unsaved zoom is not applied.
+    if let Err(e) = state.config.update(|c| c.zoom = Some(next)) {
+        log::warn!("could not save the zoom level: {e}");
+        return;
+    }
+    if let Some(window) = app.get_webview_window(main_window::LABEL) {
+        if let Err(e) = window.set_zoom(next) {
+            log::warn!("could not apply the zoom level: {e}");
+        }
+    }
+    main_window::sync_chrome(app);
 }
