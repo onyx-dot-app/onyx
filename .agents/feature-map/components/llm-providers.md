@@ -134,8 +134,10 @@ checks run under the same environment lock as each dispatch. The lock releases
 before retry handling; removing cache options prevents later attempts from adding
 markers again. True OpenAI models (on `openai`, `azure` and `litellm_proxy`) also get
 a `prompt_cache_key`: a hash of the chat session id, so the provider routes each
-conversation to one cache machine. Calls without a session send no key, and a key in
-the provider's model kwargs takes its place. When a provider 400 names a
+conversation to one cache machine. The key is used only for routing, so it does not
+depend on `SEND_USER_METADATA_TO_LLM_PROVIDER`. Subagent and compaction calls carry the
+same session identity, so they share the key. Calls without a session send no key, and
+a key in the provider's model kwargs takes its place. When a provider 400 names a
 reasoning, temperature, cache key, or explicit-cache kwarg, `_completion` retries without it
 (`_retry_attempts`). A cache fallback also removes the breakpoint markers. It
 never drops tools, tool choice or messages during that retry; the one message

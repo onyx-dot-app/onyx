@@ -8,7 +8,6 @@ anthropic_messages surface, which reconstructs the body from a fixed param
 list and drops unknown fields.
 """
 
-import hashlib
 import json
 import queue
 import threading
@@ -32,6 +31,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import llm_from_provider
 from onyx.llm.models import Usage
 from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.utils import opaque_provider_id
 from onyx.server.gateway.configs import (
     ANTHROPIC_GATEWAY_PASSTHROUGH_ENABLED,
     ANTHROPIC_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS,
@@ -140,7 +140,7 @@ def _build_upstream_request(
     if stream is not None:
         # Always overwrite: opaque provider-side abuse attribution, never a
         # client-supplied identifier.
-        body["metadata"] = {"user_id": hashlib.sha256(user_id.encode()).hexdigest()}
+        body["metadata"] = {"user_id": opaque_provider_id(user_id)}
         body["stream"] = stream
     else:
         # count_tokens rejects metadata/stream/max_tokens outright.

@@ -1418,7 +1418,7 @@ def test_existing_metadata_pass_through_when_identity_disabled() -> None:
 
 
 _SESSION_IDENTITY = LLMUserIdentity(user_id="user_123", session_id="session_abc")
-_SESSION_CACHE_KEY = hashlib.sha256(b"session_abc").hexdigest()[:32]
+_SESSION_CACHE_KEY = hashlib.sha256(b"session_abc").hexdigest()
 
 
 def _cache_key_llm(
@@ -1454,13 +1454,15 @@ def test_openai_models_send_session_prompt_cache_key(
 ) -> None:
     llm = _cache_key_llm(model_provider, model_name, deployment_name)
     messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
-    with patch("litellm.completion", return_value=[]) as mock_completion:
-        list(llm.stream_raw(messages, user_identity=_SESSION_IDENTITY))
+    with (
+        patch("litellm.completion", return_value=[]) as mock_completion,
+        patch("onyx.llm.utils.SEND_USER_METADATA_TO_LLM_PROVIDER", False),
+    ):
         list(llm.stream_raw(messages, user_identity=_SESSION_IDENTITY))
 
-    sent_keys = [call.kwargs["prompt_cache_key"] for call in mock_completion.mock_calls]
-    assert sent_keys == [_SESSION_CACHE_KEY, _SESSION_CACHE_KEY]
-    assert "session_abc" not in _SESSION_CACHE_KEY
+    kwargs = mock_completion.call_args.kwargs
+    assert kwargs["prompt_cache_key"] == _SESSION_CACHE_KEY
+    assert "session_abc" not in repr(kwargs)
 
 
 @pytest.mark.parametrize(

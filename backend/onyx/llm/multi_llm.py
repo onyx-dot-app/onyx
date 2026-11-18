@@ -1,5 +1,4 @@
 import copy
-import hashlib
 import json
 import math
 import os
@@ -118,7 +117,11 @@ from onyx.llm.prompt_cache.providers.openai import (
     uses_explicit_cache_breakpoints,
     without_cache_breakpoint_flags,
 )
-from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
+from onyx.llm.utils import (
+    build_litellm_passthrough_kwargs,
+    collect_credential_values,
+    opaque_provider_id,
+)
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import (
@@ -202,8 +205,13 @@ _ANTHROPIC_MIN_THINKING_BUDGET_TOKENS = 1024
 _REASONING_KWARG_KEYS = frozenset(
     {"thinking", "output_config", "reasoning", "reasoning_effort"}
 )
-_BEST_EFFORT_KWARG_KEYS = _REASONING_KWARG_KEYS | frozenset(
-    {"temperature", "prompt_cache_options", "prompt_cache_key", "include"}
+# Rejections of these are retried without only the named key, so the user's
+# reasoning choice survives.
+_CACHE_AND_INCLUDE_KWARG_KEYS = frozenset(
+    {"prompt_cache_options", "prompt_cache_key", "include"}
+)
+_BEST_EFFORT_KWARG_KEYS = (
+    _REASONING_KWARG_KEYS | _CACHE_AND_INCLUDE_KWARG_KEYS | frozenset({"temperature"})
 )
 
 # Substrings provider 400s use to name each strippable kwarg (errors may
@@ -1458,6 +1466,19 @@ class LitellmLLM(LLM):
                         "skipping session_id/user injection",
                         type(existing_extra_body).__name__,
                     )
+        # OpenAI routes requests with the same prefix and prompt_cache_key to
+        # one cache machine. One key per chat session keeps a conversation's
+        # growing history cached and spreads conversations across keys; one busy
+        # session can still exceed the per-key rate. The key is a hash used only
+        # for routing, so it does not depend on SEND_USER_METADATA_TO_LLM_PROVIDER.
+        # A configured key wins and, like the session key, joins the retry ladder.
+        configured_cache_key = passthrough_kwargs.pop("prompt_cache_key", None)
+        if configured_cache_key is not None:
+            optional_kwargs["prompt_cache_key"] = configured_cache_key
+        elif is_openai_model and user_identity and user_identity.session_id:
+            optional_kwargs["prompt_cache_key"] = opaque_provider_id(
+                user_identity.session_id
+            )
 
         try:
             # NOTE: must pass in None instead of empty strings otherwise litellm
@@ -1555,21 +1576,6 @@ class LitellmLLM(LLM):
             )
             if configured_cache_options is not None:
                 optional_kwargs["prompt_cache_options"] = configured_cache_options
-            # OpenAI routes requests with the same prefix and key to one cache
-            # machine. One key per chat session keeps a conversation's growing
-            # history cached and each key under the per-key rate limit. The hash
-            # does not reveal the session id. A configured key wins.
-            configured_cache_key = passthrough_kwargs.pop("prompt_cache_key", None)
-            if configured_cache_key is not None:
-                optional_kwargs["prompt_cache_key"] = configured_cache_key
-            elif (
-                is_openai_model
-                and user_identity is not None
-                and user_identity.session_id
-            ):
-                optional_kwargs["prompt_cache_key"] = hashlib.sha256(
-                    user_identity.session_id.encode()
-                ).hexdigest()[:32]
             cache_messages = messages
             cache_options = None
             if is_openai_model or self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
@@ -1751,11 +1757,7 @@ class LitellmLLM(LLM):
                         continue
                     elif rejected_tuning := {
                         key
-                        for key in (
-                            "prompt_cache_options",
-                            "prompt_cache_key",
-                            "include",
-                        )
+                        for key in _CACHE_AND_INCLUDE_KWARG_KEYS
                         if key in opts and _rejection_names_strippable_kwargs(e, {key})
                     }:
                         # A cache or include rejection must preserve the user's

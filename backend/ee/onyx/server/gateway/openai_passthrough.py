@@ -3,7 +3,6 @@ Responses bridge, which rebuilds the body from a decomposed parameter list and
 drops the unknown fields this passthrough exists to forward.
 """
 
-import hashlib
 import json
 import queue
 import threading
@@ -29,6 +28,7 @@ from onyx.llm.factory import llm_from_provider
 from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.llm.models import Usage
 from onyx.llm.multi_llm import LitellmLLM
+from onyx.llm.utils import opaque_provider_id
 from onyx.server.gateway.configs import (
     OPENAI_GATEWAY_PASSTHROUGH_ENABLED,
     OPENAI_PASSTHROUGH_CONNECT_TIMEOUT_SECONDS,
@@ -185,7 +185,7 @@ def _build_upstream_request(
     body["store"] = False
     # Always overwrite: opaque provider-side abuse/cache attribution, never a
     # client-supplied identifier.
-    hashed_user = hashlib.sha256(user_id.encode()).hexdigest()
+    hashed_user = opaque_provider_id(user_id)
     body["user"] = hashed_user
     body["safety_identifier"] = hashed_user
     body["prompt_cache_key"] = hashed_user

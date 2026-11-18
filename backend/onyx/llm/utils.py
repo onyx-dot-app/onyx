@@ -1,4 +1,5 @@
 import copy
+import hashlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -60,6 +61,12 @@ def truncate_litellm_user_id(user_id: str) -> str:
         len(user_id),
     )
     return user_id[:MAX_LITELLM_USER_ID_LENGTH]
+
+
+def opaque_provider_id(value: str) -> str:
+    """Stable id for provider routing and attribution fields that never
+    reveals *value*. The 64-char sha256 hex fits OpenAI's 64-char limit."""
+    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def build_litellm_passthrough_kwargs(
