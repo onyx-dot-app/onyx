@@ -168,11 +168,13 @@ pub async fn ask(
     question: String,
     chat_session_id: Option<String>,
     on_event: Channel<AskEvent>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let epoch = state.epoch();
     let (server, token) = state.session()?;
     let current = || state.epoch() == epoch;
+    let answer = crate::aonyx::answer_started(&app);
     let result = ask::run(
         &state.api,
         &server,
@@ -183,6 +185,7 @@ pub async fn ask(
         &current,
     )
     .await;
+    crate::aonyx::answer_finished(&app, answer, result.is_ok());
     let event = match &result {
         Ok(_) => AskEvent::Done,
         Err(message) => AskEvent::Error {
@@ -259,4 +262,21 @@ pub async fn open_external(
 #[tauri::command]
 pub fn hide_launcher(app: AppHandle) {
     windows::hide_launcher(&app);
+}
+
+/// The launcher logo's easter egg: brings Aonyx onto the screen or sends it away.
+#[tauri::command]
+pub fn toggle_aonyx(app: AppHandle) {
+    crate::aonyx::toggle(&app);
+}
+
+/// A click on the pet opens (or closes) the launcher.
+#[tauri::command]
+pub fn aonyx_clicked(app: AppHandle) {
+    windows::toggle_launcher(&app);
+}
+
+#[tauri::command]
+pub fn aonyx_menu(app: AppHandle) -> Result<(), String> {
+    crate::aonyx::show_menu(&app)
 }
