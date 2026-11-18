@@ -4,7 +4,6 @@ message continues the response in a new stream, and a reload shows the
 question's record."""
 
 import json
-import time
 from collections.abc import Iterator
 from uuid import UUID, uuid4
 
@@ -341,8 +340,7 @@ def test_agents_that_the_root_starts_get_no_question_tool(
         session.id, f"Look it up. {nonce}", admin_user, accepts_follow_ups=True
     )
     assert started.error is None
-    deadline = time.monotonic() + 60
-    while len(mock_llm.requests_in(nonce)) < 3:
-        assert time.monotonic() < deadline, "the root never read the agent's result"
-        time.sleep(0.2)
+    mock_llm.wait_for_requests(
+        nonce, 3, timeout=60, failure_message="the root never read the agent's result"
+    )
     assert [request.error for request in mock_llm.requests_in(child_task)] == [None]

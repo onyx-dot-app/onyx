@@ -111,7 +111,6 @@
 1 backend/tests/integration/tests/scim/test_scim_tokens.py
 3 backend/tests/integration/tests/skills/test_chat_skills.py
 1 backend/tests/integration/tests/spending_limits/test_spending_limits_api.py
-1 backend/tests/integration/tests/streaming_endpoints/test_chat_question_tool.py
 1 backend/tests/integration/tests/streaming_endpoints/test_chat_stream.py
 1 backend/tests/integration/tests/streaming_endpoints/test_gateway_usage_tracking.py
 1 backend/tests/integration/tests/streaming_endpoints/test_resume_stream.py
