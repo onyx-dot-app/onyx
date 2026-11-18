@@ -107,6 +107,7 @@ WORKER_COLLECT_QUEUES: dict[str, str] = {
     "heavy": OnyxCeleryQueues.CSV_GENERATION,
     "docprocessing": OnyxCeleryQueues.DOCPROCESSING,
     "docfetching": OnyxCeleryQueues.CONNECTOR_DOC_FETCHING,
+    "docconversion": OnyxCeleryQueues.DOCCONVERSION,
     "user_file_processing": OnyxCeleryQueues.USER_FILE_PROCESSING,
     "scheduled_tasks": OnyxCeleryQueues.SCHEDULED_TASKS,
     "monitoring": OnyxCeleryQueues.MONITORING,

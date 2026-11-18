@@ -167,6 +167,7 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
     ),
     ("scheduled_tasks", "scheduled_tasks"),
     ("docfetching", "connector_doc_fetching"),
+    ("docconversion", "docconversion"),
     ("monitoring", "monitoring"),
 ]
 
