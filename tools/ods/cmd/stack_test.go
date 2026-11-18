@@ -102,7 +102,7 @@ func TestStackProvider_infraPortsAndEnv(t *testing.T) {
 	for _, r := range app {
 		names = append(names, r.Name)
 	}
-	if !reflect.DeepEqual(names, []string{"web", "api", "mcp", "model", "celery-primary-metrics", "celery-light-metrics", "celery-docfetching-metrics", "celery-docprocessing-metrics", "celery-heavy-metrics", "celery-scheduled_tasks-metrics"}) {
+	if !reflect.DeepEqual(names, []string{"web", "api", "mcp", "model", "celery-primary-metrics", "celery-light-metrics", "celery-docfetching-metrics", "celery-docconversion-metrics", "celery-docprocessing-metrics", "celery-heavy-metrics", "celery-scheduled_tasks-metrics"}) {
 		t.Errorf("app ports %v", names)
 	}
 }
