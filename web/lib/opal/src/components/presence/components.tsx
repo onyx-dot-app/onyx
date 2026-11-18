@@ -290,7 +290,7 @@ function PresenceSwap({
 
   // Keep the leaving snapshot current whenever `children` is on screen (every
   // phase but the exit, which shows `outgoing`).
-  if (phase !== "exiting" && children !== shownChildren) {
+  if (phase !== "exiting" && !Object.is(children, shownChildren)) {
     setShownChildren(children);
   }
 
