@@ -207,6 +207,7 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
   const DEEP = MAX_PILE_DEPTH_SHOWN + 1;
 
   // A gone toast leaves no expanded state behind for a later one with its id.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- drops expanded state for toasts that left the toast store, so a later toast with the same id starts collapsed
   useEffect(() => {
     setExpandedIds((prev) => {
       const live = new Set(allToasts.map((t) => t.id));

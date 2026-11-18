@@ -62,7 +62,7 @@ export function useFoldedGroups({
   // the live selection cannot re-fold groups afterwards.
   const [sessionIsSelected, setSessionIsSelected] = useState(() => isSelected);
   // Keyed by the view it was made for: a new view's first render sees an
-  // empty map, before the effect below replaces it.
+  // empty map.
   const [toggledState, setToggledState] = useState<{
     viewKey: string;
     map: ReadonlyMap<string, boolean>;
@@ -74,15 +74,19 @@ export function useFoldedGroups({
     [viewKey]
   );
 
-  const latestIsSelected = useRef(isSelected);
-  useEffect(() => {
-    latestIsSelected.current = isSelected;
-  });
-  useEffect(() => {
-    if (!isOpen) return;
-    setSessionIsSelected(() => latestIsSelected.current);
-    setToggled(new Map());
-  }, [isOpen, searching, viewKey]);
+  // Each open, search change, or new view starts a fresh session.
+  const [session, setSession] = useState({ isOpen, searching, viewKey });
+  if (
+    session.isOpen !== isOpen ||
+    session.searching !== searching ||
+    session.viewKey !== viewKey
+  ) {
+    setSession({ isOpen, searching, viewKey });
+    if (isOpen) {
+      setSessionIsSelected(() => isSelected);
+      setToggledState({ viewKey, map: new Map() });
+    }
+  }
 
   const isGroupOpen = useCallback(
     (group: RowGroup) => {
@@ -214,8 +218,10 @@ export function useDropdownKeyboard({
   // "ba" finds Banana rather than cycling through the B's.
   const typeAheadRef = useRef("");
   const typeAheadTimer = useRef<number | undefined>(undefined);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the type-ahead timer on unmount
   useEffect(() => () => window.clearTimeout(typeAheadTimer.current), []);
   // The letters go with the list: a reopen starts a fresh prefix.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the type-ahead timer and prefix when the list closes
   useEffect(() => {
     if (isOpen) return;
     window.clearTimeout(typeAheadTimer.current);
@@ -227,6 +233,7 @@ export function useDropdownKeyboard({
   // otherwise take the key, leaving the list open and dismissing itself.
   // A listener on the window runs earlier still, so the list leaves a
   // view or closes and the key goes no further.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- window capture keydown listener that takes Escape while the list is open
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -469,6 +476,7 @@ export function useDropdownOverlay({
   // Read at event time, so a functional update sees the latest state in
   // controlled and uncontrolled mode alike.
   const isOpenRef = useRef(isOpen);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- publishes the open state to a ref that setIsOpen reads at event time
   useLayoutEffect(() => {
     isOpenRef.current = isOpen;
   }, [isOpen]);
@@ -506,12 +514,15 @@ export function useDropdownOverlay({
 
   // Reset highlight and keyboard nav when the list closes, including when
   // disabling closes it under a parent that still holds `open`.
-  useEffect(() => {
-    if (!isOpen || disabled) {
+  const closed = !isOpen || !!disabled;
+  const [wasClosed, setWasClosed] = useState(closed);
+  if (wasClosed !== closed) {
+    setWasClosed(closed);
+    if (closed) {
       setHighlightedIndex(-1);
       setIsKeyboardNav(false);
     }
-  }, [isOpen, disabled]);
+  }
 
   const widthRef = useRef(width);
   const { refs, floatingStyles, isPositioned, placement, update } =
@@ -568,6 +579,7 @@ export function useDropdownOverlay({
       whileElementsMounted: autoUpdate,
     });
   // A view can change the width while the list is open: measure again.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- feeds the width to floating-ui's size middleware and re-measures the list
   useLayoutEffect(() => {
     widthRef.current = width;
     update();
@@ -581,6 +593,7 @@ export function useDropdownOverlay({
     },
     [refs, virtualAnchor]
   );
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- hands the virtual anchor to floating-ui as its reference
   useEffect(() => {
     if (virtualAnchor) refs.setReference(virtualAnchor);
   }, [refs, virtualAnchor]);
@@ -637,6 +650,7 @@ export function useDropdownOverlay({
   // A mousedown anywhere else dismisses the list. Inside: the reference,
   // its wrapping label (otherwise a label click dismisses the list and the
   // forwarded click reopens it), the list, and every trigger.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- document mousedown listener that closes the list on an outside press
   useEffect(() => {
     if (!isOpen) return;
     const onMouseDown = (event: MouseEvent) => {

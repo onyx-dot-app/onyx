@@ -90,6 +90,7 @@ interface UseColumnWidthsReturn {
 function useElementWidth(): [React.RefObject<HTMLDivElement | null>, number] {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that tracks the container's content width
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -293,6 +294,7 @@ export default function useColumnWidths({
   );
   const isDraggingRef = useRef(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the body cursor and user-select styles if a column drag is in progress on unmount
   useEffect(() => {
     return () => {
       if (isDraggingRef.current) {

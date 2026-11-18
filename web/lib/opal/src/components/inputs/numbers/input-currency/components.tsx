@@ -220,18 +220,19 @@ function InputCurrency({
   // Resync when the value differs from the draft, so the echo of our own
   // onChange never reformats the segment being typed in. A precision change
   // always rebuilds: the draft may hold digits the new precision hides.
-  const precisionRef = React.useRef({ maxFraction, minFraction });
-  React.useEffect(() => {
-    const precisionChanged =
-      precisionRef.current.maxFraction !== maxFraction ||
-      precisionRef.current.minFraction !== minFraction;
-    precisionRef.current = { maxFraction, minFraction };
-    setSegments((prev) =>
-      !precisionChanged && parseSegments(prev) === value
-        ? prev
-        : toSegments(value, maxFraction, minFraction)
-    );
-  }, [value, maxFraction, minFraction]);
+  const [synced, setSynced] = React.useState({
+    value,
+    maxFraction,
+    minFraction,
+  });
+  const precisionChanged =
+    synced.maxFraction !== maxFraction || synced.minFraction !== minFraction;
+  if (precisionChanged || !Object.is(synced.value, value)) {
+    setSynced({ value, maxFraction, minFraction });
+    if (precisionChanged || parseSegments(segments) !== value) {
+      setSegments(toSegments(value, maxFraction, minFraction));
+    }
+  }
 
   // Every draft is a valid amount, so edits report at once.
   function update(next: AmountSegments) {

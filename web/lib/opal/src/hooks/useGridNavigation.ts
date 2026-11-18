@@ -144,6 +144,7 @@ export default function useGridNavigation(
 
   // The latest options, so inline callbacks do not rebind the listener.
   const optionsRef = useRef(options);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- latest options in a ref, so the keydown listener reads them without rebinding
   useEffect(() => {
     optionsRef.current = options;
   });
@@ -156,6 +157,7 @@ export default function useGridNavigation(
     [container, itemSelector]
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keydown listener on the container that moves focus between grid items
   useEffect(() => {
     if (!enabled || !container) return;
 

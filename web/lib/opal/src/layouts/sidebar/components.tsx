@@ -71,6 +71,7 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
     whileTyping: true,
   });
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- folds the sidebar when the viewport becomes mobile or small, once mount reports the real screen size
   useEffect(() => {
     // Before mount the screen size reports desktop. Act on the real size only,
     // or every mount unfolds the overlay on mobile and small screens.
@@ -341,6 +342,7 @@ function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scroll listener that saves the sidebar scroll position to sessionStorage
   useEffect(() => {
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
@@ -354,6 +356,7 @@ function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
     return () => scrollElement.removeEventListener("scroll", handleScroll);
   }, [scrollKey]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- restores the sidebar scroll position from sessionStorage before paint on each route
   useLayoutEffect(() => {
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;

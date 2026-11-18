@@ -128,6 +128,7 @@ function SingleSelectFieldInner({
     return selectedOption?.title ?? (strict ? "" : effectiveValue);
   }, [selectedOption, effectiveValue, strict]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- dev-only console warning when defaultOption is outside the option set
   useEffect(() => {
     if (
       process.env.NODE_ENV !== "production" &&
@@ -295,9 +296,11 @@ function SingleSelectFieldInner({
   // typing, selection, or close (blur/outside/Tab already close) clears it,
   // and the close-sync effect drops the invalid text back to the selection.
   const [invalidCommit, setInvalidCommit] = useState(false);
-  useEffect(() => {
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen);
     if (!isOpen) setInvalidCommit(false);
-  }, [isOpen]);
+  }
 
   const toggleDropdown = useCallback(() => {
     if (disabled) return;

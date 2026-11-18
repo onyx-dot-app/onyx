@@ -43,6 +43,7 @@ function Fold({ open, keepMounted = false, id, frame, children }: FoldProps) {
   const [closing, setClosing] = useState<boolean>(false);
   const mounted: boolean = keepMounted || open || closing;
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- closing timer that keeps children mounted until the close animation ends
   useEffect(() => {
     if (open) {
       setClosing(true);
@@ -60,6 +61,7 @@ function Fold({ open, keepMounted = false, id, frame, children }: FoldProps) {
   // later, which lets it fade in after the height. Open from the start, it
   // shows at once, with no fade on page load.
   const [shown, setShown] = useState<boolean>(open);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- waits two animation frames so the opening fade runs on a mounted element
   useEffect(() => {
     if (!open) {
       setShown(false);

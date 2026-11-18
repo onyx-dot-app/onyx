@@ -29,6 +29,7 @@ function overflows(element: HTMLElement): boolean {
 export default function useOverflow(element: HTMLElement | null): boolean {
   const [isOverflowing, setIsOverflowing] = useState(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- resize and mutation observers and font loading events that measure whether the element overflows
   useLayoutEffect(() => {
     if (!element) {
       setIsOverflowing(false);

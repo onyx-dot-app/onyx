@@ -17,6 +17,7 @@ function carriesFiles(event: DragEvent): boolean {
 export default function useWindowFileDrag(enabled: boolean = true): boolean {
   const [dragging, setDragging] = useState(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- window drag and drop listeners that track whether files are dragged over the window
   useEffect(() => {
     if (!enabled) {
       setDragging(false);
