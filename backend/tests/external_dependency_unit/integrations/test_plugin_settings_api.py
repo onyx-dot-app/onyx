@@ -8,6 +8,7 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,7 @@ from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
     MarketplaceKind,
+    Permission,
     PluginInstallationPolicy,
     SkillSharePermission,
 )
@@ -354,10 +356,22 @@ def test_install_setting_needs_an_organization_library_plugin(
 # Shares and publishing
 
 
+def _http_request(token_scopes: list[Permission] | None = None) -> Request:
+    request = Request({"type": "http"})
+    if token_scopes is not None:
+        request.state.token_scopes = token_scopes
+    return request
+
+
 def _share(
-    user: User, plugin_id: UUID, user_ids: list[UUID], db_session: Session
+    user: User,
+    plugin_id: UUID,
+    user_ids: list[UUID],
+    db_session: Session,
+    token_scopes: list[Permission] | None = None,
 ) -> None:
     plugins_api.share_plugin(
+        _http_request(token_scopes),
         plugin_id,
         PluginAccessUpdate(
             user_shares=[
@@ -382,7 +396,9 @@ def test_owner_shares_a_private_plugin(
     assert _enabled_in_member_list(member, plugin_id, db_session) is None
 
     _share(scoped, plugin_id, [member.id], db_session)
-    access = plugins_api.get_plugin_access(plugin_id, scoped, db_session)
+    access = plugins_api.get_plugin_access(
+        _http_request(), plugin_id, scoped, db_session
+    )
     assert [(share.user_id, share.email) for share in access.user_shares] == [
         (member.id, member.email)
     ]
@@ -396,6 +412,46 @@ def test_owner_shares_a_private_plugin(
 
     _share(scoped, plugin_id, [], db_session)
     assert _enabled_in_member_list(member, plugin_id, db_session) is None
+
+
+def test_a_basic_token_reaches_only_the_plugins_of_its_user(
+    db_session: Session,
+    admin: User,
+    scoped: User,
+    member: User,
+    created: list[int],
+) -> None:
+    plugin_id = _create(scoped, db_session, created, for_organization=False)
+    basic = [Permission.BASIC_ACCESS]
+
+    assert (
+        _status(
+            lambda: plugins_api.get_plugin_access(
+                _http_request(basic), plugin_id, admin, db_session
+            )
+        )
+        == 404
+    )
+    db_session.rollback()
+    assert (
+        _status(lambda: _share(admin, plugin_id, [member.id], db_session, basic)) == 404
+    )
+    db_session.rollback()
+    assert (
+        _status(
+            lambda: plugins_api.publish_plugin(
+                _http_request(basic), plugin_id, admin, db_session
+            )
+        )
+        == 404
+    )
+    db_session.rollback()
+
+    _share(scoped, plugin_id, [member.id], db_session, basic)
+    access = plugins_api.get_plugin_access(
+        _http_request(basic), plugin_id, scoped, db_session
+    )
+    assert [share.user_id for share in access.user_shares] == [member.id]
 
 
 def test_sharing_setting_off_stops_a_new_share(
@@ -420,7 +476,7 @@ def test_publish_needs_an_organization_wide_action_manager(
 ) -> None:
     plugin_id = _create(scoped, db_session, created, for_organization=False)
     publish = lambda user: plugins_api.publish_plugin(  # noqa: E731
-        plugin_id, user, db_session
+        _http_request(), plugin_id, user, db_session
     )
     assert _status(lambda: publish(scoped)) == 403
     db_session.rollback()

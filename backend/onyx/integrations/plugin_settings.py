@@ -144,13 +144,14 @@ def set_installation_policy__no_commit(
 
 
 def _owned_private_plugin(
-    user: User, plugin_id: UUID, db_session: Session
+    user: User, plugin_id: UUID, db_session: Session, *, token_may_manage: bool
 ) -> PluginAccess:
     """A private plugin that holds only integrations, which the user owns or
-    manages as an organization-wide action manager."""
+    manages as an organization-wide action manager. ``token_may_manage`` is
+    False when the token of the request does not allow Manage actions."""
     access = _integration_plugin_access(user, plugin_id, db_session)
-    if access.author_user_id != user.id and not has_global_permission(
-        user, Permission.MANAGE_ACTIONS
+    if access.author_user_id != user.id and not (
+        token_may_manage and has_global_permission(user, Permission.MANAGE_ACTIONS)
     ):
         if load_user_plugin_states([user.id], db_session, [plugin_id]):
             raise OnyxError(
@@ -168,9 +169,11 @@ def _owned_private_plugin(
 
 
 def plugin_access_view(
-    user: User, plugin_id: UUID, db_session: Session
+    user: User, plugin_id: UUID, db_session: Session, *, token_may_manage: bool
 ) -> PluginAccessView:
-    access = _owned_private_plugin(user, plugin_id, db_session)
+    access = _owned_private_plugin(
+        user, plugin_id, db_session, token_may_manage=token_may_manage
+    )
     return PluginAccessView(
         plugin_id=plugin_id,
         user_shares=[
@@ -191,11 +194,18 @@ def plugin_access_view(
 
 
 def share_plugin__no_commit(
-    user: User, plugin_id: UUID, request: PluginAccessUpdate, db_session: Session
+    user: User,
+    plugin_id: UUID,
+    request: PluginAccessUpdate,
+    db_session: Session,
+    *,
+    token_may_manage: bool,
 ) -> set[UUID]:
     """Replace the shares. The Sharing setting and the group scope rules of
     skills apply. Returns the affected users."""
-    _owned_private_plugin(user, plugin_id, db_session)
+    _owned_private_plugin(
+        user, plugin_id, db_session, token_may_manage=token_may_manage
+    )
     result = apply_plugin_access_change__no_commit(
         [plugin_id],
         PluginAccessChange(
@@ -216,13 +226,15 @@ def share_plugin__no_commit(
 
 
 def publish_plugin_for_user__no_commit(
-    user: User, plugin_id: UUID, db_session: Session
+    user: User, plugin_id: UUID, db_session: Session, *, token_may_manage: bool
 ) -> set[UUID]:
     """Move the plugin to the Organization library. Only an
     organization-wide action manager publishes a plugin that holds an
     integration, with no review: there is no review of such a plugin. A used
     name takes the next free name. Returns the affected users."""
-    _owned_private_plugin(user, plugin_id, db_session)
+    _owned_private_plugin(
+        user, plugin_id, db_session, token_may_manage=token_may_manage
+    )
     plugin = lock_plugin(plugin_id, db_session)
     if plugin is None:
         raise _not_found()
