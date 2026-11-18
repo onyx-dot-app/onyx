@@ -10663,6 +10663,7 @@
           "useDefaults": "Standards verwenden",
           "readOnly": "Lesende Aktionen ({count})",
           "write": "Schreibende Aktionen ({count})",
+          "other": "Weitere Aktionen ({count})",
           "empty": "Diese Integration hat keine Aktionen.",
           "connectFirst": {
             "title": "Verbinden Sie zuerst den Server",

@@ -10663,6 +10663,7 @@
           "useDefaults": "Use defaults",
           "readOnly": "Read-Only Actions ({count})",
           "write": "Write Actions ({count})",
+          "other": "Other Actions ({count})",
           "empty": "This integration has no actions.",
           "connectFirst": {
             "title": "Connect the server first",

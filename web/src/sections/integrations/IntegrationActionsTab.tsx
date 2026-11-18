@@ -107,7 +107,8 @@ export default function IntegrationActionsTab({
       .includes(search)
   );
   const readActions = shown.filter((action) => action.read_only === true);
-  const writeActions = shown.filter((action) => action.read_only !== true);
+  const writeActions = shown.filter((action) => action.read_only === false);
+  const otherActions = shown.filter((action) => action.read_only === null);
 
   function items(actions: IntegrationAction[]): PolicyEditorItem[] {
     return actions.map((action) => ({
@@ -328,6 +329,11 @@ export default function IntegrationActionsTab({
               id: "write",
               title: t("write", { count: writeActions.length }),
               actions: writeActions,
+            },
+            {
+              id: "other",
+              title: t("other", { count: otherActions.length }),
+              actions: otherActions,
             },
           ].map((group) =>
             group.actions.length === 0 ? null : (

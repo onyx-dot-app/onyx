@@ -10663,6 +10663,7 @@
           "useDefaults": "デフォルトを使用",
           "readOnly": "読み取りアクション ({count})",
           "write": "書き込みアクション ({count})",
+          "other": "その他のアクション ({count})",
           "empty": "この連携にはアクションがありません。",
           "connectFirst": {
             "title": "まずサーバーに接続してください",
