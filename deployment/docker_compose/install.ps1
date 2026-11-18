@@ -927,7 +927,12 @@ function Main {
     if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\app.conf.template") "$($script:NginxBaseUrl)/app.conf.template" "nginx/app.conf.template")) { exit 1 }
     if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\run-nginx.sh") "$($script:NginxBaseUrl)/run-nginx.sh" "nginx/run-nginx.sh")) { exit 1 }
     foreach ($nginxInclude in @("mcp.conf.inc.template", "mcp_upstream.conf.inc.template", "webhook.conf.inc")) {
-        if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\$nginxInclude") "$($script:NginxBaseUrl)/$nginxInclude" "nginx/$nginxInclude")) { exit 1 }
+        $nginxIncludePath = Join-Path $script:InstallRoot "data\nginx\$nginxInclude"
+        if ($Local -and -not (Test-Path $nginxIncludePath)) {
+            Print-Warning "nginx/$nginxInclude is missing. nginx starts without its routes."
+            continue
+        }
+        if (-not (Ensure-OnyxFile $nginxIncludePath "$($script:NginxBaseUrl)/$nginxInclude" "nginx/$nginxInclude")) { exit 1 }
     }
     if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "README.md") "$($script:GitHubRawUrl)/README.md" "README.md")) { exit 1 }
 
