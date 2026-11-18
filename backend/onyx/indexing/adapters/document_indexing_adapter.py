@@ -63,18 +63,10 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         tenant_id: str,
         index_attempt_metadata: IndexAttemptMetadata,
     ):
-        self._connector_id = connector_id
-        self._credential_id = credential_id
+        self.connector_id = connector_id
+        self.credential_id = credential_id
         self.tenant_id = tenant_id
         self._index_attempt_metadata = index_attempt_metadata
-
-    @property
-    def connector_id(self) -> int:
-        return self._connector_id
-
-    @property
-    def credential_id(self) -> int:
-        return self._credential_id
 
     @property
     def index_attempt_metadata(self) -> IndexAttemptMetadata:
