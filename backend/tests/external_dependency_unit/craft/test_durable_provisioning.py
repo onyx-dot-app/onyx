@@ -29,7 +29,7 @@ from onyx.auth.pat import hash_pat
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import BuildSessionStatus, Permission, SandboxStatus
 from onyx.db.models import BuildSession, PersonalAccessToken, Sandbox, User
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.sandbox import (
     begin_provisioning_attempt__no_commit,
     finalize_provisioning_attempt__no_commit,
     get_sandbox_by_user_id,

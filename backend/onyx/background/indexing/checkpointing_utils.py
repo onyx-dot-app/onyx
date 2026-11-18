@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 from io import BytesIO
 
-from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import NUM_DAYS_TO_KEEP_CHECKPOINTS, FileOrigin
@@ -9,7 +8,9 @@ from onyx.connectors.interfaces import BaseConnector, CheckpointedConnector
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.index_attempt import (
+    add_index_attempt__no_commit,
     get_index_attempt,
+    get_index_attempts_with_checkpoint_created_before,
     get_recent_completed_attempts_for_cc_pair,
 )
 from onyx.db.models import IndexAttempt
@@ -49,7 +50,7 @@ def save_checkpoint(
     if not index_attempt:
         raise RuntimeError(f"Index attempt {index_attempt_id} not found in DB.")
     index_attempt.checkpoint_pointer = checkpoint_pointer
-    db_session.add(index_attempt)
+    add_index_attempt__no_commit(db_session, index_attempt)
     db_session.commit()
     return checkpoint_pointer
 
@@ -208,19 +209,7 @@ def get_index_attempts_with_old_checkpoints(
     """
     cutoff_date = get_db_current_time(db_session) - timedelta(days=days_to_keep)
 
-    # Find all index attempts with checkpoints older than cutoff_date
-    old_attempts = (
-        db_session.query(IndexAttempt)
-        .filter(
-            and_(
-                IndexAttempt.checkpoint_pointer.isnot(None),
-                IndexAttempt.time_created < cutoff_date,
-            )
-        )
-        .all()
-    )
-
-    return old_attempts
+    return get_index_attempts_with_checkpoint_created_before(db_session, cutoff_date)
 
 
 def cleanup_checkpoint(db_session: Session, index_attempt_id: int) -> None:
@@ -236,7 +225,7 @@ def cleanup_checkpoint(db_session: Session, index_attempt_id: int) -> None:
     file_store.delete_file(index_attempt.checkpoint_pointer)
 
     index_attempt.checkpoint_pointer = None
-    db_session.add(index_attempt)
+    add_index_attempt__no_commit(db_session, index_attempt)
     db_session.commit()
 
     return None

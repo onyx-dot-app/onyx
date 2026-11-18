@@ -2,16 +2,20 @@ import asyncio
 import os
 import time
 import uuid
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
 import httpx
 from fastapi.concurrency import run_in_threadpool
 from fastapi_users.manager import BaseUserManager
+from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import RefreshedLoginToken
 from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
+from onyx.cache.interface import CacheLockAcquisitionError
+from onyx.cache.locks import async_cache_shared_lock
 from onyx.configs.app_configs import (
     OAUTH_CLIENT_ID,
     OAUTH_CLIENT_SECRET,
@@ -19,10 +23,15 @@ from onyx.configs.app_configs import (
 )
 from onyx.db.auth import reload_user_oidc_expiry
 from onyx.db.enums import SSOProviderType
-from onyx.db.models import OAuthAccount, User
-from onyx.db.sso_provider import fetch_sso_provider_by_name_async
+from onyx.db.models import OAuthAccount, SSOProvider, User
+from onyx.db.sso_provider import (
+    fetch_sso_provider_by_name,
+    fetch_sso_provider_by_name_async,
+)
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -71,32 +80,14 @@ async def _get_discovery_lock(config_url: str) -> asyncio.Lock:
         return lock
 
 
-# Per-user locks coalescing concurrent token-refresh attempts. Without this,
-# two requests for the same user near expiry could both POST a refresh, and
-# IdPs that rotate refresh tokens (e.g. Microsoft Entra) would invalidate one
-# of them with `400 invalid_grant`. The lock pairs with a re-read inside
-# `check_and_refresh_oauth_tokens` so the second coroutine skips the redundant
-# request entirely once the first has succeeded.
-_USER_REFRESH_LOCKS: Dict[uuid.UUID, asyncio.Lock] = {}
-_USER_REFRESH_LOCKS_GUARD: Optional[asyncio.Lock] = None
+# The cache lock serializes the refresh of one user's login tokens across
+# processes: web requests, background jobs and the sandbox proxy.
+LOGIN_REFRESH_LOCK_LEASE_S = 60.0
+LOGIN_REFRESH_LOCK_WAIT_S = 35.0
 
 
-def _get_user_refresh_locks_guard() -> asyncio.Lock:
-    """Lazy-init the meta-lock that protects the per-user lock dict itself."""
-    global _USER_REFRESH_LOCKS_GUARD
-    if _USER_REFRESH_LOCKS_GUARD is None:
-        _USER_REFRESH_LOCKS_GUARD = asyncio.Lock()
-    return _USER_REFRESH_LOCKS_GUARD
-
-
-async def _get_user_refresh_lock(user_id: uuid.UUID) -> asyncio.Lock:
-    """Get-or-create a per-user lock keyed by `user.id`."""
-    async with _get_user_refresh_locks_guard():
-        lock = _USER_REFRESH_LOCKS.get(user_id)
-        if lock is None:
-            lock = asyncio.Lock()
-            _USER_REFRESH_LOCKS[user_id] = lock
-        return lock
+def onyx_login_refresh_lock_name(user_id: uuid.UUID) -> str:
+    return f"onyx_login_refresh:{get_current_tenant_id()}:{user_id}"
 
 
 def _cached_token_endpoint(config_url: str) -> tuple[bool, Optional[str]]:
@@ -186,12 +177,14 @@ async def _resolve_token_endpoint(provider: str) -> Optional[str]:
     return None
 
 
-@dataclass(frozen=True)
-class _RefreshContext:
-    token_endpoint: str
-    client_id: str
+class _RefreshContext(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True)
+
+    # Keep stored values until HTTPX handles the URL and form body.
+    token_endpoint: SkipValidation[str]
+    client_id: SkipValidation[str]
     # repr=False keeps the secret out of any future log/repr of the context.
-    client_secret: str = field(repr=False)
+    client_secret: SkipValidation[str] = Field(repr=False)
 
 
 async def _resolve_refresh_context(
@@ -213,7 +206,12 @@ async def _resolve_refresh_context(
         except Exception:
             logger.exception("Session rollback failed after provider lookup error")
         return None
+    return await _refresh_context_for_provider(provider, oauth_name)
 
+
+async def _refresh_context_for_provider(
+    provider: SSOProvider | None, oauth_name: str
+) -> Optional[_RefreshContext]:
     if provider is not None and provider.provider_type is not SSOProviderType.SAML:
         try:
             raw_config = (
@@ -236,7 +234,11 @@ async def _resolve_refresh_context(
             else await _get_oidc_token_endpoint(config.get("openid_config_url") or "")
         )
         if endpoint and client_id and client_secret:
-            return _RefreshContext(endpoint, client_id, client_secret)
+            return _RefreshContext(
+                token_endpoint=endpoint,
+                client_id=client_id,
+                client_secret=client_secret,
+            )
         logger.error(
             "SSO provider %s cannot refresh tokens: has_endpoint=%s "
             "has_client_id=%s has_client_secret=%s",
@@ -256,7 +258,11 @@ async def _resolve_refresh_context(
             "No OAuth credentials configured to refresh provider: %s", oauth_name
         )
         return None
-    return _RefreshContext(endpoint, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET)
+    return _RefreshContext(
+        token_endpoint=endpoint,
+        client_id=OAUTH_CLIENT_ID,
+        client_secret=OAUTH_CLIENT_SECRET,
+    )
 
 
 # NOTE: Keeping this as a utility function for potential future debugging,
@@ -292,6 +298,42 @@ async def _test_expire_oauth_token(
         return False
 
 
+async def _request_login_token_refresh(
+    context: _RefreshContext, refresh_token: str
+) -> Optional[RefreshedLoginToken]:
+    """POST the refresh grant. None when the IdP refuses it."""
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            context.token_endpoint,
+            data={
+                "client_id": context.client_id,
+                "client_secret": context.client_secret,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+    if response.status_code != 200:
+        logger.error("Failed to refresh OAuth token: Status %s", response.status_code)
+        return None
+
+    token_data = response.json()
+    new_access_token = token_data.get("access_token")
+    if not isinstance(new_access_token, str) or not new_access_token:
+        logger.error("OAuth refresh response has no access token")
+        return None
+    expires_in = token_data.get("expires_in")
+    return RefreshedLoginToken(
+        access_token=new_access_token,
+        refresh_token=token_data.get("refresh_token", refresh_token),
+        expires_at=(
+            int(datetime.now(timezone.utc).timestamp() + expires_in)
+            if expires_in
+            else None
+        ),
+    )
+
+
 async def refresh_oauth_token(
     user: User,
     oauth_account: OAuthAccount,
@@ -318,70 +360,124 @@ async def refresh_oauth_token(
     try:
         logger.info("Refreshing OAuth token for %s's %s account", user.email, provider)
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                context.token_endpoint,
-                data={
-                    "client_id": context.client_id,
-                    "client_secret": context.client_secret,
-                    "refresh_token": oauth_account.refresh_token,
-                    "grant_type": "refresh_token",
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
+        refreshed = await _request_login_token_refresh(
+            context, oauth_account.refresh_token
+        )
+        if refreshed is None:
+            return False
 
-            if response.status_code != 200:
-                logger.error(
-                    "Failed to refresh OAuth token: Status %s", response.status_code
+        updated_data: Dict[str, Any] = {
+            "access_token": refreshed.access_token,
+            "refresh_token": refreshed.refresh_token,
+        }
+
+        if refreshed.expires_at:
+            updated_data["expires_at"] = refreshed.expires_at
+
+            if get_security_settings().track_external_idp_expiry:
+                oidc_expiry = datetime.fromtimestamp(
+                    refreshed.expires_at, tz=timezone.utc
                 )
-                return False
+                await user_manager.user_db.update(user, {"oidc_expiry": oidc_expiry})
+                user.oidc_expiry = oidc_expiry
 
-            token_data = response.json()
+        await user_manager.user_db.update_oauth_account(  # ty: ignore[invalid-argument-type]
+            user,  # ty: ignore[invalid-argument-type]
+            cast(Any, oauth_account),
+            updated_data,
+        )
 
-            new_access_token = token_data.get("access_token")
-            new_refresh_token = token_data.get(
-                "refresh_token", oauth_account.refresh_token
-            )
-            expires_in = token_data.get("expires_in")
-
-            # Calculate new expiry time if provided
-            new_expires_at: Optional[int] = None
-            if expires_in:
-                new_expires_at = int(
-                    (datetime.now(timezone.utc).timestamp() + expires_in)
-                )
-
-            # Update the OAuth account
-            updated_data: Dict[str, Any] = {
-                "access_token": new_access_token,
-                "refresh_token": new_refresh_token,
-            }
-
-            if new_expires_at:
-                updated_data["expires_at"] = new_expires_at
-
-                if get_security_settings().track_external_idp_expiry:
-                    oidc_expiry = datetime.fromtimestamp(
-                        new_expires_at, tz=timezone.utc
-                    )
-                    await user_manager.user_db.update(
-                        user, {"oidc_expiry": oidc_expiry}
-                    )
-                    user.oidc_expiry = oidc_expiry
-
-            # Update the OAuth account
-            await user_manager.user_db.update_oauth_account(  # ty: ignore[invalid-argument-type]
-                user,  # ty: ignore[invalid-argument-type]
-                cast(Any, oauth_account),
-                updated_data,
-            )
-
-            logger.info("Successfully refreshed OAuth token for %s", user.email)
-            return True
+        logger.info("Successfully refreshed OAuth token for %s", user.email)
+        return True
 
     except Exception as e:
         logger.exception("Error refreshing OAuth token: %s", str(e))
         return False
+
+
+def refresh_oauth_account_sync(
+    user: User, oauth_account: OAuthAccount, db_session: Session
+) -> bool:
+    """Refresh one login token with a sync session, for work that runs with
+    no web request (background jobs, the sandbox proxy). The caller holds the
+    lock and commits."""
+    if not oauth_account.refresh_token:
+        return False
+    oauth_name = oauth_account.oauth_name
+    try:
+        provider = fetch_sso_provider_by_name(db_session, oauth_name)
+        context = run_async_sync_no_cancel(
+            _refresh_context_for_provider(provider, oauth_name)
+        )
+        if context is None:
+            return False
+        refreshed = run_async_sync_no_cancel(
+            _request_login_token_refresh(context, oauth_account.refresh_token)
+        )
+    except Exception:
+        logger.exception("Error refreshing OAuth token for %s", user.email)
+        return False
+    if refreshed is None:
+        return False
+
+    oauth_account.access_token = refreshed.access_token
+    oauth_account.refresh_token = refreshed.refresh_token
+    if refreshed.expires_at:
+        oauth_account.expires_at = refreshed.expires_at
+        if get_security_settings().track_external_idp_expiry:
+            user.oidc_expiry = datetime.fromtimestamp(
+                refreshed.expires_at, tz=timezone.utc
+            )
+    return True
+
+
+async def _reload_oidc_expiry(db_session: AsyncSession, user: User) -> None:
+    """This User was loaded before any concurrent refresh. Its oidc_expiry is
+    re-read so a stale one cannot reject the request."""
+    try:
+        await reload_user_oidc_expiry(db_session, user)
+    except Exception:
+        logger.exception(
+            "Could not reload oidc_expiry for %s, a stale value may "
+            "reject this request",
+            user.email,
+        )
+
+
+async def _refresh_if_still_stale(
+    user: User,
+    oauth_account: OAuthAccount,
+    db_session: AsyncSession,
+    user_manager: BaseUserManager[User, Any],
+    now_timestamp: float,
+    buffer_seconds: int,
+) -> None:
+    """Re-read the account under the refresh locks, so a caller that waited
+    sees the refreshed `expires_at` (and `refresh_token` for IdPs that
+    rotate) and skips the redundant POST."""
+    try:
+        await db_session.refresh(oauth_account)
+    except Exception:
+        # `db_session.refresh` can fail when oauth_account is detached from
+        # this session (e.g. pre-loaded by the caller). Fall through and
+        # attempt the refresh anyway.
+        pass
+
+    await _reload_oidc_expiry(db_session, user)
+
+    if (
+        oauth_account.expires_at
+        and oauth_account.expires_at - now_timestamp >= buffer_seconds
+    ):
+        # Another caller already refreshed this account.
+        return
+
+    logger.info("OAuth token for %s is about to expire - refreshing", user.email)
+    success = await refresh_oauth_token(user, oauth_account, db_session, user_manager)
+    if not success:
+        logger.warning(
+            "Failed to refresh OAuth token. User may need to re-authenticate."
+        )
 
 
 async def check_and_refresh_oauth_tokens(
@@ -410,51 +506,28 @@ async def check_and_refresh_oauth_tokens(
             oauth_account.expires_at
             and oauth_account.expires_at - now_timestamp < buffer_seconds
         ):
-            # Coalesce concurrent refreshes for the same user. Re-read the
-            # account inside the lock so the second coroutine sees the
-            # refreshed `expires_at` (and `refresh_token` for IdPs that
-            # rotate) and skips the redundant POST.
-            user_lock = await _get_user_refresh_lock(user.id)
-            async with user_lock:
-                try:
-                    await db_session.refresh(oauth_account)
-                except Exception:
-                    # `db_session.refresh` can fail when oauth_account is
-                    # detached from this session (e.g. pre-loaded by the
-                    # caller). Fall through and attempt the refresh anyway —
-                    # at worst the second coroutine sees the same stale
-                    # state we'd see without the lock.
-                    pass
-
-                try:
-                    # This User was loaded before any concurrent refresh. Its
-                    # oidc_expiry is re-read so a stale one cannot reject the request.
-                    await reload_user_oidc_expiry(db_session, user)
-                except Exception:
-                    logger.exception(
-                        "Could not reload oidc_expiry for %s, a stale value may "
-                        "reject this request",
-                        user.email,
-                    )
-
-                if (
-                    oauth_account.expires_at
-                    and oauth_account.expires_at - now_timestamp >= buffer_seconds
+            try:
+                async with async_cache_shared_lock(
+                    onyx_login_refresh_lock_name(user.id),
+                    max_time_lock_held_s=LOGIN_REFRESH_LOCK_LEASE_S,
+                    wait_for_lock_s=LOGIN_REFRESH_LOCK_WAIT_S,
+                    logger=logger,
                 ):
-                    # Another coroutine already refreshed this account.
-                    continue
-
-                logger.info(
-                    "OAuth token for %s is about to expire - refreshing", user.email
-                )
-                success = await refresh_oauth_token(
-                    user, oauth_account, db_session, user_manager
-                )
-
-                if not success:
-                    logger.warning(
-                        "Failed to refresh OAuth token. User may need to re-authenticate."
+                    await _refresh_if_still_stale(
+                        user,
+                        oauth_account,
+                        db_session,
+                        user_manager,
+                        now_timestamp,
+                        buffer_seconds,
                     )
+            except CacheLockAcquisitionError:
+                # Another process holds the lock and refreshes the token.
+                logger.warning(
+                    "OAuth token refresh for %s is already running elsewhere",
+                    user.email,
+                )
+                await _reload_oidc_expiry(db_session, user)
 
 
 async def check_oauth_account_has_refresh_token(

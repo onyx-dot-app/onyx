@@ -345,7 +345,7 @@ def test_duplicate_check_id_within_a_capability_is_rejected() -> None:
     ]
 
     # Under test and postcondition.
-    with pytest.raises(AssertionError, match="Duplicate check_id"):
+    with pytest.raises(RuntimeError, match="Duplicate check_id"):
         run_capability_checks(checks, _context())
 
 
@@ -366,7 +366,7 @@ def test_mirrored_check_id_across_classes_is_rejected() -> None:
     ]
 
     # Under test and postcondition.
-    with pytest.raises(AssertionError, match="must be one class"):
+    with pytest.raises(RuntimeError, match="must be one class"):
         run_capability_checks(checks, _context())
 
 

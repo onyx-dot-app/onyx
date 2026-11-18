@@ -1,7 +1,6 @@
 """Pydantic request and response models for the skills API."""
 
 import datetime
-from dataclasses import replace
 from typing import Any, Literal
 from uuid import UUID
 
@@ -49,13 +48,6 @@ class SkillGroupSummary(BaseModel):
     installation_policy: PluginInstallationPolicy | None
 
 
-class SkillExternalAppDependencyResponse(BaseModel):
-    external_app_id: int
-    name: str
-    enabled: bool
-    ready: bool
-
-
 class SkillResponse(BaseModel):
     source: Literal["builtin", "custom"]
     id: UUID
@@ -92,7 +84,6 @@ class SkillResponse(BaseModel):
     public_permission: SkillSharePermission | None = None
     is_personal: bool = False
     user_permission: SkillAccessLevel | None = None
-    external_app: SkillExternalAppDependencyResponse | None = None
     # The plugin version of a custom skill whose files this response shows.
     # Edits send it back as base_version_id. None for built-ins.
     current_version_id: UUID | None = None
@@ -110,7 +101,6 @@ class SkillResponse(BaseModel):
         db_session: Session,
         enabled: bool,
         can_toggle: bool,
-        external_app: SkillExternalAppDependencyResponse | None = None,
     ) -> "SkillResponse":
         return cls(
             source="builtin",
@@ -123,7 +113,6 @@ class SkillResponse(BaseModel):
             can_toggle=can_toggle,
             installation_policy=PluginInstallationPolicy.AVAILABLE,
             user_permission=SkillAccessLevel.VIEWER,
-            external_app=external_app,
         )
 
     @classmethod
@@ -139,7 +128,6 @@ class SkillResponse(BaseModel):
         can_delete: bool = False,
         include_share_details: bool = False,
         group_summaries: list[SkillGroupSummary] | None = None,
-        external_app: SkillExternalAppDependencyResponse | None = None,
         current_version_id: UUID | None = None,
     ) -> "SkillResponse":
         """Access fields come from the skill's plugin; ``access`` is None only
@@ -198,7 +186,6 @@ class SkillResponse(BaseModel):
             public_permission=SkillSharePermission.VIEWER if published else None,
             is_personal=not published and not user_shares and not group_shares,
             user_permission=user_permission,
-            external_app=external_app,
             current_version_id=current_version_id,
             current_version_number=(
                 access.current_version_number if access is not None else None
@@ -224,7 +211,6 @@ class SkillPreviewResponse(BaseModel):
     description: str
     author_email: str | None = None
     instructions_markdown: str
-    external_app: SkillExternalAppDependencyResponse | None = None
 
     @classmethod
     def from_builtin(
@@ -232,7 +218,6 @@ class SkillPreviewResponse(BaseModel):
         skill: Skill,
         *,
         instructions_markdown: str,
-        external_app: SkillExternalAppDependencyResponse | None = None,
     ) -> "SkillPreviewResponse":
         return cls(
             source="builtin",
@@ -241,7 +226,6 @@ class SkillPreviewResponse(BaseModel):
             description=skill.description,
             author_email=None,
             instructions_markdown=instructions_markdown,
-            external_app=external_app,
         )
 
     @classmethod
@@ -251,7 +235,6 @@ class SkillPreviewResponse(BaseModel):
         access: PluginAccess | None,
         *,
         instructions_markdown: str,
-        external_app: SkillExternalAppDependencyResponse | None = None,
     ) -> "SkillPreviewResponse":
         return cls(
             source="custom",
@@ -262,7 +245,6 @@ class SkillPreviewResponse(BaseModel):
             ),
             author_email=access.author_email if access is not None else None,
             instructions_markdown=instructions_markdown,
-            external_app=external_app,
         )
 
 
@@ -502,12 +484,17 @@ class SkillShareRequest(SkillBulkSharing):
     def to_change(self) -> SkillSharingChange:
         if self.group_settings is None:
             return super().to_change()
-        return replace(
-            super().to_change(),
-            group_settings={
-                setting.group_id: setting.installation_policy
-                for setting in self.group_settings
-            },
+        return (
+            super()
+            .to_change()
+            .model_copy(
+                update={
+                    "group_settings": {
+                        setting.group_id: setting.installation_policy
+                        for setting in self.group_settings
+                    }
+                }
+            )
         )
 
 

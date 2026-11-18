@@ -1044,7 +1044,10 @@ def connector_document_extraction(
                             index_attempt_id,
                             exc_info=True,
                         )
-                    app.send_task(
+                    # No expires=: the task carries a fetched batch, and a
+                    # big run can wait hours for a docprocessing worker. An
+                    # expired task would leave its batch unprocessed.
+                    app.send_task(  # celery-expires: allow (a dropped batch stalls its attempt)
                         OnyxCeleryTask.DOCPROCESSING_TASK,
                         kwargs=processing_batch_data,
                         queue=OnyxCeleryQueues.DOCPROCESSING,
@@ -1290,7 +1293,7 @@ def reissue_old_batches(
                 index_attempt.id,
                 exc_info=True,
             )
-        app.send_task(
+        app.send_task(  # celery-expires: allow (a dropped batch stalls its attempt)
             OnyxCeleryTask.DOCPROCESSING_TASK,
             kwargs={
                 "index_attempt_id": index_attempt.id,

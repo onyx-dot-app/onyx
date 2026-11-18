@@ -1,50 +1,28 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
-import { Button, Text, useCreateModal } from "@opal/components";
+import { Text, useCreateModal } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
-  AppActionPoliciesView,
-  TaskAppActionPolicies,
-} from "@/lib/plugins/types";
-import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
-import { useMemberPlugins, type MemberPlugin } from "@/lib/plugins/member";
-import MemberPluginConnectionDialog from "@/sections/plugins/MemberPluginConnectionDialog";
+  TaskActionSettings,
+  TaskPluginLink,
+  TaskPluginView,
+} from "@/app/craft/v1/tasks/types";
 import styles from "@/sections/plugins/PluginsPage.module.css";
 import TaskPluginCard from "@/app/craft/v1/tasks/components/TaskPluginCard";
 import TaskAppActionsModal from "@/app/craft/v1/tasks/components/TaskAppActionsModal";
 import ActionPoliciesLoadError from "@/app/craft/v1/tasks/components/ActionPoliciesLoadError";
 
-function findTaskPlugin(app: AppActionPoliciesView, plugins: MemberPlugin[]) {
-  return plugins.find((plugin) =>
-    plugin.kind === "external-app"
-      ? app.kind === "external_app" && plugin.app.id === app.target_id
-      : plugin.kind === "mcp" &&
-        app.kind === "mcp_server" &&
-        plugin.server.id === app.target_id
-  );
-}
-
-// Snapshot personal defaults before the first task-specific edit or enable.
-function initialActionPolicies(
-  app: AppActionPoliciesView,
-  policies: Record<string, ActionPolicy>
-): Record<string, ActionPolicy> {
-  return app.enabled === null && Object.keys(policies).length === 0
-    ? Object.fromEntries(
-        app.actions.map((action) => [action.action_id, action.effective_policy])
-      )
-    : policies;
-}
+const INHERIT_ALL: TaskActionSettings = { default: "inherit", actions: {} };
 
 interface TaskActionPoliciesProps {
   taskId: string | null;
-  value: TaskAppActionPolicies[] | null;
-  onChange: (value: TaskAppActionPolicies[]) => void;
+  value: TaskPluginLink[] | null;
+  onChange: (value: TaskPluginLink[]) => void;
 }
 
 export default function TaskActionPolicies({
@@ -54,8 +32,8 @@ export default function TaskActionPolicies({
 }: TaskActionPoliciesProps) {
   const t = useTranslations("craft.actionPolicies");
   const openingId = useId();
-  const [catalog, setCatalog] = useState<AppActionPoliciesView[] | null>(null);
-  const { error, mutate } = useSWR<AppActionPoliciesView[], Error>(
+  const [catalog, setCatalog] = useState<TaskPluginView[] | null>(null);
+  const { error, mutate } = useSWR<TaskPluginView[], Error>(
     [
       taskId
         ? SWR_KEYS.taskActionPolicies(taskId)
@@ -70,20 +48,12 @@ export default function TaskActionPolicies({
         if (catalog !== null) return;
         setCatalog(data);
         onChange(
-          data.map((app) => ({
-            gated_app_id: app.gated_app_id,
-            enabled: taskId !== null && app.enabled === true,
-            action_policies: taskId
-              ? Object.fromEntries(
-                  app.actions
-                    .filter((action) => action.stored_policy !== null)
-                    .map((action) => [
-                      action.action_id,
-                      action.stored_policy ?? action.effective_policy,
-                    ])
-                )
-              : {},
-          }))
+          data
+            .filter((plugin) => plugin.enabled)
+            .map((plugin) => ({
+              plugin_id: plugin.plugin_id,
+              action_settings: plugin.action_settings ?? INHERIT_ALL,
+            }))
         );
       },
     }
@@ -94,130 +64,86 @@ export default function TaskActionPolicies({
     <Section height="auto" alignItems="stretch" gap={3}>
       <Text font="main-content-emphasis">{t("taskAppsTitle")}</Text>
       <Text font="secondary-body" color="text-03">
-        {t(taskId ? "taskDescription" : "newTaskDescription")}
+        {t(taskId ? "taskDescription" : "newTaskPluginsDescription")}
       </Text>
-      <AppActionPolicyGroups
-        apps={catalog}
-        value={value ?? []}
-        onChange={onChange}
-      />
+      <PluginGroups plugins={catalog} value={value ?? []} onChange={onChange} />
     </Section>
   );
 }
 
-interface AppActionPolicyGroupsProps {
-  apps: AppActionPoliciesView[] | null;
-  value: TaskAppActionPolicies[];
-  onChange: (value: TaskAppActionPolicies[]) => void;
+interface PluginGroupsProps {
+  plugins: TaskPluginView[] | null;
+  value: TaskPluginLink[];
+  onChange: (value: TaskPluginLink[]) => void;
 }
-function AppActionPolicyGroups({
-  apps,
-  value,
-  onChange,
-}: AppActionPolicyGroupsProps) {
+function PluginGroups({ plugins, value, onChange }: PluginGroupsProps) {
   const t = useTranslations("craft.actionPolicies");
-  const tPlugins = useTranslations("actions.memberPlugins.state");
-  const { plugins, refresh, errors } = useMemberPlugins({ surface: "craft" });
-  const [dialog, setDialog] = useState<{
-    kind: "actions" | "connection";
-    appId: number;
-  } | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // The settings of a plugin the user turned off, so turning it on again
+  // restores them.
+  const turnedOff = useRef<Record<string, TaskActionSettings>>({});
   const actionsModal = useCreateModal();
-  const connectionModal = useCreateModal();
-  if (!apps) return <Text font="secondary-body">{t("loading")}</Text>;
-  if (apps.length === 0)
-    return <Text font="secondary-body">{t("emptyApps")}</Text>;
-  const activeApp = apps.find((app) => app.gated_app_id === dialog?.appId);
-  const activeDraft = value.find((app) => app.gated_app_id === dialog?.appId);
-  const connectingPlugin =
-    activeApp && dialog?.kind === "connection"
-      ? findTaskPlugin(activeApp, plugins)
-      : undefined;
-  const editingApp = dialog?.kind === "actions" ? activeApp : undefined;
+  if (!plugins) return <Text font="secondary-body">{t("loading")}</Text>;
+  if (plugins.length === 0)
+    return <Text font="secondary-body">{t("emptyPlugins")}</Text>;
+  const linkFor = (pluginId: string) =>
+    value.find((link) => link.plugin_id === pluginId);
+  const editing = plugins.find((plugin) => plugin.plugin_id === editingId);
+  function save(pluginId: string, settings: TaskActionSettings) {
+    onChange([
+      ...value.filter((link) => link.plugin_id !== pluginId),
+      { plugin_id: pluginId, action_settings: settings },
+    ]);
+  }
   return (
     <>
-      {(errors.apps || errors.servers) && (
-        <Section height="auto" alignItems="start" gap={2}>
-          <Text font="secondary-body" color="status-error-05">
-            {tPlugins(errors.apps ? "appsError" : "serversError")}
-          </Text>
-          <Button prominence="secondary" onClick={() => void refresh()}>
-            {t("retry")}
-          </Button>
-        </Section>
-      )}
       <div className={styles.grid}>
-        {apps.map((app) => {
-          const plugin = findTaskPlugin(app, plugins);
-          const draft = value.find(
-            (item) => item.gated_app_id === app.gated_app_id
-          );
+        {plugins.map((plugin) => {
+          const link = linkFor(plugin.plugin_id);
           return (
             <TaskPluginCard
-              key={app.gated_app_id}
-              app={app}
-              enabled={draft?.enabled === true}
-              policies={draft?.action_policies ?? {}}
-              connection={plugin?.connection}
+              key={plugin.plugin_id}
+              plugin={plugin}
+              enabled={link !== undefined}
+              settings={link?.action_settings ?? INHERIT_ALL}
               onEdit={() => {
-                setDialog({ kind: "actions", appId: app.gated_app_id });
+                setEditingId(plugin.plugin_id);
                 actionsModal.toggle(true);
               }}
-              onConnect={() => {
-                setDialog({ kind: "connection", appId: app.gated_app_id });
-                connectionModal.toggle(true);
-              }}
-              onToggle={(enabled) =>
+              onToggle={(enabled) => {
+                if (enabled) {
+                  save(
+                    plugin.plugin_id,
+                    link?.action_settings ??
+                      turnedOff.current[plugin.plugin_id] ??
+                      INHERIT_ALL
+                  );
+                  return;
+                }
+                if (link)
+                  turnedOff.current[plugin.plugin_id] = link.action_settings;
                 onChange(
-                  value.map((item) =>
-                    item.gated_app_id === app.gated_app_id
-                      ? {
-                          ...item,
-                          enabled,
-                          action_policies: enabled
-                            ? initialActionPolicies(app, item.action_policies)
-                            : item.action_policies,
-                        }
-                      : item
-                  )
-                )
-              }
+                  value.filter((item) => item.plugin_id !== plugin.plugin_id)
+                );
+              }}
             />
           );
         })}
       </div>
-      <connectionModal.Provider>
-        {connectingPlugin && (
-          <MemberPluginConnectionDialog
-            plugin={connectingPlugin}
-            surface="craft"
-            open
-            onClose={() => connectionModal.toggle(false)}
-            onConnected={() => {
-              connectionModal.toggle(false);
-              void refresh();
-            }}
-          />
-        )}
-      </connectionModal.Provider>
       <actionsModal.Provider>
-        {editingApp && (
+        {editing && (
           <TaskAppActionsModal
-            key={editingApp.gated_app_id}
-            app={editingApp}
-            policies={initialActionPolicies(
-              editingApp,
-              activeDraft?.action_policies ?? {}
-            )}
+            key={editing.plugin_id}
+            plugin={editing}
+            settings={
+              linkFor(editing.plugin_id)?.action_settings ??
+              turnedOff.current[editing.plugin_id] ??
+              INHERIT_ALL
+            }
             onClose={() => actionsModal.toggle(false)}
-            onSave={(policies) => {
-              onChange(
-                value.map((app) =>
-                  app.gated_app_id === editingApp.gated_app_id
-                    ? { ...app, action_policies: policies }
-                    : app
-                )
-              );
+            onSave={(settings) => {
+              // Setting actions turns the plugin on for the task.
+              save(editing.plugin_id, settings);
               actionsModal.toggle(false);
             }}
           />

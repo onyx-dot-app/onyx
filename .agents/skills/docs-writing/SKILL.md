@@ -199,7 +199,7 @@ Run from `documentation/`:
 scripts/generate.sh                      # builds the opal SVGs and openapi.json (not committed)
 python3 scripts/format_docs.py --write   # formats MDX and runs mintlify broken-links
 python3 scripts/format_docs.py --check   # what the pre-commit hook runs
-pre-commit run --files <changed files>
+prek run --files <changed files>
 ```
 
 Also confirm:

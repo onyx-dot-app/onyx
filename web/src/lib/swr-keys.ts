@@ -258,12 +258,24 @@ export const SWR_KEYS = {
   scimToken: "/api/admin/enterprise-settings/scim/token",
 
   // ── MCP Servers ───────────────────────────────────────────────────────────
-  adminMcpServers: "/api/admin/mcp/servers",
-  adminMcpServerToolSnapshots: (serverId: number) =>
-    `/api/admin/mcp/server/${serverId}/tools/snapshots?source=db`,
-  mcpServers: "/api/mcp/servers",
-  mcpServersCraft: "/api/mcp/servers/craft",
-  agentMcpServers: (agentId: number) => `/api/mcp/servers/persona/${agentId}`,
+
+  // ── Integrations ──────────────────────────────────────────────────────────
+  agentPluginCatalog: "/api/integrations/agent-catalog",
+  adminIntegrations: "/api/admin/integrations",
+  adminIntegrationPresets: "/api/admin/integrations/presets",
+  adminIntegration: (integrationId: number) =>
+    `/api/admin/integrations/${integrationId}`,
+  adminIntegrationActions: (integrationId: number) =>
+    `/api/admin/integrations/${integrationId}/actions`,
+  adminPluginInstallationPolicy: (pluginId: string) =>
+    `/api/admin/plugins/${pluginId}/installation-policy`,
+  plugin: (pluginId: string) => `/api/plugins/${pluginId}`,
+  agentPluginIds: (agentId: number) => `/api/plugins/agents/${agentId}`,
+  pluginAccess: (pluginId: string) => `/api/plugins/${pluginId}/access`,
+  integrations: "/api/integrations",
+  integrationActionPolicies: (integrationId: number) =>
+    `/api/action-policies/integration/${integrationId}`,
+  assistantPreferences: "/api/user/assistant/preferences",
 
   // ── Skills ────────────────────────────────────────────────────────────────
   userSkills: "/api/skills",
@@ -281,8 +293,6 @@ export const SWR_KEYS = {
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
-  openApiTools: "/api/tool/openapi",
-  oauthTokenStatus: "/api/user-oauth-token/status",
   adminOAuthTestClaims: "/api/admin/oauth-test/claims",
 
   // ── Voice ─────────────────────────────────────────────────────────────────
@@ -310,9 +320,6 @@ export const SWR_KEYS = {
     `craft-output-thumbnail:${sessionId}:${filePath}`,
   buildSessionPptxPreview: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
-  buildExternalApps: "/api/build/apps",
-  buildExternalAppsAdmin: "/api/build/admin/apps",
-  buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
   buildBaseInstructions: "/api/build/admin/base-instructions",
   buildSessionApprovalStatus: (sessionId: string) =>
     `/api/build/approvals/sessions/${sessionId}/status`,
@@ -326,6 +333,7 @@ export const SWR_KEYS = {
 
   // ── Usage Reports ─────────────────────────────────────────────────────────
   usageReport: "/api/admin/usage-report",
+  usageReportJobs: "/api/admin/usage-report-jobs",
 
   // ── Web Search ────────────────────────────────────────────────────────────
   webSearchContentProviders: "/api/admin/web-search/content-providers",
@@ -364,11 +372,6 @@ export const SWR_KEYS = {
   // ── Query History (EE) ────────────────────────────────────────────────────
   adminChatSessionHistory: "/api/admin/chat-session-history",
   adminChatSession: (id: string) => `/api/admin/chat-session-history/${id}`,
-
-  // ── MCP Server (per-ID) ───────────────────────────────────────────────────
-  adminMcpServer: (id: number) => `/api/admin/mcp/servers/${id}`,
-  adminMcpOAuthDiscovery: (id: number) =>
-    ["admin-mcp-oauth-discovery", id] as const,
 
   // ── Document Processing ───────────────────────────────────────────────────
   unstructuredApiKeySet: "/api/search-settings/unstructured-api-key-set",
@@ -525,8 +528,6 @@ export const SWR_KEYS = {
   // `?limit=…` / `?cursor=…` for pagination. Invalidate from elsewhere with
   // a prefix predicate so every paginated variant gets refreshed at once.
   personalActionPolicies: "/api/build/action-policies",
-  appActionPolicies: (kind: "external_app" | "mcp_server", targetId: number) =>
-    `/api/action-policies/${kind}/${targetId}`,
   taskActionPolicies: (taskId: string) =>
     `/api/build/scheduled-tasks/${taskId}/action-policies`,
   scheduledTasks: "/api/build/scheduled-tasks",

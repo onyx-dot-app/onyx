@@ -15,7 +15,8 @@ class ImageChunker(SectionChunker):
         accumulator: AccumulatorState,
         content_token_limit: int,  # noqa: ARG002
     ) -> SectionChunkerOutput:
-        assert section.image_file_id is not None
+        if section.image_file_id is None:
+            raise RuntimeError("Image section has no image_file_id.")
 
         section_text = clean_text(str(section.text or ""))
         section_link = section.link or ""

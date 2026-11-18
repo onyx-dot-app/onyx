@@ -178,7 +178,7 @@ export async function recoverChatSession(
                 if (batchStop?.obj.type === PacketType.STOP) {
                   stopped = true;
                   paused =
-                    batchStop.obj.stop_reason === StopReason.AWAITING_APPROVAL;
+                    batchStop.obj.stop_reason === StopReason.AWAITING_USER;
                 }
                 batchStop = null;
                 if (restored) {

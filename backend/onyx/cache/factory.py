@@ -1,23 +1,28 @@
 import math
 from collections.abc import Callable
 
-from onyx.cache.interface import CacheBackend, CacheBackendType
+from onyx.cache.interface import CacheBackend
 from onyx.configs.app_configs import CACHE_BACKEND
+from onyx.configs.constants import CacheBackendType
 
 
 def _build_redis_backend(
-    tenant_id: str, operation_timeout_s: float | None
+    tenant_id: str, operation_timeout_s: float | None, replica: bool
 ) -> CacheBackend:
     from onyx.cache.redis_backend import RedisCacheBackend
     from onyx.redis.redis_pool import redis_pool
 
+    if replica:
+        return RedisCacheBackend(redis_pool.get_replica_client(tenant_id))
     return RedisCacheBackend(
         redis_pool.get_client(tenant_id, operation_timeout_s=operation_timeout_s)
     )
 
 
 def _build_postgres_backend(
-    tenant_id: str, operation_timeout_s: float | None
+    tenant_id: str,
+    operation_timeout_s: float | None,
+    _replica: bool,
 ) -> CacheBackend:
     from onyx.cache.postgres_backend import PostgresCacheBackend
 
@@ -32,7 +37,7 @@ def _build_postgres_backend(
 
 
 _BACKEND_BUILDERS: dict[
-    CacheBackendType, Callable[[str, float | None], CacheBackend]
+    CacheBackendType, Callable[[str, float | None, bool], CacheBackend]
 ] = {
     CacheBackendType.REDIS: _build_redis_backend,
     CacheBackendType.POSTGRES: _build_postgres_backend,
@@ -40,7 +45,10 @@ _BACKEND_BUILDERS: dict[
 
 
 def get_cache_backend(
-    *, tenant_id: str | None = None, operation_timeout_s: float | None = None
+    *,
+    tenant_id: str | None = None,
+    operation_timeout_s: float | None = None,
+    replica: bool = False,
 ) -> CacheBackend:
     """Return a tenant-aware ``CacheBackend``.
 
@@ -50,7 +58,12 @@ def get_cache_backend(
     each PostgreSQL statement and lock wait. It is not a total deadline, and
     PostgreSQL connection acquisition is not covered. ``None`` keeps backend
     defaults. Pass a fixed constant: each distinct Redis value gets its own pool.
+    *replica* reads from the Redis read replica, for reads that tolerate
+    replication lag. Do not write through it. PostgreSQL has one database, and
+    *operation_timeout_s* does not apply to the replica.
     """
+    if replica and operation_timeout_s is not None:
+        raise ValueError("operation_timeout_s is not supported with replica")
     if operation_timeout_s is not None and (
         not math.isfinite(operation_timeout_s) or operation_timeout_s <= 0
     ):
@@ -65,7 +78,7 @@ def get_cache_backend(
         raise ValueError(
             f"Unsupported CACHE_BACKEND={CACHE_BACKEND!r}. Supported values: {[t.value for t in CacheBackendType]}"
         )
-    return builder(tenant_id, operation_timeout_s)
+    return builder(tenant_id, operation_timeout_s, replica)
 
 
 def get_shared_cache_backend() -> CacheBackend:

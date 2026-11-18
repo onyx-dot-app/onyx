@@ -12,20 +12,9 @@ import {
   Tooltip,
 } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
-import {
-  SvgBlocks,
-  SvgEdit,
-  SvgPlug,
-  SvgShare,
-  SvgTrash,
-  SvgUser,
-} from "@opal/icons";
+import { SvgBlocks, SvgEdit, SvgShare, SvgTrash, SvgUser } from "@opal/icons";
 import { useSettings } from "@/lib/settings/hooks";
-import type {
-  CustomSkill,
-  SkillExternalAppDependency,
-} from "@/lib/skills/types";
-import { cn } from "@opal/utils";
+import type { CustomSkill } from "@/lib/skills/types";
 import { hasUnpublishedChanges } from "@/lib/skills/sharing";
 import { useInstallationPolicyCopy } from "@/lib/skills/hooks";
 
@@ -37,10 +26,6 @@ interface SkillCardItemBase {
   description: string;
   enabled: boolean;
   can_toggle: boolean;
-  /** External app this skill needs. Required for both sources: a built-in
-   * provider's associated skill is a built-in row, so reading this off the
-   * custom variant only would silently drop every built-in app. */
-  external_app: SkillExternalAppDependency | null;
 }
 
 export interface BuiltinSkillCardItem extends SkillCardItemBase {
@@ -61,7 +46,6 @@ export type SkillCardItem = BuiltinSkillCardItem | CustomSkillCardItem;
 
 export interface SkillCardProps {
   item: SkillCardItem;
-  hasEnabledNameConflict?: boolean;
   onClick?: (item: SkillCardItem) => void;
   onEdit?: (item: CustomSkillCardItem) => void;
   onShare?: (item: CustomSkillCardItem) => void;
@@ -77,7 +61,6 @@ export interface SkillCardProps {
 
 export default function SkillCard({
   item,
-  hasEnabledNameConflict = false,
   onClick,
   onEdit,
   onShare,
@@ -120,38 +103,14 @@ export default function SkillCard({
 
   const authorTitle =
     item.source === "builtin" ? appName : item.author_email || appName;
-  const dependency = item.external_app;
-  const isDependencyUnavailable = dependency !== null && !dependency.ready;
-  const isSelectedDependencyUnavailable =
-    item.enabled && isDependencyUnavailable;
-  const isInactive = !item.enabled || isDependencyUnavailable;
   const isInvalid = item.source === "custom" && item.skill.is_valid === false;
   const isBuiltinUnavailable = item.source === "builtin" && !item.is_available;
-  let dependencyStatus: string | null = null;
-  if (dependency) {
-    if (!dependency.ready) {
-      dependencyStatus = dependency.enabled
-        ? item.enabled
-          ? t("skill.dependency.connectToUse", { app: dependency.name })
-          : t("skill.dependency.connectToEnable", { app: dependency.name })
-        : t("skill.dependency.appDisabled", { app: dependency.name });
-    } else {
-      dependencyStatus =
-        !item.enabled && hasEnabledNameConflict
-          ? t("skill.dependency.nameConflict")
-          : t("skill.dependency.usesApp", { app: dependency.name });
-    }
-  }
 
   let tooltip: string | undefined;
   if (isInvalid) {
     tooltip = t("skill.tooltips.invalid");
   } else if (isBuiltinUnavailable) {
     tooltip = t("skill.tooltips.unavailable");
-  } else if (isDependencyUnavailable && dependency) {
-    tooltip = dependency.enabled
-      ? t("skill.tooltips.connectApp", { app: dependency.name })
-      : t("skill.tooltips.appDisabled", { app: dependency.name });
   }
   const canEdit =
     item.source === "custom" &&
@@ -169,19 +128,9 @@ export default function SkillCard({
     onEnabledChange?.(item, enabled);
   };
 
-  const toggleAriaLabel = dependency
-    ? item.enabled
-      ? t("skill.toggle.disableForApp.ariaLabel", {
-          name: item.name,
-          app: dependency.name,
-        })
-      : t("skill.toggle.enableForApp.ariaLabel", {
-          name: item.name,
-          app: dependency.name,
-        })
-    : item.enabled
-      ? t("skill.toggle.disable.ariaLabel", { name: item.name })
-      : t("skill.toggle.enable.ariaLabel", { name: item.name });
+  const toggleAriaLabel = item.enabled
+    ? t("skill.toggle.disable.ariaLabel", { name: item.name })
+    : t("skill.toggle.enable.ariaLabel", { name: item.name });
 
   return (
     <Tooltip tooltip={tooltip} side="top">
@@ -189,12 +138,8 @@ export default function SkillCard({
         data-testid="SkillCard"
         onClick={handleClick}
         className="group/SkillCard cursor-pointer"
-        disabled={
-          isInvalid ||
-          isBuiltinUnavailable ||
-          (isDependencyUnavailable && !item.enabled)
-        }
-        color={isInactive ? "transparent" : "background-tint-00"}
+        disabled={isInvalid || isBuiltinUnavailable}
+        color={item.enabled ? "background-tint-00" : "transparent"}
         border="solid"
         rounding={4}
         padding={0}
@@ -206,7 +151,6 @@ export default function SkillCard({
           padding={1}
           alignItems="stretch"
           justifyContent="start"
-          className={cn(isSelectedDependencyUnavailable && "opacity-50")}
         >
           <Section
             flexDirection="row"
@@ -339,8 +283,8 @@ export default function SkillCard({
           >
             <Content
               font="secondary-body"
-              icon={dependency ? SvgPlug : SvgUser}
-              title={dependencyStatus ?? authorTitle}
+              icon={SvgUser}
+              title={authorTitle}
               titleColor="text-03"
             />
           </Section>
@@ -385,8 +329,6 @@ export default function SkillCard({
               )
             ) : isInvalid ? (
               <Badge title={t("skill.tags.invalid.label")} color="pending" />
-            ) : dependency ? (
-              <Badge title={t("skill.tags.appSkill.label")} color="info" />
             ) : null}
             {canEdit && hasUnpublishedChanges(item.skill) && (
               <Badge

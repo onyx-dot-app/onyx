@@ -266,7 +266,6 @@ def read_agent_completions(
             output.metadata = ChatMessageMetadata(sources=sources[response.id])
         completions.append(
             AgentCompletion(
-                agent_id=str(response.chat_session_id),
                 agent_path=agent_path_from_ancestors(
                     response.chat_session_id, ancestors
                 ),

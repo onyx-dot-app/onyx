@@ -21,6 +21,8 @@ The user can then:
   turn on deep research, prefer an Action, and turn tools and sources on or off;
 - watch the answer stream, open its citations in a sources sheet, and stop
   the answer.
+- approve or reject a tool call, and answer the agent's questions on their
+  card or with a typed message.
 
 A tool disabled on mobile is also disabled on web, because the server saves
 the setting per agent. The preferred tool, the deep-research switch and the
@@ -175,15 +177,18 @@ session's recovery, including one a send started, so reopening attaches a new
 one.
 
 **Approval waits.** A response that waits for tool approvals ends its stream
-with `stop` and reason `awaiting_approval`. The session goes to `input`. The
-app does not check for waiting cards before a send. The server refuses the
-send with 409 `APPROVAL_PENDING`; the app then keeps the draft, scrolls to the
-card (`useToolApprovalUi.nudge`, without animation when the OS reduces
-motion) and shows a toast. A suspended turn has no Stop; the user decides
+with `stop` and reason `awaiting_user`. The session goes to `input`. Before a
+send, the app checks only for a waiting question card (see Question waits),
+not for waiting approval cards. The server refuses the send with 409
+`APPROVAL_PENDING`; the app then keeps the draft, scrolls to the card
+(`useToolApprovalUi.nudge`, without animation when the OS reduces motion) and
+shows a toast. The same refusal covers a question that the device does not
+show yet. A suspended turn has no Stop; the user decides
 each card. That stop does not finish the response in
-`chat/messageProcessor.ts`. No stop closes a card: a card's outcome comes only
-from a `tool_approval_resolved` packet or a reload. A decision made on the
-device shows until then (`chat/toolApprovals.ts:useToolApprovalUi`). The
+`chat/messageProcessor.ts`. No stop closes a card: a card's outcome comes from
+a `tool_approval_resolved` packet or a reload. Before that, the device shows
+the status of its own decision, or "No longer waiting" after a 404 or 409
+(`chat/toolApprovals.ts:useToolApprovalUi`). The
 client clears the response's `streamingStartedAt`, so the wait is not timed.
 After a decision, `components/chat/ToolApprovalCard.tsx` follows the
 `continuation` that the decision response names, from cursor 0, when no
@@ -195,7 +200,7 @@ the continuation, or a status read when there is none, on the session
 (`queueFollow`). The reader takes it (`takeQueuedFollow`) before it releases
 the chat: recovery after its settle load, and a send after its idle poll. Both
 hand it to a new recovery. A reader whose
-stream stops with `awaiting_approval` reads status while the server
+stream stops with `awaiting_user` reads status while the server
 processes, such as for a sibling response, and follows the next new
 `current_stream` from cursor 0. It never reads the paused stream again. The
 recovery reader drops a continuation's `replay_end` packet. A repeated
@@ -210,6 +215,36 @@ that waits to resume counts in `has_active_subagents`, so a decision on an
 agent's card, which names no `continuation`, starts `watchBackgroundAgents`.
 It reads status until the agents stop and shows their later requests. A later
 decision makes the running watch read again.
+
+**Question waits.** The agent's questions wait the same way: the stream stops
+with `awaiting_user`, and the timeline header reads "Waiting for your answer".
+`mobile/src/chat/toolQuestions.ts:readToolQuestions` reads
+`tool_question_request` and `tool_question_resolved` packets, which name no
+timeline step. `mobile/src/components/chat/ToolQuestionCard.tsx` shows one
+question per page with its options and an "Other" choice, one choice per
+question. Other answers with typed text in place of an option. A card with more than one question shows "Question N of M" and
+Back and Next buttons; choices and notes stay when the user changes pages.
+Submit replaces Next on the last page, is enabled when each question has an
+option or a note, and names the unanswered questions. The card
+posts the answers to `POST /chat/question-requests/{id}/answers`
+(`mobile/src/api/chat/questions.ts`). While the selected reply shows a waiting
+question card, the composer placeholder reads "Type your answer…", and
+`mobile/src/hooks/useChatController.ts:answerQuestionsWithMessage` sends the
+text to the same route as `message` instead of starting a turn, whatever the
+chat state. That text answers every waiting question of the response. A send
+with attachments, a 409 `APPROVAL_PENDING` (an approval of the response
+waits) or another refusal keeps the draft; a 404 or 409 closes the questions
+and reloads the session. The card and the composer follow the `continuation`
+through `mobile/src/hooks/followUserAnswer.ts`, as an approval decision does.
+An answer made on the device shows until its resolution packet arrives
+(`mobile/src/chat/toolQuestions.ts:useToolQuestionUi`); a question that
+already has a local status keeps it, so the answer that the server took
+wins a card and composer race. A record keeps the answers, "Answered in
+chat" with the typed text as a user message bubble, or "No longer waiting"
+for a cancelled question. `mobile/src/hooks/useToolCards.ts` reads both kinds
+of card with the specs in `mobile/src/chat/toolCards.ts`, and
+`mobile/src/chat/toolCards.ts:orderCardsByTurn` places them after the display
+groups of their turn.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and
@@ -226,10 +261,15 @@ lint forbids reading refs during render: `usePacketProcessor` regroups in a
 `useMemo`, and `usePacedTurnGroups` keeps pacing state in effects.
 
 **Composer tools.** `state/ComposerToolsProvider.tsx` holds the tool state.
-`resolveToolOptions` gives the controller `deep_research`, `preferred_tool_id`,
-`allowed_tool_ids` and the search filters at send time. Sources are tied to the
-search tool: turning a source on prefers search, and turning search off clears
-the sources.
+`resolveToolOptions` gives the controller `deep_research`, the allowed entries,
+the preferred tool and the search filters at send time; the controller sends
+them as `tool_options`. An OpenAPI or MCP tool is on or off through its plugins
+(`plugin_ids` from `GET /tool`), which the agent preferences save in
+`disabled_plugin_ids`; a built-in tool stays in `disabled_tool_ids`. The
+allow-list names every plugin of the agent (`api/plugins.ts:useAgentPluginIds`,
+`GET /plugins/agents/{id}`, the list the web reads), because `GET /tool` lists no MCP plugins. Sources
+are tied to the search tool: turning a source on prefers search, and turning
+search off clears the sources.
 
 ---
 

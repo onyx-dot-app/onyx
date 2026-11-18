@@ -8,7 +8,7 @@ import {
 } from "@/app/app/services/streamingModels";
 import type { Message } from "@/app/app/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
+import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 
 function request(tool: string, agentName: string | null = null): Packet {
   return {
@@ -101,7 +101,11 @@ function waitingTools(): string[] {
 }
 
 beforeEach(() => {
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: "s" });
   useChatSessionStore.getState().createSession("s");
 });
@@ -156,7 +160,7 @@ test("a decided card shows its record in place until the resolution arrives", ()
   render(<ToolApprovalsRegion modelProviderLookup={new Map()} />);
 
   act(() =>
-    useToolApprovalUi.getState().recordStatus("create_issue", "approved")
+    useToolRequestUi.getState().recordStatus("create_issue", "approved")
   );
   expect(
     within(screen.getByTestId("tool-approvals-region")).getByRole("status")

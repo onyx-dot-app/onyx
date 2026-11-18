@@ -7,6 +7,7 @@ import {
 } from "@/api/auth/refreshState";
 import { setToken } from "@/api/auth/tokenStore";
 import { isAuthError } from "@/api/errors";
+import { useToolQuestionUi } from "@/chat/toolQuestions";
 import { toast } from "@/hooks/useToast";
 import { persister, queryClient } from "@/query/client";
 import { getStoredServerUrl, useSession } from "@/state/session";
@@ -41,10 +42,11 @@ function sameSession(epoch: number, serverUrl: string | null): boolean {
   return sessionEpoch === epoch && getStoredServerUrl() === serverUrl;
 }
 
-// userFileStore keeps file records outside the Query cache, so clearing that cache alone would leak the prior user's data.
+// userFileStore and the question answers keep data outside the Query cache, so clearing that cache alone would leak the prior user's data.
 async function purgeCache(): Promise<void> {
   queryClient.clear();
   useUserFileStore.getState().reset();
+  useToolQuestionUi.getState().reset();
   toast.clearAll();
   await persister.removeClient();
 }

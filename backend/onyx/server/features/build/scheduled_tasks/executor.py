@@ -41,15 +41,15 @@ from typing import Any
 from uuid import UUID
 
 from onyx.configs.constants import MessageType, NotificationType
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ScheduledTaskErrorClass, ScheduledTaskRunStatus, SessionOrigin
-from onyx.db.notification import create_notification
-from onyx.db.scheduled_task import get_run, mark_run_status
-from onyx.server.features.build.db.build_session import (
+from onyx.db.build_session import (
     create_message,
     get_session_messages,
 )
-from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.enums import ScheduledTaskErrorClass, ScheduledTaskRunStatus, SessionOrigin
+from onyx.db.notification import create_notification
+from onyx.db.sandbox import update_sandbox_heartbeat
+from onyx.db.scheduled_task import get_run, mark_run_status
 from onyx.server.features.build.sandbox.event_schema import (
     TURN_ERROR_CODE_TIMEOUT,
     TURN_ERROR_CODE_TRANSPORT,
@@ -351,6 +351,7 @@ def _drive_agent(
                 user_id=task_user_id,
                 origin=SessionOrigin.SCHEDULED,
                 name=f"Scheduled: {task_name}",
+                task_id=task_id,
             )
             session_id = build_session.id
 

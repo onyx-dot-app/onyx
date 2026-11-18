@@ -36,7 +36,7 @@ import type {
   GitHubSkillsImportResult,
   GitHubSkillsPreview,
 } from "@/lib/skills/types";
-import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
+import type { CraftApp } from "@/lib/integrations/craft";
 
 interface ImportSkillsFromGitHubModalProps {
   open: boolean;
@@ -53,7 +53,7 @@ interface ImportSkillsFromGitHubModalViewProps {
   loading: boolean;
   error: string | null;
   isAdmin: boolean;
-  externalApps: ExternalAppUserResponse[] | undefined;
+  externalApps: CraftApp[] | undefined;
   onClose: () => void;
   onRepositoryChange: (value: string) => void;
   onSelectedPathsChange: (paths: string[]) => void;

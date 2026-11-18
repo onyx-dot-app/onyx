@@ -5,17 +5,36 @@ from __future__ import annotations
 import subprocess
 import time
 from typing import NamedTuple, Protocol
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import ActionPolicy, ExternalAppType, SandboxStatus
+from onyx.db.enums import (
+    ExternalAppType,
+    IntegrationActionPolicyValue,
+    IntegrationAuthMethod,
+    IntegrationAuthMode,
+    IntegrationKind,
+    PluginInstallationPolicy,
+    SandboxStatus,
+)
 from onyx.db.external_app import (
     associate_built_in_skill__no_commit,
-    create_external_app,
     get_built_in_external_app,
 )
+from onyx.db.integration import create_external_app_row__no_commit
+from onyx.db.integration_connection import upsert_connection__no_commit
+from onyx.db.models import (
+    Integration,
+    IntegrationActionPolicy,
+    Plugin,
+    Plugin__Integration,
+    PluginVersion,
+)
+from onyx.db.plugin import get_or_create_organization_library__no_commit
+from onyx.integrations.connection_models import ConnectionSecret
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     SANDBOX_EXEC_ENV,
     SANDBOX_EXEC_USER,
@@ -186,11 +205,33 @@ def provision_sandbox() -> ProvisionSandbox:
     return _provision_sandbox
 
 
+def _hold_in_default_plugin(db: Session, integration_id: int) -> None:
+    """The proxy matches only the integrations of the plugins that the sandbox
+    owner runs; every user runs a published DEFAULT plugin."""
+    plugin_id = uuid4()
+    version_id = uuid4()
+    db.add(
+        Plugin(
+            id=plugin_id,
+            name=f"slack-{plugin_id.hex[:8]}",
+            description="",
+            marketplace_id=get_or_create_organization_library__no_commit(db),
+            installation_policy=PluginInstallationPolicy.DEFAULT,
+            current_version_id=version_id,
+            published_version_id=version_id,
+        )
+    )
+    db.flush()
+    db.add(PluginVersion(id=version_id, plugin_id=plugin_id, version_number=1))
+    db.add(Plugin__Integration(plugin_id=plugin_id, integration_id=integration_id))
+    db.flush()
+
+
 @pytest.fixture(scope="module")
 def slack_external_app() -> None:
     """
-    Seeds Slack directly with an ``ASK`` policy on
-    ``slack.messages.write`` so the gate matcher claims ``chat.postMessage``.
+    Seeds Slack directly with an ``ASK`` row on ``slack.messages.write`` so
+    the gate matcher claims ``chat.postMessage``.
 
     Unlike the cloud migration that seeds built-in apps per tenant (when
     ``AUTO_PROVISION_DEFAULT_EXTERNAL_APPS=true``), this skips real credentials
@@ -200,14 +241,40 @@ def slack_external_app() -> None:
     with get_session_with_tenant(tenant_id="public") as db:
         existing = get_built_in_external_app(db, ExternalAppType.SLACK)
         if existing is None:
-            app = create_external_app(
-                db_session=db,
+            app = create_external_app_row__no_commit(
                 name="Slack",
                 app_type=ExternalAppType.SLACK,
                 upstream_url_patterns=["https://slack\\.com/api/.*"],
                 auth_template={"Authorization": "Bearer {access_token}"},
-                organization_credentials={"access_token": "fake-test-token"},
-                action_policies={"slack.messages.write": ActionPolicy.ASK},
+                db_session=db,
             )
+            integration = Integration(
+                kind=IntegrationKind.API,
+                name="Slack",
+                auth_mode=IntegrationAuthMode.SHARED,
+                auth_method=IntegrationAuthMethod.API_KEY,
+                header_template={"Authorization": "Bearer {access_token}"},
+                external_app_id=app.id,
+            )
+            db.add(integration)
+            db.flush()
+            upsert_connection__no_commit(
+                db,
+                integration_id=integration.id,
+                user_id=None,
+                secret=ConnectionSecret(
+                    fields={"access_token": "fake-test-token"}
+                ).model_dump(mode="json"),
+                expires_at=None,
+                granted_scopes=None,
+            )
+            db.add(
+                IntegrationActionPolicy(
+                    integration_id=integration.id,
+                    action="slack.messages.write",
+                    policy=IntegrationActionPolicyValue.ASK,
+                )
+            )
+            _hold_in_default_plugin(db, integration.id)
             associate_built_in_skill__no_commit(db, app)
             db.commit()

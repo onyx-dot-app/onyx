@@ -1,11 +1,10 @@
 "use client";
 
-import { useNavigation, useSearchParams } from "@opal/navigation";
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   Button,
   Collapsible,
@@ -94,11 +93,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   >([]);
   const { appName } = useSettings();
   const navigation = useNavigation();
-  const externalAppIdParam = useSearchParams().get("externalAppId");
-  const focusedExternalAppId =
-    externalAppIdParam !== null && /^\d+$/.test(externalAppIdParam)
-      ? Number(externalAppIdParam)
-      : null;
   const { data, error, isLoading, refresh } = useUserSkills();
   const { mutate } = useSWRConfig();
   // Revalidation after a successful change is best effort.
@@ -158,14 +152,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         { revalidate: false }
       );
       void revalidateSkills();
-      if (deleteTarget.external_app) {
-        void mutate(SWR_KEYS.buildExternalAppsAdmin).catch((error: unknown) => {
-          console.error(
-            "Failed to refresh external app after skill deletion",
-            error
-          );
-        });
-      }
       deleteModal.toggle(false);
       toast.success(t("editor.toasts.deleted", { name: deleteTarget.name }));
     } catch (error) {
@@ -314,7 +300,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         can_toggle: b.can_toggle,
         is_available: b.is_available,
         unavailable_reason: b.unavailable_reason,
-        external_app: b.external_app,
       }));
     const customItems: SkillCardItem[] = data.customs
       .filter((c): c is CustomSkill => c.source === "custom")
@@ -328,7 +313,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         is_personal: c.is_personal && c.user_permission === "OWNER",
         enabled: optimisticEnabledById.get(c.id) ?? c.enabled,
         can_toggle: c.can_toggle,
-        external_app: c.external_app,
       }));
     const groupRank = (item: SkillCardItem): number => {
       switch (item.source) {
@@ -344,26 +328,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
     );
   }, [data, optimisticEnabledById, admin]);
-
-  const focusedAppName = useMemo(() => {
-    if (focusedExternalAppId === null) return null;
-    for (const item of items) {
-      if (item.external_app?.external_app_id === focusedExternalAppId) {
-        return item.external_app.name;
-      }
-    }
-    return null;
-  }, [focusedExternalAppId, items]);
-
-  const enabledItemByName = useMemo(
-    () =>
-      new Map(
-        items
-          .filter((item) => item.enabled)
-          .map((item) => [item.name, item] as const)
-      ),
-    [items]
-  );
 
   // The groups of the summaries the caller may see.
   const groupOptions = useMemo(() => {
@@ -388,8 +352,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     const q = searchQuery.trim().toLowerCase();
     return items.filter(
       (item) =>
-        (focusedAppName === null ||
-          item.external_app?.external_app_id === focusedExternalAppId) &&
         (activeGroupId === null ||
           (item.source === "custom" &&
             item.skill.group_summaries.some(
@@ -399,7 +361,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           item.name.toLowerCase().includes(q) ||
           item.description.toLowerCase().includes(q))
     );
-  }, [activeGroupId, focusedAppName, focusedExternalAppId, items, searchQuery]);
+  }, [activeGroupId, items, searchQuery]);
 
   const selectableItems = visibleItems.filter(
     (item): item is CustomSkillCardItem => item.source === "custom"
@@ -485,10 +447,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         toast.success(bulkCopy("updated", { count: result.succeeded.length }));
       setBulkSharingOpen(false);
       bulkDeleteModal.toggle(false);
-      await Promise.all([
-        revalidateSkills(),
-        mutate(SWR_KEYS.buildExternalAppsAdmin),
-      ]);
+      await revalidateSkills();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : bulkCopy("failed"));
     } finally {
@@ -635,24 +594,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
             description={bulkFailures
               .map((failure) => `${failure.name}: ${failure.detail}`)
               .join("\n")}
-          />
-        )}
-
-        {focusedAppName && (
-          <MessageCard
-            variant="info"
-            title={t("page.focusedApp.title", { appName: focusedAppName })}
-            description={t("page.focusedApp.description", {
-              appName: focusedAppName,
-            })}
-            rightChildren={
-              <Button
-                prominence="secondary"
-                {...navigation.linkTo("/craft/v1/skills")}
-              >
-                {t("page.focusedApp.showAll.label")}
-              </Button>
-            }
           />
         )}
 
@@ -807,9 +748,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                                 }),
                             }}
                             item={item}
-                            hasEnabledNameConflict={
-                              !item.enabled && enabledItemByName.has(item.name)
-                            }
                             onEdit={handleEdit}
                             onShare={(skill) =>
                               setSkillDialog({ item: skill, tab: "sharing" })
@@ -878,11 +816,8 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       <BulkSkillSharingModal
         count={selectedItems.length}
         canChangeOrgAccess={
-          selectedItems.every((item) => item.skill.external_app === null) &&
-          (isAdmin ||
-            selectedItems.every(
-              (item) => item.skill.user_permission === "OWNER"
-            ))
+          isAdmin ||
+          selectedItems.every((item) => item.skill.user_permission === "OWNER")
         }
         open={bulkSharingOpen}
         saving={bulkBusy}

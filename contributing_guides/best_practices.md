@@ -111,11 +111,16 @@ Add clear comments:
 
 ### Pydantic and modeling
 
-- Prefer **Pydantic** over dataclasses.
-- If absolutely required, use `allow_arbitrary_types`.
+- Use Pydantic `BaseModel` for application models. Ruff `TID251` bans `dataclasses.dataclass`.
+- Use `ConfigDict(arbitrary_types_allowed=True)` if a model must store an arbitrary type.
+
+### HTTP requests
+
+- Set a finite HTTP timeout. Ruff `S113` checks requests in application code.
 
 ### Data conventions
 
+- Use timezone-aware datetimes for timestamps. Ruff `DTZ` checks datetime construction and parsing.
 - Prefer explicit `None` over sentinel empty strings (usually; depends on intent).
 - Prefer explicit identifiers: use string enums instead of integer codes.
 - Avoid magic numbers (co-location is good when necessary). **Always avoid magic strings.**

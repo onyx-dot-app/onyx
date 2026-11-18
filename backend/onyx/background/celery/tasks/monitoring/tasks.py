@@ -111,6 +111,7 @@ def cloud_check_alembic() -> bool | None:
 
             with get_session_with_shared_schema() as session:
                 try:
+                    # db-ops-outside-db: allow reads the alembic version of a tenant schema
                     result = session.execute(
                         text(f'SELECT * FROM "{tenant_id}".alembic_version LIMIT 1')  # noqa: S608
                     )

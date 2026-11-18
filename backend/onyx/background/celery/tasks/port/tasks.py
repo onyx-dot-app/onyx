@@ -185,7 +185,8 @@ def _copy_batch_with_retry(
                 return 0, True
             if attempt_num < _PORT_BATCH_MAX_RETRIES:
                 time.sleep(_PORT_BATCH_RETRY_SLEEP_S)
-    assert last_error is not None
+    if last_error is None:
+        raise RuntimeError("Port batch retry loop ended without an error.")
     raise last_error
 
 
@@ -440,7 +441,8 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
                     up_to_id=up_to_doc_id,
                 )
             else:
-                assert cc_pair_id is not None
+                if cc_pair_id is None:
+                    raise RuntimeError("Port scope has neither a user nor a cc_pair.")
                 doc_ids = get_document_ids_for_cc_pair_batch(
                     db_session,
                     cc_pair_id,
@@ -458,7 +460,8 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             with get_session_with_current_tenant() as db_session:
                 if port_user_id is not None:
                     return filter_existing_user_file_ids(db_session, port_user_id, _ids)
-                assert cc_pair_id is not None
+                if cc_pair_id is None:
+                    raise RuntimeError("Port scope has neither a user nor a cc_pair.")
                 return filter_existing_cc_pair_document_ids(
                     db_session, cc_pair_id, _ids
                 )
@@ -787,7 +790,8 @@ def _schedule_scope_attempts(
             resume_cursor = None
             up_to_doc_id = get_max_user_file_id_for_user(db_session, port_user_id)
         else:
-            assert cc_pair_id is not None  # exactly-one scope (DB CHECK)
+            if cc_pair_id is None:
+                raise RuntimeError("Port scope has neither a user nor a cc_pair.")
             resume_cursor = None
             up_to_doc_id = get_max_document_id_for_cc_pair(db_session, cc_pair_id)
         try:

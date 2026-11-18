@@ -926,9 +926,9 @@ class Run:
     def _withdraw_pending_inputs(self) -> None:
         """Report the requests that end with the run: saved ones and those that
         tools opened, with the answers that the run recorded, such as the
-        user's rejection when the user stopped it. A direct call that an answer
-        denies keeps the denial as its result, so later runs see it. Call under
-        the execution lock."""
+        user's rejection when the user stopped it. A direct call whose answer
+        denies it or supplies its result keeps that result, so later runs see
+        it. Call under the execution lock."""
         ended: list[NestedInputRequest] = []
         progress = self._state.progress
         answers = progress.human_tool_answers if progress is not None else {}
@@ -945,7 +945,7 @@ class Run:
                     if isinstance(pending, PendingToolInput)
                     else None
                 )
-                if answer is None or answer.decision != InputDecision.DENY:
+                if answer is None or answer.decision == InputDecision.APPROVE:
                     continue
                 result = answer.result or ToolResult(
                     content=DENIED_CALL_MESSAGE, is_error=True

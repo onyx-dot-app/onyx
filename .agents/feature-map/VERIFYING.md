@@ -116,7 +116,7 @@ Independent of the map, check the change against the rules in these files:
   the web rules.
 - [CROSS-CUTTING.md](CROSS-CUTTING.md), for the rules every component follows.
 - `contributing_guides/best_practices.md`.
-- `pre-commit run --files <changed paths>`.
+- `prek run --files <changed paths>`.
 
 ## Step 8: Report
 

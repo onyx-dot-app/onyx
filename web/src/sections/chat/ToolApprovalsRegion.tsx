@@ -6,8 +6,8 @@ import ToolApprovalCard from "@/app/app/message/messageComponents/ToolApprovalCa
 import { getMultiModelLabel } from "@/app/app/message/multiModel";
 import { useCurrentMessageTree } from "@/app/app/stores/useChatSessionStore";
 import {
-  readWaitingToolApprovals,
-  useToolApprovalUi,
+  readWaitingToolRequests,
+  useToolRequestUi,
 } from "@/lib/chat/toolApprovals";
 
 interface ToolApprovalsRegionProps {
@@ -27,9 +27,14 @@ export default function ToolApprovalsRegion({
   className,
 }: ToolApprovalsRegionProps) {
   const tree = useCurrentMessageTree();
-  const localStatuses = useToolApprovalUi((state) => state.localStatuses);
+  const localStatuses = useToolRequestUi((state) => state.localStatuses);
   const waiting = useMemo(
-    () => (tree ? readWaitingToolApprovals(tree) : []),
+    () =>
+      tree
+        ? readWaitingToolRequests(tree).flatMap((item) =>
+            item.kind === "approval" ? [item] : []
+          )
+        : [],
     [tree]
   );
   if (waiting.length === 0) return null;

@@ -1,20 +1,14 @@
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.models import TenantAnonymousUserPath
+from ee.onyx.db.tenant_provisioning import (
+    get_tenant_anonymous_user_path,
+    get_tenant_id_by_anonymous_user_path,
+    upsert_tenant_anonymous_user_path__no_commit,
+)
 
 
 def get_anonymous_user_path(tenant_id: str, db_session: Session) -> str | None:
-    result = db_session.execute(
-        select(TenantAnonymousUserPath).where(
-            TenantAnonymousUserPath.tenant_id == tenant_id
-        )
-    )
-    result_scalar = result.scalar_one_or_none()
-    if result_scalar:
-        return result_scalar.anonymous_user_path
-    else:
-        return None
+    return get_tenant_anonymous_user_path(db_session, tenant_id)
 
 
 def modify_anonymous_user_path(
@@ -23,18 +17,9 @@ def modify_anonymous_user_path(
     # Enforce lowercase path at DB operation level
     anonymous_user_path = anonymous_user_path.lower()
 
-    existing_entry = (
-        db_session.query(TenantAnonymousUserPath).filter_by(tenant_id=tenant_id).first()
+    upsert_tenant_anonymous_user_path__no_commit(
+        db_session, tenant_id, anonymous_user_path
     )
-
-    if existing_entry:
-        existing_entry.anonymous_user_path = anonymous_user_path
-
-    else:
-        new_entry = TenantAnonymousUserPath(
-            tenant_id=tenant_id, anonymous_user_path=anonymous_user_path
-        )
-        db_session.add(new_entry)
 
     db_session.commit()
 
@@ -42,16 +27,7 @@ def modify_anonymous_user_path(
 def get_tenant_id_for_anonymous_user_path(
     anonymous_user_path: str, db_session: Session
 ) -> str | None:
-    result = db_session.execute(
-        select(TenantAnonymousUserPath).where(
-            TenantAnonymousUserPath.anonymous_user_path == anonymous_user_path
-        )
-    )
-    result_scalar = result.scalar_one_or_none()
-    if result_scalar:
-        return result_scalar.tenant_id
-    else:
-        return None
+    return get_tenant_id_by_anonymous_user_path(db_session, anonymous_user_path)
 
 
 def validate_anonymous_user_path(path: str) -> None:

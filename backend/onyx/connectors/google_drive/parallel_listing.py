@@ -57,7 +57,6 @@ from onyx.connectors.google_drive.models import (
     DriveListingState,
     GDriveMimeType,
     GoogleDriveCheckpoint,
-    GoogleDriveFileType,
     ListingPartition,
     ListingPartitionKind,
     ListingShard,
@@ -71,6 +70,7 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
 )
 from onyx.connectors.google_utils.google_utils import GoogleFields
+from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import DocumentTypeLabel
 from onyx.file_processing.file_types import OnyxMimeTypes

@@ -209,9 +209,9 @@ export default function useChatSessionController({
         );
       };
 
-      const toolSelectionVersion =
+      const toolOptionsVersion =
         useChatSessionStore.getState().sessions.get(existingChatSessionId)
-          ?.toolSelectionVersion ?? 0;
+          ?.toolOptionsVersion ?? 0;
       let response: Response;
       try {
         response = await fetch(chatPageUrl(existingChatSessionId));
@@ -267,7 +267,7 @@ export default function useChatSessionController({
       initializeSession(
         chatSession.chat_session_id,
         chatSession,
-        toolSelectionVersion
+        toolOptionsVersion
       );
       const sessionOwner = useChatSessionStore
         .getState()

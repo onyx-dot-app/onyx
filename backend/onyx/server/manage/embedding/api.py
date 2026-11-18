@@ -79,7 +79,7 @@ def test_embedding_configuration(
     return TestEmbeddingResponse(dimension=dimension)
 
 
-@admin_router.get("", response_model=list[EmbeddingModelDetail])
+@admin_router.get("")
 def list_embedding_models(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),

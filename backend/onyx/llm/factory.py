@@ -16,7 +16,7 @@ from onyx.db.llm import (
     fetch_user_group_ids,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import ModelConfiguration, Persona, SearchSettings, User
+from onyx.db.models import Persona, SearchSettings, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
@@ -380,7 +380,7 @@ def llm_from_provider(
 
 def get_llm_for_contextual_rag(model_configuration_id: int) -> LLM:
     with get_session_with_current_tenant() as db_session:
-        mc = db_session.get(ModelConfiguration, model_configuration_id)
+        mc = fetch_model_configuration_by_id(db_session, model_configuration_id)
         if not mc:
             raise ValueError(
                 f"model_configuration id={model_configuration_id} not found"

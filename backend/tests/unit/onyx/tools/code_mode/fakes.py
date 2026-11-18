@@ -11,7 +11,6 @@ from onyx.agents.tools import ToolExecutionMode, ToolInvocation, ToolOutcome
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.server.features.mcp.models import MCPServerConnection
 from onyx.tools.interface import Tool
 from onyx.tools.models import CodeModeExposure, ToolContext
 from onyx.tools.tool_implementations.code_mode.models import (
@@ -162,8 +161,8 @@ class FakeMCPTool(MCPTool):
         server: str = "acme",
         output_schema: dict[str, JsonValue] | None = None,
     ) -> None:
-        self._id = 12
-        self.mcp_server = MCPServerConnection.model_construct(id=1, name=server)
+        self._integration_id = 1
+        self._integration_name = server
         self._mcp_tool_name = name
         self._output_schema = output_schema
         self._name = name

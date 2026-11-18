@@ -13,12 +13,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ArtifactType
-from onyx.server.features.build.db.artifact import (
+from onyx.db.artifact import (
     get_session_artifacts,
     mark_artifact_deleted,
     upsert_artifact,
 )
+from onyx.db.enums import ArtifactType
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.session.models import OutputSource, TurnOutputSnapshot
 from onyx.utils.logger import setup_logger

@@ -268,8 +268,7 @@ def _restore_masked_embedding_api_key(
     """Restore the stored key when the caller submits the masked placeholder.
 
     Reads mask the key, so a read-modify-write cycle would otherwise persist the
-    mask itself as the real credential. Mirrors resolve_masked_credentials in
-    onyx/db/external_app.py.
+    mask itself as the real credential.
     """
     if incoming is None:
         return incoming
@@ -1293,6 +1292,29 @@ def fetch_existing_llm_provider_by_id(
         stmt = stmt.options(_load_model_configurations_with_flows())
 
     return db_session.scalar(stmt)
+
+
+def get_llm_provider_by_pk(
+    db_session: Session, provider_id: int
+) -> LLMProviderModel | None:
+    """Primary-key lookup. Unlike `fetch_existing_llm_provider_by_id`, this returns
+    the row the session already holds without a query, and adds no eager loads."""
+    return db_session.get(LLMProviderModel, provider_id)
+
+
+def add_llm_provider__no_commit(
+    db_session: Session, llm_provider: LLMProviderModel
+) -> None:
+    """Add a newly built provider row as is. The caller flushes to get its id."""
+    db_session.add(llm_provider)
+
+
+def add_model_configuration__no_commit(
+    db_session: Session, model_configuration: ModelConfiguration
+) -> None:
+    """Add a newly built model configuration row as is. The caller flushes to
+    get its id."""
+    db_session.add(model_configuration)
 
 
 def fetch_accessible_llm_provider_by_id(

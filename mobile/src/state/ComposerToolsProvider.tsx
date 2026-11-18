@@ -14,6 +14,7 @@ import {
 } from "react";
 
 import { useWorkspaceSettings } from "@/api/settings";
+import { useAgentPluginIds } from "@/api/plugins";
 import { useAvailableTools } from "@/api/tools";
 import { useLlmProviders } from "@/api/chat/llm";
 import type { ChatToolOptions } from "@/api/chat/stream";
@@ -25,7 +26,7 @@ import {
   type DocumentSource,
 } from "@/chat/sources";
 import {
-  computeAllowedToolIds,
+  computeAllowedEntries,
   displayableTools,
   hasSearchToolsAvailable,
   isSearchTool,
@@ -40,6 +41,7 @@ import { useSourceSelection } from "@/hooks/useSourceSelection";
 
 const NO_TOOLS: ToolSnapshot[] = [];
 const NO_IDS: number[] = [];
+const NO_PLUGIN_IDS: string[] = [];
 const NO_SOURCES: DocumentSource[] = [];
 
 export interface ComposerTools {
@@ -68,6 +70,9 @@ export interface ComposerTools {
   disableAllSources: () => void;
   // Report the agent a send used, once that send is known to have created the session.
   notePendingSend: (agentForSend: MinimalAgent | null) => void;
+  // False while a saved switch-off needs the plugin list to build the allow-list. A send then
+  // waits, because an allow-list without the plugins would turn every plugin off.
+  toolOptionsReady: boolean;
   // Read at send time, never during render.
   resolveToolOptions: () => ChatToolOptions;
 }
@@ -122,8 +127,22 @@ export function useComposerToolsState({
   const {
     isLoaded: preferencesLoaded,
     disabledToolIdsFor,
+    disabledPluginIdsFor,
     setToolDisabled,
   } = useAgentPreferences();
+
+  // The plugins of each OpenAPI or MCP tool, and every plugin the user can see.
+  const pluginIdsByTool = useMemo(
+    () =>
+      new Map(
+        globallyAvailableTools.map((tool) => [tool.id, tool.plugin_ids ?? []]),
+      ),
+    [globallyAvailableTools],
+  );
+  const toolPluginIds = useMemo(
+    () => [...new Set([...pluginIdsByTool.values()].flat())],
+    [pluginIdsByTool],
+  );
 
   /*
    * `agent` goes null for a beat after a send, before the new session reaches the sessions list.
@@ -156,6 +175,9 @@ export function useComposerToolsState({
   const effectiveAgent =
     agent ?? (held.sessionId === chatSessionId ? held.agent : null);
   const effectiveAgentId = effectiveAgent?.id;
+  // Every plugin of the agent; the tool list stands in until it loads.
+  const knownPluginIds =
+    useAgentPluginIds(effectiveAgentId ?? null) ?? toolPluginIds;
 
   // With no agent resolved yet, don't withdraw a control the user just used.
   const canSearch = effectiveAgent
@@ -180,11 +202,40 @@ export function useComposerToolsState({
       .map((tool) => tool.id);
   }, [actionTools, availableToolsLoaded, globallyAvailableTools]);
 
-  const disabledToolIds = useMemo(
+  const disabledPluginIds = useMemo(
     () =>
-      effectiveAgentId == null ? NO_IDS : disabledToolIdsFor(effectiveAgentId),
-    [effectiveAgentId, disabledToolIdsFor],
+      effectiveAgentId == null
+        ? NO_PLUGIN_IDS
+        : disabledPluginIdsFor(effectiveAgentId),
+    [effectiveAgentId, disabledPluginIdsFor],
   );
+
+  /*
+   * Built-in tools switched off, and each OpenAPI or MCP tool whose plugins are all off. A saved
+   * id of a tool with plugins is from before plugins, so its plugins decide.
+   */
+  const disabledToolIds = useMemo(() => {
+    if (effectiveAgentId == null || !effectiveAgent) return NO_IDS;
+    const builtIn = disabledToolIdsFor(effectiveAgentId).filter(
+      (toolId) => !pluginIdsByTool.get(toolId)?.length,
+    );
+    const offThroughPlugins = effectiveAgent.tools
+      .filter((tool) => {
+        const pluginIds = pluginIdsByTool.get(tool.id) ?? [];
+        return (
+          pluginIds.length > 0 &&
+          pluginIds.every((id) => disabledPluginIds.includes(id))
+        );
+      })
+      .map((tool) => tool.id);
+    return [...builtIn, ...offThroughPlugins];
+  }, [
+    effectiveAgent,
+    effectiveAgentId,
+    disabledToolIdsFor,
+    disabledPluginIds,
+    pluginIdsByTool,
+  ]);
 
   const { selectedModel, selectModel } = useSelectedModel({
     chatSessionId,
@@ -241,11 +292,30 @@ export function useComposerToolsState({
     (toolId: number, disabled: boolean): Promise<void> => {
       const currentAgentId = effectiveAgentId;
       if (currentAgentId == null) return Promise.resolve();
+      // A tool that is not built in is switched through its plugins, which
+      // the tool list gives. Until that list loads, the switch waits.
+      const tool = effectiveAgent?.tools.find((t) => t.id === toolId);
+      if (!availableToolsLoaded && !tool?.in_code_tool_id) {
+        return Promise.resolve();
+      }
       // The backend fails the turn when the preferred tool isn't among the constructed ones.
       if (disabled && preferredToolId === toolId) clearPreferredTool();
-      return setToolDisabled(currentAgentId, toolId, disabled);
+      return setToolDisabled(
+        currentAgentId,
+        toolId,
+        disabled,
+        pluginIdsByTool.get(toolId) ?? [],
+      );
     },
-    [clearPreferredTool, effectiveAgentId, preferredToolId, setToolDisabled],
+    [
+      availableToolsLoaded,
+      clearPreferredTool,
+      effectiveAgent,
+      effectiveAgentId,
+      pluginIdsByTool,
+      preferredToolId,
+      setToolDisabled,
+    ],
   );
 
   /*
@@ -425,14 +495,24 @@ export function useComposerToolsState({
       enableAllSources,
       disableAllSources,
       notePendingSend,
+      toolOptionsReady:
+        preferencesLoaded &&
+        (availableToolsLoaded ||
+          (disabledToolIds.length === 0 && disabledPluginIds.length === 0)),
       // Gated on `showDeepResearch` so a control the admin has since hidden can't send true.
       resolveToolOptions: () => {
         /*
          * The FULL tool list, not the displayed rows: omitting the ones the menu hides (File
-         * Reader, MCP) strips them server-side as soon as any tool is off.
+         * Reader) strips them server-side as soon as any tool is off. Every known plugin too, for
+         * the same reason.
          */
-        const allowedToolIds = effectiveAgent
-          ? computeAllowedToolIds(effectiveAgent.tools, disabledToolIds)
+        const allowed = effectiveAgent
+          ? computeAllowedEntries(
+              effectiveAgent.tools,
+              disabledToolIds,
+              disabledPluginIds,
+              knownPluginIds,
+            )
           : null;
         // A preferred id that's filtered out, or belongs to another agent, fails the turn mid-stream.
         const preferenceIsSendable =
@@ -444,7 +524,7 @@ export function useComposerToolsState({
 
         return {
           deepResearch: showDeepResearch && deepResearchEnabled,
-          allowedToolIds,
+          allowed,
           preferredToolId:
             preferenceIsSendable && !(showDeepResearch && deepResearchEnabled)
               ? preferredToolId
@@ -473,6 +553,8 @@ export function useComposerToolsState({
       preferredToolId,
       togglePreferredTool,
       disabledToolIds,
+      disabledPluginIds,
+      knownPluginIds,
       toggleToolEnabled,
       modelOptions,
       effectiveModel,
@@ -486,6 +568,8 @@ export function useComposerToolsState({
       enableAllSources,
       disableAllSources,
       notePendingSend,
+      availableToolsLoaded,
+      preferencesLoaded,
     ],
   );
 }

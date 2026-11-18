@@ -238,6 +238,12 @@ async def fetch_sso_provider_by_name_async(
     return (await db_session.scalars(stmt)).first()
 
 
+def fetch_sso_provider_by_id(
+    db_session: Session, provider_id: int
+) -> SSOProvider | None:
+    return db_session.get(SSOProvider, provider_id)
+
+
 def create_sso_provider(
     db_session: Session,
     name: str,

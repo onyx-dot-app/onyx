@@ -39,12 +39,12 @@ from __future__ import annotations
 import queue
 import time
 from collections.abc import Callable, Generator, Iterable
-from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Any, cast
 from uuid import uuid4
 
 import httpx
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
@@ -108,17 +108,18 @@ SandboxEvent = (
 
 
 # ---------------------------------------------------------------------------
-# Public dataclasses
+# Public models
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class ClientTimeouts:
+class ClientTimeouts(BaseModel):
     """HTTP timeouts for one ``OpencodeServeClient`` instance.
 
     Defaults come from ``configs.py``. Session initialization has a separate
     budget for cold directory startup.
     """
+
+    model_config = ConfigDict(strict=True)
 
     connect_timeout: float = OPENCODE_SERVE_CONNECT_TIMEOUT
     request_timeout: float = OPENCODE_SERVE_REQUEST_TIMEOUT
@@ -132,18 +133,19 @@ class ClientTimeouts:
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class _TurnState:
+class _TurnState(BaseModel):
     """Mutable per-turn state used by the translator.
 
     Each prompt driver or live subscriber owns one instance.
     """
 
+    model_config = ConfigDict(strict=True)
+
     session_id: str
     # Live readers replace identified parts; durable writers consume deltas.
     emit_part_snapshots: bool = False
     # ToolCallStart is emitted only on the FIRST sighting of a callID.
-    seen_tool_calls: set[str] = field(default_factory=set)
+    seen_tool_calls: set[str] = Field(default_factory=set)
     # PromptResponse is yielded at most once per turn; subsequent backstop
     # signals are no-ops.
     terminator_yielded: bool = False
@@ -151,25 +153,25 @@ class _TurnState:
     # already yielded as AgentMessageChunk content. Used to gap-fill when a
     # ``message.part.updated`` for a text part reveals more text than we've
     # delivered (which happens after an ``/event`` reconnect).
-    local_text: dict[str, str] = field(default_factory=dict)
+    local_text: dict[str, str] = Field(default_factory=dict)
     # MessageIDs of every assistant message in this turn. opencode creates
     # one assistant message per step, so a single user turn that involves
     # a tool call yields at least two: the message containing the
     # pre-tool thoughts + tool call, and a follow-up message containing
     # the post-tool synthesized answer. Text parts whose ``messageID``
     # isn't in this set are filtered (user echoes, prior-turn messages).
-    assistant_message_ids: set[str] = field(default_factory=set)
+    assistant_message_ids: set[str] = Field(default_factory=set)
     # PartID → "text" | "reasoning" | "tool" | ... (the delta routes on this).
-    part_types: dict[str, str] = field(default_factory=dict)
+    part_types: dict[str, str] = Field(default_factory=dict)
     # MessageIDs we've ruled out as assistant (user role, malformed body,
     # or fetch failed). Kept so subsequent deltas short-circuit without
     # re-issuing the REST hydrate.
-    user_message_ids: set[str] = field(default_factory=set)
+    user_message_ids: set[str] = Field(default_factory=set)
     # `task` callID → claimed child session (parallel tasks get distinct children).
-    task_child_by_call: dict[str, str] = field(default_factory=dict)
+    task_child_by_call: dict[str, str] = Field(default_factory=dict)
     # Descendant sessions share this parent turn stream but not opencode-local
     # ids. Keep each child session's message/part/tool caches isolated.
-    child_states: dict[str, _TurnState] = field(default_factory=dict)
+    child_states: dict[str, _TurnState] = Field(default_factory=dict)
     # Last LLM finish reason seen on any assistant message.updated. Only the
     # terminator (fired from session.idle/status) consumes it — message.updated
     # itself is per-step and can't terminate the turn.
@@ -177,10 +179,10 @@ class _TurnState:
     # connect_app permission id → monotonic deadline. Timeout fallback only (the
     # decision endpoint answers directly); reject an undecided request for a clean
     # decline. A late reject after the user answered is a harmless no-op.
-    pending_connect_app_deadlines: dict[str, float] = field(default_factory=dict)
-    connect_app_request_ids: set[str] = field(default_factory=set)
+    pending_connect_app_deadlines: dict[str, float] = Field(default_factory=dict)
+    connect_app_request_ids: set[str] = Field(default_factory=set)
     # Set from BOTH message.updated and hydration — text deltas race ahead of message.updated.
-    summary_message_ids: set[str] = field(default_factory=set)
+    summary_message_ids: set[str] = Field(default_factory=set)
 
 
 # ---------------------------------------------------------------------------
@@ -1147,7 +1149,8 @@ class OpencodeServeClient:
                     e,
                 )
                 time.sleep(delay)
-        assert last_exc is not None
+        if last_exc is None:
+            raise RuntimeError("Cold-pod retry loop ended without an error.")
         raise last_exc
 
     def _request(

@@ -4,7 +4,6 @@ import threading
 import time
 from collections.abc import Awaitable, Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
 from functools import partial, wraps
 from types import TracebackType
 from typing import Any, TypeVar, cast
@@ -129,10 +128,11 @@ class EmbeddingRetryBackoff(BaseModel):
         ) + wait_random(0, 2)
 
 
-@dataclass(frozen=True)
-class EmbeddingRequestPolicy:
+class EmbeddingRequestPolicy(BaseModel):
     """How embedding requests retry, the rate limit each request waits for,
     and whether a provider rate limit blocks instead of failing."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     retry_backoff: EmbeddingRetryBackoff
     retry_tries: int

@@ -25,11 +25,11 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_drive.source_operations import (
     GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
 )
+from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.models import HierarchyNode
 from onyx.db.models import ConnectorCredentialPair

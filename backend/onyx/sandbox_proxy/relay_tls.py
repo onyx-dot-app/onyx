@@ -11,8 +11,9 @@ import asyncio
 import os
 import ssl
 from collections.abc import Iterable
-from dataclasses import dataclass
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.utils.logger import setup_logger
 
@@ -22,8 +23,9 @@ _CHUNK = 64 * 1024
 _HANDSHAKE_TIMEOUT_S = 10.0
 
 
-@dataclass(frozen=True)
-class RelayTLSConfig:
+class RelayTLSConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     port: int
     cert_path: str
     key_path: str

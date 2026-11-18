@@ -1,30 +1,24 @@
 "use client";
 
-import { memo, useEffect, useRef, useState } from "react";
+import { memo } from "react";
 import { useTranslations } from "next-intl";
-import { useSWRConfig } from "swr";
 import { cn } from "@opal/utils";
 import { Content, Section } from "@opal/layouts";
 import { getModelIcon } from "@/lib/languageModels/utils";
 import type { MultiModelResponse } from "@/app/app/message/types";
-import { FetchError } from "@/lib/fetcher";
 import { postChatApprovalDecision } from "@/lib/chat/svc";
 import {
-  followChatStream,
-  refreshChatSession,
-} from "@/lib/chat/settleChatSession";
-import {
-  readChatSessionStatus,
-  waitForChatResponseEnd,
-} from "@/lib/chat/sessionReadiness";
+  isClosedRequestError,
+  useFollowUserInput,
+  useNudgedCard,
+} from "@/lib/chat/hooks";
 import type { ChatStream } from "@/app/app/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
 import {
   decidedStatus,
   type ToolApproval,
-  useToolApprovalUi,
+  useToolRequestUi,
 } from "@/lib/chat/toolApprovals";
 import ApprovalCard from "@/sections/approvals/ApprovalCard";
 
@@ -38,42 +32,12 @@ interface ToolApprovalCardProps {
 function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
   const { request } = approval;
   const t = useTranslations("chat.messages.toolApproval");
-  const tReadiness = useTranslations("chat.readiness");
-  const nudge = useToolApprovalUi((state) =>
-    state.nudge?.approvalId === request.approval_id ? state.nudge.seq : null
-  );
-  const { mutate } = useSWRConfig();
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [shaking, setShaking] = useState(false);
+  const card = useNudgedCard(request.approval_id);
+  const follow = useFollowUserInput();
 
-  // A blocked send points the user at this card. Clearing the nudge keeps a
-  // remounted card from repeating it.
-  useEffect(() => {
-    if (nudge === null) return;
-    useToolApprovalUi.getState().clearNudge(nudge);
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-    cardRef.current?.scrollIntoView({
-      behavior: reduceMotion ? "auto" : "smooth",
-      block: "center",
-    });
-    // Restart a shake that is still running.
-    setShaking(false);
-    requestAnimationFrame(() => setShaking(true));
-  }, [nudge]);
-
-  // The decided status shows until the resolution packet confirms it. The
-  // client follows the stream that the server names as the continuation.
-  // Without one, the response continues in a later turn or in a live reader,
-  // or an agent continues in the background: a status read hands the chat to
-  // its status subscriber, which follows server turns until the chat is idle
-  // and then loads the saved session. Incognito does not follow server turns
-  // from its status: it waits for the next stream and follows it when it
-  // writes its answers. A continuation that already ended is read from the
-  // saved answer through a refresh.
+  // The decided status shows until the resolution packet confirms it.
   async function submit(decision: ApprovalSubmitDecision) {
-    const { recordStatus } = useToolApprovalUi.getState();
+    const { recordStatus } = useToolRequestUi.getState();
     const sessionId = useChatSessionStore.getState().currentSessionId;
     let continuation: ChatStream | null;
     try {
@@ -84,40 +48,12 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
       recordStatus(request.approval_id, decidedStatus(response));
       continuation = response.continuation;
     } catch (cause) {
-      // 409 or 404: the request no longer waits for a decision.
-      if (
-        !(cause instanceof FetchError) ||
-        (cause.status !== 409 && cause.status !== 404)
-      ) {
-        throw cause;
-      }
+      if (!isClosedRequestError(cause)) throw cause;
       recordStatus(request.approval_id, "closed");
-      if (sessionId === null) return;
-      // Another decision can have started the continuation. The read also
-      // reaches the status subscriber.
-      const status = await readChatSessionStatus(sessionId);
-      if (status.is_processing && status.current_stream)
-        followChatStream(
-          sessionId,
-          status.current_stream,
-          tReadiness("checkFailed")
-        );
+      if (sessionId !== null) await follow.refused(sessionId);
       return;
     }
-    if (sessionId === null) return;
-    if (continuation)
-      followChatStream(sessionId, continuation, tReadiness("checkFailed"));
-    else if (
-      useChatSessionStore.getState().sessions.get(sessionId)?.incognito
-    ) {
-      const next = await waitForChatResponseEnd(sessionId);
-      if (next) {
-        followChatStream(sessionId, next, tReadiness("checkFailed"));
-        return;
-      }
-      // A continuation that already ended is read from its saved answer.
-      await refreshChatSession(sessionId, tReadiness("checkFailed"));
-    } else void mutate(SWR_KEYS.chatSessionStatus(sessionId));
+    if (sessionId !== null) await follow.continued(sessionId, continuation);
   }
 
   const agentRequest =
@@ -133,12 +69,10 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
 
   return (
     <div
-      ref={cardRef}
+      ref={card.ref}
       data-testid="tool-approval-card"
-      className={cn(shaking && "motion-safe:animate-shake")}
-      onAnimationEnd={(event) => {
-        if (event.target === event.currentTarget) setShaking(false);
-      }}
+      className={cn(card.shaking && "motion-safe:animate-shake")}
+      onAnimationEnd={card.onAnimationEnd}
     >
       <Section gap={0.5} alignItems="stretch" height="auto">
         {approval.status === "pending" && sourceTitle && (

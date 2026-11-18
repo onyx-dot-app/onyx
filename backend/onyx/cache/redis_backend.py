@@ -11,6 +11,7 @@ from onyx.redis.tenant_redis_client import TenantRedisClient
 
 _SCAN_BATCH_SIZE = 100
 _EXISTS_BATCH_SIZE = 1000
+_SET_REPLACE_BATCH_SIZE = 1000
 
 
 class RedisCacheLock(CacheLock):
@@ -90,6 +91,16 @@ class RedisCacheBackend(CacheBackend):
     ) -> bool:
         return self._r.replace_if_value(key, expected, value, ex)
 
+    def incr(self, key: str, ex: int | None = None) -> int:
+        if ex is None:
+            return int(self._r.incr(key))
+        # One transaction: a counter whose EXPIRE never lands would never reset.
+        with self._r.pipeline(transaction=True) as pipeline:
+            pipeline.incr(key)
+            pipeline.expire(key, ex)
+            count, _ = pipeline.execute()
+        return int(count)
+
     def delete(self, key: str) -> None:
         self._r.delete(key)
 
@@ -131,6 +142,16 @@ class RedisCacheBackend(CacheBackend):
 
     def set_remove(self, key: str, member: str | bytes) -> None:
         self._r.srem(key, member)
+
+    def set_contains(self, key: str, member: str | bytes) -> bool:
+        return bool(self._r.sismember(key, member))
+
+    def set_replace(self, key: str, members: Collection[str | bytes]) -> None:
+        with self._r.pipeline(transaction=True) as pipeline:
+            pipeline.delete(key)
+            for names in batched(members, _SET_REPLACE_BATCH_SIZE, strict=False):
+                pipeline.sadd(key, *names)
+            pipeline.execute()
 
     def set_members(self, key: str, *, limit: int) -> list[bytes]:
         if limit < 1:

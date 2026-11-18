@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
+from onyx.connectors.microsoft_utils.sharepoint_access import SharepointPermissionCache
 from onyx.connectors.models import ExternalAccess, SlimDocument
 from onyx.connectors.sharepoint.connector import (
     FetchedDriveItem,
@@ -14,7 +15,6 @@ from onyx.connectors.sharepoint.connector import (
     _convert_sitepage_to_document,
     _convert_sitepage_to_slim_document,
 )
-from onyx.connectors.sharepoint.connector_utils import SharepointPermissionCache
 from tests.unit.onyx.connectors.sharepoint.sharepoint_gateway_fakes import (
     connector_with_gateway,
     fake_gateway,

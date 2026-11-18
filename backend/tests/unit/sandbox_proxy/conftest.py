@@ -27,15 +27,20 @@ from mitmproxy import http
 from mitmproxy.tools.dump import DumpMaster
 
 from onyx.cache.interface import CacheBackend
-from onyx.db.enums import ActionPolicy, GatedAppKind
+from onyx.db.enums import ActionPolicy, IntegrationKind
 from onyx.external_apps.matching.engine import (
     AllMatchedActions,
     GatedTarget,
     MatchedAction,
 )
+from onyx.integrations.models import UsableIntegrationIds
 from onyx.sandbox_proxy.credential_injection import CredentialResolver
 from onyx.sandbox_proxy.models import InjectionContext
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
+from onyx.sandbox_proxy.resolvers.mcp_matching import (
+    CraftMCPTarget,
+    IntegrationMatchTarget,
+)
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SandboxIdentity
 from onyx.sandbox_proxy.sandbox_identity.resolution import (
     SandboxIdentityResolver,
@@ -87,6 +92,17 @@ class StaticLookup(SandboxIPLookup):
 
     def stop(self) -> None:
         return None
+
+
+def mcp_targets(*endpoints: CraftMCPTarget) -> tuple[IntegrationMatchTarget, ...]:
+    return tuple(
+        IntegrationMatchTarget(
+            integration_id=endpoint.server_id,
+            kind=IntegrationKind.MCP,
+            endpoint=endpoint,
+        )
+        for endpoint in endpoints
+    )
 
 
 def make_resolved_sandbox(
@@ -236,7 +252,7 @@ def make_matched_actions(
             ),
         ),
         target=GatedTarget(
-            kind=GatedAppKind.EXTERNAL_APP, id=external_app_id, app_name=app_name
+            integration_id=external_app_id, kind=IntegrationKind.API, app_name=app_name
         ),
         payload=payload if payload is not None else {},
     )
@@ -263,6 +279,7 @@ class NoMatchedRequest(RequestEvaluator):
         request: http.Request,  # noqa: ARG002
         tenant_id: str,  # noqa: ARG002
         user_id: UUID,  # noqa: ARG002
+        scheduled_task_id: UUID | None,  # noqa: ARG002
     ) -> AllMatchedActions | None:
         return None
 
@@ -321,3 +338,9 @@ def make_tls_context(tmp_path: Path, hostname: str) -> tuple[ssl.SSLContext, Pat
     context: ssl.SSLContext = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(cert_path, key_path)
     return context, cert_path
+
+
+def usable_ids(*integration_ids: int) -> UsableIntegrationIds:
+    """Integrations that the user turned on and can see."""
+    ids = frozenset(integration_ids)
+    return UsableIntegrationIds(turned_on=ids, by_visible_plugin={uuid4(): ids})

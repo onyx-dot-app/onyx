@@ -2,7 +2,6 @@
 
 import json
 from collections.abc import Callable, Iterator
-from dataclasses import replace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -287,7 +286,7 @@ async def test_an_exhausted_request_is_not_replayed_by_the_outer_retry() -> None
 
     gateway = _FakeGateway(respond=always_fail_b)
     async with _bifrost(gateway, "https://bifrost.example") as embedding:
-        embedding.policy = replace(embedding.policy, retry_tries=3)
+        embedding.policy = embedding.policy.model_copy(update={"retry_tries": 3})
         with pytest.raises(EmbeddingRequestFailedError, match="HTTP 503: unavailable"):
             await embedding.embed(
                 texts=["a", "b", "c"],
@@ -450,7 +449,7 @@ async def test_queries_still_fail_on_provider_rate_limits() -> None:
         respond=lambda _: httpx.Response(429, json={"error": {"message": "slow down"}})
     )
     async with _bifrost(gateway, "https://bifrost.example") as embedding:
-        embedding.policy = replace(embedding.policy, retry_tries=2)
+        embedding.policy = embedding.policy.model_copy(update={"retry_tries": 2})
         with pytest.raises(EmbeddingRequestFailedError, match="HTTP 429"):
             await embedding.embed(
                 texts=["a"],

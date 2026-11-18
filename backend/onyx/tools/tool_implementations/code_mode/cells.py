@@ -1727,16 +1727,20 @@ class CodeCell:
 
 
 class CodeCells:
-    """The cells of one response.
+    """The cells of the owning agent's current run (one response).
 
     Ids are unique in a conversation branch: 1 + the highest id in the recorded
     messages and in this response. When the response ends, `finish` stops every
-    open cell and returns the final records. A cell whose observation waits for
+    open cell and returns the final records; no new cell starts until `reopen`
+    at the start of the agent's next run. A cell whose observation waits for
     the user's input is saved when the run suspends (`saved`, `restore`).
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._open()
+
+    def _open(self) -> None:
         self._cells: dict[int, CodeCell] = {}
         self._highest_id = 0
         self._finished = False
@@ -1896,6 +1900,14 @@ class CodeCells:
         with self._lock:
             self._finished = True
         return self._close_all(results, "response_ended")
+
+    def reopen(self) -> None:
+        """After `finish`, start empty for the agent's next run, as a newly
+        built agent does. A run starts only after the previous run's work drained, so
+        no call of the finished response remains."""
+        with self._lock:
+            if self._finished:
+                self._open()
 
     def suspend(
         self, results: Sequence[ToolResultMessage]

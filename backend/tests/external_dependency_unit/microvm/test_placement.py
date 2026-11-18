@@ -78,6 +78,7 @@ def test_picks_most_free_memory_and_writes_record(
     assert small.agent.create_calls == mid.agent.create_calls == 0
     # mem_mib and vcpus come from the node's template.
     assert placed.vm.mem_mib == 2048 and placed.vm.vcpus == 2
+    assert placed.vm.scratch_gib == 32
     record = get_sandbox_placement(tenant_cache, sandbox_id)
     assert record is not None
     assert (record.node_id, record.attempt, record.generation) == (

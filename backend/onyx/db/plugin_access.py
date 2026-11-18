@@ -31,7 +31,6 @@ can compute access for many users or many plugins.
 """
 
 from collections.abc import Collection, Iterable
-from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
 from uuid import UUID
@@ -59,7 +58,6 @@ from onyx.db.enums import (
     SandboxStatus,
     SkillSharePermission,
 )
-from onyx.db.external_app_readiness import app_dependency_states, waits_for_app
 from onyx.db.models import (
     Marketplace,
     Plugin,
@@ -344,8 +342,8 @@ class UserPluginState(BaseModel):
     version_is_valid: bool | None
     # The user's choice under the setting, before the name order.
     enabled: bool
-    # Enabled, the version is not invalid, and the app it needs, if any, is
-    # ready for the user. Only these plugins count for the skill limits.
+    # Enabled and the version is not invalid. Only these plugins count for the
+    # skill limits.
     can_run: bool
     created_at: datetime
     # Names from the plugin_skill rows of the version the user runs, by path.
@@ -544,8 +542,8 @@ def load_user_plugin_states(
     runnable_only: bool = False,
 ) -> list[UserPluginState]:
     """The state of each plugin each user can see (only those of
-    ``plugin_ids``, when given), in one query, then one query for app
-    connections. ``runnable_only`` keeps only the plugins that can run."""
+    ``plugin_ids``, when given), in one query. ``runnable_only`` keeps only
+    the plugins that can run."""
     users = sorted(set(user_ids))
     if not users:
         return []
@@ -598,21 +596,9 @@ def load_user_plugin_states(
     )
     if runnable_only:
         stmt = stmt.where(enabled, PluginVersion.is_valid.is_not(False))
-    rows = db_session.execute(stmt).all()
-    apps = app_dependency_states(
-        {row.user_id for row in rows},
-        db_session,
-        {row.plugin_id for row in rows if row.enabled},
-    )
     states: list[UserPluginState] = []
-    for row in rows:
-        can_run = (
-            bool(row.enabled)
-            and row.is_valid is not False
-            and not waits_for_app(apps.get((row.user_id, row.plugin_id)))
-        )
-        if runnable_only and not can_run:
-            continue
+    for row in db_session.execute(stmt).all():
+        can_run = bool(row.enabled) and row.is_valid is not False
         states.append(
             UserPluginState(
                 user_id=row.user_id,
@@ -659,8 +645,8 @@ def users_with_usage_past(
     user_filter: ColumnElement[bool], usage: SkillUsage
 ) -> Select[tuple[UUID]]:
     """Users whose enabled, not invalid plugins add up past ``usage`` in bytes
-    or files. App readiness is not checked, so this is an upper bound of
-    ``skill_usage_by_user``: it narrows the users that need the full read."""
+    or files. It narrows the users that need the full read of
+    ``skill_usage_by_user``."""
     pairs = _user_plugin_pairs(user_filter, None)
     return (
         select(pairs.c.user_id)
@@ -688,6 +674,10 @@ def visible_plugin_ids(user_id: UUID) -> Select[tuple[UUID]]:
     """The plugins the user can see, as a subquery for ``in_``."""
     pairs = _user_plugin_pairs(User.__table__.c.id == user_id, None)
     return select(pairs.c.plugin_id)
+
+
+def get_visible_plugin_ids(user_id: UUID, db_session: Session) -> set[UUID]:
+    return set(db_session.scalars(visible_plugin_ids(user_id)).all())
 
 
 _NO_SKILL_DISK_ACCOUNTS = (
@@ -750,15 +740,17 @@ def order_skill_names(
 # --- Access of plugins for responses ----------------------------------------
 
 
-@dataclass(frozen=True)
-class PluginUserShare:
+class PluginUserShare(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True)
+
     user_id: UUID
     email: str
     permission: SkillSharePermission
 
 
-@dataclass(frozen=True)
-class PluginGroupShare:
+class PluginGroupShare(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True)
+
     group_id: int
     group_name: str
     permission: SkillSharePermission
@@ -776,11 +768,12 @@ class PluginGroupRowAccess(BaseModel):
     installation_policy: PluginInstallationPolicy | None
 
 
-@dataclass(frozen=True)
-class PluginAccess:
+class PluginAccess(BaseModel):
     """A plugin's grants and the values one user sees. User shares and
     ``group_shares`` hold only rows with a permission; ``group_rows`` holds
     every group row."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     plugin_id: UUID
     author_user_id: UUID | None

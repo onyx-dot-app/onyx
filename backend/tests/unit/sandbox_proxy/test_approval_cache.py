@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 
 from onyx.cache.interface import CacheBackend, CacheLock
-from onyx.db.enums import ApprovalDecision, GatedAppKind
+from onyx.db.enums import ApprovalDecision
 from onyx.sandbox_proxy.approval_cache import (
     _wake_key,
     cache_session_grant_actions,
@@ -64,6 +64,11 @@ class _MemoryCache(CacheBackend):
     def delete_if_value(self, key: str, expected: bytes) -> bool:  # noqa: ARG002
         raise NotImplementedError
 
+    def incr(self, key: str, ex: int | None = None) -> int:  # noqa: ARG002
+        count = int(self.values.get(key, b"0")) + 1
+        self.values[key] = str(count).encode()
+        return count
+
     def delete(self, key: str) -> None:
         self.values.pop(key, None)
 
@@ -84,6 +89,16 @@ class _MemoryCache(CacheBackend):
     def set_remove(self, key: str, member: str | bytes) -> None:
         value = member if isinstance(member, bytes) else member.encode()
         self.sets.get(key, set()).discard(value)
+
+    def set_contains(self, key: str, member: str | bytes) -> bool:
+        value = member if isinstance(member, bytes) else member.encode()
+        return value in self.sets.get(key, set())
+
+    def set_replace(self, key: str, members: Collection[str | bytes]) -> None:
+        self.sets[key] = {
+            member if isinstance(member, bytes) else member.encode()
+            for member in members
+        }
 
     def set_members(self, key: str, *, limit: int) -> list[bytes]:
         if limit < 1:
@@ -132,21 +147,18 @@ def test_cached_session_grants_cover_requires_every_action() -> None:
     cache = _MemoryCache()
     session_id = uuid4()
     approval_id = uuid4()
-    kind = GatedAppKind.EXTERNAL_APP
-    target_id = 42
+    integration_id = 42
 
     assert not cached_session_grants_cover(
         session_id=session_id,
-        kind=kind,
-        target_id=target_id,
+        integration_id=integration_id,
         action_types=["slack.chat.post"],
         cache=cache,
     )
 
     cache_session_grant_actions(
         session_id=session_id,
-        kind=kind,
-        target_id=target_id,
+        integration_id=integration_id,
         action_types=["slack.chat.post"],
         source_approval_id=approval_id,
         cache=cache,
@@ -154,22 +166,19 @@ def test_cached_session_grants_cover_requires_every_action() -> None:
 
     assert cached_session_grants_cover(
         session_id=session_id,
-        kind=kind,
-        target_id=target_id,
+        integration_id=integration_id,
         action_types=["slack.chat.post"],
         cache=cache,
     )
     assert not cached_session_grants_cover(
         session_id=session_id,
-        kind=kind,
-        target_id=target_id,
+        integration_id=integration_id,
         action_types=["slack.chat.post", "slack.files.upload"],
         cache=cache,
     )
     assert not cached_session_grants_cover(
         session_id=session_id,
-        kind=kind,
-        target_id=target_id + 1,
+        integration_id=integration_id + 1,
         action_types=["slack.chat.post"],
         cache=cache,
     )

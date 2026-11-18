@@ -33,11 +33,11 @@ from onyx.configs.app_configs import (
     OPENSEARCH_VERIFY_CERTS,
     PIT_KEEP_ALIVE,
 )
+from onyx.configs.constants import OpenSearchAuthMethod
 from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import (
     DEFAULT_MAX_CHUNK_SIZE,
     RESOURCE_CHECK_TIMEOUT_SECONDS,
-    OpenSearchAuthMethod,
     OpenSearchSearchType,
 )
 from onyx.document_index.opensearch.models import (
@@ -911,9 +911,10 @@ class OpenSearchIndexClient(OpenSearchClient):
         expected_mapping_properties: dict[str, Any] = expected_mappings.get(
             "properties", {}
         )
-        assert expected_mapping_properties, (
-            "Bug: No properties were found in the provided expected mappings."
-        )
+        if not expected_mapping_properties:
+            raise RuntimeError(
+                "Bug: No properties were found in the provided expected mappings."
+            )
 
         for property in expected_mapping_properties:
             if property not in index_mapping_properties:
@@ -927,9 +928,10 @@ class OpenSearchIndexClient(OpenSearchClient):
             expected_property_type = expected_mapping_properties[property].get(
                 "type", ""
             )
-            assert expected_property_type, (
-                f'Bug: The field "{property}" in the supplied expected schema mappings has no type.'
-            )
+            if not expected_property_type:
+                raise RuntimeError(
+                    f'Bug: The field "{property}" in the supplied expected schema mappings has no type.'
+                )
 
             index_property_type = index_mapping_properties[property].get("type", "")
             if expected_property_type != index_property_type:

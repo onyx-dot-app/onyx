@@ -1,0 +1,233 @@
+name: Desktop v2
+concurrency:
+  group: Desktop-v2-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+# Desktop v2 (desktop-v2/) is a preview that lives beside desktop/. It has its
+# own checks and builds, and never touches v1's release in deployment.yml.
+on:
+  pull_request:
+    paths:
+      - "desktop-v2/**"
+      - "web/lib/opal/**"
+      - ".github/workflows/desktop-v2.yml"
+  # Manual release: a signed, notarized universal DMG on a GitHub pre-release
+  # tagged desktop-v2-v<version>. It is never marked as the latest release, so
+  # v1's downloads and auto-update are unaffected.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish, for example 0.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  check-and-build:
+    name: Check and build (macOS universal)
+    if: github.event_name == 'pull_request'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning]
+        with:
+          bun-version: "1.3.13"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          components: clippy, rustfmt
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # zizmor: ignore[cache-poisoning]
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            desktop-v2/src-tauri/target/
+          key: ${{ runner.os }}-desktop-v2-cargo-${{ hashFiles('desktop-v2/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-v2-cargo-
+
+      # desktop-v2 builds Opal from web/lib/opal and resolves React from web/.
+      - name: Install web dependencies
+        working-directory: ./web
+        run: bun install --frozen-lockfile
+
+      - name: Install desktop-v2 dependencies
+        working-directory: ./desktop-v2
+        run: bun install --frozen-lockfile
+
+      # Also needed before Clippy: tauri::generate_context! reads dist/.
+      - name: Build the local windows
+        working-directory: ./desktop-v2
+        run: bun run vite:build
+
+      - name: Check Rust formatting
+        working-directory: ./desktop-v2/src-tauri
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        working-directory: ./desktop-v2/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run Rust tests
+        working-directory: ./desktop-v2/src-tauri
+        run: cargo test
+
+      - name: Type-check the local windows
+        working-directory: ./desktop-v2
+        run: bun run typecheck
+
+      # Unsigned: reviewers open it with right-click > Open.
+      - name: Build universal DMG
+        working-directory: ./desktop-v2
+        run: bun run tauri build --target universal-apple-darwin --bundles dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: onyx-desktop-v2-macos-universal-${{ github.run_id }}
+          path: desktop-v2/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          retention-days: 14
+          if-no-files-found: error
+
+  release:
+    name: Release (signed universal DMG)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    timeout-minutes: 90
+    environment: release
+    permissions:
+      id-token: write
+      contents: write
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Validate version
+        run: |
+          if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must look like 0.2.0, got '${VERSION}'." >&2
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      # The Apple secrets are v1's. The updater key pair is v2's own: the public
+      # half is plugins.updater.pubkey in tauri.conf.json.
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          secret-ids: |
+            APPLE_ID, deploy/apple-id
+            APPLE_PASSWORD, deploy/apple-password
+            APPLE_CERTIFICATE, deploy/apple-certificate
+            APPLE_CERTIFICATE_PASSWORD, deploy/apple-certificate-password
+            KEYCHAIN_PASSWORD, deploy/keychain-password
+            APPLE_TEAM_ID, deploy/apple-team-id
+            TAURI_SIGNING_PRIVATE_KEY, deploy/desktop-v2-updater-private-key
+            TAURI_SIGNING_PRIVATE_KEY_PASSWORD, deploy/desktop-v2-updater-private-key-password
+          parse-json-secrets: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning]
+        with:
+          bun-version: "1.3.13"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Install web dependencies
+        working-directory: ./web
+        run: bun install --frozen-lockfile
+
+      - name: Install desktop-v2 dependencies
+        working-directory: ./desktop-v2
+        run: bun install --frozen-lockfile
+
+      - name: Inject version
+        working-directory: ./desktop-v2
+        run: |
+          sed "s/^version = .*/version = \"${VERSION}\"/" src-tauri/Cargo.toml > src-tauri/Cargo.toml.tmp
+          mv src-tauri/Cargo.toml.tmp src-tauri/Cargo.toml
+          jq --arg v "${VERSION}" '.version = $v' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp
+          mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
+          jq --arg v "${VERSION}" '.version = $v' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+      - name: Import Apple Developer Certificate
+        run: |
+          echo "${APPLE_CERTIFICATE}" | base64 --decode > certificate.p12
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security import certificate.p12 -k build.keychain -P "${APPLE_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${KEYCHAIN_PASSWORD}" build.keychain
+          rm certificate.p12
+          CERT_ID=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application" | head -n 1 | awk -F'"' '{print $2}')
+          echo "APPLE_SIGNING_IDENTITY=${CERT_ID}" >> "${GITHUB_ENV}"
+
+      # With the APPLE_* variables set, the Tauri CLI signs and notarizes the
+      # app; with TAURI_SIGNING_PRIVATE_KEY it signs the update archive. Update
+      # archives are built only here, so local and PR builds need no key.
+      - name: Build, sign and notarize
+        working-directory: ./desktop-v2
+        run: bun run tauri build --target universal-apple-darwin --config '{"bundle":{"createUpdaterArtifacts":true}}'
+
+      - name: Collect release files
+        working-directory: ./desktop-v2/src-tauri/target/universal-apple-darwin/release/bundle
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/release"
+          OUT="${RUNNER_TEMP}/release"
+          TAG="desktop-v2-v${VERSION}"
+          cp dmg/*.dmg "${OUT}/Onyx-v2_${VERSION}_universal.dmg"
+          cp macos/*.app.tar.gz "${OUT}/Onyx-v2_universal.app.tar.gz"
+          cp macos/*.app.tar.gz.sig "${OUT}/Onyx-v2_universal.app.tar.gz.sig"
+          URL="https://github.com/${REPO}/releases/download/${TAG}/Onyx-v2_universal.app.tar.gz"
+          SIG=$(cat "${OUT}/Onyx-v2_universal.app.tar.gz.sig")
+          jq -n --arg v "${VERSION}" --arg url "${URL}" --arg sig "${SIG}" \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{version: $v, pub_date: $date, platforms: {
+               "darwin-aarch64": {url: $url, signature: $sig},
+               "darwin-x86_64": {url: $url, signature: $sig}}}' > "${OUT}/latest.json"
+          ls -la "${OUT}"
+
+      - name: Publish pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          gh release create "desktop-v2-v${VERSION}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${TARGET_SHA}" \
+            --prerelease \
+            --latest=false \
+            --title "Onyx Desktop v2 ${VERSION} (preview)" \
+            --notes "Preview build of the native macOS app (desktop-v2/). Universal: Apple silicon and Intel. The default desktop app is still v1." \
+            "${RUNNER_TEMP}"/release/*

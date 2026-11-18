@@ -332,3 +332,9 @@ def delete_federated_connector(
     db_session.delete(federated_connector)
     db_session.commit()
     return True
+
+
+def delete_federated_connector_oauth_token__no_commit(
+    db_session: Session, oauth_token: FederatedConnectorOAuthToken
+) -> None:
+    db_session.delete(oauth_token)

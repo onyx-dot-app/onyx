@@ -15,11 +15,10 @@ only where authentication has conclusively failed for the request.
 """
 
 from contextvars import ContextVar
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
-from pydantic import AwareDatetime, BaseModel, ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, ValidationError
 
 from onyx.auth.constants import API_KEY_PREFIX, DEPRECATED_API_KEY_PREFIX, PAT_PREFIX
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -69,8 +68,9 @@ _REASON_TO_DETAIL = {
 }
 
 
-@dataclass(frozen=True)
-class SessionRejection:
+class SessionRejection(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     reason: SessionRejectionReason
     # None when nothing was stored or the value was unparseable.
     token_value: SessionTokenValue | None

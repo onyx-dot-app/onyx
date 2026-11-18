@@ -4,6 +4,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/approval"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
+	"github.com/onyx-dot-app/onyx/cli/internal/question"
 )
 
 // Model is the root Bubble Tea model.
@@ -50,9 +52,12 @@ type Model struct {
 	// approvals holds the tool approval requests whose outcome the server has
 	// not reported yet, oldest first.
 	approvals []approvalCard
-	// resolvedApprovals holds the requests of the chat whose outcome showed;
-	// an older session load cannot reopen them.
-	resolvedApprovals map[string]bool
+	// questions holds the agent's question requests whose outcome the server
+	// has not reported yet, oldest first.
+	questions []questionCard
+	// resolvedRequests holds the approval and question requests of the chat
+	// whose outcome showed; an older session load cannot reopen them.
+	resolvedRequests map[string]bool
 	// approvalsVersion is the session's approvals version that the cards
 	// reflect.
 	approvalsVersion string
@@ -81,10 +86,10 @@ type Model struct {
 	following bool
 	// stopReceived marks a stream that delivered the response's stop packet.
 	stopReceived bool
-	// awaitingApproval marks a stream that stopped while its response waits
-	// for decisions. Nothing runs, so Stop does not apply. A decision names
-	// the stream that continues the response.
-	awaitingApproval bool
+	// awaitingUser marks a stream that stopped while its response waits
+	// for decisions or answers. Nothing runs, so Stop does not apply. A
+	// decision or an answer names the stream that continues the response.
+	awaitingUser bool
 	// stopRequested marks a response that the user stopped.
 	stopRequested bool
 	// resumeCursor continues the followed response streamID after its last
@@ -167,7 +172,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.viewport.setWidth(msg.Width)
-		m.renderApprovals()
+		m.renderCards()
 		m.status.setWidth(msg.Width)
 		m.input.textInput.SetWidth(msg.Width - 4)
 		if !m.splashShown {
@@ -213,6 +218,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case approvalDecidedMsg:
 		return m.handleApprovalDecided(msg)
+	case questionsAnsweredMsg:
+		return m.handleQuestionsAnswered(msg)
 	case continuationMsg:
 		return m.handleContinuation(msg)
 	case approvalsLoadedMsg:
@@ -320,6 +327,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.splashShown {
 		var cmd tea.Cmd
 		m.input, cmd = m.input.update(msg)
+		if m.takesOwnAnswer() {
+			m.input.menuVisible = false
+		}
 		return m, cmd
 	}
 	return m, nil
@@ -378,15 +388,23 @@ func appView(content string) tea.View {
 
 // handleKey processes keyboard input.
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if m.activeApproval() >= 0 && m.configState == nil && !m.viewport.pickerActive && !m.input.menuVisible {
-		if updated, cmd, handled := m.handleApprovalKey(msg); handled {
+	if m.configState == nil && !m.viewport.pickerActive && !m.input.menuVisible {
+		// A root question takes its keys before a background agent's
+		// approval card; the agent's shortcuts still reach that card, except
+		// while the user types an answer after Other.
+		if updated, cmd, handled := m.handleQuestionKey(msg); handled {
 			return updated, cmd
+		}
+		if m.activeApproval() >= 0 && !m.takesOwnAnswer() {
+			if updated, cmd, handled := m.handleApprovalKey(msg); handled {
+				return updated, cmd
+			}
 		}
 	}
 
 	switch msg.String() {
 	case "ctrl+c":
-		if m.isStreaming && !m.awaitingApproval {
+		if m.isStreaming && !m.awaitingUser {
 			return m.cancelStream()
 		}
 
@@ -399,7 +417,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.cancelConfigure()
 		}
 		if m.isStreaming {
-			if m.awaitingApproval {
+			if m.awaitingUser {
 				// Only the decisions end a wait; Stop is for running work.
 				return m, nil
 			}
@@ -418,7 +436,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.quitPending {
 			return m, tea.Quit
 		}
-		if m.isStreaming && !m.awaitingApproval {
+		if m.isStreaming && !m.awaitingUser {
 			m, _ = m.cancelStream()
 		}
 		m.quitPending = true
@@ -498,6 +516,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Pass to input
 	var cmd tea.Cmd
 	m.input, cmd = m.input.update(msg)
+	if m.takesOwnAnswer() {
+		m.input.menuVisible = false
+	}
 	return m, cmd
 }
 
@@ -568,7 +589,7 @@ func (m Model) startStream(open func(context.Context) <-chan models.StreamEvent)
 	m.settling = false
 	m.following = false
 	m.stopReceived = false
-	m.awaitingApproval = false
+	m.awaitingUser = false
 	m.stopRequested = false
 	m.resumeCursor = nil
 	m.isStreaming = true
@@ -681,18 +702,30 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		if m.approvalIndex(e.ApprovalID) < 0 {
 			m.approvals = append(m.approvals, approvalCard{request: e, responseID: *m.parentMessageID})
 		}
-		m.renderApprovals()
+		m.renderCards()
 
 	case models.ToolApprovalResolvedEvent:
 		if index := m.approvalIndex(e.ApprovalID); index >= 0 {
 			m = m.resolveApproval(index, approval.OutcomeLabel(e.Outcome))
 		}
 
+	case models.ToolQuestionRequestEvent:
+		// A replay shows a card that this client already shows at its place.
+		if m.questionIndex(e.QuestionRequestID) < 0 {
+			m.questions = append(m.questions, questionCard{request: e, responseID: *m.parentMessageID})
+		}
+		m.renderCards()
+
+	case models.ToolQuestionResolvedEvent:
+		if index := m.questionIndex(e.QuestionRequestID); index >= 0 {
+			m = m.resolveQuestion(index, question.Outcome(m.questions[index].request, e), e.Message)
+		}
+
 	case models.StopEvent:
 		// Delivery completion does not confirm the save. Drain the stream.
 		m.stopReceived = true
-		m.awaitingApproval = e.AwaitingApproval()
-		m.renderApprovals()
+		m.awaitingUser = e.AwaitingUser()
+		m.renderCards()
 
 	case models.StreamUnavailableEvent:
 		if m.streamID != nil {
@@ -717,7 +750,7 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		}
 		// The server did not accept the message; the draft keeps it.
 		m.viewport.withdrawUserMessage()
-		m.viewport.addWarning("A tool call in this session waits for approval. Approve or reject it, then send again.")
+		m.viewport.addWarning("The response in this session waits for an approval or an answer. Answer it, then send again.")
 		if m.chatSessionID != nil {
 			// The session load shows the request that waits.
 			return m, tea.Batch(loadApprovals(m.client, *m.chatSessionID), WaitForStreamEvent(m.streamCh))
@@ -774,7 +807,7 @@ func (m Model) finishStream(err error) (Model, tea.Cmd) {
 	m.streamID = nil
 	m.settling = false
 	m.reloading = false
-	m.renderApprovals()
+	m.renderCards()
 
 	// Auto-rename new sessions
 	if m.needsRename && m.chatSessionID != nil {
@@ -1011,11 +1044,12 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		if m.followCancel != nil {
 			m.followCancel()
 		}
-		m.resolvedApprovals = nil
+		m.resolvedRequests = nil
 	}
 	detail := msg.Detail
 	m.chatSessionID = &detail.ChatSessionID
 	m.approvals = nil
+	m.questions = nil
 	m.approvalsVersion = detail.ApprovalsVersion
 	m.approvalsLoadVersion = ""
 	m.viewport.clearDisplay()
@@ -1029,12 +1063,26 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		m.agentID = *detail.AgentID
 	}
 
-	// Replay messages
+	// Replay messages. The questions that a response asked and that ended
+	// show as records before its text.
+	saved := readSavedRequests(detail)
+	recorded := maps.Clone(m.resolvedRequests)
+	if recorded == nil {
+		recorded = map[string]bool{}
+	}
 	for _, chatMsg := range detail.Messages {
 		switch chatMsg.MessageType {
 		case "user":
 			m.viewport.addUserMessage(chatMsg.Message)
 		case "assistant":
+			for _, card := range saved.questions {
+				resolved, ok := saved.answered[card.request.QuestionRequestID]
+				if card.responseID != chatMsg.MessageID || !ok {
+					continue
+				}
+				m.viewport.setCard(card.request.QuestionRequestID, questionRecord(question.Outcome(card.request, resolved), resolved.Message))
+				recorded[card.request.QuestionRequestID] = true
+			}
 			// A replay of a running response replaces its saved copy.
 			m.viewport.startAgent()
 			m.viewport.showResponse(chatMsg.MessageID)
@@ -1043,6 +1091,8 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 			m.viewport.endResponse()
 		}
 	}
+
+	m.resolvedRequests = recorded
 
 	// Set parent to last message
 	if len(detail.Messages) > 0 {
@@ -1057,7 +1107,7 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 	m.viewport.addInfo("Resumed session: " + desc)
 	// The saved replay shows every request that waits, also those of a
 	// response that waits for decisions and has no stream.
-	m = m.showSavedApprovals(detail)
+	m = m.showSavedRequests(detail.ApprovalsVersion, saved)
 	if msg.Status.IsProcessing {
 		m.viewport.startAgent()
 		var streamID *int

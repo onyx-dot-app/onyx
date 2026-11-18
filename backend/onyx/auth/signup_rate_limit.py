@@ -1,13 +1,14 @@
 """Per-IP rate limit on email/password signup."""
 
+import asyncio
 import time
 
 from fastapi import Request
 
+from onyx.cache.factory import get_shared_cache_backend
 from onyx.configs.app_configs import SIGNUP_RATE_LIMIT_ENABLED
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.utils.client_ip import get_client_ip
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -45,14 +46,11 @@ async def enforce_signup_rate_limit(request: Request) -> None:
     key = _bucket_key(ip)
 
     try:
-        redis = await get_async_redis_connection()
-        pipe = redis.pipeline()
-        pipe.incr(key)
-        pipe.expire(key, _BUCKET_SECONDS)
-        incr_result, _ = await pipe.execute()
-        count = int(incr_result)
+        count = await asyncio.to_thread(
+            get_shared_cache_backend().incr, key, _BUCKET_SECONDS
+        )
     except Exception as e:
-        logger.error("Signup rate-limit Redis error: %s", e)
+        logger.error("Signup rate-limit cache error: %s", e)
         return
 
     if count > _PER_IP_PER_HOUR:

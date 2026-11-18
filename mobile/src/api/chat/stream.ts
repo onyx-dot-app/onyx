@@ -7,6 +7,7 @@ import { createNdjsonBuffer } from "@/chat/ndjson";
 import { FileDescriptor } from "@/chat/interfaces";
 import { LlmOverride } from "@/chat/models";
 import { InternalSearchFilters } from "@/chat/sources";
+import type { ToolOptionsEntry } from "@/chat/tools";
 import {
   MessageResponseIDInfo,
   Packet,
@@ -23,10 +24,12 @@ export interface SendMessageBody {
   file_descriptors: FileDescriptor[];
   deep_research: boolean;
   origin: string;
-  // Omitted/null = backend defaults: allow all tools, prefer none, no source filter.
-  allowed_tool_ids?: number[] | null;
-  preferred_tool_id?: number | null;
-  internal_search_filters?: InternalSearchFilters | null;
+  // Omitted/null = backend defaults: allow all tools and plugins, prefer none, no source filter.
+  tool_options?: {
+    allowed: ToolOptionsEntry[] | null;
+    preferred: { type: "capability"; tool_id: number } | null;
+    internal_search_filters: InternalSearchFilters | null;
+  } | null;
   // Omitted or null runs the agent's own default model. Note the singular name: `llm_overrides`
   // is a separate field for multi-model comparison, which mobile does not use.
   llm_override?: LlmOverride | null;
@@ -34,7 +37,7 @@ export interface SendMessageBody {
 
 export interface ChatToolOptions {
   deepResearch: boolean;
-  allowedToolIds: number[] | null;
+  allowed: ToolOptionsEntry[] | null;
   preferredToolId: number | null;
   internalSearchFilters: InternalSearchFilters | null;
   llmOverride: LlmOverride | null;

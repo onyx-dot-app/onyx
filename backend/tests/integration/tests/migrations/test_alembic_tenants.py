@@ -1,68 +1,36 @@
-"""
-pytest-alembic tests for the tenants/public schema migrations.
-
-These tests use pytest-alembic to verify that alembic_tenants migrations
-are correct. The alembic_tenants configuration handles migrations for
-the public schema tables that are shared across tenants.
-
-Usage:
-    pytest tests/integration/tests/migrations/test_alembic_tenants.py -v
-
-See: https://github.com/schireson/pytest-alembic
-"""
-
-from collections.abc import Generator
-from typing import Any
+from functools import partial
 
 import pytest
-from pytest_alembic import create_alembic_fixture
+from alembic.config import Config as AlembicConfig
+from pytest_alembic.config import Config
 from pytest_alembic.tests import (
+    test_model_definitions_match_ddl,
     test_single_head_revision,
     test_up_down_consistency,
     test_upgrade,
 )
-from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
 
-from onyx.configs.app_configs import (
-    POSTGRES_HOST,
-    POSTGRES_PASSWORD,
-    POSTGRES_PORT,
-    POSTGRES_USER,
+from tests.integration.tests.migrations.ddl_baseline import exclude_known_drift
+from tests.integration.tests.migrations.revision_roundtrip import (
+    test_each_revision_round_trip,
 )
-from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 
 
 @pytest.fixture
-def alembic_config() -> dict[str, Any]:
-    """Override alembic_config for tenants configuration."""
-    return {
-        "file": "alembic.ini",
-        "config_ini_section": "schema_private",
-        "script_location": "alembic_tenants",
-    }
-
-
-@pytest.fixture
-def alembic_engine() -> Generator[Engine, None, None]:
-    """Override alembic_engine for tenants configuration."""
-    conn_str = build_connection_string(
-        db="postgres",
-        user=POSTGRES_USER,
-        password=POSTGRES_PASSWORD,
-        host=POSTGRES_HOST,
-        port=POSTGRES_PORT,
-        db_api=SYNC_DB_API,
+def alembic_config() -> Config:
+    return Config(
+        config_options={
+            "process_revision_directives": partial(
+                exclude_known_drift, chain="alembic_tenants"
+            )
+        },
+        alembic_config=AlembicConfig("alembic.ini", ini_section="schema_private"),
     )
-    engine = create_engine(conn_str)
-    yield engine
-    engine.dispose()
 
-
-# Create a custom alembic fixture for the tenants configuration
-alembic_runner = create_alembic_fixture()
 
 __all__ = [
+    "test_each_revision_round_trip",
+    "test_model_definitions_match_ddl",
     "test_single_head_revision",
     "test_up_down_consistency",
     "test_upgrade",

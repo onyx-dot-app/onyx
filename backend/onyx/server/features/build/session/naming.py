@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.configs.constants import MessageType
+from onyx.db.build_session import get_session_messages
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.factory import get_default_llm
@@ -22,7 +23,6 @@ from onyx.llm.models import (
     SystemMessage,
     UserMessage,
 )
-from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
 from onyx.utils.logger import setup_logger

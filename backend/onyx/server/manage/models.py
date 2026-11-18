@@ -2,10 +2,12 @@ import re
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.context.search.models import CCPairAccessMode, SavedSearchSettings
 from onyx.db.enums import (
     AccountType,
@@ -87,13 +89,19 @@ class AuthConfigResponse(BaseModel):
     # on instances with no provider rows, so the page falls back to the built-in
     # password (and Google when oauth_enabled) login.
     sso_providers: list[SSOProviderOption] = []
+    # The session cookie's name (AUTH_COOKIE_NAME). Native apps sign in with a
+    # bearer token and hand it to their embedded web UI under this name.
+    auth_cookie_name: str = FASTAPI_USERS_AUTH_COOKIE_NAME
     # Workspace UI language for signed-out pages, which cannot read GET /settings
     # unless anonymous access is on. None on cloud, which has no tenant yet.
     default_language: SupportedLanguage | None = None
 
 
 class UserSpecificAssistantPreference(BaseModel):
-    disabled_tool_ids: list[int]
+    # The built-in tools and the plugins that the user turned off for the
+    # agent. None on a write keeps the saved list.
+    disabled_tool_ids: list[int] | None = None
+    disabled_plugin_ids: list[UUID] | None = None
 
 
 UserSpecificAssistantPreferences = dict[int, UserSpecificAssistantPreference]

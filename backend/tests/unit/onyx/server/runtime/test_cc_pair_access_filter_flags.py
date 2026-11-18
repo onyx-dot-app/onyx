@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from onyx.cache.interface import CacheBackendType
+from onyx.configs.constants import CacheBackendType
 from onyx.server.runtime import onyx_runtime
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 

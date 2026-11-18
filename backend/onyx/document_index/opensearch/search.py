@@ -86,9 +86,10 @@ def _get_hybrid_search_normalization_weights() -> list[float]:
         search_keyword_weight,
     ]
 
-    assert sum(hybrid_search_normalization_weights) == 1.0, (
-        "Bug: Hybrid search normalization weights do not sum to 1.0."
-    )
+    if sum(hybrid_search_normalization_weights) != 1.0:
+        raise RuntimeError(
+            "Bug: Hybrid search normalization weights do not sum to 1.0."
+        )
 
     return hybrid_search_normalization_weights
 

@@ -1,18 +1,21 @@
 import { useState } from "react";
 import { render, screen, setupUser, within } from "@tests/setup/test-utils";
 import PolicyEditor from "@/sections/actions/PolicyEditor";
-import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
+import type { PolicyValue } from "@/lib/integrations/types";
 
 function Editor() {
-  const [policies, setPolicies] = useState<Record<string, ActionPolicy>>({});
+  const [policies, setPolicies] = useState<Record<string, PolicyValue>>({});
   return (
     <PolicyEditor
+      title="Actions"
+      resetLabel="Use defaults"
+      onReset={jest.fn()}
       items={[
         {
           id: "search",
           name: "Search messages",
           description: "Find workspace messages.",
-          defaultPolicy: "ASK",
+          defaultPolicy: "ask",
         },
       ]}
       policies={policies}
@@ -30,99 +33,54 @@ test("shows per-action permissions immediately without an Advanced disclosure", 
   await setupUser().click(
     within(screen.getByRole("group", { name: "Search messages" })).getByRole(
       "button",
-      { name: "Disabled" }
+      { name: "Blocked" }
     )
   );
   expect(
     within(screen.getByRole("group", { name: "Search messages" })).getByRole(
       "button",
-      { name: "Disabled" }
+      { name: "Blocked" }
     )
   ).toHaveAttribute("aria-pressed", "true");
 });
 
-test("restores each action's default without changing policies outside the list", async () => {
-  const onChange = jest.fn();
-  render(
-    <PolicyEditor
-      items={[
-        {
-          id: "read",
-          name: "Read",
-          description: "Read data",
-          defaultPolicy: "ALWAYS",
-        },
-        {
-          id: "write",
-          name: "Write",
-          description: "Write data",
-          defaultPolicy: "ASK",
-        },
-      ]}
-      policies={{ read: "DENY", write: "DENY", other: "ASK" }}
-      onChange={onChange}
-    />
-  );
-  const user = setupUser();
-  await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
-  await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
-  expect(onChange).toHaveBeenCalledWith({
-    read: "ALWAYS",
-    write: "ASK",
-    other: "ASK",
-  });
-});
-
-test("bulk changes only matching editable actions and reset delegates to the owner", async () => {
+test("bulk changes only the actions that accept the value and reset delegates to the owner", async () => {
   const onChange = jest.fn();
   const onReset = jest.fn();
   render(
     <PolicyEditor
+      title="Actions"
+      resetLabel="Use defaults"
       items={[
         {
           id: "read",
           name: "Read data",
           description: "",
-          defaultPolicy: "ASK",
+          defaultPolicy: "ask",
         },
         {
-          id: "blocked",
+          id: "secrets",
           name: "Read secrets",
           description: "",
-          defaultPolicy: "DENY",
-          editable: false,
-          lockReason: "workspace_disabled",
-        },
-        {
-          id: "write",
-          name: "Write data",
-          description: "",
-          defaultPolicy: "ASK",
+          defaultPolicy: "ask",
+          disabledPolicies: ["allow"],
         },
       ]}
-      policies={{ read: "ASK", blocked: "DENY", write: "ASK" }}
+      policies={{ read: "ask", secrets: "ask" }}
       onChange={onChange}
       onReset={onReset}
     />
   );
   const user = setupUser();
-  await user.type(
-    screen.getByRole("searchbox", { name: "Search tools" }),
-    "Read"
-  );
   expect(
     within(screen.getByRole("group", { name: "Read secrets" })).getByRole(
       "button",
-      { name: "Auto-approve" }
+      { name: "Allow" }
     )
   ).toBeDisabled();
   await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
   await user.keyboard("{ArrowDown}{Enter}");
-  expect(onChange).toHaveBeenCalledWith({
-    read: "ALWAYS",
-    blocked: "DENY",
-    write: "ASK",
-  });
+  expect(onChange).toHaveBeenCalledWith({ read: "allow", secrets: "ask" });
   await user.click(screen.getByRole("combobox", { name: "Set permissions" }));
   await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
   expect(onReset).toHaveBeenCalledTimes(1);

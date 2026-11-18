@@ -64,9 +64,9 @@
   card then becomes a one-line record of the outcome, or of "No longer
   waiting" when the server returns 409 or 404. The record shows in the region
   until the resolution packet arrives; from then on the reply's timeline
-  shows it next to its tool call (`AgentMessage`, `orderApprovalsByTurn`), and
+  shows it next to its tool call (`AgentMessage`, `orderRecordsByTurn`), and
   a reload replays it there. While the turn waits, its stream ends with
-  `stop(awaiting_approval)` and the chat goes idle. That stop pauses the
+  `stop(awaiting_user)` and the chat goes idle. That stop pauses the
   answer: `processPackets` does not count it. No stop changes a card: the
   server sends `tool_approval_resolved` for every request that it ends, live
   and in replay, with `cancelled` when there is no decision. A card's status
@@ -96,7 +96,7 @@
   shows a waiting card was resolved elsewhere, so the refresh reads it again
   from the page that ends at it (`fetchSettledChatSession` with
   `beforeMessageId`). A stream that ends
-  with `stop(awaiting_approval)` settles like any other: the status reads
+  with `stop(awaiting_user)` settles like any other: the status reads
   follow a new `current_stream` until the session is idle. After a 409 or
   404 decision, the card reads the status once and follows `current_stream`
   while the server processes it. A subagent's requests and resolutions
@@ -118,12 +118,59 @@
   approval", also after a preamble and for parallel tool calls. The server
   refuses new input with a 409 `APPROVAL_PENDING`; the client does not check
   first. On that 409 the composer keeps the draft, scrolls to the reply's
-  first waiting card in the region, shakes it and shows a toast
-  (`lib/chat/hooks.ts:useShowPendingApproval`). When the chat shows no such
+  first waiting card in the region, approval or question, shakes it and
+  shows a toast that names what waits
+  (`lib/chat/hooks.ts:useShowPendingRequest`). When the chat shows no such
   card, for example for a turn that another tab started, the saved session
   supplies it: a refused send's settlement loads it, and an idle chat
   refreshes. A subagent's card blocks no send.
   What each decision does is in [[mcp-and-custom-tools]].
+- **The agent asks the user questions.** A question card
+  (`ToolQuestionCard`) shows 1-3 questions, one per page; each offers its
+  options in the model's order, recommended first, and an "Other" field
+  for the user's own answer. A card with more than one question shows "Question N of M"
+  and Back and Next buttons; the choices stay when the page changes, and
+  picking an option does not change the page. For every question the user
+  picks one option or writes in Other; typing in Other clears the option
+  and picking an option clears Other. The user submits on the last page,
+  where Submit replaces Next. Submit stays disabled, with a hint that
+  names the unanswered questions, until each question has an answer.
+  Waiting cards show in their own region after the approval
+  region (`sections/chat/ToolQuestionsRegion.tsx`); a question has no model
+  label, since only a single-model reply's root agent asks. The packets,
+  the answers route and the replay are in [[streaming-protocol]] and
+  [[mcp-and-custom-tools]]. Questions share the approval reads and UI
+  state in `lib/chat/toolApprovals.ts`: `readToolQuestions` reads them
+  with the same cache as `readToolApprovals`, `readWaitingToolRequests`
+  lists both kinds on the selected branch, and `useToolRequestUi` holds
+  the local statuses of both and the nudge. The card's answered status
+  shows until `tool_question_resolved` arrives; a 409 or 404 makes it "No
+  longer waiting", and the card follows the continuation exactly as an
+  approval card does (`lib/chat/hooks.ts:useFollowUserInput`). While a
+  question waits, the timeline header reads "Waiting for your answer"
+  (`useToolRequests` gives `awaiting`). The options of a page are one radio
+  group: one tab stop, arrow keys, Home and End move the choice. One read,
+  `readWaitingQuestions`, gives the waiting questions with this client's
+  local status; the region, the composer and `useShowPendingRequest` use
+  it, and only a question without a local status still waits for the
+  user. While such a question waits on the selected branch, text sent from
+  the composer answers every waiting question of that reply instead of
+  starting a turn, also while a foreground part of the reply still runs
+  (`useWaitingQuestionIds`, `useAnswerWithMessage`); the questions then
+  show as answered until their resolution arrives. Stop stays next to the
+  send button while the reply streams. An answer takes no files: with
+  files attached, the composer holds the text and says why. The text
+  leaves the composer and comes back if the server refuses it: a 409
+  `APPROVAL_PENDING` nudges the reply's waiting approval card, another 409
+  or a 404 marks the questions "No longer waiting", and any other refusal
+  (a query-hook rejection, 413 for a long text) shows the server's reason
+  in a toast. After the resolution,
+  the reply's timeline shows the record: each card answer as
+  "Header: option (note)", "Answered in the chat", or "Not answered" for a
+  question that a stop cancelled. A typed answer
+  (`tool_question_resolved.message`) shows as the user's message bubble
+  after the record, and later output follows it (`AgentMessage` splits the
+  section there); a reload replays the same.
 - **A user edits or regenerates** an earlier message. A switcher then moves
   between the versions, and the rest of the chat follows the chosen one. A
   reload shows the same version.
@@ -505,7 +552,8 @@ so another browser starts again. The input lock is a comparison against
 `disabled` prop in `AppPage`; a change to the step order must keep it.
 
 **Action preference.** At send time `onSubmit` filters the selected Action through
-`web/src/lib/plugins/chat.ts:effectiveChatPreferredToolId`. Sending a message
+`web/src/lib/plugins/chat.ts:effectiveChatPreference`, which keeps a built-in
+tool of the agent, else a saved plugin action whose plugin is on. Sending a message
 preserves the selected preference for later messages in that chat. Each request
 sends the current eligible selection, except Deep Research requests send no
 preference. A preference does not restrict which available tools may run.

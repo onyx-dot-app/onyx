@@ -181,7 +181,8 @@ def compile_to_cron(payload: EditorPayload) -> str:
                 return "0 0 * * *"
             return f"0 */{every} * * *"
         # unit == "days" — model validator guaranteed time_of_day is set.
-        assert payload.time_of_day is not None
+        if payload.time_of_day is None:
+            raise RuntimeError("A schedule in days needs time_of_day.")
         hour, minute = _split_hh_mm(payload.time_of_day)
         return f"{minute} {hour} */{every} * *"
 

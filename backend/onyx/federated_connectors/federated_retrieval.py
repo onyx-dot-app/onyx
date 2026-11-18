@@ -55,7 +55,8 @@ def get_federated_retrieval_functions(
         )
 
     # At this point, user_id is guaranteed to be not None since we're in the else branch
-    assert user_id is not None
+    if user_id is None:
+        raise RuntimeError("Federated retrieval needs a user ID on this path.")
 
     # If no source types are specified, don't use any federated connectors
     if source_types is None:

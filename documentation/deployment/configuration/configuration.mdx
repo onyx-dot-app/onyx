@@ -338,9 +338,62 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
 
     `PASSWORD_REQUIRE_SPECIAL_CHAR`: For basic auth. Require special characters in passwords
 
-    `ENCRYPTION_KEY_SECRET`: Key that Onyx uses to AES-encrypt connector credentials, API keys,
-    and other secrets at rest. Encryption is on whenever the key is set. Keep it stable:
-    changing it makes stored credentials unreadable.
+    `ENCRYPTION_KEY_SECRET`: Key that Onyx uses to encrypt connector credentials, API keys,
+    and other secrets at rest (Enterprise Edition). Encryption is on whenever a key is set. Keep the value:
+    Onyx needs it to read every value that it wrote with it. To change keys,
+    use `ENCRYPTION_KEYS` and `ENCRYPTION_WRITE_KEY_ID`. Do not change this value in place,
+    because that makes stored credentials unreadable.
+
+    `ENCRYPTION_KEYS`: Keys for key rotation, as a JSON object of key id to key, for example `{"2026-11": "<base64>"}`.
+    Each key is the base64 encoding of 32 random bytes (`openssl rand -base64 32`).
+    Onyx can read values written under any key in this object and under `ENCRYPTION_KEY_SECRET`.
+    A key id has 1 to 32 characters from letters, digits, `.`, `_` and `-`.
+    The id `legacy` is reserved for `ENCRYPTION_KEY_SECRET`. Onyx refuses to start when a key is malformed,
+    an id repeats, or `ENCRYPTION_WRITE_KEY_ID` names a key that is not configured.
+
+    `ENCRYPTION_WRITE_KEY_ID`: The key id that Onyx uses for new writes. When it is unset,
+    Onyx keeps writing in the format of `ENCRYPTION_KEY_SECRET`. Set it only after every Onyx process (API server,
+    background workers, bots) runs with that key in `ENCRYPTION_KEYS`,
+    because a process without the key cannot read the new values.
+    The value `legacy` moves new writes to the authenticated format with a key derived from `ENCRYPTION_KEY_SECRET`.
+
+    To rotate the encryption key without downtime:
+
+    <Steps>
+      <Step title="Stage the new key">
+        Generate a key with `openssl rand -base64 32`.
+        Add it to `ENCRYPTION_KEYS` under a new id and keep the keys already there. Restart every Onyx process.
+        Do not change `ENCRYPTION_WRITE_KEY_ID` at this step. If it is set,
+        unsetting it makes Onyx store new secrets as plain text when `ENCRYPTION_KEY_SECRET` is unset.
+      </Step>
+
+      <Step title="Switch new writes to the new key">
+        Set `ENCRYPTION_WRITE_KEY_ID` to the new id and restart every Onyx process. From this point,
+        roll back only the setting, to its earlier value, not the Onyx version:
+        an older version cannot read values written under the new id.
+      </Step>
+
+      <Step title="Re-encrypt stored values">
+        In the API server container, run `python -m scripts.reencrypt_secrets --dry-run`,
+        then `python -m scripts.reencrypt_secrets`. The command re-encrypts stored values while Onyx runs.
+        It never overwrites a value that changed during the run, and you can run it again after an interruption.
+      </Step>
+
+      <Step title="Verify">
+        Run `python -m scripts.reencrypt_secrets --verify`.
+        It exits with status 0 only when every stored value uses the new key and decrypts. If it reports stale values,
+        run the re-encrypt command again, then verify again. Fix or remove any value it reports as unreadable,
+        then verify again.
+      </Step>
+
+      <Step title="Retire the old key">
+        When verification passes, wait at least 10 minutes after the last restart in the second step.
+        Onyx keeps some short-lived sign-in data for up to 10 minutes, and the script does not convert it.
+        Then remove the old key: `ENCRYPTION_KEY_SECRET` on a first rotation,
+        or the previous id in `ENCRYPTION_KEYS` on a later one. Restart every Onyx process.
+        Keep a copy of the old key in your secret store: a database backup from before the rotation still needs it.
+      </Step>
+    </Steps>
 
     `MASK_CREDENTIAL_PREFIX`: Mask connector credentials in the admin UI.
     Turn off if admins should see the credentials in the admin panel.

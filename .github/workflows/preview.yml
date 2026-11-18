@@ -71,6 +71,8 @@ jobs:
       && github.event.pull_request.user.login != 'dependabot[bot]'
       && github.event.pull_request.user.login != 'onyx-cherry-pick[bot]')) }}
     runs-on: ubuntu-latest
+    # Setup and the build take about 3 minutes, and the deploy step stops
+    # at 20, which leaves time for the report step.
     timeout-minutes: 30
     permissions:
       contents: read
@@ -123,13 +125,21 @@ jobs:
             ${{ runner.os }}-nextjs-${{ hashFiles('web/bun.lock') }}-
             ${{ runner.os }}-nextjs-
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
-        with:
-          version: "0.13.8"
-
+      # The fork's CLI waits out a busy server instead of failing the upload.
+      # The checksum pins the archive, because a release tag can move.
       - name: Install the preview CLI
-        run: uv tool install local-preview==0.9.0
+        env:
+          PREVIEW_CLI_VERSION: "0.32.0"
+          PREVIEW_CLI_SHA256: e105b848b7e28227a7ab3d3b2e50986804cab823a5b1adecbff761050df9598a
+        run: |
+          set -euo pipefail
+          archive="local-preview_${PREVIEW_CLI_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/rohoswagger/local-preview/releases/download/v${PREVIEW_CLI_VERSION}/$archive"
+          echo "$PREVIEW_CLI_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/bin" preview
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       # Must match the frontend build in the server's own manifest for this
       # repo (manifests/onyx.toml in the terraform workspace) step for step —
@@ -166,17 +176,24 @@ jobs:
       # fresh one for each request (the server accepts OIDC on exactly these).
       - name: Upload the frontend and deploy
         id: deploy
+        # A backstop for the step's 16-minute deadline below. A step that
+        # times out fails instead of cancelling the job, so the report step
+        # still runs.
+        timeout-minutes: 20
         run: |
           # Without pipefail the tee below would mask a failed upload.
           set -euo pipefail
+          # One deadline covers the upload, the deploy request, and the wait.
+          # Successful runs finish in under 13 minutes.
+          DEADLINE=$((SECONDS + 960))
           # stderr into the capture too: on a failure it holds the reason, and
           # the next step quotes the tail of it into the PR comment.
-          preview upload frontend upload "$PREVIEW_SHA" \
+          # The CLI retries while the server is at upload capacity.
+          timeout 8m preview upload frontend upload "$PREVIEW_SHA" \
             --repo onyx --server "$PREVIEW_URL" --oidc 2>&1 | tee out.txt
 
           # Every call is bounded (connect, per attempt, and all retries), so a
-          # stalled server cannot hold the step past the 20-minute wait below
-          # and the report step still runs before the job timeout. Retries
+          # stalled server cannot hold the step far past the deadline. Retries
           # cover timeouts, 408/429/5xx and refused connections, not 4xx.
           CURL_LIMITS=(--connect-timeout 10 --max-time 30 --retry 3 --retry-connrefused --retry-max-time 90)
           token() {
@@ -213,7 +230,8 @@ jobs:
             if DEPLOY=$(api POST /api/deploys "$PAYLOAD"); then
               break
             fi
-            if [ "$attempt" = 6 ] || ! tail -1 out.txt | grep -q '"already exists"'; then
+            if [ "$attempt" = 6 ] || [ "$SECONDS" -ge "$DEADLINE" ] ||
+              ! tail -1 out.txt | grep -q '"already exists"'; then
               exit 1
             fi
             sleep 15
@@ -221,11 +239,9 @@ jobs:
           ID=$(jq -r .id <<<"$DEPLOY")
           STATUS=$(jq -r .status <<<"$DEPLOY")
           echo "deploy $ID: $STATUS" | tee -a out.txt
-          # The build runs on the server; 20 minutes is well past its slowest.
-          DEADLINE=$((SECONDS + 1200))
           while [ "$STATUS" = queued ] || [ "$STATUS" = building ]; do
             if [ "$SECONDS" -ge "$DEADLINE" ]; then
-              echo "deploy $ID still $STATUS after 20 minutes" | tee -a out.txt
+              echo "deploy $ID still $STATUS at the 16-minute step deadline" | tee -a out.txt
               exit 1
             fi
             sleep 5

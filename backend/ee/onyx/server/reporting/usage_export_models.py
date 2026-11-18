@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from onyx.db.enums import TaskStatus
+
 USAGE_REPORT_MEDIA_TYPE = "application/zip"
 
 
@@ -39,3 +41,9 @@ class UsageReportMetadata(BaseModel):
     time_created: datetime
     period_from: datetime | None  # None = All time
     period_to: datetime | None
+
+
+class UsageReportJob(BaseModel):
+    report_id: UUID
+    status: TaskStatus
+    time_created: datetime

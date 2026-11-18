@@ -21,7 +21,6 @@ const mockToastError = jest.fn();
 const mockRouterReplace = jest.fn();
 const mockUseUserSkills = jest.fn();
 const mockStageSkillCreationDraft = jest.fn();
-const mockSearchParamsGet = jest.fn();
 
 jest.mock("swr", () => ({
   __esModule: true,
@@ -35,12 +34,6 @@ jest.mock("next/navigation", () => ({
   ).nextNavigationMock,
   useRouter: () => ({ replace: mockRouterReplace }),
   usePathname: () => "/craft/v1/skills",
-  useSearchParams: () => {
-    const externalAppId: unknown = mockSearchParamsGet("externalAppId");
-    return new URLSearchParams(
-      typeof externalAppId === "string" ? { externalAppId } : {}
-    );
-  },
 }));
 
 jest.mock("@/hooks/useUserSkills", () => ({
@@ -186,7 +179,6 @@ function customSkill(id: string, name: string): CustomSkill {
     group_shares: [],
     public_permission: "VIEWER",
     user_permission: "VIEWER",
-    external_app: null,
     current_version_id: null,
     current_version_number: null,
     published_version_number: null,
@@ -240,8 +232,6 @@ describe("SkillsPage preference toggles", () => {
     mockBulkUpdateSkills.mockReset();
     mockRouterReplace.mockReset();
     window.history.replaceState(null, "", "/");
-    mockSearchParamsGet.mockReset();
-    mockSearchParamsGet.mockReturnValue(null);
     mockStageSkillCreationDraft.mockReset();
     mockStageSkillCreationDraft.mockReturnValue("draft-id");
   });
@@ -465,32 +455,6 @@ describe("SkillsPage preference toggles", () => {
     );
   });
 
-  it("locks organization access in bulk sharing when an app skill is selected", async () => {
-    skillsData.customs[1] = {
-      ...skillsData.customs[1]!,
-      user_permission: "OWNER",
-      external_app: {
-        external_app_id: 7,
-        name: "GitHub",
-        enabled: true,
-        ready: true,
-      },
-    };
-    skillsData.customs[0] = {
-      ...skillsData.customs[0]!,
-      user_permission: "OWNER",
-    };
-    render(<SkillsPage />);
-    const user = setupUser();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
-    await user.click(screen.getByRole("button", { name: "Share" }));
-    expect(
-      screen.getByRole("button", { name: "Who can access" })
-    ).toBeDisabled();
-  });
-
   it("lists exactly the skills selected for deletion before confirming", async () => {
     const names = [
       "first-skill",
@@ -690,69 +654,6 @@ describe("SkillsPage preference toggles", () => {
       ).not.toBeInTheDocument()
     );
     expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
-  });
-
-  it("refreshes associated apps after deletion without masking a successful delete on refresh failure", async () => {
-    skillsData.customs = [
-      {
-        ...customSkill("associated-id", "associated-skill"),
-        user_permission: "OWNER",
-        external_app: {
-          external_app_id: 7,
-          name: "CRM",
-          enabled: true,
-          ready: true,
-        },
-      },
-    ];
-    mockDeleteUserSkill.mockResolvedValue(undefined);
-    mockMutate.mockRejectedValue(new Error("Refresh failed"));
-    const log = jest.spyOn(console, "error").mockImplementation(() => {});
-    try {
-      render(<SkillsPage />);
-      const user = setupUser();
-      await user.click(
-        screen.getByRole("button", { name: "Delete associated-skill" })
-      );
-      await user.click(screen.getByRole("button", { name: "Delete" }));
-      await waitFor(() =>
-        expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
-      );
-      expect(mockMutate).toHaveBeenCalledWith("/api/build/admin/apps");
-      expect(skillsData.customs).toHaveLength(0);
-      expect(log).toHaveBeenCalled();
-    } finally {
-      log.mockRestore();
-    }
-  });
-
-  it("finishes deletion while the optional app refresh is pending", async () => {
-    skillsData.customs = [
-      {
-        ...customSkill("associated-id", "associated-skill"),
-        user_permission: "OWNER",
-        external_app: {
-          external_app_id: 7,
-          name: "CRM",
-          enabled: true,
-          ready: true,
-        },
-      },
-    ];
-    const refresh = deferred<void>();
-    mockDeleteUserSkill.mockResolvedValue(undefined);
-    mockMutate.mockReturnValue(refresh.promise);
-    render(<SkillsPage />);
-    const user = setupUser();
-    await user.click(
-      screen.getByRole("button", { name: "Delete associated-skill" })
-    );
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
-    );
-    expect(skillsData.customs).toHaveLength(0);
-    await act(async () => refresh.resolve());
   });
 
   it("keeps an invalid skill and reports a failed delete", async () => {
@@ -966,12 +867,6 @@ describe("SkillsPage preference toggles", () => {
     };
     const second = {
       ...customSkill("second-id", "report-writer"),
-      external_app: {
-        external_app_id: 42,
-        name: "Acme CRM",
-        enabled: true,
-        ready: true,
-      },
     };
     skillsData = { builtins: [], customs: [first, second] };
     mockSetSkillEnabled.mockResolvedValueOnce({ ...second, enabled: true });
@@ -1079,72 +974,5 @@ describe("SkillsPage preference toggles", () => {
         screen.queryByText("Switch “first-skill” skill?")
       ).not.toBeInTheDocument()
     );
-  });
-
-  it("focuses the list on skills associated with a reviewed app", () => {
-    mockSearchParamsGet.mockImplementation((key: string) =>
-      key === "externalAppId" ? "42" : null
-    );
-    skillsData = {
-      builtins: [],
-      customs: [
-        {
-          ...customSkill("associated-id", "crm-workflow"),
-          external_app: {
-            external_app_id: 42,
-            name: "Acme CRM",
-            enabled: true,
-            ready: true,
-          },
-        },
-        customSkill("other-id", "other-skill"),
-      ],
-    };
-
-    render(<SkillsPage />);
-
-    expect(screen.getByText("Skills for app “Acme CRM”")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Enable every skill associated with app “Acme CRM”. The app may not work correctly without them. If another skill with the same name is enabled, enabling the app-associated skill disables the other skill for you."
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("switch", { name: "crm-workflow" })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("switch", { name: "other-skill" })
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows all skills when an app focus no longer resolves", () => {
-    mockSearchParamsGet.mockImplementation((key: string) =>
-      key === "externalAppId" ? "999" : null
-    );
-    skillsData = {
-      builtins: [],
-      customs: [
-        {
-          ...customSkill("associated-id", "crm-workflow"),
-          external_app: {
-            external_app_id: 42,
-            name: "Acme CRM",
-            enabled: true,
-            ready: true,
-          },
-        },
-        customSkill("other-id", "other-skill"),
-      ],
-    };
-
-    render(<SkillsPage />);
-
-    expect(screen.queryByText(/Skills for app/)).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("switch", { name: "crm-workflow" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("switch", { name: "other-skill" })
-    ).toBeInTheDocument();
   });
 });

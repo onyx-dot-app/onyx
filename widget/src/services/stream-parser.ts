@@ -5,9 +5,10 @@
 import { Packet, Message, SearchDocument } from "@/types/api-types";
 import { ChatMessage } from "@/types/widget-types";
 import {
-  AWAITING_APPROVAL_STOP_REASON,
+  AWAITING_USER_STOP_REASON,
   readOutcome,
 } from "@/services/approvals";
+import { readQuestionResolution } from "@/services/questions";
 
 /** The server ended the turn with an error packet. */
 export class StreamErrorPacket extends Error {}
@@ -15,6 +16,19 @@ export class StreamErrorPacket extends Error {}
 export interface ParsedMessage {
   message: ChatMessage;
   isComplete: boolean;
+}
+
+/** The response a tool call's card joins; a tool call can come first. */
+function responseOf(currentMessage: ChatMessage | null): ChatMessage {
+  return (
+    currentMessage ?? {
+      id: `msg-${Date.now()}`,
+      role: "assistant",
+      content: "",
+      timestamp: Date.now(),
+      isStreaming: true,
+    }
+  );
 }
 
 export interface MessageIDs {
@@ -61,7 +75,7 @@ export function processPacket(
 
   switch (obj.type) {
     case "message_start":
-      // Start of a new assistant response; keeps approvals that came first
+      // Start of a new assistant response; keeps the cards that came first
       return {
         message: {
           id: `msg-${Date.now()}`,
@@ -70,6 +84,7 @@ export function processPacket(
           timestamp: Date.now(),
           isStreaming: true,
           approvals: currentMessage?.approvals,
+          questions: currentMessage?.questions,
         },
         status: "", // Clear status when response starts
       };
@@ -202,14 +217,7 @@ export function processPacket(
       };
 
     case "tool_approval_request": {
-      // A tool call can come first
-      const base: ChatMessage = currentMessage ?? {
-        id: `msg-${Date.now()}`,
-        role: "assistant",
-        content: "",
-        timestamp: Date.now(),
-        isStreaming: true,
-      };
+      const base = responseOf(currentMessage);
       const others = (base.approvals ?? []).filter(
         (entry) => entry.request.approval_id !== obj.approval_id
       );
@@ -242,17 +250,49 @@ export function processPacket(
       };
     }
 
+    case "tool_question_request": {
+      const base = responseOf(currentMessage);
+      const others = (base.questions ?? []).filter(
+        (entry) =>
+          entry.request.question_request_id !== obj.question_request_id
+      );
+      return {
+        message: {
+          ...base,
+          questions: [...others, { request: obj, resolution: null }],
+        },
+        status: "",
+      };
+    }
+
+    case "tool_question_resolved": {
+      const resolution = readQuestionResolution(obj);
+      if (!currentMessage?.questions || resolution === null) {
+        return { message: currentMessage };
+      }
+      return {
+        message: {
+          ...currentMessage,
+          questions: currentMessage.questions.map((entry) =>
+            entry.request.question_request_id === obj.question_request_id
+              ? { ...entry, resolution }
+              : entry
+          ),
+        },
+      };
+    }
+
     case "stop":
     case "overall_stop":
-      // End of stream - mark message as complete, or as waiting for decisions
+      // End of stream - mark message as complete, or as waiting for the user
       if (currentMessage) {
         return {
           message: {
             ...currentMessage,
             isStreaming: false,
-            awaitingApproval:
+            awaitingUser:
               obj.type === "stop" &&
-              obj.stop_reason === AWAITING_APPROVAL_STOP_REASON,
+              obj.stop_reason === AWAITING_USER_STOP_REASON,
           },
         };
       }

@@ -31,6 +31,8 @@ from atlassian.errors import ApiError
 from pydantic import BaseModel
 from requests import HTTPError
 
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE,
     OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
@@ -61,8 +63,6 @@ from onyx.connectors.source_operations import (
     SourceOperations,
     source_operation,
 )
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -243,10 +243,10 @@ class _OnyxConfluence:
         self._url = url.rstrip("/")
         self._credentials_provider = credentials_provider
         self.scoped_token = scoped_token
-        self.redis_client: TenantRedisClient | None = None
+        self.cache: CacheBackend | None = None
         self.static_credentials: dict[str, Any] | None = None
         if self._credentials_provider.is_dynamic():
-            self.redis_client = get_redis_client(
+            self.cache = get_cache_backend(
                 tenant_id=credentials_provider.get_tenant_id()
             )
         else:
@@ -294,12 +294,12 @@ class _OnyxConfluence:
         if self.static_credentials:
             return self.static_credentials, False
 
-        if not self.redis_client:
-            raise RuntimeError("self.redis_client is None")
+        if not self.cache:
+            raise RuntimeError("self.cache is None")
 
         # dynamic credentials need locking
         # check redis first, then fallback to the DB
-        credential_bytes = self.redis_client.get(self.credential_key)
+        credential_bytes = self.cache.get(self.credential_key)
         if credential_bytes is not None:
             credential_str = credential_bytes.decode("utf-8")
             credential_json: dict[str, Any] = json.loads(credential_str)
@@ -351,8 +351,8 @@ class _OnyxConfluence:
         # reasonably frequently rather than trying to handle strong synchronization
         # between the db and redis everywhere the credentials might be updated
         new_credential_str = json.dumps(new_credentials)
-        self.redis_client.set(
-            self.credential_key, new_credential_str, nx=True, ex=self.CREDENTIAL_TTL
+        self.cache.set_if_absent(
+            self.credential_key, new_credential_str, ex=self.CREDENTIAL_TTL
         )
         self._credentials_provider.set_credentials(new_credentials)
 
