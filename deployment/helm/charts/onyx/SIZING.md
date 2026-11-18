@@ -150,6 +150,11 @@ celery_worker_docfetching:
   replicaCount: 2
 celery_worker_docprocessing:
   replicaCount: 2
+# For a very large Google Drive, turn on the conversion stage and scale its
+# worker on queue depth (documentation: deployment/production/conversion_stage).
+# celery_worker_docconversion:
+#   enabled: true
+#   replicaCount: 3
   resources:
     requests: {cpu: 500m, memory: 2Gi}
     limits: {cpu: 1000m, memory: 18Gi}
