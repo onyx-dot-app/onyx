@@ -96,6 +96,47 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
+## Builds and releases
+
+`.github/workflows/desktop-v2.yml`:
+
+- On pull requests that touch `desktop-v2/`, CI runs the checks and builds an unsigned
+  universal (Apple silicon and Intel) DMG as a workflow artifact for reviewers. macOS blocks
+  an unsigned app on first launch: right-click it, choose **Open**, then **Open** again.
+- Run the workflow by hand with a version (for example `0.2.0`) to publish a signed and
+  notarized universal DMG, its update archive and `latest.json`. They go to a GitHub
+  pre-release tagged `desktop-v2-v<version>`, which is never marked as the latest release, so
+  v1's downloads and auto-update are not affected.
+
+## Auto-update
+
+`src-tauri/src/updater.rs`, like Claude Desktop: the app checks the feed 15 seconds after launch
+and every 6 hours, downloads a newer version in the background, then changes **Check for
+Updates…** (app menu and tray) to **Restart to Update (vX)**. It does not restart on its own.
+Every download is verified against `plugins.updater.pubkey` in `tauri.conf.json` before it is
+installed; a build that was changed after signing, or signed with another key, is rejected.
+
+- The feed (`plugins.updater.endpoints`) must be HTTPS. It points at a feed that does not exist
+  yet, so checks fail quietly until the feed is set up.
+- The public key in `tauri.conf.json` is a development key. Before the first release, create
+  the release key pair, put the public key here and the private key in CI's secrets. If that
+  private key is lost, installed apps can never update again.
+
+To test an update end to end on one Mac, make a key pair with `bun run tauri signer generate`,
+then build an old and a new version with a config overlay that points the feed at a local
+server and allows plain HTTP for that test only:
+
+```bash
+echo '{"version":"0.1.0","bundle":{"createUpdaterArtifacts":true},"plugins":{"updater":{"pubkey":"<public key>","endpoints":["http://127.0.0.1:8765/latest.json"],"dangerousInsecureTransportProtocol":true}}}' > /tmp/old.json
+sed 's/0.1.0/0.1.1/' /tmp/old.json > /tmp/new.json
+export TAURI_SIGNING_PRIVATE_KEY="$(cat <private key file>)" TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+bun run tauri build --debug --bundles app --config /tmp/old.json   # copy the .app somewhere, run it
+bun run tauri build --debug --bundles app --config /tmp/new.json   # serve the .app.tar.gz + latest.json
+```
+
+`latest.json` lists the version and, per platform (`darwin-aarch64`, `darwin-x86_64`), the
+archive URL and the contents of its `.sig` file.
+
 ## Known limits
 
 - wry calls the navigation hook for iframes too, so a cross-origin iframe in the web UI
