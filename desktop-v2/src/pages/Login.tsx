@@ -22,6 +22,8 @@ function Login() {
   const [busy, setBusy] = useState(false);
   const [waitingForSso, setWaitingForSso] = useState<"browser" | "window" | null>(null);
   const [startingSso, setStartingSso] = useState(false);
+  // The browser sign-in in progress, so only its button offers to start again.
+  const [browserProvider, setBrowserProvider] = useState<string | null>(null);
   // Set by any browser attempt, also one that could not open the browser.
   const [browserTried, setBrowserTried] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +71,9 @@ function Login() {
     setStartingSso(true);
     if (browser) setBrowserTried(true);
     try {
-      setWaitingForSso(await signInWithSso(browser, provider));
+      const waiting = await signInWithSso(browser, provider);
+      setWaitingForSso(waiting);
+      setBrowserProvider(waiting === "browser" ? provider : null);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -86,13 +90,13 @@ function Login() {
           <Section gap={2} alignItems="stretch" height="fit">
             {methods.sso.map((option) => (
               <Button
-                key={option.label}
+                key={option.provider ?? option.label}
                 prominence="secondary"
                 width="full"
                 disabled={startingSso}
                 onClick={() => void onSso(option.browser, option.provider)}
               >
-                {waitingForSso === "browser" && option.browser
+                {waitingForSso === "browser" && option.browser && option.provider === browserProvider
                   ? "Start again in your browser"
                   : option.label}
               </Button>
