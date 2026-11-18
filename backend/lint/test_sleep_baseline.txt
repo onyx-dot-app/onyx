@@ -47,7 +47,6 @@
 1 backend/tests/external_dependency_unit/permission_sync/test_pause_cancels_permission_syncs.py
 3 backend/tests/external_dependency_unit/permission_sync/test_permission_sync_attempt_lease.py
 1 backend/tests/external_dependency_unit/redis/test_incognito_context.py
-1 backend/tests/external_dependency_unit/redis/test_lock_context.py
 1 backend/tests/external_dependency_unit/sandbox_proxy/test_approval_cache.py
 5 backend/tests/external_dependency_unit/sandbox_proxy/test_identity_docker_lookup.py
 1 backend/tests/external_dependency_unit/sandbox_proxy/test_informer_watch_deadline.py
