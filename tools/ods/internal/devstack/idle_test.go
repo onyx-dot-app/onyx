@@ -97,6 +97,23 @@ func TestLastActivityCountsGitAndUntrackedEditsButNotIgnoredFiles(t *testing.T) 
 		t.Fatalf("a deleted tracked file did not count: %s", got)
 	}
 
+	nested := filepath.Join(root, "pkg", "sub", "gone.go")
+	writeFile(t, nested, "x")
+	for _, args := range [][]string{{"add", "pkg"}, {"-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "pkg"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	age(t, root, old)
+	if err := os.RemoveAll(filepath.Join(root, "pkg")); err != nil {
+		t.Fatal(err)
+	}
+	if got := LastActivity(row, nil, time.Now()); !got.After(started) {
+		t.Fatalf("a deleted tracked directory did not count: %s", got)
+	}
+
 	if got := LastActivity(StackRow{Root: "/nonexistent", Since: started}, nil, time.Now()); !got.Equal(started) {
 		t.Fatalf("missing checkout: activity %s, want %s", got, started)
 	}

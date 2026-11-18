@@ -28,12 +28,22 @@ func AgentDirs() ([]string, error) {
 			return nil, fmt.Errorf("cannot read /proc to find coding agents: %v", err)
 		}
 		for _, proc := range procs {
-			comm, err := os.ReadFile(filepath.Join(proc, "comm"))
-			if err != nil || !isAgentCommand(strings.TrimSpace(string(comm))) {
+			// A process can rename itself, so the executable name also counts.
+			comm, _ := os.ReadFile(filepath.Join(proc, "comm"))
+			exe, _ := os.Readlink(filepath.Join(proc, "exe"))
+			if !isAgentCommand(strings.TrimSpace(string(comm))) && (exe == "" || !isAgentCommand(filepath.Base(exe))) {
 				continue
 			}
-			if dir, err := os.Readlink(filepath.Join(proc, "cwd")); err == nil {
+			dir, err := os.Readlink(filepath.Join(proc, "cwd"))
+			switch {
+			case err == nil:
 				dirs = append(dirs, dir)
+			case errors.Is(err, os.ErrNotExist):
+				// The process exited.
+			case errors.Is(err, os.ErrPermission):
+				// Another user's agent cannot work in this user's worktree.
+			default:
+				return nil, fmt.Errorf("cannot read the working directory of agent %s: %w", filepath.Base(proc), err)
 			}
 		}
 	case "darwin":
@@ -114,9 +124,9 @@ func LastActivity(row StackRow, agentDirs []string, now time.Time) time.Time {
 			}
 			path := filepath.Join(row.Root, name)
 			info, err := os.Lstat(path)
-			if errors.Is(err, os.ErrNotExist) {
-				// A deleted tracked file changes the mtime of its directory.
-				info, err = os.Stat(filepath.Dir(path))
+			// A deletion changes the mtime of the nearest directory that is left.
+			for dir := filepath.Dir(path); errors.Is(err, os.ErrNotExist) && strings.HasPrefix(dir, row.Root); dir = filepath.Dir(dir) {
+				info, err = os.Stat(dir)
 			}
 			if err == nil {
 				later(info.ModTime())
