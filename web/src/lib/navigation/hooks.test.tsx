@@ -19,7 +19,7 @@ beforeEach(() => {
   mockParams = new URLSearchParams();
 });
 
-test.each(["/app/plugins", "/app/plugins/oauth/complete"])(
+test.each(["/app/plugins", "/app/plugins/7"])(
   "recognizes %s without highlighting New chat",
   (pathname) => {
     mockPathname = pathname;

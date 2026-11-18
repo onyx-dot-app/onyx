@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import SplitResult, urlsplit
 
 from onyx.sandbox_proxy.models import DestinationPolicyConfig, IPNetwork
-from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
+from onyx.sandbox_proxy.resolvers.integration import IntegrationResolver
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 from onyx.sandbox_proxy.sandbox_identity.resolution import (
     PeerAddress,
@@ -107,7 +107,7 @@ def resolve_destination(
     scheme: str = "",
     peer: PeerAddress | None = None,
     identity: SandboxIdentityResolver | None = None,
-    mcp_resolver: MCPServerResolver | None = None,
+    integration_resolver: IntegrationResolver | None = None,
     upstream_addresses: tuple[str, ...] = (),
     sandbox: ResolvedSandbox | None = None,
 ) -> tuple[str, ...] | None:
@@ -156,7 +156,7 @@ def resolve_destination(
     if is_api or not any(is_internal(config, address) for address in addresses):
         return resolved
 
-    if mcp_resolver is None or scheme not in {"http", "https"}:
+    if integration_resolver is None or scheme not in {"http", "https"}:
         return None
     if sandbox is None and identity is None:
         return None
@@ -166,7 +166,7 @@ def resolve_destination(
             if src_ip is None:
                 return None
             sandbox = identity.resolve_sandbox(src_ip)
-        if sandbox is None or not mcp_resolver.allows_destination(
+        if sandbox is None or not integration_resolver.allows_destination(
             sandbox, scheme, host, port
         ):
             return None

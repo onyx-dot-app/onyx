@@ -40,7 +40,6 @@ from tests.external_dependency_unit.craft.db_helpers import (
     make_group,
     make_skill,
     make_user,
-    make_user_credential,
     set_current_version_validity,
     share_plugin_with_group,
 )
@@ -175,19 +174,15 @@ def test_chat_skills_use_the_version_each_user_runs(
     assert not built_in_names & set(author_skills)
 
 
-def test_chat_skills_leave_out_external_app_and_invalid_skills(
+def test_chat_skills_keep_app_skills_and_leave_out_invalid_skills(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     users: tuple[User, User],
 ) -> None:
     user, _ = users
+    # The app's plugin holds the skill; the user has not connected the app.
     app_skill = make_skill(db_session, is_public=True)
-    app = make_external_app(
-        db_session, skill=app_skill, auth_template={"token": "{token}"}
-    )
-    make_user_credential(
-        db_session, app=app, user=user, user_credentials={"token": "t"}
-    )
+    make_external_app(db_session, skill=app_skill, auth_template={"token": "{token}"})
     invalid_skill = make_skill(db_session, is_public=True)
     valid_skill = make_skill(db_session, is_public=True)
     for skill in (app_skill, invalid_skill, valid_skill):
@@ -204,8 +199,8 @@ def test_chat_skills_leave_out_external_app_and_invalid_skills(
 
     assert {app_skill.name, valid_skill.name} <= runtime_names
     assert invalid_skill.name not in runtime_names
-    assert valid_skill.name in chat_names
-    assert not {app_skill.name, invalid_skill.name} & chat_names
+    assert {app_skill.name, valid_skill.name} <= chat_names
+    assert invalid_skill.name not in chat_names
 
 
 def test_chat_skills_follow_install_settings_and_the_name_order(

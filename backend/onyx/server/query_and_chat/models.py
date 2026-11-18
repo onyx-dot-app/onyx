@@ -20,7 +20,7 @@ from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride
 from onyx.server.features.action_policies.models import DecisionBody
 from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
-from onyx.tools.models import ChatToolSelection
+from onyx.tools.models import ToolOptions
 from onyx.tools.tool_implementations.question.models import ToolQuestionAnswer
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -144,18 +144,9 @@ class SendMessageRequest(BaseModel):
     # When provided with >1 entry, triggers multi-model streaming.
     llm_overrides: list[LLMOverride] | None = None
 
-    allowed_tool_ids: list[int] | None = None
-    preferred_tool_id: int | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def reject_forced_action(cls, data: Any) -> Any:
-        if isinstance(data, dict) and data.get("forced_tool_id") is not None:
-            raise ValueError(
-                "forced_tool_id is no longer supported. Use preferred_tool_id for "
-                "an optional Action preference; invocation is not guaranteed."
-            )
-        return data
+    # The tools, plugins and search filters for this turn; None uses each
+    # tool and plugin of the agent.
+    tool_options: ToolOptions | None = None
 
     file_descriptors: list[FileDescriptor] = []
 
@@ -169,8 +160,6 @@ class SendMessageRequest(BaseModel):
             "message text never tags anything."
         ),
     )
-
-    internal_search_filters: BaseFilters | None = None
 
     deep_research: bool = False
 
@@ -215,10 +204,57 @@ class SendMessageRequest(BaseModel):
     # the current tab URL when "Read this tab" is enabled.
     additional_context: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_removed_tool_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        if data.get("forced_tool_id") is not None:
+            raise ValueError(
+                "forced_tool_id is no longer supported. Use tool_options.preferred "
+                "for an optional Action preference; invocation is not guaranteed."
+            )
+        for field in ("allowed_tool_ids", "preferred_tool_id"):
+            if data.get(field) is not None:
+                raise ValueError(
+                    f"{field} is no longer supported. Use tool_options: "
+                    "tool_options.allowed narrows the Actions and "
+                    "tool_options.preferred sets an optional preference."
+                )
+        # The filters were a field of their own before tool_options.
+        if "internal_search_filters" not in data:
+            return data
+        data = dict(data)
+        filters = data.pop("internal_search_filters")
+        if filters is None:
+            return data
+        options = data.get("tool_options") or {}
+        if isinstance(options, ToolOptions):
+            options = options.model_dump()
+        if not isinstance(options, dict):
+            raise ValueError("tool_options must be an object")
+        if options.get("internal_search_filters") is not None:
+            raise ValueError(
+                "Send internal_search_filters in tool_options or at the top "
+                "level, not in both"
+            )
+        data["tool_options"] = {**options, "internal_search_filters": filters}
+        return data
+
+    @property
+    def internal_search_filters(self) -> BaseFilters | None:
+        return self.tool_options.internal_search_filters if self.tool_options else None
+
     @model_validator(mode="after")
     def check_preference_supported(self) -> "SendMessageRequest":
-        if self.deep_research and self.preferred_tool_id is not None:
-            raise ValueError("preferred_tool_id is not supported with deep_research")
+        if (
+            self.deep_research
+            and self.tool_options is not None
+            and self.tool_options.preferred is not None
+        ):
+            raise ValueError(
+                "tool_options.preferred is not supported with deep_research"
+            )
         return self
 
     @model_validator(mode="after")
@@ -485,8 +521,8 @@ class ChatSessionDetailResponse(BaseModel):
     incognito: bool = False
     # Set on a paged load when the current branch has messages before the page.
     has_older_messages: bool = False
-    # The owner's saved tools and search filters; NULL means the agent's tools.
-    tool_selection: ChatToolSelection | None = None
+    # The owner's saved tool options; NULL means the agent's tools.
+    tool_options: ToolOptions | None = None
     # The status route's `approvals_version` for the requests this load shows.
     approvals_version: str = ""
 

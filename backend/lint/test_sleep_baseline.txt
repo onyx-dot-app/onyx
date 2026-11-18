@@ -20,12 +20,10 @@
 4 backend/tests/external_dependency_unit/connectors/google_drive/test_drive_entry_points.py
 2 backend/tests/external_dependency_unit/connectors/google_drive/test_drive_folder_subtree.py
 7 backend/tests/external_dependency_unit/connectors/google_drive/test_parallel_drive_listing.py
-1 backend/tests/external_dependency_unit/craft/test_granted_scopes_persistence.py
 1 backend/tests/external_dependency_unit/craft/test_output_cards.py
 3 backend/tests/external_dependency_unit/craft/test_prompt_slot_distributed.py
 2 backend/tests/external_dependency_unit/craft/test_skill_db_mutations.py
 2 backend/tests/external_dependency_unit/craft/test_skill_write_limit.py
-1 backend/tests/external_dependency_unit/db/test_default_assistant_disabled_tool.py
 2 backend/tests/external_dependency_unit/db/test_index_attempt_stage_metrics.py
 3 backend/tests/external_dependency_unit/db/test_migration_lock.py
 1 backend/tests/external_dependency_unit/db/test_search_settings_share_lock.py
@@ -55,7 +53,6 @@
 1 backend/tests/external_dependency_unit/sandbox_proxy/test_informer_watch_deadline.py
 1 backend/tests/external_dependency_unit/scripts/test_orphan_doc_cleanup_script.py
 1 backend/tests/external_dependency_unit/server/documents/test_restricted_data_access_lock.py
-1 backend/tests/external_dependency_unit/server/features/mcp/test_mcp_tool_sync.py
 3 backend/tests/external_dependency_unit/tools/test_code_mode.py
 2 backend/tests/external_dependency_unit/utils/test_playwright_outbound.py
 2 backend/tests/external_dependency_unit/voice/test_openai_streaming.py
@@ -83,7 +80,6 @@
 1 backend/tests/integration/tests/craft/docker_e2e/test_serve_streaming_docker.py
 1 backend/tests/integration/tests/craft/docker_e2e/test_snapshot_roundtrip_docker.py
 8 backend/tests/integration/tests/craft/k8s/k8s_fixtures.py
-3 backend/tests/integration/tests/craft/k8s/test_approval_gate.py
 1 backend/tests/integration/tests/craft/k8s/test_bun_node_modules_dedup.py
 1 backend/tests/integration/tests/craft/k8s/test_cleanup_recovery.py
 1 backend/tests/integration/tests/craft/k8s/test_messages_api_k8s.py
@@ -96,9 +92,7 @@
 1 backend/tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py
 1 backend/tests/integration/tests/log_export/test_log_export.py
 1 backend/tests/integration/tests/mcp/conftest.py
-1 backend/tests/integration/tests/mcp/test_craft_mcp_servers.py
 3 backend/tests/integration/tests/mcp/test_mcp_chat_tool_approval.py
-1 backend/tests/integration/tests/mcp_oauth/conftest.py
 1 backend/tests/integration/tests/migrations/test_drop_opensearch_migration_tables.py
 1 backend/tests/integration/tests/migrations/test_run_multitenant_migrations.py
 2 backend/tests/integration/tests/no_vectordb/test_no_vectordb_chat.py
@@ -148,7 +142,6 @@
 8 backend/tests/unit/onyx/server/features/craft/test_session_manager_merger.py
 1 backend/tests/unit/onyx/server/features/mcp/test_mcp_cancellation_transport.py
 1 backend/tests/unit/onyx/server/features/mcp/test_mcp_client.py
-1 backend/tests/unit/onyx/server/features/mcp/test_mcp_oauth_refresh.py
 1 backend/tests/unit/onyx/server/manage/voice/test_streaming_transcription.py
 1 backend/tests/unit/onyx/server/manage/voice/test_zoom_rest_transcribe.py
 2 backend/tests/unit/onyx/server/manage/voice/test_zoom_session_admission.py

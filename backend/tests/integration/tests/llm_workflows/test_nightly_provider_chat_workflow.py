@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from onyx.configs import app_configs
 from onyx.configs.constants import DocumentSource
 from onyx.tools.constants import SEARCH_TOOL_ID
+from onyx.tools.models import CapabilityEntry, ToolOptions
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -329,7 +330,7 @@ def _run_chat_assertions(
                 "then summarize the result in one short sentence."
             ),
             user_performing_action=admin_user,
-            preferred_tool_id=search_tool_id,
+            tool_options=ToolOptions(preferred=CapabilityEntry(tool_id=search_tool_id)),
         )
 
         if response.error is None:

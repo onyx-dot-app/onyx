@@ -22,7 +22,7 @@ import {
 } from "@/lib/chat/sessionReadiness";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
-import { flushToolSelection } from "@/lib/tools/hooks";
+import { flushToolOptions } from "@/lib/tools/hooks";
 import type { ChatSessionStatus, PendingChatMessage } from "@/lib/chat/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@opal/layouts";
@@ -125,9 +125,13 @@ jest.mock("@/refresh-components/popovers/FilePickerPopover", () => ({
   default: () => null,
 }));
 jest.mock("@/lib/tools/components", () => ({ ToolsPopover: () => null }));
+jest.mock("@/sections/plugins/IntegrationConnectPrompt", () => ({
+  __esModule: true,
+  default: () => null,
+}));
 jest.mock("@/lib/tools/hooks", () => ({
   ...jest.requireActual("@/lib/tools/hooks"),
-  flushToolSelection: jest.fn(() => Promise.resolve()),
+  flushToolOptions: jest.fn(() => Promise.resolve()),
 }));
 jest.mock("@/components/voice/Waveform", () => ({
   __esModule: true,
@@ -186,7 +190,9 @@ function props(chatState: AppInputBarProps["chatState"]): ComposerProps {
       hasTemperatureOverride: false,
       temperature: 0.5,
     } as AppInputBarProps["llmManager"],
-    toolConfiguration: {} as AppInputBarProps["toolConfiguration"],
+    toolConfiguration: {
+      optionsLoaded: true,
+    } as AppInputBarProps["toolConfiguration"],
   };
 }
 
@@ -366,6 +372,29 @@ test("stopping preserves the draft and queue until completion", async () => {
   rerender(<ChatInput {...inputProps} chatState="input" />);
   expect(inputProps.onSubmit).not.toHaveBeenCalled();
   expect(textbox).toHaveTextContent("Keep this draft");
+});
+
+test("a send before the tool options load waits for them and then sends", async () => {
+  const user = setupUser();
+  const inputProps = props("input");
+  const notLoaded = {
+    ...inputProps,
+    toolConfiguration: {
+      optionsLoaded: false,
+    } as AppInputBarProps["toolConfiguration"],
+  };
+  const { rerender } = render(<ChatInput {...notLoaded} />);
+  const textbox = screen.getByRole("textbox", { name: "Message input" });
+  await user.click(textbox);
+  await user.keyboard("{Enter}");
+  expect(inputProps.onSubmit).not.toHaveBeenCalled();
+  expect(textbox).toHaveTextContent("Keep this draft");
+
+  rerender(<ChatInput {...inputProps} />);
+  await waitFor(() => expect(inputProps.onSubmit).toHaveBeenCalledTimes(1));
+  expect(inputProps.onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({ message: "Keep this draft" })
+  );
 });
 
 test("unconfirmed completion offers a retry and never submits the draft or queue", async () => {
@@ -899,7 +928,7 @@ describe("while a question waits", () => {
 test("a queued message waits for the chat's tool selection to save", async () => {
   const user = setupUser();
   const saved = deferred<void>();
-  const flush = jest.mocked(flushToolSelection);
+  const flush = jest.mocked(flushToolOptions);
   flush.mockReturnValueOnce(saved.promise);
   const posted = jest.fn();
   fetchSpy.mockImplementation(async (url, init) => {

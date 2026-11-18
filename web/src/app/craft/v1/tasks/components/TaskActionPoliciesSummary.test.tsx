@@ -1,37 +1,32 @@
 import { render, screen } from "@tests/setup/test-utils";
 import TaskActionPoliciesSummary from "@/app/craft/v1/tasks/components/TaskActionPoliciesSummary";
-import type { AppActionPoliciesView } from "@/lib/plugins/types";
+import type { TaskPluginView } from "@/app/craft/v1/tasks/types";
 
-const initialData: AppActionPoliciesView[] = [
-  {
-    gated_app_id: 1,
-    kind: "external_app",
-    target_id: 10,
-    name: "Slack",
-    enabled: true,
-    users_can_manage_policies: true,
-    actions: [],
-  },
-];
-let mockData = initialData;
+function plugin(
+  pluginId: string,
+  name: string,
+  enabled: boolean
+): TaskPluginView {
+  return {
+    plugin_id: pluginId,
+    plugin_name: name,
+    enabled,
+    action_settings: enabled ? { default: "inherit", actions: {} } : null,
+    integrations: [],
+  };
+}
+
+let mockData: TaskPluginView[] = [];
 jest.mock("swr", () => ({
   ...jest.requireActual("swr"),
   __esModule: true,
   default: () => ({ data: mockData, mutate: jest.fn() }),
 }));
-beforeEach(() => {
-  mockData = initialData;
-});
 
 it("lists only enabled plugins as passive task context", () => {
   mockData = [
-    ...initialData.map((app) => ({ ...app, enabled: true })),
-    ...initialData.map((app) => ({
-      ...app,
-      gated_app_id: 2,
-      name: "Disabled plugin",
-      enabled: false,
-    })),
+    plugin("a", "Slack", true),
+    plugin("b", "Disabled plugin", false),
   ];
   render(<TaskActionPoliciesSummary taskId="task" />);
   expect(screen.getByText("Slack")).toBeInTheDocument();
@@ -41,7 +36,7 @@ it("lists only enabled plugins as passive task context", () => {
 });
 
 it("shows an explicit empty state when no plugins are enabled", () => {
-  mockData = initialData.map((app) => ({ ...app, enabled: false }));
+  mockData = [plugin("a", "Slack", false)];
   render(<TaskActionPoliciesSummary taskId="task" />);
   expect(
     screen.getByText("No plugins enabled for this task.")

@@ -21,6 +21,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
     WHOLE_DOMAIN_ACTION_TYPE,
     recognize_actions,
+    url_matches_patterns,
 )
 from onyx.external_apps.matching.request import ProxiedRequest
 from onyx.external_apps.providers.registry import get_endpoint_catalog
@@ -31,13 +32,15 @@ from onyx.integrations.models import (
     ApiShape,
     IntegrationActionSpec,
     MatchedIntegrationAction,
+    RequestMatch,
 )
-from onyx.sandbox_proxy.request_evaluator import resolve_app_for_url
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
+    CraftMCPTarget,
+    IntegrationMatchTarget,
     match_request,
     normalized_request_path,
-    parse_target,
 )
+from onyx.server.features.mcp.models import merge_mcp_headers
 from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo
 from onyx.tools.tool_implementations.custom.custom_tool import (
@@ -142,9 +145,11 @@ class ApiKindHandler(IntegrationKindHandler):
         if tool is None or tool.openapi_schema is None:
             return None
         try:
-            base_url = openapi_to_url(tool.openapi_schema)
-        except ValueError as e:
-            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
+            base_url: str | None = openapi_to_url(tool.openapi_schema)
+        except ValueError:
+            # A spec with no single server URL matches no request; it must not
+            # break the readers that only need the shape.
+            base_url = None
         return ApiConfig(
             shape=ApiShape.OPENAPI,
             tool_id=tool.id,
@@ -237,67 +242,71 @@ class ApiKindHandler(IntegrationKindHandler):
             return []
         keys = {action.key for action in actions}
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            # The tool row id keeps the tool names of today.
-            tool_id=config.tool_id,
+            integration_id=integration.id,
             openapi_schema=config.openapi_spec,
-            custom_headers=header_dict_to_header_list(ctx.custom_headers),
+            # The credential wins over a request header of the same name.
+            custom_headers=header_dict_to_header_list(
+                merge_mcp_headers(ctx.additional_headers, ctx.credentials.headers)
+            ),
             dynamic_schema_info=DynamicSchemaInfo(
                 chat_session_id=ctx.chat_session_id,
                 message_id=ctx.message_id,
                 user_id=ctx.user_id,
                 user_email=ctx.user_email,
             ),
-            user_oauth_token=ctx.user_oauth_token,
             approval_for=ctx.approval_for,
+            plugin_ids=ctx.plugin_ids,
         )
-        return [tool for tool in tools if tool.action_key in keys]
+        return [
+            tool
+            for tool in tools
+            if tool.plugin_action is not None and tool.plugin_action.action in keys
+        ]
 
     def match_request(
         self,
         integration: Integration,
+        target: IntegrationMatchTarget,
         request: ProxiedRequest,
         db_session: Session,
-    ) -> list[MatchedIntegrationAction] | None:
+    ) -> RequestMatch | None:
         if request.url is None:
             return None
-        config = self._openapi_config(integration, db_session)
-        if config is not None:
+        if target.endpoint is not None:
             return self._match_openapi(
-                integration.id, config.base_url, request.method, request.url, db_session
+                integration.id, target.endpoint, request.method, request.url, db_session
             )
-
-        app = self._external_app(integration, db_session)
-        if resolve_app_for_url(request.url, [app]) is None:
+        if target.app_type is None or not url_matches_patterns(
+            request.url, target.url_regexes
+        ):
             return None
         matched = recognize_actions(
-            app, request.model_copy(update={"path": request.path.split("?", 1)[0]})
+            target.app_type,
+            request.model_copy(update={"path": request.path.split("?", 1)[0]}),
         )
-        return [
-            MatchedIntegrationAction(
-                integration_id=integration.id,
-                action_key=action.action_type,
-                display_name=action.display_name,
-                description=action.description,
-                default_policy=CATALOG_POLICY_VALUES[action.policy],
-            )
-            for action in matched.actions
-        ]
+        return RequestMatch(
+            actions=[
+                MatchedIntegrationAction(
+                    integration_id=integration.id,
+                    action_key=action.action_type,
+                    display_name=action.display_name,
+                    description=action.description,
+                    default_policy=CATALOG_POLICY_VALUES[action.policy],
+                )
+                for action in matched
+            ]
+        )
 
     def _match_openapi(
         self,
         integration_id: int,
-        base_url: str | None,
+        target: CraftMCPTarget,
         method: str,
         url: str,
         db_session: Session,
-    ) -> list[MatchedIntegrationAction] | None:
+    ) -> RequestMatch | None:
         """The request must be under the server URL of the spec. Then its method
         and the rest of its path pick the stored actions."""
-        if base_url is None:
-            return None
-        target = parse_target(integration_id, base_url)
-        if target is None:
-            return None
         proxied = http.Request.make(method, url)
         if match_request((target,), proxied) is None:
             return None
@@ -322,9 +331,7 @@ class ApiKindHandler(IntegrationKindHandler):
             for action, template in path_matches
             if _literal_length(template) == longest and action.http_method == method
         ]
-        if not winners:
-            return [_whole_domain_action(integration_id, f"{method} {path}")]
-        return [
+        matched = [
             MatchedIntegrationAction(
                 integration_id=integration_id,
                 action_key=action.key,
@@ -335,3 +342,8 @@ class ApiKindHandler(IntegrationKindHandler):
             )
             for action in winners
         ]
+        return RequestMatch(
+            actions=matched
+            or [_whole_domain_action(integration_id, f"{method} {path}")],
+            path_prefix_length=len(target.path_prefix),
+        )

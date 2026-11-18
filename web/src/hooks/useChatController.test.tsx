@@ -120,8 +120,13 @@ const toolConfiguration: ToolConfigurationHandle = {
   toggleToolState: jest.fn(),
   clearPreferredTool: jest.fn(),
   preferredToolId: null,
+  preferredAction: null,
   disabledToolIds: [],
+  isPluginEnabled: jest.fn(() => true),
+  setPluginEnabled: jest.fn(),
+  allowed: null,
   ready: true,
+  optionsLoaded: true,
   filters: {
     selectedSources: null,
     documentSets: [],
@@ -946,7 +951,13 @@ test.each([false, true])(
       })
     );
     expect(sendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ preferredToolId: 3 })
+      expect.objectContaining({
+        toolOptions: {
+          allowed: null,
+          preferred: { type: "capability", tool_id: 3 },
+          internal_search_filters: expect.anything(),
+        },
+      })
     );
     expect(toolConfiguration.clearPreferredTool).not.toHaveBeenCalled();
     expect(toolConfiguration.setToolState).not.toHaveBeenCalled();
@@ -960,7 +971,11 @@ test.each([false, true])(
     );
     expect(sendMessage).toHaveBeenCalledTimes(2);
     expect(sendMessage).toHaveBeenLastCalledWith(
-      expect.objectContaining({ preferredToolId: 3 })
+      expect.objectContaining({
+        toolOptions: expect.objectContaining({
+          preferred: { type: "capability", tool_id: 3 },
+        }),
+      })
     );
   }
 );

@@ -3,6 +3,7 @@ credential for a user or the organization) and ``integration_oauth_client``.
 The logic lives in ``onyx.integrations.connections``."""
 
 import datetime
+from collections.abc import Collection
 from typing import Any
 from uuid import UUID
 
@@ -79,6 +80,26 @@ def get_connection_with_organization(
     organization = next((row for row in rows if row.user_id is None), None)
     user = next((row for row in rows if row.user_id is not None), None)
     return organization, user
+
+
+def list_connections(
+    db_session: Session, integration_ids: Collection[int], user_id: UUID | None
+) -> dict[tuple[int, UUID | None], IntegrationConnection]:
+    """The organization connections of the integrations and, for a user, the
+    user's connections, by ``(integration_id, user_id)``."""
+    if not integration_ids:
+        return {}
+    owner = IntegrationConnection.user_id.is_(None)
+    if user_id is not None:
+        owner = owner | (IntegrationConnection.user_id == user_id)
+    return {
+        (connection.integration_id, connection.user_id): connection
+        for connection in db_session.scalars(
+            select(IntegrationConnection).where(
+                IntegrationConnection.integration_id.in_(integration_ids), owner
+            )
+        )
+    }
 
 
 def get_connection_by_id(
@@ -238,6 +259,21 @@ def get_oauth_client(
         # The locked read replaces what the session holds for the row.
         stmt = stmt.with_for_update().execution_options(populate_existing=True)
     return db_session.scalars(stmt).one_or_none()
+
+
+def get_oauth_clients(
+    db_session: Session, integration_ids: Collection[int]
+) -> dict[int, IntegrationOAuthClient]:
+    if not integration_ids:
+        return {}
+    return {
+        oauth_client.integration_id: oauth_client
+        for oauth_client in db_session.scalars(
+            select(IntegrationOAuthClient).where(
+                IntegrationOAuthClient.integration_id.in_(integration_ids)
+            )
+        )
+    }
 
 
 def set_oauth_client_credentials__no_commit(

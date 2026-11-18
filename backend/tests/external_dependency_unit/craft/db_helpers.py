@@ -27,15 +27,15 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.action_policy import get_or_create_gated_app_id
 from onyx.db.enums import (
     AccessType,
     AccountType,
-    ActionPolicy,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
     ExternalAppType,
-    GatedAppKind,
+    IntegrationActionPolicyValue,
+    IntegrationAuthMode,
+    IntegrationOAuthProviderMode,
     PluginInstallationPolicy,
     SandboxStatus,
     SkillSharePermission,
@@ -47,8 +47,11 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,
     ExternalApp,
-    ExternalAppUserCredential,
+    Integration,
+    IntegrationActionPolicy,
+    IntegrationOAuthClient,
     Plugin,
+    Plugin__Integration,
     Plugin__User,
     Plugin__UserGroup,
     PluginVersion,
@@ -60,7 +63,6 @@ from onyx.db.models import (
     User__UserGroup,
     UserGroup,
     UserGroup__ConnectorCredentialPair,
-    WorkspaceActionPolicy,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.plugin import (
@@ -68,6 +70,7 @@ from onyx.db.plugin import (
     get_or_create_organization_library__no_commit,
     get_or_create_user_uploads__no_commit,
     legacy_skill_version_content,
+    set_plugin_preferences__no_commit,
 )
 from onyx.db.users import assign_user_to_default_groups__no_commit
 
@@ -308,59 +311,95 @@ def reset_built_in_skill_row(
 def make_external_app(
     db_session: Session,
     *,
-    skill: Skill,
     auth_template: dict[str, Any],
-    organization_credentials: dict[str, Any] | None = None,
+    skill: Skill | None = None,
+    name: str | None = None,
+    organization_credentials: dict[str, str] | None = None,
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
     upstream_url_patterns: list[str] | None = None,
-    action_policies: dict[str, ActionPolicy] | None = None,
+    action_policies: dict[str, IntegrationActionPolicyValue] | None = None,
     enabled: bool = True,
 ) -> ExternalApp:
-    """Insert an ``ExternalApp`` row backing ``skill``, plus any per-action
-    policy overrides in ``action_policies`` (``{action_id: policy}``)."""
-    app = ExternalApp(
-        name=skill.name,
-        app_type=app_type,
-        enabled=enabled,
-        upstream_url_patterns=upstream_url_patterns or [],
-        auth_template=auth_template,
-        organization_credentials=organization_credentials or {},
-        associated_skills=[skill],
+    """Insert an ``ExternalApp`` row and its integration, plus the preset
+    OAuth client that holds ``organization_credentials`` and the admin rows
+    in ``action_policies`` (``{action_key: policy}``). The plugin of a custom
+    ``skill`` holds the integration. ``skill`` also gives the default name."""
+    from tests.external_dependency_unit.integration_helpers import (
+        make_app_integration,
     )
-    db_session.add(app)
-    db_session.flush()
-    if action_policies:
-        gated_app_id = get_or_create_gated_app_id(
-            db_session, GatedAppKind.EXTERNAL_APP, app.id
-        )
-        for action_id, policy in action_policies.items():
-            db_session.add(
-                WorkspaceActionPolicy(
-                    gated_app_id=gated_app_id,
-                    action_id=action_id,
-                    policy=policy,
-                )
+
+    integration, app = make_app_integration(
+        db_session,
+        name=name or (skill.name if skill is not None else None),
+        app_type=app_type,
+        upstream_url_patterns=upstream_url_patterns,
+        auth_template=auth_template,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        oauth_client=(
+            IntegrationOAuthClient(
+                provider_mode=IntegrationOAuthProviderMode.PRESET,
+                client_id=organization_credentials.get("client_id"),
+                client_secret=organization_credentials.get("client_secret"),
+                additional_params={
+                    key: value
+                    for key, value in organization_credentials.items()
+                    if key not in ("client_id", "client_secret")
+                },
             )
+            if organization_credentials
+            else None
+        ),
+    )
+    app.enabled = enabled
+    integration.enabled = enabled
+    db_session.flush()
+    if (
+        skill is not None
+        and skill.is_custom
+        and db_session.get(Plugin, skill.id) is not None
+    ):
+        hold_external_app(db_session, app=app, plugin_id=skill.id)
+    if action_policies:
+        db_session.add_all(
+            IntegrationActionPolicy(
+                integration_id=integration.id, action=action, policy=policy
+            )
+            for action, policy in action_policies.items()
+        )
         db_session.flush()
     return app
 
 
-def make_user_credential(
-    db_session: Session,
-    *,
-    app: ExternalApp,
-    user: User,
-    user_credentials: dict[str, Any],
-) -> ExternalAppUserCredential:
-    """Insert an ``ExternalAppUserCredential`` row for ``user`` + ``app``."""
-    cred = ExternalAppUserCredential(
-        external_app_id=app.id,
-        user_id=user.id,
-        user_credentials=user_credentials,
+def app_integration_id(db_session: Session, app: ExternalApp) -> int:
+    integration_id = db_session.scalar(
+        select(Integration.id).where(Integration.external_app_id == app.id)
     )
-    db_session.add(cred)
+    assert integration_id is not None
+    return integration_id
+
+
+def hold_external_app(
+    db_session: Session, *, app: ExternalApp, plugin_id: UUID
+) -> None:
+    """Make the plugin hold the integration of ``app``."""
+    db_session.add(
+        Plugin__Integration(
+            plugin_id=plugin_id, integration_id=app_integration_id(db_session, app)
+        )
+    )
     db_session.flush()
-    return cred
+
+
+def make_app_plugin_for_user(
+    db_session: Session, *, app: ExternalApp, user: User, enabled: bool = True
+) -> Plugin:
+    """A private plugin of ``user`` that holds the integration of ``app``,
+    with the user's on/off choice set to ``enabled``."""
+    plugin = make_skillless_plugin(db_session, author_user_id=user.id)
+    hold_external_app(db_session, app=app, plugin_id=plugin.id)
+    set_plugin_preferences__no_commit(user.id, [plugin.id], enabled, db_session)
+    db_session.flush()
+    return plugin
 
 
 def share_skill_with_user(

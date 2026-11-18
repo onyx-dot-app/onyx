@@ -8,7 +8,6 @@ MANAGE_ACTIONS protects custom-tool + MCP admin endpoints in
 
 import os
 from typing import Any
-from uuid import uuid4
 
 import pytest
 
@@ -37,39 +36,23 @@ _VALIDATE_TOOL_BODY: dict[str, Any] = {
     },
 }
 
-_OAUTH_CONFIG_BODY: dict[str, Any] = {
-    "name": "perm-test-oauth",
-    "authorization_url": "https://example.com/authorize",
-    "token_url": "https://example.com/token",
-    "client_id": "client-id",
-    "client_secret": "client-secret",
-}
-
-_OAUTH_CONFIG_CREATE_PATH = "/admin/oauth-config/create"
-
-# MANAGE_ACTIONS spans three route clusters — custom tools, OAuth configs and
-# MCP servers. Sampled across all of them, and across every method, because a
-# GET-only list would miss a mutating route losing its gate.
+# MANAGE_ACTIONS spans the custom tool aliases and the integration routes.
+# Sampled across every method, because a GET-only list would miss a mutating
+# route losing its gate.
 ENDPOINTS: list[Endpoint] = [
     # custom tools
     ("POST", "/admin/tool/custom", _VALIDATE_TOOL_BODY),
     ("PUT", "/admin/tool/custom/999999", _VALIDATE_TOOL_BODY),
     ("DELETE", "/admin/tool/custom/999999", None),
-    ("PATCH", "/admin/tool/status", {"tool_ids": [999999], "enabled": True}),
     ("POST", "/admin/tool/custom/validate", _VALIDATE_TOOL_BODY),
-    # OAuth configs
-    ("POST", _OAUTH_CONFIG_CREATE_PATH, _OAUTH_CONFIG_BODY),
-    ("GET", "/admin/oauth-config/999999", None),
-    ("PUT", "/admin/oauth-config/999999", _OAUTH_CONFIG_BODY),
-    ("DELETE", "/admin/oauth-config/999999", None),
-    # MCP servers
-    ("GET", "/admin/mcp/servers", None),
-    ("GET", "/admin/mcp/tools", None),
-    ("GET", "/admin/mcp/servers/999999", None),
-    ("GET", "/admin/mcp/server/999999/tools", None),
-    ("GET", "/admin/mcp/server/999999/db-tools", None),
-    ("PATCH", "/admin/mcp/server/999999/status", {"is_active": False}),
-    ("DELETE", "/admin/mcp/server/999999", None),
+    # integrations
+    ("GET", "/admin/integrations", None),
+    ("GET", "/admin/integrations/presets", None),
+    ("GET", "/admin/integrations/999999", None),
+    ("PATCH", "/admin/integrations/999999", {"name": "renamed"}),
+    ("DELETE", "/admin/integrations/999999", None),
+    ("GET", "/admin/integrations/999999/actions", None),
+    ("PUT", "/admin/integrations/999999/actions", {"actions": {}}),
 ]
 
 
@@ -96,21 +79,6 @@ def test_access_matrix(
     request: pytest.FixtureRequest,
     permission_admin_user: DATestUser,  # noqa: ARG001 -- ensures module_reset ran
 ) -> None:
-    creates_oauth_config = path == _OAUTH_CONFIG_CREATE_PATH
     headers, cookies = resolve_credentials(user_kind, request)
-    if creates_oauth_config:
-        # oauth_config.name is unique-constrained, so a shared name fails for every
-        # principal after the first and assert_response reads that as "allowed"
-        body = {**_OAUTH_CONFIG_BODY, "name": f"perm-test-oauth-{user_kind}-{uuid4()}"}
-
     resp = call_endpoint(method, path, body, headers, cookies)
     assert_response(resp, method, path, user_kind, expected)
-
-    if creates_oauth_config and resp.status_code == 200:
-        call_endpoint(
-            "DELETE",
-            f"/admin/oauth-config/{resp.json()['id']}",
-            None,
-            headers,
-            cookies,
-        )

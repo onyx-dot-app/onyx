@@ -27,9 +27,15 @@ from onyx.db.enums import (
     ApprovalDecidedVia,
     ApprovalDecision,
     ExternalAppType,
-    GatedAppKind,
+    IntegrationAuthMode,
+    IntegrationKind,
 )
-from onyx.db.models import ActionApproval, BuildSession, ExternalApp
+from onyx.db.models import (
+    ActionApproval,
+    BuildSession,
+    ExternalApp,
+    Integration,
+)
 from tests.common.craft.payloads import action_entry, default_action_entries
 from tests.external_dependency_unit.craft.db_helpers import (
     force_approval_created_at,
@@ -219,18 +225,26 @@ def test_deleting_app_preserves_action_approval(
     )
     db_session.add(app)
     db_session.flush()
+    integration = Integration(
+        kind=IntegrationKind.API,
+        name="Audit test",
+        auth_mode=IntegrationAuthMode.NONE,
+        external_app_id=app.id,
+    )
+    db_session.add(integration)
+    db_session.flush()
     row = insert_action_approval(
         db_session,
         session_id=session.id,
         actions=default_action_entries(),
         app_name=app.name,
         payload={},
-        target=(GatedAppKind.EXTERNAL_APP, app.id),
+        integration_id=integration.id,
         decision=ApprovalDecision.APPROVED if pre_decided else None,
         decided_via=ApprovalDecidedVia.SESSION_GRANT if pre_decided else None,
     )
     db_session.commit()
-    assert row.gated_app_id is not None
+    assert row.integration_id == integration.id
     if pre_decided:
         assert row.decision == ApprovalDecision.APPROVED
         assert row.decided_via == ApprovalDecidedVia.SESSION_GRANT
@@ -239,8 +253,9 @@ def test_deleting_app_preserves_action_approval(
         assert row.decision is None
         assert row.decided_via is None
         assert row.decided_at is None
+    # Deleting the app deletes its integration.
     db_session.execute(delete(ExternalApp).where(ExternalApp.id == app.id))
     db_session.commit()
     db_session.refresh(row)
-    assert row.gated_app_id is None
+    assert row.integration_id is None
     assert row.app_name == "Audit test"

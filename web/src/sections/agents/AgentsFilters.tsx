@@ -4,7 +4,7 @@
  * AgentsFilters — shared filter bar for agent lists.
  *
  * Renders "Created By" and "Actions" filter popovers that let users narrow
- * an agent list by creator and by attached tools/MCP servers.
+ * an agent list by creator and by attached tools.
  *
  * Usage:
  *
@@ -35,7 +35,6 @@ import {
   type DropdownOption,
 } from "@opal/components";
 import { SvgActions, SvgUser } from "@opal/icons";
-import { useAdminMcpServers } from "@/lib/mcp/hooks";
 import { useAvailableTools } from "@/lib/tools/hooks";
 import useUsers from "@/hooks/useUsers";
 import { useUser } from "@/providers/UserProvider";
@@ -50,29 +49,19 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-/**
- * Discriminated union for action filter items.
- * - `"tool"` — an individual tool (system or OpenAPI/custom).
- * - `"mcp_server"` — an MCP server, grouping all its tools into one entry.
- */
-type ActionFilterItem =
-  | { type: "mcp_server"; mcpServerId: number; name: string }
-  | { type: "tool"; toolId: number; name: string; systemIcon?: React.FC };
+type ActionFilterItem = {
+  toolId: number;
+  name: string;
+  systemIcon?: React.FC;
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Produces a unique string key for each action filter item. */
-function actionFilterKey(item: ActionFilterItem): string {
-  return item.type === "mcp_server"
-    ? `mcp:${item.mcpServerId}`
-    : `tool:${item.toolId}`;
-}
-
 /** Returns true when the item is a built-in system tool (Search, Web Search, etc.). */
 function isSystemTool(item: ActionFilterItem): boolean {
-  return item.type === "tool" && !!item.systemIcon;
+  return !!item.systemIcon;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +87,6 @@ export function useAgentsFilters<T extends MinimalAgent>(
 ): UseAgentsFiltersReturn<T> {
   const t = useTranslations("agents");
   const { user } = useUser();
-  const { mcpData } = useAdminMcpServers();
   const { tools: allTools } = useAvailableTools();
   const { data: usersData } = useUsers({ includeApiKeys: false });
 
@@ -110,16 +98,6 @@ export function useAgentsFilters<T extends MinimalAgent>(
   const [selectedActionKeys, setSelectedActionKeys] = useState<Set<string>>(
     new Set()
   );
-
-  // -- MCP server name lookup ------------------------------------------------
-
-  const mcpServerNames = useMemo(() => {
-    const names = new Map<number, string>();
-    for (const server of mcpData?.mcp_servers ?? []) {
-      names.set(server.id, server.name);
-    }
-    return names;
-  }, [mcpData]);
 
   // -- Creator filter data ---------------------------------------------------
 
@@ -153,16 +131,11 @@ export function useAgentsFilters<T extends MinimalAgent>(
    * passed-in agents). This ensures the dropdown is consistent across all
    * pages.
    *
-   * Ordering: system tools first (with their dedicated icons), then MCP
-   * servers (grouped — one entry per server, not per tool), then
+   * Ordering: system tools first (with their dedicated icons), then
    * OpenAPI/custom actions.
    */
   const uniqueActions: ActionFilterItem[] = useMemo(() => {
-    const seenMcpServers = new Set<number>();
-    const individualTools = new Map<
-      number,
-      { id: number; name: string; systemIcon?: React.FC }
-    >();
+    const individualTools = new Map<number, ActionFilterItem>();
 
     allTools.forEach((tool) => {
       // Skip OpenURL — implicit tool, not user-facing
@@ -174,54 +147,32 @@ export function useAgentsFilters<T extends MinimalAgent>(
         return;
       }
 
-      if (tool.mcp_server_id != null) {
-        seenMcpServers.add(tool.mcp_server_id);
-      } else {
-        individualTools.set(tool.id, {
-          id: tool.id,
-          name: tool.display_name,
-          systemIcon: SYSTEM_TOOL_ICONS[tool.name],
-        });
-      }
+      individualTools.set(tool.id, {
+        toolId: tool.id,
+        name: tool.display_name,
+        systemIcon: SYSTEM_TOOL_ICONS[tool.name],
+      });
     });
 
     const toolItems = Array.from(individualTools.values());
 
-    const systemItems: ActionFilterItem[] = toolItems
+    const systemItems = toolItems
       .filter((t) => !!t.systemIcon)
-      .map((t) => ({ type: "tool" as const, toolId: t.id, ...t }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    const mcpItems: ActionFilterItem[] = Array.from(seenMcpServers)
-      .map((id) => ({
-        type: "mcp_server" as const,
-        mcpServerId: id,
-        name: mcpServerNames.get(id) ?? `MCP Server ${id}`,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    const otherItems: ActionFilterItem[] = toolItems
+    const otherItems = toolItems
       .filter((t) => !t.systemIcon)
-      .map((t) => ({ type: "tool" as const, toolId: t.id, ...t }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    return [...systemItems, ...mcpItems, ...otherItems];
-  }, [allTools, mcpServerNames]);
+    return [...systemItems, ...otherItems];
+  }, [allTools]);
 
   // -- Derived selection sets ------------------------------------------------
 
-  const { selectedMcpServerIds, selectedToolIds } = useMemo(() => {
-    const mcpIds = new Set<number>();
-    const toolIds = new Set<number>();
-    for (const key of Array.from(selectedActionKeys)) {
-      if (key.startsWith("mcp:")) {
-        mcpIds.add(Number(key.slice(4)));
-      } else if (key.startsWith("tool:")) {
-        toolIds.add(Number(key.slice(5)));
-      }
-    }
-    return { selectedMcpServerIds: mcpIds, selectedToolIds: toolIds };
-  }, [selectedActionKeys]);
+  const selectedToolIds = useMemo(
+    () => new Set(Array.from(selectedActionKeys, Number)),
+    [selectedActionKeys]
+  );
 
   // -- Filter button labels --------------------------------------------------
 
@@ -243,7 +194,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
     if (selectedActionKeys.size === 0) return t("filters.actions.all.label");
     if (selectedActionKeys.size === 1) {
       const key = Array.from(selectedActionKeys)[0];
-      const item = uniqueActions.find((a) => actionFilterKey(a) === key);
+      const item = uniqueActions.find((a) => String(a.toolId) === key);
       return item?.name ?? t("filters.actions.all.label");
     }
     return t("filters.actions.multiple.label", {
@@ -266,22 +217,11 @@ export function useAgentsFilters<T extends MinimalAgent>(
 
       const actionsMatch =
         selectedActionKeys.size === 0 ||
-        agent.tools.some(
-          (tool) =>
-            selectedToolIds.has(tool.id) ||
-            (tool.mcp_server_id != null &&
-              selectedMcpServerIds.has(tool.mcp_server_id))
-        );
+        agent.tools.some((tool) => selectedToolIds.has(tool.id));
 
       return creatorMatch && actionsMatch;
     });
-  }, [
-    agents,
-    selectedCreatorIds,
-    selectedActionKeys,
-    selectedToolIds,
-    selectedMcpServerIds,
-  ]);
+  }, [agents, selectedCreatorIds, selectedActionKeys, selectedToolIds]);
 
   // -- filterBar node --------------------------------------------------------
 
@@ -311,11 +251,8 @@ export function useAgentsFilters<T extends MinimalAgent>(
   }));
   const actionOption = (action: ActionFilterItem): DropdownOption => ({
     kind: "option",
-    value: actionFilterKey(action),
-    icon:
-      action.type === "tool" && action.systemIcon
-        ? action.systemIcon
-        : SvgActions,
+    value: String(action.toolId),
+    icon: action.systemIcon ? action.systemIcon : SvgActions,
     title: action.name,
   });
   const systemActions = uniqueActions.filter(isSystemTool);

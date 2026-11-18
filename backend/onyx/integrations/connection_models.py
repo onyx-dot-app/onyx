@@ -4,6 +4,7 @@ shapes for the new format and for each old format. Each write saves the new
 format and clears ``legacy_format``."""
 
 import datetime
+import hashlib
 from enum import Enum
 from typing import Any
 from uuid import UUID
@@ -260,6 +261,14 @@ def read_connection_secret(connection: IntegrationConnection) -> ConnectionSecre
     return read_connection(connection).secret
 
 
+def secret_fingerprint(secret: ConnectionSecret) -> str:
+    return hashlib.sha256(secret.model_dump_json().encode()).hexdigest()
+
+
+def connection_secret_fingerprint(connection: IntegrationConnection) -> str:
+    return secret_fingerprint(read_connection_secret(connection))
+
+
 def legacy_organization_defaults(
     organization: IntegrationConnection, *, template_in_headers: bool
 ) -> ConnectionSecret | None:
@@ -385,6 +394,10 @@ class ResolvedConnection(BaseModel):
     integration_id: int
     connection_id: int | None
     secret: ConnectionSecret | None
+    # The fingerprint of the stored secret of the connection row.
+    secret_fingerprint: str | None = None
+    # When the access token expires; None when unknown.
+    expires_at: datetime.datetime | None = None
 
 
 class ConnectionProblem(BaseModel):
@@ -439,4 +452,5 @@ class IntegrationOAuthAttemptPayload(BaseModel):
 
 class IntegrationOAuthCallbackResult(BaseModel):
     integration_id: int
+    for_organization: bool
     return_path: str | None

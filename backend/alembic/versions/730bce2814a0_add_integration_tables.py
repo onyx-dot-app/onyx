@@ -1287,7 +1287,7 @@ _MADE_PLUGIN = "(md5('integration_plugin:' || i.id::text)::uuid)::text"
 # The old tool selection of a chat as tool options. A built-in tool stays a
 # capability. An MCP tool becomes its action in the plugin of its server, and
 # an OpenAPI tool its whole plugin. A deleted tool is left out. Run after the
-# commit; a rerun skips the chats it filled.
+# commit, in the transaction that drops tool_selection.
 _FILL_TOOL_OPTIONS = f"""
     UPDATE chat_session c
     SET tool_options = jsonb_build_object(
@@ -1507,12 +1507,28 @@ def upgrade() -> None:
             "DROP TABLE integration_source",
         ):
             op.execute(statement)
+    has_tool_selection = "tool_selection" in {
+        column["name"]
+        for column in sa.inspect(bind).get_columns("chat_session", schema=schema)
+    }
     # Fill and validate only after the ALTER TABLE locks are released.
     bind.commit()
     quoted_schema = bind.dialect.identifier_preparer.quote_identifier(schema)
     # Each step commits on the migration connection, so env.py pins the tenant
     # search_path at the start of every transaction.
-    steps = [[_FILL_TOOL_OPTIONS]]
+    steps: list[list[str]] = []
+    if has_tool_selection:
+        steps.append(
+            [
+                _FILL_TOOL_OPTIONS,
+                # A parked run saved before tool options continues with the
+                # tools of its agent.
+                f"UPDATE {quoted_schema}.chat_response_checkpoint "
+                "SET state = state - 'tool_selection' "
+                "WHERE state ? 'tool_selection'",
+                f"ALTER TABLE {quoted_schema}.chat_session DROP COLUMN tool_selection",
+            ]
+        )
     for table in RECORD_TABLES:
         steps.append(
             [_SET_RECORD_INTEGRATIONS.format(table=f"{quoted_schema}.{table}")]
@@ -1539,6 +1555,14 @@ def downgrade() -> None:
     op.drop_column("assistant__user_specific_config", "disabled_plugin_ids")
     for table in reversed(RECORD_TABLES):
         op.drop_column(table, "integration_id")
+    op.add_column(
+        "chat_session",
+        sa.Column("tool_selection", postgresql.JSONB(), nullable=True),
+    )
+    op.execute(
+        "UPDATE chat_response_checkpoint SET state = state - 'tool_options' "
+        "WHERE state ? 'tool_options'"
+    )
     op.drop_column("chat_session", "tool_options")
     for table in (
         "plugin__integration",
