@@ -203,7 +203,8 @@ export interface IntegrationActionsResponse {
 }
 
 export interface IntegrationActionsUpdate {
-  default_policy: PolicyValue | null;
+  /** Left out, the default row stays as it is. */
+  default_policy?: PolicyValue | null;
   actions: Record<string, PolicyValue | null>;
 }
 

@@ -90,6 +90,7 @@ from onyx.integrations.connection_models import (
 from onyx.integrations.connections import (
     IntegrationStatus,
     MissingHeaderValueError,
+    connect_with_fields__no_commit,
     credential_field_keys,
     has_placeholder,
     header_field_keys,
@@ -102,7 +103,11 @@ from onyx.integrations.connections import (
     sign_in_settings_for,
 )
 from onyx.integrations.craft import always_asks, craft_service_urls
-from onyx.integrations.kinds.mcp_server import fetch_mcp_actions, mcp_action_specs
+from onyx.integrations.kinds.mcp_server import (
+    check_mcp_credential_fields,
+    fetch_mcp_actions,
+    mcp_action_specs,
+)
 from onyx.integrations.models import (
     EffectivePolicy,
     IntegrationActionSpec,
@@ -1361,13 +1366,28 @@ def _check_action_keys(
         )
 
 
+def save_connection_fields__no_commit(
+    integration: Integration,
+    user: User | None,
+    fields: Mapping[str, str],
+    db_session: Session,
+) -> None:
+    """Check the key with the server of an MCP integration, then save the
+    connection of ``user``, or of the organization when ``user`` is None.
+    The check runs before the save locks the integration row."""
+    check_mcp_credential_fields(integration, fields, db_session)
+    connect_with_fields__no_commit(integration, user, fields, db_session)
+
+
 def set_admin_actions__no_commit(
     integration: Integration, request: IntegrationActionsUpdate, db_session: Session
 ) -> None:
     _check_action_keys(integration, request.actions, db_session)
-    values: dict[str, IntegrationActionPolicyValue | None] = {
-        DEFAULT_ACTION_KEY: _stored_value(request.default_policy)
-    }
+    # Only the fields that the request names change, so a save from a stale
+    # page does not undo a newer save of another action.
+    values: dict[str, IntegrationActionPolicyValue | None] = {}
+    if "default_policy" in request.model_fields_set:
+        values[DEFAULT_ACTION_KEY] = _stored_value(request.default_policy)
     values.update(
         {key: _stored_value(policy) for key, policy in request.actions.items()}
     )

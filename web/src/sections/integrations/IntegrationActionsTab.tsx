@@ -23,6 +23,7 @@ import type {
   AdminIntegrationDetail,
   IntegrationAction,
   IntegrationActionsResponse,
+  IntegrationActionsUpdate,
   PolicyValue,
 } from "@/lib/integrations/types";
 
@@ -54,6 +55,30 @@ function isDirty(
         (saved.actions[action.key] ?? null)
     )
   );
+}
+
+/** Only the rows the draft changed, so a save from a stale page keeps the
+ * newer settings of the other rows. */
+function changes(
+  draft: Draft,
+  data: IntegrationActionsResponse | undefined
+): IntegrationActionsUpdate {
+  if (data === undefined) return { actions: {} };
+  const saved = savedDraft(data);
+  const update: IntegrationActionsUpdate = {
+    actions: Object.fromEntries(
+      data.actions
+        .filter(
+          (action) =>
+            (draft.actions[action.key] ?? null) !==
+            (saved.actions[action.key] ?? null)
+        )
+        .map((action) => [action.key, draft.actions[action.key] ?? null])
+    ),
+  };
+  if (draft.defaultPolicy !== saved.defaultPolicy)
+    update.default_policy = draft.defaultPolicy;
+  return update;
 }
 
 interface IntegrationActionsTabProps {
@@ -162,15 +187,10 @@ export default function IntegrationActionsTab({
   async function save() {
     setBusy(true);
     try {
-      const next = await updateIntegrationActions(integration.id, {
-        default_policy: current.defaultPolicy,
-        actions: Object.fromEntries(
-          data?.actions.map((action) => [
-            action.key,
-            current.actions[action.key] ?? null,
-          ]) ?? []
-        ),
-      });
+      const next = await updateIntegrationActions(
+        integration.id,
+        changes(current, data)
+      );
       await mutate(next, { revalidate: false });
       setDraft(null);
       toast.success(t("saved"));

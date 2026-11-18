@@ -11,7 +11,6 @@ from onyx.db.integration_connection import delete_connection__no_commit
 from onyx.db.models import User
 from onyx.integrations.connections import (
     IntegrationStatus,
-    connect_with_fields__no_commit,
 )
 from onyx.integrations.service import (
     admin_actions,
@@ -26,6 +25,7 @@ from onyx.integrations.service import (
     preset_views,
     refresh_actions__no_commit,
     reload_craft_sessions,
+    save_connection_fields__no_commit,
     set_admin_actions__no_commit,
     update_integration__no_commit,
 )
@@ -165,7 +165,7 @@ def save_organization_connection(
     db_session: Session = Depends(get_session),
 ) -> IntegrationStatus:
     integration = get_manageable_integration(user, integration_id, db_session)
-    connect_with_fields__no_commit(integration, None, request.fields, db_session)
+    save_connection_fields__no_commit(integration, None, request.fields, db_session)
     db_session.commit()
     reload_craft_sessions(
         craft_users_of_integration(integration.id, db_session), db_session

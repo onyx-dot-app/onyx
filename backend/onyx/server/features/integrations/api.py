@@ -11,7 +11,6 @@ from onyx.db.integration_connection import delete_connection__no_commit
 from onyx.db.models import User
 from onyx.integrations.connections import (
     IntegrationStatus,
-    connect_with_fields__no_commit,
     integration_status,
 )
 from onyx.integrations.service import (
@@ -21,6 +20,7 @@ from onyx.integrations.service import (
     list_member_integrations,
     member_detail,
     reload_craft_sessions,
+    save_connection_fields__no_commit,
     set_action_grants__no_commit,
 )
 from onyx.server.features.integrations.models import (
@@ -72,7 +72,7 @@ def save_member_connection(
     db_session: Session = Depends(get_session),
 ) -> IntegrationStatus:
     integration = get_member_integration(user, integration_id, db_session)
-    connect_with_fields__no_commit(integration, user, request.fields, db_session)
+    save_connection_fields__no_commit(integration, user, request.fields, db_session)
     db_session.commit()
     reload_craft_sessions({user.id}, db_session)
     return integration_status(integration, user, db_session)

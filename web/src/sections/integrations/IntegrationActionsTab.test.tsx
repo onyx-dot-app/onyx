@@ -109,7 +109,7 @@ test("shows the default row, then read-only and write actions with counts", asyn
   ).toHaveAttribute("aria-pressed", "true");
 });
 
-test("saves the default row and each changed action", async () => {
+test("saves only the default row and the actions that changed", async () => {
   const fetchMock = mockFetch({
     [URL_ACTIONS]: { default_policy: null, actions },
     [`PUT ${URL_ACTIONS}`]: { default_policy: "ask", actions },
@@ -145,11 +145,7 @@ test("saves the default row and each changed action", async () => {
   await waitFor(() =>
     expect(requestBody(fetchMock, "PUT", URL_ACTIONS)).toEqual({
       default_policy: "ask",
-      actions: {
-        list_issues: null,
-        get_issue: "ask",
-        create_issue: "blocked",
-      },
+      actions: { get_issue: "ask" },
     })
   );
 });
@@ -176,8 +172,7 @@ test("Use defaults clears the admin values of a group", async () => {
   await u.click(screen.getByRole("button", { name: copy.save }));
   await waitFor(() =>
     expect(requestBody(fetchMock, "PUT", URL_ACTIONS)).toEqual({
-      default_policy: "allow",
-      actions: { list_issues: null, get_issue: null, create_issue: null },
+      actions: { create_issue: null },
     })
   );
 });
@@ -341,8 +336,7 @@ test("locks Allow for an action that Craft always asks for, with the reason", as
   await u.click(screen.getByRole("button", { name: copy.save }));
   await waitFor(() =>
     expect(requestBody(fetchMock, "PUT", URL_ACTIONS)).toEqual({
-      default_policy: "allow",
-      actions: { list_issues: "allow", unspecified: null },
+      actions: { list_issues: "allow" },
     })
   );
 });

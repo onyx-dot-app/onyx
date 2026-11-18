@@ -1018,6 +1018,25 @@ def test_admin_actions_get_put_and_refresh(
             db_session,
         )
 
+    # A save from a stale page names only what it changed, so it keeps the
+    # newer settings of the other rows, the default row too.
+    admin_api.set_integration_actions(
+        detail.id,
+        IntegrationActionsUpdate(actions={"set_alert": EffectivePolicy.ALLOW}),
+        admin,
+        db_session,
+    )
+    stale = admin_api.set_integration_actions(
+        detail.id,
+        IntegrationActionsUpdate(actions={"get_forecast": EffectivePolicy.BLOCKED}),
+        admin,
+        db_session,
+    )
+    by_key = {action.key: action for action in stale.actions}
+    assert stale.default_policy is EffectivePolicy.BLOCKED
+    assert by_key["get_forecast"].admin_policy is EffectivePolicy.BLOCKED
+    assert by_key["set_alert"].admin_policy is EffectivePolicy.ALLOW
+
 
 def test_refresh_of_an_mcp_server_stores_discovered_tools(
     db_session: Session, admin: User, created: Created
@@ -1209,6 +1228,55 @@ def test_refresh_of_an_individual_mcp_server_uses_the_admin_connection(
         assert discover.call_args.args[1] == {"Authorization": "Bearer admin-key"}
     else:
         discover.assert_not_called()
+
+
+def test_member_connect_refuses_a_key_that_the_mcp_server_rejects(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    with patch(
+        "onyx.integrations.kinds.mcp_server.discover_mcp_tools", return_value=[]
+    ):
+        integration = admin_api.create_integration(
+            IntegrationCreate(
+                for_organization=True,
+                name=f"mcp-{uuid4().hex[:8]}",
+                auth_mode=IntegrationAuthMode.INDIVIDUAL,
+                auth_method=IntegrationAuthMethod.API_KEY,
+                header_template={"Authorization": "Bearer {api_key}"},
+                config=McpServerConfigInput(server_url="https://mcp.example.com/mcp"),
+            ),
+            admin,
+            db_session,
+        )
+    created.add(integration.id)
+
+    with (
+        patch(
+            "onyx.integrations.kinds.mcp_server.discover_mcp_tools",
+            side_effect=_unauthorized(401),
+        ) as discover,
+        pytest.raises(OnyxError) as error,
+    ):
+        api.save_member_connection(
+            integration.id,
+            ConnectionFieldsRequest(fields={"api_key": "wrong-key"}),
+            member,
+            db_session,
+        )
+    assert error.value.error_code is OnyxErrorCode.CREDENTIAL_INVALID
+    assert discover.call_args.args[1] == {"Authorization": "Bearer wrong-key"}
+    db_session.rollback()
+
+    with patch(
+        "onyx.integrations.kinds.mcp_server.discover_mcp_tools", return_value=[]
+    ):
+        status = api.save_member_connection(
+            integration.id,
+            ConnectionFieldsRequest(fields={"api_key": "right-key"}),
+            member,
+            db_session,
+        )
+    assert status.state is ConnectionState.CONNECTED
 
 
 # Member

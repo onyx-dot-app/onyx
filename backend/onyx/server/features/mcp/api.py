@@ -43,7 +43,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_connection_secret
 from onyx.integrations.connections import (
-    connect_with_fields__no_commit,
     header_field_keys,
 )
 from onyx.integrations.plugin_settings import (
@@ -58,6 +57,7 @@ from onyx.integrations.service import (
     get_viewable_integration,
     masked_header_template,
     reload_craft_sessions,
+    save_connection_fields__no_commit,
     update_integration__no_commit,
 )
 from onyx.server.features.integrations.models import (
@@ -251,7 +251,7 @@ def _save_credentials(
         return
     if not fields and owner is not None:
         return
-    connect_with_fields__no_commit(integration, owner, fields, db_session)
+    save_connection_fields__no_commit(integration, owner, fields, db_session)
 
 
 def _apply_access(

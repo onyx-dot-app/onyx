@@ -1,5 +1,5 @@
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from mcp.types import Tool as MCPLibTool
 from mitmproxy import http
@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import (
     IntegrationActionPolicyValue,
     IntegrationActionSource,
+    IntegrationAuthMethod,
+    IntegrationKind,
     MCPTransport,
 )
 from onyx.db.integration import (
@@ -23,7 +25,12 @@ from onyx.integrations.call_credentials import (
     mcp_oauth_server,
     resolve_call_credentials,
 )
-from onyx.integrations.connections import ConnectionProblem
+from onyx.integrations.connection_models import ConnectionSecret
+from onyx.integrations.connections import (
+    ConnectionProblem,
+    MissingHeaderValueError,
+    render_headers,
+)
 from onyx.integrations.kinds.base import IntegrationKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
 from onyx.integrations.models import (
@@ -118,6 +125,45 @@ def fetch_mcp_actions(
             ) from error
         raise
     return mcp_action_specs(tools)
+
+
+def check_mcp_credential_fields(
+    integration: Integration, fields: Mapping[str, str], db_session: Session
+) -> None:
+    """Ask the MCP server of an API key integration for its tools with the
+    headers that ``fields`` give. Raises CREDENTIAL_INVALID when the server
+    refuses them. Other failures only log, so a save does not wait for a
+    server that is down."""
+    if (
+        integration.kind is not IntegrationKind.MCP
+        or integration.auth_method is not IntegrationAuthMethod.API_KEY
+    ):
+        return
+    server = get_mcp_server_for_integration(integration.id, db_session)
+    if server is None:
+        return
+    try:
+        headers = render_headers(
+            integration.header_template, ConnectionSecret(fields=dict(fields))
+        )
+    except MissingHeaderValueError:
+        # The save refuses the missing fields with its own message.
+        return
+    try:
+        discover_mcp_tools(
+            server.server_url,
+            headers,
+            transport=server.transport or MCPTransport.STREAMABLE_HTTP,
+        )
+    except Exception as error:
+        if has_auth_rejection_response(error):
+            raise OnyxError(
+                OnyxErrorCode.CREDENTIAL_INVALID,
+                f"{integration.name} refused the key. Check it and try again.",
+            ) from error
+        logger.warning(
+            "Could not check the key of integration %s: %s", integration.id, error
+        )
 
 
 def mcp_action_specs(tools: Sequence[MCPLibTool]) -> list[IntegrationActionSpec]:
