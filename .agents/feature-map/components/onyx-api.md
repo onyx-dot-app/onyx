@@ -84,7 +84,7 @@ validation on every PR that touches `backend/onyx/server/` or
 operation id to the handler's function name.
 
 The `openapi-snapshot` hook uses the same generator with default Onyx settings.
-It compares the tag-stripped schema, including EE operations, with `backend/openapi.json`.
+It compares the tag-stripped schema, including EE operations, with `backend/schema/openapi.json`.
 After a schema change, run `python3 backend/lint/check_openapi_snapshot.py --write`
 and commit the snapshot with the change.
 

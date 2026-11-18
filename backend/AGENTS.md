@@ -39,7 +39,7 @@ tests. Additive to the root `AGENTS.md`.
   is allowed. `# no-response-model: allow <reason>` on the decorator marks a deliberate exception.
   `lint/no_response_model_baseline.txt` counts the older uses in each file. After you remove
   one, regenerate it with `--write-baseline`.
-- The `openapi-snapshot` prek hook checks `backend/openapi.json` against the HTTP API schema
+- The `openapi-snapshot` prek hook checks `backend/schema/openapi.json` against the HTTP API schema
   with default Onyx settings. The schema includes EE routes and needs no running services.
   After a schema change, run `python3 backend/lint/check_openapi_snapshot.py --write`
   from the repository root. Review the JSON diff and commit it with the API change.

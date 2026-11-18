@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
-SNAPSHOT = Path("backend/openapi.json")
+SNAPSHOT = Path("backend/schema/openapi.json")
 FIX_COMMAND = "python3 backend/lint/check_openapi_snapshot.py --write"
 
 
@@ -80,6 +80,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.hook and not args.files and not has_deleted_schema_input():
         return 0
 
+    if args.write:
+        snapshot.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(dir=snapshot.parent if args.write else None) as tmp:
         generated = Path(tmp) / "openapi.json"
         generate(generated)
