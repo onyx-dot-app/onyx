@@ -926,6 +926,14 @@ function Main {
     if (-not (Ensure-OnyxFile $envTemplateDest "$($script:GitHubRawUrl)/env.template" "env.template")) { exit 1 }
     if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\app.conf.template") "$($script:NginxBaseUrl)/app.conf.template" "nginx/app.conf.template")) { exit 1 }
     if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "data\nginx\run-nginx.sh") "$($script:NginxBaseUrl)/run-nginx.sh" "nginx/run-nginx.sh")) { exit 1 }
+    foreach ($nginxInclude in @("mcp.conf.inc.template", "mcp_upstream.conf.inc.template", "webhook.conf.inc")) {
+        $nginxIncludePath = Join-Path $script:InstallRoot "data\nginx\$nginxInclude"
+        if ($Local -and -not (Test-Path $nginxIncludePath)) {
+            Print-Warning "nginx/$nginxInclude is missing. nginx starts without its routes."
+            continue
+        }
+        if (-not (Ensure-OnyxFile $nginxIncludePath "$($script:NginxBaseUrl)/$nginxInclude" "nginx/$nginxInclude")) { exit 1 }
+    }
     if (-not (Ensure-OnyxFile (Join-Path $script:InstallRoot "README.md") "$($script:GitHubRawUrl)/README.md" "README.md")) { exit 1 }
 
     $gitkeep = Join-Path $script:InstallRoot "data\nginx\local\.gitkeep"
@@ -1035,6 +1043,9 @@ function Main {
             Download-OnyxFile "$pinnedBase/docker_compose/docker-compose.yml" $composeDest
             try { Download-OnyxFile "$pinnedBase/data/nginx/app.conf.template" (Join-Path $script:InstallRoot "data\nginx\app.conf.template") } catch {}
             try { Download-OnyxFile "$pinnedBase/data/nginx/run-nginx.sh" (Join-Path $script:InstallRoot "data\nginx\run-nginx.sh") } catch {}
+            foreach ($nginxInclude in @("mcp.conf.inc.template", "mcp_upstream.conf.inc.template", "webhook.conf.inc")) {
+                try { Download-OnyxFile "$pinnedBase/data/nginx/$nginxInclude" (Join-Path $script:InstallRoot "data\nginx\$nginxInclude") } catch {}
+            }
             if ($script:LiteMode) {
                 try { Download-OnyxFile "$pinnedBase/docker_compose/$($script:LiteComposeFile)" $liteOverlayPath } catch {}
             }
