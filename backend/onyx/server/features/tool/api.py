@@ -501,6 +501,14 @@ def update_tool_user_preferences(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> ToolUserPreferences:
     """Turn the plugins that hold the custom tool on or off for the user."""
+    tools = get_tools_by_ids([tool_id], db_session)
+    if tools and (
+        tools[0].in_code_tool_id is not None or tools[0].mcp_server_id is not None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Only OpenAPI plugins support these preferences",
+        )
     _, integration, _ = _openapi_tool_or_404(tool_id, db_session)
     visible = get_visible_plugin_ids(user.id, db_session)
     plugin_ids = [
