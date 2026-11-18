@@ -1,0 +1,42 @@
+name: "Stack position"
+description: >-
+  Finds where a same-repository pull request sits in a stack of PRs. A PR with
+  an open child skips the slow suites, because the stack tip tests every change
+  below it. The merge queue accepts the skipped PR only when a descendant's
+  passing run contains its head (see .github/actions/check-tested-base).
+outputs:
+  child:
+    description: "Number of an open same-repository PR whose base is this PR's head branch, or empty"
+    value: ${{ steps.position.outputs.child }}
+  stacked:
+    description: "'true' when this PR's base is the head branch of an open same-repository PR"
+    value: ${{ steps.position.outputs.stacked }}
+runs:
+  using: "composite"
+  steps:
+    - name: Find the parent and child PRs
+      id: position
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        HEAD_REF: ${{ github.head_ref }}
+        BASE_REF: ${{ github.base_ref }}
+        SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+      run: |
+        set -euo pipefail
+        child=""
+        stacked=false
+        if [[ "$SAME_REPO" == "true" ]]; then
+          same_repo='[.[] | select(.isCrossRepository == false) | .number] | first // empty'
+          child=$(gh pr list --repo "$REPO" --base "$HEAD_REF" --state open \
+            --json number,isCrossRepository --jq "$same_repo")
+          parent=$(gh pr list --repo "$REPO" --head "$BASE_REF" --state open \
+            --json number,isCrossRepository --jq "$same_repo")
+          if [[ -n "$parent" ]]; then
+            stacked=true
+          fi
+        fi
+        echo "child=${child} stacked=${stacked}"
+        echo "child=${child}" >> "$GITHUB_OUTPUT"
+        echo "stacked=${stacked}" >> "$GITHUB_OUTPUT"

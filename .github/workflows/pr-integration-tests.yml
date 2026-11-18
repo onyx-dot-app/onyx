@@ -69,21 +69,29 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      integration: ${{ github.event_name != 'pull_request' && 'true' || (steps.filter.outputs.integration == 'true' || steps.backend_src.outputs.backend == 'true') && 'true' || 'false' }}
-      gateway: ${{ steps.filter.outputs.gateway || 'true' }}
+      # A PR with an open child PR skips the suite: the stack tip runs it for
+      # every change below the tip. A stacked tip runs every optional suite,
+      # because its path filters see only the tip's own diff.
+      covered_by: ${{ steps.stack.outputs.child }}
+      integration: ${{ github.event_name != 'pull_request' && 'true' || steps.stack.outputs.child != '' && 'false' || steps.stack.outputs.stacked == 'true' && 'true' || (steps.filter.outputs.integration == 'true' || steps.backend_src.outputs.backend == 'true') && 'true' || 'false' }}
+      gateway: ${{ steps.stack.outputs.stacked == 'true' && 'true' || steps.filter.outputs.gateway || 'true' }}
       # Live connector suites that this run skips. See the "Pick live connector
       # suites" step.
       skipped_connector_suites: ${{ steps.connectors.outputs.skipped }}
       # The reindex port suite is slow (each test waits for a full re-embed and
       # swap). PRs run it only for related changes, and main runs skip it; the
       # daily run and tag runs always include it.
-      reindex_port: ${{ github.event_name == 'pull_request' && steps.filter.outputs.reindex_port || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'false' || 'true' }}
+      reindex_port: ${{ github.event_name == 'pull_request' && (steps.stack.outputs.stacked == 'true' && 'true' || steps.filter.outputs.reindex_port) || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'false' || 'true' }}
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+      - name: Find the PR's place in a stack
+        id: stack
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/stack-position
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: backend_src
         if: github.event_name == 'pull_request'
@@ -195,10 +203,11 @@ jobs:
         id: connectors
         env:
           EVENT_NAME: ${{ github.event_name }}
+          STACKED: ${{ steps.stack.outputs.stacked }}
           FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
         run: |
           skipped=""
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+          if [[ "$EVENT_NAME" == "pull_request" && "$STACKED" != "true" ]]; then
             for suite in azure_datalake github google jira onedrive sharepoint slack; do
               if [[ "$(jq -r --arg suite "$suite" '.[$suite] // "false"' <<< "$FILTER_OUTPUTS")" != "true" ]]; then
                 skipped="$skipped $suite"
@@ -928,6 +937,7 @@ jobs:
       - name: Check job status
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
+          COVERED_BY: ${{ needs.changes.outputs.covered_by }}
           RUN_TESTS: ${{ needs.changes.outputs.integration }}
           INTEGRATION_RESULT: ${{ needs.integration-tests.result }}
           LITE_RESULT: ${{ needs.onyx-lite-tests.result }}
@@ -941,6 +951,10 @@ jobs:
           if [ "${CHANGES_RESULT}" != "success" ]; then
             echo "changes job did not succeed (result: ${CHANGES_RESULT})"
             exit 1
+          fi
+          if [ -n "${COVERED_BY}" ]; then
+            echo "PR #${COVERED_BY} is stacked on this PR. The stack tip runs the suite for this PR's changes."
+            exit 0
           fi
           if [ "${RUN_TESTS}" != "true" ]; then
             echo "No relevant paths changed — required check passes."
@@ -965,6 +979,7 @@ jobs:
       - name: Record tested base
         if: >-
           github.event_name == 'pull_request' &&
+          needs.changes.outputs.covered_by == '' &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           github.actor != 'dependabot[bot]'
         env:
