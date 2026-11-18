@@ -180,6 +180,11 @@ class LangfuseTracingProcessor(TracingProcessor):
             with self._propagated(trace_attributes):
                 langfuse_span = client.start_observation(
                     name=trace.name,
+                    trace_context=(
+                        {"trace_id": metadata["distributed_trace_id"]}
+                        if metadata.get("distributed_trace_id")
+                        else None
+                    ),
                 )
 
             with self._lock:

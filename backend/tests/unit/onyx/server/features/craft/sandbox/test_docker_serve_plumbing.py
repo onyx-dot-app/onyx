@@ -14,15 +14,19 @@ docker-sandbox-serve port — no Docker engine required. We use
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
-from unittest.mock import MagicMock
-from uuid import UUID
+from unittest.mock import MagicMock, patch
+from uuid import UUID, uuid4
 
 import pytest
+from fastapi import Request
 
 import onyx.server.features.build.sandbox.docker.dev_mode_serve as dev_mode_serve
 import onyx.server.features.build.sandbox.docker.docker_sandbox_manager as dsm
+from onyx.cache.interface import CacheLockLostError
+from onyx.server.features.build import turn_tracing
 from onyx.server.features.build.configs import (
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
@@ -32,7 +36,15 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     DockerSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import CraftLLMProviderConfig
+from onyx.server.gateway import craft_session
+from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
+from onyx.server.gateway.craft_session import (
+    CRAFT_TURN_TRACE_ID_CONTEXTVAR,
+    craft_session_binder,
+)
 from onyx.server.gateway.models import GatewayModelDescriptor
+from onyx.server.gateway.tracing import llm_gateway_trace
+from onyx.tracing.flows import LLMFlow
 from tests.unit.fakes import FakeCache
 
 _SBX = UUID("12345678-1234-1234-1234-1234567890ab")
@@ -565,3 +577,91 @@ def test_provision_removes_container_when_history_restore_fails(
     # Half-provisioned container is force-removed; opencode never started.
     fake_container.remove.assert_called_once_with(force=True)
     fake_container.start.assert_not_called()
+
+
+def test_gateway_steps_share_turn_identity_without_sharing_request_state() -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    sandbox_id = uuid4()
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/",
+            "headers": [
+                (CRAFT_SESSION_HEADER.lower().encode(), str(session_id).encode())
+            ],
+        }
+    )
+    bind = craft_session_binder(lambda: MagicMock())
+
+    async def request_trace() -> tuple[str, str]:
+        dependency = bind(request, MagicMock(), MagicMock())
+        await dependency.__anext__()
+        try:
+            with llm_gateway_trace(LLMFlow.CRAFT_LLM_GENERATION, "m") as active:
+                metadata = (active.export() or {})["metadata"]
+                return active.trace_id, metadata["distributed_trace_id"]
+        finally:
+            with pytest.raises(StopAsyncIteration):
+                await dependency.__anext__()
+            assert CRAFT_TURN_TRACE_ID_CONTEXTVAR.get() is None
+
+    async def concurrent_steps() -> tuple[tuple[str, str], tuple[str, str]]:
+        return await asyncio.gather(request_trace(), request_trace())
+
+    with (
+        patch.object(craft_session, "get_build_session", return_value=object()),
+        patch.object(turn_tracing, "get_cache_backend", return_value=cache),
+        patch.object(serve_transport, "get_cache_backend", return_value=cache),
+        patch.object(turn_tracing, "trace", wraps=turn_tracing.trace) as roots,
+    ):
+        manager = _bare_manager()
+        with manager.prompt_slot(sandbox_id, session_id):
+            roots.assert_not_called()
+        with manager.prompt_slot(sandbox_id, session_id, trace_turn=True) as slot:
+            assert slot.acquired
+            first, second = asyncio.run(concurrent_steps())
+            assert first[0] != second[0]
+            assert first[1] == second[1]
+            assert (
+                roots.call_args.kwargs["metadata"]["distributed_trace_id"] == first[1]
+            )
+            with manager.prompt_slot(
+                sandbox_id, session_id, trace_turn=True
+            ) as refused:
+                assert not refused.acquired
+            assert turn_tracing.get_craft_turn_trace_id(session_id) == first[1]
+        assert turn_tracing.get_craft_turn_trace_id(session_id) is None
+        with manager.prompt_slot(sandbox_id, session_id, trace_turn=True):
+            third = asyncio.run(request_trace())
+            assert third[1] != first[1]
+        assert roots.call_count == 2
+
+
+def test_trace_setup_cannot_yield_a_lost_prompt_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    successor_id = "a" * 32
+    root = MagicMock()
+
+    def lose_lease() -> None:
+        assert turn_tracing.get_craft_turn_trace_id(session_id) is not None
+        cache.set(f"craft:turn_trace:{session_id}", successor_id)
+        lock = cache.locks[f"buildpromptslot_{_SBX}_{session_id}"]
+        monkeypatch.setattr(
+            lock, "extend", MagicMock(side_effect=CacheLockLostError("lease expired"))
+        )
+
+    root.start.side_effect = lose_lease
+    with (
+        patch.object(turn_tracing, "get_cache_backend", return_value=cache),
+        patch.object(serve_transport, "get_cache_backend", return_value=cache),
+        patch.object(turn_tracing, "trace", return_value=root),
+    ):
+        with _bare_manager().prompt_slot(_SBX, session_id, trace_turn=True) as slot:
+            assert not slot.acquired
+        assert turn_tracing.get_craft_turn_trace_id(session_id) == successor_id
+    root.finish.assert_called_once()

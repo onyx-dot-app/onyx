@@ -868,7 +868,9 @@ def stream_subagent_turn(
         # Serialize against concurrent turns on the same build session
         # (the parent turn and a subagent follow-up share the same pod
         # directory + event bus).
-        candidate_cm = sandbox_manager.prompt_slot(sandbox_id, session_id)
+        candidate_cm = sandbox_manager.prompt_slot(
+            sandbox_id, session_id, trace_turn=True
+        )
         slot = candidate_cm.__enter__()
         if not slot.acquired:
             candidate_cm.__exit__(None, None, None)

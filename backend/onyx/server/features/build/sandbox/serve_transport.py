@@ -53,6 +53,7 @@ from onyx.server.features.build.timeouts import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
     PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
 )
+from onyx.server.features.build.turn_tracing import craft_turn_trace
 from onyx.server.metrics.craft_sandbox import (
     SandboxProvisionPhase,
     time_provision_phase,
@@ -223,6 +224,7 @@ class _ServeMixin:
         acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
         *,
         fail_open: bool = True,
+        trace_turn: bool = False,
     ) -> Generator[PromptSlot, None, None]:
         """Serialize turns for a build session across replicas via the cache.
 
@@ -262,7 +264,16 @@ class _ServeMixin:
                 )
                 yield PromptSlot(acquired=False)
             else:
-                yield PromptSlot(acquired=True, lock=lock)
+                trace_context = (
+                    craft_turn_trace(build_session_id)
+                    if trace_turn
+                    else contextlib.nullcontext()
+                )
+                with trace_context:
+                    slot = PromptSlot(acquired=True, lock=lock)
+                    if trace_turn:
+                        slot.extend()
+                    yield PromptSlot(acquired=False) if slot.lost else slot
         finally:
             if acquired:
                 try:

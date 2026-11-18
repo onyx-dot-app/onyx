@@ -4,12 +4,14 @@ import asyncio
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pytest
 from fastapi import Request
 
 from onyx.server.gateway import craft_session
 from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
 from onyx.server.gateway.craft_session import (
     CRAFT_SESSION_ID_CONTEXTVAR,
+    CRAFT_TURN_TRACE_ID_CONTEXTVAR,
     craft_session_binder,
     resolve_craft_session_id,
 )
@@ -63,7 +65,10 @@ def test_binder_sets_and_resets_the_context_variable() -> None:
     bind = craft_session_binder(lambda: MagicMock())
 
     async def scenario() -> tuple[str | None, str | None]:
-        with patch.object(craft_session, "get_build_session", return_value=object()):
+        with (
+            patch.object(craft_session, "get_build_session", return_value=object()),
+            patch.object(craft_session, "get_craft_turn_trace_id", return_value=None),
+        ):
             dependency = bind(_request(session_id), MagicMock(), MagicMock())
             await dependency.__anext__()
             bound = CRAFT_SESSION_ID_CONTEXTVAR.get()
@@ -95,3 +100,21 @@ def test_trace_without_session_is_unchanged() -> None:
             "flow": LLMFlow.LLM_GATEWAY.value,
             "model": "m",
         }
+
+
+def test_unowned_session_cannot_bind_a_turn_trace() -> None:
+    bind = craft_session_binder(lambda: MagicMock())
+
+    async def scenario() -> None:
+        with (
+            patch.object(craft_session, "get_build_session", return_value=None),
+            patch.object(craft_session, "get_craft_turn_trace_id") as lookup,
+        ):
+            dependency = bind(_request(str(uuid4())), MagicMock(), MagicMock())
+            await dependency.__anext__()
+            assert CRAFT_TURN_TRACE_ID_CONTEXTVAR.get() is None
+            with pytest.raises(StopAsyncIteration):
+                await dependency.__anext__()
+            lookup.assert_not_called()
+
+    asyncio.run(scenario())

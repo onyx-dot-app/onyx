@@ -99,6 +99,12 @@ on, `setup_tracing` also adds
 `tracing/processors/user_usage_processor.py:UserUsageTracingProcessor`, apart
 from Braintrust and Langfuse.
 
+**Distributed Craft turns.** Gateway request traces carry a shared
+`distributed_trace_id` from the turn's prompt slot. Braintrust uses it as
+`root_span_id` and links requests to the turn root; Langfuse uses it in
+`trace_context`. Request trace ids remain
+unique, so one request's cleanup cannot remove another request's span state.
+
 **Root traces.** `tracing/framework/create.py:trace` and `ensure_trace` open
 the root. Use `ChatTraceMetadata` when a chat session exists and
 `SearchTraceMetadata` when none does.

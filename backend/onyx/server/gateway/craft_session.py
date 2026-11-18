@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from onyx.db.build_session import get_build_session
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
+from onyx.server.features.build.turn_tracing import get_craft_turn_trace_id
 from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
 from onyx.utils.logger import setup_logger
 
@@ -27,6 +28,10 @@ logger = setup_logger()
 
 CRAFT_SESSION_ID_CONTEXTVAR: ContextVar[str | None] = ContextVar(
     "craft_session_id", default=None
+)
+
+CRAFT_TURN_TRACE_ID_CONTEXTVAR: ContextVar[str | None] = ContextVar(
+    "craft_turn_trace_id", default=None
 )
 
 
@@ -78,10 +83,17 @@ def craft_session_binder(
         craft_session_id = await run_in_threadpool(
             resolve_craft_session_id, http_request, user, db_session
         )
+        turn_trace_id = (
+            await run_in_threadpool(get_craft_turn_trace_id, UUID(craft_session_id))
+            if craft_session_id is not None
+            else None
+        )
         token = CRAFT_SESSION_ID_CONTEXTVAR.set(craft_session_id)
+        turn_token = CRAFT_TURN_TRACE_ID_CONTEXTVAR.set(turn_trace_id)
         try:
             yield
         finally:
+            CRAFT_TURN_TRACE_ID_CONTEXTVAR.reset(turn_token)
             CRAFT_SESSION_ID_CONTEXTVAR.reset(token)
 
     return bind_craft_session

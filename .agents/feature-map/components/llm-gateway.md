@@ -126,7 +126,15 @@ upstream, and records the span.
 when the caller owns that build session, and
 `server/gateway/tracing.py:llm_gateway_trace` tags the trace with it. The
 header is a hint, not an identity claim, because the sandbox can edit its own
-configuration.
+configuration. For a prompt execution, while the prompt slot is held,
+`server/features/build/turn_tracing.py:craft_turn_trace` publishes a turn trace
+id in the tenant cache and opens a turn root. The binder reads the id only
+after the ownership check.
+Gateway calls keep separate local traces, but Braintrust and Langfuse use this
+shared external trace id. Braintrust request spans name the turn root as their
+parent. This groups interactive, scheduled, and subagent
+steps without sharing mutable span state across requests or replicas. A new
+prompt slot gets a new id. Missing cache context falls back to per-call traces.
 
 ---
 

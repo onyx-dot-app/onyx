@@ -1249,7 +1249,7 @@ class SessionManager:
         acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
     ) -> AbstractContextManager[PromptSlot]:
         return self._sandbox_manager.prompt_slot(
-            sandbox_id, session_id, acquire_timeout=acquire_timeout
+            sandbox_id, session_id, acquire_timeout=acquire_timeout, trace_turn=True
         )
 
     def yield_sandbox_events(
