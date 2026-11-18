@@ -379,8 +379,10 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
             desk_project_key = desk.get("projectKey")
             if (
                 self.project_key
-                and desk_project_key
-                and str(desk_project_key).lower() != self.project_key.lower()
+                and (
+                    not desk_project_key
+                    or str(desk_project_key).lower() != self.project_key.lower()
+                )
             ):
                 raise ConnectorValidationError(
                     f"Service desk '{self.service_desk_id}' belongs to project "

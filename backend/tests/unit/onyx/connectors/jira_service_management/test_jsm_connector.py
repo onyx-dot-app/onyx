@@ -463,7 +463,7 @@ def test_explicit_service_desk_validates_credentials_and_project_match(
 
     monkeypatch.setattr(
         "onyx.connectors.jira_service_management.connector._rate_limited_jsm_get",
-        lambda url, headers, auth, params=None: _fake_response(
+        lambda *_args, **_kwargs: _fake_response(
             200, {"id": "2", "projectKey": "HR"}
         ),
     )
@@ -472,7 +472,7 @@ def test_explicit_service_desk_validates_credentials_and_project_match(
 
     monkeypatch.setattr(
         "onyx.connectors.jira_service_management.connector._rate_limited_jsm_get",
-        lambda url, headers, auth, params=None: _fake_response(401, {}),
+        lambda *_args, **_kwargs: _fake_response(401, {}),
     )
     with pytest.raises(CredentialExpiredError):
         connector.validate_connector_settings()
