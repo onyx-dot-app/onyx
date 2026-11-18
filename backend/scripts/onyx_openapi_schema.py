@@ -11,17 +11,19 @@ import sys
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 
-from onyx.main import app as app_fn
-
 OPENAPI_VERSION = "3.1.0"
 
 
-def go(filename: str, tagged_for_docs: str | None = None) -> None:
+def go(
+    filename: str, tagged_for_docs: str | None = None, *, snapshot: bool = False
+) -> None:
     """Generate OpenAPI schema.
 
     By default outputs tag-stripped schema (for client generation).
     If tagged_for_docs is provided, also outputs the original tagged version for docs.
     """
+    from onyx.main import app as app_fn
+
     app: FastAPI = app_fn()
     app.openapi_version = OPENAPI_VERSION
     schema = get_openapi(
@@ -40,8 +42,12 @@ def go(filename: str, tagged_for_docs: str | None = None) -> None:
 
     # Output stripped version (default) for client generation
     stripped = strip_tags_from_schema(schema)
-    with open(filename, "w") as f:
-        json.dump(stripped, f)
+    with open(filename, "w", encoding="utf-8", newline="\n") as f:
+        if snapshot:
+            json.dump(stripped, f, indent=2, sort_keys=True)
+            f.write("\n")
+        else:
+            json.dump(stripped, f)
     print(f"Wrote OpenAPI schema to {filename}.")
 
 
@@ -130,9 +136,18 @@ def main() -> None:
         "--tagged-for-docs",
         help="Also output a tagged version for API docs (specify output path)",
     )
+    parser.add_argument(
+        "--snapshot",
+        action="store_true",
+        help="Use default Onyx settings and write sorted, indented JSON",
+    )
 
     args = parser.parse_args()
-    go(args.filename, tagged_for_docs=args.tagged_for_docs)
+    if args.snapshot:
+        os.environ.clear()
+        os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
+
+    go(args.filename, tagged_for_docs=args.tagged_for_docs, snapshot=args.snapshot)
 
     if args.generate_python_client:
         # Schema is already stripped by go(), no need to strip again

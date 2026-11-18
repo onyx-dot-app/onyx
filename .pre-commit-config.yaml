@@ -97,6 +97,21 @@ repos:
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
+        alias: openapi-snapshot
+        name: backend OpenAPI snapshot
+        args: ["--no-project", "python", "backend/lint/check_openapi_snapshot.py", "--hook"]
+        files: >-
+          (?x)^(
+            backend/((onyx|ee|shared_configs|model_server)/.*|openapi\.json
+            |scripts/onyx_openapi_schema\.py|lint/check_openapi_snapshot\.py)
+            |pyproject\.toml|uv\.lock
+          )$
+        pass_filenames: true
+        # prek omits deleted files. The script checks for them when it receives no paths.
+        always_run: true
+        require_serial: true
+        stages: [pre-commit]
+      - id: uv-run
         alias: docker-compose-sync
         name: sync docker compose files from template
         # Regenerates docker-compose.yml / docker-compose.prod.yml /
@@ -215,6 +230,7 @@ repos:
       - id: check-added-large-files
         name: Check for added large files
         args: ["--maxkb=1500"]
+        exclude: ^backend/openapi\.json$
       - id: check-yaml
         name: Check YAML
         # --unsafe relaxes check-yaml to syntax-only, so it accepts the

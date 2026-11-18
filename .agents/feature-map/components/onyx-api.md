@@ -38,7 +38,8 @@ EE routers also carry the tag.
 This component owns:
 - the `public` tag convention (`PUBLIC_API_TAGS`) and what it promises callers;
 - the ingestion API, which writes and deletes documents with no connector;
-- the scripts that build the OpenAPI spec for the customer reference.
+- the scripts that build the OpenAPI spec for the customer reference;
+- the checked-in OpenAPI snapshot and its drift check.
 
 It does not own the tagged routes. Each belongs to the component that owns its
 router. To list them, run `git grep -n "PUBLIC_API_TAGS" backend`.
@@ -81,6 +82,11 @@ validation on every PR that touches `backend/onyx/server/` or
 
 `backend/onyx/main.py:use_route_function_names_as_operation_ids` sets each
 operation id to the handler's function name.
+
+The `openapi-snapshot` hook uses the same generator with default Onyx settings.
+It compares the tag-stripped schema, including EE operations, with `backend/openapi.json`.
+After a schema change, run `python3 backend/lint/check_openapi_snapshot.py --write`
+and commit the snapshot with the change.
 
 **The ingestion write.**
 `backend/onyx/server/onyx_api/ingestion.py:upsert_ingestion_doc` runs in the
