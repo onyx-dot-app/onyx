@@ -783,6 +783,31 @@ def test_a_new_header_field_resets_connections_and_a_literal_change_does_not(
     assert status() is IntegrationConnectionStatus.NEEDS_RECONNECT
 
 
+def test_a_switch_to_oauth_drops_the_api_key_template_and_fields(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    oauth_client = _oauth_create().oauth_client
+
+    updated = admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            auth_method=IntegrationAuthMethod.OAUTH2, oauth_client=oauth_client
+        ),
+        admin,
+        db_session,
+    )
+
+    assert updated.header_template is None
+    assert updated.credential_fields == []
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None
+    db_session.refresh(integration)
+    assert integration.header_template is None
+    assert integration.credential_fields is None
+
+
 def test_scoped_owner_starts_the_organization_sign_in_of_its_integration(
     db_session: Session, scoped: User, member: User, created: Created
 ) -> None:
