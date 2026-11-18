@@ -537,7 +537,8 @@ const AgentMessage = React.memo(function AgentMessage({
             {buildRunSegments(
               section.toolGroups,
               toolTurnGroups,
-              section.interimGroups
+              section.interimGroups,
+              section.turnIndex
             ).map((segment, index, segments) => {
               if (segment.kind === "text") {
                 return (
@@ -762,13 +763,15 @@ function packetTurn(group: TurnGroup): number {
 /**
  * Orders the revealed steps and the interim text by turn. Consecutive steps
  * form one run. Interim text shows once every earlier step is revealed, so
- * text never appears ahead of the steps before it. The list always ends with
- * a run, which holds the live header while later steps arrive.
+ * text never appears ahead of the steps before it. Only the section's own
+ * steps count: an earlier section's steps never gate its text. The list always
+ * ends with a run, which holds the live header while later steps arrive.
  */
 function buildRunSegments(
   pacedTurnGroups: TurnGroup[],
   allTurnGroups: TurnGroup[],
-  interimGroups: GroupedPacket[]
+  interimGroups: GroupedPacket[],
+  sectionTurnIndex: number
 ): RunSegment[] {
   const revealed = new Set(
     pacedTurnGroups.flatMap((group) => group.steps.map((step) => step.key))
@@ -776,6 +779,7 @@ function buildRunSegments(
   const visibleText = interimGroups.filter((text) =>
     allTurnGroups.every(
       (group) =>
+        packetTurn(group) < sectionTurnIndex ||
         packetTurn(group) >= text.turn_index ||
         group.steps.every((step) => revealed.has(step.key))
     )
