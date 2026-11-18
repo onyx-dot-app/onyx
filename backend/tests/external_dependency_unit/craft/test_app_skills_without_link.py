@@ -110,6 +110,7 @@ def test_built_in_app_skill_follows_the_plugin_the_user_runs(
     runner = make_user(session)
     turned_off = make_user(session)
     no_plugin = make_user(session)
+    admin = make_user(session, is_admin=True)
     slack_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.SLACK]
     built_in = reset_built_in_skill_row(session, built_in_skill_id=slack_id)
     app = make_external_app(
@@ -149,7 +150,7 @@ def test_built_in_app_skill_follows_the_plugin_the_user_runs(
     assert runtime(runner).get(slack_id) == app.id
     assert slack_id in viewable(runner)
     assert skill_user_states(runner, [built_in.id], session)[built_in.id].enabled
-    for user in (turned_off, no_plugin):
+    for user in (turned_off, no_plugin, admin):
         assert slack_id not in runtime(user)
         assert slack_id not in viewable(user)
         assert not skill_user_states(user, [built_in.id], session)[built_in.id].enabled
