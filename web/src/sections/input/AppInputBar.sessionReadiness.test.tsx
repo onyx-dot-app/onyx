@@ -370,6 +370,29 @@ test("stopping preserves the draft and queue until completion", async () => {
   expect(textbox).toHaveTextContent("Keep this draft");
 });
 
+test("a send before the tool options load waits for them and then sends", async () => {
+  const user = setupUser();
+  const inputProps = props("input");
+  const notLoaded = {
+    ...inputProps,
+    toolConfiguration: {
+      optionsLoaded: false,
+    } as AppInputBarProps["toolConfiguration"],
+  };
+  const { rerender } = render(<ChatInput {...notLoaded} />);
+  const textbox = screen.getByRole("textbox", { name: "Message input" });
+  await user.click(textbox);
+  await user.keyboard("{Enter}");
+  expect(inputProps.onSubmit).not.toHaveBeenCalled();
+  expect(textbox).toHaveTextContent("Keep this draft");
+
+  rerender(<ChatInput {...inputProps} />);
+  await waitFor(() => expect(inputProps.onSubmit).toHaveBeenCalledTimes(1));
+  expect(inputProps.onSubmit).toHaveBeenCalledWith(
+    expect.objectContaining({ message: "Keep this draft" })
+  );
+});
+
 test("unconfirmed completion offers a retry and never submits the draft or queue", async () => {
   const user = setupUser();
   const inputProps = props("unconfirmed");

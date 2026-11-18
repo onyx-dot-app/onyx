@@ -338,6 +338,7 @@ const AppInputBar = React.memo(
     // Snapshot of the input, read non-reactively in the restore effect so
     // seeding doesn't re-run on every keystroke, and after awaits.
     const composedRef = useRef(composed);
+    const [sendHeld, setSendHeld] = useState(false);
     // One typed answer at a time.
     const answeringRef = useRef(false);
     const isRecordingRef = useRef(isRecording);
@@ -360,6 +361,7 @@ const AppInputBar = React.memo(
       // this one.
       if (prevDraftKeyRef.current !== chatDraftStorageKey) {
         prevDraftKeyRef.current = chatDraftStorageKey;
+        setSendHeld(false);
         clearMessage();
       }
     }, [chatDraftStorageKey, clearMessage]);
@@ -408,13 +410,23 @@ const AppInputBar = React.memo(
     const questionRefusesFiles =
       questionWaits && currentMessageFiles.length > 0;
 
+    useEffect(() => {
+      if (!sendHeld || !toolConfiguration.optionsLoaded) return;
+      setSendHeld(false);
+      submitMessage(composedRef.current);
+    }, [sendHeld, toolConfiguration.optionsLoaded]);
+
     function submitMessage(submitted: ComposedMessage) {
       if (!submitted.message.trim()) return;
       if (questionWaits) {
         if (!questionRefusesFiles) void answerQuestion(submitted);
         return;
       }
-      if (chatState !== "input" || !toolConfiguration.optionsLoaded) return;
+      if (chatState !== "input") return;
+      if (!toolConfiguration.optionsLoaded) {
+        setSendHeld(true);
+        return;
+      }
       // Stop TTS first to prevent overlapping voices.
       stopTTS();
       onSubmit(submitted);
