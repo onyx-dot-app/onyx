@@ -95,8 +95,7 @@ export default function ScheduleTaskForm({
   const { data: externalAppsData } = useUserExternalApps();
   const { data: craftMcpData } = useCraftMcpServers();
   const pickerSections = useMemo(
-    () =>
-      toPickerSections(skillsData, externalAppsData, craftMcpData?.mcp_servers),
+    () => toPickerSections(skillsData, externalAppsData, craftMcpData),
     [skillsData, externalAppsData, craftMcpData]
   );
   const pickPromptEntry = useCallback(

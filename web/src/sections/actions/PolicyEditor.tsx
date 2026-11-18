@@ -1,15 +1,9 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
 import type { RichStr } from "@opal/types";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
-import {
-  Text,
-  InputSingleSelect,
-  InputTypeIn,
-  Tooltip,
-} from "@opal/components";
+import { Text, InputSingleSelect } from "@opal/components";
 import PolicyToggle, {
   usePolicyOptions,
 } from "@/sections/actions/PolicyToggle";
@@ -20,29 +14,23 @@ export interface PolicyEditorItem {
   name: string;
   description: string;
   defaultPolicy: PolicyValue;
-  editable?: boolean;
   /** Values the admin cannot choose for this item. */
   disabledPolicies?: readonly PolicyValue[];
-  lockReason?: "workspace_disabled" | "workspace_managed" | null;
   note?: string | RichStr;
 }
 
 interface PolicyEditorProps {
-  showTitle?: boolean;
-  title?: string | RichStr;
-  searchable?: boolean;
+  title: string | RichStr;
   disabled?: boolean;
-  onReset?: () => void;
-  resetLabel?: string | RichStr;
+  onReset: () => void;
+  resetLabel: string | RichStr;
   items: PolicyEditorItem[];
   policies: Record<string, PolicyValue>;
-  onChange?: (policies: Record<string, PolicyValue>) => void;
+  onChange: (policies: Record<string, PolicyValue>) => void;
 }
 
 export default function PolicyEditor({
-  showTitle = true,
   title,
-  searchable = true,
   disabled = false,
   onReset,
   resetLabel,
@@ -50,108 +38,64 @@ export default function PolicyEditor({
   policies,
   onChange,
 }: PolicyEditorProps) {
-  const t = useTranslations("craft.apps.policyEditor");
   const copy = useTranslations("craft.actionPolicies");
-  const toolCopy = useTranslations("actions.mcpTools");
-  const detailCopy = useTranslations("actions.memberPlugins.detail");
-  const [query, setQuery] = useState("");
-  const search = query.trim().toLocaleLowerCase();
-  const shownItems = items.filter((item) =>
-    `${item.name} ${item.description}`.toLocaleLowerCase().includes(search)
-  );
-  const editableItems = shownItems.filter((item) => item.editable !== false);
+  const editorCopy = useTranslations("actions.policyEditor");
+  const options = usePolicyOptions();
   function accepts(item: PolicyEditorItem, value: PolicyValue): boolean {
     return !item.disabledPolicies?.includes(value);
-  }
-  const options = usePolicyOptions();
-  function reset() {
-    if (onReset) onReset();
-    else
-      onChange?.({
-        ...policies,
-        ...Object.fromEntries(
-          items
-            .filter((item) => item.editable !== false)
-            .map((item) => [item.id, item.defaultPolicy])
-        ),
-      });
   }
 
   return (
     <div className="flex flex-col gap-4">
-      {showTitle && (
-        <Text font="main-ui-action">{title ?? t("permissions.title")}</Text>
-      )}
-      {searchable && (
-        <InputTypeIn
-          icon="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={toolCopy("search")}
-          aria-label={toolCopy("search")}
-        />
-      )}
-      {onChange && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Text font="secondary-body" color="text-03">
-            {detailCopy("toolCount", { count: shownItems.length })}
-          </Text>
-          <div className="ms-auto w-44">
-            <InputSingleSelect
-              aria-label={copy("setPermissions")}
-              placeholder={copy("setPermissions")}
-              value=""
-              disabled={
-                disabled || !items.some((item) => item.editable !== false)
-              }
-              options={[
-                ...options.map((option) => ({
-                  value: option.value,
-                  title: option.label,
-                  disabled: !editableItems.some((item) =>
-                    accepts(item, option.value)
+      <Text font="main-ui-action">{title}</Text>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Text font="secondary-body" color="text-03">
+          {editorCopy("toolCount", { count: items.length })}
+        </Text>
+        <div className="ms-auto w-44">
+          <InputSingleSelect
+            aria-label={copy("setPermissions")}
+            placeholder={copy("setPermissions")}
+            value=""
+            disabled={disabled || items.length === 0}
+            options={[
+              ...options.map((option) => ({
+                value: option.value,
+                title: option.label,
+                disabled: !items.some((item) => accepts(item, option.value)),
+              })),
+              {
+                options: [{ value: "reset", title: toPlainString(resetLabel) }],
+              },
+            ]}
+            onValueChange={(value) => {
+              if (value === "reset") onReset();
+              else if (
+                value === "allow" ||
+                value === "ask" ||
+                value === "blocked"
+              ) {
+                onChange({
+                  ...policies,
+                  ...Object.fromEntries(
+                    items
+                      .filter((item) => accepts(item, value))
+                      .map((item) => [item.id, value])
                   ),
-                })),
-                {
-                  options: [
-                    {
-                      value: "reset",
-                      title: toPlainString(
-                        resetLabel ?? t("permissions.defaultOption")
-                      ),
-                    },
-                  ],
-                },
-              ]}
-              onValueChange={(value) => {
-                if (value === "reset") reset();
-                else if (
-                  value === "allow" ||
-                  value === "ask" ||
-                  value === "blocked"
-                ) {
-                  onChange({
-                    ...policies,
-                    ...Object.fromEntries(
-                      editableItems
-                        .filter((item) => accepts(item, value))
-                        .map((item) => [item.id, value])
-                    ),
-                  });
-                }
-              }}
-            />
-          </div>
+                });
+              }
+            }}
+          />
         </div>
-      )}
+      </div>
 
       <div className="flex flex-col gap-2">
-        {shownItems.length === 0 && (
+        {items.length === 0 && (
           <Text font="secondary-body" color="text-03">
-            {copy(items.length ? "noMatchingActions" : "emptyActions")}
+            {copy("emptyActions")}
           </Text>
         )}
-        {shownItems.map((item) => (
+        {items.map((item) => (
           <div
             key={item.id}
             className="flex items-center justify-between gap-3"
@@ -173,31 +117,13 @@ export default function PolicyEditor({
                 </Text>
               )}
             </div>
-            <Tooltip
-              tooltip={
-                item.lockReason === "workspace_disabled"
-                  ? copy("workspaceDisabledTooltip")
-                  : item.lockReason
-                    ? copy(item.lockReason)
-                    : undefined
-              }
-            >
-              <div>
-                <PolicyToggle
-                  label={item.name}
-                  disabled={disabled || !onChange || item.editable === false}
-                  disabledValues={item.disabledPolicies}
-                  value={
-                    item.editable === false
-                      ? item.defaultPolicy
-                      : (policies[item.id] ?? item.defaultPolicy)
-                  }
-                  onChange={(value) =>
-                    onChange?.({ ...policies, [item.id]: value })
-                  }
-                />
-              </div>
-            </Tooltip>
+            <PolicyToggle
+              label={item.name}
+              disabled={disabled}
+              disabledValues={item.disabledPolicies}
+              value={policies[item.id] ?? item.defaultPolicy}
+              onChange={(value) => onChange({ ...policies, [item.id]: value })}
+            />
           </div>
         ))}
       </div>

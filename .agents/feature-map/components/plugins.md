@@ -38,15 +38,25 @@ Group or user restriction needs EE.
   other. A scoped action manager can edit a plugin but cannot change Default
   Chat. When a server needs sign-in, enabling it opens authentication first.
   If sign-in fails or is cancelled, the tools stay off.
-- **A member** opens Plugins from the sidebar or the composer's Actions menu.
-  The member sees which plugins are connected and which need sign-in, connects
-  an account in a new tab, and can turn a plugin off for their own Default
-  Chat or Craft sessions. Turning it off keeps their credentials. A plugin
-  that an admin left off cannot be turned on by a member.
-- **In chat**, a "Tools need credentials" prompt lists tools on the current
-  agent that need the user to connect. The user can keep chatting without
-  them. A tool call that fails on credentials shows an error in the tool step
-  ([[mcp-and-custom-tools]]).
+- **A member** opens Plugins (`/app/plugins`) from the sidebar or the
+  composer's Actions menu: one list of custom-skill plugins and plugins that
+  hold integrations, in Organization library, My uploads and Shared with you,
+  with All, Skills and Integrations filters and search. A plugin page
+  (`/app/plugins/[pluginId]`) has Overview, Skills, Integrations and Versions;
+  a tab with nothing to show is hidden. The Integrations tab shows one status
+  per integration: Connected, Not connected (Connect), Needs reconnect (the
+  reason and Reconnect) or Not set up ("Ask your admin"). When the admin lets
+  users save it, each action that asks offers "Always allow". A member with
+  manage:actions adds a personal integration ("For me" only); its plugin goes
+  to My uploads. The Overview tab has the user's on/off switch ("Use this
+  plugin"), off with a reason when the plugin is Required. The owner of a
+  private plugin that holds only integrations gets Share and Publish; Publish
+  is off for a user without global manage:actions.
+- **In chat**, the tools popover lists the current agent's plugins that hold
+  integrations and switches each one; the choice is saved for the agent. An
+  "integrations need sign-in" prompt lists the integrations of the plugins
+  that are on and need the user to connect. An integration with no usable
+  credential gives the model no action, so the user can keep chatting.
 
 ---
 
@@ -83,21 +93,33 @@ through `POST /admin/mcp/probe` to suggest the sign-in, and uses
 `PolicyEditor` and `PolicyToggle`, which take the API values
 `allow|ask|blocked`.
 
-**Member flow.** `lib/plugins/member.ts:useMemberPlugins` reads only member
-endpoints (MCP servers, tools, the user's OAuth token status and Craft apps),
-never admin listings. `buildMemberPlugins` joins them into one list and drops
-tools whose `Tool.enabled` is false. Its `mcpConnection` and `openAPIConnection` helpers classify
-each plugin as connected (with an owner: user, workspace, session or none),
-needing OAuth, needing credentials, unconfigured, checking or unavailable.
+**Member flow.** `web/src/sections/plugins/MemberPluginsPage.tsx` and
+`web/src/sections/plugins/MemberPluginDetailPage.tsx` read only member endpoints: the user's skills
+(`GET /skills`, as the Skills page) and `GET /integrations`.
+`lib/plugins/directory.ts:memberPluginEntries` joins them by plugin id (a
+custom skill's id is its plugin id). The API decides which plugins the user
+sees, and each ref's `installation_policy` is the user's own setting (group
+overrides and shares included). `lib/plugins/directory.ts:pluginSwitch` gives
+the switch state, locked for Required: a skill plugin uses `PUT /skills/{id}/enabled`, a plugin that holds only
+integrations `PUT /plugins/{id}/enabled`. `sections/plugins/SharePluginModal.tsx`
+reads and replaces the shares through `/plugins/{id}/access`.
+`sections/plugins/IntegrationConnectionRow.tsx` shows the
+status of one integration and its action; the API key form
+(`web/src/sections/plugins/IntegrationCredentialsModal.tsx`, which the Craft
+setup card also opens) renders `CredentialFieldInputs` from `credential_fields`
+and calls `PUT /integrations/{id}/connection`; Disconnect is `DELETE` on the same path.
+`web/src/sections/plugins/AlwaysAllowList.tsx` reads and writes `/action-policies/integration/{id}`.
 
-**Member OAuth.** `lib/plugins/memberConnection.ts:runMemberPluginOAuth` runs
-the flow through `lib/oauth/launch.ts:launchOAuth`: a new tab on the web, the
-system browser in the desktop app. It waits for the provider callback page to
-report the OAuth `state`. The attempt ends on completion, on cancel, or after
-ten minutes. The caller then checks the saved connection before it reports
-success. `/app/plugins/oauth/complete` is only the landing page for a callback
-that no waiting page closed; it checks the saved connection and shows the
-result.
+**Member OAuth.** `lib/integrations/connect.ts:connectWithOAuth` calls
+`POST /integrations/{id}/oauth/start` (`organization: false`, the page as
+`return_path`; the admin Configuration tab passes `organization: true`) through `lib/oauth/launch.ts:launchOAuth`: a new tab on the
+web, the system browser in the desktop app. When the browser blocks the tab,
+it loads the provider in the same tab. Each redirect URI
+(`/craft/v1/apps/oauth/callback` for presets, `/oauth-config/callback` for
+manual clients, `/mcp/oauth/callback` for MCP) renders
+`sections/oauth/IntegrationOAuthCallback.tsx`. It posts `{code, state}` to
+`POST /integrations/oauth/callback`, reports to the waiting tab, and goes to
+`return_path` (a path of this app) or `/app/plugins`.
 
 **Default Chat at turn time.** Chat reads no tool preference row.
 `integrations/chat_tools.py:build_integration_chat_tools` gives the default
@@ -105,20 +127,33 @@ assistant the integrations of each plugin the user runs (visible and enabled in
 `db/plugin_access.py:load_user_plugin_states`), with the settings of its
 persona 0 link. A custom agent uses each plugin of its links that the user can
 see, whatever the user's on/off choice. `PATCH /tool/{id}/preferences` sets
-the on/off of the plugins that hold the custom tool. On the web,
-`lib/plugins/chat.ts:effectiveChatPreferredToolId` drops an unavailable preferred plugin tool in
-Default Chat when the user's preference turns it off.
+the on/off of the plugins that hold the custom tool. The member routes send that choice as
+`enabled` on each plugin ref, and the chat popover of the default agent shows
+only the plugins that are on. On the web,
+`lib/plugins/chat.ts:effectiveChatPreference` names a built-in tool of the agent,
+else a saved plugin action (`tool_options.preferred` with `type: "action"`)
+whose plugin is on. The web has no control that sets an action preference; it
+keeps one that another client saved, and pinning a built-in tool releases it.
 
 **Tool options of an existing chat.** The server owns them.
 `lib/tools/hooks.ts:useToolConfiguration` reads them from the chat-session detail
 (`tool_options`, held in the chat session store). The composer keeps built-in
-tool states by tool id and plugin states by plugin id. A plugin toggle in
-`ChatPluginsPopover` (`lib/plugins/chat.ts:setChatPluginEnabled`) switches the
-plugin ids of the MCP server or OpenAPI tool (`plugin_ids` on the rows of the
-MCP server lists and `/api/tool`). When something is off, `allowed`
-names each built-in tool that is on and each plugin of the catalog that is on;
-the hook reads both member catalogs (all plugins and the agent's), because the
-server leaves out each plugin that the list does not name.
+tool states by tool id and plugin states by plugin id. The plugins are the
+agent's (`lib/plugins/hooks.ts:useAgentPluginIds`): `GET /plugins/agents/{id}`
+(`integrations/plugin_settings.py:agent_plugin_ids`) returns the plugins that
+chat tool construction reads (`integrations/policy.py:agent_plugin_settings`). A failed read
+leaves the list null, not empty, so the composer never sends an allow-list
+that leaves out every plugin. The agent viewer passes its own agent id, and
+the composer reads and saves that agent's plugins. A switch in
+`ChatPluginsPopover` calls `setPluginEnabled`, which also saves the agent's
+`disabled_plugin_ids` (`lib/plugins/hooks.ts:useAgentPluginPreferences`,
+`PATCH /user/assistant/{id}/preferences`); a chat that does not exist yet
+starts from them, and so does an existing chat whose `allowed` is null. When something is off, `allowed` names each built-in tool
+that is on and each plugin of the agent that is on, because the server leaves
+out each plugin that the list does not name.
+`sections/plugins/IntegrationConnectPrompt.tsx` is the chat connect prompt. It
+reads the integration statuses again when the user opens it. A tool sign-in
+card (`web/src/app/app/message/messageComponents/CustomToolAuthCard.tsx`) also reads them again; a turn does not.
 
 When a signed-in user changes tools or filters in an existing chat, the store
 keeps the change as an unconfirmed edit, and the chat's save loop PATCHes
@@ -176,11 +211,12 @@ only the configuration of a chat that does not exist yet.
 8. `connection-status-is-credential-state` **`connection_status` is credential
    state, not a UI decision.** It is `not_connected`, `connected` or
    `reauth_required`, and null only without a user. Whether a Connect action
-   exists comes from `web/src/lib/mcp/auth.ts:getMcpAuthenticationFlow`.
-   Admin-performed OAuth or API-token servers have no member flow.
+   exists comes from `web/src/lib/integrations/connect.ts:connectAction`.
+   An integration with one organization account has no member flow.
 9. `member-directory-no-admin-endpoints` **The member directory must not call
-   admin endpoints.** A scoped manager or a member cannot read them, and Craft
-   app admin records are for full admins only.
+   admin endpoints.** A scoped manager or a member cannot read them. The only
+   admin route on the page is the add dialog's `POST /admin/integrations`,
+   shown only with manage:actions.
 10. `old-admin-routes-redirect` **Old admin plugin URLs only redirect.**
     `redirects()` in `web/next.config.js` sends `/admin/mcp-actions*`,
     `/admin/openapi-actions`, `/admin/craft/apps` and
@@ -197,24 +233,16 @@ only the configuration of a chat that does not exist yet.
     leaves out a Blocked action. The Actions tab
     (`web/src/sections/integrations/IntegrationActionsTab.tsx`) shows the
     policies with or without Craft, and so does the "Users Can Save Always
-    Allow" switch on the Configuration tab. The member approval
-    tab (`sections/plugins/MemberPluginDetailModal.tsx`) shows for a connected
-    MCP server whose `users_can_manage_policies` is on, with or without Craft.
-    It reads and writes
+    Allow" switch on the Configuration tab. The member "Always allow" list
+    (`sections/plugins/AlwaysAllowList.tsx`) shows for an integration whose
+    `users_can_save_always_allow` is on and offers the switch only for an
+    action whose admin policy is Ask. It reads and writes
     `/action-policies/integration/{id}` (`server/features/integrations/api.py`),
     which checks plugin visibility but not Craft. The Craft catalog list
     (`/build/action-policies`) and task choices cover the integrations of the
     plugins the user runs (`integrations/craft.py:list_task_plugin_views`). The
     plugin UI must not show
     read or write badges to members.
-12. `shared-oauth-config-shared-connection` **OpenAPI tools that shared an
-    `OAuthConfig` before the upgrade have one connection each.** The migration
-    copies the user's token to the integration of each tool. A member who
-    connects or disconnects one such plugin changes only that plugin. On a
-    provider that rotates refresh tokens, the other copies go to Needs
-    reconnect after the first refresh. An expired grant needs a new sign-in
-    only when the token status has `can_refresh` not true
-    (`lib/plugins/member.ts`).
 
 ---
 
@@ -239,14 +267,12 @@ only the configuration of a chat that does not exist yet.
   `config` to `IntegrationConfig`, and a branch in
   `web/src/sections/integrations/AddIntegrationModal.tsx:config`. Add its label under
   `admin.integrations.shape` in all nine locales.
-- `plugin-kind` **A plugin kind.** Copy the `openapi` kind; list the kinds in
-  `PluginReference` in `web/src/lib/plugins/types.ts`. Extend the `MemberPlugin`
-  union and its connection helper in `web/src/lib/plugins/member.ts`. Decide whether it is a Chat kind
-  (`ChatPluginReference`).
-- `mcp-auth-type-ui` **The UI for a new MCP auth type.** Copy the `API_TOKEN`
-  branches in `web/src/lib/mcp/auth.ts:getMcpAuthenticationFlow`, the
-  `mcpConnection` helper in `web/src/lib/plugins/member.ts`, and the sign-in
-  fields in `web/src/sections/integrations/signIn.ts`.
+- `mcp-auth-type-ui` **The UI for a new MCP auth type.** Add the admin sign-in
+  fields in `web/src/sections/integrations/signIn.ts`, the method to
+  `connectAction` in `web/src/lib/integrations/connect.ts`, and a branch in
+  `web/src/sections/plugins/IntegrationConnectionRow.tsx:connect`. The Craft
+  connect card (`web/src/app/craft/components/setup-requests/SetupCard.tsx`)
+  signs in with the integration id of the member list (`GET /integrations`).
 - `investigate-missing-default-chat-tool` **Investigate "a plugin is on, but its
   tool is missing in Default Chat".** Check, in order: the tool has a
   `Persona__Tool` row on the default assistant
@@ -263,7 +289,6 @@ only the configuration of a chat that does not exist yet.
 - Backend: `backend/tests/external_dependency_unit/integrations/test_integrations_api.py`,
   `backend/tests/external_dependency_unit/integrations/test_plugin_settings_api.py`
   and `backend/tests/integration/tests/integrations/test_integrations_api.py`.
-- Playwright: `web/tests/e2e/mcp/`, which covers Default Chat.
-- By hand, enable a server for Default Chat from the plugin page and confirm
-  that Admin > Chat Preferences shows its tools selected. Then turn it off as a
-  member and confirm that a custom agent with the server still uses it.
+- Playwright: `web/tests/e2e/mcp/`: the default agent, connecting from a
+  plugin page and from the chat prompt (API key and OAuth), plugin access, and
+  Always allow (`web/tests/e2e/mcp/mcp_tool_approval.spec.ts`).

@@ -1,5 +1,5 @@
-"""Routes of a plugin that holds only integrations: the user's on/off
-switch, the shares and publishing of a private plugin, and the install
+"""Routes of a plugin that holds only integrations: the plugins an agent
+runs for the user, the user's on/off switch, the shares and publishing of a private plugin, and the install
 setting of an Organization library plugin."""
 
 from uuid import UUID
@@ -12,6 +12,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.integrations.plugin_settings import (
+    agent_plugin_ids,
     member_plugin_state,
     plugin_access_view,
     publish_plugin_for_user__no_commit,
@@ -32,6 +33,15 @@ router = APIRouter(prefix="/plugins")
 admin_router = APIRouter(prefix="/admin/plugins")
 
 _member = require_permission(Permission.BASIC_ACCESS)
+
+
+@router.get("/agents/{persona_id}")
+def get_agent_plugin_ids(
+    persona_id: int,
+    user: User = Depends(_member),
+    db_session: Session = Depends(get_session),
+) -> list[UUID]:
+    return agent_plugin_ids(user, persona_id, db_session)
 
 
 @router.put("/{plugin_id}/enabled")

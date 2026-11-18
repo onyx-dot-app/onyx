@@ -8,6 +8,8 @@ export type ConnectionState =
   | "needs_reconnect"
   | "not_set_up";
 export type PolicyValue = "allow" | "ask" | "blocked";
+
+export type LinkValue = "inherit" | PolicyValue;
 export type InstallationPolicy =
   | "REQUIRED"
   | "DEFAULT"
@@ -35,6 +37,40 @@ export interface IntegrationPluginRef {
   installation_policy: InstallationPolicy | null;
 }
 
+export interface MemberPluginRef extends IntegrationPluginRef {
+  enabled: boolean;
+}
+
+/** `PUT /plugins/{id}/enabled`: the user's state of the plugin. */
+export interface MemberPluginState {
+  plugin_id: string;
+  enabled: boolean;
+  installation_policy: InstallationPolicy;
+}
+
+export type PluginSharePermission = "EDITOR" | "VIEWER";
+
+/** The shares of a private plugin that holds only integrations. */
+export interface PluginAccessView {
+  plugin_id: string;
+  user_shares: {
+    user_id: string;
+    email: string;
+    permission: PluginSharePermission;
+  }[];
+  group_shares: {
+    group_id: number;
+    group_name: string;
+    permission: PluginSharePermission;
+  }[];
+}
+
+/** The new set of shares; a share left out is removed. */
+export interface PluginAccessUpdate {
+  user_shares: { user_id: string; permission: PluginSharePermission }[];
+  group_shares: { group_id: number; permission: PluginSharePermission }[];
+}
+
 export interface IntegrationAction {
   key: string;
   display_name: string;
@@ -45,6 +81,23 @@ export interface IntegrationAction {
   effective_admin_policy: PolicyValue;
   /** Craft asks before each call of this action, so Allow has no effect. */
   always_asks: boolean;
+}
+
+/** One integration of a plugin in `GET /integrations/agent-catalog`. */
+export interface AgentCatalogIntegration {
+  id: number;
+  name: string;
+  kind: IntegrationKind;
+  shape: IntegrationShape;
+  users_can_save_always_allow: boolean;
+  actions: IntegrationAction[];
+}
+
+export interface AgentPluginOption {
+  plugin_id: string;
+  plugin_name: string;
+  description: string | null;
+  integrations: AgentCatalogIntegration[];
 }
 
 export interface AdminIntegration {
@@ -146,6 +199,42 @@ export interface IntegrationActionsResponse {
 export interface IntegrationActionsUpdate {
   default_policy: PolicyValue | null;
   actions: Record<string, PolicyValue | null>;
+}
+
+export interface MemberIntegration {
+  id: number;
+  kind: IntegrationKind;
+  shape: IntegrationShape;
+  name: string;
+  description: string | null;
+  preset_id: string | null;
+  auth_mode: AuthMode;
+  auth_method: AuthMethod | null;
+  credential_fields: CredentialField[];
+  status: IntegrationStatus;
+  plugins: MemberPluginRef[];
+  users_can_save_always_allow: boolean;
+  /** The user's saved credential values, masked. */
+  credential_values: Record<string, string>;
+  external_app_id: number | null;
+  service_urls: string[];
+  mcp_server_id: number | null;
+  server_url: string | null;
+}
+
+export interface MemberAction extends IntegrationAction {
+  /** The user's saved "Always allow". */
+  user_policy: "allow" | null;
+}
+
+export interface MemberActionPolicies {
+  users_can_save_always_allow: boolean;
+  actions: MemberAction[];
+}
+
+export interface IntegrationOAuthCallbackResult {
+  integration_id: number;
+  return_path: string | null;
 }
 
 export interface AdminPluginEntry {

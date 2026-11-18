@@ -177,6 +177,25 @@ test("refreshes the actions of an MCP server", async () => {
   ).toBe(true);
 });
 
+test("blocks Refresh while the action settings have unsaved changes", async () => {
+  mockFetch({ [URL_ACTIONS]: { default_policy: null, actions } });
+  const u = user();
+  render(
+    <IntegrationActionsTab
+      integration={makeDetail({ auth_mode: "none", auth_method: null })}
+      onOpenConfiguration={jest.fn()}
+    />
+  );
+  const refresh = await screen.findByRole("button", { name: copy.refresh });
+  expect(refresh).toBeEnabled();
+  await u.click(
+    within(rowOf("List issues")).getByRole("button", {
+      name: labels.deny.label,
+    })
+  );
+  expect(refresh).toBeDisabled();
+});
+
 test("asks to connect an MCP server before its actions load", async () => {
   mockFetch({ [URL_ACTIONS]: { default_policy: null, actions: [] } });
   const onOpenConfiguration = jest.fn();
@@ -240,6 +259,9 @@ test("tells the admin to connect an own account for an individual MCP server", a
   expect(
     screen.queryByRole("button", { name: copy.connectFirst.open })
   ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: copy.connectFirst.openPlugins })
+  ).toBeInTheDocument();
 });
 
 test("locks Allow for an action that Craft always asks for, with the reason", async () => {

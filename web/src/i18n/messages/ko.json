@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "커넥터 추가"
       },
-      "authenticate": {
-        "label": "인증"
-      },
       "codingAgentIncognito": {
         "tooltip": "시크릿 모드에서는 코딩 에이전트를 사용할 수 없습니다"
       },
@@ -221,53 +218,6 @@
         "title": "*{name}* 연결 해제"
       }
     },
-    "mcpOauthCallback": {
-      "autoRedirect": {
-        "text": "자동으로 돌아갑니다…"
-      },
-      "backToChatButton": {
-        "label": "채팅으로 돌아가기"
-      },
-      "cancelled": {
-        "description": "인증이 취소되거나 거부되어 연결이 이루어지지 않았습니다. 다시 시도하려면 MCP 서버의 인증 설정에서 연결을 다시 시작하세요.",
-        "title": "인증이 취소되었습니다"
-      },
-      "continueButton": {
-        "label": "계속"
-      },
-      "genericError": {
-        "fallbackDetail": "인증을 완료하지 못했습니다",
-        "title": "문제가 발생했습니다"
-      },
-      "invalidLink": {
-        "description": "이 링크에 필요한 인증 매개변수가 없습니다. MCP 서버의 인증 설정에서 연결을 다시 시작하세요.",
-        "title": "잘못된 인증 링크"
-      },
-      "processing": {
-        "description": "MCP 서버와의 연결을 마무리하는 중입니다. 잠시 걸릴 수 있습니다…",
-        "title": "인증을 완료하는 중"
-      },
-      "serverNotFound": {
-        "description": "이 인증이 속한 MCP 서버가 더 이상 존재하지 않거나 구성되어 있지 않습니다. 서버를 다시 만들거나 다시 구성한 후 다시 연결하세요.",
-        "title": "MCP 서버를 찾을 수 없습니다"
-      },
-      "sessionExpired": {
-        "description": "이 인증 링크는 유효하지 않거나 만료되었거나 이미 사용되었습니다. MCP 서버의 인증 설정에서 연결을 다시 시작하세요.",
-        "title": "인증 세션이 만료되었습니다"
-      },
-      "success": {
-        "description": "인증이 성공적으로 완료되었습니다. 이제 채팅에서 이 서버의 도구를 사용할 수 있습니다.",
-        "title": "{serverName}에 연결됨"
-      },
-      "timedOut": {
-        "description": "MCP 서버가 제시간에 인증을 확인하지 않았습니다. 다시 연결해 보세요. 문제가 계속되면 서버의 OAuth 구성을 확인하세요.",
-        "title": "인증 시간이 초과되었습니다"
-      },
-      "tokenExchangeFailed": {
-        "description": "제공자가 인증을 승인했지만 유효한 액세스 토큰을 얻을 수 없었습니다. 서버의 OAuth 클라이언트 자격 증명과 엔드포인트를 확인한 후 다시 연결해 보세요.",
-        "title": "토큰 교환에 실패했습니다"
-      }
-    },
     "policyToggle": {
       "always": {
         "label": "허용"
@@ -290,23 +240,6 @@
     "toolItem": {
       "unavailable": {
         "label": "도구를 사용할 수 없음"
-      }
-    },
-    "toolsList": {
-      "disableAllButton": {
-        "tooltip": "모든 도구 비활성화"
-      },
-      "empty": {
-        "message": "사용할 수 있는 도구가 없습니다",
-        "searchMessage": "도구를 찾을 수 없습니다"
-      },
-      "showAllButton": {
-        "ariaLabel": "모든 도구 표시",
-        "tooltip": "모든 도구 표시"
-      },
-      "showEnabledButton": {
-        "ariaLabel": "활성화된 도구만 표시",
-        "tooltip": "활성화된 항목만 표시"
       }
     },
     "toolNames": {
@@ -426,283 +359,6 @@
     "placeholders": {
       "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
-    "memberPlugins": {
-      "chat": {
-        "trigger": {
-          "label": "플러그인"
-        },
-        "search": {
-          "placeholder": "플러그인 검색"
-        },
-        "empty": {
-          "text": "이 채팅에서 사용할 수 있는 플러그인이 없습니다.",
-          "searchText": "검색어와 일치하는 플러그인이 없습니다."
-        },
-        "loading": {
-          "label": "플러그인 로딩 중"
-        },
-        "loadError": {
-          "text": "일부 플러그인을 불러오지 못했습니다. 다시 시도하세요."
-        },
-        "retry": {
-          "label": "다시 시도"
-        },
-        "browse": {
-          "label": "플러그인 둘러보기"
-        },
-        "toggle": {
-          "ariaLabel": "이 채팅에서 {name} 사용"
-        },
-        "connect": {
-          "label": "연결"
-        },
-        "connection": {
-          "connected": "연결됨",
-          "workspace": "워크스페이스 연결",
-          "session": "세션 연결",
-          "none": "연결 필요 없음",
-          "oauth": "계정 연결",
-          "credentials": "인증 정보 추가",
-          "checking": "연결 확인 중",
-          "unconfigured": "워크스페이스 설정 필요",
-          "unavailable": "연결을 사용할 수 없음"
-        },
-        "intent": {
-          "unavailable": "이 채팅의 에이전트에서 사용할 수 없는 플러그인입니다.",
-          "invalid": "유효하지 않은 플러그인 링크입니다."
-        }
-      },
-      "oauthComplete": {
-        "success": {
-          "title": "플러그인이 연결되었습니다",
-          "description": "이전 탭으로 돌아가서 계속하세요."
-        },
-        "error": {
-          "title": "연결을 확인하지 못했습니다",
-          "description": "이전 탭으로 돌아가서 다시 연결해 보세요."
-        },
-        "return": {
-          "label": "플러그인으로 돌아가기"
-        },
-        "close": {
-          "label": "탭 닫기"
-        }
-      },
-      "title": "플러그인",
-      "description": "계정을 연결하여 워크스페이스 플러그인을 사용하세요.",
-      "manageWorkspace": "워크스페이스 플러그인 관리",
-      "search": "플러그인 검색",
-      "kind": {
-        "mcp": "MCP",
-        "openapi": "OpenAPI",
-        "external-app": "Craft용 앱"
-      },
-      "row": {
-        "view": "{name} 보기",
-        "connect": "{name} 연결"
-      },
-      "status": {
-        "connected": "연결됨",
-        "workspace": "워크스페이스 연결",
-        "session": "연결된 계정 사용",
-        "none": "사용 준비됨",
-        "oauth": "계정 연결",
-        "credentials": "인증 정보 추가",
-        "unconfigured": "워크스페이스 설정 필요",
-        "checking": "연결 확인 중",
-        "unavailable": "연결을 사용할 수 없음"
-      },
-      "availability": {
-        "label": "{name}의 연결 상태",
-        "chat": "기본 채팅",
-        "craft": "Craft",
-        "on": "켜짐",
-        "off": "꺼짐",
-        "unknown": "알 수 없음",
-        "disabledByAdmin": "관리자가 비활성화함",
-        "disabledByYou": "내가 비활성화함",
-        "agents": "사용자 지정 에이전트",
-        "notAvailable": "사용할 수 없음"
-      },
-      "state": {
-        "loading": "플러그인 로딩 중",
-        "serversError": "MCP 플러그인을 불러오지 못했습니다.",
-        "toolsError": "플러그인 도구를 불러오지 못했습니다.",
-        "oauthError": "계정 연결을 불러오지 못했습니다.",
-        "retry": "다시 시도",
-        "noResultsTitle": "일치하는 플러그인이 없습니다",
-        "noResultsDescription": "다른 이름이나 설명으로 검색하세요.",
-        "clearSearch": "모든 플러그인 보기",
-        "appsError": "Craft 앱을 불러오지 못했습니다.",
-        "appsLoading": "Craft 앱 불러오는 중",
-        "emptyTitle": "플러그인을 찾을 수 없습니다",
-        "emptyDescription": "다른 연결 필터를 사용하거나 워크스페이스 관리자에게 플러그인 추가를 요청하세요."
-      },
-      "detail": {
-        "noAuthentication": "인증이 필요하지 않음",
-        "connection": "연결",
-        "tools": "도구",
-        "toolCount": "{count, plural, other {작업 #개}}",
-        "noTools": "이 플러그인에 표시할 수 있는 도구가 저장되어 있지 않습니다.",
-        "connect": "계정 연결",
-        "useInChat": "채팅에서 사용",
-        "disconnect": "연결 해제",
-        "disconnectTitle": "{name}의 연결을 해제할까요?",
-        "disconnectDescription": "계정 연결이 삭제됩니다. 워크스페이스 사용 가능 여부는 유지됩니다.",
-        "oauthDisconnectWarning": "동일한 OAuth 설정을 사용하는 모든 플러그인과 앱이 이 계정 연결을 공유합니다. 연결을 해제하면 모든 해당 플러그인과 앱에서 연결이 삭제됩니다.",
-        "disconnecting": "연결 해제 중...",
-        "disconnectFailed": "계정 연결을 해제하지 못했습니다. 다시 시도하세요.",
-        "cancel": "취소",
-        "close": "완료",
-        "openInCraft": "Craft에서 열기"
-      },
-      "connection": {
-        "title": "{name} 연결",
-        "description": "워크스페이스에서 이 플러그인을 설정했습니다. 계정을 연결하여 사용하세요.",
-        "credentialsDescription": "이 플러그인의 인증 정보를 입력하세요. 계정 연결은 다른 멤버와 별도로 관리됩니다.",
-        "oauthDescription": "계속 진행하여 계정으로 로그인하세요. 제공업체에서 요청된 접근 권한을 표시합니다.",
-        "continue": "{name}(으)로 계속",
-        "connect": "연결",
-        "connecting": "연결 중...",
-        "cancel": "취소",
-        "done": "완료",
-        "workspaceDescription": "워크스페이스에서 이 연결을 제공합니다. 계정을 연결할 필요가 없습니다.",
-        "sessionDescription": "이 플러그인은 현재 로그인을 사용합니다.",
-        "noneDescription": "이 플러그인은 계정 연결이 필요하지 않습니다.",
-        "connectedDescription": "계정이 연결되었습니다.",
-        "unconfiguredDescription": "연결하려면 워크스페이스 관리자가 이 플러그인의 설정을 완료해야 합니다.",
-        "checkingDescription": "연결 상태를 불러오는 중입니다. 완료된 후 다시 시도하세요.",
-        "unavailableDescription": "연결 상태를 불러오지 못했습니다. 플러그인 페이지에서 다시 시도하세요.",
-        "errors": {
-          "popup_blocked": "브라우저에서 로그인 창을 차단했습니다. 팝업을 허용하고 다시 시도하세요.",
-          "cancelled": "로그인이 취소되었습니다. 다시 시도할 수 있습니다.",
-          "timed_out": "로그인 시간이 초과되었습니다. 다시 시도하세요.",
-          "credentials_required": "필요한 인증 정보를 모두 입력하세요.",
-          "unconfigured": "워크스페이스 관리자가 이 플러그인의 설정을 완료해야 합니다.",
-          "not_connected": "계정 연결을 확인하지 못했습니다. 다시 시도하세요.",
-          "request_failed": "연결하지 못했습니다. 다시 시도하세요."
-        }
-      },
-      "filters": {
-        "label": "연결 상태",
-        "all": "전체",
-        "connected": "연결됨",
-        "needsSignIn": "로그인 필요",
-        "showAll": "모든 플러그인 보기"
-      },
-      "defaults": {
-        "chat": "기본 Chat에서 활성화",
-        "craft": "Craft에서 활성화",
-        "chatDescription": "사용자 지정 에이전트를 사용하지 않는 내 채팅에서 이 플러그인을 사용할 수 있게 합니다.",
-        "craftDescription": "내 Craft 세션과 예약된 작업에서 이 플러그인을 사용할 수 있게 합니다. 조직의 도구 권한은 계속 적용됩니다.",
-        "unavailable": "관리자가 {surface}에서 이 플러그인을 비활성화했습니다.",
-        "saveFailed": "플러그인 기본 설정을 저장하지 못했습니다. 다시 시도하세요.",
-        "chatUnavailable": "관리자가 {surface}에서 이 플러그인을 비활성화했습니다. 이 플러그인이 설정된 사용자 지정 에이전트는 계속 사용할 수 있습니다."
-      },
-      "openapi": {
-        "chatOnly": "Chat 전용",
-        "chatOnlyDescription": "이 플러그인은 Chat에서 사용할 수 있으며 Craft에서는 사용할 수 없습니다."
-      },
-      "externalApp": {
-        "description": "Craft에서 계정을 사용하세요.",
-        "craftOnly": "Craft 전용",
-        "craftOnlyDescription": "이 앱은 Craft에서 사용할 수 있습니다. 메인 채팅에서는 지원하지 않습니다.",
-        "craftDisabledDescription": "이 앱은 Craft에서 비활성화되어 있습니다. 메인 채팅에서는 지원되지 않습니다."
-      }
-    },
-    "plugins": {
-      "availability": {
-        "mainChat": "기본 Chat",
-        "craft": "Craft",
-        "on": "켜짐",
-        "off": "꺼짐",
-        "unknown": "알 수 없음",
-        "enabled": "활성화됨",
-        "disabled": "비활성화됨",
-        "chatEnabled": "Chat 켜짐",
-        "chatDisabled": "Chat 꺼짐",
-        "chatUnknown": "Chat 상태 알 수 없음",
-        "craftEnabled": "Craft 켜짐",
-        "craftDisabled": "Craft 꺼짐"
-      },
-      "controls": {
-        "disconnect": "워크스페이스에서 활성화 또는 비활성화",
-        "disable": "워크스페이스에서 비활성화",
-        "manageAvailability": "워크스페이스 가용성 관리",
-        "more": "추가 작업",
-        "disableChat": "기본 채팅에서 비활성화",
-        "disableCraft": "Craft에서 비활성화"
-      },
-      "craftApp": {
-        "tabs": {
-          "configuration": "설정",
-          "permissions": "권한"
-        }
-      },
-      "disableConfirmation": {
-        "workspaceTitle": "워크스페이스에서 {name}을(를) 비활성화할까요?",
-        "workspaceDescription": "사용자 지정 에이전트를 포함하여 워크스페이스의 모든 사용자에게 {name}이(가) 비활성화됩니다. 저장된 설정과 자격 증명은 유지됩니다. 다시 활성화할 수 있습니다.",
-        "scope": "조직의 모든 사용자",
-        "chatTitle": "메인 채팅에서 {name}을(를) 비활성화할까요?",
-        "chatDescription": "조직의 모든 사용자의 기본 채팅에서 {name}이(가) 제거됩니다. 사용자 지정 에이전트에는 영향을 주지 않습니다. 다시 활성화할 수 있습니다.",
-        "craftTitle": "Craft에서 {name}을(를) 비활성화할까요?",
-        "craftDescription": "조직의 모든 사용자가 Craft에서 {name}을(를) 사용할 수 없게 됩니다. 메인 채팅에는 영향을 주지 않습니다. 다시 활성화할 수 있습니다."
-      },
-      "openapi": {
-        "schemaPreview": {
-          "detected": "{count, plural, one {도구 #개 감지됨} other {도구 #개 감지됨}}",
-          "viewTools": "도구 보기",
-          "saveToUpdate": "변경 사항을 저장하여 도구를 업데이트하세요."
-        },
-        "schemaTitle": "OpenAPI 스키마"
-      },
-      "title": "플러그인",
-      "description": "도구와 앱을 워크스페이스에 연결하세요.",
-      "search": {
-        "placeholder": "플러그인 검색"
-      },
-      "add": {
-        "label": "추가",
-        "openapi": "OpenAPI 플러그인 추가"
-      },
-      "catalog": {
-        "linear": {
-          "summary": "이슈, 프로젝트, 팀을 관리합니다",
-          "description": "이슈, 프로젝트, 팀을 관리합니다."
-        },
-        "notion": {
-          "summary": "Notion 워크스페이스를 검색하고 업데이트합니다",
-          "description": "Notion 워크스페이스를 검색하고 업데이트합니다."
-        },
-        "sentry": {
-          "summary": "오류와 성능 문제를 조사합니다",
-          "description": "오류와 성능 문제를 조사합니다."
-        },
-        "atlassian": {
-          "summary": "Jira와 Confluence를 사용합니다",
-          "description": "Jira와 Confluence를 사용합니다."
-        },
-        "add": {
-          "label": "{name} 추가"
-        }
-      },
-      "filters": {
-        "label": "플러그인 유형"
-      },
-      "state": {
-        "retry": {
-          "label": "다시 시도"
-        },
-        "loading": "플러그인 불러오는 중",
-        "empty": {
-          "title": "설치된 플러그인 없음",
-          "description": "워크스페이스에 플러그인을 추가하세요.",
-          "explore": {
-            "label": "플러그인 둘러보기"
-          }
-        }
-      }
-    },
     "mcpSetup": {
       "contactingServer": "서버에 연결 중",
       "detectingAuthentication": "인증 방식 감지 중",
@@ -719,11 +375,8 @@
       "continue": "계속",
       "back": "뒤로"
     },
-    "mcpTools": {
-      "enabledTab": "사용 가능한 도구",
-      "policiesTab": "승인 설정",
-      "search": "도구 검색",
-      "enabledCount": "활성화된 도구: {total}개 중 {enabled}개"
+    "policyEditor": {
+      "toolCount": "{count, plural, other {작업 #개}}"
     }
   },
   "admin": {
@@ -10975,7 +10628,6 @@
           "organization": {
             "title": "조직 연결",
             "description": "각 사용자는 이 계정으로 작업합니다.",
-            "state": "{state, select, connected {연결됨} not_connected {연결 안 됨} needs_reconnect {재연결 필요} not_set_up {설정되지 않음} other {알 수 없음}}",
             "connect": "연결",
             "disconnect": "연결 해제",
             "connected": "조직 계정을 연결했습니다.",
@@ -11016,7 +10668,8 @@
             "title": "먼저 서버를 연결하세요",
             "description": "Onyx는 MCP 서버가 연결된 후 해당 서버의 액션을 불러옵니다.",
             "open": "구성 열기",
-            "individualDescription": "각 사용자가 이 서버에 로그인합니다. 플러그인 페이지에서 본인 계정을 연결한 다음 새로 고침을 클릭하세요."
+            "individualDescription": "각 사용자가 이 서버에 로그인합니다. 플러그인 페이지에서 본인 계정을 연결한 다음 새로 고침을 클릭하세요.",
+            "openPlugins": "플러그인 열기"
           }
         }
       }
@@ -11140,16 +10793,54 @@
           "label": "저장"
         }
       },
-      "mcp": {
-        "noAccess": {
-          "tooltip": "더 이상 이 MCP 서버에 액세스할 수 없습니다. 기존 도구는 유지됩니다."
-        },
-        "searchTools": {
-          "placeholder": "도구 검색..."
-        }
-      },
       "page": {
         "ariaLabel": "에이전트 편집기 페이지"
+      },
+      "plugins": {
+        "askHint": "확인 없이 실행하려면 관리자가 통합에서 허용으로 설정하거나, 각 사용자가 항상 허용을 선택합니다.",
+        "askHintAdminOnly": "확인 없이 실행하려면 관리자가 통합에서 허용으로 설정합니다.",
+        "askHintAgent": "확인 없이 실행하려면 에이전트 설정을 변경하거나, 각 사용자가 항상 허용을 선택합니다.",
+        "askHintAgentOnly": "확인 없이 실행하려면 에이전트 설정을 변경합니다.",
+        "choice": {
+          "inherit": "통합 설정 사용",
+          "agentDefault": "에이전트 기본값 사용"
+        },
+        "default": {
+          "description": "자체 설정이 없는 각 작업에 적용되며, 통합이 나중에 추가하는 작업에도 적용됩니다.",
+          "title": "기타 작업의 기본값"
+        },
+        "description": "에이전트에 플러그인을 제공합니다. 다른 설정을 고르지 않으면 각 작업은 통합 설정을 사용합니다.",
+        "effective": "{policy, select, allow {허용} ask {확인} other {차단}} ({source, select, integration {통합 설정} agentDefault {에이전트 기본값} other {에이전트 설정}})",
+        "empty": "사용할 수 있는 통합 플러그인이 없습니다.",
+        "loadFailed": "플러그인을 불러오지 못했습니다.",
+        "lock": {
+          "adminBlocked": "허용을 사용할 수 없습니다: 관리자가 이 작업을 차단했습니다.",
+          "alwaysAsks": "허용을 사용할 수 없습니다: Craft는 이러한 요청마다 승인을 요청합니다.",
+          "adminFinal": "허용을 사용할 수 없습니다: 이 통합의 관리자 설정은 확정되어 있습니다.",
+          "defaultFinal": "허용을 사용할 수 없습니다: 이 통합들의 관리자 설정은 확정되어 있습니다."
+        },
+        "noActions": "이 통합에는 아직 작업이 없습니다.",
+        "notVisible": "이 플러그인의 작업을 볼 수 없습니다. 설정은 그대로 유지됩니다.",
+        "title": "플러그인",
+        "add": {
+          "placeholder": "플러그인 추가"
+        },
+        "remove": {
+          "ariaLabel": "{plugin} 제거"
+        },
+        "retry": {
+          "label": "다시 시도"
+        },
+        "actionSetting": {
+          "label": "{action} 설정"
+        },
+        "defaultSetting": {
+          "label": "{plugin}의 기본 설정"
+        },
+        "openIntegration": {
+          "label": "{integration} 작업 열기"
+        },
+        "stricterPlugin": "이 에이전트의 {plugin} 플러그인이 이 작업에 더 엄격한 설정을 적용합니다."
       },
       "prompts": {
         "instructions": {
@@ -11406,14 +11097,6 @@
         "knowledgeCutoff": {
           "description": "이 날짜 이전에 마지막으로 업데이트된 문서는 무시됩니다.",
           "title": "지식 기준 날짜"
-        },
-        "mcpCard": {
-          "expand": {
-            "label": "펼치기"
-          },
-          "fold": {
-            "label": "접기"
-          }
         },
         "moreInfo": {
           "title": "추가 정보"
@@ -11985,40 +11668,6 @@
     }
   },
   "chat": {
-    "mcpConnections": {
-      "trigger": {
-        "label": "도구에 인증 정보가 필요합니다 ({count})",
-        "tooltip": "일부 도구는 계정을 연결하거나 인증 정보를 추가해야 사용할 수 있습니다."
-      },
-      "modal": {
-        "title": "도구 연결",
-        "description": "Onyx에서 도구를 사용하려면 인증 정보를 추가하세요.",
-        "hint": "도구를 연결하지 않아도 채팅을 계속할 수 있지만, 에이전트의 기능이 제한될 수 있습니다."
-      },
-      "connect": {
-        "label": "연결",
-        "accessibleLabel": "{server} 연결"
-      },
-      "reconnect": {
-        "label": "다시 연결",
-        "accessibleLabel": "{server} 다시 연결"
-      },
-      "connecting": {
-        "label": "연결 중…"
-      },
-      "connected": {
-        "label": "연결됨"
-      },
-      "required": {
-        "label": "인증 정보 필요"
-      },
-      "done": {
-        "label": "완료"
-      },
-      "error": {
-        "description": "연결할 수 없습니다. 다시 시도하세요."
-      }
-    },
     "app": {
       "createSessionFailed": {
         "toast": "새 채팅을 시작할 수 없습니다. 다시 시도하세요."
@@ -12452,91 +12101,6 @@
       },
       "pendingUserInput": {
         "toast": "먼저 대기 중인 승인 요청이나 질문을 처리하세요."
-      }
-    },
-    "mcpApiKey": {
-      "apiKeyField": {
-        "label": "API 키",
-        "placeholder": "API 키를 입력하세요"
-      },
-      "apiKeyVisibilityButton": {
-        "hideAriaLabel": "API 키 숨기기",
-        "showAriaLabel": "API 키 표시"
-      },
-      "cancelButton": {
-        "label": "취소"
-      },
-      "credentialField": {
-        "placeholder": "{field}을(를) 입력하세요"
-      },
-      "credentialVisibilityButton": {
-        "hideAriaLabel": "자격 증명 숨기기",
-        "showAriaLabel": "자격 증명 표시"
-      },
-      "header": {
-        "enterApiKey": {
-          "title": "API 키 입력"
-        },
-        "enterCredentials": {
-          "title": "자격 증명 입력"
-        },
-        "manageApiKey": {
-          "title": "API 키 관리"
-        },
-        "manageCredentials": {
-          "title": "자격 증명 관리"
-        }
-      },
-      "intro": {
-        "enterApiKey": {
-          "text": "인증을 사용하려면 {server}의 API 키를 입력하세요."
-        },
-        "enterCredentials": {
-          "text": "인증을 사용하려면 {server}의 자격 증명을 입력하세요."
-        },
-        "updateApiKey": {
-          "text": "{server}의 API 키를 업데이트하세요."
-        },
-        "updateCredentials": {
-          "text": "{server}의 자격 증명을 업데이트하세요."
-        }
-      },
-      "saveApiKeyError": {
-        "message": "API 키를 저장하지 못했습니다"
-      },
-      "saveCredentialsError": {
-        "message": "자격 증명을 저장하지 못했습니다"
-      },
-      "submitButton": {
-        "saveApiKey": {
-          "label": "API 키 저장"
-        },
-        "saveCredentials": {
-          "label": "자격 증명 저장"
-        },
-        "saving": {
-          "label": "저장 중..."
-        },
-        "updateApiKey": {
-          "label": "API 키 업데이트"
-        },
-        "updateCredentials": {
-          "label": "자격 증명 업데이트"
-        }
-      },
-      "validationNote": {
-        "apiKey": {
-          "text": "API 키는 서버에서 검증한 후 안전하게 저장됩니다."
-        },
-        "authenticated": {
-          "text": "변경 사항은 저장하기 전에 서버에서 검증됩니다."
-        },
-        "credentials": {
-          "text": "자격 증명은 서버에서 검증한 후 안전하게 저장됩니다."
-        }
-      },
-      "backButton": {
-        "label": "도구로 돌아가기"
       }
     },
     "messages": {
@@ -14397,48 +13961,7 @@
         "ariaLabel": "에이전트 전환"
       }
     },
-    "apps": {
-      "oauthCallback": {
-        "backButton": "내 앱으로 돌아가기",
-        "description": "OAuth 핸드셰이크를 마치는 중…",
-        "errors": {
-          "cancelled": "OAuth가 취소되었거나 거부되었습니다: {reason}",
-          "failed": "연결에 실패했습니다.",
-          "missingParams": "콜백 URL에 code 또는 state가 없습니다."
-        },
-        "exchanging": {
-          "label": "승인 코드를 교환하는 중…"
-        },
-        "success": {
-          "label": "연결되었습니다. 앱으로 돌아가는 중…"
-        },
-        "title": "앱 연결 중"
-      },
-      "policyEditor": {
-        "loading": {
-          "label": "불러오는 중…"
-        },
-        "permissions": {
-          "defaultOption": "기본값",
-          "description": "에이전트가 할 수 있는 작업을 선택하세요. \"확인 요청\"은 각 작업 전에 승인을 요청하고, \"허용\"은 확인 없이 실행합니다.",
-          "title": "권한"
-        },
-        "advanced": {
-          "description": "각 작업에 대해 개별적으로 정책을 설정합니다.",
-          "title": "고급"
-        }
-      },
-      "userCredentials": {
-        "cancelButton": "취소",
-        "connectButton": "연결",
-        "connectingButton": "연결 중…",
-        "description": "계정에서 이 앱을 승인하려면 자격 증명을 입력하세요.",
-        "errors": {
-          "connectFailedTitle": "연결할 수 없습니다"
-        },
-        "title": "{name} 연결"
-      }
-    },
+    "apps": {},
     "artifactsTab": {
       "download": {
         "button": "다운로드"
@@ -14960,7 +14483,6 @@
       "error": {
         "generic": "문제가 발생했습니다. 다시 시도해 주세요.",
         "notConfigurable": "이 앱은 여기에서 설정할 수 없습니다.",
-        "popupBlocked": "설정 창을 열 수 없습니다. 팝업을 허용한 후 다시 시도해 주세요.",
         "startFailed": "설정을 시작하지 못했습니다"
       },
       "loading": {
@@ -15555,17 +15077,13 @@
       "title": "승인 설정",
       "personalDescription": "이 설정은 Craft 대화, 새 작업, 채팅의 MCP 도구 호출에서 동작을 자동으로 실행할지 승인을 요청할지 결정하며, 기존 작업은 자체 설정을 유지합니다.",
       "taskDescription": "이 작업에서 사용할 플러그인과 자동으로 실행할 동작을 선택하세요. 변경 사항은 이 작업에만 적용됩니다.",
-      "workspace_disabled": "워크스페이스에서 비활성화됨",
-      "workspace_managed": "워크스페이스에서 관리",
       "userManagement": "사용자가 승인 설정을 관리하도록 허용",
       "userManagementDescription": "사용자는 사용 가능한 작업의 승인 설정을 변경할 수 있습니다.",
       "loading": "승인 설정 로드 중…",
       "loadError": "승인 설정을 불러올 수 없습니다.",
       "retry": "다시 시도",
-      "save": "저장",
       "saving": "저장 중…",
       "cancel": "취소",
-      "saveError": "승인 설정을 저장할 수 없습니다.",
       "emptyActions": "알려진 작업이 없습니다. 알 수 없는 작업은 승인이 필요합니다.",
       "agentPermissionRequired": "작업에 승인이 필요하여 실행이 중지되었습니다. 권한을 검토한 후 다시 실행하세요.",
       "enableForTask": "이 작업에서 활성화",
@@ -15581,12 +15099,10 @@
       "searchActions": "작업 검색",
       "setPermissions": "권한 설정",
       "applyMatching": "일치하는 편집 가능한 작업 {count}개",
-      "noMatchingActions": "검색과 일치하는 작업이 없습니다.",
       "close": "닫기",
       "saveChanges": "변경 사항 저장",
       "resetDefaults": "모두 기본값으로 재설정",
       "resetAll": "모두 워크스페이스 기본값으로 재설정",
-      "workspaceDisabledTooltip": "관리자가 워크스페이스에서 이 작업을 비활성화했습니다.",
       "newTaskPluginsDescription": "이 작업에서 사용할 수 있는 플러그인을 켜세요. 변경하기 전까지 각 작업은 통합 설정을 사용합니다.",
       "emptyPlugins": "통합이 포함된 플러그인이 없습니다.",
       "needsSignIn": "{name}에 로그인해야 합니다.",
@@ -17479,5 +16995,215 @@
     "jvmMemoryTitle": "JVM 메모리",
     "vectorMemoryTitle": "벡터 메모리",
     "viewDetails": "세부 정보 보기"
+  },
+  "plugins": {
+    "member": {
+      "title": "플러그인",
+      "description": "채팅과 에이전트에서 사용할 수 있는 스킬과 통합입니다.",
+      "filters": {
+        "label": "플러그인 유형",
+        "all": {
+          "label": "전체"
+        },
+        "skills": {
+          "label": "스킬"
+        },
+        "integrations": {
+          "label": "통합"
+        }
+      },
+      "sections": {
+        "organization": "조직 라이브러리",
+        "mine": "내 업로드",
+        "shared": "나와 공유됨"
+      },
+      "row": {
+        "skillCount": "{count, plural, other {스킬 #개}}",
+        "integrationCount": "{count, plural, other {통합 #개}}",
+        "needsConnection": "{count, plural, other {#개 로그인 필요}}",
+        "open": {
+          "label": "{name} 열기"
+        }
+      },
+      "state": {
+        "loading": "플러그인 불러오는 중",
+        "loadFailed": "일부 플러그인을 불러올 수 없습니다.",
+        "emptyTitle": "아직 플러그인이 없습니다",
+        "emptyDescription": "관리자에게 플러그인 추가를 요청하세요.",
+        "noResultsTitle": "일치하는 플러그인 없음",
+        "noResultsDescription": "다른 이름이나 필터를 사용해 보세요.",
+        "retry": {
+          "label": "다시 시도"
+        },
+        "clear": {
+          "label": "모든 플러그인 보기"
+        }
+      },
+      "detail": {
+        "title": "플러그인",
+        "notFound": "이 플러그인을 사용할 수 없습니다.",
+        "loadFailed": "플러그인을 불러올 수 없습니다.",
+        "tabs": {
+          "overview": "개요",
+          "skills": "스킬",
+          "integrations": "통합",
+          "versions": "버전"
+        },
+        "overview": {
+          "noDescription": "설명이 없습니다.",
+          "location": "위치",
+          "owner": "소유자",
+          "skills": "스킬",
+          "integrations": "통합"
+        },
+        "skills": {
+          "off": "꺼짐",
+          "invalid": "유효하지 않음"
+        },
+        "back": {
+          "label": "플러그인"
+        },
+        "switch": {
+          "title": "이 플러그인 사용",
+          "description": "켜면 기본 에이전트가 이 플러그인을 사용할 수 있습니다.",
+          "label": "{name} 사용",
+          "required": "관리자가 이 플러그인을 필수로 지정했습니다. 끌 수 없습니다.",
+          "notAvailable": "관리자가 이 플러그인을 사용할 수 없게 했습니다.",
+          "unavailable": "이 플러그인을 켜거나 끌 수 없습니다.",
+          "failed": "플러그인을 변경할 수 없습니다."
+        },
+        "share": {
+          "label": "공유"
+        },
+        "publish": {
+          "label": "게시",
+          "blocked": "통합이 포함된 플러그인은 조직 전체 작업 관리 권한이 있는 사용자만 게시할 수 있습니다.",
+          "confirmTitle": "{name}을(를) 게시하시겠습니까?",
+          "confirmMessage": "플러그인이 조직 라이브러리로 이동합니다. 되돌릴 수 없습니다. 그런 다음 관리자가 설치 설정을 지정합니다.",
+          "done": "{name}이(가) 이제 조직 라이브러리에 있습니다.",
+          "failed": "플러그인을 게시할 수 없습니다."
+        }
+      },
+      "connection": {
+        "askAdmin": "관리자에게 문의하세요",
+        "connected": "{name}을(를) 연결했습니다.",
+        "disconnected": "{name} 연결을 해제했습니다.",
+        "failed": "연결할 수 없습니다. 다시 시도하세요.",
+        "disconnectFailed": "연결을 해제할 수 없습니다. 다시 시도하세요.",
+        "connect": {
+          "label": "연결",
+          "ariaLabel": "{name} 연결"
+        },
+        "reconnect": {
+          "label": "다시 연결",
+          "ariaLabel": "{name} 다시 연결"
+        },
+        "disconnect": {
+          "label": "연결 해제",
+          "ariaLabel": "{name} 연결 해제"
+        }
+      },
+      "credentials": {
+        "title": "{name} 연결",
+        "description": "자격 증명을 입력하세요. 본인만 사용합니다.",
+        "required": "이 값을 입력하세요.",
+        "failed": "자격 증명을 저장할 수 없습니다. 다시 시도하세요.",
+        "submit": {
+          "label": "연결",
+          "pendingLabel": "연결 중…"
+        },
+        "cancel": {
+          "label": "취소"
+        }
+      },
+      "alwaysAllow": {
+        "title": "항상 허용",
+        "description": "승인을 요청하는 작업을 확인 없이 실행합니다.",
+        "loadFailed": "작업을 불러올 수 없습니다.",
+        "saveFailed": "저장할 수 없습니다. 다시 시도하세요.",
+        "alwaysAsks": "Craft는 이러한 요청마다 승인을 요청합니다.",
+        "switch": {
+          "label": "{name} 항상 허용"
+        },
+        "retry": {
+          "label": "다시 시도"
+        }
+      },
+      "oauthCallback": {
+        "processing": "계정을 연결하는 중…",
+        "successTitle": "계정이 연결되었습니다",
+        "successDescription": "Onyx가 이전 페이지로 이동합니다.",
+        "errorTitle": "연결할 수 없습니다",
+        "cancelled": "로그인이 취소되었습니다.",
+        "invalidLink": "이 로그인 링크는 유효하지 않습니다. 로그인을 다시 시작하세요.",
+        "failed": "로그인이 완료되지 않았습니다. 다시 시도하세요.",
+        "back": {
+          "label": "플러그인으로 돌아가기"
+        }
+      },
+      "search": {
+        "placeholder": "플러그인 검색"
+      },
+      "addIntegration": {
+        "label": "통합 추가"
+      },
+      "manage": {
+        "label": "플러그인 관리"
+      },
+      "share": {
+        "title": "{name} 공유",
+        "description": "사람과 그룹에 이 플러그인에 대한 액세스 권한을 부여합니다.",
+        "sharedSignIn": "{names}은(는) 하나의 계정을 사용합니다. 액세스 권한이 있는 사람은 회원님이 연결한 계정을 사용합니다.",
+        "loadFailed": "액세스 권한이 있는 사람을 불러올 수 없습니다.",
+        "empty": "회원님만 액세스할 수 있습니다.",
+        "remove": {
+          "label": "{name} 제거"
+        },
+        "cancel": {
+          "label": "취소"
+        },
+        "submit": {
+          "label": "저장",
+          "pendingLabel": "저장 중..."
+        },
+        "saved": "{name}의 액세스 권한을 저장했습니다.",
+        "failed": "액세스 권한을 저장할 수 없습니다."
+      }
+    },
+    "chat": {
+      "popover": {
+        "empty": "이 에이전트에는 통합이 있는 플러그인이 없습니다.",
+        "searchEmpty": "검색과 일치하는 플러그인이 없습니다.",
+        "loading": "플러그인 불러오는 중",
+        "loadError": "일부 플러그인을 불러올 수 없습니다. 다시 시도하세요.",
+        "trigger": {
+          "label": "플러그인"
+        },
+        "retry": {
+          "label": "다시 시도"
+        },
+        "browse": {
+          "label": "플러그인 둘러보기"
+        },
+        "toggle": {
+          "label": "이 에이전트에서 {name} 사용"
+        }
+      },
+      "connectPrompt": {
+        "tooltip": "계정을 연결하기 전까지 에이전트는 이 통합을 사용할 수 없습니다.",
+        "title": "통합 연결",
+        "description": "이 채팅에서 이 통합을 사용하려면 로그인하세요.",
+        "hint": "계속 채팅할 수 있습니다. 연결하기 전까지 에이전트는 통합을 사용하지 않습니다.",
+        "trigger": {
+          "label": "{count, plural, other {통합 #개에 로그인이 필요합니다}}"
+        },
+        "done": {
+          "label": "완료"
+        }
+      }
+    }
+  },
+  "integrations": {
+    "connectionState": "{state, select, connected {연결됨} not_connected {연결 안 됨} needs_reconnect {재연결 필요} not_set_up {설정되지 않음} other {알 수 없음}}"
   }
 }

@@ -78,8 +78,7 @@ import {
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { effectiveChatPreferredToolId } from "@/lib/plugins/chat";
-import type { MemberPlugin } from "@/lib/plugins/member";
+import { effectiveChatPreference } from "@/lib/plugins/chat";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
@@ -130,7 +129,6 @@ interface UseChatControllerProps {
   /** Owned by the surface, so the input bar and this read the same one. */
   toolConfiguration: ToolConfigurationHandle;
   activeAgent: MinimalAgent | undefined;
-  memberPlugins?: readonly MemberPlugin[];
   availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
@@ -145,7 +143,6 @@ export default function useChatController({
   toolConfiguration,
   availableAgents,
   activeAgent,
-  memberPlugins,
   existingChatSessionId,
   selectedDocuments,
   resetInputBar,
@@ -1061,13 +1058,14 @@ export default function useChatController({
           }
         }
 
-        const effectivePreferredToolId = deepResearch
+        const effectivePreference = deepResearch
           ? null
-          : effectiveChatPreferredToolId({
+          : effectiveChatPreference({
               requestedToolId: toolConfiguration.preferredToolId,
+              requestedAction: toolConfiguration.preferredAction,
               agent: activeAgent,
-              plugins: memberPlugins ?? [],
               incognito,
+              isPluginEnabled: toolConfiguration.isPluginEnabled,
             });
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
@@ -1105,10 +1103,7 @@ export default function useChatController({
           chatSessionId: currChatSessionId,
           toolOptions: {
             allowed: activeAgent ? toolConfiguration.allowed : null,
-            preferred:
-              effectivePreferredToolId === null
-                ? null
-                : { type: "capability", tool_id: effectivePreferredToolId },
+            preferred: effectivePreference,
             internal_search_filters: searchFilters,
           },
           modelProvider: isMultiModel
@@ -1583,7 +1578,6 @@ export default function useChatController({
       llmManager.persistOverrides,
       // Others that affect logic
       activeAgent,
-      memberPlugins,
       availableAgents,
       existingChatSessionId,
       selectedDocuments,

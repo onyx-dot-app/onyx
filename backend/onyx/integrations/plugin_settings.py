@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
 from onyx.db.enums import Permission, PluginInstallationPolicy
+from onyx.db.integration_policy import list_persona_plugin_snapshots
 from onyx.db.models import User
+from onyx.db.persona import get_persona_by_id
 from onyx.db.plugin import (
     PluginAccessChange,
     PluginGroupGrant,
@@ -28,6 +30,7 @@ from onyx.db.plugin_access import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.policy import agent_plugin_settings
 from onyx.server.features.integrations.models import (
     MemberPluginState,
     PluginAccessUpdate,
@@ -64,6 +67,32 @@ def member_plugin_state(
         plugin_id=plugin_id,
         enabled=state.enabled,
         installation_policy=state.installation_policy,
+    )
+
+
+def agent_plugin_ids(user: User, persona_id: int, db_session: Session) -> list[UUID]:
+    """The plugins whose integrations a chat of the agent uses for the user,
+    the list that chat tool construction reads."""
+    try:
+        get_persona_by_id(persona_id, user, db_session, is_for_edit=False)
+    except ValueError as e:
+        raise OnyxError(
+            OnyxErrorCode.PERSONA_NOT_FOUND,
+            f"Agent with ID {persona_id} does not exist",
+        ) from e
+    links = {
+        snapshot.plugin_id: snapshot.action_settings
+        for snapshot in list_persona_plugin_snapshots(persona_id, db_session)
+    }
+    return sorted(
+        agent_plugin_settings(
+            db_session,
+            user.id,
+            persona_id,
+            links,
+            published_only=user.is_anonymous,
+        ),
+        key=str,
     )
 
 

@@ -8,6 +8,8 @@ import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
 import { ContentAction, Section, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { SvgRefreshCw } from "@opal/icons";
+import { useNavigation } from "@opal/navigation";
+import { memberPluginHref } from "@/lib/plugins/directory";
 import PolicyEditor, {
   type PolicyEditorItem,
 } from "@/sections/actions/PolicyEditor";
@@ -70,6 +72,7 @@ export default function IntegrationActionsTab({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
+  const navigation = useNavigation();
   const readOnly = !integration.can_manage;
   const isMcp = integration.shape === "mcp_server";
   const dirty = data ? isDirty(draft, data) : false;
@@ -228,7 +231,7 @@ export default function IntegrationActionsTab({
             <Button
               prominence="secondary"
               icon={SvgRefreshCw}
-              disabled={busy || readOnly}
+              disabled={busy || readOnly || dirty}
               onClick={() => void refresh()}
             >
               {t("refresh")}
@@ -286,7 +289,23 @@ export default function IntegrationActionsTab({
               : t("connectFirst.description")
           }
           rightChildren={
-            individual ? undefined : (
+            individual ? (
+              <Button
+                prominence="secondary"
+                onClick={() =>
+                  navigation.go(
+                    integration.plugins[0]
+                      ? memberPluginHref(
+                          integration.plugins[0].plugin_id,
+                          "integrations"
+                        )
+                      : "/app/plugins"
+                  )
+                }
+              >
+                {t("connectFirst.openPlugins")}
+              </Button>
+            ) : (
               <Button prominence="secondary" onClick={onOpenConfiguration}>
                 {t("connectFirst.open")}
               </Button>
@@ -315,7 +334,6 @@ export default function IntegrationActionsTab({
               <Card key={group.id} padding={4}>
                 <PolicyEditor
                   title={group.title}
-                  searchable={false}
                   disabled={busy || readOnly}
                   resetLabel={t("useDefaults")}
                   onReset={() => resetGroup(group.actions)}

@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "Konnektoren hinzufügen"
       },
-      "authenticate": {
-        "label": "Authentifizieren"
-      },
       "codingAgentIncognito": {
         "tooltip": "Der Coding-Agent ist im Inkognito-Modus nicht verfügbar"
       },
@@ -221,53 +218,6 @@
         "title": "*{name}* trennen"
       }
     },
-    "mcpOauthCallback": {
-      "autoRedirect": {
-        "text": "Sie werden automatisch zurückgeleitet …"
-      },
-      "backToChatButton": {
-        "label": "Zurück zum Chat"
-      },
-      "cancelled": {
-        "description": "Die Autorisierung wurde abgebrochen oder verweigert, daher wurde keine Verbindung hergestellt. Um es erneut zu versuchen, starten Sie die Verbindung über die Authentifizierungseinstellungen des MCP-Servers neu.",
-        "title": "Autorisierung abgebrochen"
-      },
-      "continueButton": {
-        "label": "Weiter"
-      },
-      "genericError": {
-        "fallbackDetail": "Autorisierung konnte nicht abgeschlossen werden",
-        "title": "Etwas ist schiefgelaufen"
-      },
-      "invalidLink": {
-        "description": "Diesem Link fehlen die erforderlichen Autorisierungsparameter. Starten Sie die Verbindung über die Authentifizierungseinstellungen des MCP-Servers neu.",
-        "title": "Ungültiger Autorisierungslink"
-      },
-      "processing": {
-        "description": "Die Verbindung zu Ihrem MCP-Server wird hergestellt. Dies kann einen Moment dauern …",
-        "title": "Autorisierung wird abgeschlossen"
-      },
-      "serverNotFound": {
-        "description": "Der MCP-Server, zu dem diese Autorisierung gehört, existiert nicht mehr oder ist nicht mehr konfiguriert. Erstellen oder konfigurieren Sie den Server neu und stellen Sie dann erneut eine Verbindung her.",
-        "title": "MCP-Server nicht gefunden"
-      },
-      "sessionExpired": {
-        "description": "Dieser Autorisierungslink ist ungültig, abgelaufen oder wurde bereits verwendet. Starten Sie die Verbindung über die Authentifizierungseinstellungen des MCP-Servers neu.",
-        "title": "Autorisierungssitzung abgelaufen"
-      },
-      "success": {
-        "description": "Die Autorisierung wurde erfolgreich abgeschlossen. Sie können die Tools dieses Servers jetzt im Chat verwenden.",
-        "title": "Mit {serverName} verbunden"
-      },
-      "timedOut": {
-        "description": "Der MCP-Server hat die Autorisierung nicht rechtzeitig bestätigt. Versuchen Sie erneut, eine Verbindung herzustellen. Falls das Problem weiterhin auftritt, überprüfen Sie die OAuth-Konfiguration des Servers.",
-        "title": "Zeitüberschreitung bei der Autorisierung"
-      },
-      "tokenExchangeFailed": {
-        "description": "Der Anbieter hat die Autorisierung genehmigt, aber es konnte kein gültiges Zugriffstoken abgerufen werden. Überprüfen Sie die OAuth-Client-Anmeldedaten und -Endpunkte des Servers und versuchen Sie dann erneut, eine Verbindung herzustellen.",
-        "title": "Token-Austausch fehlgeschlagen"
-      }
-    },
     "policyToggle": {
       "always": {
         "label": "Erlauben"
@@ -290,23 +240,6 @@
     "toolItem": {
       "unavailable": {
         "label": "Tool nicht verfügbar"
-      }
-    },
-    "toolsList": {
-      "disableAllButton": {
-        "tooltip": "Alle Tools deaktivieren"
-      },
-      "empty": {
-        "message": "Keine Tools verfügbar",
-        "searchMessage": "Keine Tools gefunden"
-      },
-      "showAllButton": {
-        "ariaLabel": "Alle Tools anzeigen",
-        "tooltip": "Alle Tools anzeigen"
-      },
-      "showEnabledButton": {
-        "ariaLabel": "Nur aktivierte Tools anzeigen",
-        "tooltip": "Nur aktivierte anzeigen"
       }
     },
     "toolNames": {
@@ -426,283 +359,6 @@
     "placeholders": {
       "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
-    "memberPlugins": {
-      "chat": {
-        "trigger": {
-          "label": "Plugins"
-        },
-        "search": {
-          "placeholder": "Plugins suchen"
-        },
-        "empty": {
-          "text": "In diesem Chat sind keine Plugins verfügbar.",
-          "searchText": "Keine Plugins stimmen mit Ihrer Suche überein."
-        },
-        "loading": {
-          "label": "Plugins werden geladen"
-        },
-        "loadError": {
-          "text": "Einige Plugins konnten nicht geladen werden. Versuchen Sie es erneut."
-        },
-        "retry": {
-          "label": "Erneut versuchen"
-        },
-        "browse": {
-          "label": "Plugins durchsuchen"
-        },
-        "toggle": {
-          "ariaLabel": "{name} in diesem Chat verwenden"
-        },
-        "connect": {
-          "label": "Verbinden"
-        },
-        "connection": {
-          "connected": "Verbunden",
-          "workspace": "Workspace-Verbindung",
-          "session": "Sitzungsverbindung",
-          "none": "Keine Verbindung erforderlich",
-          "oauth": "Konto verbinden",
-          "credentials": "Anmeldedaten hinzufügen",
-          "checking": "Verbindung wird geprüft",
-          "unconfigured": "Workspace-Einrichtung erforderlich",
-          "unavailable": "Verbindung nicht verfügbar"
-        },
-        "intent": {
-          "unavailable": "Dieses Plugin steht dem Agenten dieses Chats nicht zur Verfügung.",
-          "invalid": "Dieser Plugin-Link ist ungültig."
-        }
-      },
-      "oauthComplete": {
-        "success": {
-          "title": "Plugin verbunden",
-          "description": "Kehren Sie zum vorherigen Tab zurück, um fortzufahren."
-        },
-        "error": {
-          "title": "Verbindung nicht bestätigt",
-          "description": "Kehren Sie zum vorherigen Tab zurück und versuchen Sie die Verbindung erneut."
-        },
-        "return": {
-          "label": "Zurück zu Plugins"
-        },
-        "close": {
-          "label": "Tab schließen"
-        }
-      },
-      "title": "Plugins",
-      "description": "Verbinden Sie Ihre Konten, um Workspace-Plugins zu verwenden.",
-      "manageWorkspace": "Workspace-Plugins verwalten",
-      "search": "Plugins suchen",
-      "kind": {
-        "mcp": "MCP",
-        "openapi": "OpenAPI",
-        "external-app": "Craft-App"
-      },
-      "row": {
-        "view": "{name} anzeigen",
-        "connect": "{name} verbinden"
-      },
-      "status": {
-        "connected": "Verbunden",
-        "workspace": "Workspace-Verbindung",
-        "session": "Verwendet Ihr verbundenes Konto",
-        "none": "Einsatzbereit",
-        "oauth": "Konto verbinden",
-        "credentials": "Anmeldedaten hinzufügen",
-        "unconfigured": "Workspace-Einrichtung erforderlich",
-        "checking": "Verbindung wird geprüft",
-        "unavailable": "Verbindung nicht verfügbar"
-      },
-      "availability": {
-        "label": "Verbindungsstatus für {name}",
-        "chat": "Haupt-Chat",
-        "craft": "Craft",
-        "on": "Ein",
-        "off": "Aus",
-        "unknown": "Unbekannt",
-        "disabledByAdmin": "Vom Admin deaktiviert",
-        "disabledByYou": "Von Ihnen deaktiviert",
-        "agents": "Benutzerdefinierte Agenten",
-        "notAvailable": "Nicht verfügbar"
-      },
-      "state": {
-        "loading": "Plugins werden geladen",
-        "serversError": "MCP-Plugins konnten nicht geladen werden.",
-        "toolsError": "Plugin-Werkzeuge konnten nicht geladen werden.",
-        "oauthError": "Kontoverbindungen konnten nicht geladen werden.",
-        "retry": "Erneut versuchen",
-        "noResultsTitle": "Keine passenden Plugins",
-        "noResultsDescription": "Versuchen Sie einen anderen Namen oder eine andere Beschreibung.",
-        "clearSearch": "Alle Plugins anzeigen",
-        "appsError": "Craft-Apps konnten nicht geladen werden.",
-        "appsLoading": "Craft-Apps werden geladen",
-        "emptyTitle": "Keine Plugins gefunden",
-        "emptyDescription": "Versuchen Sie einen anderen Verbindungsfilter oder bitten Sie Ihren Workspace-Admin, ein Plugin hinzuzufügen."
-      },
-      "detail": {
-        "noAuthentication": "Keine Authentifizierung erforderlich",
-        "connection": "Verbindung",
-        "tools": "Werkzeuge",
-        "toolCount": "{count, plural, one {# Aktion} other {# Aktionen}}",
-        "noTools": "Für dieses Plugin sind keine sichtbaren Werkzeuge gespeichert.",
-        "connect": "Konto verbinden",
-        "useInChat": "Im Chat verwenden",
-        "disconnect": "Trennen",
-        "disconnectTitle": "{name} trennen?",
-        "disconnectDescription": "Dadurch wird Ihre Kontoverbindung entfernt. Die Workspace-Verfügbarkeit bleibt gleich.",
-        "oauthDisconnectWarning": "Alle Plugins und Apps mit derselben OAuth-Konfiguration teilen diese Kontoverbindung. Beim Trennen wird Ihre Verbindung zu allen entfernt.",
-        "disconnecting": "Verbindung wird getrennt...",
-        "disconnectFailed": "Ihr Konto konnte nicht getrennt werden. Versuchen Sie es erneut.",
-        "cancel": "Abbrechen",
-        "close": "Fertig",
-        "openInCraft": "In Craft öffnen"
-      },
-      "connection": {
-        "title": "{name} verbinden",
-        "description": "Ihr Workspace hat dieses Plugin eingerichtet. Verbinden Sie Ihr Konto, um es zu verwenden.",
-        "credentialsDescription": "Geben Sie Ihre Anmeldedaten für dieses Plugin ein. Ihre Kontoverbindung ist von denen anderer Mitglieder getrennt.",
-        "oauthDescription": "Fahren Sie fort, um sich mit Ihrem Konto anzumelden. Ihr Anbieter zeigt die angeforderten Zugriffsrechte an.",
-        "continue": "Weiter zu {name}",
-        "connect": "Verbinden",
-        "connecting": "Verbindung wird hergestellt...",
-        "cancel": "Abbrechen",
-        "done": "Fertig",
-        "workspaceDescription": "Ihr Workspace stellt diese Verbindung bereit. Sie müssen kein Konto verbinden.",
-        "sessionDescription": "Dieses Plugin nutzt Ihre aktuelle Anmeldung.",
-        "noneDescription": "Dieses Plugin benötigt keine Kontoverbindung.",
-        "connectedDescription": "Ihr Konto ist verbunden.",
-        "unconfiguredDescription": "Ein Workspace-Administrator muss die Einrichtung dieses Plugins abschließen, bevor Sie es verbinden können.",
-        "checkingDescription": "Ihr Verbindungsstatus wird noch geladen. Versuchen Sie es danach erneut.",
-        "unavailableDescription": "Ihr Verbindungsstatus konnte nicht geladen werden. Versuchen Sie es auf der Plugins-Seite erneut.",
-        "errors": {
-          "popup_blocked": "Ihr Browser hat das Anmeldefenster blockiert. Erlauben Sie Pop-ups und versuchen Sie es erneut.",
-          "cancelled": "Die Anmeldung wurde abgebrochen. Sie können es erneut versuchen.",
-          "timed_out": "Die Anmeldung hat zu lange gedauert. Versuchen Sie es erneut.",
-          "credentials_required": "Geben Sie alle erforderlichen Anmeldedaten ein.",
-          "unconfigured": "Ein Workspace-Administrator muss die Einrichtung dieses Plugins abschließen.",
-          "not_connected": "Ihre Kontoverbindung konnte nicht bestätigt werden. Versuchen Sie es erneut.",
-          "request_failed": "Die Verbindung ist fehlgeschlagen. Versuchen Sie es erneut."
-        }
-      },
-      "filters": {
-        "label": "Verbindungsstatus",
-        "all": "Alle",
-        "connected": "Verbunden",
-        "needsSignIn": "Anmeldung erforderlich",
-        "showAll": "Alle Plugins anzeigen"
-      },
-      "defaults": {
-        "chat": "Im Standard-Chat aktivieren",
-        "craft": "In Craft aktivieren",
-        "chatDescription": "Dieses Plugin in Ihren Chats ohne benutzerdefinierten Agenten verfügbar machen.",
-        "craftDescription": "Dieses Plugin in Ihren Craft-Sitzungen und geplanten Aufgaben verfügbar machen. Die Tool-Berechtigungen Ihrer Organisation gelten weiterhin.",
-        "unavailable": "Ihr Admin hat dieses Plugin für {surface} deaktiviert.",
-        "saveFailed": "Ihre Plugin-Standardeinstellungen konnten nicht gespeichert werden. Versuchen Sie es erneut.",
-        "chatUnavailable": "Ihr Admin hat dieses Plugin für {surface} deaktiviert. Benutzerdefinierte Agenten, die mit diesem Plugin konfiguriert sind, können es möglicherweise weiterhin verwenden."
-      },
-      "openapi": {
-        "chatOnly": "Nur Chat",
-        "chatOnlyDescription": "Dieses Plugin ist in Chat verfügbar, nicht in Craft."
-      },
-      "externalApp": {
-        "description": "Verwenden Sie Ihr Konto in Craft.",
-        "craftOnly": "Nur Craft",
-        "craftOnlyDescription": "Diese App ist in Craft verfügbar. Der Hauptchat unterstützt sie nicht.",
-        "craftDisabledDescription": "Diese App ist in Craft deaktiviert. Der Hauptchat unterstützt sie nicht."
-      }
-    },
-    "plugins": {
-      "availability": {
-        "mainChat": "Hauptchat",
-        "craft": "Craft",
-        "on": "An",
-        "off": "Aus",
-        "unknown": "Unbekannt",
-        "enabled": "Aktiviert",
-        "disabled": "Deaktiviert",
-        "chatEnabled": "Chat an",
-        "chatDisabled": "Chat aus",
-        "chatUnknown": "Chatstatus unbekannt",
-        "craftEnabled": "Craft an",
-        "craftDisabled": "Craft aus"
-      },
-      "controls": {
-        "disconnect": "Für den Arbeitsbereich aktivieren oder deaktivieren",
-        "disable": "Für den Arbeitsbereich deaktivieren",
-        "manageAvailability": "Verfügbarkeit im Arbeitsbereich verwalten",
-        "more": "Weitere Aktionen",
-        "disableChat": "Für Hauptchat deaktivieren",
-        "disableCraft": "Für Craft deaktivieren"
-      },
-      "craftApp": {
-        "tabs": {
-          "configuration": "Konfiguration",
-          "permissions": "Berechtigungen"
-        }
-      },
-      "disableConfirmation": {
-        "workspaceTitle": "{name} für den Arbeitsbereich deaktivieren?",
-        "workspaceDescription": "Dadurch wird {name} für alle im Arbeitsbereich deaktiviert, einschließlich benutzerdefinierter Agenten. Gespeicherte Einstellungen und Zugangsdaten bleiben erhalten. Sie können es wieder aktivieren.",
-        "scope": "Alle Benutzer Ihrer Organisation",
-        "chatTitle": "{name} für den Hauptchat deaktivieren?",
-        "chatDescription": "Dadurch wird {name} für alle Benutzer Ihrer Organisation aus dem Standardchat entfernt. Benutzerdefinierte Agenten sind nicht betroffen. Sie können es wieder aktivieren.",
-        "craftTitle": "{name} für Craft deaktivieren?",
-        "craftDescription": "Dadurch ist {name} in Craft für alle Benutzer Ihrer Organisation nicht mehr verfügbar. Der Hauptchat ist nicht betroffen. Sie können es wieder aktivieren."
-      },
-      "openapi": {
-        "schemaPreview": {
-          "detected": "{count, plural, one {# Tool erkannt} other {# Tools erkannt}}",
-          "viewTools": "Tools anzeigen",
-          "saveToUpdate": "Speichern Sie die Änderungen, um die Tools zu aktualisieren."
-        },
-        "schemaTitle": "OpenAPI-Schema"
-      },
-      "title": "Plugins",
-      "description": "Verbinden Sie Tools und Apps mit Ihrem Workspace.",
-      "search": {
-        "placeholder": "Plugins suchen"
-      },
-      "add": {
-        "label": "Hinzufügen",
-        "openapi": "OpenAPI-Plugin hinzufügen"
-      },
-      "catalog": {
-        "linear": {
-          "summary": "Issues, Projekte und Teams verwalten",
-          "description": "Issues, Projekte und Teams verwalten."
-        },
-        "notion": {
-          "summary": "Ihren Notion-Arbeitsbereich durchsuchen und aktualisieren",
-          "description": "Ihren Notion-Arbeitsbereich durchsuchen und aktualisieren."
-        },
-        "sentry": {
-          "summary": "Fehler und Leistungsprobleme untersuchen",
-          "description": "Fehler und Leistungsprobleme untersuchen."
-        },
-        "atlassian": {
-          "summary": "Mit Jira und Confluence arbeiten",
-          "description": "Mit Jira und Confluence arbeiten."
-        },
-        "add": {
-          "label": "{name} hinzufügen"
-        }
-      },
-      "filters": {
-        "label": "Plugin-Typ"
-      },
-      "state": {
-        "retry": {
-          "label": "Erneut versuchen"
-        },
-        "loading": "Plugins werden geladen",
-        "empty": {
-          "title": "Keine Plugins installiert",
-          "description": "Fügen Sie Ihrem Workspace ein Plugin hinzu.",
-          "explore": {
-            "label": "Plugins entdecken"
-          }
-        }
-      }
-    },
     "mcpSetup": {
       "contactingServer": "Server kontaktieren",
       "detectingAuthentication": "Authentifizierung erkennen",
@@ -719,11 +375,8 @@
       "continue": "Weiter",
       "back": "Zurück"
     },
-    "mcpTools": {
-      "enabledTab": "Verfügbare Tools",
-      "policiesTab": "Genehmigungseinstellungen",
-      "search": "Tools suchen",
-      "enabledCount": "Aktivierte Tools: {enabled} von {total}"
+    "policyEditor": {
+      "toolCount": "{count, plural, one {# Aktion} other {# Aktionen}}"
     }
   },
   "admin": {
@@ -10975,7 +10628,6 @@
           "organization": {
             "title": "Organisationsverbindung",
             "description": "Jeder Nutzer handelt mit diesem Konto.",
-            "state": "{state, select, connected {Verbunden} not_connected {Nicht verbunden} needs_reconnect {Neu verbinden} not_set_up {Nicht eingerichtet} other {Unbekannt}}",
             "connect": "Verbinden",
             "disconnect": "Trennen",
             "connected": "Das Organisationskonto wurde verbunden.",
@@ -11016,7 +10668,8 @@
             "title": "Verbinden Sie zuerst den Server",
             "description": "Onyx lädt die Aktionen eines MCP-Servers, nachdem der Server verbunden ist.",
             "open": "Konfiguration öffnen",
-            "individualDescription": "Jeder Benutzer meldet sich bei diesem Server an. Verbinden Sie Ihr eigenes Konto auf der Seite „Plugins“ und klicken Sie dann auf „Aktualisieren“."
+            "individualDescription": "Jeder Benutzer meldet sich bei diesem Server an. Verbinden Sie Ihr eigenes Konto auf der Seite „Plugins“ und klicken Sie dann auf „Aktualisieren“.",
+            "openPlugins": "Plugins öffnen"
           }
         }
       }
@@ -11140,16 +10793,54 @@
           "label": "Speichern"
         }
       },
-      "mcp": {
-        "noAccess": {
-          "tooltip": "Sie haben keinen Zugriff mehr auf diesen MCP-Server. Seine vorhandenen Tools bleiben erhalten."
-        },
-        "searchTools": {
-          "placeholder": "Tools suchen..."
-        }
-      },
       "page": {
         "ariaLabel": "Agenten-Editor-Seite"
+      },
+      "plugins": {
+        "askHint": "Damit dies ohne Rückfrage läuft, setzt ein Administrator es in der Integration auf Erlauben, oder jeder Benutzer wählt Immer erlauben.",
+        "askHintAdminOnly": "Damit dies ohne Rückfrage läuft, setzt ein Administrator es in der Integration auf Erlauben.",
+        "askHintAgent": "Damit dies ohne Rückfrage läuft, ändern Sie die Agent-Einstellung, oder jeder Benutzer wählt Immer erlauben.",
+        "askHintAgentOnly": "Damit dies ohne Rückfrage läuft, ändern Sie die Agent-Einstellung.",
+        "choice": {
+          "inherit": "Integrationseinstellung verwenden",
+          "agentDefault": "Agentenstandard verwenden"
+        },
+        "default": {
+          "description": "Gilt für jede Aktion ohne eigene Einstellung, auch für Aktionen, die die Integration später hinzufügt.",
+          "title": "Standard für andere Aktionen"
+        },
+        "description": "Geben Sie dem Agenten Plugins. Jede Aktion verwendet die Integrationseinstellung, sofern Sie keine andere wählen.",
+        "effective": "{policy, select, allow {Erlaubt} ask {Fragt} other {Blockiert}} ({source, select, integration {Integrationseinstellung} agentDefault {Agentenstandard} other {Agenteneinstellung}})",
+        "empty": "Für Sie sind keine Plugins mit Integrationen verfügbar.",
+        "loadFailed": "Die Plugins konnten nicht geladen werden.",
+        "lock": {
+          "adminBlocked": "Erlauben ist nicht verfügbar: Ein Administrator hat diese Aktion blockiert.",
+          "alwaysAsks": "Erlauben ist nicht verfügbar: Craft fragt bei jeder dieser Anfragen nach einer Freigabe.",
+          "adminFinal": "Erlauben ist nicht verfügbar: Die Administratoreinstellung dieser Integration ist endgültig.",
+          "defaultFinal": "Erlauben ist nicht verfügbar: Die Administratoreinstellungen dieser Integrationen sind endgültig."
+        },
+        "noActions": "Diese Integration hat noch keine Aktionen.",
+        "notVisible": "Sie können die Aktionen dieses Plugins nicht sehen. Seine Einstellungen bleiben unverändert.",
+        "title": "Plugins",
+        "add": {
+          "placeholder": "Plugin hinzufügen"
+        },
+        "remove": {
+          "ariaLabel": "{plugin} entfernen"
+        },
+        "retry": {
+          "label": "Erneut versuchen"
+        },
+        "actionSetting": {
+          "label": "Einstellung für {action}"
+        },
+        "defaultSetting": {
+          "label": "Standardeinstellung für {plugin}"
+        },
+        "openIntegration": {
+          "label": "Aktionen von {integration} öffnen"
+        },
+        "stricterPlugin": "Das Plugin {plugin} dieses Agenten legt für diese Aktion eine strengere Einstellung fest."
       },
       "prompts": {
         "instructions": {
@@ -11406,14 +11097,6 @@
         "knowledgeCutoff": {
           "description": "Dokumente, deren letzte Aktualisierung vor diesem Datum liegt, werden ignoriert.",
           "title": "Stichtag für Wissen"
-        },
-        "mcpCard": {
-          "expand": {
-            "label": "Ausklappen"
-          },
-          "fold": {
-            "label": "Einklappen"
-          }
         },
         "moreInfo": {
           "title": "Weitere Informationen"
@@ -11985,40 +11668,6 @@
     }
   },
   "chat": {
-    "mcpConnections": {
-      "trigger": {
-        "label": "Tools benötigen Zugangsdaten ({count})",
-        "tooltip": "Einige Tools sind erst verfügbar, wenn Sie Ihr Konto verbinden oder Zugangsdaten hinzufügen."
-      },
-      "modal": {
-        "title": "Tools verbinden",
-        "description": "Geben Sie Ihre Zugangsdaten ein, um diese Tools in Onyx zu verwenden.",
-        "hint": "Sie können weiterchatten, ohne diese Tools zu verbinden. Die Funktionen Ihres Agenten sind dann möglicherweise eingeschränkt."
-      },
-      "connect": {
-        "label": "Verbinden",
-        "accessibleLabel": "{server} verbinden"
-      },
-      "reconnect": {
-        "label": "Erneut verbinden",
-        "accessibleLabel": "{server} erneut verbinden"
-      },
-      "connecting": {
-        "label": "Verbindung wird hergestellt…"
-      },
-      "connected": {
-        "label": "Verbunden"
-      },
-      "required": {
-        "label": "Zugangsdaten erforderlich"
-      },
-      "done": {
-        "label": "Fertig"
-      },
-      "error": {
-        "description": "Verbindung fehlgeschlagen. Versuchen Sie es erneut."
-      }
-    },
     "app": {
       "createSessionFailed": {
         "toast": "Neuer Chat konnte nicht gestartet werden. Versuche es erneut."
@@ -12452,91 +12101,6 @@
       },
       "pendingUserInput": {
         "toast": "Bearbeiten Sie zuerst die ausstehenden Genehmigungsanfragen oder Fragen."
-      }
-    },
-    "mcpApiKey": {
-      "apiKeyField": {
-        "label": "API-Schlüssel",
-        "placeholder": "Geben Sie Ihren API-Schlüssel ein"
-      },
-      "apiKeyVisibilityButton": {
-        "hideAriaLabel": "API-Schlüssel verbergen",
-        "showAriaLabel": "API-Schlüssel anzeigen"
-      },
-      "cancelButton": {
-        "label": "Abbrechen"
-      },
-      "credentialField": {
-        "placeholder": "Geben Sie {field} ein"
-      },
-      "credentialVisibilityButton": {
-        "hideAriaLabel": "Anmeldedaten verbergen",
-        "showAriaLabel": "Anmeldedaten anzeigen"
-      },
-      "header": {
-        "enterApiKey": {
-          "title": "API-Schlüssel eingeben"
-        },
-        "enterCredentials": {
-          "title": "Anmeldedaten eingeben"
-        },
-        "manageApiKey": {
-          "title": "API-Schlüssel verwalten"
-        },
-        "manageCredentials": {
-          "title": "Anmeldedaten verwalten"
-        }
-      },
-      "intro": {
-        "enterApiKey": {
-          "text": "Geben Sie Ihren API-Schlüssel für {server} ein, um die Authentifizierung zu aktivieren."
-        },
-        "enterCredentials": {
-          "text": "Geben Sie Ihre Anmeldedaten für {server} ein, um die Authentifizierung zu aktivieren."
-        },
-        "updateApiKey": {
-          "text": "Aktualisieren Sie Ihren API-Schlüssel für {server}."
-        },
-        "updateCredentials": {
-          "text": "Aktualisieren Sie Ihre Anmeldedaten für {server}."
-        }
-      },
-      "saveApiKeyError": {
-        "message": "API-Schlüssel konnte nicht gespeichert werden"
-      },
-      "saveCredentialsError": {
-        "message": "Anmeldedaten konnten nicht gespeichert werden"
-      },
-      "submitButton": {
-        "saveApiKey": {
-          "label": "API-Schlüssel speichern"
-        },
-        "saveCredentials": {
-          "label": "Anmeldedaten speichern"
-        },
-        "saving": {
-          "label": "Wird gespeichert..."
-        },
-        "updateApiKey": {
-          "label": "API-Schlüssel aktualisieren"
-        },
-        "updateCredentials": {
-          "label": "Anmeldedaten aktualisieren"
-        }
-      },
-      "validationNote": {
-        "apiKey": {
-          "text": "Ihr API-Schlüssel wird beim Server validiert und sicher gespeichert."
-        },
-        "authenticated": {
-          "text": "Änderungen werden vor dem Speichern beim Server validiert."
-        },
-        "credentials": {
-          "text": "Ihre Anmeldedaten werden beim Server validiert und sicher gespeichert."
-        }
-      },
-      "backButton": {
-        "label": "Zurück zu den Tools"
       }
     },
     "messages": {
@@ -14397,48 +13961,7 @@
         "ariaLabel": "Agent wechseln"
       }
     },
-    "apps": {
-      "oauthCallback": {
-        "backButton": "Zurück zu meinen Apps",
-        "description": "OAuth-Handshake wird abgeschlossen…",
-        "errors": {
-          "cancelled": "OAuth wurde abgebrochen oder abgelehnt: {reason}",
-          "failed": "Verbindung fehlgeschlagen.",
-          "missingParams": "Code oder State fehlt in der Callback-URL."
-        },
-        "exchanging": {
-          "label": "Autorisierungscode wird eingetauscht…"
-        },
-        "success": {
-          "label": "Verbunden. Weiterleitung zurück zu Ihren Apps…"
-        },
-        "title": "App wird verbunden"
-      },
-      "policyEditor": {
-        "loading": {
-          "label": "Wird geladen…"
-        },
-        "permissions": {
-          "defaultOption": "Standard",
-          "description": "Legen Sie fest, was der Agent tun darf. „Nachfragen“ fordert vor jeder Aktion eine Genehmigung an; „Erlauben“ führt sie ohne Rückfrage aus.",
-          "title": "Berechtigungen"
-        },
-        "advanced": {
-          "description": "Legen Sie für jede Aktion einzeln eine Richtlinie fest.",
-          "title": "Erweitert"
-        }
-      },
-      "userCredentials": {
-        "cancelButton": "Abbrechen",
-        "connectButton": "Verbinden",
-        "connectingButton": "Wird verbunden…",
-        "description": "Geben Sie Ihre Zugangsdaten ein, um diese App für Ihr Konto zu autorisieren.",
-        "errors": {
-          "connectFailedTitle": "Verbindung nicht möglich"
-        },
-        "title": "{name} verbinden"
-      }
-    },
+    "apps": {},
     "artifactsTab": {
       "download": {
         "button": "Herunterladen"
@@ -14960,7 +14483,6 @@
       "error": {
         "generic": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
         "notConfigurable": "Diese App kann von hier aus nicht eingerichtet werden.",
-        "popupBlocked": "Das Einrichtungsfenster konnte nicht geöffnet werden. Erlauben Sie Pop-ups und versuchen Sie es erneut.",
         "startFailed": "Einrichtung konnte nicht gestartet werden"
       },
       "loading": {
@@ -15555,17 +15077,13 @@
       "title": "Genehmigungseinstellungen",
       "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen, neuen Aufgaben und MCP-Toolaufrufen im Chat automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
       "taskDescription": "Wählen Sie die Plugins für diese Aufgabe und legen Sie fest, welche Aktionen automatisch ausgeführt werden. Änderungen gelten nur für diese Aufgabe.",
-      "workspace_disabled": "Für den Arbeitsbereich deaktiviert",
-      "workspace_managed": "Vom Arbeitsbereich verwaltet",
       "userManagement": "Nutzer dürfen Genehmigungseinstellungen verwalten",
       "userManagementDescription": "Benutzer können Genehmigungseinstellungen für verfügbare Aktionen ändern.",
       "loading": "Genehmigungseinstellungen werden geladen…",
       "loadError": "Genehmigungseinstellungen konnten nicht geladen werden.",
       "retry": "Erneut versuchen",
-      "save": "Speichern",
       "saving": "Wird gespeichert…",
       "cancel": "Abbrechen",
-      "saveError": "Genehmigungseinstellungen konnten nicht gespeichert werden.",
       "emptyActions": "Keine bekannten Aktionen. Unbekannte Aktionen erfordern eine Genehmigung.",
       "agentPermissionRequired": "Dieser Lauf wurde gestoppt, weil eine Aktion eine Genehmigung benötigte. Prüfen Sie die Berechtigungen und starten Sie erneut.",
       "enableForTask": "Für diese Aufgabe aktivieren",
@@ -15581,12 +15099,10 @@
       "searchActions": "Aktionen suchen",
       "setPermissions": "Berechtigungen festlegen",
       "applyMatching": "{count} passende bearbeitbare Aktionen",
-      "noMatchingActions": "Keine Aktionen entsprechen Ihrer Suche.",
       "close": "Schließen",
       "saveChanges": "Änderungen speichern",
       "resetDefaults": "Alle auf Standardwerte zurücksetzen",
       "resetAll": "Alle auf Workspace-Standardwerte zurücksetzen",
-      "workspaceDisabledTooltip": "Ein Admin hat diese Aktion für den Workspace deaktiviert.",
       "newTaskPluginsDescription": "Aktivieren Sie die Plugins, die diese Aufgabe verwenden kann. Jede Aktion nutzt die Einstellung ihrer Integration, bis Sie sie ändern.",
       "emptyPlugins": "Es sind keine Plugins mit Integrationen verfügbar.",
       "needsSignIn": "{name} erfordert eine Anmeldung.",
@@ -17479,5 +16995,215 @@
     "jvmMemoryTitle": "JVM-Arbeitsspeicher",
     "vectorMemoryTitle": "Vektorspeicher",
     "viewDetails": "Details anzeigen"
+  },
+  "plugins": {
+    "member": {
+      "title": "Plugins",
+      "description": "Skills und Integrationen, die Sie in Chats und Agenten nutzen können.",
+      "filters": {
+        "label": "Plugin-Typ",
+        "all": {
+          "label": "Alle"
+        },
+        "skills": {
+          "label": "Skills"
+        },
+        "integrations": {
+          "label": "Integrationen"
+        }
+      },
+      "sections": {
+        "organization": "Organisationsbibliothek",
+        "mine": "Meine Uploads",
+        "shared": "Mit Ihnen geteilt"
+      },
+      "row": {
+        "skillCount": "{count, plural, one {# Skill} other {# Skills}}",
+        "integrationCount": "{count, plural, one {# Integration} other {# Integrationen}}",
+        "needsConnection": "{count, plural, one {# braucht Anmeldung} other {# brauchen Anmeldung}}",
+        "open": {
+          "label": "{name} öffnen"
+        }
+      },
+      "state": {
+        "loading": "Plugins werden geladen",
+        "loadFailed": "Einige Plugins konnten nicht geladen werden.",
+        "emptyTitle": "Noch keine Plugins",
+        "emptyDescription": "Bitten Sie Ihren Admin, ein Plugin hinzuzufügen.",
+        "noResultsTitle": "Keine passenden Plugins",
+        "noResultsDescription": "Versuchen Sie einen anderen Namen oder Filter.",
+        "retry": {
+          "label": "Erneut versuchen"
+        },
+        "clear": {
+          "label": "Alle Plugins anzeigen"
+        }
+      },
+      "detail": {
+        "title": "Plugin",
+        "notFound": "Dieses Plugin ist für Sie nicht verfügbar.",
+        "loadFailed": "Das Plugin konnte nicht geladen werden.",
+        "tabs": {
+          "overview": "Übersicht",
+          "skills": "Skills",
+          "integrations": "Integrationen",
+          "versions": "Versionen"
+        },
+        "overview": {
+          "noDescription": "Keine Beschreibung.",
+          "location": "Ort",
+          "owner": "Eigentümer",
+          "skills": "Skills",
+          "integrations": "Integrationen"
+        },
+        "skills": {
+          "off": "Aus",
+          "invalid": "Ungültig"
+        },
+        "back": {
+          "label": "Plugins"
+        },
+        "switch": {
+          "title": "Dieses Plugin verwenden",
+          "description": "Wenn dies aktiviert ist, kann der Standardagent dieses Plugin verwenden.",
+          "label": "{name} verwenden",
+          "required": "Ihr Admin hat dieses Plugin als erforderlich festgelegt. Sie können es nicht deaktivieren.",
+          "notAvailable": "Ihr Admin hat dieses Plugin als nicht verfügbar festgelegt.",
+          "unavailable": "Sie können dieses Plugin nicht aktivieren oder deaktivieren.",
+          "failed": "Das Plugin konnte nicht geändert werden."
+        },
+        "share": {
+          "label": "Teilen"
+        },
+        "publish": {
+          "label": "Veröffentlichen",
+          "blocked": "Nur ein Benutzer mit der organisationsweiten Berechtigung „Aktionen verwalten“ kann ein Plugin mit einer Integration veröffentlichen.",
+          "confirmTitle": "{name} veröffentlichen?",
+          "confirmMessage": "Das Plugin wird in die Organisationsbibliothek verschoben. Dies kann nicht rückgängig gemacht werden. Admins legen dann die Installationseinstellung fest.",
+          "done": "{name} ist jetzt in der Organisationsbibliothek.",
+          "failed": "Das Plugin konnte nicht veröffentlicht werden."
+        }
+      },
+      "connection": {
+        "askAdmin": "Fragen Sie Ihren Admin",
+        "connected": "{name} verbunden.",
+        "disconnected": "{name} getrennt.",
+        "failed": "Verbindung fehlgeschlagen. Versuchen Sie es erneut.",
+        "disconnectFailed": "Trennen fehlgeschlagen. Versuchen Sie es erneut.",
+        "connect": {
+          "label": "Verbinden",
+          "ariaLabel": "{name} verbinden"
+        },
+        "reconnect": {
+          "label": "Neu verbinden",
+          "ariaLabel": "{name} neu verbinden"
+        },
+        "disconnect": {
+          "label": "Trennen",
+          "ariaLabel": "{name} trennen"
+        }
+      },
+      "credentials": {
+        "title": "{name} verbinden",
+        "description": "Geben Sie Ihre Anmeldedaten ein. Nur Sie nutzen sie.",
+        "required": "Fügen Sie diesen Wert hinzu.",
+        "failed": "Ihre Anmeldedaten konnten nicht gespeichert werden. Versuchen Sie es erneut.",
+        "submit": {
+          "label": "Verbinden",
+          "pendingLabel": "Verbinden…"
+        },
+        "cancel": {
+          "label": "Abbrechen"
+        }
+      },
+      "alwaysAllow": {
+        "title": "Immer Erlauben",
+        "description": "Eine Aktion, die eine Freigabe verlangt, ohne Nachfrage ausführen.",
+        "loadFailed": "Die Aktionen konnten nicht geladen werden.",
+        "saveFailed": "Speichern fehlgeschlagen. Versuchen Sie es erneut.",
+        "alwaysAsks": "Craft fragt bei jeder dieser Anfragen nach einer Freigabe.",
+        "switch": {
+          "label": "{name} immer erlauben"
+        },
+        "retry": {
+          "label": "Erneut versuchen"
+        }
+      },
+      "oauthCallback": {
+        "processing": "Ihr Konto wird verbunden…",
+        "successTitle": "Konto verbunden",
+        "successDescription": "Onyx bringt Sie zurück.",
+        "errorTitle": "Verbindung fehlgeschlagen",
+        "cancelled": "Die Anmeldung wurde abgebrochen.",
+        "invalidLink": "Dieser Anmeldelink ist ungültig. Starten Sie die Anmeldung erneut.",
+        "failed": "Die Anmeldung wurde nicht abgeschlossen. Versuchen Sie es erneut.",
+        "back": {
+          "label": "Zurück zu den Plugins"
+        }
+      },
+      "search": {
+        "placeholder": "Plugins suchen"
+      },
+      "addIntegration": {
+        "label": "Integration Hinzufügen"
+      },
+      "manage": {
+        "label": "Plugins verwalten"
+      },
+      "share": {
+        "title": "{name} teilen",
+        "description": "Geben Sie Personen und Gruppen Zugriff auf dieses Plugin.",
+        "sharedSignIn": "{names} verwendet ein Konto. Personen mit Zugriff verwenden das Konto, das Sie verbunden haben.",
+        "loadFailed": "Die Personen mit Zugriff konnten nicht geladen werden.",
+        "empty": "Nur Sie haben Zugriff.",
+        "remove": {
+          "label": "{name} entfernen"
+        },
+        "cancel": {
+          "label": "Abbrechen"
+        },
+        "submit": {
+          "label": "Speichern",
+          "pendingLabel": "Wird gespeichert..."
+        },
+        "saved": "Der Zugriff auf {name} wurde gespeichert.",
+        "failed": "Der Zugriff konnte nicht gespeichert werden."
+      }
+    },
+    "chat": {
+      "popover": {
+        "empty": "Dieser Agent hat keine Plugins mit Integrationen.",
+        "searchEmpty": "Keine Plugins passen zu Ihrer Suche.",
+        "loading": "Plugins werden geladen",
+        "loadError": "Einige Plugins konnten nicht geladen werden. Versuchen Sie es erneut.",
+        "trigger": {
+          "label": "Plugins"
+        },
+        "retry": {
+          "label": "Erneut versuchen"
+        },
+        "browse": {
+          "label": "Plugins durchsuchen"
+        },
+        "toggle": {
+          "label": "{name} mit diesem Agenten verwenden"
+        }
+      },
+      "connectPrompt": {
+        "tooltip": "Der Agent kann diese Integrationen erst nutzen, wenn Sie Ihr Konto verbinden.",
+        "title": "Integrationen Verbinden",
+        "description": "Melden Sie sich an, um diese Integrationen in diesem Chat zu nutzen.",
+        "hint": "Sie können weiter chatten. Der Agent nutzt eine Integration erst, wenn Sie sie verbinden.",
+        "trigger": {
+          "label": "{count, plural, one {# Integration braucht Anmeldung} other {# Integrationen brauchen Anmeldung}}"
+        },
+        "done": {
+          "label": "Fertig"
+        }
+      }
+    }
+  },
+  "integrations": {
+    "connectionState": "{state, select, connected {Verbunden} not_connected {Nicht verbunden} needs_reconnect {Neu verbinden} not_set_up {Nicht eingerichtet} other {Unbekannt}}"
   }
 }

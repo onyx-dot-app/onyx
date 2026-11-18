@@ -15,44 +15,6 @@ async function readErrorDetail(
   return data.detail ?? `${fallback} (HTTP ${res.status}).`;
 }
 
-interface OAuthStartResponse {
-  authorize_url: string;
-}
-
-export async function startExternalAppOAuth(
-  externalAppId: number,
-  returnPath?: string
-): Promise<OAuthStartResponse> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/apps/${externalAppId}/oauth/start${returnPath ? `?${new URLSearchParams({ return_path: returnPath })}` : ""}`
-  );
-  if (!res.ok) {
-    throw new Error(await readErrorDetail(res, "Failed to start OAuth"));
-  }
-  return res.json();
-}
-
-interface OAuthCallbackResponse {
-  success: boolean;
-  external_app_id: number;
-  return_path?: string | null;
-}
-
-export async function completeExternalAppOAuthCallback(
-  code: string,
-  state: string
-): Promise<OAuthCallbackResponse> {
-  const res = await fetch(`${BUILD_API_BASE}/apps/oauth/callback`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code, state }),
-  });
-  if (!res.ok) {
-    throw new Error(await readErrorDetail(res, "OAuth exchange failed"));
-  }
-  return res.json();
-}
-
 export type ConnectAppDecision = "connected" | "declined";
 
 /**
@@ -74,34 +36,5 @@ export async function postConnectAppDecision(
   );
   if (!res.ok) {
     throw new Error(await readErrorDetail(res, "Failed to resolve connection"));
-  }
-}
-
-export async function upsertUserCredentials(
-  externalAppId: number,
-  userCredentials: Record<string, unknown>
-): Promise<void> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/apps/${externalAppId}/credentials`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_credentials: userCredentials }),
-    }
-  );
-  if (!res.ok) {
-    throw new Error(await readErrorDetail(res, "Failed to save credentials"));
-  }
-}
-
-export async function disconnectUserFromApp(
-  externalAppId: number
-): Promise<void> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/apps/${externalAppId}/credentials`,
-    { method: "DELETE" }
-  );
-  if (!res.ok) {
-    throw new Error(await readErrorDetail(res, "Failed to disconnect app"));
   }
 }

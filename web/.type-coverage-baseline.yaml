@@ -24,7 +24,7 @@ packages:
   src/app/craft: 99.4
   src/app/ee: 95.6
   src/app/federated: 97
-  src/app/mcp: 99.5
+  src/app/mcp: 100
   src/app/nrf: 99.2
   src/app/oauth: 100
   src/app/oauth-config: 100
@@ -59,7 +59,7 @@ packages:
   src/layouts/chromes: 99.8
   src/layouts/craft: 96.1
   src/lib: 99.2
-  src/lib/agents: 99.3
+  src/lib/agents: 99.5
   src/lib/analytics: 99.4
   src/lib/app: 99.9
   src/lib/approvals: 100
@@ -76,10 +76,10 @@ packages:
   src/lib/docx: 100
   src/lib/extension: 100
   src/lib/hierarchy: 100
-  src/lib/hooks: 96
+  src/lib/hooks: 95.9
   src/lib/integrations: 100
   src/lib/languageModels: 99.1
-  src/lib/mcp: 99.4
+  src/lib/mcp: 98.8
   src/lib/multiModel: 100
   src/lib/navigation: 100
   src/lib/notifications: 99.3
@@ -100,7 +100,7 @@ packages:
   src/lib/spendingLimits: 100
   src/lib/sso: 99.2
   src/lib/tiers: 100
-  src/lib/tools: 99.4
+  src/lib/tools: 99.6
   src/lib/tracing: 96.9
   src/lib/usage: 97.9
   src/lib/users: 99.1
@@ -120,7 +120,7 @@ packages:
   src/refresh-components/texts: 98.9
   src/refresh-components/tiles: 100
   src/sections: 100
-  src/sections/actions: 98.8
+  src/sections/actions: 98.6
   src/sections/admin: 100
   src/sections/agents: 99.8
   src/sections/approvals: 99.1
