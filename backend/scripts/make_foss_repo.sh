@@ -35,7 +35,6 @@ echo "=== Removing enterprise directory and licenses from history ==="
 git filter-repo \
   --path backend/ee --invert-paths \
   --path backend/ee/LICENSE --invert-paths \
-  --path backend/schema/openapi.json --invert-paths \
   --path web/src/app/ee/LICENSE --invert-paths \
   --force
 

@@ -212,7 +212,7 @@ covers new files that match it.
 | `backend/onyx/onyxbot/discord/`, `backend/onyx/db/discord_bot.py`, `backend/onyx/server/manage/discord_bot/` | discord-bot |
 | `backend/onyx/server/onyx_api/` | onyx-api |
 | `backend/scripts/onyx_openapi_schema.py`, `backend/scripts/transform_openapi_for_docs.py`, `backend/scripts/api_inference_sample.py`, `documentation/scripts/generate.sh` | onyx-api |
-| `backend/schema/openapi.json`, `backend/lint/check_openapi_snapshot.py` | onyx-api |
+| `backend/schema/openapi.json` | onyx-api |
 | `backend/onyx/mcp_server/`, `backend/onyx/mcp_server_main.py`, `backend/onyx/oauth_provider/auth.py`, `extensions/agent-plugin/` | mcp-server |
 | `deployment/tests/test_oauth_proxy.py`, `deployment/tests/test_next_oauth_discovery.py`, `backend/tests/unit/onyx/oauth_provider/test_native_client_cleanup.py`, `backend/tests/unit/onyx/oauth_provider/test_codex_response_reader.py` | mcp-server |
 | `.github/workflows/mcp-compatibility.yml`, `.github/scripts/check-mcp-compatibility.py`, `deployment/tests/test_mcp_compatibility_probe.py` | mcp-server |
@@ -413,7 +413,6 @@ the admin routes and check that each has a row above, run
 | `web/.type-coverage-baseline.yaml` | Type-coverage floor of each `web/` directory. The `typescript-check` pre-commit hook fails when a directory falls below its floor (`web/AGENTS.md`, Tests). |
 | `.github/` | CI. Read the workflow. |
 | `.pre-commit-config.yaml` | The pre-commit hooks of every area. Read the hook and the script it runs. |
-| `.secretsignore` | Repository-wide exceptions for the ripsecrets hook. |
 | `web/src/app/ee/admin/` | A second admin route tree. `web/src/proxy.ts:EE_ROUTES` rewrites the `/admin/...` paths it lists to this tree. Check `EE_ROUTES` before you decide which copy serves an `/admin/...` path. |
 | `web/src/lib/admin-routes.ts`, `web/src/lib/admin-sidebar-utils.ts`, `web/src/lib/adminNavLabels.tsx`, `web/src/app/admin/layout.tsx` | The admin route list, the sidebar that filters it by permission and feature flag, its labels, and the admin shell. A new admin route needs its own row above. |
 | `web/src/lib/types.ts` | Frontend types that many components share, such as `Permission`, which must match `backend/onyx/db/enums.py`. Check the callers. |

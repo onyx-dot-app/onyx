@@ -99,18 +99,12 @@ repos:
       - id: uv-run
         alias: openapi-snapshot
         name: backend OpenAPI snapshot
-        args: ["--no-project", "python", "backend/lint/check_openapi_snapshot.py", "--hook"]
-        files: >-
-          (?x)^(
-            backend/((onyx|ee|shared_configs|model_server)/.*|schema/openapi\.json
-            |scripts/onyx_openapi_schema\.py|lint/check_openapi_snapshot\.py)
-            |pyproject\.toml|uv\.lock
-          )$
-        pass_filenames: true
-        # prek omits deleted files from argv but exports the range refs for the fallback.
-        always_run: true
-        require_serial: true
-        stages: [pre-commit]
+        # Rewrites backend/schema/openapi.json; prek fails when the file changes.
+        args: ["--frozen", "--no-default-groups", "--group", "backend", "--group", "ee",
+               "--directory", "backend", "python", "-m", "scripts.onyx_openapi_schema",
+               "--snapshot", "--filename", "schema/openapi.json"]
+        pass_filenames: false
+        files: ^(backend/((onyx|ee|shared_configs)/.*|scripts/onyx_openapi_schema\.py|schema/openapi\.json)|pyproject\.toml|uv\.lock)$
       - id: uv-run
         alias: docker-compose-sync
         name: sync docker compose files from template

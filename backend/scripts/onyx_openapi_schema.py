@@ -42,13 +42,16 @@ def go(
 
     # Output stripped version (default) for client generation
     stripped = strip_tags_from_schema(schema)
-    with open(filename, "w", encoding="utf-8", newline="\n") as f:
+    with open(filename, "w") as f:
         if snapshot:
             json.dump(stripped, f, indent=2, sort_keys=True)
             f.write("\n")
         else:
             json.dump(stripped, f)
     print(f"Wrote OpenAPI schema to {filename}.")
+    if snapshot:
+        print("Commit the snapshot with the API change. To regenerate it, run:")
+        print("  prek run openapi-snapshot --all-files")
 
 
 def strip_tags_from_schema(schema: dict) -> dict:
@@ -144,7 +147,9 @@ def main() -> None:
 
     args = parser.parse_args()
     if args.snapshot:
+        # Settings such as OAUTH_ENABLED add routes, so the snapshot uses defaults.
         os.environ.clear()
+        # Stops LiteLLM from fetching its model cost map at import.
         os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 
     go(args.filename, tagged_for_docs=args.tagged_for_docs, snapshot=args.snapshot)

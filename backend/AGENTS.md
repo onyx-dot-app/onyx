@@ -39,10 +39,9 @@ tests. Additive to the root `AGENTS.md`.
   is allowed. `# no-response-model: allow <reason>` on the decorator marks a deliberate exception.
   `lint/no_response_model_baseline.txt` counts the older uses in each file. After you remove
   one, regenerate it with `--write-baseline`.
-- The `openapi-snapshot` prek hook checks `backend/schema/openapi.json` against the HTTP API schema
-  with default Onyx settings. The schema includes EE routes and needs no running services.
-  After a schema change, run `python3 backend/lint/check_openapi_snapshot.py --write`
-  from the repository root. Review the JSON diff and commit it with the API change.
+- The `openapi-snapshot` prek hook regenerates `backend/schema/openapi.json`, the HTTP API schema
+  with EE routes and default settings, and fails when it changes. After an API change, run
+  `prek run openapi-snapshot --all-files` and commit the JSON diff with the change.
 - OpenSearch is the only document index backend for search and indexing. Onyx no longer uses
   Vespa. Some live Celery names still say "vespa" (the `vespa_metadata_sync` queue, the
   `check_for_vespa_sync_task` task, the `onyx.background.celery.tasks.vespa` module); they sync

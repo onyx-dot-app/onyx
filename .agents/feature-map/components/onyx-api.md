@@ -83,10 +83,9 @@ validation on every PR that touches `backend/onyx/server/` or
 `backend/onyx/main.py:use_route_function_names_as_operation_ids` sets each
 operation id to the handler's function name.
 
-The `openapi-snapshot` hook uses the same generator with default Onyx settings.
-It compares the tag-stripped schema, including EE operations, with `backend/schema/openapi.json`.
-After a schema change, run `python3 backend/lint/check_openapi_snapshot.py --write`
-and commit the snapshot with the change.
+The `openapi-snapshot` prek hook runs the same generator with `--snapshot`. It writes the
+tag-stripped schema, with EE operations and default settings, to `backend/schema/openapi.json`,
+and fails when the file changes.
 
 **The ingestion write.**
 `backend/onyx/server/onyx_api/ingestion.py:upsert_ingestion_doc` runs in the
