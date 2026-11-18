@@ -221,6 +221,8 @@ TARGETED_REINDEX_TIMEOUT = 30 * 60  # seconds
 USER_EXPORT_TASK_EXPIRES = 60 * 60  # seconds
 USER_JOB_LOST_TASK_GRACE = 5 * 60  # seconds
 
+PRUNING_GENERATOR_TASK_EXPIRES = 10 * 60  # seconds
+
 # how long a task should wait for associated fence to be ready
 CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
 
