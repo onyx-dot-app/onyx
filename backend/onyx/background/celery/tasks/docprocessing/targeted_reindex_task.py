@@ -11,10 +11,10 @@ import datetime
 import logging
 import traceback
 from collections.abc import Sequence
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from celery import Task, shared_task
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
@@ -45,11 +45,12 @@ _TARGETED_REINDEX_TIME_LIMIT = _TARGETED_REINDEX_SOFT_TIME_LIMIT + 60
 _CANCELED_MSG = "Canceled by a user."
 
 
-@dataclass(frozen=True)
-class _PairEnd:
+class _PairEnd(BaseModel):
     """How a pair's retry attempts end: FAILED with ``error_msg`` when every
     target failed again, SUCCESS when it is None, with one error per document
     that failed again."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     failures: list[ConnectorFailure]
     error_msg: str | None = None
@@ -70,14 +71,14 @@ def _processed_end(
             original.model_copy(update={"failure_message": result.reason})
             for original in originals
         ]
-        return _PairEnd(failures, result.reason)
+        return _PairEnd(failures=failures, error_msg=result.reason)
     failures = [
         result.failures.get(target.document_id, original)
         for target, original in zip(failed, originals, strict=True)
     ]
     if not failures or len(failures) < len(targets):
-        return _PairEnd(failures)
-    return _PairEnd(failures, "Every retried document failed again.")
+        return _PairEnd(failures=failures)
+    return _PairEnd(failures=failures, error_msg="Every retried document failed again.")
 
 
 def _raised_end(
@@ -90,7 +91,11 @@ def _raised_end(
         failure.model_copy(update={"failure_message": message, "exception": error})
         for failure in targets_to_connector_failures(targets, db_session)
     ]
-    return _PairEnd(failures, message, "".join(traceback.format_exception(error)))
+    return _PairEnd(
+        failures=failures,
+        error_msg=message,
+        exception_trace="".join(traceback.format_exception(error)),
+    )
 
 
 def _canceled_pair_ids(db_session: Session, attempts: list[IndexAttempt]) -> set[int]:
@@ -113,7 +118,7 @@ def _end_attempts__no_commit(
 ) -> None:
     canceled = _canceled_pair_ids(db_session, attempts)
     for attempt in attempts:
-        end = pair_ends.get(attempt.connector_credential_pair_id, _PairEnd([]))
+        end = pair_ends.get(attempt.connector_credential_pair_id, _PairEnd(failures=[]))
         if attempt.connector_credential_pair_id in canceled:
             attempt.status = IndexingStatus.CANCELED
             attempt.error_msg = _CANCELED_MSG

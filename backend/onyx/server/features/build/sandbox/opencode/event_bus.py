@@ -12,11 +12,11 @@ import json
 import socket
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from queue import Empty, Full, Queue
 from typing import Any
 
 import httpx
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.server.features.build.timeouts import CONNECT_TIMEOUT_SECONDS
 from onyx.utils.logger import setup_logger
@@ -27,10 +27,11 @@ logger = setup_logger()
 BUS_CLOSED_SENTINEL = None
 
 
-@dataclass
-class _Subscription:
+class _Subscription(BaseModel):
+    model_config = ConfigDict(strict=True, arbitrary_types_allowed=True)
+
     session_id: str
-    queue: "Queue[dict[str, Any] | None]" = field(
+    queue: "Queue[dict[str, Any] | None]" = Field(
         default_factory=lambda: Queue(maxsize=500)
     )
     dropped_count: int = 0

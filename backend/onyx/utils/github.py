@@ -1,9 +1,9 @@
 import re
-from dataclasses import dataclass
 from typing import Final
 from urllib.parse import quote, unquote, urlparse
 
 import requests
+from pydantic import BaseModel, ConfigDict
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -23,15 +23,17 @@ _GITHUB_SSH_SOURCE_PATTERN: Final[re.Pattern[str]] = re.compile(
 )
 
 
-@dataclass(frozen=True, slots=True)
-class GitHubSource:
+class GitHubSource(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     owner: str
     repo: str
     tree_tail: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class GitHubRevision:
+class GitHubRevision(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     revision: str
     subpath: str | None
 

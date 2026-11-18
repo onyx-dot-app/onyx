@@ -11,9 +11,10 @@ import zlib
 from collections.abc import Callable, Iterable
 from contextlib import ExitStack
 from copy import copy
-from dataclasses import dataclass
 from itertools import pairwise
 from typing import IO, Final, Literal
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -68,8 +69,9 @@ _IGNORED_BUNDLE_FILE_NAMES: Final[frozenset[str]] = frozenset(
 )
 
 
-@dataclass(frozen=True)
-class NormalizedSkillBundle:
+class NormalizedSkillBundle(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     content: bytes
     source_directory: str | None
 
@@ -674,8 +676,6 @@ def update_custom_bundle_files(
             OnyxErrorCode.INVALID_INPUT,
             "provide exactly one file upload or path to remove",
         )
-    if is_upload and not filename:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "upload is missing a filename")
 
     output = io.BytesIO()
     with ExitStack() as archives:
@@ -683,7 +683,10 @@ def update_custom_bundle_files(
         upload_infos: list[tuple[zipfile.ZipInfo, str]] = []
         changed_paths: set[str]
         if upload_bytes is not None:
-            assert filename is not None
+            if not filename:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT, "upload is missing a filename"
+                )
             if (
                 filename.lower().endswith(".zip")
                 and len(upload_bytes) > DEFAULT_ZIP_MAX_BYTES
@@ -742,7 +745,8 @@ def update_custom_bundle_files(
                 )
             changed_paths = set(upload_file_paths)
         else:
-            assert remove_path is not None
+            if remove_path is None:
+                raise RuntimeError("Bug: no upload and no path to remove.")
             normalized_remove_path = _validated_bundle_path(
                 zipfile.ZipInfo(remove_path)
             )

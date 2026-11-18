@@ -1,6 +1,5 @@
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
 import { SOURCE_METADATA_MAP } from "@/lib/connectors/constants";
-import { pluginDetailHref } from "@/lib/plugins/routes";
 import {
   ADMIN_CONFIG_LINKS,
   OPENAPI_ADMIN_CONFIG,
@@ -164,7 +163,7 @@ export function getAdminConfigureInfo(
   }
   if (!tool.in_code_tool_id && !tool.mcp_server_id) {
     return {
-      href: pluginDetailHref({ kind: "openapi", id: tool.id }),
+      href: OPENAPI_ADMIN_CONFIG.href,
       tooltip: configureTooltips.openapi ?? OPENAPI_ADMIN_CONFIG.tooltip,
     };
   }

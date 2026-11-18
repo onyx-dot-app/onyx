@@ -29,17 +29,18 @@ scope, expiry).
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import Any, Awaitable, NamedTuple, TypeGuard, cast
+from typing import Any, NamedTuple, TypeGuard
 
 import httpx
 import jwt
 from fastapi_users import exceptions as fastapi_users_exceptions
 
+from onyx.cache.factory import get_shared_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.configs.app_configs import (
     IDP_PROFILE_CLAIM_MAP,
     IDP_PROFILE_ENRICHMENT_ENABLED,
 )
-from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
@@ -47,9 +48,9 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-# Redis HASH per (tenant, email): field = provider name, value = snapshot JSON.
-# Keeping one field per provider means a login through a second IdP never
-# clobbers the first provider's directory data.
+# One cache value per (tenant, email): a JSON object of provider name to
+# snapshot JSON. Keeping one entry per provider means a login through a second
+# IdP never clobbers the first provider's directory data.
 _IDP_CLAIMS_KEY_PREFIX = "idp_login_claims"
 # Long enough that an admin can log in and inspect at leisure, short enough
 # that data for users who stop logging in doesn't linger forever.
@@ -76,6 +77,72 @@ _MS_GRAPH_SELECT_FIELDS = (
 
 def _idp_claims_key(tenant_id: str, email: str) -> str:
     return f"{_IDP_CLAIMS_KEY_PREFIX}:{tenant_id}:{email.lower()}"
+
+
+# A concurrent login through another provider can change the value between the
+# read and the write. Each attempt re-reads, so a few are enough.
+_STORE_ATTEMPTS = 5
+
+
+class _ClaimsStore:
+    """Provider snapshots for one user, kept as one JSON object per key.
+
+    The key carries the tenant id, and the login callbacks that write run
+    before the tenant context is set, so the store uses the shared namespace.
+    """
+
+    def __init__(self, cache: CacheBackend) -> None:
+        self._cache = cache
+
+    def _read(self, key: str) -> tuple[bytes | None, dict[str, str]]:
+        raw = self._cache.get(key)
+        if raw is None:
+            return None, {}
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return raw, {}
+        if not isinstance(parsed, dict):
+            return raw, {}
+        return raw, {
+            str(provider): payload
+            for provider, payload in parsed.items()
+            if isinstance(payload, str)
+        }
+
+    def snapshots(self, key: str) -> dict[str, str]:
+        """Snapshot JSON by provider name."""
+        return self._read(key)[1]
+
+    def snapshot(self, key: str, provider: str) -> str | None:
+        return self.snapshots(key).get(provider)
+
+    def store(self, key: str, provider: str, payload: str) -> None:
+        """Set one provider's snapshot and renew the TTL of the whole value.
+
+        The TTL is per key, so any login through any provider keeps every
+        provider's snapshot alive. Entries for abandoned providers persist
+        until the value expires.
+        """
+        for _ in range(_STORE_ATTEMPTS):
+            raw, by_provider = self._read(key)
+            by_provider[provider] = payload
+            value = json.dumps(by_provider)
+            if raw is None:
+                stored = self._cache.set_if_absent(
+                    key, value, ex=_IDP_CLAIMS_TTL_SECONDS
+                )
+            else:
+                stored = self._cache.replace_if_value(
+                    key, raw, value, ex=_IDP_CLAIMS_TTL_SECONDS
+                )
+            if stored:
+                return
+        logger.warning("Claims capture: concurrent writers, snapshot not stored")
+
+
+def _claims_store() -> _ClaimsStore:
+    return _ClaimsStore(get_shared_cache_backend())
 
 
 async def _resolve_capture_tenant_id(email: str) -> str | None:
@@ -152,9 +219,9 @@ async def _store_claims_snapshot(
         return
     provider = str(snapshot.get("oauth_name") or "unknown")
     key = _idp_claims_key(tenant_id, email)
-    redis = await get_async_redis_connection()
+    store = _claims_store()
 
-    old_raw = await cast(Awaitable[Any], redis.hget(key, provider))
+    old_raw = await asyncio.to_thread(store.snapshot, key, provider)
     old_snapshots = _sorted_snapshots([old_raw]) if old_raw else []
     to_store = (
         _retain_richer_sources(old_snapshots[0], snapshot)
@@ -180,12 +247,7 @@ async def _store_claims_snapshot(
             email,
             _MAX_SNAPSHOT_BYTES,
         )
-    # TTL is per key, so any login through any provider keeps the whole hash
-    # alive. Fields for abandoned providers persist until the hash expires.
-    pipe = redis.pipeline()
-    pipe.hset(key, provider, payload)
-    pipe.expire(key, _IDP_CLAIMS_TTL_SECONDS)
-    await pipe.execute()
+    await asyncio.to_thread(store.store, key, provider, payload)
 
 
 def _snapshot_captured_at(snapshot: dict[str, Any]) -> datetime:
@@ -488,15 +550,10 @@ def _load_profile_sources(email: str) -> list[dict[str, Any]]:
     resolve profile fields against, in precedence order: every source of the
     most recent login first, then older providers' sources as gap fillers.
 
-    Must use the RAW client — the capture writes via the raw async connection,
-    and the tenant-prefixing TenantRedisClient would look up a different key
-    (the tenant id is already part of ``_idp_claims_key``). Best-effort: the
-    chat pipeline that consumes this must treat the profile as optional."""
-    from onyx.redis.redis_pool import get_raw_redis_client
-
-    redis = get_raw_redis_client()
-    raw_map = redis.hgetall(_idp_claims_key(get_current_tenant_id(), email))
-    if not isinstance(raw_map, dict) or not raw_map:
+    Best-effort: the chat pipeline that consumes this must treat the profile
+    as optional."""
+    raw_map = _claims_store().snapshots(_idp_claims_key(get_current_tenant_id(), email))
+    if not raw_map:
         return []
 
     sources: list[dict[str, Any]] = []
@@ -597,11 +654,8 @@ def get_idp_profile_placeholder_values(email: str) -> dict[str, str]:
 
 async def get_captured_oauth_claims(email: str) -> dict[str, Any] | None:
     """Return the most recent captured claims snapshot for ``email``, or None."""
-    redis = await get_async_redis_connection()
-    # redis-py types hash commands as a sync-or-async union. This is the async client.
-    raw_map = await cast(
-        Awaitable[dict[Any, Any]],
-        redis.hgetall(_idp_claims_key(get_current_tenant_id(), email)),
+    raw_map = await asyncio.to_thread(
+        _claims_store().snapshots, _idp_claims_key(get_current_tenant_id(), email)
     )
     if not raw_map:
         return None

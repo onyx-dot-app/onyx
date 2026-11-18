@@ -232,16 +232,11 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
     security decision must pass `allow_fallback=False`, as
     `sandbox_proxy/destination_policy.py` does for the SSRF level. The default
     can silently apply env values for the tenant.
-11. `action-oauth-config-fingerprint` **Action OAuth rejects a callback after a
-    configuration change.** Initiate stores
-    `server/features/oauth_config/api.py:_oauth_config_fingerprint`, which
-    hashes all of `OAuthFlowParams`, PKCE and the redirect URI. The callback
-    compares it, so a change while authorization is pending fails, and the
-    user must start again. A field that changes the flow must live in
-    `OAuthFlowParams`. A provider failure in the exchange returns 502
-    `BAD_GATEWAY`. Traps: `/pkce-support` needs global `MANAGE_ACTIONS` and
-    sends no client credentials; the test flow discards its tokens but leaves
-    the grant at the provider.
+11. `action-oauth-config-fingerprint` **Integration OAuth rejects a callback
+    after a configuration change.** The start stores
+    `backend/onyx/integrations/oauth.py:_configuration_fingerprint`, and the
+    callback compares it, so a change while authorization is pending fails and
+    the user must start again. The old OAuth config routes are gone.
 12. `seat-lock-on-user-write` **User creation and activation take the seat
     lock.** Call `onyx/auth/users.py:enforce_seat_limit_locked` on the session that
     writes the user, and `_invalidate_license_cache_after_seat_change` after a
@@ -258,8 +253,9 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
 ## Known issues
 
 - **User deletion fails while the user owns private skills**
-  (`db/users.py:delete_user_from_db__no_commit`). The check asks whether the
-  user's "My uploads" holds a plugin. The admin must transfer or delete those
+  (`db/users.py:delete_user_from_db__no_commit`). The delete first moves the
+  user's private integrations to the Organization library as NOT_AVAILABLE,
+  with their shares, then refuses if "My uploads" still holds a plugin. The admin must transfer or delete those
   first. Published plugins stay with no author ([[skills#plugin-tables]]).
 - **Anonymous access can turn itself off.** `auth/users.py` reads
   `anonymous_user_enabled` from the same cache key as the settings store, and
@@ -290,7 +286,13 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
 - `new-security-setting` **Add a security setting.** Copy `allow_renamed_account_claim` through
   `server/security/models.py` and `server/security/store.py`; list the current
   settings in `SecuritySettings`. Read it with `allow_fallback=False` when it
-  decides access ([[#security-settings-strict-read]]).
+  decides access ([[#security-settings-strict-read]]). The Security & Hardening
+  page also edits workspace `Settings` fields (`invite_only_enabled`,
+  `anonymous_user_enabled`, `query_history_type`,
+  `maximum_chat_retention_days`) through `saveWorkspaceSettings`. Those are not
+  `SecuritySettings`: they have no audit event, and only `query_history_type`
+  has an env default (`ONYX_QUERY_HISTORY_TYPE`, read in
+  `server/settings/store.py:load_settings` when no value is stored).
 - `investigate-unexpected-signout` **Investigate "signed out unexpectedly".** Check `AUTH_BACKEND` first,
   because Postgres and JWT sessions keep no reason. With Redis, read the
   `detail` of the 403 that the browser received:

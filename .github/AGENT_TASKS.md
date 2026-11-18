@@ -118,7 +118,7 @@ Keep prompts, domain validation, and PR publishing outside the adapter.
 
 ```bash
 python3 -m unittest discover -s .github/scripts -p test_run_coding_agent.py
-pre-commit run --files .github/scripts/run_coding_agent.py \
+prek run --files .github/scripts/run_coding_agent.py \
   .github/scripts/test_run_coding_agent.py \
   .github/actions/run-coding-agent/action.yml \
   .github/workflows/reusable-agent-task-pr.yml \

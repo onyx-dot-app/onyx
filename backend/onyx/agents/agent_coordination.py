@@ -860,11 +860,21 @@ class AgentCoordinator:
         description: str,
         restoration_config: BaseModel | None,
     ) -> AgentInfo:
-        if not name or "/" in name:
-            raise ValueError("Agent name must be a nonempty label without slashes")
+        if name in ("", ".", "..") or "/" in name:
+            raise ValueError(
+                "Agent name must be a nonempty label without slashes, other than . or .."
+            )
         with self._state.lock:
             self.check_open()
             parent = self._state.registrations[parent_id]
+            path = f"{parent.path}/{name}"
+            # Agents address each other by path. Chat registers the branch's
+            # saved agents when it creates the view.
+            if any(info.path == path for info in self._visible_agents.values()):
+                raise ValueError(
+                    f"An agent at {path} already exists. Use send_message to "
+                    "continue it, or pick another name."
+                )
             if parent.depth >= MAX_CHILD_DEPTH:
                 raise ValueError(
                     f"Agent nesting limit reached: agents {MAX_CHILD_DEPTH} levels "
@@ -878,7 +888,7 @@ class AgentCoordinator:
                 )
             info = AgentInfo(
                 id=agent.id,
-                path=f"{parent.path}/{name}",
+                path=path,
                 parent_id=parent_id,
                 description=description,
                 restoration_config=restoration_config,

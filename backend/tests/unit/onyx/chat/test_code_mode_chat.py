@@ -1,5 +1,6 @@
 """Code mode results render live and on replay, save, and change the offered tools."""
 
+import json
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -47,6 +48,7 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import FILE_READER_TOOL_NAME, WAIT_CODE_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
+    CapabilityEntry,
     CodeModeExposure,
     CustomToolCallSummary,
     LlmPythonExecutionResult,
@@ -469,7 +471,7 @@ def test_code_mode_names_preferred_tools_without_changing_definitions(
         user_memory_context=None,
         llm=llm,
         token_counter=len,
-        preferred_tool_id=preferred_tool_id,
+        preferred_tool=CapabilityEntry(tool_id=preferred_tool_id),
     )
     run_agent(agent, messages=[UserMessage(content="Find")], max_steps=3)
 
@@ -518,6 +520,56 @@ def test_code_mode_keeps_identical_tool_definitions_on_the_final_step() -> None:
         WAIT_CODE_TOOL_NAME,
     ]
     assert final["tool_choice"] == ToolChoiceOptions.NONE
+
+
+def test_the_next_run_of_the_same_agent_starts_new_cells() -> None:
+    """A message to an idle child starts a new run of the loaded agent."""
+
+    def program(call_id: str, code: str) -> Delta:
+        return Delta(
+            tool_calls=[
+                ChatCompletionDeltaToolCall(
+                    index=0,
+                    id=call_id,
+                    function=ResponseFunctionCall(
+                        name=CodeModeTool.NAME, arguments=json.dumps({"code": code})
+                    ),
+                )
+            ]
+        )
+
+    llm = ScriptedLLM(
+        [
+            program("call-0", 'store("answer", 41)\nprint(42)'),
+            Delta(content="One."),
+            # The next run reads what the first run stored for this chat.
+            program("call-1", 'print(load("answer") + 1)'),
+            Delta(content="Two."),
+        ]
+    )
+    agent = ChatAgent(
+        messages=[],
+        tools=[EchoTool()],
+        code_mode=True,
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=_context_files(),
+        persona=None,
+        user_memory_context=None,
+        llm=llm,
+        token_counter=len,
+    )
+    run_agent(agent, messages=[UserMessage(content="First")], max_steps=3)
+    run_agent(agent, messages=[UserMessage(content="Again")], max_steps=3)
+
+    first, second = [
+        message
+        for message in agent.state.messages
+        if isinstance(message, ToolResultMessage)
+    ]
+    assert "cell 1" in first.content and "42" in first.content
+    assert not second.is_error
+    assert "cell 2" in second.content and "42" in second.content
 
 
 @pytest.mark.parametrize(

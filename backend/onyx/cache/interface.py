@@ -1,7 +1,6 @@
 import abc
 import builtins
 from collections.abc import Collection
-from enum import Enum
 
 from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
@@ -18,11 +17,6 @@ catch this tuple instead of bare ``Exception``.
 When adding a new ``CacheBackend`` implementation, add its transient error base
 class(es) here so all call-sites pick it up automatically.
 """
-
-
-class CacheBackendType(str, Enum):
-    REDIS = "redis"
-    POSTGRES = "postgres"
 
 
 class CacheLockLostError(Exception):
@@ -121,6 +115,15 @@ class CacheBackend(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def incr(self, key: str, ex: int | None = None) -> int:
+        """Atomically add 1 to an integer counter and return the new count.
+
+        A missing or expired key counts from 0. ``ex`` sets the TTL on every
+        call; ``None`` keeps the TTL the key has.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def delete(self, key: str) -> None:
         raise NotImplementedError
 
@@ -160,6 +163,15 @@ class CacheBackend(abc.ABC):
 
     @abc.abstractmethod
     def set_remove(self, key: str, member: str | bytes) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def set_contains(self, key: str, member: str | bytes) -> bool:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def set_replace(self, key: str, members: Collection[str | bytes]) -> None:
+        """Atomically replace every member. An empty collection clears the set."""
         raise NotImplementedError
 
     @abc.abstractmethod

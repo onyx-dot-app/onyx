@@ -18,16 +18,15 @@ from typing import Callable
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import BuildSessionStatus, SandboxStatus
 from onyx.db.models import BuildSession, Sandbox, User
-from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.sandbox import (
     create_snapshot__no_commit,
     get_running_sandboxes,
 )
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     FilesystemEntry,
     OutputsManifestEntry,
@@ -363,7 +362,7 @@ class TestRestoreFailureRecovery:
             lambda: stub_sandbox_manager,
         )
 
-        with pytest.raises(HTTPException) as exc_info:
+        with pytest.raises(OnyxError) as exc_info:
             restore_session(
                 session_id=session_id,
                 user=test_user,

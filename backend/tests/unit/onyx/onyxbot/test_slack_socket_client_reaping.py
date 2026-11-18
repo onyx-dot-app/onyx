@@ -58,7 +58,7 @@ def test_acquire_tenants_drops_the_client_of_a_deleted_bot() -> None:
             f"{_LISTENER}.fetch_ee_implementation_or_noop", return_value=lambda: set()
         ),
         patch(f"{_LISTENER}.get_all_tenant_ids", return_value=[_TENANT]),
-        patch(f"{_LISTENER}.get_redis_client"),
+        patch(f"{_LISTENER}.get_cache_backend"),
         patch(f"{_LISTENER}.get_session_with_current_tenant", _fake_session),
         patch(f"{_LISTENER}.fetch_slack_bots", return_value=[live_bot]),
         patch.object(SlackbotHandler, "_manage_clients_per_tenant"),

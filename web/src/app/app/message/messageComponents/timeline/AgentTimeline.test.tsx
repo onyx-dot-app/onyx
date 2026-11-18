@@ -47,6 +47,7 @@ function step(tabIndex: number): TransformedStep {
 const parallelTurn: TurnGroup[] = [
   { turnIndex: 0, isParallel: true, steps: [step(0), step(1)] },
 ];
+const noTurns: TurnGroup[] = [];
 const sequentialTurn: TurnGroup[] = [
   { turnIndex: 0, isParallel: false, steps: [step(0)] },
 ];
@@ -56,20 +57,31 @@ beforeEach(() => {
   useChatSessionStore.getState().createSession("s");
 });
 
-describe("AgentTimeline while a tool call waits for approval", () => {
+describe("AgentTimeline while a tool call waits for the user", () => {
   it.each([
-    ["parallel tool calls", parallelTurn, false],
-    ["a preamble", sequentialTurn, true],
-  ])("names the wait after %s", (_, turnGroups, hasDisplayContent) => {
-    render(
-      <AgentTimeline
-        turnGroups={turnGroups}
-        chatState={{ agent }}
-        hasDisplayContent={hasDisplayContent}
-        awaitingApproval
-      />
-    );
+    ["parallel tool calls", parallelTurn, false, "approval"],
+    ["a preamble", sequentialTurn, true, "approval"],
+    ["a preamble and a question", sequentialTurn, true, "answer"],
+    ["a preamble and only a question", noTurns, true, "answer"],
+  ] as const)(
+    "names the wait after %s",
+    (_, turnGroups, hasDisplayContent, awaitingUser) => {
+      render(
+        <AgentTimeline
+          turnGroups={turnGroups}
+          chatState={{ agent }}
+          hasDisplayContent={hasDisplayContent}
+          awaitingUser={awaitingUser}
+        />
+      );
 
-    expect(screen.getByText("Waiting for your approval")).toBeVisible();
-  });
+      expect(
+        screen.getByText(
+          awaitingUser === "approval"
+            ? "Waiting for your approval"
+            : "Waiting for your answer"
+        )
+      ).toBeVisible();
+    }
+  );
 });

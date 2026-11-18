@@ -9,9 +9,9 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.db.build_session import session_runtime_stale
 from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
 from onyx.db.models import BuildSession, Skill, User
-from onyx.server.features.build.db.build_session import session_runtime_stale
 from onyx.server.features.build.sandbox.models import FatalWriteError
 from onyx.skills.push import (
     UserSkillsPayload,

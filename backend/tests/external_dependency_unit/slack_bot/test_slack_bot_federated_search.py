@@ -658,7 +658,7 @@ class TestSlackBotFederatedSearch:
             self._teardown_common_mocks(patches)
 
 
-@patch("onyx.context.search.federated.slack_search.get_redis_client")
+@patch("onyx.context.search.federated.slack_search.get_cache_backend")
 @patch("onyx.context.search.federated.slack_search.WebClient")
 def test_missing_scope_resilience(
     mock_web_client: Mock, mock_redis_client: Mock
@@ -749,7 +749,7 @@ def test_missing_scope_resilience(
     assert result["D9876543210"]["type"] == "im"
 
 
-@patch("onyx.context.search.federated.slack_search.get_redis_client")
+@patch("onyx.context.search.federated.slack_search.get_cache_backend")
 @patch("onyx.context.search.federated.slack_search.WebClient")
 def test_multiple_missing_scopes_resilience(
     mock_web_client: Mock, mock_redis_client: Mock

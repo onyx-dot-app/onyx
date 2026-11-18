@@ -9,6 +9,7 @@ from typing import Any
 from opensearchpy.helpers.errors import BulkIndexError
 
 from onyx.access.models import DocumentAccess
+from onyx.cache.locks import cache_shared_lock
 from onyx.configs.app_configs import (
     MAX_CHUNKS_PER_DOC_BATCH,
     OPENSEARCH_EXPLAIN_ENABLED,
@@ -76,7 +77,6 @@ from onyx.document_index.opensearch.search import (
     get_zscore_normalization_pipeline_name_and_config,
 )
 from onyx.indexing.models import DocMetadataAwareIndexChunk
-from onyx.redis.lock_context import redis_shared_lock
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
@@ -441,7 +441,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             embedding_dim,
         )
 
-        with redis_shared_lock(
+        with cache_shared_lock(
             lock_name=f"{OnyxRedisLocks.OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX}:{self._index_name}",
             max_time_lock_held_s=VERIFY_INDEX_LOCK_TTL_S,
             wait_for_lock_s=VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S,
@@ -567,7 +567,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
         deleted_doc_ids: set[str] = set()
 
         def _flush_chunks(group: list[DocMetadataAwareIndexChunk]) -> None:
-            assert len(group) > 0, "group is empty"
+            if not group:
+                raise RuntimeError("Bug: group is empty.")
 
             # An error midway can leave a doc with its chunks deleted and not
             # all of its new chunks indexed.
@@ -1405,9 +1406,8 @@ class OpenSearchIndexPair(DocumentIndex):
     def verify_and_create_index_if_necessary(self, embedding_dim: int) -> None:
         self._primary.verify_and_create_index_if_necessary(embedding_dim)
         if self._secondary is not None:
-            assert self._secondary_embedding_dim is not None, (
-                "Bug: Secondary embedding dimension is not set."
-            )
+            if self._secondary_embedding_dim is None:
+                raise RuntimeError("Bug: Secondary embedding dimension is not set.")
             self._secondary.verify_and_create_index_if_necessary(
                 self._secondary_embedding_dim
             )

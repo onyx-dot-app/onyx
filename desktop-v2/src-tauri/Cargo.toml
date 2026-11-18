@@ -1,0 +1,44 @@
+[package]
+name = "onyx-desktop-v2"
+version = "0.0.0-dev"
+description = "Onyx Desktop v2 (preview)"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2.6", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-updater = "2"
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+tauri-plugin-window-state = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# native-tls: trust what the OS trusts (keychain roots, corporate TLS proxies).
+reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls", "stream"] }
+futures-util = "0.3"
+tokio = { version = "1", features = ["time"] }
+url = "2.5"
+keyring = { version = "3", features = ["apple-native"] }
+rfd = "0.15"
+log = "0.4"
+libc = "0.2" # QA harness: checks its directory's owner (geteuid)
+
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri-nspanel = "2.1.1"
+block2 = "0.6"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSGeometry", "NSDictionary"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSAlert", "NSApplication", "NSButton", "NSControl", "NSResponder", "NSTextField", "NSView", "NSWindow"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

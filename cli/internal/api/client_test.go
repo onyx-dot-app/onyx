@@ -136,12 +136,57 @@ func TestDecideApprovalNoLongerWaiting(t *testing.T) {
 		}))
 		_, err := testutil.NewClient(srv.URL).DecideApproval(t.Context(), "a1", models.RejectApproval)
 		srv.Close()
-		if !api.IsApprovalNoLongerWaiting(err) {
-			t.Errorf("status %d: IsApprovalNoLongerWaiting(%v) = false", status, err)
+		if !api.IsNoLongerWaiting(err) {
+			t.Errorf("status %d: IsNoLongerWaiting(%v) = false", status, err)
 		}
 	}
-	if api.IsApprovalNoLongerWaiting(&api.OnyxAPIError{StatusCode: http.StatusInternalServerError}) {
+	if api.IsNoLongerWaiting(&api.OnyxAPIError{StatusCode: http.StatusInternalServerError}) {
 		t.Error("a server error must stay retryable, not no longer waiting")
+	}
+}
+
+func TestAnswerQuestionsSendsTheAnswers(t *testing.T) {
+	var gotPath string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotBody = r.URL.Path, nil
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_, _ = w.Write([]byte(`{"question_request_id":"q1","continuation":{"stream_id":9,"response_ids":[4]}}`))
+	}))
+	defer srv.Close()
+
+	client := testutil.NewClient(srv.URL)
+	result, err := client.AnswerQuestions(t.Context(), "q1", models.QuestionAnswers{Answers: []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabel: "Team"}}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotPath != "/api/chat/question-requests/q1/answers" {
+		t.Fatalf("path = %s", gotPath)
+	}
+	// Exactly one of answers and message is sent.
+	if want := map[string]any{"answers": []any{map[string]any{"question_id": "scope", "option_label": "Team"}}}; !reflect.DeepEqual(gotBody, want) {
+		t.Fatalf("body = %v, want %v", gotBody, want)
+	}
+	if want := (models.QuestionAnswersResult{QuestionRequestID: "q1", Continuation: &models.ChatStream{StreamID: 9, ResponseIDs: []int{4}}}); !reflect.DeepEqual(result, want) {
+		t.Fatalf("result = %+v, want %+v", result, want)
+	}
+
+	if _, err := client.AnswerQuestions(t.Context(), "q1", models.QuestionAnswers{Message: "Only Ana"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := map[string]any{"message": "Only Ana"}; !reflect.DeepEqual(gotBody, want) {
+		t.Fatalf("body = %v, want %v", gotBody, want)
+	}
+}
+
+func TestApprovalPendingIsNotNoLongerWaiting(t *testing.T) {
+	pending := &api.OnyxAPIError{StatusCode: http.StatusConflict, ErrorCode: api.ErrorCodeApprovalPending}
+	if api.IsNoLongerWaiting(pending) || !api.IsApprovalPending(pending) {
+		t.Fatal("a message refused while an approval waits must keep the questions open")
+	}
+	conflict := &api.OnyxAPIError{StatusCode: http.StatusConflict, ErrorCode: "CONFLICT"}
+	if !api.IsNoLongerWaiting(conflict) || api.IsApprovalPending(conflict) {
+		t.Fatal("an answered question must be no longer waiting")
 	}
 }
 

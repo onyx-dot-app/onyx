@@ -13,7 +13,6 @@ from fastapi import (
     Depends,
     File,
     Form,
-    HTTPException,
     Query,
     Request,
     Response,
@@ -42,6 +41,7 @@ from onyx.configs.app_configs import (
     WEB_DOMAIN,
 )
 from onyx.configs.constants import (
+    CHECK_FOR_INDEXING_EXPIRES_SECONDS,
     ONYX_METADATA_FILENAME,
     PUBLIC_API_TAGS,
     DocumentSource,
@@ -162,6 +162,8 @@ from onyx.file_store.file_store import (
     FileStore,
     get_default_file_store,
 )
+
+# no-direct-redis: allow client for a Celery task helper
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.capability_check_runs import (
@@ -439,7 +441,7 @@ def upload_files(
 
             if is_zip_file(file):
                 if seen_zip:
-                    raise HTTPException(status_code=400, detail=SEEN_ZIP_DETAIL)
+                    raise OnyxError(OnyxErrorCode.BAD_REQUEST, SEEN_ZIP_DETAIL)
                 seen_zip = True
 
                 # Validate the zip by opening it (catches corrupt/non-zip files)
@@ -520,7 +522,7 @@ def upload_files(
     except ZipSizeLimitError as e:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e)) from e
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
     return FileUploadResponse(
         file_paths=deduped_file_paths,
         file_names=deduped_file_names,
@@ -552,9 +554,9 @@ def _fetch_and_check_file_connector_cc_pair_permissions(
 ) -> ConnectorCredentialPair:
     cc_pair = fetch_connector_credential_pair_for_connector(db_session, connector_id)
     if cc_pair is None:
-        raise HTTPException(
-            status_code=404,
-            detail="No Connector-Credential Pair found for this connector",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "No Connector-Credential Pair found for this connector",
         )
 
     # The file list is connector config shared by every pair on the connector.
@@ -603,11 +605,11 @@ def list_connector_files(
     """
     connector = fetch_connector_by_id(connector_id, db_session)
     if connector is None:
-        raise HTTPException(status_code=404, detail="Connector not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Connector not found")
 
     if connector.source != DocumentSource.FILE:
-        raise HTTPException(
-            status_code=400, detail="This endpoint only works with file connectors"
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "This endpoint only works with file connectors"
         )
 
     # READ is the obvious choice for a read, but its filter passes any public
@@ -741,11 +743,11 @@ def update_connector_files(
     files = files or []
     connector = fetch_connector_by_id(connector_id, db_session)
     if connector is None:
-        raise HTTPException(status_code=404, detail="Connector not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Connector not found")
 
     if connector.source != DocumentSource.FILE:
-        raise HTTPException(
-            status_code=400, detail="This endpoint only works with file connectors"
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "This endpoint only works with file connectors"
         )
 
     # Get the connector-credential pair for indexing/pruning triggers and validate
@@ -761,12 +763,11 @@ def update_connector_files(
     try:
         file_ids_list = json.loads(file_ids_to_remove)
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid file_ids_to_remove format")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid file_ids_to_remove format")
 
     if not isinstance(file_ids_list, list):
-        raise HTTPException(
-            status_code=400,
-            detail="file_ids_to_remove must be a JSON-encoded list",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "file_ids_to_remove must be a JSON-encoded list"
         )
 
     # Get current connector config
@@ -791,9 +792,9 @@ def update_connector_files(
                 current_zip_metadata = loaded_metadata
         except Exception as e:
             logger.warning("Failed to load existing metadata file: %s", e)
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to load existing connector metadata file",
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "Failed to load existing connector metadata file",
             )
 
     # Upload new files if any
@@ -850,9 +851,9 @@ def update_connector_files(
 
     # Validate that at least one file remains
     if not final_file_locations:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot remove all files from connector. At least one file must remain.",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "Cannot remove all files from connector. At least one file must remain.",
         )
 
     # Merge and filter metadata (remove metadata for deleted files)
@@ -896,8 +897,8 @@ def update_connector_files(
 
     updated_connector = update_connector(connector_id, connector_base, db_session)
     if updated_connector is None:
-        raise HTTPException(
-            status_code=500, detail="Failed to update connector configuration"
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR, "Failed to update connector configuration"
         )
 
     # Trigger re-indexing for new files and pruning for removed files
@@ -915,6 +916,7 @@ def update_connector_files(
                 OnyxCeleryTask.CHECK_FOR_INDEXING,
                 kwargs={"tenant_id": tenant_id},
                 priority=OnyxCeleryPriority.HIGH,
+                expires=CHECK_FOR_INDEXING_EXPIRES_SECONDS,
             )
             logger.info(
                 "Marked cc_pair %s for UPDATE indexing (new files) for connector %s",
@@ -924,6 +926,7 @@ def update_connector_files(
 
         # If files were removed, trigger pruning immediately
         if file_ids_list:
+            # no-direct-redis: allow client for a Celery task helper
             r = get_redis_client()
             payload_id = try_creating_prune_generator_task(
                 client_app, cc_pair, db_session, r, tenant_id
@@ -1688,7 +1691,7 @@ def create_connector_from_model(
         return connector_response
     except ValueError as e:
         logger.error("Error creating connector: %s", e)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
 
 @router.post("/admin/connector-with-mock-credential")
@@ -2060,7 +2063,6 @@ def update_connector_from_model(
 
 @router.delete(
     "/admin/connector/{connector_id}",
-    response_model=StatusResponse[int],
     tags=PUBLIC_API_TAGS,
 )
 def delete_connector_by_id(
@@ -2078,7 +2080,7 @@ def delete_connector_by_id(
                 connector_id=connector_id,
             )
     except AssertionError:
-        raise HTTPException(status_code=400, detail="Connector is not deletable")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Connector is not deletable")
 
     emit_audit_event(
         AuditAction.CONNECTOR_DELETE,
@@ -2110,9 +2112,8 @@ def connector_run_once(
             run_info.connector_id, db_session
         )
     except ValueError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Connector by id {connector_id} does not exist.",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"Connector by id {connector_id} does not exist."
         )
 
     if not specified_credential_ids:
@@ -2121,15 +2122,15 @@ def connector_run_once(
         if set(specified_credential_ids).issubset(set(possible_credential_ids)):
             credential_ids = specified_credential_ids
         else:
-            raise HTTPException(
-                status_code=400,
-                detail="Not all specified credentials are associated with connector",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                "Not all specified credentials are associated with connector",
             )
 
     if not credential_ids:
-        raise HTTPException(
-            status_code=400,
-            detail="Connector has no valid credentials, cannot create index attempts.",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            "Connector has no valid credentials, cannot create index attempts.",
         )
 
     # GATE 2, all pairs up front — a mid-loop reject would leave attempts already queued
@@ -2158,7 +2159,7 @@ def connector_run_once(
             db_session,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
     logger.info("connector_run_once - running check_for_indexing")
 
@@ -2228,8 +2229,8 @@ def gmail_callback(
 ) -> StatusResponse:
     credential_id_cookie = request.cookies.get(_GMAIL_CREDENTIAL_ID_COOKIE_NAME)
     if credential_id_cookie is None or not credential_id_cookie.isdigit():
-        raise HTTPException(
-            status_code=401, detail="Request did not pass CSRF verification."
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHENTICATED, "Request did not pass CSRF verification."
         )
     credential_id = int(credential_id_cookie)
     verify_csrf(credential_id, callback.state)
@@ -2242,8 +2243,8 @@ def gmail_callback(
         GoogleOAuthAuthenticationMethod.UPLOADED,
     )
     if credentials is None:
-        raise HTTPException(
-            status_code=500, detail="Unable to fetch Gmail access tokens"
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR, "Unable to fetch Gmail access tokens"
         )
 
     return StatusResponse(success=True, message="Updated Gmail access tokens")
@@ -2258,8 +2259,8 @@ def google_drive_callback(
 ) -> StatusResponse:
     credential_id_cookie = request.cookies.get(_GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME)
     if credential_id_cookie is None or not credential_id_cookie.isdigit():
-        raise HTTPException(
-            status_code=401, detail="Request did not pass CSRF verification."
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHENTICATED, "Request did not pass CSRF verification."
         )
     credential_id = int(credential_id_cookie)
     verify_csrf(credential_id, callback.state)
@@ -2272,8 +2273,8 @@ def google_drive_callback(
         GoogleOAuthAuthenticationMethod.UPLOADED,
     )
     if credentials is None:
-        raise HTTPException(
-            status_code=500, detail="Unable to fetch Google Drive access tokens"
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR, "Unable to fetch Google Drive access tokens"
         )
 
     return StatusResponse(success=True, message="Updated Google Drive access tokens")
@@ -2315,8 +2316,8 @@ def get_connector_by_id(
 ) -> ConnectorSnapshot | StatusResponse[int]:
     connector = fetch_connector_by_id(connector_id, db_session)
     if connector is None:
-        raise HTTPException(
-            status_code=404, detail=f"Connector {connector_id} does not exist"
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"Connector {connector_id} does not exist"
         )
 
     return ConnectorSnapshot(
@@ -2350,7 +2351,7 @@ def submit_connector_request(
     connector_name = request_data.connector_name.strip()
 
     if not connector_name:
-        raise HTTPException(status_code=400, detail="Connector name cannot be empty")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Connector name cannot be empty")
 
     user_email = user.email
 
@@ -2540,6 +2541,7 @@ def trigger_indexing_for_cc_pair(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
         priority=priority,
         kwargs={"tenant_id": tenant_id},
+        expires=CHECK_FOR_INDEXING_EXPIRES_SECONDS,
     )
 
     return num_triggers

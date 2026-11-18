@@ -9,7 +9,6 @@ from collections.abc import Generator
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -346,9 +345,9 @@ def test_feedback_needs_operate_on_every_pair_of_the_document(
     update_document_boost_for_user(db_session, own_doc, 3, operator)
     update_document_hidden_for_user(db_session, own_doc, True, operator)
     for doc_id in (shared_doc, other_doc):
-        with pytest.raises(HTTPException):
+        with pytest.raises(OnyxError):
             update_document_boost_for_user(db_session, doc_id, 3, operator)
-        with pytest.raises(HTTPException):
+        with pytest.raises(OnyxError):
             update_document_hidden_for_user(db_session, doc_id, True, operator)
 
 

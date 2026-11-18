@@ -54,7 +54,8 @@ def build_generic_connector_failure(
             exception=exc if isinstance(exc, Exception) else None,
         )
 
-    assert entity_id is not None  # linter
+    if entity_id is None:
+        raise RuntimeError("entity_id is missing.")
     return ConnectorFailure(
         failed_entity=EntityFailure(entity_id=entity_id),
         failure_message=str(exc),

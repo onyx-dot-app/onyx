@@ -1,30 +1,31 @@
-"""One-time, PKCE-bound SSO code store (Redis).
+"""One-time, PKCE-bound SSO code store (cache backend).
 
 The mobile SSO bridge never puts a session token on the (interceptable)
 custom-scheme deep link. Instead the backend stores the freshly minted token in
-Redis under a short-lived, single-use code bound to an app-supplied PKCE
+the cache under a short-lived, single-use code bound to an app-supplied PKCE
 challenge, and hands the deep link only that opaque code. The app later swaps the
 code for the token over TLS, proving possession of the matching ``code_verifier``
 — so a hijacked code is useless to an attacker who never saw the verifier.
 
 Security properties enforced here:
-  * single-use  -- atomic ``GETDEL`` burns the code on first read
+  * single-use  -- atomic get-and-delete burns the code on first read
   * short TTL   -- ``MOBILE_SSO_CODE_TTL_SECONDS`` (default 60s)
   * PKCE (S256) -- the verifier is hashed and constant-time-compared to the
                    stored challenge (RFC 7636)
 
-Redis is core infra (always available, even when ``AUTH_BACKEND=jwt``), so this
+The cache backend is always available, even when ``AUTH_BACKEND=jwt``, so this
 store works across every auth backend. Keys are a single global namespace: a
 code is a high-entropy random value mapping to exactly one already-tenant-bound
 token, so there is no cross-tenant ambiguity.
 """
 
+import asyncio
 import json
 import secrets
 
 from onyx.auth.pkce import compute_s256_challenge
+from onyx.cache.factory import get_shared_cache_backend
 from onyx.configs.app_configs import MOBILE_SSO_CODE_PREFIX, MOBILE_SSO_CODE_TTL_SECONDS
-from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -38,11 +39,11 @@ async def store_sso_code(token: str, code_challenge: str) -> str:
     """
     code = secrets.token_urlsafe(32)
     record = {"token": token, "code_challenge": code_challenge}
-    redis = await get_async_redis_connection()
-    await redis.set(
+    await asyncio.to_thread(
+        get_shared_cache_backend().set,
         f"{MOBILE_SSO_CODE_PREFIX}{code}",
         json.dumps(record),
-        ex=MOBILE_SSO_CODE_TTL_SECONDS,
+        MOBILE_SSO_CODE_TTL_SECONDS,
     )
     return code
 
@@ -56,9 +57,10 @@ async def consume_sso_code(code: str, code_verifier: str) -> str | None:
     no oracle. The code is burned (``GETDEL``) before the PKCE check, so a wrong
     verifier cannot be retried against the same code.
     """
-    redis = await get_async_redis_connection()
-    # Atomic get-and-delete enforces single use (Redis 6.2+).
-    raw = await redis.getdel(f"{MOBILE_SSO_CODE_PREFIX}{code}")
+    # Atomic get-and-delete enforces single use.
+    raw = await asyncio.to_thread(
+        get_shared_cache_backend().getdel, f"{MOBILE_SSO_CODE_PREFIX}{code}"
+    )
     if not raw:
         return None
 

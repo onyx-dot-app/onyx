@@ -2,15 +2,13 @@ import gc
 import os
 import time
 import traceback
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from celery import Celery, Task, current_app, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from redis.lock import Lock as RedisLock
-from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
@@ -55,7 +53,9 @@ from onyx.configs.app_configs import (
     SKIP_SPREADSHEET_CONTENT,
 )
 from onyx.configs.constants import (
+    CELERY_CHECKPOINT_CLEANUP_TASK_EXPIRES,
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_INDEX_ATTEMPT_CLEANUP_TASK_EXPIRES,
     DocumentSource,
     MilestoneRecordType,
     NotificationType,
@@ -103,10 +103,13 @@ from onyx.db.hierarchy import remove_unfilled_stub_hierarchy_nodes_for_cc_pair
 from onyx.db.index_attempt import (
     cc_pair_has_dispatched_index_attempts,
     create_index_attempt_error,
+    get_active_index_attempts,
     get_active_index_attempts_without_task,
+    get_in_progress_index_attempts_with_task,
     get_index_attempt,
     get_stale_not_started_index_attempts,
     get_waiting_index_attempt,
+    has_active_index_attempt,
     index_attempt_has_errors_without_document,
     mark_attempt_canceled,
     mark_attempt_failed,
@@ -211,20 +214,7 @@ def validate_active_indexing_attempts(
 
     with get_session_with_current_tenant() as db_session:
         # Find all active indexing attempts
-        active_attempts = (
-            db_session.execute(
-                select(IndexAttempt).where(
-                    IndexAttempt.status.in_([IndexingStatus.IN_PROGRESS]),
-                    IndexAttempt.celery_task_id.isnot(None),
-                    # Synthetic attempts spawned by the targeted-reindex flow
-                    # have their own lifecycle owner and do not increment
-                    # the docprocessing heartbeat counter.
-                    IndexAttempt.targeted_reindex_job_id.is_(None),
-                )
-            )
-            .scalars()
-            .all()
-        )
+        active_attempts = get_in_progress_index_attempts_with_task(db_session)
 
         for attempt in active_attempts:
             lock_beat.reacquire()
@@ -792,20 +782,11 @@ def active_indexing_attempt(
 
     Returns True if there's an active indexing attempt, False otherwise.
     """
-    active_indexing_attempt = db_session.execute(
-        select(
-            exists().where(
-                IndexAttempt.connector_credential_pair_id == cc_pair_id,
-                IndexAttempt.search_settings_id == search_settings_id,
-                IndexAttempt.status.in_(
-                    [
-                        IndexingStatus.NOT_STARTED,
-                        IndexingStatus.IN_PROGRESS,
-                    ]
-                ),
-            )
-        )
-    ).scalar()
+    active_indexing_attempt = has_active_index_attempt(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+        search_settings_id=search_settings_id,
+    )
 
     if active_indexing_attempt:
         task_logger.debug(
@@ -813,12 +794,13 @@ def active_indexing_attempt(
             f"cc_pair={cc_pair_id} search_settings={search_settings_id}"
         )
 
-    return bool(active_indexing_attempt)
+    return active_indexing_attempt
 
 
-@dataclass
-class _KickoffResult:
+class _KickoffResult(BaseModel):
     """Tracks diagnostic counts from a _kickoff_indexing_tasks run."""
+
+    model_config = ConfigDict(strict=True)
 
     created: int = 0
     skipped_active: int = 0
@@ -1491,18 +1473,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         with get_session_with_current_tenant() as db_session:
             # Monitor all active indexing attempts directly from the database
             # This replaces the Redis fence-based monitoring
-            active_attempts = (
-                db_session.execute(
-                    select(IndexAttempt).where(
-                        IndexAttempt.status.in_(
-                            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-                        ),
-                        IndexAttempt.targeted_reindex_job_id.is_(None),
-                    )
-                )
-                .scalars()
-                .all()
-            )
+            active_attempts = get_active_index_attempts(db_session)
 
             for attempt in active_attempts:
                 try:
@@ -1588,6 +1559,7 @@ def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
                     },
                     queue=OnyxCeleryQueues.CHECKPOINT_CLEANUP,
                     priority=OnyxCeleryPriority.MEDIUM,
+                    expires=CELERY_CHECKPOINT_CLEANUP_TASK_EXPIRES,
                 )
     except Exception:
         task_logger.exception("Unexpected exception during checkpoint cleanup")
@@ -1677,6 +1649,7 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
                     },
                     queue=OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
                     priority=OnyxCeleryPriority.MEDIUM,
+                    expires=CELERY_INDEX_ATTEMPT_CLEANUP_TASK_EXPIRES,
                 )
     except Exception:
         task_logger.exception("Unexpected exception during index attempt cleanup check")

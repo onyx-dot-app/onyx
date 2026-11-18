@@ -1,6 +1,6 @@
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
+from typing import NoReturn, Tuple
 from uuid import UUID
 
 from pydantic import TypeAdapter
@@ -76,7 +76,7 @@ from onyx.server.query_and_chat.models import (
     ChatMessageDetail,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
-from onyx.tools.models import ChatToolSelection
+from onyx.tools.models import PluginEntry, ToolOptions
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -1028,22 +1028,29 @@ def set_response_model_names__no_commit(
         )
 
 
-# A selection is user input stored on the chat and loaded with it, so its size
-# is bounded before anything reads or stores it.
-MAX_TOOL_SELECTION_ITEMS = 1000
-MAX_TOOL_SELECTION_BYTES = 64 * 1024
+# Tool options are user input stored on the chat and loaded with it, so their
+# size is bounded before anything reads or stores them.
+MAX_TOOL_OPTIONS_ITEMS = 1000
+MAX_TOOL_OPTIONS_BYTES = 64 * 1024
 
 
-def set_chat_session_tool_selection__no_commit(
+def _raise_tool_options_too_large() -> NoReturn:
+    raise OnyxError(
+        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+        "The tool options are too large to save",
+    )
+
+
+def set_chat_session_tool_options__no_commit(
     db_session: Session,
     chat_session_id: UUID,
-    tool_selection: ChatToolSelection,
+    tool_options: ToolOptions,
     user: User,
-) -> ChatToolSelection | None:
-    """Save the fields set on `tool_selection`; unset fields keep their saved values.
+) -> ToolOptions | None:
+    """Save the fields set on `tool_options`; unset fields keep their saved values.
 
-    A chat that keeps no content stores no selection, because search filters
-    carry user choices such as tag values. Returns the stored selection, or
+    A chat that keeps no content stores no options, because search filters
+    carry user choices such as tag values. Returns the stored options, or
     None when the chat stores none.
     """
     chat_session = db_session.get(ChatSession, chat_session_id)
@@ -1051,38 +1058,38 @@ def set_chat_session_tool_selection__no_commit(
         chat_session.incognito_record_mode
     ):
         return None
-    filters = tool_selection.internal_search_filters
+    filters = tool_options.internal_search_filters
     item_lists = [
-        tool_selection.allowed_tool_ids,
+        tool_options.allowed,
+        *(
+            entry.actions
+            for entry in tool_options.allowed or []
+            if isinstance(entry, PluginEntry)
+        ),
         filters.source_type if filters else None,
         filters.document_set if filters else None,
         filters.tags if filters else None,
     ]
-    if (
-        any(len(items) > MAX_TOOL_SELECTION_ITEMS for items in item_lists if items)
-        or len(tool_selection.model_dump_json().encode()) > MAX_TOOL_SELECTION_BYTES
-    ):
-        raise OnyxError(
-            OnyxErrorCode.PAYLOAD_TOO_LARGE,
-            "The tool selection is too large to save",
-        )
+    if any(len(items) > MAX_TOOL_OPTIONS_ITEMS for items in item_lists if items):
+        _raise_tool_options_too_large()
     require_document_set_access(
         db_session, filters.document_set if filters else None, user
     )
-    changes = tool_selection.model_dump(include=tool_selection.model_fields_set)
-    saved = chat_session.tool_selection
+    changes = tool_options.model_dump(include=tool_options.model_fields_set)
+    saved = chat_session.tool_options
     if (
         saved is not None
-        and ChatToolSelection.model_validate(saved.model_dump() | changes) == saved
+        and ToolOptions.model_validate(saved.model_dump() | changes) == saved
     ):
         return saved
     # Merge under the row lock, so a concurrent save keeps the fields it set.
     db_session.refresh(chat_session, with_for_update=True)
-    current = chat_session.tool_selection or ChatToolSelection()
-    chat_session.tool_selection = ChatToolSelection.model_validate(
-        current.model_dump() | changes
-    )
-    return chat_session.tool_selection
+    current = chat_session.tool_options or ToolOptions()
+    merged = ToolOptions.model_validate(current.model_dump() | changes)
+    if len(merged.model_dump_json().encode()) > MAX_TOOL_OPTIONS_BYTES:
+        _raise_tool_options_too_large()
+    chat_session.tool_options = merged
+    return chat_session.tool_options
 
 
 def set_preferred_response(
@@ -2092,3 +2099,7 @@ def parent_session_id(db_session: Session, session: ChatSession) -> UUID | None:
     if parent_id is None:
         raise ValueError("Agent creation message is unavailable")
     return parent_id
+
+
+def add_chat_session__no_commit(db_session: Session, row: ChatSession) -> None:
+    db_session.add(row)

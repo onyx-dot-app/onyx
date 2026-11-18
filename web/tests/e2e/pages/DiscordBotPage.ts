@@ -24,10 +24,10 @@ export class DiscordBotPage {
       .getByRole("status");
   }
 
-  /** The "Discord Integration" page title. */
+  /** The "Discord Bot" page title. */
   get title(): Locator {
     return this.page
       .locator('[aria-label="admin-page-title"]')
-      .getByText("Discord Integration");
+      .getByText("Discord Bot");
   }
 }

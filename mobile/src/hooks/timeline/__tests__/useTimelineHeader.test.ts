@@ -122,7 +122,7 @@ describe("useTimelineHeader — userStopped", () => {
 });
 
 describe("useTimelineHeader — approvals", () => {
-  it("shows the wait for an approval over the step's activity", () => {
+  it("shows the wait for an approval or an answer over the step's activity", () => {
     const turn = makeTurn(0, [
       makeStep(0, 0, [
         makePacket(
@@ -133,9 +133,13 @@ describe("useTimelineHeader — approvals", () => {
       ]),
     ]);
     expect(
-      renderHook(() => useTimelineHeader([turn], undefined, false, true)).result
-        .current.headerText,
+      renderHook(() => useTimelineHeader([turn], undefined, false, "approval"))
+        .result.current.headerText,
     ).toBe("Waiting for your approval");
+    expect(
+      renderHook(() => useTimelineHeader([turn], undefined, false, "answer"))
+        .result.current.headerText,
+    ).toBe("Waiting for your answer");
     expect(
       renderHook(() => useTimelineHeader([turn])).result.current.headerText,
     ).toBe("Executing Lookup");

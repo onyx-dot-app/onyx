@@ -15,13 +15,13 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
-from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
-from onyx.server.features.build.db.build_session import (
+from onyx.db.build_session import (
     create_message,
     get_session_messages,
     upsert_agent_plan,
 )
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
+from onyx.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.event_schema import (
     AgentMessageChunk,
     AgentThoughtChunk,

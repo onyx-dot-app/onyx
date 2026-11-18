@@ -54,7 +54,6 @@ from onyx.connectors.google_drive.file_retrieval import (
 from onyx.connectors.google_drive.models import (
     DriveListingState,
     GoogleDriveCheckpoint,
-    GoogleDriveFileType,
     ImpersonationError,
     ListingPartition,
     ListingPartitionKind,
@@ -86,6 +85,7 @@ from onyx.connectors.google_utils.shared_constants import (
     ONYX_SCOPE_INSTRUCTIONS,
     SLIM_BATCH_SIZE,
     GoogleCredentialKind,
+    GoogleDriveFileType,
 )
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,

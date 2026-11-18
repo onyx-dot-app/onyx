@@ -9,10 +9,11 @@ from uuid import UUID
 
 import httpx
 import pytest
-from fastapi import HTTPException, Request
+from fastapi import Request
 from starlette.responses import StreamingResponse
 
 from onyx.db.enums import SharingScope
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build import webapp_proxy as api
 from tests.common.paths import find_ancestor_containing
 
@@ -587,7 +588,7 @@ class TestWebappAccessCache:
         )
 
         for _ in range(2):
-            with pytest.raises(HTTPException) as exc:
+            with pytest.raises(OnyxError) as exc:
                 await api._check_webapp_access(UUID(SESSION_ID), cast(api.User, viewer))
             assert exc.value.status_code == 404
 

@@ -6,7 +6,7 @@ from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
     ResolvedEntraGroup,
 )
-from ee.onyx.external_permissions.sharepoint.permission_utils import (
+from ee.onyx.external_permissions.microsoft_utils.sharepoint_permissions import (
     DocumentGroupsResult,
     GroupsResult,
     _get_azuread_groups,
@@ -28,23 +28,23 @@ from onyx.connectors.microsoft_utils.models import (
     SharepointSecurable,
     SharepointSecurableKind,
 )
-from onyx.connectors.microsoft_utils.sharepoint_principals import (
-    SharepointPrincipalType,
-    has_only_limited_access,
-)
-from onyx.connectors.sharepoint.connector import SharepointConnectorCheckpoint
-from onyx.connectors.sharepoint.connector_utils import (
+from onyx.connectors.microsoft_utils.sharepoint_access import (
     SharepointGroup,
     SharepointPermissionCache,
     get_sharepoint_external_access,
     get_sharepoint_hierarchy_node_external_access,
 )
+from onyx.connectors.microsoft_utils.sharepoint_principals import (
+    SharepointPrincipalType,
+    has_only_limited_access,
+)
+from onyx.connectors.sharepoint.connector import SharepointConnectorCheckpoint
 from onyx.db.enums import HierarchyNodeType
 from tests.unit.onyx.connectors.microsoft_utils.fake_sharepoint_reader import (
     FakeSharepointReader,
 )
 
-MODULE = "ee.onyx.external_permissions.sharepoint.permission_utils"
+MODULE = "ee.onyx.external_permissions.microsoft_utils.sharepoint_permissions"
 SITE_URL = "https://contoso.sharepoint.com/sites/eng"
 PUBLIC_LOGIN = "c:0-.f|rolemanager|spo-grid-all-users/tenant-id"
 

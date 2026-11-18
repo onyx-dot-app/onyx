@@ -15,7 +15,6 @@ from __future__ import annotations
 from datetime import datetime
 
 import requests
-from redis.exceptions import RedisError
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 
 from ee.onyx.db.license import get_cached_license_metadata, refresh_license_cache
@@ -28,6 +27,7 @@ from ee.onyx.server.tenants.tier_management import (
     mark_tenant_tier_miss,
     update_tenant_tier,
 )
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -74,7 +74,7 @@ def tier_from_license_metadata(metadata: object | None) -> Tier:
 def _self_hosted_tier() -> Tier:
     try:
         metadata = get_cached_license_metadata()
-    except RedisError as e:
+    except CACHE_TRANSIENT_ERRORS as e:
         # Treat cache failure as a miss so the existing DB-fallback path
         # below still has a chance to resolve the correct tier.
         logger.warning("Self-hosted tier: license cache read failed: %s", e)
@@ -134,7 +134,7 @@ def get_tier(tenant_id: str | None = None) -> Tier:
     try:
         cached = get_cached_tier(tid)
         recent_miss = cached is None and has_recent_tenant_tier_miss(tid)
-    except RedisError as e:
+    except CACHE_TRANSIENT_ERRORS as e:
         # Don't try CP either — likely a wider outage; keep failures cheap.
         logger.warning(
             "Tier Redis read failed for tenant %s; falling back to BUSINESS: %s",
@@ -158,7 +158,7 @@ def get_tier(tenant_id: str | None = None) -> Tier:
         fresh_tier, fresh_trial_end = fresh
         try:
             update_tenant_tier(tid, fresh_tier, fresh_trial_end)
-        except RedisError as e:
+        except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
                 "Tier Redis write failed for tenant %s after CP refresh: %s",
                 tid,
@@ -168,7 +168,7 @@ def get_tier(tenant_id: str | None = None) -> Tier:
 
     try:
         mark_tenant_tier_miss(tid)
-    except RedisError as e:
+    except CACHE_TRANSIENT_ERRORS as e:
         logger.warning("Tier miss marker write failed for tenant %s: %s", tid, e)
     return Tier.BUSINESS
 

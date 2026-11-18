@@ -6,6 +6,7 @@ in conftest.py.
 """
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY, CacheBackend
@@ -13,6 +14,40 @@ from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY, CacheBackend
 
 def _key() -> str:
     return f"parity_{uuid4().hex[:12]}"
+
+
+class TestCounterParity:
+    def test_counts_from_one(self, cache: CacheBackend) -> None:
+        k = _key()
+        assert [cache.incr(k), cache.incr(k), cache.incr(k)] == [1, 2, 3]
+        assert cache.get(k) == b"3"
+        assert cache.ttl(k) == TTL_NO_EXPIRY
+
+    def test_ex_sets_the_ttl_on_every_call(self, cache: CacheBackend) -> None:
+        k = _key()
+        assert cache.incr(k, ex=30) == 1
+        assert 0 < cache.ttl(k) <= 30
+        assert cache.incr(k, ex=600) == 2
+        assert 30 < cache.ttl(k) <= 600
+
+    def test_no_ex_keeps_the_ttl(self, cache: CacheBackend) -> None:
+        k = _key()
+        cache.incr(k, ex=600)
+        assert cache.incr(k) == 2
+        assert 0 < cache.ttl(k) <= 600
+
+    def test_expired_counter_restarts(self, cache: CacheBackend) -> None:
+        k = _key()
+        assert cache.incr(k, ex=1) == 1
+        time.sleep(1.2)
+        assert cache.incr(k) == 1
+        assert cache.ttl(k) == TTL_NO_EXPIRY
+
+    def test_concurrent_increments_are_not_lost(self, cache: CacheBackend) -> None:
+        k = _key()
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            counts = list(pool.map(lambda _: cache.incr(k, ex=60), range(40)))
+        assert sorted(counts) == list(range(1, 41))
 
 
 class TestKVParity:

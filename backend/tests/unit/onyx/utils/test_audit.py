@@ -185,13 +185,13 @@ def test_dedup_suppresses_within_window(
 def test_dedup_degrades_to_emit_when_redis_down(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # ``should_emit`` must return True (always-emit) when the Redis client raises.
+    # ``should_emit`` must return True (always-emit) when the cache backend raises.
     def boom_get_client(*_args: Any, **_kwargs: Any) -> Any:
         raise RuntimeError("redis down")
 
-    import onyx.redis.redis_pool as redis_pool
+    import onyx.cache.factory as cache_factory
 
-    monkeypatch.setattr(redis_pool, "get_redis_client", boom_get_client)
+    monkeypatch.setattr(cache_factory, "get_cache_backend", boom_get_client)
     assert audit.should_emit("any-key", 600, "tenant-1") is True
 
 

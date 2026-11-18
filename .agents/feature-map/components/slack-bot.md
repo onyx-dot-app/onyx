@@ -97,7 +97,7 @@ process_slack_event                                  per event
 
 **Process and tenancy.** `onyx/onyxbot/slack/listener.py` runs as its own
 process (the supervisord `slack_bot` program, the Helm `slackbot` deployment). A
-Redis lock per tenant (`OnyxRedisLocks.SLACK_BOT_LOCK`) lets one pod own a
+Cache lock per tenant (`OnyxRedisLocks.SLACK_BOT_LOCK`) lets one pod own a
 tenant's sockets. Token changes and deleted bots reach the sockets only at the
 next acquisition cycle. Until then `prefilter_requests` drops events for a
 missing or disabled bot.

@@ -137,7 +137,7 @@ live run older than five minutes, so double clicks start one run.
    `InsufficientPermissionsError` (`connectors/exceptions.py`).
 2. `named-checks-need-gateway` **Named checks need a gateway, and listing
    validates them.** `connectors/capability_checks/registry.py:get_capability_checks`
-   and the EE dispatch assert that a
+   and the EE dispatch raise `RuntimeError` unless a
    source with named checks has a `SourceOperations` class
    ([[connectors#gateway-fenced-and-thread-safe]]). Checks call gateway
    operations, never the SDK. The same listing calls

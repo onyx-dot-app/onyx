@@ -6,8 +6,40 @@
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
-import type { AppActionPoliciesView } from "@/lib/plugins/types";
-import { appFixture, mcpServerFixture } from "@/lib/skills/__fixtures__/picker";
+import type { TaskPluginView } from "@/app/craft/v1/tasks/types";
+import type { MemberIntegration } from "@/lib/integrations/types";
+
+function memberIntegration(
+  overrides: Partial<MemberIntegration> & { id: number; name: string }
+): MemberIntegration {
+  return {
+    kind: "api",
+    shape: "custom",
+    description: null,
+    preset_id: null,
+    auth_mode: "individual",
+    auth_method: "api_key",
+    credential_fields: [],
+    status: { state: "connected", reason: null },
+    plugins: [
+      {
+        plugin_id: `plugin-${overrides.id}`,
+        plugin_name: overrides.name,
+        scope: "organization",
+        owner_email: null,
+        installation_policy: "AVAILABLE",
+        enabled: true,
+      },
+    ],
+    users_can_save_always_allow: true,
+    credential_values: {},
+    external_app_id: null,
+    service_urls: [],
+    mcp_server_id: null,
+    server_url: null,
+    ...overrides,
+  };
+}
 
 const TASKS_LIST_PATH = "/craft/v1/tasks";
 const NEW_TASK_PATH = "/craft/v1/tasks/new";
@@ -136,60 +168,55 @@ export class ScheduledTasksPage {
   }
 
   async mockActionPolicyOptions(): Promise<void> {
-    const policies: AppActionPoliciesView[] = [
-      { id: 11, name: "Acme CRM", kind: "external_app" as const },
-      { id: 12, name: "Acme Support", kind: "external_app" as const },
-      { id: 22, name: "Acme MCP", kind: "mcp_server" as const },
+    const plugins: TaskPluginView[] = [
+      { id: 11, name: "Acme CRM", kind: "api" as const },
+      { id: 12, name: "Acme Support", kind: "api" as const },
+      { id: 22, name: "Acme MCP", kind: "mcp" as const },
     ].map(({ id, name, kind }) => ({
-      gated_app_id: id,
-      target_id: id,
-      name,
-      kind,
-      enabled: null,
-      users_can_manage_policies: true,
-      actions: [
+      plugin_id: `plugin-${id}`,
+      plugin_name: name,
+      enabled: false,
+      action_settings: null,
+      integrations: [
         {
-          action_id: "send",
-          normalised_name: "Send message",
-          description: "Send a message.",
-          effective_policy: "ASK",
-          workspace_policy: "ASK",
-          stored_policy: null,
-          editable: true,
-          lock_reason: null,
+          id,
+          name,
+          kind,
+          app_type: null,
+          status: { state: "connected", reason: null },
+          actions: [
+            {
+              key: "send",
+              display_name: "Send message",
+              description: "Send a message.",
+              integration_policy: "ask",
+              locked: false,
+            },
+          ],
         },
       ],
     }));
     await this.page.route("**/api/build/action-policies", async (route) => {
-      await route.fulfill({ json: policies });
+      await route.fulfill({ json: plugins });
     });
-    await this.page.route("**/api/build/apps", async (route) => {
+    await this.page.route("**/api/integrations", async (route) => {
       await route.fulfill({
         json: [
-          appFixture({
-            id: 11,
-            name: "Acme CRM",
-            app_type: "CUSTOM",
-          }),
-          appFixture({
+          memberIntegration({ id: 11, name: "Acme CRM", external_app_id: 11 }),
+          memberIntegration({
             id: 12,
             name: "Acme Support",
-            app_type: "CUSTOM",
+            external_app_id: 12,
+          }),
+          memberIntegration({
+            id: 22,
+            name: "Acme MCP",
+            kind: "mcp",
+            shape: "mcp_server",
+            mcp_server_id: 22,
+            server_url: "https://mcp.example.com/mcp",
           }),
         ],
-      });
-    });
-    await this.page.route("**/api/mcp/servers/craft", async (route) => {
-      await route.fulfill({
-        json: {
-          mcp_servers: [
-            mcpServerFixture({
-              id: 22,
-              name: "Acme MCP",
-              server_url: "https://mcp.example.com/mcp",
-            }),
-          ],
-        },
       });
     });
   }
@@ -205,7 +232,7 @@ export class ScheduledTasksPage {
     }
     await expect(
       this.appPolicies.getByRole("button", { name: "Manage actions" })
-    ).toHaveCount(0);
+    ).toHaveCount(3);
     await this.expectActionPolicyCardsFillForm();
     await expect
       .poll(async () => {
@@ -225,12 +252,13 @@ export class ScheduledTasksPage {
     await this.appPolicies
       .getByRole("switch", { name: "Enable Acme CRM for this task" })
       .click();
-    await this.appPolicies
+    await this.appCards
+      .filter({ hasText: "Acme CRM" })
       .getByRole("button", { name: "Manage actions" })
       .click();
     const modal = this.page.getByRole("dialog");
     await expect(
-      modal.getByRole("group", { name: "Send message" })
+      modal.getByRole("combobox", { name: "Setting for Send message" })
     ).toBeVisible();
     await modal.getByRole("button", { name: "Cancel", exact: true }).click();
 

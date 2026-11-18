@@ -16,7 +16,7 @@ from ee.onyx.server.log_export.api import (
 from ee.onyx.server.log_export.kubernetes_collection import KUBERNETES_WORKER_NAME
 from ee.onyx.server.log_export.models import LogExportManifest
 from ee.onyx.server.log_export.storage import LOG_EXPORT_COLLECTION_DEADLINE
-from onyx.cache.interface import CacheBackendType
+from onyx.configs.constants import CacheBackendType
 
 
 class _StartedThread:

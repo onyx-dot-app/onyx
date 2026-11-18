@@ -191,7 +191,7 @@ describe("ToolApprovalCard continuation", () => {
   >;
   const pausedStop: Packet = {
     placement: { turn_index: 0 },
-    obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_APPROVAL },
+    obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_USER },
   };
   // The continuation's stream ID is no message ID.
   const continuation = { stream_id: 40, response_ids: [2] };

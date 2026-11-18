@@ -143,3 +143,9 @@ CI runs the specs tagged `@code-mode` a second time, in the `code-mode` project,
 does not match. Tag a spec when its backend flow or rendering differs in code mode. Script tool calls with
 `mockLlmToolCallReply`, which picks the call shape for the mode, or branch on `CODE_MODE_ENABLED`. Both are in
 `tests/e2e/utils/mockLlm.ts` and read the variable that CI also sets for the runner. Set it the same way locally.
+
+## Flaky tests
+
+Do not add sleeps, skips, or retries to make a flaky test pass. Find and fix
+the root cause. If you delete the test, write down why and tell the user.
+After three failed fix rounds, stop and ask a human for help.

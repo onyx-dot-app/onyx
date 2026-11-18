@@ -22,6 +22,8 @@ from typing import Any
 
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
+
+# no-direct-redis: allow type of the Celery broker client
 from redis import Redis
 
 from onyx.background.celery.celery_redis import (

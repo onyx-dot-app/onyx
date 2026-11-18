@@ -23,10 +23,10 @@ Usage in a worker app module:
 
 import threading
 import time
-from dataclasses import dataclass
 
 from celery import Task
 from prometheus_client import Counter, Histogram
+from pydantic import BaseModel, ConfigDict
 
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.server.metrics.celery_task_metrics import _MAX_START_TIME_AGE_SECONDS
@@ -35,9 +35,10 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-@dataclass(frozen=True)
-class ConnectorInfo:
+class ConnectorInfo(BaseModel):
     """Cached connector metadata for metric labels."""
+
+    model_config = ConfigDict(frozen=True, strict=True)
 
     source: str
     name: str

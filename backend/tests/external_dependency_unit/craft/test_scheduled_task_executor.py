@@ -32,6 +32,7 @@ from onyx.background.celery.tasks.scheduled_tasks.tasks import (
     dispatch_due_scheduled_tasks,
 )
 from onyx.configs.constants import MessageType
+from onyx.db.build_session import get_session_messages
 from onyx.db.enums import (
     SandboxStatus,
     ScheduledTaskErrorClass,
@@ -40,7 +41,6 @@ from onyx.db.enums import (
     ScheduledTaskTriggerSource,
 )
 from onyx.db.models import Sandbox, ScheduledTask, ScheduledTaskRun, User
-from onyx.server.features.build.db.build_session import get_session_messages
 from onyx.server.features.build.sandbox.base import SandboxEvent
 from onyx.server.features.build.sandbox.event_schema import (
     TURN_ERROR_CODE_TIMEOUT,

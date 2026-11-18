@@ -34,6 +34,7 @@ _MIGRATION_FILE = "cdec9dd9ca3d_add_plugin_tables_and_backfill.py"
 # Later migrations that depend on the plugin tables, newest first. The test
 # downgrades them before it drops the tables.
 _LATER_MIGRATION_FILES = (
+    "730bce2814a0_add_integration_tables.py",
     "414dfccc5e24_drop_deferrable_foreign_keys.py",
     "26ff9e3664f0_add_pending_version_to_plugins.py",
 )

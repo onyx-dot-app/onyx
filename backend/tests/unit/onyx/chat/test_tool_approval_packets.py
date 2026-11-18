@@ -323,7 +323,7 @@ def test_a_suspended_response_replays_as_its_stream_stopped(decided: bool) -> No
             if decided
             else []
         ),
-        OverallStop(stop_reason="awaiting_approval"),
+        OverallStop(stop_reason="awaiting_user"),
     ]
     assert not any(isinstance(packet.obj, SectionEnd) for packet in loaded[-3:])
 
@@ -376,7 +376,7 @@ def test_a_non_streaming_response_returns_the_requests_that_wait() -> None:
         yield request(approval_ids[1])
         yield Packet(
             placement=Placement(turn_index=0),
-            obj=OverallStop(stop_reason="awaiting_approval"),
+            obj=OverallStop(stop_reason="awaiting_user"),
         )
 
     outcome = Future[ChatResponseOutcome]()

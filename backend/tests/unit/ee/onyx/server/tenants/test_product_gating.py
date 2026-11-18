@@ -6,36 +6,35 @@ import pytest
 
 
 class TestIsTenantGated:
-    """Tests for is_tenant_gated - the O(1) Redis check used by middleware."""
+    """Tests for is_tenant_gated - the O(1) cache check used by middleware."""
 
     @pytest.mark.parametrize(
         "redis_result,expected",
         [
             (True, True),
             (False, False),
-            (1, True),  # Redis sismember can return int
-            (0, False),
         ],
     )
-    @patch("ee.onyx.server.tenants.product_gating.get_redis_replica_client")
+    @patch("ee.onyx.server.tenants.product_gating.get_cache_backend")
     def test_tenant_gated_status(
         self,
         mock_get_redis: MagicMock,
-        redis_result: bool | int,
+        redis_result: bool,
         expected: bool,
     ) -> None:
-        """is_tenant_gated correctly interprets Redis sismember result."""
+        """is_tenant_gated reads the gated set from the replica."""
         from ee.onyx.server.tenants.product_gating import is_tenant_gated
 
         mock_redis = MagicMock()
-        mock_redis.sismember.return_value = redis_result
+        mock_redis.set_contains.return_value = redis_result
         mock_get_redis.return_value = mock_redis
 
         assert is_tenant_gated("test_tenant") is expected
+        assert mock_get_redis.call_args.kwargs["replica"] is True
 
 
 class TestUpdateTenantGating:
-    """Tests for update_tenant_gating - modifies Redis gated set."""
+    """Tests for update_tenant_gating - modifies the gated set."""
 
     @pytest.mark.parametrize(
         "status,should_add_to_set",
@@ -44,7 +43,7 @@ class TestUpdateTenantGating:
             ("active", False),  # All other statuses remove from set
         ],
     )
-    @patch("ee.onyx.server.tenants.product_gating.get_redis_client")
+    @patch("ee.onyx.server.tenants.product_gating.get_cache_backend")
     def test_gating_set_modification(
         self,
         mock_get_redis: MagicMock,
@@ -61,8 +60,8 @@ class TestUpdateTenantGating:
         update_tenant_gating("test_tenant", ApplicationStatus(status))
 
         if should_add_to_set:
-            mock_redis.sadd.assert_called_once()
-            mock_redis.srem.assert_not_called()
+            mock_redis.set_add.assert_called_once()
+            mock_redis.set_remove.assert_not_called()
         else:
-            mock_redis.srem.assert_called_once()
-            mock_redis.sadd.assert_not_called()
+            mock_redis.set_remove.assert_called_once()
+            mock_redis.set_add.assert_not_called()

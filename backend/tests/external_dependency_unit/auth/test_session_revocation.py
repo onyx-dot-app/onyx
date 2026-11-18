@@ -13,7 +13,6 @@ from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import AuthBackend
 from onyx.auth.session_tokens import (
     SESSION_TOKEN_GRACE_PERIOD_SECONDS,
     SessionRejection,
@@ -28,6 +27,7 @@ from onyx.configs.app_configs import (
     REDIS_AUTH_KEY_PREFIX,
     REDIS_USER_SESSIONS_KEY_PREFIX,
 )
+from onyx.configs.constants import AuthBackend
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.models import AccessToken, OAuthAccount, User
 from onyx.error_handling.exceptions import OnyxError

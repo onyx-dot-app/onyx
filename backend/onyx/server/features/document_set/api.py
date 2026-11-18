@@ -9,6 +9,7 @@ from onyx.auth.permissions import (
 from onyx.auth.scoped_permissions import (
     assert_within_scope,
 )
+from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
@@ -77,6 +78,7 @@ def create_document_set(
             OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
+            expires=BEAT_EXPIRES_DEFAULT,
         )
 
     return document_set_db_model.id
@@ -176,6 +178,7 @@ def patch_document_set(
             OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
+            expires=BEAT_EXPIRES_DEFAULT,
         )
 
 
@@ -225,6 +228,7 @@ def delete_document_set(
             OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
+            expires=BEAT_EXPIRES_DEFAULT,
         )
 
 

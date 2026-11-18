@@ -62,7 +62,7 @@ def _check_bot_config_api_access() -> None:
 # === Bot Config ===
 
 
-@router.get("/config", response_model=DiscordBotConfigResponse)
+@router.get("/config")
 def get_bot_config(
     _: None = Depends(_check_bot_config_api_access),
     __: User = Depends(require_permission(Permission.MANAGE_BOTS)),
@@ -79,7 +79,7 @@ def get_bot_config(
     )
 
 
-@router.post("/config", response_model=DiscordBotConfigResponse)
+@router.post("/config")
 def create_bot_request(
     request: DiscordBotConfigCreateRequest,
     _: None = Depends(_check_bot_config_api_access),
@@ -153,7 +153,7 @@ def delete_service_api_key_endpoint(
 # === Guild Config ===
 
 
-@router.get("/guilds", response_model=list[DiscordGuildConfigResponse])
+@router.get("/guilds")
 def list_guild_configs(
     _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),
@@ -163,7 +163,7 @@ def list_guild_configs(
     return [DiscordGuildConfigResponse.model_validate(c) for c in configs]
 
 
-@router.post("/guilds", response_model=DiscordGuildConfigCreateResponse)
+@router.post("/guilds")
 def create_guild_request(
     _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
     db_session: Session = Depends(get_session),
@@ -181,7 +181,7 @@ def create_guild_request(
     )
 
 
-@router.get("/guilds/{config_id}", response_model=DiscordGuildConfigResponse)
+@router.get("/guilds/{config_id}")
 def get_guild_config(
     config_id: int,
     _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
@@ -194,7 +194,7 @@ def get_guild_config(
     return DiscordGuildConfigResponse.model_validate(config)
 
 
-@router.patch("/guilds/{config_id}", response_model=DiscordGuildConfigResponse)
+@router.patch("/guilds/{config_id}")
 def update_guild_request(
     config_id: int,
     request: DiscordGuildConfigUpdateRequest,
@@ -244,9 +244,7 @@ def delete_guild_request(
 # === Channel Config ===
 
 
-@router.get(
-    "/guilds/{config_id}/channels", response_model=list[DiscordChannelConfigResponse]
-)
+@router.get("/guilds/{config_id}/channels")
 def list_channel_configs(
     config_id: int,
     _: User = Depends(require_permission(Permission.MANAGE_BOTS)),
@@ -265,7 +263,6 @@ def list_channel_configs(
 
 @router.patch(
     "/guilds/{guild_config_id}/channels/{channel_config_id}",
-    response_model=DiscordChannelConfigResponse,
 )
 def update_channel_request(
     guild_config_id: int,

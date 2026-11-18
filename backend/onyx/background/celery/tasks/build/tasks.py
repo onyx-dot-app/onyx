@@ -15,16 +15,15 @@ from onyx.cache.interface import CacheLock, CacheLockLostError
 from onyx.configs.constants import OnyxCeleryTask, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
-from onyx.redis.redis_pool import get_redis_client
+from onyx.db.sandbox import (
+    get_latest_snapshot_for_session,
+    get_running_sandboxes,
+    user_has_stale_active_session,
+)
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import (
     ENABLE_CRAFT,
     SANDBOX_IDLE_TIMEOUT_SECONDS,
-)
-from onyx.server.features.build.db.sandbox import (
-    get_latest_snapshot_for_session,
-    get_running_sandboxes,
-    user_has_stale_active_session,
 )
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
@@ -232,7 +231,6 @@ def _sweep_tenant_sandboxes(
 
     task_logger.info(f"Sandbox sweep starting for tenant {tenant_id}")
 
-    redis_client = get_redis_client(tenant_id=tenant_id)
     cache = get_cache_backend(tenant_id=tenant_id)
     lock = cache.lock(
         OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK,
@@ -289,7 +287,7 @@ def _sweep_tenant_sandboxes(
                             db_session, sandbox, now
                         ):
                             session_creation_lock = get_session_creation_lock(
-                                redis_client, sandbox.user_id
+                                tenant_id, sandbox.user_id
                             )
                             sleep_sandbox(
                                 db_session=db_session,
@@ -312,7 +310,7 @@ def _sweep_tenant_sandboxes(
                             continue
 
                         session_creation_lock = get_session_creation_lock(
-                            redis_client, sandbox.user_id
+                            tenant_id, sandbox.user_id
                         )
                         if not session_creation_lock.acquire(blocking=False):
                             task_logger.info(

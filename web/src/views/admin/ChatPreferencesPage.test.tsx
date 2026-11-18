@@ -97,12 +97,8 @@ describe("ChatPreferencesPage", () => {
             default_system_prompt: "",
           };
           break;
-        case SWR_KEYS.mcpServers:
-          data = { mcp_servers: [] };
-          break;
         case SWR_KEYS.connectorStatus:
         case SWR_KEYS.tools:
-        case SWR_KEYS.openApiTools:
           data = [];
           break;
         default:

@@ -29,7 +29,11 @@ class SpawnAgentArguments(BaseModel):
 class AgentSelectionArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    agent_id: str = Field(min_length=1, description="From list_agents.")
+    target: str = Field(
+        min_length=1,
+        description="Path from spawn_agent or list_agents, e.g. /root/research; "
+        ".. is your parent.",
+    )
 
 
 class SendMessageArguments(AgentSelectionArguments):
@@ -56,12 +60,13 @@ class ListAgentsArguments(BaseModel):
 class WaitAgentsArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    agent_ids: list[str] | None = Field(
+    targets: list[str] | None = Field(
         default=None,
-        description="Agents to wait for, from list_agents. Omit to wait for all.",
+        description="Paths from spawn_agent or list_agents, e.g. /root/research. "
+        "Omit to wait for all.",
     )
 
-    @field_validator("agent_ids")
+    @field_validator("targets")
     @classmethod
-    def _empty_means_all(cls, agent_ids: list[str] | None) -> list[str] | None:
-        return agent_ids or None
+    def _empty_means_all(cls, targets: list[str] | None) -> list[str] | None:
+        return targets or None

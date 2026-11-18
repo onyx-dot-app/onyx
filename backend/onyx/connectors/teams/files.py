@@ -29,6 +29,10 @@ from onyx.connectors.microsoft_utils.drive_items import (
     iter_drive_items_paged,
 )
 from onyx.connectors.microsoft_utils.graph_auth import acquire_token_for_rest
+from onyx.connectors.microsoft_utils.sharepoint_access import (
+    SharepointPermissionCache,
+    get_sharepoint_external_access,
+)
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointRestReads
 from onyx.connectors.models import (
     BasicExpertInfo,
@@ -38,10 +42,6 @@ from onyx.connectors.models import (
     DocumentFailure,
     SlimDocument,
     TextSection,
-)
-from onyx.connectors.sharepoint.connector_utils import (
-    SharepointPermissionCache,
-    get_sharepoint_external_access,
 )
 from onyx.connectors.teams import listing
 from onyx.connectors.teams.models import ChannelLibrary, ChannelRef

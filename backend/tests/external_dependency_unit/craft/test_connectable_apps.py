@@ -1,75 +1,105 @@
 from __future__ import annotations
 
+from collections.abc import Generator
+
+import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.external_app import get_connectable_apps_for_user
+from onyx.db.enums import (
+    ExternalAppType,
+    IntegrationAuthMethod,
+    IntegrationAuthMode,
+    PluginInstallationPolicy,
+)
+from onyx.db.models import Integration, UserPluginPreference
+from onyx.integrations.connection_models import ConnectionSecret
+from onyx.integrations.craft import list_connectable_apps
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
-from tests.external_dependency_unit.craft.db_helpers import (
-    make_external_app,
-    make_skill,
-    make_user,
-    make_user_credential,
+from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    hold_in_plugin,
+    make_app_integration,
 )
-
-# auth_template value carrying a user-supplied placeholder.
-_USER_TOKEN_TEMPLATE = {"Authorization": "Bearer {token}"}
+from tests.external_dependency_unit.integrations.conftest import add_connection
 
 
-def test_lists_only_unconnected_apps_and_renders_them(
+@pytest.fixture
+def created(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
-) -> None:
-    user = make_user(db_session, email_prefix="connectable")
+) -> Generator[list[int], None, None]:
+    integration_ids: list[int] = []
+    try:
+        yield integration_ids
+    finally:
+        delete_integrations(db_session, integration_ids)
 
-    # Connectable: needs a user token the org hasn't pre-filled.
-    make_external_app(
+
+def _app(
+    db_session: Session,
+    created: list[int],
+    name: str,
+    auth_mode: IntegrationAuthMode = IntegrationAuthMode.INDIVIDUAL,
+) -> Integration:
+    integration, _ = make_app_integration(
         db_session,
-        skill=make_skill(db_session, name="needs-setup", is_public=True),
-        auth_template=_USER_TOKEN_TEMPLATE,
+        app_type=ExternalAppType.CUSTOM,
+        upstream_url_patterns=[f"https://{name}.example.com/*"],
+        name=name,
+        auth_mode=auth_mode,
+        auth_method=(
+            IntegrationAuthMethod.API_KEY
+            if auth_mode is not IntegrationAuthMode.NONE
+            else None
+        ),
+        header_template=(
+            {"Authorization": "Bearer {api_key}"}
+            if auth_mode is not IntegrationAuthMode.NONE
+            else None
+        ),
     )
-    # Connected: the user already stored the token.
-    connected = make_external_app(
+    created.append(integration.id)
+    return integration
+
+
+def test_lists_the_apps_of_run_plugins_that_need_a_connection(
+    db_session: Session, created: list[int], make_test_user: MakeTestUser
+) -> None:
+    user = make_test_user("connectable")
+    needs_setup = _app(db_session, created, "needs-setup")
+    connected = _app(db_session, created, "already-connected")
+    no_sign_in = _app(db_session, created, "no-sign-in", IntegrationAuthMode.NONE)
+    turned_off = _app(db_session, created, "turned-off")
+    hold_in_plugin(
         db_session,
-        skill=make_skill(db_session, name="already-connected", is_public=True),
-        auth_template=_USER_TOKEN_TEMPLATE,
+        [needs_setup, connected, no_sign_in],
+        published=True,
+        installation_policy=PluginInstallationPolicy.DEFAULT,
     )
-    make_user_credential(
-        db_session, app=connected, user=user, user_credentials={"token": "secret"}
-    )
-    # Org-credentialed: org pre-fills the token, so there's nothing to set up.
-    make_external_app(
+    off_plugin = hold_in_plugin(
         db_session,
-        skill=make_skill(db_session, name="org-filled", is_public=True),
-        auth_template=_USER_TOKEN_TEMPLATE,
-        organization_credentials={"token": "shared"},
+        [turned_off],
+        published=True,
+        installation_policy=PluginInstallationPolicy.DEFAULT,
     )
-    # App visibility is organization-wide and independent of skill sharing.
-    make_external_app(
-        db_session,
-        skill=make_skill(db_session, name="hidden-app", is_public=False),
-        auth_template=_USER_TOKEN_TEMPLATE,
-    )
-    make_external_app(
-        db_session,
-        skill=make_skill(db_session, name="disabled-app", is_public=True),
-        auth_template=_USER_TOKEN_TEMPLATE,
-        enabled=False,
+    db_session.add(
+        UserPluginPreference(user_id=user.id, plugin_id=off_plugin.id, enabled=False)
     )
     db_session.commit()
+    add_connection(
+        db_session, connected, user.id, ConnectionSecret(fields={"api_key": "k"})
+    )
 
-    names = {app.name for app in get_connectable_apps_for_user(db_session, user)}
+    names = {app.name for app in list_connectable_apps(db_session, user)}
 
     assert "needs-setup" in names
     assert "already-connected" not in names
-    assert "org-filled" not in names
-    assert "hidden-app" in names
-    assert "disabled-app" not in names
+    assert "no-sign-in" not in names
+    assert "turned-off" not in names
 
-    apps_list = build_connectable_apps_list(
-        get_connectable_apps_for_user(db_session, user)
-    )
+    apps_list = build_connectable_apps_list(list_connectable_apps(db_session, user))
     assert "**needs-setup**" in apps_list
-    assert "**hidden-app**" in apps_list
-    assert "disabled-app" not in apps_list
+    assert "turned-off" not in apps_list

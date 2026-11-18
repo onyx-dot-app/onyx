@@ -23,7 +23,7 @@ from ee.onyx.server.log_export.storage import (
     derive_export_state,
     read_export_snapshot,
 )
-from onyx.cache.interface import CacheBackendType
+from onyx.configs.constants import CacheBackendType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 

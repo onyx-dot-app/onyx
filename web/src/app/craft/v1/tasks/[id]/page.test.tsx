@@ -38,7 +38,7 @@ const task: ScheduledTaskDetail = {
   next_run_at: null,
   next_runs: [],
   last_run: null,
-  action_policies: [],
+  plugins: [],
   created_at: "2026-10-19T00:00:00Z",
   updated_at: "2026-10-19T00:00:00Z",
 };
@@ -53,12 +53,9 @@ function mockRequests(deletion: Promise<Response>) {
     if (init?.method === "DELETE") return deletion;
     if (
       String(url) === SWR_KEYS.taskActionPolicies(task.id) ||
-      String(url) === SWR_KEYS.buildExternalApps
+      String(url) === SWR_KEYS.integrations
     ) {
       return new Response(JSON.stringify([]));
-    }
-    if (String(url) === SWR_KEYS.mcpServersCraft) {
-      return new Response(JSON.stringify({ mcp_servers: [] }));
     }
     if (String(url) === SWR_KEYS.scheduledTasks) {
       if (listReadCount++ === 0) {

@@ -596,7 +596,7 @@ class TranscriptSource(OrganizerSource):
         """One organizer's transcripts. A refused organizer lists nothing and
         the walk goes on: the app lost those transcripts, so pruning removes
         them, and one organizer never costs the rest of the connector its sync."""
-        listing = PagedListing(walk)
+        listing = PagedListing(walk=walk)
         try:
             for transcript in fetch_transcripts(
                 self._session.graph(),

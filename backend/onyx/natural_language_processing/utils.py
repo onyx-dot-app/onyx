@@ -267,7 +267,8 @@ def tokenizer_trim_middle(
     sep_str = TRIM_SEP_PAT.format(n=len(tokens) - desired_length)
     sep_tokens = tokenizer.encode(sep_str)
     slice_size = (desired_length - len(sep_tokens)) // 2
-    assert slice_size > 0, "Slice size is not positive, desired length is too short"
+    if slice_size <= 0:
+        raise ValueError("Slice size is not positive, desired length is too short")
     return (
         tokenizer.decode(tokens[:slice_size])
         + sep_str

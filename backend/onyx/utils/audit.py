@@ -18,9 +18,10 @@ import json
 import logging
 import sys
 import time
-from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict, SkipValidation
 
 AUDIT_SCHEMA_VERSION = "1.0"
 
@@ -171,13 +172,14 @@ if _unmapped:
     )
 
 
-@dataclass(frozen=True)
-class AuditActor:
+class AuditActor(BaseModel):
     """Who performed the action; all fields optional. Never a secret —
     ``api_key_id`` is the key's id, never its value."""
 
+    model_config = ConfigDict(strict=True, frozen=True)
+
     user_id: str | None = None
-    email: str | None = None
+    email: SkipValidation[str | None] = None
     api_key_id: str | None = None
     auth_type: str | None = None  # e.g. "password", "oauth", "saml", "api_key"
 
@@ -253,15 +255,13 @@ def _safe_get_client_ip() -> str | None:
 
 
 def should_emit(dedup_key: str, ttl_seconds: int, tenant_id: str | None) -> bool:
-    """Redis ``SETNX``-with-``EX`` dedup. ``True`` if the window wasn't already
-    claimed; degrades to always-emit (``True``) if Redis is unavailable."""
+    """Set-if-absent dedup with a TTL. ``True`` if the window wasn't already
+    claimed; degrades to always-emit (``True``) if the cache is unavailable."""
     try:
-        from onyx.redis.redis_pool import get_redis_client
+        from onyx.cache.factory import get_cache_backend
 
-        client = get_redis_client(tenant_id=tenant_id)
-        # nx=True returns truthy only when the key didn't exist (window is free).
-        result = client.set(f"audit:{dedup_key}", "1", ex=ttl_seconds, nx=True)
-        return bool(result)
+        cache = get_cache_backend(tenant_id=tenant_id)
+        return cache.set_if_absent(f"audit:{dedup_key}", "1", ex=ttl_seconds)
     except Exception:
         return True
 

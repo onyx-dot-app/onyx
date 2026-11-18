@@ -1,28 +1,32 @@
-"""Redis-backed rate limits for admin invite + remove-invited-user endpoints.
+"""Rate limits for admin invite + remove-invited-user endpoints.
 
 Defends against compromised-admin invite-spam and email-bomb abuse that
 nginx IP-keyed `limit_req` cannot stop (per-pod counters in multi-replica
-deployments, trivial IP rotation). Counters live in tenant-prefixed Redis
+deployments, trivial IP rotation). Counters live in the tenant's cache
 so multi-pod api-server instances share state and per-admin / per-tenant
 quotas are enforced cluster-wide.
 
-Check+increment is performed in a single Redis Lua script so two
-concurrent replicas cannot both pass the pre-check and both increment
-past the limit. When Redis is unavailable (e.g. Onyx Lite deployments
-where Redis is an opt-in `--profile redis` service), the rate limiter
-fails open with a logged warning so core invite flows continue to work.
+Check+increment runs under one cache lock per tenant, so two concurrent
+replicas cannot both pass the pre-check and both increment past the limit.
+When the cache is unavailable, or the lock is busy for too long, the rate
+limiter fails open with a logged warning so core invite flows continue to
+work.
 """
 
-from dataclasses import dataclass
 from uuid import UUID
 
-from redis.exceptions import ConnectionError as RedisConnectionError
-from redis.exceptions import RedisError
-from redis.exceptions import TimeoutError as RedisTimeoutError
+from pydantic import BaseModel, ConfigDict
 
+from onyx.cache.interface import (
+    CACHE_TRANSIENT_ERRORS,
+    TTL_KEY_NOT_FOUND,
+    TTL_NO_EXPIRY,
+    CacheBackend,
+    CacheLock,
+    CacheLockLostError,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -32,7 +36,7 @@ _SECONDS_PER_DAY = 24 * 60 * 60
 
 # Rate limits apply to trial tenants only (enforced at call site). Paid tenants
 # bypass entirely — their guardrails are seat limits and the per-admin lifetime
-# counter. Self-hosted / Lite deployments fail open when Redis is unavailable.
+# counter. The limiter fails open when the cache is unavailable.
 # Values are sized against the trial lifetime cap
 # `NUM_FREE_TRIAL_USER_INVITES=10` and the invite -> remove -> invite bypass
 # attack: per-day caps stay tight so a compromised or scripted trial admin
@@ -47,52 +51,24 @@ _REMOVE_ADMIN_PER_DAY = 30
 
 # Per-admin buckets are scoped by globally unique admin UUIDs. The tenant/day
 # bucket also embeds the tenant_id directly so two tenants never share a bucket
-# even when the script keys collide post-prefixing — defence in depth alongside
-# the per-tenant Redis prefix applied by ``TenantRedisClient``.
+# even when the keys collide post-prefixing — defence in depth alongside
+# the per-tenant prefix the cache backend applies.
 _INVITE_PUT_ADMIN_MIN_KEY = "ratelimit:invite_put:admin:{user_id}:min"
 _INVITE_PUT_ADMIN_DAY_KEY = "ratelimit:invite_put:admin:{user_id}:day"
 _INVITE_PUT_TENANT_DAY_KEY = "ratelimit:invite_put:tenant:{tenant_id}:day"
 _INVITE_REMOVE_ADMIN_MIN_KEY = "ratelimit:invite_remove:admin:{user_id}:min"
 _INVITE_REMOVE_ADMIN_DAY_KEY = "ratelimit:invite_remove:admin:{user_id}:day"
 
-# Atomic multi-bucket check+increment.
-# ARGV[1] = N (bucket count). For each bucket i=1..N, ARGV[2+(i-1)*3..4+(i-1)*3]
-# carry increment, limit, ttl. KEYS[i] is the bucket's Redis key.
-#
-# Buckets with limit <= 0 or increment <= 0 are skipped (a disabled tier). On
-# reject, returns the 1-indexed bucket number that failed so the caller can
-# report which scope tripped; on success returns 0. TTL is set with NX semantics
-# so pre-existing keys without a TTL are still given one, but fresh increments
-# do not reset the window (fixed-window, not sliding).
-_CHECK_AND_INCREMENT_SCRIPT = """
-local n = tonumber(ARGV[1])
-for i = 1, n do
-    local key = KEYS[i]
-    local increment = tonumber(ARGV[2 + (i - 1) * 3])
-    local limit = tonumber(ARGV[3 + (i - 1) * 3])
-    if limit > 0 and increment > 0 then
-        local current = tonumber(redis.call('get', key)) or 0
-        if current + increment > limit then
-            return i
-        end
-    end
-end
-for i = 1, n do
-    local key = KEYS[i]
-    local increment = tonumber(ARGV[2 + (i - 1) * 3])
-    local limit = tonumber(ARGV[3 + (i - 1) * 3])
-    local ttl = tonumber(ARGV[4 + (i - 1) * 3])
-    if limit > 0 and increment > 0 then
-        redis.call('incrby', key, increment)
-        redis.call('expire', key, ttl, 'NX')
-    end
-end
-return 0
-"""
+# Serializes check+increment for one tenant. The lease covers a few cache
+# round trips; the wait bounds how long a request queues behind another.
+_LOCK_KEY = "ratelimit:invite:lock"
+_LOCK_LEASE_SECONDS = 10
+_LOCK_WAIT_SECONDS = 5
 
 
-@dataclass(frozen=True)
-class _Bucket:
+class _Bucket(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     key: str
     limit: int
     ttl_seconds: int
@@ -100,46 +76,96 @@ class _Bucket:
     increment: int
 
 
-def _run_atomic(redis_client: TenantRedisClient, buckets: list[_Bucket]) -> None:
-    """Run the check+increment Lua script. Raise OnyxError on rejection.
+def _check_and_increment(
+    cache: CacheBackend, buckets: list[_Bucket], lock: CacheLock
+) -> _Bucket | None:
+    """Return the first bucket the request would exceed, or record the request.
 
-    On Redis connection / timeout errors the rate limiter fails open: the
-    request is allowed through and the failure is logged. This keeps the
-    invite flow usable on Onyx Lite deployments (Redis is opt-in there)
-    and during transient Redis outages in full deployments.
+    Checks every bucket before it increments any, so a rejected request does
+    not consume budget. Buckets with limit <= 0 or increment <= 0 are skipped
+    (a disabled tier). The TTL is set when a counter is created and kept on
+    later increments (fixed window, not sliding). The caller holds ``lock``.
+    Raises CacheLockLostError if the lease ended during the check, or if a
+    counter changed after it was read. Counters written before that point stay,
+    so the limiter can count high but never low.
+    """
+    active = [b for b in buckets if b.limit > 0 and b.increment > 0]
+    raws: list[bytes | None] = []
+    for bucket in active:
+        raw = cache.get(bucket.key)
+        if int(raw or 0) + bucket.increment > bucket.limit:
+            return bucket
+        raws.append(raw)
+    if not lock.owned():
+        raise CacheLockLostError("Invite rate limiter lock expired before the write")
+    for bucket, raw in zip(active, raws, strict=True):
+        remaining = cache.ttl(bucket.key) if raw is not None else TTL_KEY_NOT_FOUND
+        # Each write is a compare-and-swap on the value read above. If the lease
+        # ends here and another request counts first, the write fails and
+        # cannot erase that request's increment.
+        if raw is None or remaining == TTL_KEY_NOT_FOUND:
+            # No counter, or its window ended after the read: start a new window.
+            stored = cache.set_if_absent(
+                bucket.key, bucket.increment, ex=bucket.ttl_seconds
+            )
+        else:
+            # Keep the window. A TTL of 0 is a window with under a second left.
+            stored = cache.replace_if_value(
+                bucket.key,
+                raw,
+                int(raw) + bucket.increment,
+                ex=(
+                    bucket.ttl_seconds
+                    if remaining == TTL_NO_EXPIRY
+                    else max(1, remaining)
+                ),
+            )
+        if not stored:
+            raise CacheLockLostError(
+                "Another request changed an invite counter during the write"
+            )
+    return None
+
+
+def _run_atomic(cache: CacheBackend, buckets: list[_Bucket]) -> None:
+    """Check and record the request under the tenant lock. Raise OnyxError on rejection.
+
+    On cache errors, or when the lock stays busy, the rate limiter fails open:
+    the request is allowed through and the failure is logged. This keeps the
+    invite flow usable during a cache outage.
     """
     if not buckets:
         return
 
-    keys = [b.key for b in buckets]
-    argv: list[str] = [str(len(buckets))]
-    for b in buckets:
-        argv.extend([str(b.increment), str(b.limit), str(b.ttl_seconds)])
-
     try:
-        result = redis_client.eval(
-            _CHECK_AND_INCREMENT_SCRIPT,
-            keys=keys,
-            args=argv,
-        )
-    except (RedisConnectionError, RedisTimeoutError) as e:
+        lock = cache.lock(_LOCK_KEY, timeout=_LOCK_LEASE_SECONDS)
+        if not lock.acquire(blocking=True, blocking_timeout=_LOCK_WAIT_SECONDS):
+            logger.warning(
+                "Invite rate limiter skipped — lock busy. Rate limiting is disabled for this request."
+            )
+            return
+        try:
+            failed_bucket = _check_and_increment(cache, buckets, lock)
+        finally:
+            try:
+                lock.release()
+            except CacheLockLostError:
+                logger.warning("Invite rate limiter lock expired before release.")
+    except CACHE_TRANSIENT_ERRORS as e:
         logger.warning(
-            "Invite rate limiter skipped — Redis unavailable: %s. Rate limiting is disabled for this request.",
+            "Invite rate limiter skipped — cache unavailable: %s. Rate limiting is disabled for this request.",
             e,
         )
         return
-    except RedisError as e:
-        logger.error(
-            "Invite rate limiter Redis error, failing open: %s",
-            e,
+    except CacheLockLostError:
+        logger.warning(
+            "Invite rate limiter skipped — lock lost during the check. Rate limiting is disabled for this request."
         )
         return
 
-    failed_index = int(result) if isinstance(result, (int, str, bytes)) else 0
-    if failed_index <= 0:
+    if failed_bucket is None:
         return
 
-    failed_bucket = buckets[failed_index - 1]
     logger.warning(
         "Invite rate limit hit: scope=%s key=%s adding=%d limit=%d",
         failed_bucket.scope,
@@ -154,7 +180,7 @@ def _run_atomic(redis_client: TenantRedisClient, buckets: list[_Bucket]) -> None
 
 
 def enforce_invite_rate_limit(
-    redis_client: TenantRedisClient,
+    cache: CacheBackend,
     admin_user_id: UUID | str,
     num_invites: int,
     tenant_id: str,
@@ -198,11 +224,11 @@ def enforce_invite_rate_limit(
             increment=1,
         ),
     ]
-    _run_atomic(redis_client, buckets)
+    _run_atomic(cache, buckets)
 
 
 def enforce_remove_invited_rate_limit(
-    redis_client: TenantRedisClient,
+    cache: CacheBackend,
     admin_user_id: UUID | str,
 ) -> None:
     """Check+record remove-invited-user quotas for an admin user.
@@ -229,4 +255,4 @@ def enforce_remove_invited_rate_limit(
             increment=1,
         ),
     ]
-    _run_atomic(redis_client, buckets)
+    _run_atomic(cache, buckets)

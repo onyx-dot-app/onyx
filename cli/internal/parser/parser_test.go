@@ -2,6 +2,7 @@ package parser
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
@@ -416,6 +417,69 @@ func TestToolApprovalResolved(t *testing.T) {
 	}
 	if e.ApprovalID != "a1" || e.Outcome != models.ApprovalOutcomeCancelled {
 		t.Errorf("got %+v", e)
+	}
+}
+
+func TestToolQuestionRequest(t *testing.T) {
+	line := makePacket(map[string]interface{}{
+		"type":                "tool_question_request",
+		"question_request_id": "q1",
+		"tool_call_id":        "call-1",
+		"questions": []interface{}{map[string]interface{}{
+			"id": "scope", "header": "Scope", "question": "Which teams?",
+			"options": []interface{}{
+				map[string]interface{}{"label": "Company (Recommended)", "description": "All teams."},
+				map[string]interface{}{"label": "Team", "description": "Only yours."},
+			},
+		}},
+	}, 1, 0)
+	e, ok := ParseStreamLine(line).(models.ToolQuestionRequestEvent)
+	if !ok {
+		t.Fatal("expected ToolQuestionRequestEvent")
+	}
+	want := []models.ToolQuestion{{ID: "scope", Header: "Scope", Question: "Which teams?", Options: []models.ToolQuestionOption{
+		{Label: "Company (Recommended)", Description: "All teams."}, {Label: "Team", Description: "Only yours."},
+	}}}
+	if e.QuestionRequestID != "q1" || e.ToolCallID != "call-1" || !reflect.DeepEqual(e.Questions, want) || e.Placement == nil || e.Placement.TurnIndex != 1 {
+		t.Errorf("got %+v", e)
+	}
+}
+
+func TestToolQuestionResolved(t *testing.T) {
+	for name, tt := range map[string]struct {
+		obj  map[string]interface{}
+		want models.ToolQuestionResolvedEvent
+	}{
+		"card": {
+			obj: map[string]interface{}{"answered_via": "card", "answers": []interface{}{
+				map[string]interface{}{"question_id": "scope", "option_label": "Team", "user_note": nil},
+			}, "message": nil},
+			want: models.ToolQuestionResolvedEvent{AnsweredVia: "card", Answers: []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabel: "Team"}}},
+		},
+		"message": {
+			obj:  map[string]interface{}{"answered_via": "message", "answers": nil, "message": "Only Ana"},
+			want: models.ToolQuestionResolvedEvent{AnsweredVia: "message", Message: "Only Ana"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tt.obj["type"], tt.obj["question_request_id"], tt.obj["outcome"] = "tool_question_resolved", "q1", "answered"
+			e, ok := ParseStreamLine(makePacket(tt.obj, 1, 0)).(models.ToolQuestionResolvedEvent)
+			if !ok {
+				t.Fatal("expected ToolQuestionResolvedEvent")
+			}
+			e.Placement = nil
+			tt.want.QuestionRequestID, tt.want.Outcome = "q1", models.QuestionOutcomeAnswered
+			if !reflect.DeepEqual(e, tt.want) {
+				t.Errorf("got %+v, want %+v", e, tt.want)
+			}
+		})
+	}
+}
+
+func TestToolQuestionRequestWithBadFieldsIsUnknown(t *testing.T) {
+	line := makePacket(map[string]interface{}{"type": "tool_question_request", "question_request_id": "q1", "questions": "not a list"}, 1, 0)
+	if _, ok := ParseStreamLine(line).(models.UnknownEvent); !ok {
+		t.Fatal("a malformed question request must not show as a question")
 	}
 }
 
