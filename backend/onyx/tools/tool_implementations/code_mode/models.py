@@ -562,7 +562,8 @@ class SearchableFunction(BaseModel):
     description: str
     # The function's stub with the declarations of its result types.
     stub: str
-    # Text that the search matches: the name (weighted), namespace and description.
+    # Text that the search matches: the name (weighted), namespace, description,
+    # and the argument schema's property names and descriptions.
     text: str
 
 

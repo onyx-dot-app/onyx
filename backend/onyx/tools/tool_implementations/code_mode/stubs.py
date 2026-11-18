@@ -6,6 +6,7 @@ import json
 import keyword
 import re
 import unicodedata
+from collections import deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from types import UnionType
 from typing import Literal, Union, get_args, get_origin
@@ -715,13 +716,37 @@ def tool_function(
 def _searchable(function: ToolFunction) -> SearchableFunction:
     namespace = function.tool.code_mode_function_name.namespace or ""
     stub = "\n\n\n".join([*function.declarations, f"{_TOOLS_CLASS}\n\n{function.stub}"])
+    # Property names and descriptions at every depth of the argument schema,
+    # outer ones first; each distinct text once, so a large schema does not
+    # outweigh the name.
+    parameter_texts: dict[str, None] = {}
+    parameter_chars = 0
+    pending: deque[JsonValue] = deque([function.tool.tool_definition().parameters])
+    while pending and parameter_chars < MAX_TOOL_DESCRIPTION_CHARS:
+        node = pending.popleft()
+        if isinstance(node, list):
+            pending.extend(node)
+            continue
+        if not isinstance(node, dict):
+            continue
+        properties = node.get("properties")
+        texts = list(properties) if isinstance(properties, dict) else []
+        description = node.get("description")
+        if isinstance(description, str):
+            texts.append(description)
+        for text in texts:
+            if text not in parameter_texts:
+                parameter_texts[text] = None
+                parameter_chars += len(text) + 1
+        pending.extend(node.values())
     return SearchableFunction(
         name=function.function_name,
         description=function.description,
         stub=stub,
         # The name counts twice, so a match on it ranks above a match in prose.
         text=f"{function.function_name} {function.function_name} {namespace} "
-        f"{function.description}",
+        f"{function.description} "
+        f"{_clip(' '.join(parameter_texts), MAX_TOOL_DESCRIPTION_CHARS)}",
     )
 
 

@@ -26,6 +26,10 @@ from onyx.tools.tool_implementations.code_mode.stubs import (
     tool_arguments,
 )
 from onyx.tools.tool_implementations.code_mode.tool_search import MAX_TOOL_SEARCH_LIMIT
+from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
+from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    openapi_to_method_specs,
+)
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -637,6 +641,88 @@ def test_tool_search_matches_words_in_any_script() -> None:
     assert index is not None
     assert [match.name for match in index.search("заявки", 8)] == ["ticket_lookup"]
     assert [match.name for match in index.search("prüfen", 8)] == ["billing_lookup"]
+
+
+def test_tool_search_matches_argument_names_and_nested_descriptions() -> None:
+    tools = [
+        FakeTool(
+            "assign_ticket",
+            _unused,
+            description="Give a ticket to someone.",
+            exposure=CodeModeExposure.DEFERRED,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "assignee": {"type": "string"},
+                    "labels": {
+                        "type": "array",
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "color": {
+                                            "type": "string",
+                                            "description": "Hex swatch shown in the board.",
+                                        }
+                                    },
+                                },
+                                {"type": "null"},
+                            ]
+                        },
+                    },
+                },
+            },
+        ),
+        FakeTool(
+            "get_assignee",
+            _unused,
+            description="Look up the person a ticket is given to.",
+            exposure=CodeModeExposure.DEFERRED,
+        ),
+        FakeTool("send_email", _unused, exposure=CodeModeExposure.DEFERRED),
+    ]
+    index = build_tool_stubs(tools).tool_index
+    assert index is not None
+
+    assert [match.name for match in index.search("swatch", 8)] == ["assign_ticket"]
+    # A name match ranks above a match on an argument name.
+    assert [match.name for match in index.search("assignee", 8)] == [
+        "get_assignee",
+        "assign_ticket",
+    ]
+
+
+def test_tool_search_matches_openapi_query_parameter_descriptions() -> None:
+    [method] = openapi_to_method_specs(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "t", "description": "d", "version": "1.0.0"},
+            "servers": [{"url": "http://x"}],
+            "paths": {
+                "/incidents": {
+                    "get": {
+                        "summary": "List incidents",
+                        "operationId": "listIncidents",
+                        "parameters": [
+                            {
+                                "name": "sev",
+                                "in": "query",
+                                "description": "Severity bucket of the outage.",
+                                "schema": {"type": "string"},
+                            }
+                        ],
+                    }
+                }
+            },
+        }
+    )
+    tool = CustomTool(integration_id=1, method_spec=method, base_url="http://x")
+    stubs = build_tool_stubs([tool])
+    assert stubs.tool_index is not None
+
+    assert [match.name for match in stubs.tool_index.search("outage", 8)] == [tool.name]
+    assert "sev: Severity bucket of the outage." in stubs.functions[tool.name].stub
 
 
 def test_mcp_output_schema_types_the_result() -> None:
