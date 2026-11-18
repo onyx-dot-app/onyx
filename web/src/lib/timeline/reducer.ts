@@ -266,10 +266,10 @@ function appendChunk(
     ...target,
     payload: chunkPayload(kind, content),
   };
-  return settleChunks(
-    entries.map((entry, i) => (i === index ? updated : entry)),
-    updated.id
-  );
+  const next = entries.map((entry, i) => (i === index ? updated : entry));
+  // A snapshot that repairs a settled part changes only that part; the part
+  // that still streams goes on.
+  return target.status === "streaming" ? settleChunks(next, updated.id) : next;
 }
 
 /** Applies one event. Pure: returns a new state and never mutates `state`. */
