@@ -810,8 +810,6 @@
     // React Compiler baseline. Remove a file once it is clean for that rule. Never add one.
     {
       "files": [
-        "lib/opal/src/components/inputs/dropdowns/single/components.tsx",
-        "lib/opal/src/icons/progress-ring.tsx",
         "src/app/admin/billing/page.tsx",
         "src/app/app/message/MultiModelResponseView.tsx",
         "src/app/craft/components/IntroBackground.tsx",

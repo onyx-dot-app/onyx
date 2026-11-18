@@ -1,5 +1,6 @@
 import { IconLoader } from "@opal/loaders/icon-loader/components";
 import type { IconProps } from "@opal/types";
+import type { ReactElement } from "react";
 
 /**
  * Each count takes its share of the ring, out of the sum of all five. The
@@ -64,7 +65,27 @@ const SvgProgressRing = ({
   }
   if (total === 0) counts.success = 1;
   const drawnTotal = Math.max(total, 1);
+  const circles: ReactElement[] = [];
   let offset = 0;
+
+  for (const [part, className] of PARTS) {
+    const length = (counts[part] / drawnTotal) * CIRCUMFERENCE;
+    const start = offset;
+    offset += length;
+    if (className === null || length === 0) continue;
+    circles.push(
+      <circle
+        key={part}
+        cx={CENTER}
+        cy={CENTER}
+        r={RADIUS}
+        strokeWidth={STROKE_WIDTH}
+        className={className}
+        strokeDasharray={`${length} ${CIRCUMFERENCE - length}`}
+        strokeDashoffset={-start}
+      />
+    );
+  }
 
   return (
     <svg
@@ -75,26 +96,7 @@ const SvgProgressRing = ({
       xmlns="http://www.w3.org/2000/svg"
       {...props}
     >
-      <g transform={`rotate(-90 ${CENTER} ${CENTER})`}>
-        {PARTS.map(([part, className]) => {
-          const length = (counts[part] / drawnTotal) * CIRCUMFERENCE;
-          const start = offset;
-          offset += length;
-          if (className === null || length === 0) return null;
-          return (
-            <circle
-              key={part}
-              cx={CENTER}
-              cy={CENTER}
-              r={RADIUS}
-              strokeWidth={STROKE_WIDTH}
-              className={className}
-              strokeDasharray={`${length} ${CIRCUMFERENCE - length}`}
-              strokeDashoffset={-start}
-            />
-          );
-        })}
-      </g>
+      <g transform={`rotate(-90 ${CENTER} ${CENTER})`}>{circles}</g>
     </svg>
   );
 };
