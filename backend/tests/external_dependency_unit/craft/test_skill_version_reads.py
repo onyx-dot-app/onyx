@@ -21,9 +21,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
+from onyx.db.enums import PluginInstallationPolicy, SkillSharePermission
 from onyx.db.file_record import FileRecordNotFoundError
-from onyx.db.models import Plugin, PluginVersion, Skill, User
+from onyx.db.models import Plugin, PluginVersion, User
 from onyx.db.skill import (
     SkillSharingChange,
     create_custom_skill__no_commit,
@@ -58,7 +58,7 @@ def _bundle(name: str, version: str) -> bytes:
 
 @dataclass
 class _PublishedSkill:
-    skill: Skill
+    skill: Plugin
     author: User
     recipient: User
     org_only: User
@@ -154,7 +154,7 @@ def published_skill(
         ),
     )
     first_version_id = _current_version_id(skill.id, db_session)
-    set_skill_installation_policy(skill, SkillInstallationPolicy.DEFAULT, db_session)
+    set_skill_installation_policy(skill, PluginInstallationPolicy.DEFAULT, db_session)
     replace_skill_shares(
         skill=skill,
         db_session=db_session,
@@ -288,7 +288,7 @@ def test_editor_and_preview_make_no_file_store_read_for_stored_content(
 
 
 def test_editor_and_preview_open_the_bundle_of_a_backfilled_version(
-    seeded_skill: Callable[..., Skill],
+    seeded_skill: Callable[..., Plugin],
     db_session: Session,
     file_store_reads: list[str],
     new_user: Callable[[], User],
@@ -325,7 +325,7 @@ def test_editor_and_preview_open_the_bundle_of_a_backfilled_version(
 
 
 def test_backfilled_version_lists_name_and_description_without_file_store_read(
-    seeded_skill: Callable[..., Skill],
+    seeded_skill: Callable[..., Plugin],
     db_session: Session,
     file_store_reads: list[str],
     new_user: Callable[[], User],

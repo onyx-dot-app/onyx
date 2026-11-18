@@ -869,8 +869,7 @@ class PersonaSharePermission(str, PyEnum):
 
 
 class SkillSharePermission(str, PyEnum):
-    """Level granted by a skill share row (user or group), or to the whole org
-    via `Skill.public_permission`."""
+    """Level granted by a plugin share row (user or group)."""
 
     EDITOR = "EDITOR"
     VIEWER = "VIEWER"
@@ -1027,12 +1026,6 @@ class CapabilityReportRunStatus(str, PyEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED_TO_RUN = "failed_to_run"
-
-
-class SkillInstallationPolicy(str, PyEnum):
-    AVAILABLE = "AVAILABLE"
-    DEFAULT = "DEFAULT"
-    REQUIRED = "REQUIRED"
 
 
 class MarketplaceKind(str, PyEnum):

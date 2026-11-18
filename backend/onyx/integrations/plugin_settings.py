@@ -254,7 +254,6 @@ def publish_plugin_for_user__no_commit(
     before = affected_user_ids_for_plugins([plugin_id], db_session)
     publish_or_request_review__no_commit(
         plugin,
-        None,
         plugin.current_version_id,
         None,
         on_name_clash,

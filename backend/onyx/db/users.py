@@ -1035,7 +1035,6 @@ def delete_user_from_db__no_commit(
         # A private plugin added after the check above.
         if not (
             is_check_violation(exc, "ck_private_plugin_has_owner")
-            or is_check_violation(exc, "ck_private_skill_has_owner")
             or is_fk_violation(exc, "plugin_marketplace_id_fkey")
         ):
             raise

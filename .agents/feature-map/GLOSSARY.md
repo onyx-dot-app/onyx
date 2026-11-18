@@ -240,4 +240,4 @@ mobile code checks for it. See [[streaming-protocol]].
 | Prompt slot | A renewable per-session cache lease (`server/features/build/sandbox/serve_transport.py`) that serializes the work on one opencode session. It is not the active-turn lock. See [[craft-sessions]]. |
 | `turn_completed` | The Craft packet that the attach endpoint sends after the turn finishes. It is not opencode's `prompt_response`. See [[craft-streaming]]. |
 | Settlement (Craft) | The browser step that replaces the live transcript with saved history after the turn ends, and then releases the prompt queue. See [[craft-frontend]]. |
-| Built-in skill and custom skill | A built-in skill's files are on disk. A custom skill is an uploaded bundle with an installation policy. See [[skills]]. |
+| Built-in skill and custom skill | A built-in skill's files are on disk. A custom skill is a plugin whose version holds one uploaded skill. See [[skills]]. |

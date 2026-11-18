@@ -17,7 +17,14 @@ from sqlalchemy import pool
 from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.engine.base import Connection
-from sqlalchemy.schema import Column, Constraint, Index, SchemaItem, Table
+from sqlalchemy.schema import (
+    Column,
+    ColumnCollectionConstraint,
+    Constraint,
+    Index,
+    SchemaItem,
+    Table,
+)
 import os
 from itertools import chain
 import asyncio
@@ -73,11 +80,29 @@ _TABLES_KEPT_WITHOUT_MODEL = frozenset(
         "oauth_user_token",
         "scheduled_task_action_policy",
         "scheduled_task_enabled_app",
+        "skill__user",
+        "skill__user_group",
         "tool_user_preference",
         "user_action_policy",
+        "user_skill_preference",
         "workspace_action_policy",
     }
 )
+
+# Columns of a mapped table that stay in the database for rollback after they
+# left the model, and the indexes and constraints that use them.
+_COLUMNS_KEPT_WITHOUT_MODEL = frozenset(
+    ("skill", column)
+    for column in (
+        "bundle_file_id",
+        "bundle_sha256",
+        "is_valid",
+        "author_user_id",
+        "public_permission",
+        "installation_policy",
+    )
+)
+_INDEXES_KEPT_WITHOUT_MODEL = frozenset({"uq_skill_automatic_name"})
 
 
 def include_object(
@@ -91,9 +116,25 @@ def include_object(
         return True
     if isinstance(object_, Table):
         return object_.name not in _TABLES_KEPT_WITHOUT_MODEL
-    if isinstance(object_, (Column, Constraint, Index)):
+    if isinstance(object_, Column):
         table = object_.table
-        return table is None or table.name not in _TABLES_KEPT_WITHOUT_MODEL
+        return table is None or (
+            table.name not in _TABLES_KEPT_WITHOUT_MODEL
+            and (table.name, object_.name) not in _COLUMNS_KEPT_WITHOUT_MODEL
+        )
+    if isinstance(object_, (Constraint, Index)):
+        table = object_.table
+        return table is None or (
+            table.name not in _TABLES_KEPT_WITHOUT_MODEL
+            and object_.name not in _INDEXES_KEPT_WITHOUT_MODEL
+            and not (
+                isinstance(object_, (ColumnCollectionConstraint, Index))
+                and any(
+                    (table.name, column.name) in _COLUMNS_KEPT_WITHOUT_MODEL
+                    for column in object_.columns
+                )
+            )
+        )
     return True
 
 

@@ -54,11 +54,10 @@ from onyx.db.models import (
     Plugin__Integration,
     Plugin__User,
     Plugin__UserGroup,
+    PluginSkill,
     PluginVersion,
     Sandbox,
     Skill,
-    Skill__User,
-    Skill__UserGroup,
     User,
     User__UserGroup,
     UserGroup,
@@ -66,10 +65,9 @@ from onyx.db.models import (
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.plugin import (
-    create_skill_plugin__no_commit,
+    free_plugin_name,
     get_or_create_organization_library__no_commit,
     get_or_create_user_uploads__no_commit,
-    legacy_skill_version_content,
     set_plugin_preferences__no_commit,
 )
 from onyx.db.users import assign_user_to_default_groups__no_commit
@@ -195,35 +193,60 @@ def make_skill(
     *,
     name: str | None = None,
     is_public: bool = False,
-    public_permission: SkillSharePermission = SkillSharePermission.VIEWER,
     author_user_id: UUID | None = None,
-    with_plugin: bool = True,
-) -> Skill:
-    """Create a single custom ``Skill`` row and its plugin. Without
-    ``with_plugin``, the skill has no plugin, as if an older server made it.
+    description: str = "d",
+    bundle_file_id: str | None = None,
+    bundle_sha256: str = "0" * 64,
+) -> Plugin:
+    """Create the plugin of a custom skill: version 1 with one skill at the
+    root. A public skill is in the Organization library, published; others are
+    in the author's "My uploads". A public skill may have no author.
 
-    Bundle metadata (``bundle_file_id``, ``bundle_sha256``) is filled with
-    placeholder values; tests that need a real bundle should use the
-    ``seeded_skill`` fixture from ``conftest.py`` instead.
+    Without ``bundle_file_id`` the bundle fields hold placeholder values;
+    tests that need a real bundle should use the ``seeded_skill`` fixture
+    from ``conftest.py`` instead.
     """
     if author_user_id is None and not is_public:
         author_user_id = make_user(db_session, standard_account=True).id
-    skill = Skill(
-        id=uuid4(),
-        name=name or f"helper-skill-{uuid4().hex[:8]}",
-        description="d",
-        bundle_file_id=f"bundle-{uuid4().hex[:8]}",
-        bundle_sha256="0" * 64,
-        public_permission=public_permission if is_public else None,
-        author_user_id=author_user_id,
-    )
-    db_session.add(skill)
-    db_session.flush()
-    if with_plugin:
-        create_skill_plugin__no_commit(
-            skill, legacy_skill_version_content(skill), None, db_session
+    skill_name = name or f"helper-skill-{uuid4().hex[:8]}"
+    if is_public or author_user_id is None:
+        marketplace_id = get_or_create_organization_library__no_commit(db_session)
+    else:
+        marketplace_id = get_or_create_user_uploads__no_commit(
+            author_user_id, db_session
         )
-    return skill
+    plugin_id = uuid4()
+    version_id = uuid4()
+    plugin = Plugin(
+        id=plugin_id,
+        name=free_plugin_name(marketplace_id, skill_name, db_session),
+        description=description,
+        marketplace_id=marketplace_id,
+        author_user_id=author_user_id,
+        current_version_id=version_id,
+        published_version_id=version_id if is_public else None,
+    )
+    db_session.add(plugin)
+    db_session.flush()
+    db_session.add(
+        PluginVersion(
+            id=version_id,
+            plugin_id=plugin_id,
+            version_number=1,
+            bundle_file_id=bundle_file_id or f"bundle-{uuid4().hex[:8]}",
+            bundle_sha256=bundle_sha256,
+        )
+    )
+    db_session.flush()
+    db_session.add(
+        PluginSkill(
+            plugin_version_id=version_id,
+            path="",
+            frontmatter={"name": skill_name, "description": description},
+        )
+    )
+    db_session.flush()
+    return plugin
 
 
 def set_current_version_validity(
@@ -261,21 +284,16 @@ def make_built_in_skill_row(
     built_in_skill_id: str,
     name: str | None = None,
     description: str = "test built-in",
-    is_public: bool = True,
 ) -> Skill:
     """Insert a built-in-style ``Skill`` row pointing at a
     ``built_in_skill_id``. Name defaults to ``built_in_skill_id`` (the
     default seeder convention), but can be overridden to test the
-    multi-row case where several skills share the same built-in id.
-    Bundle fields stay NULL (required by the XOR check constraint)."""
+    multi-row case where several skills share the same built-in id."""
     skill = Skill(
         id=uuid4(),
         name=name or built_in_skill_id,
         description=description,
         built_in_skill_id=built_in_skill_id,
-        bundle_file_id=None,
-        bundle_sha256=None,
-        public_permission=SkillSharePermission.VIEWER if is_public else None,
     )
     db_session.add(skill)
     db_session.flush()
@@ -288,7 +306,6 @@ def reset_built_in_skill_row(
     built_in_skill_id: str,
     name: str | None = None,
     description: str = "test built-in",
-    is_public: bool = True,
 ) -> Skill:
     """Idempotently (re)create a built-in row for ``built_in_skill_id``.
 
@@ -304,7 +321,6 @@ def reset_built_in_skill_row(
         built_in_skill_id=built_in_skill_id,
         name=name,
         description=description,
-        is_public=is_public,
     )
 
 
@@ -312,7 +328,7 @@ def make_external_app(
     db_session: Session,
     *,
     auth_template: dict[str, Any],
-    skill: Skill | None = None,
+    skill: Skill | Plugin | None = None,
     name: str | None = None,
     organization_credentials: dict[str, str] | None = None,
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
@@ -353,11 +369,7 @@ def make_external_app(
     app.enabled = enabled
     integration.enabled = enabled
     db_session.flush()
-    if (
-        skill is not None
-        and skill.is_custom
-        and db_session.get(Plugin, skill.id) is not None
-    ):
+    if isinstance(skill, Plugin):
         hold_external_app(db_session, app=app, plugin_id=skill.id)
     if action_policies:
         db_session.add_all(
@@ -404,42 +416,20 @@ def make_app_plugin_for_user(
 
 def share_skill_with_user(
     db_session: Session,
-    skill: Skill,
+    skill: Plugin,
     user: User,
     permission: SkillSharePermission = SkillSharePermission.VIEWER,
-) -> Skill__User:
-    """Insert a ``Skill__User`` share row, and the plugin share of a custom
-    skill."""
-    share = Skill__User(
-        skill_id=skill.id,
-        user_id=user.id,
-        permission=permission,
-    )
-    db_session.add(share)
-    db_session.flush()
-    if skill.is_custom:
-        share_plugin_with_user(db_session, skill.id, user.id, permission)
-    return share
+) -> None:
+    share_plugin_with_user(db_session, skill.id, user.id, permission)
 
 
 def share_skill_with_group(
     db_session: Session,
-    skill: Skill,
+    skill: Plugin,
     group: UserGroup,
     permission: SkillSharePermission = SkillSharePermission.VIEWER,
-) -> Skill__UserGroup:
-    """Insert a ``Skill__UserGroup`` share row, and the plugin share of a
-    custom skill."""
-    share = Skill__UserGroup(
-        skill_id=skill.id,
-        user_group_id=group.id,
-        permission=permission,
-    )
-    db_session.add(share)
-    db_session.flush()
-    if skill.is_custom:
-        share_plugin_with_group(db_session, skill.id, group.id, permission)
-    return share
+) -> None:
+    share_plugin_with_group(db_session, skill.id, group.id, permission)
 
 
 def share_plugin_with_user(

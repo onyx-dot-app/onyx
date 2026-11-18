@@ -8,7 +8,7 @@ import hashlib
 import importlib.util
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -16,17 +16,23 @@ from uuid import UUID, uuid4
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Integer,
+    String,
+    Text,
+    column,
+    insert,
+    select,
+    table,
+    text,
+)
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
-from onyx.db.models import (
-    Skill,
-    Skill__User,
-    Skill__UserGroup,
-    User,
-    UserSkillPreference,
-)
+from onyx.db.enums import SkillSharePermission
+from onyx.db.models import User
 from tests.external_dependency_unit.craft.db_helpers import make_group, make_user
 
 _VERSIONS = Path(__file__).parents[3] / "alembic/versions"
@@ -40,6 +46,42 @@ _LATER_MIGRATION_FILES = (
 )
 _ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
 _T0 = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+
+# The legacy skill storage, which the ORM no longer maps.
+_skill = table(
+    "skill",
+    column("id", PGUUID(as_uuid=True)),
+    column("name", String),
+    column("description", Text),
+    column("built_in_skill_id", String),
+    column("bundle_file_id", String),
+    column("bundle_sha256", String),
+    column("is_valid", Boolean),
+    column("author_user_id", PGUUID(as_uuid=True)),
+    column("public_permission", String),
+    column("installation_policy", String),
+    column("created_at", DateTime(timezone=True)),
+    column("updated_at", DateTime(timezone=True)),
+)
+_skill__user = table(
+    "skill__user",
+    column("skill_id", PGUUID(as_uuid=True)),
+    column("user_id", PGUUID(as_uuid=True)),
+    column("permission", String),
+)
+_skill__user_group = table(
+    "skill__user_group",
+    column("skill_id", PGUUID(as_uuid=True)),
+    column("user_group_id", Integer),
+    column("permission", String),
+)
+_user_skill_preference = table(
+    "user_skill_preference",
+    column("user_id", PGUUID(as_uuid=True)),
+    column("skill_id", PGUUID(as_uuid=True)),
+    column("name", String),
+    column("enabled", Boolean),
+)
 
 
 def _load_migration(filename: str = _MIGRATION_FILE) -> ModuleType:
@@ -91,10 +133,25 @@ def _table_exists(db_session: Session, table: str) -> bool:
 
 
 @dataclass(frozen=True)
+class _LegacySkill:
+    id: UUID
+    name: str
+    description: str
+    bundle_file_id: str
+    bundle_sha256: str
+    is_valid: bool
+    author_user_id: UUID | None
+    public_permission: str | None
+    installation_policy: str
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+
+@dataclass(frozen=True)
 class _Expected:
     """The plugin a custom skill must map to."""
 
-    skill: Skill
+    skill: _LegacySkill
     plugin_name: str
     marketplace_id: UUID
     published: bool
@@ -107,10 +164,10 @@ def _add_skill(
     minutes: int,
     author: User | None,
     public_permission: SkillSharePermission | None = None,
-    installation_policy: SkillInstallationPolicy = SkillInstallationPolicy.AVAILABLE,
-) -> Skill:
+    installation_policy: str = "AVAILABLE",
+) -> _LegacySkill:
     created_at = _T0 + datetime.timedelta(minutes=minutes)
-    skill = Skill(
+    skill = _LegacySkill(
         id=uuid4(),
         name=name,
         description=f"description of {name}",
@@ -118,20 +175,19 @@ def _add_skill(
         bundle_sha256=uuid4().hex + uuid4().hex,
         is_valid=minutes % 2 == 0,
         author_user_id=author.id if author else None,
-        public_permission=public_permission,
+        public_permission=public_permission.value if public_permission else None,
         installation_policy=installation_policy,
         created_at=created_at,
         updated_at=created_at + datetime.timedelta(hours=1),
     )
-    db_session.add(skill)
-    db_session.flush()
+    db_session.execute(insert(_skill).values(**asdict(skill)))
     return skill
 
 
 def _assert_backfilled(
     db_session: Session,
     expected: list[_Expected],
-    built_in: Skill,
+    built_in_id: UUID,
     authors: dict[UUID, User],
     seeded_ids: list[UUID],
 ) -> None:
@@ -184,8 +240,8 @@ def _assert_backfilled(
         assert plugin["author_user_id"] == skill.author_user_id
         assert plugin["installation_policy"] == (
             None
-            if skill.installation_policy == SkillInstallationPolicy.AVAILABLE
-            else skill.installation_policy.value
+            if skill.installation_policy == "AVAILABLE"
+            else skill.installation_policy
         )
         assert plugin["current_version_id"] == skill.id
         assert plugin["published_version_id"] == (skill.id if e.published else None)
@@ -243,8 +299,10 @@ def _assert_backfilled(
             )
         }
         assert user_shares == {
-            (share.user_id, share.permission.value, skill.created_at)
-            for share in db_session.query(Skill__User).filter_by(skill_id=skill.id)
+            (row.user_id, row.permission, skill.created_at)
+            for row in db_session.execute(
+                select(_skill__user).where(_skill__user.c.skill_id == skill.id)
+            )
         }
         group_shares = {
             tuple(row)
@@ -257,8 +315,12 @@ def _assert_backfilled(
             )
         }
         assert group_shares == {
-            (share.user_group_id, share.permission.value, None, skill.created_at)
-            for share in db_session.query(Skill__UserGroup).filter_by(skill_id=skill.id)
+            (row.user_group_id, row.permission, None, skill.created_at)
+            for row in db_session.execute(
+                select(_skill__user_group).where(
+                    _skill__user_group.c.skill_id == skill.id
+                )
+            )
         }
         preferences = {
             tuple(row)
@@ -271,13 +333,15 @@ def _assert_backfilled(
             )
         }
         assert preferences == {
-            (pref.user_id, pref.enabled, None)
-            for pref in db_session.query(UserSkillPreference).filter_by(
-                skill_id=skill.id
+            (row.user_id, row.enabled, None)
+            for row in db_session.execute(
+                select(_user_skill_preference).where(
+                    _user_skill_preference.c.skill_id == skill.id
+                )
             )
         }
 
-    for table, column in (
+    for table_name, column_name in (
         ("plugin", "id"),
         ("plugin_version", "id"),
         ("plugin_skill", "id"),
@@ -287,11 +351,11 @@ def _assert_backfilled(
     ):
         assert (
             db_session.execute(
-                text(f"SELECT count(*) FROM {table} WHERE {column} = :id"),
-                {"id": built_in.id},
+                text(f"SELECT count(*) FROM {table_name} WHERE {column_name} = :id"),
+                {"id": built_in_id},
             ).scalar_one()
             == 0
-        ), table
+        ), table_name
 
     assert db_session.execute(
         text("SELECT count(*) FROM plugin WHERE id = ANY(:ids)"),
@@ -328,7 +392,7 @@ def test_backfill_maps_each_custom_skill_to_one_plugin(
             name=f"lint-{tag}",
             minutes=11,
             author=alice,
-            installation_policy=SkillInstallationPolicy.DEFAULT,
+            installation_policy="DEFAULT",
         )
         required_public = _add_skill(
             db_session,
@@ -336,7 +400,7 @@ def test_backfill_maps_each_custom_skill_to_one_plugin(
             minutes=12,
             author=alice,
             public_permission=SkillSharePermission.VIEWER,
-            installation_policy=SkillInstallationPolicy.REQUIRED,
+            installation_policy="REQUIRED",
         )
         # One user with two skills named deploy and one named deploy-2. The
         # deploy-2 skill is the newest and still keeps its name.
@@ -370,61 +434,66 @@ def test_backfill_maps_each_custom_skill_to_one_plugin(
         long_name = f"{tag}-" + "x" * (64 - len(tag) - 1)
         long_first = _add_skill(db_session, name=long_name, minutes=7, author=bob)
         long_second = _add_skill(db_session, name=long_name, minutes=8, author=bob)
-        built_in = Skill(
-            id=uuid4(),
-            name=f"builtin-{tag}",
-            description="built-in",
-            built_in_skill_id=f"test-builtin-{tag}",
-            public_permission=SkillSharePermission.VIEWER,
+        built_in_id = uuid4()
+        built_in_name = f"builtin-{tag}"
+        db_session.execute(
+            insert(_skill).values(
+                id=built_in_id,
+                name=built_in_name,
+                description="built-in",
+                built_in_skill_id=f"test-builtin-{tag}",
+                public_permission=SkillSharePermission.VIEWER.value,
+                installation_policy="AVAILABLE",
+            )
         )
-        db_session.add(built_in)
-        db_session.flush()
-
-        db_session.add_all(
+        editor = SkillSharePermission.EDITOR.value
+        viewer = SkillSharePermission.VIEWER.value
+        db_session.execute(
+            insert(_skill__user),
             [
-                Skill__User(
-                    skill_id=shared.id,
-                    user_id=bob.id,
-                    permission=SkillSharePermission.EDITOR,
-                ),
-                Skill__User(
-                    skill_id=shared.id,
-                    user_id=carol.id,
-                    permission=SkillSharePermission.VIEWER,
-                ),
-                Skill__User(
-                    skill_id=built_in.id,
-                    user_id=carol.id,
-                    permission=SkillSharePermission.VIEWER,
-                ),
-                Skill__UserGroup(
-                    skill_id=shared.id,
-                    user_group_id=group.id,
-                    permission=SkillSharePermission.VIEWER,
-                ),
-                Skill__UserGroup(
-                    skill_id=public_deploy_bob.id,
-                    user_group_id=group.id,
-                    permission=SkillSharePermission.EDITOR,
-                ),
-                UserSkillPreference(
-                    user_id=bob.id, skill_id=shared.id, name=shared.name, enabled=True
-                ),
-                UserSkillPreference(
-                    user_id=carol.id,
-                    skill_id=default.id,
-                    name=default.name,
-                    enabled=False,
-                ),
-                UserSkillPreference(
-                    user_id=carol.id,
-                    skill_id=built_in.id,
-                    name=built_in.name,
-                    enabled=True,
-                ),
-            ]
+                {"skill_id": shared.id, "user_id": bob.id, "permission": editor},
+                {"skill_id": shared.id, "user_id": carol.id, "permission": viewer},
+                {"skill_id": built_in_id, "user_id": carol.id, "permission": viewer},
+            ],
         )
-        db_session.flush()
+        db_session.execute(
+            insert(_skill__user_group),
+            [
+                {
+                    "skill_id": shared.id,
+                    "user_group_id": group.id,
+                    "permission": viewer,
+                },
+                {
+                    "skill_id": public_deploy_bob.id,
+                    "user_group_id": group.id,
+                    "permission": editor,
+                },
+            ],
+        )
+        db_session.execute(
+            insert(_user_skill_preference),
+            [
+                {
+                    "user_id": bob.id,
+                    "skill_id": shared.id,
+                    "name": shared.name,
+                    "enabled": True,
+                },
+                {
+                    "user_id": carol.id,
+                    "skill_id": default.id,
+                    "name": default.name,
+                    "enabled": False,
+                },
+                {
+                    "user_id": carol.id,
+                    "skill_id": built_in_id,
+                    "name": built_in_name,
+                    "enabled": True,
+                },
+            ],
+        )
 
         expected = [
             _Expected(shared, shared.name, alice_uploads, False),
@@ -440,12 +509,12 @@ def test_backfill_maps_each_custom_skill_to_one_plugin(
             _Expected(long_second, long_name[:62] + "-2", bob_uploads, False),
         ]
         authors = {user.id: user for user in (alice, bob, carol)}
-        seeded_ids = [e.skill.id for e in expected] + [built_in.id]
+        seeded_ids = [e.skill.id for e in expected] + [built_in_id]
 
         with _migration_ops(db_session):
             migration.upgrade()
         _check_deferred_constraints(db_session)
-        _assert_backfilled(db_session, expected, built_in, authors, seeded_ids)
+        _assert_backfilled(db_session, expected, built_in_id, authors, seeded_ids)
         assert _skill_table_shape(db_session) == skill_shape
 
         with _migration_ops(db_session):
@@ -457,7 +526,7 @@ def test_backfill_maps_each_custom_skill_to_one_plugin(
         with _migration_ops(db_session):
             migration.upgrade()
         _check_deferred_constraints(db_session)
-        _assert_backfilled(db_session, expected, built_in, authors, seeded_ids)
+        _assert_backfilled(db_session, expected, built_in_id, authors, seeded_ids)
 
         # A second run (as a re-sync migration does) adds only skills that have
         # no plugin yet and gives a new duplicate the first free name.
@@ -468,7 +537,7 @@ def test_backfill_maps_each_custom_skill_to_one_plugin(
         _assert_backfilled(
             db_session,
             [*expected, _Expected(late_deploy, f"{deploy}-4", alice_uploads, False)],
-            built_in,
+            built_in_id,
             authors,
             [*seeded_ids, late_deploy.id],
         )

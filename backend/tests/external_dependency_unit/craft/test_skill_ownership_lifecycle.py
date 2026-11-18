@@ -109,7 +109,11 @@ def test_copied_plugin_does_not_block_deletion_of_former_owner(
 
     delete_user_from_db__no_commit(owner, db_session)
     assert db_session.get(User, owner.id) is None
-    plugin = db_session.scalar(select(Plugin).where(Plugin.id == plugin_id))
+    plugin = db_session.scalar(
+        select(Plugin)
+        .where(Plugin.id == plugin_id)
+        .execution_options(populate_existing=True)
+    )
     if change == "delete":
         assert plugin is None
     else:
@@ -122,7 +126,10 @@ def test_database_rejects_deletion_that_would_orphan_private_skill(
 ) -> None:
     owner = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, author_user_id=owner.id)
-    with pytest.raises(IntegrityError, match="ck_private_skill_has_owner"):
+    with pytest.raises(
+        IntegrityError,
+        match="ck_private_plugin_has_owner|plugin_marketplace_id_fkey",
+    ):
         with db_session.begin_nested():
             db_session.execute(
                 delete(User__UserGroup).where(User__UserGroup.user_id == owner.id)
@@ -234,13 +241,3 @@ async def test_auth_deletion_cleans_up_group_membership(db_session: Session) -> 
         if remaining_user is not None:
             delete_user_from_db__no_commit(remaining_user, db_session)
             db_session.commit()
-
-
-def test_delete_skill_with_no_plugin_returns_its_bundle(
-    db_session: Session,
-) -> None:
-    skill = make_skill(db_session, with_plugin=False)
-    bundle_file_id = skill.bundle_file_id
-
-    assert delete_skill(skill, db_session) == [bundle_file_id]
-    assert db_session.get(Plugin, skill.id) is None
