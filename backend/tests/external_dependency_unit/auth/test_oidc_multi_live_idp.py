@@ -28,6 +28,7 @@ from fastapi_users.password import PasswordHelper
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.orm import Session
 
+from onyx.auth import web_domain
 from onyx.auth.mobile_sso.code_store import consume_sso_code
 from onyx.auth.users import cookie_transport, generate_pkce_pair
 from onyx.db.enums import AccountType, SSOProviderType
@@ -181,6 +182,7 @@ def _provision(
 @pytest.fixture
 def app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     monkeypatch.setattr(oidc_multi, "WEB_DOMAIN", _WEB_DOMAIN)
+    monkeypatch.setattr(web_domain, "WEB_DOMAIN", _WEB_DOMAIN)
     monkeypatch.setattr(oidc_multi, "USER_AUTH_SECRET", _STATE_SECRET)
     fastapi_app = FastAPI()
     fastapi_app.include_router(oidc_multi.router)

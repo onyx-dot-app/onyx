@@ -1986,6 +1986,9 @@ configMap:
   LOG_ONYX_MODEL_INTERACTIONS: ""
   # Shared or Non-backend Related
   WEB_DOMAIN: "http://localhost:3000"
+  # Comma-separated extra origins that also serve this deployment (e.g. a domain
+  # CNAMEd to WEB_DOMAIN). A browser on one of them stays on it through login.
+  ALTERNATE_WEB_DOMAINS: ""
   # DOMAIN used by nginx
   DOMAIN: "localhost"
   # Chat Configs

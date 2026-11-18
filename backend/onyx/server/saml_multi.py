@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.login_claims_capture import capture_saml_login_claims
 from onyx.auth.sso_web_error import redirect_sso_errors_to_web
 from onyx.auth.users import UserManager, auth_backend, fastapi_users, get_user_manager
+from onyx.auth.web_domain import get_request_web_domain
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION, WEB_DOMAIN
 from onyx.db.engine.sql_engine import get_session
@@ -101,16 +102,17 @@ class _SamlSettings(TypedDict):
     idp: _SamlIdpSettings
 
 
-def build_saml_settings(config: SAMLProviderConfig) -> _SamlSettings:
-    """OneLogin old_settings built from a typed provider config. The ACS is fixed
-    so every provider shares the one issuer-resolved callback."""
+def build_saml_settings(config: SAMLProviderConfig, web_domain: str) -> _SamlSettings:
+    """OneLogin old_settings built from a typed provider config. The ACS path is
+    fixed so every provider shares the one issuer-resolved callback; its host is
+    the web domain the browser is on."""
     return {
         "strict": True,
         "debug": False,
         "sp": {
             "entityId": config.sp_entity_id,
             "assertionConsumerService": {
-                "url": f"{WEB_DOMAIN}/auth/saml/callback",
+                "url": f"{web_domain}/auth/saml/callback",
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST",
             },
             "x509cert": config.sp_x509_cert or "",
@@ -386,7 +388,7 @@ async def saml_login(
 
 
 async def _start_saml_login(request: Request, config: SAMLProviderConfig) -> Response:
-    settings = build_saml_settings(config)
+    settings = build_saml_settings(config, get_request_web_domain(request))
     auth = await _build_saml_auth(request, settings)
     return_to = _sanitize_relay_state(request.query_params.get("next"))
     callback_url = auth.login(return_to=return_to)
@@ -462,7 +464,7 @@ async def _process_saml_callback(request: Request, db_session: Session) -> Respo
         )
     pending = _consume_authn_request(header.in_response_to, header.issuer)
     provider, config = _resolve_saml_provider_by_issuer(db_session, header.issuer)
-    settings = build_saml_settings(config)
+    settings = build_saml_settings(config, get_request_web_domain(request))
 
     auth = OneLogin_Saml2_Auth(req, old_settings=settings)
     auth.process_response(request_id=header.in_response_to)
@@ -496,7 +498,8 @@ async def _process_saml_callback(request: Request, db_session: Session) -> Respo
         ex=_LOGIN_TICKET_TTL_SECONDS,
     )
     return RedirectResponse(
-        f"{WEB_DOMAIN}/auth/saml/complete?ticket={ticket}", status_code=303
+        f"{get_request_web_domain(request)}/auth/saml/complete?ticket={ticket}",
+        status_code=303,
     )
 
 
@@ -534,7 +537,7 @@ async def _complete_saml_login(
     # browser navigation, so carry its session cookie on a redirect instead.
     login_response = await auth_backend.login(strategy, user)
     response = RedirectResponse(
-        f"{WEB_DOMAIN}{login.next_path or '/'}", status_code=302
+        f"{get_request_web_domain(request)}{login.next_path or '/'}", status_code=302
     )
     for cookie in login_response.headers.getlist("set-cookie"):
         response.headers.append("set-cookie", cookie)

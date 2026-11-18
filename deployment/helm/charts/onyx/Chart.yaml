@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.55
+version: 0.9.56
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,14 +20,10 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: security
-      description: The default opensearch.opensearchJavaOpts adds
-        -XX:-UseBASE64Intrinsics, a stopgap for Java4Shell
-        (CVE-2026-114938) in the JDK of the OpenSearch image. If you set
-        your own opensearchJavaOpts, add the flag to it. helm upgrade
-        --reuse-values keeps the old default, so set the flag explicitly with
-        your heap settings. After the upgrade, check that GET _nodes/jvm lists
-        -XX:-UseBASE64Intrinsics.
+    - kind: added
+      description: New configMap.ALTERNATE_WEB_DOMAINS (empty by default) lists
+        extra origins that also serve the deployment, such as a domain CNAMEd to
+        WEB_DOMAIN. A browser on one of them stays on it through login.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

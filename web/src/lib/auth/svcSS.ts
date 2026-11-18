@@ -71,7 +71,8 @@ async function getGoogleOAuthUrlSS(
   nextUrl: string | null,
   startNewTeam: boolean
 ): Promise<string> {
-  const url = UrlBuilder.fromClientUrl("/api/auth/oauth/authorize");
+  // Relative, so the browser stays on the web domain it is already on.
+  const url = new UrlBuilder("/api/auth/oauth/authorize");
   if (nextUrl) url.addParam("next", nextUrl);
   // Playground: the person chose "start a new team" on /auth/error.
   if (startNewTeam) url.addParam("start_new_team", true);

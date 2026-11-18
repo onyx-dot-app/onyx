@@ -754,7 +754,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
                 USER_AUTH_SECRET,
                 associate_by_email=True,
                 is_verified_by_default=True,
-                redirect_url=f"{WEB_DOMAIN}/auth/oauth/callback",
+                redirect_path="/auth/oauth/callback",
             ),
             prefix="/auth/oauth",
         )
@@ -771,7 +771,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
                 USER_AUTH_SECRET,
                 associate_by_email=True,
                 is_verified_by_default=True,
-                redirect_url=f"{WEB_DOMAIN}/api/auth/mobile/oauth/callback",
+                redirect_path="/api/auth/mobile/oauth/callback",
             ),
             prefix="/auth/mobile/oauth",
         )

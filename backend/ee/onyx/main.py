@@ -44,7 +44,6 @@ from onyx.configs.app_configs import (
     OAUTH_CLIENT_ID,
     OAUTH_CLIENT_SECRET,
     USER_AUTH_SECRET,
-    WEB_DOMAIN,
 )
 from onyx.main import get_application as get_application_base
 from onyx.main import (
@@ -118,7 +117,7 @@ def get_application() -> FastAPI:
                 associate_by_email=True,
                 is_verified_by_default=True,
                 # Points the user back to the login page
-                redirect_url=f"{WEB_DOMAIN}/auth/oauth/callback",
+                redirect_path="/auth/oauth/callback",
             ),
             prefix="/auth/oauth",
         )

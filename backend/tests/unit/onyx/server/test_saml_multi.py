@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from starlette.requests import Request
 from starlette.responses import Response
 
+from onyx.auth import web_domain as web_domain_module
 from onyx.auth.users import UserManager
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider, User
@@ -44,11 +45,13 @@ def _config(**overrides: Any) -> SAMLProviderConfig:
 
 def test_build_saml_settings_fixed_acs() -> None:
     settings = saml_multi.build_saml_settings(
-        _config(sp_x509_cert="SPCERT", sp_private_key="SPKEY")
+        _config(sp_x509_cert="SPCERT", sp_private_key="SPKEY"),
+        "https://onyx.example.com",
     )
     assert settings["strict"] is True
-    assert settings["sp"]["assertionConsumerService"]["url"].endswith(
-        "/auth/saml/callback"
+    assert (
+        settings["sp"]["assertionConsumerService"]["url"]
+        == "https://onyx.example.com/auth/saml/callback"
     )
     assert settings["sp"]["entityId"] == _IDP["sp_entity_id"]
     assert settings["sp"]["x509cert"] == "SPCERT"
@@ -59,7 +62,7 @@ def test_build_saml_settings_fixed_acs() -> None:
 
 
 def test_build_saml_settings_optional_sp_defaults_empty() -> None:
-    settings = saml_multi.build_saml_settings(_config())
+    settings = saml_multi.build_saml_settings(_config(), "https://onyx.example.com")
     assert settings["sp"]["x509cert"] == ""
     assert settings["sp"]["privateKey"] == ""
 
@@ -92,11 +95,10 @@ def _callback_request(cookie: str | None = None) -> Request:
 async def test_callback_request_url_matches_acs(
     monkeypatch: pytest.MonkeyPatch, web_domain: str
 ) -> None:
-    monkeypatch.setattr(saml, "WEB_DOMAIN", web_domain)
-    monkeypatch.setattr(saml_multi, "WEB_DOMAIN", web_domain)
+    monkeypatch.setattr(web_domain_module, "WEB_DOMAIN", web_domain)
 
     request_data = await saml.prepare_from_fastapi_request(_callback_request())
-    settings = saml_multi.build_saml_settings(_config())
+    settings = saml_multi.build_saml_settings(_config(), web_domain)
 
     assert (
         OneLogin_Saml2_Utils.get_self_url_no_query(request_data)

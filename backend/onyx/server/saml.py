@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from onyx.auth.schemas import UserCreate
 from onyx.auth.users import get_user_manager
-from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.auth.web_domain import get_request_web_domain
 from onyx.db.auth import get_user_db
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.models import User
@@ -108,10 +108,10 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
     if request.client is None:
         raise ValueError("Invalid request for SAML")
 
-    # Derive http_host, server_port and https from WEB_DOMAIN (a trusted env var)
-    # instead of X-Forwarded-* headers, which can be spoofed by an attacker
+    # Derive http_host, server_port and https from the configured web domains
+    # instead of raw X-Forwarded-* headers, which can be spoofed by an attacker
     # to poison SAML redirect URLs (host header poisoning).
-    parsed_domain = urlparse(WEB_DOMAIN)
+    parsed_domain = urlparse(get_request_web_domain(request))
     http_host = parsed_domain.hostname or request.client.host
     server_port = parsed_domain.port or (443 if parsed_domain.scheme == "https" else 80)
 
@@ -120,7 +120,7 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
         "server_port": server_port,
         "script_name": request.url.path,
         # OneLogin assumes HTTPS only on port 443, so without this an HTTPS
-        # WEB_DOMAIN on another port fails the Destination check.
+        # web domain on another port fails the Destination check.
         "https": "on" if parsed_domain.scheme == "https" else "off",
         "post_data": {},
         "get_data": {},

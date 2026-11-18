@@ -54,6 +54,7 @@ from onyx.auth.users import (
     get_pkce_cookie_name,
     get_user_manager,
 )
+from onyx.auth.web_domain import get_request_web_domain
 from onyx.configs.app_configs import (
     GOOGLE_LOGIN_BASE_SCOPES,
     GOOGLE_OAUTH_SCOPE_OVERRIDE,
@@ -305,11 +306,13 @@ def _set_oauth_cookie(
     )
 
 
-def _callback_uri(provider: SSOProvider, config: dict[str, Any]) -> str:
+def _callback_uri(
+    request: Request, provider: SSOProvider, config: dict[str, Any]
+) -> str:
     # Legacy-callback rows land on the web wrappers at the legacy paths, which
     # forward to this router. The fixed /callback below resolves the row from
     # the signed state.
-    return sso_login_callback_uri(provider, config, WEB_DOMAIN)
+    return sso_login_callback_uri(provider, config, get_request_web_domain(request))
 
 
 @router.get("/{provider_name}/authorize")
@@ -328,7 +331,7 @@ async def oidc_login_for_provider(
 ) -> Response:
     provider, config = _resolve_oidc_provider(db_session, provider_name)
     client = await _get_oauth_client(provider, config)
-    redirect_uri = _callback_uri(provider, config)
+    redirect_uri = _callback_uri(request, provider, config)
     next_url = sanitize_next_url(request.query_params.get("next"))
     csrf_token = generate_csrf_token()
     use_pkce = _pkce_enabled(config)
@@ -476,7 +479,7 @@ async def oidc_login_callback_for_provider(
         with get_session_with_current_tenant() as db_session:
             provider, config = _resolve_oidc_provider(db_session, provider_name)
             client = await _get_oauth_client(provider, config)
-            redirect_uri = _callback_uri(provider, config)
+            redirect_uri = _callback_uri(request, provider, config)
             allowed_email_domains = list(provider.allowed_email_domains)
             provider_id = provider.id
             # A tenant-controlled OIDC IdP can assert any address, so its login

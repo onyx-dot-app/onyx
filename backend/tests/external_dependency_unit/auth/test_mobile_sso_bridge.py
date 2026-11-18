@@ -121,7 +121,7 @@ def _build_test_client(
         backend=backend,
         get_user_manager=get_user_manager,
         state_secret=_STATE_SECRET,
-        redirect_url="http://localhost/auth/oauth/callback",
+        redirect_path="/auth/oauth/callback",
         associate_by_email=True,
         is_verified_by_default=True,
         enable_pkce=enable_pkce,

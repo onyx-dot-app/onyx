@@ -1,5 +1,5 @@
 import { authErrorRedirect } from "@/app/auth/libSS";
-import { getDomain } from "@/lib/redirectSS";
+import { getDomain, getForwardedHostHeaders } from "@/lib/redirectSS";
 import { buildUrl } from "@/lib/utilsSS";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -18,7 +18,7 @@ async function handleSamlCallback(
 
   const fetchOptions: RequestInit = {
     method,
-    headers: {},
+    headers: getForwardedHostHeaders(request),
     redirect: "manual",
   };
 

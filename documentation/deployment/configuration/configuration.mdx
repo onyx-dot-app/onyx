@@ -196,6 +196,13 @@ set the `WEB_DOMAIN` environment variable and update your DNS records to point t
 
 For additional instructions, read the [EC2 Deployment Guide](/deployment/cloud/aws/ec2)!
 
+To serve Onyx on more than one domain, keep the main domain in `WEB_DOMAIN`.
+Add each other domain to `ALTERNATE_WEB_DOMAINS` as a comma-separated list of origins,
+such as `https://onyx.example.com`. Set it on both the API server and the web server.
+A user who opens an alternate domain stays on it through sign-in.
+Register the sign-in callback URL on each domain with your SSO provider.
+Emails and connector OAuth flows still use `WEB_DOMAIN`.
+
 ### SSL
 
 If using Docker,

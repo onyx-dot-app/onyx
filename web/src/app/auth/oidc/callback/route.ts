@@ -1,5 +1,5 @@
 import { authErrorRedirect } from "@/app/auth/libSS";
-import { getDomain } from "@/lib/redirectSS";
+import { getDomain, getForwardedHostHeaders } from "@/lib/redirectSS";
 import { buildUrl } from "@/lib/utilsSS";
 import { NextRequest, NextResponse } from "next/server";
 import { isAppSignInHandoff } from "@/lib/auth/appHandoff";
@@ -10,11 +10,13 @@ export const GET = async (request: NextRequest) => {
   const url = new URL(buildUrl("/auth/oidc/callback"));
   url.search = request.nextUrl.search;
   const cookieHeader = request.headers.get("cookie") || "";
+  const headers = getForwardedHostHeaders(request);
+  if (cookieHeader) headers.cookie = cookieHeader;
 
   // Set 'redirect' to 'manual' to prevent automatic redirection
   const response = await fetch(url.toString(), {
     redirect: "manual",
-    headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+    headers,
   });
   if (response.status === 401) {
     return NextResponse.redirect(

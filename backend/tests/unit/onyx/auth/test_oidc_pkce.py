@@ -100,7 +100,7 @@ def _build_test_client(
         backend=backend,
         get_user_manager=get_user_manager,
         state_secret="test-secret",
-        redirect_url="http://localhost/auth/oidc/callback",
+        redirect_path="/auth/oidc/callback",
         associate_by_email=True,
         is_verified_by_default=True,
         enable_pkce=enable_pkce,

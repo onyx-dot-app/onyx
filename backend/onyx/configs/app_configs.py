@@ -133,6 +133,15 @@ HIDE_QUERY_HISTORY_FROM_ADMIN_PANEL = (
 # on Windows, try  setting this to `http://127.0.0.1:3000` instead and see if that
 # fixes it)
 WEB_DOMAIN = os.environ.get("WEB_DOMAIN") or "http://localhost:3000"
+# Comma-separated extra origins (e.g. `https://onyx.example.com`) that also serve
+# this deployment, such as a domain CNAMEd to WEB_DOMAIN. A browser on one of
+# them stays on it through login. Links that leave the browser (emails, connector
+# OAuth, billing) keep WEB_DOMAIN.
+ALTERNATE_WEB_DOMAINS: list[str] = [
+    domain.strip().rstrip("/")
+    for domain in os.environ.get("ALTERNATE_WEB_DOMAINS", "").split(",")
+    if domain.strip()
+]
 
 # Surfaced to the web app via /api/settings so analytics can be enabled by env
 # var instead of a NEXT_PUBLIC_POSTHOG_KEY build arg. Client-side project key.

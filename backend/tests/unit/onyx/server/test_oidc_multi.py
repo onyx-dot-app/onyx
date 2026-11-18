@@ -8,7 +8,9 @@ from typing import Any, cast
 
 import pytest
 from sqlalchemy.orm import Session
+from starlette.requests import Request
 
+from onyx.auth import web_domain
 from onyx.auth.users import (
     CSRF_TOKEN_COOKIE_NAME,
     CSRF_TOKEN_KEY,
@@ -321,17 +323,43 @@ def test_decode_state_rejects_bad_jwt() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _browser_request(host: str = "api-server:8080") -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/auth/oidc/okta/authorize",
+            "headers": [(b"host", host.encode())],
+        }
+    )
+
+
+def test_callback_uri_follows_alternate_web_domain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    alternate = "https://agent.customer.example"
+    monkeypatch.setattr(
+        web_domain,
+        "_ALTERNATE_ORIGINS_BY_HOST",
+        web_domain._alternate_origins_by_host([alternate]),
+    )
+    uri = oidc_multi._callback_uri(
+        _browser_request("agent.customer.example"), _provider(), dict(_OIDC_CONFIG)
+    )
+    assert uri == f"{alternate}/api/auth/oidc/okta/callback"
+
+
 def test_callback_uri_parametric_by_default() -> None:
     provider = _provider()
-    assert oidc_multi._callback_uri(provider, dict(_OIDC_CONFIG)).endswith(
-        "/api/auth/oidc/okta/callback"
-    )
+    assert oidc_multi._callback_uri(
+        _browser_request(), provider, dict(_OIDC_CONFIG)
+    ).endswith("/api/auth/oidc/okta/callback")
 
 
 def test_callback_uri_legacy_oidc() -> None:
     provider = _provider()
     config: dict[str, object] = {**_OIDC_CONFIG, "legacy_callback": True}
-    uri = oidc_multi._callback_uri(provider, config)
+    uri = oidc_multi._callback_uri(_browser_request(), provider, config)
     assert uri.endswith("/auth/oidc/callback")
     assert "/api/" not in uri
 
@@ -339,7 +367,7 @@ def test_callback_uri_legacy_oidc() -> None:
 def test_callback_uri_legacy_google() -> None:
     provider = _provider(name="google", provider_type=SSOProviderType.GOOGLE_OAUTH)
     config: dict[str, object] = {**_GOOGLE_CONFIG, "legacy_callback": True}
-    uri = oidc_multi._callback_uri(provider, config)
+    uri = oidc_multi._callback_uri(_browser_request(), provider, config)
     assert uri.endswith("/auth/oauth/callback")
     assert "/api/" not in uri
 

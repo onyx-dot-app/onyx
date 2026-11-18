@@ -19,6 +19,7 @@ jest.mock("@/lib/utilsSS", () => ({
 
 jest.mock("@/lib/redirectSS", () => ({
   getDomain: () => APP_DOMAIN,
+  getForwardedHostHeaders: () => ({ "x-forwarded-host": "onyx.example.com" }),
 }));
 
 const SESSION_COOKIE =
@@ -69,6 +70,19 @@ describe.each([
       `${APP_DOMAIN}/app?new_team=true`
     );
     expect(result.headers.getSetCookie()).toContain(SESSION_COOKIE);
+  });
+
+  it("tells the API server which web domain the browser is on", async () => {
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(loginSucceeded());
+
+    await handler(callbackRequest(path));
+
+    const init = fetchSpy.mock.calls[0]?.[1];
+    expect(init?.headers).toMatchObject({
+      "x-forwarded-host": "onyx.example.com",
+    });
   });
 
   it("re-emits each Set-Cookie separately so attributes cannot bleed", async () => {

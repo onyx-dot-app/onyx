@@ -19,6 +19,7 @@ from fastapi.responses import RedirectResponse
 from starlette.responses import Response
 
 from onyx.auth.users import get_pkce_cookie_name
+from onyx.auth.web_domain import get_request_web_domain
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.error_handling.exceptions import (
     OnyxError,
@@ -71,7 +72,8 @@ def redirect_sso_errors_to_web(
                     detail.value if isinstance(detail, enum.Enum) else str(detail)
                 )
                 response: Response = RedirectResponse(
-                    f"{WEB_DOMAIN}/auth/error?error={quote(detail_str)}",
+                    f"{get_request_web_domain(request)}/auth/error"
+                    f"?error={quote(detail_str)}",
                     status_code=302,
                 )
             else:

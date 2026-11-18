@@ -97,6 +97,7 @@ from onyx.auth.session_tokens import (
     record_session_rejection,
 )
 from onyx.auth.signup_rate_limit import enforce_signup_rate_limit
+from onyx.auth.web_domain import get_allowed_web_origins, get_request_web_domain
 from onyx.configs.app_configs import (
     AUTH_BACKEND,
     AUTH_COOKIE_EXPIRE_TIME_SECONDS,
@@ -2732,9 +2733,12 @@ def _check_websocket_origin(websocket: WebSocket) -> None:
     if not origin:
         logger.warning("WS auth: missing Origin header")
         raise WebSocketException(code=1008)
-    if not is_same_origin(origin, WEB_DOMAIN):
+    allowed_origins = get_allowed_web_origins()
+    if not any(is_same_origin(origin, allowed) for allowed in allowed_origins):
         logger.warning(
-            "WS auth: origin mismatch. Expected %s, got %s", WEB_DOMAIN, origin
+            "WS auth: origin mismatch. Expected one of %s, got %s",
+            allowed_origins,
+            origin,
         )
         raise WebSocketException(code=1008)
 
@@ -3096,7 +3100,7 @@ def create_onyx_oauth_router(
     oauth_client: BaseOAuth2,
     backend: AuthenticationBackend,
     state_secret: SecretType,
-    redirect_url: Optional[str] = None,
+    redirect_path: Optional[str] = None,
     associate_by_email: bool = False,
     is_verified_by_default: bool = False,
     enable_pkce: bool = False,
@@ -3106,7 +3110,7 @@ def create_onyx_oauth_router(
         backend,
         get_user_manager,
         state_secret,
-        redirect_url,
+        redirect_path,
         associate_by_email,
         is_verified_by_default,
         enable_pkce=enable_pkce,
@@ -3118,7 +3122,7 @@ def get_oauth_router(
     backend: AuthenticationBackend,
     get_user_manager: UserManagerDependency[models.UP, models.ID],
     state_secret: SecretType,
-    redirect_url: Optional[str] = None,
+    redirect_path: Optional[str] = None,
     associate_by_email: bool = False,
     is_verified_by_default: bool = False,
     *,
@@ -3134,22 +3138,38 @@ def get_oauth_router(
     router = APIRouter()
     callback_route_name = f"oauth:{oauth_client.name}.{backend.name}.callback"
 
-    if redirect_url is not None:
-        oauth2_authorize_callback = OAuth2AuthorizeCallback(
-            oauth_client,
-            redirect_url=redirect_url,
+    def get_callback_url(request: Request) -> str:
+        """The IdP callback on the host the browser is on. Authorize and the code
+        exchange must send the same value. The host comes from the configured
+        web domains, never from request.url_for(), which trusts the Host header."""
+        callback_path = (
+            redirect_path
+            if redirect_path is not None
+            else request.app.url_path_for(callback_route_name)
         )
-    else:
+        return f"{get_request_web_domain(request)}{callback_path}"
+
+    async def authorize_callback_access_token_state(
+        request: Request,
+        code: Optional[str] = None,
+        code_verifier: Optional[str] = None,
+        state: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> tuple[OAuth2Token, Optional[str]] | None:
         oauth2_authorize_callback = OAuth2AuthorizeCallback(
-            oauth_client,
-            route_name=callback_route_name,
+            oauth_client, redirect_url=get_callback_url(request)
+        )
+        return await oauth2_authorize_callback(
+            request, code, code_verifier, state, error
         )
 
     async def null_access_token_state() -> tuple[OAuth2Token, Optional[str]] | None:
         return None
 
     access_token_state_dependency = (
-        oauth2_authorize_callback if not enable_pkce else null_access_token_state
+        authorize_callback_access_token_state
+        if not enable_pkce
+        else null_access_token_state
     )
 
     if csrf_token_cookie_secure is None:
@@ -3173,13 +3193,7 @@ def get_oauth_router(
     ) -> Response | OAuth2AuthorizeResponse:
         referral_source = request.cookies.get("referral_source", None)
 
-        if redirect_url is not None:
-            authorize_redirect_url = redirect_url
-        else:
-            # Use WEB_DOMAIN instead of request.url_for() to prevent host
-            # header poisoning — request.url_for() trusts the Host header.
-            callback_path = request.app.url_path_for(callback_route_name)
-            authorize_redirect_url = f"{WEB_DOMAIN}{callback_path}"
+        authorize_redirect_url = get_callback_url(request)
 
         next_url = sanitize_next_url(request.query_params.get("next"))
 
@@ -3362,11 +3376,7 @@ def get_oauth_router(
 
             state_value = state
 
-            if redirect_url is not None:
-                callback_redirect_url = redirect_url
-            else:
-                callback_path = request.app.url_path_for(callback_route_name)
-                callback_redirect_url = f"{WEB_DOMAIN}{callback_path}"
+            callback_redirect_url = get_callback_url(request)
 
             code_verifier = request.cookies.get(cast(str, pkce_cookie_name))
             if not code_verifier:
