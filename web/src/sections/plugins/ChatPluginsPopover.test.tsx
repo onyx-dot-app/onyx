@@ -8,7 +8,7 @@ import {
   LINEAR_PLUGIN_ID,
   makeMemberIntegration,
   REPORTS_PLUGIN_ID,
-} from "@/sections/plugins/__tests__/memberIntegrationFixtures";
+} from "@tests/setup/memberIntegrationTestUtils";
 
 const copy = messages.plugins.chat.popover;
 

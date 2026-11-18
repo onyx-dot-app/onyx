@@ -9,15 +9,12 @@ import {
 import IntegrationConnectPrompt from "@/sections/plugins/IntegrationConnectPrompt";
 import messages from "@/i18n/messages/en.json";
 import type { ChatPluginEntry } from "@/lib/plugins/hooks";
-import {
-  mockFetch,
-  requestBody,
-} from "@/sections/integrations/__tests__/integrationFixtures";
+import { mockFetch, requestBody } from "@tests/setup/integrationTestUtils";
 import {
   LINEAR_PLUGIN_ID,
   makeMemberIntegration,
   REPORTS_PLUGIN_ID,
-} from "@/sections/plugins/__tests__/memberIntegrationFixtures";
+} from "@tests/setup/memberIntegrationTestUtils";
 
 const copy = messages.plugins.chat.connectPrompt;
 let mockPlugins: ChatPluginEntry[] = [];

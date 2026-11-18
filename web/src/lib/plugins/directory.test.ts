@@ -8,7 +8,7 @@ import { customFixture } from "@/lib/skills/__fixtures__/picker";
 import {
   LINEAR_PLUGIN_ID,
   makeMemberIntegration,
-} from "@/sections/plugins/__tests__/memberIntegrationFixtures";
+} from "@tests/setup/memberIntegrationTestUtils";
 
 const skill = customFixture({
   id: "33333333-3333-4333-8333-333333333333",

@@ -1,10 +1,7 @@
 import { render, screen, waitFor } from "@tests/setup/test-utils";
 import IntegrationOAuthCallback from "@/sections/oauth/IntegrationOAuthCallback";
 import messages from "@/i18n/messages/en.json";
-import {
-  mockFetch,
-  requestBody,
-} from "@/sections/integrations/__tests__/integrationFixtures";
+import { mockFetch, requestBody } from "@tests/setup/integrationTestUtils";
 
 const copy = messages.plugins.member.oauthCallback;
 const mockReplace = jest.fn();

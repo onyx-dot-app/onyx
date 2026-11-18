@@ -9,15 +9,12 @@ import {
 import MemberPluginDetailPage from "@/sections/plugins/MemberPluginDetailPage";
 import messages from "@/i18n/messages/en.json";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
-import {
-  mockFetch,
-  requestBody,
-} from "@/sections/integrations/__tests__/integrationFixtures";
+import { mockFetch, requestBody } from "@tests/setup/integrationTestUtils";
 import {
   LINEAR_PLUGIN_ID,
   makeMemberAction,
   makeMemberIntegration,
-} from "@/sections/plugins/__tests__/memberIntegrationFixtures";
+} from "@tests/setup/memberIntegrationTestUtils";
 import type {
   MemberIntegration,
   PluginAccessView,
