@@ -5,15 +5,12 @@ import {
   useAgentChatPlugins,
   useAgentPluginPreferences,
 } from "@/lib/plugins/hooks";
-import {
-  mockFetch,
-  requestBody,
-} from "@/sections/integrations/__tests__/integrationFixtures";
+import { mockFetch, requestBody } from "@tests/setup/integrationTestUtils";
 import {
   LINEAR_PLUGIN_ID,
   makeMemberIntegration,
   REPORTS_PLUGIN_ID,
-} from "@/sections/plugins/__tests__/memberIntegrationFixtures";
+} from "@tests/setup/memberIntegrationTestUtils";
 
 function wrapper({ children }: { children: ReactNode }) {
   return (

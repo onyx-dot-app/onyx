@@ -4,11 +4,11 @@ import MemberPluginsPage from "@/sections/plugins/MemberPluginsPage";
 import type AddIntegrationModal from "@/sections/integrations/AddIntegrationModal";
 import messages from "@/i18n/messages/en.json";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
-import { mockFetch } from "@/sections/integrations/__tests__/integrationFixtures";
+import { mockFetch } from "@tests/setup/integrationTestUtils";
 import {
   makeMemberIntegration,
   REPORTS_PLUGIN_ID,
-} from "@/sections/plugins/__tests__/memberIntegrationFixtures";
+} from "@tests/setup/memberIntegrationTestUtils";
 
 const copy = messages.plugins.member;
 const mockPush = jest.fn();
@@ -47,8 +47,8 @@ jest.mock("@/sections/integrations/AddIntegrationModal", () => ({
             props.onCreated({
               ...jest
                 .requireActual<
-                  typeof import("@/sections/integrations/__tests__/integrationFixtures")
-                >("@/sections/integrations/__tests__/integrationFixtures")
+                  typeof import("@tests/setup/integrationTestUtils")
+                >("@tests/setup/integrationTestUtils")
                 .makeDetail(),
               plugins: [
                 {

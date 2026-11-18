@@ -1,5 +1,5 @@
 import { connectAction } from "@/lib/integrations/connect";
-import { makeMemberIntegration } from "@/sections/plugins/__tests__/memberIntegrationFixtures";
+import { makeMemberIntegration } from "@tests/setup/memberIntegrationTestUtils";
 
 test("a member reconnects an own connection but not the organization one", () => {
   const needsReconnect = {
