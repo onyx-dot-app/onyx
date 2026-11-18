@@ -22,8 +22,6 @@ def alembic_config() -> Config:
         config_options={
             "process_revision_directives": partial(exclude_known_drift, chain="alembic")
         },
-        # The persona category downgrade drops the wrong foreign key name.
-        minimum_downgrade_revision="47e5bef3a1d7",
         alembic_config=AlembicConfig("alembic.ini", ini_section="alembic"),
     )
 
