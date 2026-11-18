@@ -64,10 +64,12 @@ test("case", { tag: "@x" }, async ({ page }) => {
   await page.waitForTimeout(150);
   await page.waitForLoadState("networkidle");
   await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { "waitUntil": "networkidle" });
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
   await test.step("box", async () => {}, { box: true });
   await expect.poll(() => page.getByRole("row").count()).toBe(1);
 });
+test("details and a named body", { tag: "@x" }, body);
 test.fixme("disabled without an issue", async () => {});
 // Skip: Blocked by the upstream bug. https://github.com/example/repo/issues/123
 test.fixme("disabled with an issue", async () => {});
@@ -80,8 +82,9 @@ test.fixme("disabled with an issue", async () => {});
     "8 no-real-time-wait-in-tests",
     "9 no-networkidle-in-tests",
     "10 no-networkidle-in-tests",
-    "11 no-real-time-wait-in-tests",
-    "15 require-test-skip-reason",
+    "11 no-networkidle-in-tests",
+    "12 no-real-time-wait-in-tests",
+    "17 require-test-skip-reason",
   ]);
 });
 
@@ -96,6 +99,8 @@ it("case", async () => {
 }, 60000);
 it.each([1])("case %s", () => {}, 60000);
 xit("disabled", () => {});
+it.skip.each([1])("disabled case %s", () => {});
+beforeEach(() => {}, 60000);
 `
     )
   ).toEqual([
@@ -104,5 +109,7 @@ xit("disabled", () => {});
     "3 no-real-time-wait-in-tests",
     "6 no-test-timeout-override",
     "7 require-test-skip-reason",
+    "8 require-test-skip-reason",
+    "9 no-test-timeout-override",
   ]);
 });

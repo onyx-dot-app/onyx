@@ -30,13 +30,14 @@ export const requireTestSkipReasonRule = defineRule({
       CallExpression(node) {
         const path = callPath(node.callee);
         const [root] = path;
-        const method = path.at(-1);
         const skips =
-          (root !== undefined &&
-            testRoots.has(root) &&
-            (method === "skip" || method === "fixme")) ||
-          (path.length === 1 && disabledTests.has(root ?? ""));
-        if (!skips || hasReason(node.arguments[1])) return;
+          (testRoots.has(root ?? "") &&
+            (path.includes("skip") || path.includes("fixme"))) ||
+          disabledTests.has(root ?? "");
+        // `test.skip.each(table)` returns the registration; check that call once.
+        const factory =
+          node.parent.type === "CallExpression" && node.parent.callee === node;
+        if (!skips || factory || hasReason(node.arguments[1])) return;
 
         let statement: ESTree.Node = node;
         while (

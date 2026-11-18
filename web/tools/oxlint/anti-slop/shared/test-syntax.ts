@@ -17,6 +17,10 @@ export function callPath(node: ESTree.Node | null | undefined): string[] {
   switch (node?.type) {
     case "Identifier":
       return [node.name];
+    case "Literal": {
+      const text = staticText(node);
+      return text === undefined ? [] : [text];
+    }
     case "MemberExpression": {
       const name =
         !node.computed && node.property.type === "Identifier"

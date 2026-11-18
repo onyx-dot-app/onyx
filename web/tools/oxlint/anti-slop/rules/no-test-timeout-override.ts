@@ -2,6 +2,8 @@ import { defineRule, type ESTree } from "@oxlint/plugins";
 
 import { callPath, isFunction } from "../shared/test-syntax.ts";
 
+const jestHooks = new Set(["afterAll", "afterEach", "beforeAll", "beforeEach"]);
+
 /** A test option that raises the time or attempts a test gets. Zero retries is stricter, so it passes. */
 function raisesLimit(options: ESTree.Node | undefined): boolean {
   if (options?.type !== "ObjectExpression") return false;
@@ -33,16 +35,18 @@ export const noTestTimeoutOverrideRule = defineRule({
         const path = callPath(node.callee);
         const [root] = path;
         const method = path.at(-1);
-        const [first, , third] = node.arguments;
+        const [first, second, third] = node.arguments;
         if (
           (root === "test" && method === "setTimeout") ||
           (root === "test" && method === "configure" && raisesLimit(first)) ||
           (root === "jest" &&
             (method === "setTimeout" || method === "retryTimes")) ||
+          (jestHooks.has(root ?? "") && second !== undefined) ||
           // Jest it(name, fn, timeout), or Playwright test.step(name, fn, options).
-          // A Playwright test(name, details, fn) ends in its body.
+          // A Playwright test(name, details, body) passes its details second.
           ((root === "it" || root === "test") &&
             third !== undefined &&
+            second?.type !== "ObjectExpression" &&
             !isFunction(third) &&
             (third.type !== "ObjectExpression" || raisesLimit(third)))
         ) {
