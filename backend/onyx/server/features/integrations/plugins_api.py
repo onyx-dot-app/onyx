@@ -4,7 +4,7 @@ setting of an Organization library plugin."""
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission, token_allows
@@ -27,6 +27,7 @@ from onyx.server.features.integrations.models import (
     PluginAccessView,
     PluginEnableRequest,
     PluginInstallationPolicyUpdate,
+    PluginPublishResponse,
 )
 
 router = APIRouter(prefix="/plugins")
@@ -91,22 +92,25 @@ def share_plugin(
     )
 
 
-@router.post("/{plugin_id}/publish", status_code=204)
+@router.post("/{plugin_id}/publish")
 def publish_plugin(
     http_request: Request,
     plugin_id: UUID,
     user: User = Depends(_member),
     db_session: Session = Depends(get_session),
-) -> Response:
-    affected = publish_plugin_for_user__no_commit(
+) -> PluginPublishResponse:
+    """A name that the Organization library has for a skill is refused with
+    CONFLICT, as for a skill publish."""
+    name, affected = publish_plugin_for_user__no_commit(
         user,
         plugin_id,
         db_session,
         token_may_manage=token_allows(http_request, Permission.MANAGE_ACTIONS),
+        on_name_clash="raise",
     )
     db_session.commit()
     reload_craft_sessions(affected, db_session)
-    return Response(status_code=204)
+    return PluginPublishResponse(plugin_id=plugin_id, name=name)
 
 
 @admin_router.put("/{plugin_id}/installation-policy")

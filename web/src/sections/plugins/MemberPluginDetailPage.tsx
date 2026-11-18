@@ -231,8 +231,8 @@ export default function MemberPluginDetailPage({
     if (!entry) return;
     setPublishing(false);
     try {
-      await publishPlugin(entry.id);
-      toast.success(t("publish.done", { name: entry.name }));
+      const published = await publishPlugin(entry.id);
+      toast.success(t("publish.done", { name: published.name }));
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("publish.failed"));

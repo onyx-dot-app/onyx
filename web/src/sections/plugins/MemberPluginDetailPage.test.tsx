@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from "@tests/setup/test-utils";
+import { toast } from "@opal/layouts";
 import MemberPluginDetailPage from "@/sections/plugins/MemberPluginDetailPage";
 import messages from "@/i18n/messages/en.json";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
@@ -427,10 +428,13 @@ test("the owner publishes after the confirmation", async () => {
       }),
     ],
     {
-      [`POST /api/plugins/${LINEAR_PLUGIN_ID}/publish`]: () =>
-        new Response(null, { status: 204 }),
+      [`POST /api/plugins/${LINEAR_PLUGIN_ID}/publish`]: {
+        plugin_id: LINEAR_PLUGIN_ID,
+        name: "Linear-2",
+      },
     }
   );
+  const success = jest.spyOn(toast, "success");
   const u = user();
   await u.click(
     await screen.findByRole("button", { name: copy.detail.publish.label })
@@ -447,5 +451,10 @@ test("the owner publishes after the confirmation", async () => {
           init?.method === "POST"
       )
     ).toBe(true)
+  );
+  await waitFor(() =>
+    expect(success).toHaveBeenCalledWith(
+      copy.detail.publish.done.replace("{name}", "Linear-2")
+    )
   );
 });

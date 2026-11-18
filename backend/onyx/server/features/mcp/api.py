@@ -281,9 +281,14 @@ def _apply_access(
                     db_session,
                     token_may_manage=True,
                 )
-                affected |= publish_plugin_for_user__no_commit(
-                    user, row.plugin_id, db_session, token_may_manage=True
+                _, published = publish_plugin_for_user__no_commit(
+                    user,
+                    row.plugin_id,
+                    db_session,
+                    token_may_manage=True,
+                    on_name_clash="rename",
                 )
+                affected |= published
             continue
         if row.in_organization_library:
             affected |= unpublish_integration_plugin__no_commit(

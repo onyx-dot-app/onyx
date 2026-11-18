@@ -12,6 +12,7 @@ from onyx.db.integration_policy import list_persona_plugin_snapshots
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.plugin import (
+    NameClashAction,
     PluginAccessChange,
     PluginGroupGrant,
     PluginUserGrant,
@@ -226,12 +227,18 @@ def share_plugin__no_commit(
 
 
 def publish_plugin_for_user__no_commit(
-    user: User, plugin_id: UUID, db_session: Session, *, token_may_manage: bool
-) -> set[UUID]:
+    user: User,
+    plugin_id: UUID,
+    db_session: Session,
+    *,
+    token_may_manage: bool,
+    on_name_clash: NameClashAction,
+) -> tuple[str, set[UUID]]:
     """Move the plugin to the Organization library. Only an
     organization-wide action manager publishes a plugin that holds an
     integration, with no review: there is no review of such a plugin. A used
-    name takes the next free name. Returns the affected users."""
+    name follows ``on_name_clash``. Returns the name in the library and the
+    affected users."""
     _owned_private_plugin(
         user, plugin_id, db_session, token_may_manage=token_may_manage
     )
@@ -250,8 +257,8 @@ def publish_plugin_for_user__no_commit(
         None,
         plugin.current_version_id,
         None,
-        "rename",
+        on_name_clash,
         db_session,
         approver=user,
     )
-    return before | affected_user_ids_for_plugins([plugin_id], db_session)
+    return plugin.name, before | affected_user_ids_for_plugins([plugin_id], db_session)
