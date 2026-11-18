@@ -193,6 +193,41 @@ def get_openapi_tool_with_integration(
     return (row[0], row[1], row[2]) if row is not None else None
 
 
+def _mcp_tools_with_integration() -> Select[
+    tuple[Tool, Integration, IntegrationConnection]
+]:
+    return (
+        select(Tool, Integration, IntegrationConnection)
+        .join(Integration, Integration.mcp_server_id == Tool.mcp_server_id)
+        .outerjoin(
+            IntegrationConnection,
+            (IntegrationConnection.integration_id == Integration.id)
+            & IntegrationConnection.user_id.is_(None),
+        )
+    )
+
+
+def list_mcp_tools_with_integration(
+    db_session: Session,
+) -> list[tuple[Tool, Integration, IntegrationConnection | None]]:
+    """Each MCP tool row with its integration and organization connection."""
+    return [
+        (tool, integration, organization)
+        for tool, integration, organization in db_session.execute(
+            _mcp_tools_with_integration().order_by(Tool.id)
+        ).tuples()
+    ]
+
+
+def get_mcp_tool_with_integration(
+    tool_id: int, db_session: Session
+) -> tuple[Tool, Integration, IntegrationConnection | None] | None:
+    row = db_session.execute(
+        _mcp_tools_with_integration().where(Tool.id == tool_id)
+    ).one_or_none()
+    return (row[0], row[1], row[2]) if row is not None else None
+
+
 def list_integration_actions(
     integration_id: int, db_session: Session
 ) -> list[IntegrationAction]:
