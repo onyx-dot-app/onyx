@@ -33,6 +33,7 @@ from onyx.indexing.models import (
     DocAwareChunk,
     DocMetadataAwareIndexChunk,
     IndexChunk,
+    IndexingBatchAdapter,
     UpdatableChunkData,
 )
 from onyx.redis.redis_hierarchy import (
@@ -47,7 +48,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-class DocumentIndexingBatchAdapter:
+class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
     """Default adapter: handles DB prep, locking, metadata enrichment, and finalize.
 
     Keeps orchestration logic in the pipeline and side-effects in the adapter.
@@ -62,10 +63,22 @@ class DocumentIndexingBatchAdapter:
         tenant_id: str,
         index_attempt_metadata: IndexAttemptMetadata,
     ):
-        self.connector_id = connector_id
-        self.credential_id = credential_id
+        self._connector_id = connector_id
+        self._credential_id = credential_id
         self.tenant_id = tenant_id
-        self.index_attempt_metadata = index_attempt_metadata
+        self._index_attempt_metadata = index_attempt_metadata
+
+    @property
+    def connector_id(self) -> int:
+        return self._connector_id
+
+    @property
+    def credential_id(self) -> int:
+        return self._credential_id
+
+    @property
+    def index_attempt_metadata(self) -> IndexAttemptMetadata:
+        return self._index_attempt_metadata
 
     def prepare(
         self,
