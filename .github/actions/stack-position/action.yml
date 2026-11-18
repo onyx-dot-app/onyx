@@ -68,6 +68,9 @@ runs:
           skip_reason="PR #${child} is stacked on this PR. The stack tip runs the slow suites for this PR's changes."
         fi
         echo "child=${child} stack_base=${stack_base} draft=${draft}"
+        if [[ -n "$skip_reason" ]]; then
+          echo "::notice::${skip_reason}"
+        fi
         {
           echo "child=${child}"
           echo "stack_base=${stack_base}"

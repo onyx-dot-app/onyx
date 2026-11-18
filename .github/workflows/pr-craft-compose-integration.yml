@@ -78,11 +78,6 @@ jobs:
         id: stack
         if: github.event_name == 'pull_request'
         uses: ./.github/actions/stack-position
-      - name: Skip the slow suites
-        if: steps.stack.outputs.skip_reason != ''
-        env:
-          SKIP_REASON: ${{ steps.stack.outputs.skip_reason }}
-        run: echo "::notice::${SKIP_REASON}"
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
         if: github.event_name == 'pull_request'
