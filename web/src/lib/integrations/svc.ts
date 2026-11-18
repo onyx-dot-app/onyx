@@ -208,10 +208,11 @@ export async function updatePluginAccess(
   return res.json();
 }
 
-/** Moves a private plugin to the Organization library. */
+/** Moves a private plugin to the Organization library. An older backend
+ * answers 204 with no body, so the result is then null. */
 export async function publishPlugin(
   pluginId: string
-): Promise<PluginPublishResponse> {
+): Promise<PluginPublishResponse | null> {
   const res = await request(`${SWR_KEYS.plugin(pluginId)}/publish`, "POST");
-  return res.json();
+  return res.status === 204 ? null : res.json();
 }

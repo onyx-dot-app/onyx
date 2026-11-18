@@ -417,7 +417,11 @@ test("only an organization-wide action manager publishes", async () => {
   ).toBeDisabled();
 });
 
-test("the owner publishes after the confirmation", async () => {
+test.each([
+  [{ plugin_id: LINEAR_PLUGIN_ID, name: "Linear-2" }, "Linear-2"],
+  // An older backend answers 204 with no body.
+  [null, "Linear"],
+])("the owner publishes after the confirmation (%o)", async (body, name) => {
   mockGlobalHolder = true;
   const fetchMock = overview(
     [
@@ -428,10 +432,7 @@ test("the owner publishes after the confirmation", async () => {
       }),
     ],
     {
-      [`POST /api/plugins/${LINEAR_PLUGIN_ID}/publish`]: {
-        plugin_id: LINEAR_PLUGIN_ID,
-        name: "Linear-2",
-      },
+      [`POST /api/plugins/${LINEAR_PLUGIN_ID}/publish`]: body,
     }
   );
   const success = jest.spyOn(toast, "success");
@@ -454,7 +455,7 @@ test("the owner publishes after the confirmation", async () => {
   );
   await waitFor(() =>
     expect(success).toHaveBeenCalledWith(
-      copy.detail.publish.done.replace("{name}", "Linear-2")
+      copy.detail.publish.done.replace("{name}", name)
     )
   );
 });

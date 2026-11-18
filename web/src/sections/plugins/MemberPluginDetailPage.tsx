@@ -232,7 +232,7 @@ export default function MemberPluginDetailPage({
     setPublishing(false);
     try {
       const published = await publishPlugin(entry.id);
-      toast.success(t("publish.done", { name: published.name }));
+      toast.success(t("publish.done", { name: published?.name ?? entry.name }));
       await refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("publish.failed"));
