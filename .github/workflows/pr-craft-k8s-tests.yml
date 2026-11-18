@@ -20,10 +20,9 @@ on:
   schedule:
     - cron: "0 7 * * *"   # 07:00 UTC nightly
   pull_request:
-    paths-ignore:
-      - "documentation/**"
-    # Not a required check, so docs-only PRs skip it entirely.
-    # A draft skips the slow suites, so they run again when the draft state changes.
+    # No `paths-ignore`: a docs-only stack tip must still start this workflow,
+    # because the `changes` job filters on every change in the stack. A draft
+    # skips the slow suites, so they run again when the draft state changes.
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     tags:
