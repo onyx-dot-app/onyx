@@ -35,7 +35,7 @@ from onyx.db.integration_policy import (
     list_persona_openapi_tools,
     list_persona_plugin_snapshots,
 )
-from onyx.db.models import User
+from onyx.db.models import Integration, Tool, User
 from onyx.db.persona import (
     can_delete_persona,
     can_edit_persona,
@@ -89,7 +89,7 @@ from onyx.server.features.persona.models import (
     PersonaSnapshot,
     PersonaUpsertRequest,
 )
-from onyx.server.features.tool.api import openapi_tool_snapshot
+from onyx.server.features.tool.api import openapi_tool_snapshots
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.manage.llm.api import get_valid_model_configuration_ids_for_persona
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
@@ -779,14 +779,27 @@ def get_persona(
             }
         )
 
-    custom_tools: dict[int, ToolSnapshot] = {}
+    custom_tools: dict[int, tuple[UUID, Tool, Integration]] = {}
     for plugin_id, tool, integration in list_persona_openapi_tools(
         persona.id, db_session
     ):
-        if tool.id not in custom_tools or custom_tools[tool.id].definition is None:
-            custom_tools[tool.id] = viewer_snapshot(
-                plugin_id, openapi_tool_snapshot(tool, integration, db_session)
-            )
+        if tool.id not in custom_tools or (
+            visible_plugins is not None
+            and custom_tools[tool.id][0] not in visible_plugins
+            and plugin_id in visible_plugins
+        ):
+            custom_tools[tool.id] = (plugin_id, tool, integration)
+    custom_snapshots = [
+        viewer_snapshot(plugin_id, tool_snapshot)
+        for (plugin_id, _, _), tool_snapshot in zip(
+            custom_tools.values(),
+            openapi_tool_snapshots(
+                [(tool, integration) for _, tool, integration in custom_tools.values()],
+                db_session,
+            ),
+            strict=True,
+        )
+    ]
     mcp_tools = {
         tool.id: viewer_snapshot(
             plugin_id, ToolSnapshot.from_model(tool, plugin_ids=[plugin_id])
@@ -796,7 +809,7 @@ def get_persona(
     }
     snapshot.tools = (
         [tool for tool in snapshot.tools if tool.in_code_tool_id is not None]
-        + list(custom_tools.values())
+        + custom_snapshots
         + list(mcp_tools.values())
     )
     # Hide a pinned model this viewer cannot use. The check is viewer-relative, so

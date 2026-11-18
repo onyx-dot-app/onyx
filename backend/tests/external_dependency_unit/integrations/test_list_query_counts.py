@@ -14,7 +14,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import IntegrationAuthMethod, IntegrationAuthMode
-from onyx.db.models import Integration, User
+from onyx.db.models import Integration, Persona, Persona__Plugin, User
 from onyx.integrations.connections import connect_with_fields__no_commit
 from onyx.server.features.integrations import admin_api, api
 from onyx.server.features.integrations.models import (
@@ -22,9 +22,14 @@ from onyx.server.features.integrations.models import (
     McpServerConfigInput,
     OpenApiConfigInput,
 )
+from onyx.server.features.persona.api import get_persona
 from onyx.server.features.tool import api as tool_api
 from tests.external_dependency_unit.conftest import MakeTestUser
-from tests.external_dependency_unit.integration_helpers import delete_integrations
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    hold_in_plugin,
+    make_openapi_integration,
+)
 
 
 def _openapi_spec(name: str) -> dict[str, Any]:
@@ -182,3 +187,44 @@ def test_list_views_do_not_query_once_per_integration(
         for name, (users, read) in views.items()
     }
     assert after == before
+
+
+def test_persona_detail_batches_openapi_snapshots(
+    db_session: Session, admin: User, created: list[int]
+) -> None:
+    persona = Persona(name="snapshot-count", description="", user_id=admin.id)
+    db_session.add(persona)
+    db_session.commit()
+    counts: list[int] = []
+    expected: dict[int, dict[str, Any]] = {}
+    try:
+        for size in (2, 10):
+            for i in range(len(created), size):
+                integration, tool = make_openapi_integration(
+                    db_session, openapi_schema=_openapi_spec(str(i))
+                )
+                created.append(integration.id)
+                plugin = hold_in_plugin(
+                    db_session, [integration], author_user_id=admin.id
+                )
+                db_session.add(
+                    Persona__Plugin(persona_id=persona.id, plugin_id=plugin.id)
+                )
+                db_session.flush()
+                expected[tool.id] = tool_api.openapi_tool_snapshot(
+                    tool, integration, db_session
+                ).model_dump()
+            db_session.commit()
+
+            def read(expected_size: int = size) -> None:
+                snapshot = get_persona(persona.id, admin, db_session)
+                assert len(snapshot.tools) == expected_size
+                assert {
+                    tool.id: tool.model_dump() for tool in snapshot.tools
+                } == expected
+
+            counts.append(_query_count(db_session, [admin], read))
+        assert counts[0] == counts[1], counts
+    finally:
+        db_session.delete(persona)
+        db_session.commit()

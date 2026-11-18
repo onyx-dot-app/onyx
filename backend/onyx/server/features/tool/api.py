@@ -27,6 +27,7 @@ from onyx.db.integration import (
 )
 from onyx.db.integration_connection import (
     get_connection,
+    list_connections,
     upsert_connection__no_commit,
 )
 from onyx.db.models import Integration, IntegrationConnection, Tool, User
@@ -267,10 +268,24 @@ def _openapi_tool_or_404(
 def openapi_tool_snapshot(
     tool: Tool, integration: Integration, db_session: Session
 ) -> ToolSnapshot:
-    plugins = list_integration_plugin_rows([integration.id], db_session)[integration.id]
-    return _alias_snapshot(
-        tool, integration, get_connection(db_session, integration.id, None), plugins
-    )
+    return openapi_tool_snapshots([(tool, integration)], db_session)[0]
+
+
+def openapi_tool_snapshots(
+    tools: Sequence[tuple[Tool, Integration]], db_session: Session
+) -> list[ToolSnapshot]:
+    integration_ids = [integration.id for _, integration in tools]
+    plugins = list_integration_plugin_rows(integration_ids, db_session)
+    connections = list_connections(db_session, integration_ids, None)
+    return [
+        _alias_snapshot(
+            tool,
+            integration,
+            connections.get((integration.id, None)),
+            plugins[integration.id],
+        )
+        for tool, integration in tools
+    ]
 
 
 @admin_router.post("/custom", tags=PUBLIC_API_TAGS)
