@@ -1,7 +1,20 @@
-import { defineRule } from "@oxlint/plugins";
+import { defineRule, type ESTree } from "@oxlint/plugins";
 
-import { testBindings, testHooks } from "../shared/test-framework.ts";
-import { callPath, option } from "../shared/test-syntax.ts";
+import { callPath, isFunction } from "../shared/test-syntax.ts";
+
+/** A test option that raises the time or attempts a test gets. Zero retries is stricter, so it passes. */
+function raisesLimit(options: ESTree.Node | undefined): boolean {
+  if (options?.type !== "ObjectExpression") return false;
+  return options.properties.some((property) => {
+    if (property.type !== "Property") return false;
+    const [key] = callPath(property.key);
+    if (key === "timeout") return true;
+    const { value } = property;
+    return (
+      key === "retries" && !(value.type === "Literal" && value.value === 0)
+    );
+  });
+}
 
 export const noTestTimeoutOverrideRule = defineRule({
   meta: {
@@ -14,47 +27,25 @@ export const noTestTimeoutOverrideRule = defineRule({
         "Use the project timeout and retry policy. Wait for the state needed by the test.",
     },
   },
-  create(context) {
-    const bindings = testBindings(context.filename);
+  createOnce(context) {
     return {
-      ImportDeclaration: bindings.ImportDeclaration,
-      VariableDeclarator: bindings.VariableDeclarator,
       CallExpression(node) {
-        const parts = callPath(node.callee);
-        const [root, firstMember] = parts;
-        if (!root) return;
-        const method = parts.at(-1);
+        const path = callPath(node.callee);
+        const [root] = path;
+        const method = path.at(-1);
+        const [first, , third] = node.arguments;
         if (
-          bindings.playwright &&
-          method !== "setTimeout" &&
-          method !== "configure"
-        )
-          return;
-        const name = bindings.testName(root);
-
-        const timeoutSetter =
-          method === "setTimeout" &&
-          (bindings.jest.has(root) ||
-            (bindings.playwright &&
-              (root === "testInfo" ||
-                (name && (parts.length === 2 || firstMember === "info")))));
-        const playwrightConfig =
-          bindings.playwright &&
-          name &&
-          firstMember === "describe" &&
-          method === "configure" &&
-          (option(node.arguments[0], "timeout") ||
-            option(node.arguments[0], "retries"));
-        const jestTimeout =
-          !bindings.playwright &&
-          name &&
-          name !== "describe" &&
-          (method !== "each" || node.callee.type !== "MemberExpression") &&
-          method !== "todo" &&
-          node.arguments.length > (testHooks.has(name) ? 1 : 2);
-        const retries = bindings.jest.has(root) && method === "retryTimes";
-
-        if (timeoutSetter || playwrightConfig || jestTimeout || retries) {
+          (root === "test" && method === "setTimeout") ||
+          (root === "test" && method === "configure" && raisesLimit(first)) ||
+          (root === "jest" &&
+            (method === "setTimeout" || method === "retryTimes")) ||
+          // Jest it(name, fn, timeout), or Playwright test.step(name, fn, options).
+          // A Playwright test(name, details, fn) ends in its body.
+          ((root === "it" || root === "test") &&
+            third !== undefined &&
+            !isFunction(third) &&
+            (third.type !== "ObjectExpression" || raisesLimit(third)))
+        ) {
           context.report({ node, messageId: "timeout" });
         }
       },

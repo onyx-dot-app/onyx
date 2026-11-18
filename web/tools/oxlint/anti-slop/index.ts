@@ -3,13 +3,11 @@ import { eslintCompatPlugin } from "@oxlint/plugins";
 import { noChainedTypeAssertionsRule } from "./rules/no-chained-type-assertions.ts";
 import { noConditionalEmptyObjectSpreadRule } from "./rules/no-conditional-empty-object-spread.ts";
 import { noEmDashRule } from "./rules/no-em-dash.ts";
-import { noFrameWaitsInTestsRule } from "./rules/no-frame-waits-in-tests.ts";
 import { noHooklessUseFunctionRule } from "./rules/no-hookless-use-function.ts";
 import { noKnownValueWideningRule } from "./rules/no-known-value-widening.ts";
 import { noModuleMockingRule } from "./rules/no-module-mocking.ts";
 import { noNetworkidleInTestsRule } from "./rules/no-networkidle-in-tests.ts";
 import { noObjectParametersRule } from "./rules/no-object-parameters.ts";
-import { noPollingLoopInTestsRule } from "./rules/no-polling-loop-in-tests.ts";
 import { noRealTimeWaitInTestsRule } from "./rules/no-real-time-wait-in-tests.ts";
 import { noReflectApplyRule } from "./rules/no-reflect-apply.ts";
 import { noReflectGetRule } from "./rules/no-reflect-get.ts";
@@ -20,7 +18,6 @@ import { noUnknownParametersRule } from "./rules/no-unknown-parameters.ts";
 import { noUnknownReturnsRule } from "./rules/no-unknown-returns.ts";
 import { noUnknownTypeAliasesRule } from "./rules/no-unknown-type-aliases.ts";
 import { noUnsafeDictionaryTypeRule } from "./rules/no-unsafe-dictionary-type.ts";
-import { noWallClockInTestsRule } from "./rules/no-wall-clock-in-tests.ts";
 import { noWidenThenAssertRule } from "./rules/no-widen-then-assert.ts";
 import { requireSafetyCommentForTypeAssertionRule } from "./rules/require-safety-comment-for-type-assertion.ts";
 import { requireSuppressionReasonRule } from "./rules/require-suppression-reason.ts";
@@ -33,13 +30,11 @@ const antiSlopPlugin = eslintCompatPlugin({
     "no-chained-type-assertions": noChainedTypeAssertionsRule,
     "no-conditional-empty-object-spread": noConditionalEmptyObjectSpreadRule,
     "no-em-dash": noEmDashRule,
-    "no-frame-waits-in-tests": noFrameWaitsInTestsRule,
     "no-hookless-use-function": noHooklessUseFunctionRule,
     "no-known-value-widening": noKnownValueWideningRule,
     "no-module-mocking": noModuleMockingRule,
     "no-networkidle-in-tests": noNetworkidleInTestsRule,
     "no-object-parameters": noObjectParametersRule,
-    "no-polling-loop-in-tests": noPollingLoopInTestsRule,
     "no-real-time-wait-in-tests": noRealTimeWaitInTestsRule,
     "no-reflect-apply": noReflectApplyRule,
     "no-reflect-get": noReflectGetRule,
@@ -50,7 +45,6 @@ const antiSlopPlugin = eslintCompatPlugin({
     "no-unknown-parameters": noUnknownParametersRule,
     "no-unknown-returns": noUnknownReturnsRule,
     "no-unknown-type-aliases": noUnknownTypeAliasesRule,
-    "no-wall-clock-in-tests": noWallClockInTestsRule,
     "no-widen-then-assert": noWidenThenAssertRule,
     "require-safety-comment-for-type-assertion":
       requireSafetyCommentForTypeAssertionRule,

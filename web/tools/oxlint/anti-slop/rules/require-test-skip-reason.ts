@@ -1,11 +1,13 @@
 import { defineRule, type ESTree } from "@oxlint/plugins";
 
-import { disabledTests, testBindings } from "../shared/test-framework.ts";
-import { callPath, isFunction, staticText } from "../shared/test-syntax.ts";
+import { callPath, staticText } from "../shared/test-syntax.ts";
 
+const testRoots = new Set(["describe", "it", "test"]);
+const disabledTests = new Set(["xdescribe", "xit", "xtest"]);
 const issueUrl =
   /https:\/\/(?:github\.com\/[\w.-]+\/[\w.-]+\/issues\/\d+|linear\.app\/[\w-]+\/issue\/[\w-]+)(?=[/\s)]|$)/u;
 
+/** A conditional Playwright skip, `test.skip(condition, "reason")`, explains itself in its second argument. */
 function hasReason(node: ESTree.Node | undefined): boolean {
   return Boolean(
     staticText(node)?.trim() ||
@@ -19,61 +21,28 @@ export const requireTestSkipReasonRule = defineRule({
     type: "problem",
     docs: { description: "Require a reason to skip a test." },
     messages: {
-      reason: "Explain the condition in the second argument to test.skip.",
-      issue:
-        "Add a Skip: comment directly above the disabled test with a reason and a GitHub or Linear issue URL.",
+      reason:
+        "Give a conditional skip a reason in its second argument. Put `// Skip: <reason> <issue URL>` directly above a disabled test.",
     },
   },
-  create(context) {
-    const bindings = testBindings(context.filename);
+  createOnce(context) {
     return {
-      ImportDeclaration: bindings.ImportDeclaration,
-      VariableDeclarator: bindings.VariableDeclarator,
       CallExpression(node) {
-        const parts = callPath(node.callee);
-        const [root] = parts;
-        const method = parts.at(-1);
-        if (
-          bindings.playwright &&
-          !parts.includes("skip") &&
-          !parts.includes("fixme")
-        )
-          return;
-        const test = root ? bindings.testName(root) : undefined;
-        if (
-          !test ||
-          (!disabledTests.has(test) &&
-            !parts.includes("skip") &&
-            !parts.includes("fixme"))
-        )
-          return;
-        if (
-          node.parent.type === "CallExpression" &&
-          node.parent.callee === node
-        )
-          return;
-
-        const [condition, reason] = node.arguments;
-        const conditional =
-          bindings.playwright &&
-          method === "skip" &&
-          !parts.includes("describe") &&
-          condition &&
-          condition.type !== "TemplateLiteral" &&
-          !(
-            condition.type === "Literal" &&
-            (condition.value === true || typeof condition.value === "string")
-          ) &&
-          !isFunction(reason);
-        if (conditional) {
-          if (!hasReason(reason)) context.report({ node, messageId: "reason" });
-          return;
-        }
+        const path = callPath(node.callee);
+        const [root] = path;
+        const method = path.at(-1);
+        const skips =
+          (root !== undefined &&
+            testRoots.has(root) &&
+            (method === "skip" || method === "fixme")) ||
+          (path.length === 1 && disabledTests.has(root ?? ""));
+        if (!skips || hasReason(node.arguments[1])) return;
 
         let statement: ESTree.Node = node;
         while (
           statement.parent &&
-          !/(?:Statement|Declaration)$/u.test(statement.type)
+          statement.parent.type !== "Program" &&
+          statement.parent.type !== "BlockStatement"
         ) {
           statement = statement.parent;
         }
@@ -87,7 +56,7 @@ export const requireTestSkipReasonRule = defineRule({
         )
           return;
 
-        context.report({ node, messageId: "issue" });
+        context.report({ node, messageId: "reason" });
       },
     };
   },
