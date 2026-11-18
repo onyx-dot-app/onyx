@@ -744,7 +744,6 @@
     {
       "files": [
         "src/lib/chat/settleChatSession.test.ts",
-        "tests/e2e/admin/disable_default_agent.spec.ts",
         "tests/e2e/agents/user_file_attachment.spec.ts",
         "tests/e2e/connectors/inlineFileManagement.spec.ts",
         "tests/e2e/global-setup.ts",
@@ -771,7 +770,6 @@
         "src/views/admin/connectors/ConnectorDetailPage/ActivityPanel.test.tsx",
         "tests/e2e/admin/code-interpreter/code_interpreter.spec.ts",
         "tests/e2e/admin/default-agent.spec.ts",
-        "tests/e2e/admin/disable_default_agent.spec.ts",
         "tests/e2e/admin/discord-bot/guilds-list.spec.ts",
         "tests/e2e/admin/theme/appearance_theme_settings.spec.ts",
         "tests/e2e/admin/usage_report_status.spec.ts",
@@ -814,7 +812,6 @@
     },
     {
       "files": [
-        "lib/opal/src/time.test.ts",
         "src/app/craft/components/BuildMessageList.test.tsx",
         "src/app/craft/components/approvals/ApprovalCard.test.tsx",
         "src/app/craft/components/output-panel/FilesTab.test.tsx",

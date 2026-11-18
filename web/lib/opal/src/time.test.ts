@@ -4,11 +4,19 @@ import {
   timeAgo,
 } from "@opal/time";
 
-const minutesAgo = (n: number) =>
-  new Date(Date.now() - n * 60_000).toISOString();
+const now = Date.UTC(2026, 0, 1);
+const minutesAgo = (n: number) => new Date(now - n * 60_000).toISOString();
 const daysAgo = (n: number) => minutesAgo(n * 24 * 60);
 
 describe("timeAgo", () => {
+  beforeEach(() => {
+    jest.useFakeTimers({ now });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it("returns null without a date or with an unparseable one", () => {
     expect(timeAgo(null, "en")).toBeNull();
     expect(timeAgo(undefined, "en")).toBeNull();
