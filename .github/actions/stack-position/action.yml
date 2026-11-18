@@ -45,16 +45,21 @@ runs:
           child=$(gh pr list --repo "$REPO" --base "$HEAD_REF" --state open \
             --json number,isCrossRepository,isDraft \
             --jq '[.[] | select(.isCrossRepository == false and .isDraft == false) | .number] | first // empty')
-          # Walk down the stack to its root branch, the base of its lowest PR.
-          root="$BASE_REF"
-          for _ in $(seq 1 100); do
-            below=$(gh pr list --repo "$REPO" --head "$root" --state open \
-              --json baseRefName,isCrossRepository \
-              --jq '[.[] | select(.isCrossRepository == false) | .baseRefName] | first // empty')
-            [[ -n "$below" ]] || break
-            root="$below"
-          done
-          if [[ "$root" != "$BASE_REF" ]]; then
+          root=$(gh pr list --repo "$REPO" --head "$BASE_REF" --state open \
+            --json baseRefName,isCrossRepository \
+            --jq '[.[] | select(.isCrossRepository == false) | .baseRefName] | first // empty')
+          if [[ -n "$root" ]]; then
+            # Walk down the stack to its root branch, the base of its lowest PR.
+            # Read open PRs once: stacks can be dozens of PRs deep.
+            open_prs=$(gh pr list --repo "$REPO" --state open --limit 2000 \
+              --json headRefName,baseRefName,isCrossRepository)
+            for _ in $(seq 1 500); do
+              next=$(jq -r --arg ref "$root" \
+                '[.[] | select(.isCrossRepository == false and .headRefName == $ref) | .baseRefName] | first // empty' \
+                <<< "$open_prs")
+              [[ -n "$next" ]] || break
+              root="$next"
+            done
             # GITHUB_SHA is the PR's merge commit, so this is the newest root
             # branch commit that the stack contains.
             stack_base=$(gh api "repos/${REPO}/compare/${root}...${GITHUB_SHA}?per_page=1" \
