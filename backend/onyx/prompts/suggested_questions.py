@@ -19,11 +19,13 @@ SQ_TRIAGE_USABLE_LEVELS = [
     ),
 ]
 
+
 SQ_TRIAGE_SENSITIVE_QUESTION = (
-    "Does excerpt [{index}] reveal private information about a specific person: "
-    "their pay, health, performance review, credentials, or personal details? "
-    "Ignore company-wide policies about pay, benefits or leave that name no "
-    "individual."
+    "Does excerpt [{index}] contain private information: a named person's pay, "
+    "bonus, severance, health or medical leave, performance rating or review, "
+    "disciplinary action or termination, home address or personal contact "
+    "details; or any password, API key or other secret? Ignore company-wide "
+    "policies about pay, benefits or leave that name no individual."
 )
 
 SQ_TRIAGE_TOPIC_QUESTION = "Which kind of work is excerpt [{index}] most useful for?"
