@@ -180,8 +180,9 @@ unless all results request termination. It stops after a final answer.
 A continuation request at the step limit produces `LIMIT`; it does not prepare or execute another step.
 The runtime decides the outcome of a step that declares tools and allows none; `after_step` still runs for it.
 A call on that step does not run. It gets the error result `NO_TOOL_CAN_RUN_RESULT`, which asks for the final answer, and shows as a tool error.
-If the step has calls, with or without text, the run takes one extra step with the same tools and choice.
+If the step has calls, with or without text, the run takes one extra step.
 The runtime resets the step limit so that the extra step is the run's last step.
+Agents that answer on their last step therefore prepare it the same way.
 This can go past `max_steps`, or lower the limit when the step came before it. A run takes at most one extra step.
 A step without calls ends the run `COMPLETE` with its text as the answer. A step without calls or non-blank text fails the run.
 Raise from `after_step` when output validation fails. The run retains the completed output and records the failure.
