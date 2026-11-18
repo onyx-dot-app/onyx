@@ -11,6 +11,7 @@ mod macos_cookies;
 mod macos_dialogs;
 mod main_window;
 mod menu;
+mod qa;
 mod session_store;
 mod shortcut;
 mod sso;
@@ -72,6 +73,7 @@ fn main() {
 
             main_window::spawn_session_renewal(handle);
             updater::spawn_background_checks(handle);
+            qa::start(handle);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -137,6 +137,19 @@ bun run tauri build --debug --bundles app --config /tmp/new.json   # serve the .
 `latest.json` lists the version and, per platform (`darwin-aarch64`, `darwin-x86_64`), the
 archive URL and the contents of its `.sig` file.
 
+## QA harness (debug builds)
+
+`src-tauri/src/qa.rs` drives the running app with real AppKit key and mouse events posted to
+its own event queue, so shortcuts go through the menus and the web view as if typed. Write a
+JSON action such as `{"op":"key","key":"n","mods":["cmd"]}` to a temporary file in
+`$ONYX_DESKTOP_QA_DIR` and rename it to `<name>.json` when complete; the answer
+appears, complete, in `<name>.out.json`. Other ops:
+`windows`, `focus`, `bounds`, `eval`, `type`, `click`, `dblclick`, `drag`, `menu`,
+`toggle_launcher`, `shortcut`, `state`. The harness only acts in debug builds started with
+`ONYX_DESKTOP_QA_DIR` set to a private directory (owned by you, mode 0700; created that way if
+missing), because it can drive signed-in windows. It cannot press global shortcuts or move the window by drag (both
+need the physical mouse or keyboard).
+
 ## Known limits
 
 - wry calls the navigation hook for iframes too, so a cross-origin iframe in the web UI

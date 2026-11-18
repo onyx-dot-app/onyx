@@ -5,12 +5,17 @@ use crate::windows;
 
 pub fn register(app: &AppHandle, accelerator: &str) -> Result<(), String> {
     app.global_shortcut()
-        .on_shortcut(accelerator, |app, _shortcut, event| {
+        .on_shortcut(accelerator, |app, shortcut, event| {
+            crate::qa::log(&format!("global shortcut {shortcut} {:?}", event.state()));
             if event.state() == ShortcutState::Pressed {
                 windows::toggle_launcher(app);
             }
         })
         .map_err(|e| format!("Could not use {accelerator} as the shortcut: {e}"))
+}
+
+pub fn is_registered(app: &AppHandle, accelerator: &str) -> bool {
+    app.global_shortcut().is_registered(accelerator)
 }
 
 /// Swaps the launcher shortcut. Restores the old one if the new one fails.
