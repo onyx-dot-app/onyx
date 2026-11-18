@@ -1036,6 +1036,7 @@
         "src/sections/input/MicrophoneButton.tsx",
         "src/sections/input/PasteTilePopover.tsx",
         "src/sections/input/QueuedMessageBar.tsx",
+        "src/sections/integrations/IntegrationActionsTab.tsx",
         "src/sections/integrations/McpServerFields.tsx",
         "src/sections/knowledge/AgentKnowledgePane.tsx",
         "src/sections/knowledge/SourceHierarchyBrowser.tsx",
