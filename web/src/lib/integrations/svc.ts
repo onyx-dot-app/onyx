@@ -13,6 +13,7 @@ import type {
   MemberPluginState,
   PluginAccessUpdate,
   PluginAccessView,
+  PluginPublishResponse,
 } from "@/lib/integrations/types";
 
 type RequestBody =
@@ -208,6 +209,9 @@ export async function updatePluginAccess(
 }
 
 /** Moves a private plugin to the Organization library. */
-export async function publishPlugin(pluginId: string): Promise<void> {
-  await request(`${SWR_KEYS.plugin(pluginId)}/publish`, "POST");
+export async function publishPlugin(
+  pluginId: string
+): Promise<PluginPublishResponse> {
+  const res = await request(`${SWR_KEYS.plugin(pluginId)}/publish`, "POST");
+  return res.json();
 }

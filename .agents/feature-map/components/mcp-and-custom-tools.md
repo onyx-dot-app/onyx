@@ -271,7 +271,10 @@ admin value is not Ask.
   `GET`/`PUT /plugins/{id}/access` reads and replaces the shares of a private
   plugin (its owner or an organization-wide action manager), and
   `POST /plugins/{id}/publish` moves a private plugin to the Organization
-  library (organization-wide manage-actions, no review). The writes go through
+  library (organization-wide manage-actions, no review) and returns its new
+  name. A skill name there is refused with CONFLICT, as for a skill publish;
+  the name of another integration plugin gives a free name (`-2`). The MCP
+  server alias publishes with a free name in both cases. The writes go through
   `db/plugin.py:apply_plugin_access_change__no_commit`,
   `publish_or_request_review__no_commit` and
   `set_plugin_preferences__no_commit`. A plugin that holds a skill gets 400.

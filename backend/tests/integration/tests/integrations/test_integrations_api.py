@@ -495,7 +495,8 @@ def test_owner_shares_and_publishes_a_private_plugin(
     published = client.post(
         f"{API_SERVER_URL}/plugins/{plugin_id}/publish", headers=admin_user.headers
     )
-    assert published.status_code == 204, published.text
+    assert published.status_code == 200, published.text
+    assert published.json()["plugin_id"] == str(plugin_id)
     assert IntegrationManager.get_admin(detail.id, admin_user).plugins[0].scope == (
         "organization"
     )
