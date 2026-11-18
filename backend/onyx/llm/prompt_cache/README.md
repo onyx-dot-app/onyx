@@ -152,6 +152,8 @@ processed_prompt, _ = process_with_prompt_cache(
 - **Behavior**: Implicit caching needs no parameters. With explicit caching, every request marks each
   user message of the cacheable prefix and every tool result. Later steps and later turns repeat those
   markers, so they read the entries earlier requests wrote.
+- **Routing**: `multi_llm.py` sends a `prompt_cache_key` (a hash of the chat session id) for OpenAI models, so the
+  provider routes each conversation to one cache machine. Calls without a chat session send no key.
 - **Cache Lifetime**: Depends on the model and cache mode.
 - **Cost Savings**: Read discounts and write charges depend on the model and cache mode.
 

@@ -1,3 +1,4 @@
+import hashlib
 import os
 import threading
 import time
@@ -1414,6 +1415,111 @@ def test_existing_metadata_pass_through_when_identity_disabled() -> None:
         kwargs = mock_completion.call_args.kwargs
         assert "user" not in kwargs
         assert kwargs["metadata"]["foo"] == "bar"
+
+
+_SESSION_IDENTITY = LLMUserIdentity(user_id="user_123", session_id="session_abc")
+_SESSION_CACHE_KEY = hashlib.sha256(b"session_abc").hexdigest()[:32]
+
+
+def _cache_key_llm(
+    model_provider: str, model_name: str, deployment_name: str | None = None
+) -> LitellmLLM:
+    return LitellmLLM(
+        api_key="test_key",
+        model_provider=model_provider,
+        model_name=model_name,
+        deployment_name=deployment_name,
+        api_base=(
+            "https://my-resource.openai.azure.com"
+            if model_provider == LlmProviderNames.AZURE
+            else None
+        ),
+        api_version="2025-04-01-preview"
+        if model_provider == LlmProviderNames.AZURE
+        else None,
+        max_input_tokens=100_000,
+    )
+
+
+@pytest.mark.parametrize(
+    ("model_provider", "model_name", "deployment_name"),
+    [
+        (LlmProviderNames.OPENAI, "gpt-4.1", None),
+        (LlmProviderNames.AZURE, "gpt-4.1", "my-gpt-deployment"),
+        (LlmProviderNames.LITELLM_PROXY, "gpt-4.1", None),
+    ],
+)
+def test_openai_models_send_session_prompt_cache_key(
+    model_provider: str, model_name: str, deployment_name: str | None
+) -> None:
+    llm = _cache_key_llm(model_provider, model_name, deployment_name)
+    messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
+    with patch("litellm.completion", return_value=[]) as mock_completion:
+        list(llm.stream_raw(messages, user_identity=_SESSION_IDENTITY))
+        list(llm.stream_raw(messages, user_identity=_SESSION_IDENTITY))
+
+    sent_keys = [call.kwargs["prompt_cache_key"] for call in mock_completion.mock_calls]
+    assert sent_keys == [_SESSION_CACHE_KEY, _SESSION_CACHE_KEY]
+    assert "session_abc" not in _SESSION_CACHE_KEY
+
+
+@pytest.mark.parametrize(
+    ("model_provider", "model_name", "identity"),
+    [
+        (LlmProviderNames.ANTHROPIC, "claude-sonnet-4-5", _SESSION_IDENTITY),
+        (LlmProviderNames.AZURE, "deepseek-v4-pro", _SESSION_IDENTITY),
+        (LlmProviderNames.OPENAI, "gpt-4.1", LLMUserIdentity(user_id="user_123")),
+        (LlmProviderNames.OPENAI, "gpt-4.1", None),
+    ],
+    ids=["anthropic", "azure-non-openai-model", "no-session", "no-identity"],
+)
+def test_prompt_cache_key_omitted_without_openai_model_or_session(
+    model_provider: str, model_name: str, identity: LLMUserIdentity | None
+) -> None:
+    llm = _cache_key_llm(model_provider, model_name)
+    messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
+    with patch("litellm.completion", return_value=[]) as mock_completion:
+        list(llm.stream_raw(messages, user_identity=identity))
+
+    assert "prompt_cache_key" not in mock_completion.call_args.kwargs
+
+
+def test_configured_prompt_cache_key_wins_over_session_key() -> None:
+    llm = LitellmLLM(
+        api_key="test_key",
+        model_provider=LlmProviderNames.OPENAI,
+        model_name="gpt-4.1",
+        max_input_tokens=100_000,
+        model_kwargs={"prompt_cache_key": "configured"},
+    )
+    messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
+    with patch("litellm.completion", return_value=[]) as mock_completion:
+        list(llm.stream_raw(messages, user_identity=_SESSION_IDENTITY))
+
+    assert mock_completion.call_args.kwargs["prompt_cache_key"] == "configured"
+
+
+def test_prompt_cache_key_rejection_retries_without_it_and_keeps_reasoning() -> None:
+    llm = _cache_key_llm(LlmProviderNames.OPENAI, "gpt-5.4")
+    messages: list[ChatCompletionMessage] = [UserMessage(content="Hi")]
+    rejection = litellm.exceptions.BadRequestError(
+        message="Unrecognized request argument supplied: prompt_cache_key",
+        model="gpt-5.4",
+        llm_provider="openai",
+    )
+    with patch("litellm.completion", side_effect=[rejection, []]) as mock_completion:
+        list(
+            llm.stream_raw(
+                messages,
+                reasoning_effort=ReasoningEffort.HIGH,
+                user_identity=_SESSION_IDENTITY,
+            )
+        )
+
+    first, retry = (call.kwargs for call in mock_completion.mock_calls)
+    assert first["prompt_cache_key"] == _SESSION_CACHE_KEY
+    assert "prompt_cache_key" not in retry
+    assert retry["reasoning"] == first["reasoning"]
 
 
 def test_openai_model_invoke_uses_httphandler_client(

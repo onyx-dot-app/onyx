@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import math
 import os
@@ -202,7 +203,7 @@ _REASONING_KWARG_KEYS = frozenset(
     {"thinking", "output_config", "reasoning", "reasoning_effort"}
 )
 _BEST_EFFORT_KWARG_KEYS = _REASONING_KWARG_KEYS | frozenset(
-    {"temperature", "prompt_cache_options", "include"}
+    {"temperature", "prompt_cache_options", "prompt_cache_key", "include"}
 )
 
 # Substrings provider 400s use to name each strippable kwarg (errors may
@@ -1554,6 +1555,21 @@ class LitellmLLM(LLM):
             )
             if configured_cache_options is not None:
                 optional_kwargs["prompt_cache_options"] = configured_cache_options
+            # OpenAI routes requests with the same prefix and key to one cache
+            # machine. One key per chat session keeps a conversation's growing
+            # history cached and each key under the per-key rate limit. The hash
+            # does not reveal the session id. A configured key wins.
+            configured_cache_key = passthrough_kwargs.pop("prompt_cache_key", None)
+            if configured_cache_key is not None:
+                optional_kwargs["prompt_cache_key"] = configured_cache_key
+            elif (
+                is_openai_model
+                and user_identity is not None
+                and user_identity.session_id
+            ):
+                optional_kwargs["prompt_cache_key"] = hashlib.sha256(
+                    user_identity.session_id.encode()
+                ).hexdigest()[:32]
             cache_messages = messages
             cache_options = None
             if is_openai_model or self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
@@ -1735,7 +1751,11 @@ class LitellmLLM(LLM):
                         continue
                     elif rejected_tuning := {
                         key
-                        for key in ("prompt_cache_options", "include")
+                        for key in (
+                            "prompt_cache_options",
+                            "prompt_cache_key",
+                            "include",
+                        )
                         if key in opts and _rejection_names_strippable_kwargs(e, {key})
                     }:
                         # A cache or include rejection must preserve the user's

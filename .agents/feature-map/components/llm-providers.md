@@ -132,8 +132,11 @@ transforms that add or remove messages keep it. A transform that replaces a
 message must copy the flag. Cache endpoint
 checks run under the same environment lock as each dispatch. The lock releases
 before retry handling; removing cache options prevents later attempts from adding
-markers again. When a provider 400 names a
-reasoning, temperature, or explicit-cache kwarg, `_completion` retries without it
+markers again. True OpenAI models (on `openai`, `azure` and `litellm_proxy`) also get
+a `prompt_cache_key`: a hash of the chat session id, so the provider routes each
+conversation to one cache machine. Calls without a session send no key, and a key in
+the provider's model kwargs takes its place. When a provider 400 names a
+reasoning, temperature, cache key, or explicit-cache kwarg, `_completion` retries without it
 (`_retry_attempts`). A cache fallback also removes the breakpoint markers. It
 never drops tools, tool choice or messages during that retry; the one message
 edit is the removal of rejected `reasoning_items`
