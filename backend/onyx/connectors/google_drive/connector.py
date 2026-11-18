@@ -449,6 +449,7 @@ def _drop_listing_state(checkpoint: GoogleDriveCheckpoint) -> None:
     checkpoint.incomplete_drive_ids = set()
     checkpoint.failed_impersonation_emails = set()
     checkpoint.unreachable_target_ids = set()
+    checkpoint.denied_listing_emails = set()
 
 
 def _listing_done(checkpoint: GoogleDriveCheckpoint) -> bool:
@@ -2730,6 +2731,10 @@ class GoogleDriveConnector(
                 ListingPartitionKind.SHARED_DRIVE,
                 ListingPartitionKind.FOLDER_SUBTREE,
             )
+            if not keyed_by_parent:
+                # The lister marks a denied drive or folder. A denied user
+                # partition is marked here, so the counts are partial.
+                checkpoint.denied_listing_emails.add(email)
             return [
                 RetrievedDriveFile(
                     drive_file={},
@@ -2926,8 +2931,9 @@ class GoogleDriveConnector(
         if state is None:
             return None
         # A shared drive that was listed only in part, a requested drive or
-        # folder that no user could reach, or a user whose My Drive could not
-        # be listed as them leaves files out of the count.
+        # folder that no user could reach, a user whose My Drive could not
+        # be listed as them, or a user listing that Drive denied leaves files
+        # out of the count.
         failed_users = {
             email.lower() for email in checkpoint.failed_impersonation_emails
         }
@@ -2942,6 +2948,7 @@ class GoogleDriveConnector(
                 checkpoint.incomplete_drive_ids
                 or checkpoint.unreachable_target_ids
                 or unlisted_my_drives
+                or checkpoint.denied_listing_emails
             ),
         )
 

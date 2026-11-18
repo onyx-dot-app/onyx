@@ -399,6 +399,10 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # listing would delete every document indexed from them.
     unreachable_target_ids: set[str] = set()
 
+    # Users whose My Drive or shared-with-me listing Drive denied this run.
+    # Their files are missing from the listing counts.
+    denied_listing_emails: set[str] = set()
+
     # State of the shard engine. None before the first call of an attempt.
     listing: DriveListingState | None = None
 
