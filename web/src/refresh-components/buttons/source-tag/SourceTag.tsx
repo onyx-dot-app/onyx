@@ -442,6 +442,14 @@ const SourceTagInner = ({
         className
       )}
       onClick={handleClick}
+      // The Badge's own tooltips are suppressed, and a suppressed tooltip
+      // prevents pointer moves, so Radix never opens this card on hover.
+      // Pointer enter is not prevented; Radix still closes the card.
+      onPointerEnter={
+        showDetailsCard && !toggleSource
+          ? () => handleOpenChange(true)
+          : undefined
+      }
     >
       <Badge title={displayName} />
       {extraCount > 0 && <Badge title={`+${extraCount}`} />}
