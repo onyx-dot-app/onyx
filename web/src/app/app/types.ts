@@ -5,7 +5,7 @@ import {
 } from "@/lib/search/types";
 import { Packet } from "./services/streamingModels";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
-import type { ChatToolSelection } from "@/lib/tools/types";
+import type { ChatToolOptions } from "@/lib/tools/types";
 import type { ComposedMention, RecordedMention } from "@/lib/chat/types";
 
 export type FeedbackType = "like" | "dislike";
@@ -243,7 +243,7 @@ export interface BackendChatSession {
   // Set on a paged load when the current branch has messages before the page.
   has_older_messages?: boolean;
   // The owner's saved tools and search filters; null means the agent's tools.
-  tool_selection?: ChatToolSelection | null;
+  tool_options?: ChatToolOptions | null;
   // The status route's `approvals_version` for the requests this load shows.
   approvals_version?: string;
 }

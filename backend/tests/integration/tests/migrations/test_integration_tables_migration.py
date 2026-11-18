@@ -844,6 +844,15 @@ def _copied(conn: Connection, where: str, **params: Any) -> Copied:
 TOOL_INTEGRATION = "i.tool_id = :t"
 
 
+def _has_tool_selection(conn: Connection) -> bool:
+    return conn.execute(
+        text(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'chat_session' AND column_name = 'tool_selection')"
+        )
+    ).scalar_one()
+
+
 def _kind_integration(conn: Connection, table: str, row_id: int) -> int | None:
     """The integration that points at this row of a kind table."""
     return conn.execute(
@@ -1308,6 +1317,7 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             },
             "internal_search_filters": {"source_type": ["web"]},
         }
+        assert _has_tool_selection(conn) is False
 
         # Choices of users.
         preferences = {
@@ -1487,6 +1497,7 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
         assert (
             conn.execute(text("SELECT to_regclass('integration')")).scalar_one() is None
         )
+        assert _has_tool_selection(conn) is True
         # The downgrade deletes it, then gated_app_id is required again.
         assert (
             conn.execute(

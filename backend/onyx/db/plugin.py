@@ -41,6 +41,7 @@ from onyx.db.enums import (
     SkillInstallationPolicy,
     SkillSharePermission,
 )
+from onyx.db.integration import plugin_holds_integration
 from onyx.db.models import (
     Marketplace,
     Plugin,
@@ -592,6 +593,61 @@ def create_skill_plugin__no_commit(
     return plugin
 
 
+def create_integration_plugin__no_commit(
+    *,
+    integration_id: int,
+    name: str,
+    description: str,
+    author: User,
+    for_organization: bool,
+    db_session: Session,
+) -> Plugin:
+    """Add a plugin that holds one integration: version 1 with no files, in
+    the Organization library (published) or in the author's "My uploads". A
+    used name takes the next free name."""
+    marketplace_id = (
+        get_or_create_organization_library__no_commit(db_session)
+        if for_organization
+        else get_or_create_user_uploads__no_commit(author.id, db_session)
+    )
+    plugin_id = uuid4()
+    version_id = uuid4()
+    try:
+        with db_session.begin_nested():
+            plugin = Plugin(
+                id=plugin_id,
+                name=free_plugin_name(marketplace_id, name[:64], db_session),
+                description=description,
+                marketplace_id=marketplace_id,
+                author_user_id=author.id,
+                current_version_id=version_id,
+                published_version_id=version_id if for_organization else None,
+            )
+            db_session.add(plugin)
+            db_session.flush()
+            db_session.add(
+                PluginVersion(
+                    id=version_id,
+                    plugin_id=plugin_id,
+                    version_number=1,
+                    created_by_user_id=author.id,
+                    created_by_email=author.email,
+                )
+            )
+            db_session.add(
+                Plugin__Integration(plugin_id=plugin_id, integration_id=integration_id)
+            )
+            db_session.flush()
+    except IntegrityError as exc:
+        if not is_unique_violation(exc, _PLUGIN_NAME_INDEX):
+            raise
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"Another plugin named '{name}' was saved at the same time. Try again.",
+        ) from exc
+    return plugin
+
+
 def lock_skill_plugin__no_commit(skill: Skill, db_session: Session) -> Plugin:
     """Lock and return the plugin of a custom skill. The caller holds the skill
     row lock, or the skill is new in this transaction.
@@ -670,6 +726,15 @@ def _holds_only_integrations() -> ColumnElement[bool]:
         ~select(PluginSkill.id)
         .where(PluginSkill.plugin_version_id == Plugin.current_version_id)
         .exists(),
+    )
+
+
+def plugin_holds_only_integrations(plugin_id: UUID, db_session: Session) -> bool:
+    return (
+        db_session.scalar(
+            select(Plugin.id).where(Plugin.id == plugin_id, _holds_only_integrations())
+        )
+        is not None
     )
 
 
@@ -831,6 +896,59 @@ def publish_plugin__no_commit(
     db_session.flush()
 
 
+def unpublish_integration_plugin__no_commit(
+    plugin_id: UUID, db_session: Session
+) -> set[UUID]:
+    """Move an Organization library plugin that holds only integrations back
+    to its author's "My uploads". Only the MCP server alias of the public API
+    does this. A used name takes the next free name. Returns the affected
+    users."""
+    plugin = lock_plugin(plugin_id, db_session)
+    if plugin is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
+    if plugin.author_user_id is None or not plugin_holds_only_integrations(
+        plugin_id, db_session
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Only a plugin with an owner that holds only integrations can be "
+            "made private.",
+        )
+    before = affected_user_ids_for_plugins([plugin_id], db_session)
+    _move_plugin__no_commit(
+        plugin=plugin,
+        marketplace_id=get_or_create_user_uploads__no_commit(
+            plugin.author_user_id, db_session
+        ),
+        on_name_clash="rename",
+        clash_detail=lambda name: f"The owner already has a plugin named '{name}'.",
+        db_session=db_session,
+    )
+    plugin.published_version_id = None
+    plugin.pending_version_id = None
+    plugin.installation_policy = None
+    db_session.flush()
+    return before | affected_user_ids_for_plugins([plugin_id], db_session)
+
+
+def add_author_share__no_commit(
+    plugin_id: UUID, author_user_id: UUID, db_session: Session
+) -> None:
+    """Share the plugin with its own author. The MCP server alias of the
+    public API keeps the owner in the access list it returns this way. A
+    later share change through the plugin routes removes the row."""
+    db_session.execute(
+        insert(Plugin__User)
+        .values(
+            plugin_id=plugin_id,
+            user_id=author_user_id,
+            permission=SkillSharePermission.VIEWER,
+        )
+        .on_conflict_do_nothing()
+    )
+    db_session.flush()
+
+
 def publish_or_request_review__no_commit(
     plugin: Plugin,
     skill: Skill | None,
@@ -838,12 +956,17 @@ def publish_or_request_review__no_commit(
     actor: User | None,
     on_name_clash: NameClashAction,
     db_session: Session,
+    approver: User | None = None,
 ) -> None:
     """Publish a version of a locked plugin, or make it the pending request
     (replacing any older one) when the Publishing setting requires review for
     ``actor``; OFF raises. The one place the setting applies. ``actor`` None
     is a system or approved publish and always publishes. An organization-wide
-    plugin manager always publishes. A publish clears the pending request."""
+    plugin manager always publishes. A publish clears the pending request.
+
+    A plugin that holds an integration publishes only for an organization-wide
+    action manager: ``actor``, or ``approver`` when an admin approves a
+    request."""
     if actor is not None and not has_global_permission(
         actor, Permission.MANAGE_PLUGINS
     ):
@@ -859,6 +982,17 @@ def publish_or_request_review__no_commit(
             plugin.pending_version_id = version_id
             db_session.flush()
             return
+    publisher = actor or approver
+    if (
+        publisher is not None
+        and not has_global_permission(publisher, Permission.MANAGE_ACTIONS)
+        and plugin_holds_integration(plugin.id, db_session)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only an organization-wide action manager can publish a plugin "
+            "that holds an integration.",
+        )
     if skill is not None and skill.public_permission is None:
         skill.public_permission = SkillSharePermission.VIEWER
         db_session.flush()

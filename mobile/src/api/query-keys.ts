@@ -27,4 +27,6 @@ export const QUERY_KEYS = {
     ["available-tools", serverUrl] as const,
   llmProviders: (serverUrl: string | null, agentId: number | null) =>
     ["llm-providers", serverUrl, agentId] as const,
+  agentPluginIds: (serverUrl: string | null, agentId: number | null) =>
+    ["agent-plugin-ids", serverUrl, agentId] as const,
 };

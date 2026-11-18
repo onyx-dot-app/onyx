@@ -1,6 +1,7 @@
 {
   "allow_scope_without_gate2": {
     "DELETE /persona/{persona_id}": "Existing. No registered GATE-2 helper found. Review.",
+    "GET /admin/integrations/presets": "Static preset catalog from code. Reads no stored resource, so there is nothing to scope.",
     "GET /manage/admin/cc-pair/{cc_pair_id}/errors": "Existing. Reads the pair with a read-level check only. No manager-scope check.",
     "GET /manage/admin/cc-pair/{cc_pair_id}/get-docs-sync-status": "Existing. Reads the pair with a read-level check only. No manager-scope check.",
     "GET /manage/admin/cc-pair/{cc_pair_id}/hierarchy-breakdown": "Existing. Reads the pair with a read-level check only. No manager-scope check.",
@@ -10,7 +11,6 @@
     "GET /manage/admin/indexing/targeted-reindex/{job_id}": "Existing. No registered GATE-2 helper found. Review.",
     "GET /manage/connector-group-restrictions": "Existing. No registered GATE-2 helper found. Review.",
     "POST /admin/mcp/probe": "Create-flow probe. Takes only a URL and reads or writes no stored resource, so there is nothing to scope. The SSRF-guarded client blocks internal hosts.",
-    "POST /admin/oauth-config/create": "Existing. Create route: no stored resource to scope yet. Review.",
     "POST /admin/tool/custom": "Existing. Create route: no stored resource to scope yet. Review.",
     "POST /admin/tool/custom/validate": "Existing. No registered GATE-2 helper found. Review.",
     "POST /manage/admin/connector": "Existing. Create route: no stored resource to scope yet. Review.",
@@ -23,8 +23,6 @@
   },
   "get_handler_writes": {
     "GET /admin/chat-session-history/{chat_session_id}": "Existing. Writes on a GET. Review.",
-    "GET /admin/mcp/server/{server_id}/tools": "Existing. Owner-or-admin tool discovery syncs the stored tools. Review.",
-    "GET /admin/mcp/server/{server_id}/tools/snapshots": "Existing. Owner-or-admin tool discovery syncs the stored tools. Review.",
     "GET /build/sessions/{session_id}/turns/{turn_id}/events": "Existing. Craft route, outside this change.",
     "GET /chat/get-chat-session/{session_id}": "Existing. Writes on a GET. Review.",
     "GET /connector/oauth/callback/{source}": "OAuth redirect flow: the provider calls back with GET.",

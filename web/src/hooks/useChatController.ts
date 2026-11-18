@@ -78,11 +78,7 @@ import {
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import {
-  effectiveChatPreferredToolId,
-  enabledChatToolIds,
-} from "@/lib/plugins/chat";
-import type { MemberPlugin } from "@/lib/plugins/member";
+import { effectiveChatPreference } from "@/lib/plugins/chat";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
@@ -133,7 +129,6 @@ interface UseChatControllerProps {
   /** Owned by the surface, so the input bar and this read the same one. */
   toolConfiguration: ToolConfigurationHandle;
   activeAgent: MinimalAgent | undefined;
-  memberPlugins?: readonly MemberPlugin[];
   availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
@@ -148,7 +143,6 @@ export default function useChatController({
   toolConfiguration,
   availableAgents,
   activeAgent,
-  memberPlugins,
   existingChatSessionId,
   selectedDocuments,
   resetInputBar,
@@ -1064,13 +1058,14 @@ export default function useChatController({
           }
         }
 
-        const effectivePreferredToolId = deepResearch
+        const effectivePreference = deepResearch
           ? null
-          : effectiveChatPreferredToolId({
+          : effectiveChatPreference({
               requestedToolId: toolConfiguration.preferredToolId,
+              requestedAction: toolConfiguration.preferredAction,
               agent: activeAgent,
-              plugins: memberPlugins ?? [],
               incognito,
+              isPluginEnabled: toolConfiguration.isPluginEnabled,
             });
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
@@ -1106,7 +1101,11 @@ export default function useChatController({
             return parentId === SYSTEM_MESSAGE_ID ? null : parentId;
           })(),
           chatSessionId: currChatSessionId,
-          filters: searchFilters,
+          toolOptions: {
+            allowed: activeAgent ? toolConfiguration.allowed : null,
+            preferred: effectivePreference,
+            internal_search_filters: searchFilters,
+          },
           modelProvider: isMultiModel
             ? undefined
             : modelOverride?.name || llmManager.currentLlm.name || undefined,
@@ -1127,15 +1126,6 @@ export default function useChatController({
             ? llmManager.temperature
             : undefined,
           deepResearch,
-          // Only sent when something is actually disabled. To the backend an
-          // explicit list is a whitelist, and this one is built from the tools
-          // the frontend can see — which excludes those marked
-          // `expose_to_frontend=False`. Sending it always would quietly
-          // withhold tools nobody chose to disable.
-          enabledToolIds: activeAgent
-            ? enabledChatToolIds(activeAgent.tools, toolConfiguration)
-            : undefined,
-          preferredToolId: effectivePreferredToolId,
           origin: messageOrigin,
           additionalContext,
           llmOverrides: isMultiModel
@@ -1588,7 +1578,6 @@ export default function useChatController({
       llmManager.persistOverrides,
       // Others that affect logic
       activeAgent,
-      memberPlugins,
       availableAgents,
       existingChatSessionId,
       selectedDocuments,

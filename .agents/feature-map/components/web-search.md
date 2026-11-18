@@ -97,7 +97,7 @@ sibling endpoint. If no URL can be derived, no copy is made.
 
 **The web search and open_url coupling.** `OpenURLTool.is_available` is always
 true, because `open_url` can serve indexed documents. When the agent has
-`WebSearchTool` and the request's `allowed_tool_ids` excludes it,
+`WebSearchTool` and the request's `tool_options.allowed` leaves it out,
 `tools/tool_constructor.py:should_disable_open_url_web_fetch` returns true and
 `construct_tools` builds `OpenURLTool` with `web_fetch_disabled=True`. The tool
 then builds no content provider. It marks each unresolved URL as failed with

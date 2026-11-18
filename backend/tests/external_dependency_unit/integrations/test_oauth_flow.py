@@ -555,7 +555,11 @@ def test_shared_sign_in_needs_a_token_that_allows_manage_actions(
 
     with pytest.raises(OnyxError) as error:
         start_oauth(
-            basic_token, shared.id, IntegrationOAuthStartRequest(), admin, db_session
+            basic_token,
+            shared.id,
+            IntegrationOAuthStartRequest(organization=True),
+            admin,
+            db_session,
         )
     assert error.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 

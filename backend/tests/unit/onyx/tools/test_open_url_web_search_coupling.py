@@ -1,7 +1,7 @@
 """Disabling Web Search in chat must cut off open_url's live web access.
 
 OpenURLTool is hidden from the chat tool toggles (chat_selectable=False), so
-the frontend always includes it in allowed_tool_ids. When WebSearchTool is
+the frontend always includes it in tool_options.allowed. When WebSearchTool is
 explicitly excluded, the tool stays available but in indexed-only mode: pasted
 links are still served from indexed documents, nothing is fetched from the
 live internet.
@@ -16,7 +16,7 @@ from onyx.agents.runtime import Agent
 from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
-from onyx.tools.models import ToolContext
+from onyx.tools.models import CapabilityEntry, ToolContext, ToolOptions
 from onyx.tools.tool_constructor import should_disable_open_url_web_fetch
 from onyx.tools.tool_implementations.open_url.models import FailedFetch
 from onyx.tools.tool_implementations.open_url.open_url_tool import (
@@ -40,10 +40,14 @@ OPEN_URL = _tool(2, OpenURLTool.__name__)
 SEARCH = _tool(3, "SearchTool")
 
 
+def _allowing(*tools: MagicMock) -> ToolOptions:
+    return ToolOptions(allowed=[CapabilityEntry(tool_id=tool.id) for tool in tools])
+
+
 def test_disabled_when_web_search_not_in_allowed_list() -> None:
     assert (
         should_disable_open_url_web_fetch(
-            [WEB_SEARCH, OPEN_URL, SEARCH], allowed_tool_ids=[OPEN_URL.id, SEARCH.id]
+            [WEB_SEARCH, OPEN_URL, SEARCH], _allowing(OPEN_URL, SEARCH)
         )
         is True
     )
@@ -52,17 +56,14 @@ def test_disabled_when_web_search_not_in_allowed_list() -> None:
 def test_not_disabled_when_web_search_allowed() -> None:
     assert (
         should_disable_open_url_web_fetch(
-            [WEB_SEARCH, OPEN_URL], allowed_tool_ids=[WEB_SEARCH.id, OPEN_URL.id]
+            [WEB_SEARCH, OPEN_URL], _allowing(WEB_SEARCH, OPEN_URL)
         )
         is False
     )
 
 
 def test_not_disabled_without_allowlist() -> None:
-    assert (
-        should_disable_open_url_web_fetch([WEB_SEARCH, OPEN_URL], allowed_tool_ids=None)
-        is False
-    )
+    assert should_disable_open_url_web_fetch([WEB_SEARCH, OPEN_URL], None) is False
 
 
 def test_not_disabled_when_persona_has_no_web_search() -> None:
@@ -70,9 +71,7 @@ def test_not_disabled_when_persona_has_no_web_search() -> None:
     # open_url behavior; there is no web-search toggle whose state could
     # express "no internet" intent.
     assert (
-        should_disable_open_url_web_fetch(
-            [OPEN_URL, SEARCH], allowed_tool_ids=[OPEN_URL.id]
-        )
+        should_disable_open_url_web_fetch([OPEN_URL, SEARCH], _allowing(OPEN_URL))
         is False
     )
 

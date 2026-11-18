@@ -51,6 +51,7 @@ from onyx.file_store.models import (
     FileDescriptor,
     FileToolMetadata,
 )
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import (
     GenerationRequestParams,
@@ -76,11 +77,12 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles, SavedLoadedFile
 from onyx.tools.models import (
     ChatFile,
-    ChatToolSelection,
     GeneratedImage,
     PersonaToolConfiguration,
     SearchToolUsage,
     ToolCallInfo,
+    ToolOptions,
+    ToolPreference,
 )
 from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeExecutionResult,
@@ -400,11 +402,11 @@ class ParkedRun(BaseModel):
     response_id: int
     # The root response whose branch the run belongs to.
     root_response_id: int
-    # The model, temperature, and the request's tools and search filters that
-    # the run's checkpoint saved, which it continues with.
+    # The model, temperature, and the request's tool options that the run's
+    # checkpoint saved, which it continues with.
     model_configuration_id: int | None = None
     temperature: float | None = None
-    tool_selection: ChatToolSelection | None = None
+    tool_options: ToolOptions | None = None
 
     @property
     def is_root(self) -> bool:
@@ -861,7 +863,7 @@ class ChatFeatureState(BaseModel):
     reasoning_effort: ReasoningEffort
     include_citations: bool
     inject_memories: bool
-    preferred_tool_id: int | None = None
+    preferred_tool: ToolPreference | None = None
     code_mode: bool
     base_prompt: str
     custom_prompt: str | None
@@ -924,8 +926,8 @@ class ChatTurnSetup(BaseModel):
     search_params: SearchParams
     all_injected_file_metadata: dict[str, FileToolMetadata]
     available_files: AvailableFiles
-    preferred_tool_id: int | None
-    # The preferred tool comes from the chat's saved selection, which can
+    preferred_tool: ToolPreference | None
+    # The preferred tool comes from the chat's saved options, which can
     # outlive the tool or its plugin; the turn then runs without it.
     preferred_tool_saved: bool = False
     chat_files_for_tools: list[ChatFile]
@@ -943,10 +945,8 @@ class ChatTurnSetup(BaseModel):
     litellm_additional_headers: dict[str, str] | None = None
     custom_tool_additional_headers: dict[str, str] | None
     mcp_headers: dict[str, str] | None
-    # False runs tools whose action policy asks for approval without asking,
-    # for a bot that cannot show approval requests. Only server-side callers
-    # set it; the public request has no such field.
-    ask_for_approval: bool = True
+    # Only server-side callers set it; the public request has no such field.
+    approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE
     # The suspended response that this turn continues after its approvals,
     # under a new stream ID; None for a turn that starts a response.
     resumed_response_id: int | None = None
@@ -1002,11 +1002,11 @@ class ResponseCheckpoint(BaseModel):
     input_messages: list[Message]
     input_payloads: list[MessagePayload]
     # The saved model configuration that the response runs, its sampling
-    # temperature, and the tools and search filters of its request; a parked
-    # response continues with them.
+    # temperature, and the tool options of its request; a parked response
+    # continues with them.
     model_configuration_id: int | None = None
     temperature: float | None = None
-    tool_selection: ChatToolSelection | None = None
+    tool_options: ToolOptions | None = None
 
 
 class SavedCheckpoint(BaseModel):

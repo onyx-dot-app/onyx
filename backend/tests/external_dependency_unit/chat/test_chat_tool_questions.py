@@ -28,6 +28,7 @@ from onyx.db.models import ChatSession, QuestionRequest, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.hooks.points.query_processing import QueryProcessingResponse
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
     AssistantMessage,
@@ -132,7 +133,7 @@ class QuestionTurns:
         asker: Asker,
         *,
         models: list[LLMOverride] | None = None,
-        ask_for_approval: bool = True,
+        approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
     ) -> list[PacketObj]:
         """Send a message; returns the turn's packets."""
         monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: {})
@@ -150,13 +151,13 @@ class QuestionTurns:
                     new_msg_req=request,
                     user=self.user,
                     llm_overrides=models,
-                    ask_for_approval=ask_for_approval,
+                    approval_mode=approval_mode,
                 )
                 if models
                 else handle_stream_message_objects(
                     new_msg_req=request,
                     user=self.user,
-                    ask_for_approval=ask_for_approval,
+                    approval_mode=approval_mode,
                 )
             )
             if isinstance(packet, Packet)
@@ -224,12 +225,16 @@ def _card(
 
 
 @pytest.mark.parametrize("multi_model", [False, True], ids=["one_model", "two_models"])
-@pytest.mark.parametrize("ask_for_approval", [True, False], ids=["asks", "bot"])
-def test_only_single_model_turns_that_ask_for_approval_offer_the_question_tool(
+@pytest.mark.parametrize(
+    "approval_mode",
+    [ApprovalMode.INTERACTIVE, ApprovalMode.NO_APPROVER],
+    ids=["asks", "bot"],
+)
+def test_only_single_model_interactive_turns_offer_the_question_tool(
     turns: QuestionTurns,
     monkeypatch: pytest.MonkeyPatch,
     multi_model: bool,
-    ask_for_approval: bool,
+    approval_mode: ApprovalMode,
 ) -> None:
     asker = Asker(calls=0)
     turns.start(
@@ -238,9 +243,11 @@ def test_only_single_model_turns_that_ask_for_approval_offer_the_question_tool(
         models=[LLMOverride(model_version="a"), LLMOverride(model_version="b")]
         if multi_model
         else None,
-        ask_for_approval=ask_for_approval,
+        approval_mode=approval_mode,
     )
-    assert asker.offered() == (ask_for_approval and not multi_model)
+    assert asker.offered() == (
+        approval_mode == ApprovalMode.INTERACTIVE and not multi_model
+    )
 
 
 def test_a_card_answer_must_answer_each_question_with_its_options(

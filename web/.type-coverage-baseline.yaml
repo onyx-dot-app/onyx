@@ -11,27 +11,28 @@
 total: 99
 packages:
   .: 100
-  src: 99.4
+  src: 99.5
   src/app: 99.5
   src/app/admin: 96.9
   src/app/anonymous: 100
   src/app/api: 100
   src/app/app: 99
-  src/app/auth: 98.8
+  src/app/auth: 98.9
   src/app/components: 100
   src/app/config: 100
   src/app/connector: 100
-  src/app/craft: 99.5
+  src/app/craft: 99.4
   src/app/ee: 95.6
   src/app/federated: 97
-  src/app/mcp: 99.5
+  src/app/mcp: 100
   src/app/nrf: 99.2
+  src/app/oauth: 100
   src/app/oauth-config: 100
   src/app/oauth-provider: 100
   src/components: 98.4
   src/components/admin: 95.9
   src/components/auth: 89.3
-  src/components/chat: 95.9
+  src/components/chat: 96
   src/components/context: 100
   src/components/dateRangeSelectors: 100
   src/components/dev: 98.8
@@ -39,7 +40,7 @@ packages:
   src/components/filters: 99.5
   src/components/header: 100
   src/components/icons: 100
-  src/components/oauth: 89.5
+  src/components/oauth: 90.3
   src/components/search: 99.5
   src/components/standardAnswers: 100
   src/components/tools: 100
@@ -55,59 +56,62 @@ packages:
   src/i18n: 99.2
   src/i18n/messages: 100
   src/layouts: 100
-  src/layouts/chromes: 99.7
+  src/layouts/chromes: 99.8
   src/layouts/craft: 96.1
   src/lib: 99.2
-  src/lib/agents: 99.3
+  src/lib/agents: 99.5
   src/lib/analytics: 99.4
   src/lib/app: 99.9
+  src/lib/approvals: 100
   src/lib/auth: 98.3
+  src/lib/badges: 100
   src/lib/banner: 99.3
   src/lib/billing: 100
   src/lib/build: 100
-  src/lib/chat: 99.3
+  src/lib/chat: 99.6
+  src/lib/common: 100
   src/lib/connectors: 99.1
   src/lib/constants: 100
   src/lib/credentials: 98.9
   src/lib/docx: 100
   src/lib/extension: 100
-  src/lib/externalApps: 100
   src/lib/hierarchy: 100
-  src/lib/hooks: 95.8
+  src/lib/hooks: 95.9
+  src/lib/integrations: 100
   src/lib/languageModels: 99.1
-  src/lib/mcp: 99.3
+  src/lib/mcp: 98.8
   src/lib/multiModel: 100
+  src/lib/navigation: 100
   src/lib/notifications: 99.3
-  src/lib/oauth: 99.6
+  src/lib/oauth: 99.4
   src/lib/oauth-provider: 100
   src/lib/onboarding: 99.8
   src/lib/opensearch-health: 100
   src/lib/permissions: 100
-  src/lib/plugins: 99.7
-  src/lib/navigation: 100
+  src/lib/plugins: 100
   src/lib/projects: 99.7
   src/lib/scheduledTasks: 100
   src/lib/search: 99.2
-  src/lib/searchFilters: 98.1
+  src/lib/searchFilters: 98.4
   src/lib/searchSettings: 99.6
-  src/lib/settings: 96.7
+  src/lib/settings: 96.9
   src/lib/sidebar: 100
-  src/lib/skills: 97.5
+  src/lib/skills: 98.6
   src/lib/spendingLimits: 100
   src/lib/sso: 99.2
   src/lib/tiers: 100
-  src/lib/tools: 99.1
+  src/lib/tools: 99.6
   src/lib/tracing: 96.9
   src/lib/usage: 97.9
   src/lib/users: 99.1
   src/lib/voice: 99.3
   src/lib/webSearch: 97.4
   src/providers: 99.5
-  src/refresh-components: 99.1
+  src/refresh-components: 99.2
   src/refresh-components/avatars: 99.6
   src/refresh-components/buttons: 99.6
   src/refresh-components/cards: 93.3
-  src/refresh-components/commandmenu: 99.6
+  src/refresh-components/commandmenu: 100
   src/refresh-components/form: 98.5
   src/refresh-components/inputs: 100
   src/refresh-components/messages: 100
@@ -116,23 +120,28 @@ packages:
   src/refresh-components/texts: 98.9
   src/refresh-components/tiles: 100
   src/sections: 100
-  src/sections/actions: 99.7
+  src/sections/actions: 98.6
   src/sections/admin: 100
   src/sections/agents: 99.8
+  src/sections/approvals: 99.1
   src/sections/banners: 99.1
   src/sections/cards: 100
-  src/sections/chat: 99.7
+  src/sections/chat: 99.8
   src/sections/document-sidebar: 99.5
-  src/sections/input: 99.8
+  src/sections/input: 99.9
+  src/sections/integrations: 100
   src/sections/knowledge: 99.6
   src/sections/modals: 99.5
   src/sections/model-selector: 99.9
+  src/sections/oauth: 100
   src/sections/oauth-provider: 100
-  src/sections/plugins: 99.8
+  src/sections/plugins: 99.9
   src/sections/settings: 100
   src/sections/sidebar: 99.1
-  src/sections/skills: 99.8
+  src/sections/skills: 99.9
   src/sections/usage: 99.6
-  src/views: 99.4
-  src/views/admin: 98.6
+  src/views: 99.6
+  src/views/AgentEditorPage: 99.1
+  src/views/AgentsCatalogPage: 99.1
+  src/views/admin: 98.8
   types: 100

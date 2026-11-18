@@ -41,6 +41,7 @@ interface InputBarProps {
   attachments: UseComposerDraft;
   // A waiting question card takes the sent message as its answer.
   answersQuestions?: boolean;
+  toolsReady: boolean;
 }
 
 export function InputBar({
@@ -51,6 +52,7 @@ export function InputBar({
   chatState,
   attachments,
   answersQuestions = false,
+  toolsReady,
 }: InputBarProps) {
   const insets = useSafeAreaInsets();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -59,7 +61,10 @@ export function InputBar({
   const hasFiles = attachments.files.length > 0;
 
   const canSend =
-    value.trim().length > 0 && !isBusy && !attachments.hasBlockingFiles;
+    value.trim().length > 0 &&
+    !isBusy &&
+    !attachments.hasBlockingFiles &&
+    toolsReady;
 
   const { data: recentFiles = [], isLoading: isLoadingRecent } =
     useRecentFiles(pickerOpen);

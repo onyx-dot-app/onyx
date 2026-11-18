@@ -97,13 +97,18 @@ def test_rendered_cloud_file_names_the_configured_cloud(
     class _App:
         id = 1
         app_type = ExternalAppType.SLACK
-        organization_credentials = SimpleNamespace(get_value=lambda **_: {})
 
     monkeypatch.setattr(
         "onyx.skills.rendering.get_external_app_by_id", lambda *_: _App()
     )
+    monkeypatch.setattr("onyx.skills.rendering.admin_blocked_actions", lambda *_: set())
     monkeypatch.setattr(
-        "onyx.skills.rendering.get_workspace_action_policies", lambda *_: {}
+        "onyx.skills.rendering.get_integration_by_kind_row",
+        lambda *_: SimpleNamespace(id=1),
+    )
+    monkeypatch.setattr(
+        "onyx.skills.rendering.preset_organization_values",
+        lambda *_: {},
     )
 
     rendered = render_external_app_files(

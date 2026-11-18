@@ -1,28 +1,30 @@
 """Render dynamic skill templates for the per-user skills fileset."""
 
 import re
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource, DocumentSourceDescription
-from onyx.db.action_policy import get_workspace_action_policies
 from onyx.db.connector import _INTERNAL_ONLY_SOURCES
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     get_connector_credential_pairs_for_user,
 )
-from onyx.db.enums import ActionPolicy, ExternalAppType, GatedAppKind
+from onyx.db.enums import ExternalAppType
 from onyx.db.external_app import get_external_app_by_id
-from onyx.db.models import ExternalApp, User
+from onyx.db.integration import get_integration_by_kind_row
+from onyx.db.models import ExternalApp, Integration, User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import (
-    action_policy_views,
+    get_endpoint_catalog,
     get_provider_for_app,
     uses_cloud_scope,
     withheld_on_cloud,
 )
+from onyx.integrations.connections import preset_organization_values
+from onyx.integrations.policy import admin_blocked_actions
 from onyx.skills.built_in import iter_builtin_skill_files
 from onyx.skills.bundle import SKILL_MD_NAME, TEMPLATE_SUFFIX
 from onyx.utils.logger import setup_logger
@@ -121,21 +123,20 @@ def render_company_search_skill(
 
 def build_action_availability_section(
     app_type: ExternalAppType,
-    stored: dict[str, ActionPolicy],
+    blocked: Collection[str],
 ) -> str:
     """The warning listing the app's unavailable actions — cloud-withheld plus
-    the ``DENY`` entries from ``stored`` (the admin's per-action overrides) —
-    or "" when none apply. Available actions are omitted: the skill body
-    already documents those."""
-    # Cloud-withheld actions never reach the filtered catalog, so the DENY
+    the actions the admin blocked — or "" when none apply. Available actions
+    are omitted: the skill body already documents those."""
+    # Cloud-withheld actions never reach the filtered catalog, so the blocked
     # loop below can't see them.
     unavailable: list[str] = [
         endpoint.normalised_name for endpoint in withheld_on_cloud(app_type)
     ]
     unavailable.extend(
-        view.normalised_name
-        for view in action_policy_views(app_type, stored)
-        if view.state == ActionPolicy.DENY
+        endpoint.normalised_name
+        for endpoint in get_endpoint_catalog(app_type)
+        if endpoint.id.value in blocked
     )
     if not unavailable:
         return ""
@@ -159,7 +160,7 @@ def substitute_app_values(template: str, values: Mapping[str, str]) -> str:
 def render_external_app_skill(
     template: str,
     app_type: ExternalAppType,
-    stored: dict[str, ActionPolicy],
+    blocked: Collection[str],
     app_values: Mapping[str, str] | None = None,
 ) -> str:
     """Pure template rendering for an external-app SKILL.md: apply the cloud
@@ -182,7 +183,7 @@ def render_external_app_skill(
 
     template = _CLOUD_SCOPE_BLOCK_RE.sub(_resolve_block, template)
     template = substitute_app_values(template, app_values or {})
-    section = build_action_availability_section(app_type, stored)
+    section = build_action_availability_section(app_type, blocked)
     if section:
         rendered = template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)
     else:
@@ -196,7 +197,9 @@ def render_external_app_skill(
     return rendered
 
 
-def _app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
+def _app_template_values(
+    external_app: ExternalApp | None, organization_values: Mapping[str, str]
+) -> dict[str, str]:
     """The provider's ``{{APP:<key>}}`` values for this app row, or ``{}`` when
     there is no row or its config no longer resolves — rendering is a read-only
     projection, so a rejected config leaves placeholders unconfigured."""
@@ -205,10 +208,9 @@ def _app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
     provider = get_provider_for_app(external_app)
     if provider is None:
         return {}
-    credentials = external_app.organization_credentials.get_value(apply_mask=False)
     # Only public fields may enter files sent to a sandbox or shown in previews.
     public = {
-        field.key: value if isinstance(value := credentials.get(field.key), str) else ""
+        field.key: organization_values.get(field.key, "")
         for field in provider.spec.descriptor.required_org_credential_fields
         if not field.secret
     }
@@ -240,17 +242,30 @@ def render_external_app_files(
         if external_app_id is not None
         else None
     )
-    stored = (
-        get_workspace_action_policies(
-            db_session, GatedAppKind.EXTERNAL_APP, external_app.id
+    integration = (
+        get_integration_by_kind_row(
+            Integration.external_app_id, external_app.id, db_session
         )
-        if external_app
-        else {}
+        if external_app is not None
+        else None
     )
-    values = _app_template_values(external_app)
+    integration_id = integration.id if integration is not None else None
+    blocked = (
+        admin_blocked_actions(db_session, integration_id)
+        if integration_id is not None
+        else set()
+    )
+    values = _app_template_values(
+        external_app,
+        (
+            preset_organization_values(integration_id, db_session)
+            if integration_id is not None
+            else {}
+        ),
+    )
     rendered = {
         SKILL_MD_NAME: render_external_app_skill(
-            (source_dir / _SKILL_TEMPLATE_NAME).read_text(), app_type, stored, values
+            (source_dir / _SKILL_TEMPLATE_NAME).read_text(), app_type, blocked, values
         )
     }
     for path in iter_builtin_skill_files(source_dir):

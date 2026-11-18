@@ -18,6 +18,9 @@ from mitmproxy import http
 
 from onyx.sandbox_proxy.models import McpRpcClassification, McpRpcKind
 
+# The action of an MCP request that does not parse. It is always blocked.
+MCP_UNCLASSIFIABLE_ACTION_TYPE = "mcp.unclassifiable"
+
 _TOOL_CALL_METHOD = "tools/call"
 
 # Non-invocation JSON-RPC methods that operate the MCP session. Kept as an

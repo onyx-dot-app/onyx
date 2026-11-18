@@ -9,13 +9,11 @@ from sqlalchemy.orm import Session, class_mapper
 
 from onyx.db.models import (
     ExternalApp,
-    ExternalAppUserCredential,
     GatedApp,
     Plugin,
     Skill,
     Skill__User,
     Skill__UserGroup,
-    WorkspaceActionPolicy,
 )
 
 # Parent -> child order (FKs all point child -> parent). Restore/insert in this
@@ -26,8 +24,6 @@ _SKILL_ISOLATION_MODELS: tuple[type[Any], ...] = (
     GatedApp,
     Skill__User,
     Skill__UserGroup,
-    WorkspaceActionPolicy,
-    ExternalAppUserCredential,
 )
 
 
