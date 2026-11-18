@@ -29,7 +29,10 @@ from onyx.server.features.mcp.models import (
     MCPOAuthKeys,
     merge_mcp_headers,
 )
+from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 # Reason texts that a user reads.
 SIGN_IN_SETTINGS_CHANGED_REASON = "Your admin changed the sign-in settings"
@@ -279,7 +282,17 @@ def legacy_organization_defaults(
     server kept its template in the admin headers."""
     if organization.legacy_format is None:
         return None
-    raw: Any = organization.secret.get_value(apply_mask=False)
+    try:
+        raw: Any = organization.secret.get_value(apply_mask=False)
+    except ValueError as error:
+        # The migration gave an old row that does not read no template, so
+        # the other connections of the integration get no defaults from it.
+        logger.warning(
+            "Integration %s: the old organization row does not read (%s)",
+            organization.integration_id,
+            type(error).__name__,
+        )
+        return None
     match IntegrationLegacyFormat(organization.legacy_format):
         case IntegrationLegacyFormat.MCP_CONFIG:
             data = _dict(raw)
