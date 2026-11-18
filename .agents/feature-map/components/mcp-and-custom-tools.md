@@ -860,7 +860,10 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   reached saves nothing (502). A server with a sign-in saves first, because the
   sign-in needs the integration; its actions come from a refresh after the
   sign-in. The public alias `POST /admin/mcp/servers/create` uses the same
-  create.
+  create, with one exception: `upsert_mcp_server_alias` passes
+  `save_unreachable_server=True`, so a server that cannot be reached is
+  saved with no actions. A failed discovery through the alias, for example
+  from Terraform, can leave a record.
 
 ---
 
