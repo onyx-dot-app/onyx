@@ -12,15 +12,6 @@ from uuid import UUID
 from celery import Task, shared_task
 from celery.utils.log import get_task_logger
 
-from onyx.background.celery.tasks.suggested_questions.scheduling import (
-    count_usable_questions,
-    fresh_document_ids,
-    is_enabled,
-    release_pool_flag,
-    release_topup_flag,
-    topup_allowed,
-    worth_running,
-)
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -50,6 +41,15 @@ from onyx.server.features.suggested_questions.models import (
     CandidateDocument,
     PoolQuestion,
     QuestionPool,
+)
+from onyx.server.features.suggested_questions.scheduling import (
+    count_usable_questions,
+    fresh_document_ids,
+    is_enabled,
+    release_pool_flag,
+    release_topup_flag,
+    topup_allowed,
+    worth_running,
 )
 from onyx.server.features.suggested_questions.selection import (
     best_chunks_per_document,

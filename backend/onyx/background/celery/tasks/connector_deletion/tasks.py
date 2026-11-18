@@ -73,6 +73,9 @@ from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.server.features.suggested_questions.scheduling import (
+    drop_orphaned_questions,
+)
 from onyx.server.metrics.deletion_metrics import (
     inc_deletion_blocked,
     inc_deletion_completed,
@@ -707,6 +710,7 @@ def monitor_connector_deletion_taskset(
     )
 
     redis_connector.delete.reset()
+    drop_orphaned_questions(tenant_id)
 
 
 def validate_connector_deletion_fences(
