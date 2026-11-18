@@ -9,7 +9,7 @@ from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.source_operations import (
-    JiraSourceOperations,
+    JiraGateway,
     is_cloud_gateway,
 )
 from onyx.connectors.jira.utils import (
@@ -264,7 +264,7 @@ def _get_actor_group_name(actor: object) -> str | None:
 
 
 def _get_user_lookup_id(
-    source_operations: JiraSourceOperations, actor_user: object
+    source_operations: JiraGateway, actor_user: object
 ) -> str | None:
     if is_cloud_gateway(source_operations):
         return _get_first_str_value(actor_user, ("accountId", "name", "key"))
@@ -272,7 +272,7 @@ def _get_user_lookup_id(
 
 
 def _get_actor_user_email(
-    source_operations: JiraSourceOperations,
+    source_operations: JiraGateway,
     jira_project: str,
     role_id: str,
     actor_user: object,
@@ -319,7 +319,7 @@ def _get_actor_user_email(
 
 
 def _get_user_emails_and_groups_from_project_roles(
-    source_operations: JiraSourceOperations,
+    source_operations: JiraGateway,
     jira_project: str,
     project_role_holders: list[Holder],
 ) -> tuple[list[str], list[str]]:
@@ -453,7 +453,7 @@ def _get_user_emails_and_groups_from_project_roles(
 
 
 def _build_external_access_from_holder_map(
-    source_operations: JiraSourceOperations, jira_project: str, holder_map: HolderMap
+    source_operations: JiraGateway, jira_project: str, holder_map: HolderMap
 ) -> ExternalAccess:
     """
     Build ExternalAccess from the holder map.
@@ -613,9 +613,10 @@ def _build_external_access_from_holder_map(
 
 
 def get_project_permissions(
-    source_operations: JiraSourceOperations,
+    source_operations: JiraGateway,
     jira_project: str,
     add_prefix: bool = False,
+    source: DocumentSource = DocumentSource.JIRA,
 ) -> ExternalAccess | None:
     """
     Get project permissions from Jira.
@@ -656,7 +657,7 @@ def get_project_permissions(
     # Prefix group IDs with source type if requested (for indexing path)
     if add_prefix and external_access and external_access.external_user_group_ids:
         prefixed_groups = {
-            build_ext_group_name_for_onyx(g, DocumentSource.JIRA)
+            build_ext_group_name_for_onyx(g, source)
             for g in external_access.external_user_group_ids
         }
         return ExternalAccess(

@@ -483,6 +483,9 @@
         "jira": {
           "description": "Gestor de issues de Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Mesa de ayuda de TI de Atlassian"
+        },
         "productboard": {
           "description": "Gestión de producto"
         },

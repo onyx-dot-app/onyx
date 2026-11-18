@@ -453,6 +453,10 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     ],
     DocumentSource.GOOGLE_DRIVE: [_configure_google_drive_spy],
     DocumentSource.JIRA: [_configure_jira_cloud_spy, _configure_jira_server_spy],
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: [
+        _configure_jira_cloud_spy,
+        _configure_jira_server_spy,
+    ],
     DocumentSource.SHAREPOINT: [_configure_sharepoint_spy],
     DocumentSource.GITHUB: [_configure_github_spy, _configure_github_user_owner_spy],
     DocumentSource.SLACK: [_configure_slack_spy],

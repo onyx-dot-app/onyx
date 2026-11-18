@@ -57,7 +57,9 @@ from onyx.connectors.jira.models import (
 from onyx.connectors.jira.source_operations import (
     JiraApiError,
     JiraCloudIdError,
+    JiraGateway,
     JiraGroupPage,
+    JiraServiceManagementSourceOperations,
     JiraSourceOperations,
     JiraTimeoutError,
     is_cloud_gateway,
@@ -103,9 +105,11 @@ _BROWSE_NEED = "Browse Projects on the projects to index"
 _SIGN_IN_REFUSED_STATUSES = frozenset({401, 403, 404})
 
 
-def _gateway(context: CapabilityCheckContext) -> JiraSourceOperations:
+def _gateway(context: CapabilityCheckContext) -> JiraGateway:
     gateway: SourceOperations | None = context.source_operations
-    if not isinstance(gateway, JiraSourceOperations):
+    if not isinstance(
+        gateway, (JiraSourceOperations, JiraServiceManagementSourceOperations)
+    ):
         raise TypeError(
             "Bug: The runner constructs the registered gateway for migrated sources."
         )
@@ -356,7 +360,7 @@ class _SiteAuthCheck(_JiraCheck):
         return form_state.config.scoped_token == self._scoped
 
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
-        gateway: JiraSourceOperations = _gateway(context)
+        gateway: JiraGateway = _gateway(context)
         try:
             if self._scoped:
                 gateway.list_projects(fast=True)
@@ -435,7 +439,7 @@ class _SiteAuthCheck(_JiraCheck):
     def _raise_for_sign_in_error(
         self,
         context: CapabilityCheckContext,
-        gateway: JiraSourceOperations,
+        gateway: JiraGateway,
         error: JiraApiError,
     ) -> NoReturn:
         config: JiraConnectorConfig = self.config(context)
@@ -594,7 +598,7 @@ class _ConfiguredProjectCheck(_JiraCheck):
     def run(self, context: CapabilityCheckContext) -> CheckOutput:
         config: JiraConnectorConfig = self.config(context)
         project_key: str = _project_key(config)
-        gateway: JiraSourceOperations = _gateway(context)
+        gateway: JiraGateway = _gateway(context)
         try:
             project: dict[str, Any] = gateway.get_project(
                 project_key=project_key, fast=True
@@ -619,7 +623,7 @@ class _ConfiguredProjectCheck(_JiraCheck):
         )
 
     def _raise_not_found(
-        self, gateway: JiraSourceOperations, project_key: str, error: JiraApiError
+        self, gateway: JiraGateway, project_key: str, error: JiraApiError
     ) -> NoReturn:
         try:
             matches: list[str] = _matching_project_keys(
@@ -649,7 +653,7 @@ class _ConfiguredProjectCheck(_JiraCheck):
         ) from error
 
 
-def _search_one_issue(gateway: JiraSourceOperations, jql: str) -> dict[str, Any] | None:
+def _search_one_issue(gateway: JiraGateway, jql: str) -> dict[str, Any] | None:
     """The first issue the query matches, with all fields, read through the
     API family the connector uses. Raises ``JiraApiError``."""
     if is_cloud_gateway(gateway):
@@ -886,12 +890,12 @@ def _perm_sync_hint(config: JiraConnectorConfig, admin_hint: str) -> str:
     return admin_hint
 
 
-def _email_hint(gateway: JiraSourceOperations) -> str:
+def _email_hint(gateway: JiraGateway) -> str:
     return _CLOUD_EMAIL_HINT if is_cloud_gateway(gateway) else _DC_EMAIL_HINT
 
 
 def _jql_issue_projects(
-    gateway: JiraSourceOperations, jql: str
+    gateway: JiraGateway, jql: str
 ) -> JiraProjectSample | None:
     """The distinct projects of the first page of issues the query matches,
     or None when it matches no issue. Raises ``JiraApiError``."""
@@ -1235,7 +1239,7 @@ def _role_actor_user(actor: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def _user_lookup_id(gateway: JiraSourceOperations, user: dict[str, Any]) -> str | None:
+def _user_lookup_id(gateway: JiraGateway, user: dict[str, Any]) -> str | None:
     fields: tuple[str, ...] = (
         ("accountId", "name", "key")
         if is_cloud_gateway(gateway)
@@ -1426,7 +1430,7 @@ class _PermissionUserEmailsCheck(_JiraCheck):
         project_key: str,
         scheme: dict[str, Any],
     ) -> CheckOutput:
-        gateway: JiraSourceOperations = _gateway(context)
+        gateway: JiraGateway = _gateway(context)
         holders: list[dict[str, Any]] = _browse_holders(scheme)
         holder_types: set[str] = {str(holder.get("type")) for holder in holders}
         if _is_public(scheme):
@@ -1621,7 +1625,7 @@ def _list_groups_for_dependent_check(
 def _sample_group_members(
     context: CapabilityCheckContext, config: JiraConnectorConfig
 ) -> JiraGroupMemberSample:
-    gateway: JiraSourceOperations = _gateway(context)
+    gateway: JiraGateway = _gateway(context)
     group_names: list[str] = _list_groups_for_dependent_check(context, config)
     members: list[dict[str, Any]] = []
     complete: bool = len(group_names) <= _SAMPLE_GROUPS
