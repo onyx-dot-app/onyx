@@ -36,6 +36,10 @@ _TOKEN = re.compile(r"[^\W_]+")
 # BM25 parameters: term frequency saturation and document length normalization.
 _K1 = 1.2
 _B = 0.75
+# Weight of a parameter match against a name, namespace or description match.
+# At 0.5 or less, a match only on the parameters does not outrank a function
+# whose name has the query word.
+PARAMETER_WEIGHT = 0.5
 
 
 def _tokens(text: str) -> list[str]:
@@ -89,10 +93,8 @@ class ToolIndex:
 
     def search(self, query: str, limit: int) -> list[SearchableFunction]:
         query_terms = set(_tokens(query))
-        # A match on the name, namespace or description ranks above any match
-        # on the parameters alone; the parameter score breaks ties.
         scored = [
-            (main, parameters, function)
+            (main + PARAMETER_WEIGHT * parameters, function)
             for main, parameters, function in zip(
                 self._main.scores(query_terms),
                 self._parameters.scores(query_terms),
@@ -102,8 +104,8 @@ class ToolIndex:
             if main > 0 or parameters > 0
         ]
         # Ties keep name order.
-        scored.sort(key=lambda item: (-item[0], -item[1], item[2].name))
-        return [function for _, _, function in scored[:limit]]
+        scored.sort(key=lambda item: (-item[0], item[1].name))
+        return [function for _, function in scored[:limit]]
 
     def tool_search(
         self, query: object, limit: object = DEFAULT_TOOL_SEARCH_LIMIT

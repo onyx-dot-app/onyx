@@ -135,9 +135,10 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         functions, the DEFERRED ones whose names the code
                                         uses, and the imported modules; tool_search()
                                         (tool_search.py, BM25) only when some are DEFERRED,
-                                        over the name, namespace and description; a match
-                                        only on the argument schema's property names and
-                                        descriptions ranks below them (stubs.py:_searchable)
+                                        scoring the name, namespace and description plus
+                                        PARAMETER_WEIGHT times a separate score of the
+                                        argument schema's property names and descriptions
+                                        (tool_search.py:ToolIndex.search)
   CodeModeTool._run -> CodeCells.start  MAX_OPEN_CELLS per response, MAX_RUNNING_CELLS per
                                         process (else BUSY_MESSAGE); cell id = 1 + the highest
                                         id in the branch; store snapshot = store.py:store_snapshot

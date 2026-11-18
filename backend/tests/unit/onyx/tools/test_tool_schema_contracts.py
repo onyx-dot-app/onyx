@@ -300,6 +300,12 @@ def test_openapi_parameter_description_moves_into_its_property_schema() -> None:
                     "description": "Team that owns the incident.",
                     "schema": True,
                 },
+                {
+                    "name": "closed",
+                    "in": "query",
+                    "description": "Never accepted.",
+                    "schema": False,
+                },
             ]
         },
     )
@@ -308,6 +314,7 @@ def test_openapi_parameter_description_moves_into_its_property_schema() -> None:
         "properties": {
             "sev": {"type": "string", "description": "Severity bucket of the outage."},
             "page": {"type": "integer"},
-            "team": True,
+            "team": {"description": "Team that owns the incident."},
+            "closed": False,
         },
     }

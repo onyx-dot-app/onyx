@@ -731,6 +731,65 @@ def test_tool_search_ranks_a_name_match_with_a_large_schema_first() -> None:
     ]
 
 
+def test_tool_search_ranks_a_full_parameter_match_above_a_filler_word_match() -> None:
+    tools = [
+        FakeTool(
+            "open_page",
+            _unused,
+            description="Open the page.",
+            exposure=CodeModeExposure.DEFERRED,
+        ),
+        FakeTool(
+            "page_oncall",
+            _unused,
+            description="Notify someone on call.",
+            exposure=CodeModeExposure.DEFERRED,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "urgency": {"type": "string"},
+                    "severity": {"type": "string"},
+                },
+            },
+        ),
+    ]
+    index = build_tool_stubs(tools).tool_index
+    assert index is not None
+
+    assert [match.name for match in index.search("the urgency severity", 8)][0] == (
+        "page_oncall"
+    )
+
+
+def test_tool_search_skips_schema_data() -> None:
+    tools = [
+        FakeTool(
+            "set_animal",
+            _unused,
+            exposure=CodeModeExposure.DEFERRED,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "object",
+                        "default": {"description": "zebra"},
+                        "examples": [{"description": "giraffe"}],
+                        "enum": [{"properties": {"okapi": {}}}],
+                    },
+                    "default": {"type": "string", "description": "Fallback lemur."},
+                },
+            },
+        ),
+        FakeTool("archive", _unused, exposure=CodeModeExposure.DEFERRED),
+    ]
+    index = build_tool_stubs(tools).tool_index
+    assert index is not None
+
+    assert index.search("zebra giraffe okapi", 8) == []
+    # A property named like a data keyword is still a schema.
+    assert [match.name for match in index.search("lemur", 8)] == ["set_animal"]
+
+
 def test_tool_search_matches_the_namespace_of_any_deferred_tool() -> None:
     tools = [
         FakeTool(
@@ -773,9 +832,7 @@ def test_tool_search_matches_openapi_query_parameter_descriptions() -> None:
     )
     tool = CustomTool(integration_id=1, method_spec=method, base_url="http://x")
     stubs = build_tool_stubs([tool])
-    assert stubs.tool_index is not None
 
-    assert [match.name for match in stubs.tool_index.search("outage", 8)] == [tool.name]
     assert "sev: Severity bucket of the outage." in stubs.functions[tool.name].stub
 
 

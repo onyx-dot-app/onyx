@@ -54,6 +54,12 @@ from onyx.utils.pydantic_util import as_base
 MAX_STUB_CHARS = 16_000
 MAX_TOOL_DESCRIPTION_CHARS = 2_000
 MAX_ARGUMENT_DESCRIPTION_CHARS = 400
+# Schema keywords whose values are data, not schemas; tool_search skips them.
+_SCHEMA_DATA_KEYWORDS = frozenset({"enum", "const", "default", "examples", "example"})
+# Schema keywords whose values map arbitrary keys to schemas.
+_SCHEMA_MAP_KEYWORDS = frozenset(
+    {"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"}
+)
 MAX_REF_EXPANSIONS_PER_PATH = 2
 MAX_REF_EXPANSIONS_TOTAL = 32
 MAX_SCHEMA_DEPTH = 8
@@ -728,7 +734,7 @@ def _searchable(function: ToolFunction) -> SearchableFunction:
     while pending and parameter_chars < MAX_TOOL_DESCRIPTION_CHARS:
         node = pending.popleft()
         if isinstance(node, list):
-            pending.extend(node)
+            pending.extend(item for item in node if isinstance(item, (dict, list)))
             continue
         if not isinstance(node, dict):
             continue
@@ -741,7 +747,18 @@ def _searchable(function: ToolFunction) -> SearchableFunction:
             if text not in parameter_texts:
                 parameter_texts[text] = None
                 parameter_chars += len(text) + 1
-        pending.extend(node.values())
+        for key, value in node.items():
+            if key in _SCHEMA_DATA_KEYWORDS:
+                continue
+            # The values of a schema map are schemas, whatever their keys.
+            children = (
+                value.values()
+                if key in _SCHEMA_MAP_KEYWORDS and isinstance(value, dict)
+                else [value]
+            )
+            pending.extend(
+                child for child in children if isinstance(child, (dict, list))
+            )
     return SearchableFunction(
         name=function.function_name,
         description=function.description,
