@@ -1094,3 +1094,30 @@ def test_a_drive_call_that_recovers_reports_and_spends_each_try() -> None:
         ("drive", "a@co.com", False),
         ("drive", "a@co.com", True),
     ]
+
+
+def test_a_rate_limit_that_outlasts_the_retries_is_no_denial() -> None:
+    """A 403 rate limit after the last retry raises as a rate limit. The
+    getters do not read it as a file or drive the user cannot see."""
+    gateway, limiter = _limited_gateway()
+    drive = mock.MagicMock()
+    # The test retry makes three tries.
+    drive.files.return_value.get.return_value.execute.side_effect = [
+        _http_error(429),
+        _http_error(403, _RATE_LIMIT_BODY),
+        _http_error(403, _RATE_LIMIT_BODY),
+    ]
+    drive.drives.return_value.get.return_value.execute.side_effect = [
+        _http_error(403, _RATE_LIMIT_BODY)
+    ] * 3
+
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive):
+        with pytest.raises(GoogleDriveHttpError) as file_error:
+            gateway.get_file(user_email="a@co.com", file_id="f", fields="id")
+        with pytest.raises(GoogleDriveHttpError) as drive_error:
+            gateway.get_shared_drive_name(user_email="a@co.com", drive_id="d")
+
+    assert file_error.value.rate_limited
+    assert drive_error.value.rate_limited
+    # Each refused try reported to the limiter.
+    assert len(limiter.reported) == 6

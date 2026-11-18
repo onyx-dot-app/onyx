@@ -2,9 +2,11 @@
 no metadata fetch, readers rotated by file id, the listing user and the admin
 kept as fallbacks. A target with no stored fields goes through reindex."""
 
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from typing import cast
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
@@ -298,7 +300,13 @@ _PERMISSIONS: list[dict[str, object]] = [
         "id": "p2",
         "type": "group",
         "emailAddress": "team@example.com",
-        "permissionDetails": [{"inherited": True, "inheritedFrom": "drive-1"}],
+        "permissionDetails": [
+            {
+                "permissionType": "member",
+                "inherited": True,
+                "inheritedFrom": "drive-1",
+            }
+        ],
     },
 ]
 
@@ -525,3 +533,119 @@ def test_a_permission_read_again_replaces_the_stored_one() -> None:
 
     convert.assert_not_called()
     assert results == []
+
+
+def test_stored_readers_outside_the_user_limit_are_not_impersonated() -> None:
+    """specific_user_emails limits the users the connector acts as. A stored
+    reader outside it reads nothing at conversion: not the content, the
+    permissions or the folder path."""
+    connector = GoogleDriveConnector(
+        include_my_drives=True,
+        specific_user_emails="lister@example.com,alice@example.com",
+    )
+    connector._ops = MagicMock(spec=GoogleDriveSourceOperations)
+    connector._primary_admin_email = "admin@example.com"
+    ops = cast(MagicMock, connector.ops)
+    ops.list_file_permissions.side_effect = _denied()
+    target = _shared_drive_target("file-a", ["bob@example.com", "alice@example.com"])
+    payload = cast(DriveListingPayload, target.listing_payload)
+    payload.folder_path = None
+    retrievers: list[list[str]] = []
+    recorded: list[list[str]] = []
+
+    def build_path(
+        *_args: object, path_readers: Iterable[str] = (), **_kwargs: object
+    ) -> list[str]:
+        recorded.append(list(path_readers))
+        return ["Team"]
+
+    def convert(*args: object, **_kwargs: object) -> Document:
+        retrievers.append(cast(list[str], args[4]))
+        return _doc("file-a")
+
+    with (
+        patch(f"{_CONN_MODULE}.convert_drive_item_to_document", side_effect=convert),
+        patch(f"{_CONN_MODULE}.build_folder_path", side_effect=build_path),
+        patch.object(connector, "_drive_member_emails", return_value=[]),
+    ):
+        list(connector.resolve_targets([target], include_permissions=False))
+
+    assert retrievers and "bob@example.com" not in retrievers[0]
+    assert "alice@example.com" in retrievers[0]
+    assert recorded and "bob@example.com" not in recorded[0]
+
+
+def test_a_listing_user_outside_the_user_limit_sends_its_file_to_reindex() -> None:
+    connector = GoogleDriveConnector(
+        include_my_drives=True, specific_user_emails="alice@example.com"
+    )
+    connector._ops = MagicMock(spec=GoogleDriveSourceOperations)
+    connector._primary_admin_email = "admin@example.com"
+
+    with (
+        patch(f"{_CONN_MODULE}.convert_drive_item_to_document") as convert,
+        patch.object(connector, "reindex", return_value=iter(())) as reindex,
+    ):
+        list(connector.resolve_targets([_target("file-a", ["alice@example.com"])]))
+
+    convert.assert_not_called()
+    reindex.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "permissions",
+    [
+        pytest.param([], id="empty"),
+        pytest.param(_PERMISSIONS[:1], id="no-member"),
+    ],
+)
+def test_a_shared_drive_permission_read_with_no_member_fails_closed(
+    permissions: list[dict[str, object]],
+) -> None:
+    """A shared drive file always has the drive's members. A read that gives
+    none of them is not complete: the document would leave them out."""
+    connector = _make_connector()
+    ops = cast(MagicMock, connector.ops)
+    ops.list_file_permissions.return_value = permissions
+
+    with patch(f"{_CONN_MODULE}.convert_drive_item_to_document") as convert:
+        results = list(
+            connector.resolve_targets(
+                [_shared_drive_target("file-a", ["member@example.com"])],
+                include_permissions=True,
+            )
+        )
+
+    convert.assert_not_called()
+    assert [type(r) for r in results] == [ConnectorFailure]
+
+
+def test_a_folder_path_error_fails_only_its_target() -> None:
+    """The folder path of a target with no stored path is read at
+    conversion. An error there fails that target, and the other targets of
+    the batch still convert."""
+    connector = _make_connector()
+    broken = _target("file-a", [])
+    cast(DriveListingPayload, broken.listing_payload).folder_path = None
+
+    with (
+        patch(
+            f"{_CONN_MODULE}.convert_drive_item_to_document",
+            side_effect=lambda *args, **_kwargs: _doc(str(args[5]["id"])),
+        ),
+        patch(
+            f"{_CONN_MODULE}.build_folder_path",
+            side_effect=ConnectionResetError("reset"),
+        ),
+    ):
+        results = list(connector.resolve_targets([broken, _target("file-b", [])]))
+
+    assert sorted(type(r).__name__ for r in results) == [
+        "ConnectorFailure",
+        "Document",
+    ]
+    failure = next(r for r in results if isinstance(r, ConnectorFailure))
+    assert failure.failed_document is not None
+    assert failure.failed_document.document_id == (
+        "https://docs.google.com/document/d/file-a"
+    )
