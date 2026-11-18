@@ -38,7 +38,16 @@ export function FileBody({
 }: FileBodyProps) {
   const [expanded, setExpanded] = useState(false);
   const language = useMemo(() => getLanguageFromPath(path), [path]);
-  const allLines = useCodeLines(content, language);
+  // Highlight only the lines on screen; the rest waits until the file is
+  // expanded.
+  const totalLines = useMemo(() => content.split("\n").length, [content]);
+  const showAll = expanded || excerpt;
+  const shownText = useMemo(
+    () =>
+      showAll ? content : content.split("\n", PREVIEW_LINE_COUNT).join("\n"),
+    [content, showAll]
+  );
+  const visibleLines = useCodeLines(shownText, language);
 
   if (!content) {
     return (
@@ -49,9 +58,7 @@ export function FileBody({
     );
   }
 
-  const visibleLines =
-    expanded || excerpt ? allLines : allLines.slice(0, PREVIEW_LINE_COUNT);
-  const hiddenCount = allLines.length - visibleLines.length;
+  const hiddenCount = totalLines - visibleLines.length;
 
   return (
     <CodePanel>

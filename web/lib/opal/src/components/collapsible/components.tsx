@@ -342,6 +342,7 @@ function CollapsibleHeader({
                   open={open}
                   size={size}
                   prominence="internal"
+                  disabled={disabled}
                   interaction={
                     !disabled && (focusVisible || hovered) ? "hover" : undefined
                   }

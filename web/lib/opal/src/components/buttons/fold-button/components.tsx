@@ -27,6 +27,8 @@ interface FoldButtonProps {
   onFocus?: React.FocusEventHandler<HTMLElement>;
   onBlur?: React.FocusEventHandler<HTMLElement>;
   "aria-controls"?: string;
+  /** Shows the control as unavailable and suppresses clicks. */
+  disabled?: boolean;
 }
 
 /**

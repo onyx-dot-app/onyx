@@ -21,7 +21,10 @@ function plain(text: string): string {
 
 /** A plain verb, then the command, pattern, skill or path as a code span. */
 function verbWithCode(verb: string, chip: string): RichStr {
-  return markdown(`${plain(verb)} ${codeSpan(chip)}`);
+  // A code span cannot cross a line break, so a multi-line command (a heredoc,
+  // say) reads as one line in the title; the body keeps the original.
+  const oneLine = chip.replace(/\s*\n\s*/g, " ").trim();
+  return markdown(`${plain(verb)} ${codeSpan(oneLine)}`);
 }
 
 /** The finished form of each running verb and tool title. */
