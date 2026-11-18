@@ -211,6 +211,10 @@ PERMISSION_SYNC_TASK_EXPIRES = 6 * 60 * 60  # seconds
 # A NOT_STARTED attempt this old whose task is not in the broker queue lost its
 # task (e.g. a Redis restart without persistence), so the reaper fails it.
 PERMISSION_SYNC_LOST_TASK_GRACE = 10 * 60  # seconds
+# Celery drops a targeted reindex task that waited longer than this in the
+# queue. The stale-job validator then fails its NOT_STARTED job.
+TARGETED_REINDEX_TASK_EXPIRES = 10 * 60  # seconds
+TARGETED_REINDEX_TIMEOUT = 30 * 60  # seconds
 
 # Celery drops a user-started export task that waited longer than this. The
 # hourly export cleanup fails its job once the expiry and the grace have passed.

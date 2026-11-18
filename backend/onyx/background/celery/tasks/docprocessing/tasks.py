@@ -131,6 +131,7 @@ from onyx.db.search_settings import (
     port_reindex_in_progress,
 )
 from onyx.db.swap_index import check_and_perform_index_swap
+from onyx.db.targeted_reindex import fail_stale_targeted_reindex_jobs
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.document_batch_storage import (
     DocumentBatchStorage,
@@ -213,6 +214,7 @@ def validate_active_indexing_attempts(
     logger.info("Validating active indexing attempts")
 
     with get_session_with_current_tenant() as db_session:
+        fail_stale_targeted_reindex_jobs(db_session)
         # Find all active indexing attempts
         active_attempts = get_in_progress_index_attempts_with_task(db_session)
 
