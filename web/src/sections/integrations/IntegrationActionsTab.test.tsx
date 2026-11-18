@@ -223,6 +223,51 @@ test("a save after a revalidation keeps the newer values of rows it did not chan
   );
 });
 
+test("an edit that a revalidation saved does not cover a later value", async () => {
+  const withCreateIssue = (policy: "ask" | "allow") =>
+    actions.map((action) =>
+      action.key === "create_issue"
+        ? { ...action, admin_policy: policy, effective_admin_policy: policy }
+        : action
+    );
+  let loads = 0;
+  mockFetch({
+    [URL_ACTIONS]: () => {
+      loads += 1;
+      const policy = loads === 2 ? "ask" : "allow";
+      return {
+        default_policy: null,
+        actions: loads === 1 ? actions : withCreateIssue(policy),
+      };
+    },
+  });
+  const u = user();
+  render(
+    <>
+      <IntegrationActionsTab
+        integration={makeDetail()}
+        onOpenConfiguration={jest.fn()}
+      />
+      <ActionsRevalidator />
+    </>
+  );
+  await screen.findByText(copy.default.title);
+  const createIssue = () => within(rowOf("Create issue"));
+  await u.click(createIssue().getByRole("button", { name: labels.ask.label }));
+
+  for (let round = 0; round < 2; round++) {
+    await act(async () => {
+      await revalidateActions();
+    });
+  }
+  await waitFor(() =>
+    expect(
+      createIssue().getByRole("button", { name: labels.always.label })
+    ).toHaveAttribute("aria-pressed", "true")
+  );
+  expect(screen.getByRole("button", { name: copy.save })).toBeDisabled();
+});
+
 test("Use defaults clears the admin values of a group", async () => {
   const fetchMock = mockFetch({
     [URL_ACTIONS]: { default_policy: "allow", actions },
