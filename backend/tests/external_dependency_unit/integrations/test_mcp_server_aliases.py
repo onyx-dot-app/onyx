@@ -19,7 +19,10 @@ from onyx.db.enums import (
     MCPAuthenticationType,
     MCPTransport,
 )
-from onyx.db.integration import get_integration_by_kind_row
+from onyx.db.integration import (
+    count_integration_actions,
+    get_integration_by_kind_row,
+)
 from onyx.db.integration_connection import get_connection
 from onyx.db.integration_policy import list_persona_plugin_links
 from onyx.db.models import (
@@ -121,6 +124,23 @@ def _marketplace_kind(db_session: Session, integration_id: int) -> MarketplaceKi
         .join(Plugin__Integration, Plugin__Integration.plugin_id == Plugin.id)
         .where(Plugin__Integration.integration_id == integration_id)
     ).one()
+
+
+def test_create_saves_a_server_that_onyx_cannot_reach(
+    db_session: Session, admin: User, created: list[int]
+) -> None:
+    """The Terraform provider route saves the server before it is reachable,
+    as before integrations. The integration has no actions until a refresh."""
+    with patch(
+        "onyx.integrations.service.discover_mcp_tools",
+        side_effect=ConnectionError("unreachable"),
+    ):
+        server_id = _upsert(db_session, admin, created)
+
+    integration = _integration(db_session, server_id)
+    assert count_integration_actions([integration.id], db_session) == {
+        integration.id: 0
+    }
 
 
 def test_create_get_update_and_delete_keep_the_old_shapes(

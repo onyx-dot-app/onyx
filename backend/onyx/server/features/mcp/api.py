@@ -460,6 +460,9 @@ def upsert_mcp_server_alias(
                 ),
             ),
             db_session,
+            # The Terraform provider route keeps its old behavior: it saves
+            # the server before Onyx can reach it.
+            save_unreachable_server=True,
         )
         is_new = True
     else:

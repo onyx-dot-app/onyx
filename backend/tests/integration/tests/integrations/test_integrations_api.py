@@ -101,10 +101,12 @@ def test_create_each_shape(admin_user: DATestUser, created: list[int]) -> None:
         assert IntegrationManager.create_raw(custom_body, admin_user).status_code == 400
         assert presets == set()
 
-    # An unreachable public server is still added; a refresh asks again.
-    mcp = IntegrationManager.create(
+    # Onyx loads the actions of a server with no sign-in before it saves
+    # anything, so an unreachable server is refused.
+    mcp_name = f"mcp-{uuid4().hex[:8]}"
+    response = IntegrationManager.create_raw(
         {
-            "name": f"mcp-{uuid4().hex[:8]}",
+            "name": mcp_name,
             "auth_mode": "none",
             "config": {
                 "shape": "mcp_server",
@@ -114,8 +116,10 @@ def test_create_each_shape(admin_user: DATestUser, created: list[int]) -> None:
         },
         admin_user,
     )
-    created.append(mcp.id)
-    assert mcp.kind.value == "mcp"
+    assert response.status_code == 502
+    assert mcp_name not in {
+        view.name for view in IntegrationManager.list_admin(admin_user)
+    }
 
 
 def test_basic_user_cannot_use_admin_routes(

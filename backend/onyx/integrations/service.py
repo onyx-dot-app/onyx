@@ -601,10 +601,16 @@ def _discover_and_sync(
 
 
 def create_integration__no_commit(
-    user: User, request: IntegrationCreate, db_session: Session
+    user: User,
+    request: IntegrationCreate,
+    db_session: Session,
+    *,
+    save_unreachable_server: bool = False,
 ) -> Integration:
     """Make the integration, its kind row, its OAuth client, one plugin that
-    holds it, and its actions. The caller commits; an error leaves nothing."""
+    holds it, and its actions. The caller commits; an error leaves nothing.
+    With ``save_unreachable_server``, an MCP server with no sign-in that
+    cannot be reached is saved with no actions until a refresh."""
     if request.for_organization and not has_global_permission(
         user, Permission.MANAGE_ACTIONS
     ):
@@ -663,12 +669,22 @@ def create_integration__no_commit(
         validate_openapi_definition(config.openapi_spec)
     elif isinstance(config, CustomConfigInput):
         _validate_url_patterns(config.upstream_url_patterns)
-    mcp_actions = (
-        _discover_new_server(name, config, header_template, user)
-        if isinstance(config, McpServerConfigInput)
+    mcp_actions: list[IntegrationActionSpec] | None = None
+    if (
+        isinstance(config, McpServerConfigInput)
         and request.auth_mode is IntegrationAuthMode.NONE
-        else None
-    )
+    ):
+        try:
+            mcp_actions = _discover_new_server(name, config, header_template, user)
+        except OnyxError as error:
+            if (
+                not save_unreachable_server
+                or error.error_code is not OnyxErrorCode.BAD_GATEWAY
+            ):
+                raise
+            logger.warning(
+                "Saving MCP integration %s with no actions: %s", name, error.detail
+            )
 
     mcp_server_id: int | None = None
     tool_id: int | None = None
