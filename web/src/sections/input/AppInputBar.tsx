@@ -489,7 +489,8 @@ const AppInputBar = React.memo(
       if (
         heldSendKey !== chatDraftStorageKey ||
         !toolConfiguration.optionsLoaded ||
-        hasPendingFiles
+        hasPendingFiles ||
+        disabled
       )
         return;
       setHeldSendKey(null);
@@ -499,6 +500,7 @@ const AppInputBar = React.memo(
       chatDraftStorageKey,
       toolConfiguration.optionsLoaded,
       hasPendingFiles,
+      disabled,
     ]);
 
     // Text typed while Onyx responds becomes pending input, unless it

@@ -455,6 +455,12 @@ test("a held send waits for pending files after the tool options load", async ()
   expect(inputProps.onSubmit).not.toHaveBeenCalled();
 
   mockMessageFiles = [{ ...file, status: UserFileStatus.COMPLETED }];
+  rerender(<ChatInput {...inputProps} disabled />);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(inputProps.onSubmit).not.toHaveBeenCalled();
+
   rerender(<ChatInput {...inputProps} />);
   await waitFor(() => expect(inputProps.onSubmit).toHaveBeenCalledTimes(1));
 });
