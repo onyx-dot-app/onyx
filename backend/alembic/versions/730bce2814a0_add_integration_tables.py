@@ -1510,24 +1510,24 @@ def upgrade() -> None:
     # Fill and validate only after the ALTER TABLE locks are released.
     bind.commit()
     quoted_schema = bind.dialect.identifier_preparer.quote_identifier(schema)
-    with bind.engine.connect() as conn:
-        # SET LOCAL stays with its transaction, also behind a pooler in
-        # transaction mode.
-        with conn.begin():
-            conn.exec_driver_sql(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'")
-            conn.exec_driver_sql(_FILL_TOOL_OPTIONS)
-        for table in RECORD_TABLES:
-            with conn.begin():
-                conn.exec_driver_sql(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'")
-                conn.exec_driver_sql(
-                    _SET_RECORD_INTEGRATIONS.format(table=f"{quoted_schema}.{table}")
-                )
-            with conn.begin():
-                conn.exec_driver_sql(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'")
-                conn.exec_driver_sql(
-                    f"ALTER TABLE {quoted_schema}.{table} "
-                    f"VALIDATE CONSTRAINT fk_{table}_integration_id"
-                )
+    # Each step commits on the migration connection, so env.py pins the tenant
+    # search_path at the start of every transaction.
+    steps = [[_FILL_TOOL_OPTIONS]]
+    for table in RECORD_TABLES:
+        steps.append(
+            [_SET_RECORD_INTEGRATIONS.format(table=f"{quoted_schema}.{table}")]
+        )
+        steps.append(
+            [
+                f"ALTER TABLE {quoted_schema}.{table} "
+                f"VALIDATE CONSTRAINT fk_{table}_integration_id"
+            ]
+        )
+    for statements in steps:
+        bind.exec_driver_sql(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'")
+        for statement in statements:
+            bind.exec_driver_sql(statement)
+        bind.commit()
 
 
 def downgrade() -> None:
