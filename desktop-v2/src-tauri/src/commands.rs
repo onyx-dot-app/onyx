@@ -174,7 +174,7 @@ pub async fn ask(
     let epoch = state.epoch();
     let (server, token) = state.session()?;
     let current = || state.epoch() == epoch;
-    crate::aonyx::set_mood(&app, crate::aonyx::Mood::Thinking);
+    let answer = crate::aonyx::answer_started(&app);
     let result = ask::run(
         &state.api,
         &server,
@@ -185,12 +185,7 @@ pub async fn ask(
         &current,
     )
     .await;
-    let mood = if result.is_ok() {
-        crate::aonyx::Mood::Happy
-    } else {
-        crate::aonyx::Mood::Idle
-    };
-    crate::aonyx::set_mood(&app, mood);
+    crate::aonyx::answer_finished(&app, answer, result.is_ok());
     let event = match &result {
         Ok(_) => AskEvent::Done,
         Err(message) => AskEvent::Error {

@@ -43,13 +43,28 @@ impl Mood {
     }
 }
 
-/// Tells the pet what is going on; does nothing while it is not shown.
+/// Tells the pet what is going on. Sent while it is hidden too: its page
+/// stays loaded, so it is up to date when it is shown again.
 pub fn set_mood(app: &AppHandle, mood: Mood) {
-    let visible = app
-        .get_webview_window(LABEL)
-        .is_some_and(|w| w.is_visible().unwrap_or(false));
-    if visible {
+    if app.get_webview_window(LABEL).is_some() {
         let _ = app.emit_to(LABEL, STATE_EVENT, mood.name());
+    }
+}
+
+/// The latest launcher answer; only it sets the pet's mood.
+static ANSWER: AtomicU64 = AtomicU64::new(0);
+
+/// An answer started: the pet thinks. Returns its id for `answer_finished`.
+pub fn answer_started(app: &AppHandle) -> u64 {
+    let id = ANSWER.fetch_add(1, Ordering::SeqCst) + 1;
+    set_mood(app, Mood::Thinking);
+    id
+}
+
+/// An answer ended. An older answer that a newer one replaced changes nothing.
+pub fn answer_finished(app: &AppHandle, id: u64, ok: bool) {
+    if ANSWER.load(Ordering::SeqCst) == id {
+        set_mood(app, if ok { Mood::Happy } else { Mood::Idle });
     }
 }
 

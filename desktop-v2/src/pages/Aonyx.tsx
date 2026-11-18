@@ -59,6 +59,19 @@ interface Play {
   loops: number | null;
 }
 
+// Follows the system setting live, not only when the page loads.
+function useReducedMotion(): boolean {
+  const query = "(prefers-reduced-motion: reduce)";
+  const [reduced, setReduced] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const onChange = () => setReduced(media.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+  return reduced;
+}
+
 function Aonyx() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const images = useRef<Partial<Record<Anim, HTMLImageElement>>>({});
@@ -67,7 +80,7 @@ function Aonyx() {
   const [play, setPlay] = useState<Play>({ anim: "spin", loops: 1 });
   const [shown, setShown] = useState(false);
   const press = useRef<{ x: number; y: number; dragged: boolean } | null>(null);
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reducedMotion = useReducedMotion();
 
   function react(anim: Anim, loops = 1) {
     setPlay({ anim, loops });
