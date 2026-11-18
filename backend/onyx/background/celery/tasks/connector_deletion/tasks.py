@@ -637,6 +637,9 @@ def monitor_connector_deletion_taskset(
                 )
                 delete_connector_row__no_commit(db_session, connector)
             db_session.commit()
+            # Here, not at the end: a later step can raise, and the deleted
+            # pair is not monitored again. This call never raises.
+            drop_orphaned_questions(tenant_id)
 
             # The pair's doc permission sync checkpoint is a file, not a row
             fetch_versioned_implementation_with_fallback(
@@ -710,7 +713,6 @@ def monitor_connector_deletion_taskset(
     )
 
     redis_connector.delete.reset()
-    drop_orphaned_questions(tenant_id)
 
 
 def validate_connector_deletion_fences(

@@ -457,8 +457,8 @@ def _process_user_file_with_indexing(
                 db_session.commit()
         raise RuntimeError(f"Indexing pipeline failed for user file {user_file_id}")
 
-    _dual_write_new_file_to_secondary(user_file_id, documents, tenant_id)
     request_refresh_for_new_documents(tenant_id)
+    _dual_write_new_file_to_secondary(user_file_id, documents, tenant_id)
 
 
 def _index_user_file_to_secondary(
