@@ -29,3 +29,7 @@ textarea,
 .drag-region {
   -webkit-app-region: drag;
 }
+
+body.launcher {
+  background: transparent;
+}

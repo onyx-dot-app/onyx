@@ -4,16 +4,25 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
+pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Shift+Space";
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     pub server_url: Option<String>,
+    pub hotkey: Option<String>,
     pub zoom: Option<f64>,
 }
 
 impl Config {
     pub fn zoom(&self) -> f64 {
         self.zoom.unwrap_or(1.0)
+    }
+
+    pub fn hotkey(&self) -> String {
+        self.hotkey
+            .clone()
+            .unwrap_or_else(|| DEFAULT_HOTKEY.to_string())
     }
 }
 

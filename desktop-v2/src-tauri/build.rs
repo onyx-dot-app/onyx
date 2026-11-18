@@ -5,9 +5,14 @@ const COMMANDS: &[&str] = &[
     "save_server",
     "login",
     "get_prefs",
+    "set_hotkey",
     "change_server",
     "sign_out",
+    "ask",
+    "search",
+    "open_chat_in_main",
     "open_external",
+    "hide_launcher",
 ];
 
 fn main() {

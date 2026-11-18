@@ -9,6 +9,7 @@ use crate::windows;
 
 pub const PREFERENCES: &str = "preferences";
 const NEW_CHAT: &str = "new_chat";
+const LAUNCHER: &str = "launcher";
 const RELOAD: &str = "reload";
 const ZOOM_RESET: &str = "zoom_reset";
 const ZOOM_IN: &str = "zoom_in";
@@ -46,6 +47,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         true,
         &[
             &MenuItem::with_id(app, NEW_CHAT, "New Chat", true, Some("CmdOrCtrl+N"))?,
+            &MenuItem::with_id(app, LAUNCHER, "Open Launcher", true, None::<&str>)?,
             &separator()?,
             &PredefinedMenuItem::close_window(app, None)?,
         ],
@@ -97,6 +99,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         app,
         &[
             &MenuItem::with_id(app, OPEN, "Open Onyx", true, None::<&str>)?,
+            &MenuItem::with_id(app, LAUNCHER, "Open Launcher", true, None::<&str>)?,
             &MenuItem::with_id(app, PREFERENCES, "Preferences…", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, QUIT, "Quit Onyx", true, None::<&str>)?,
@@ -120,6 +123,7 @@ pub fn handle(app: &AppHandle, id: &str) {
         PREFERENCES => {
             let _ = windows::open_preferences(app);
         }
+        LAUNCHER => windows::toggle_launcher(app),
         OPEN => windows::show_primary(app),
         QUIT => app.exit(0),
         NEW_CHAT => {
