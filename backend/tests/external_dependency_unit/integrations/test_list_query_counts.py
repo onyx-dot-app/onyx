@@ -67,8 +67,9 @@ def _query_count(
     return len(statements)
 
 
-def _add_integrations(db_session: Session, admin: User, member: User) -> list[int]:
-    ids: list[int] = []
+def _add_integrations(
+    db_session: Session, admin: User, member: User, ids: list[int]
+) -> None:
     for _ in range(5):
         name = f"count-api-{uuid4().hex[:8]}"
         detail = admin_api.create_integration(
@@ -127,7 +128,6 @@ def _add_integrations(db_session: Session, admin: User, member: User) -> list[in
                 integration, member, {"api_key": "mine"}, db_session
             )
             db_session.commit()
-    return ids
 
 
 @pytest.fixture
@@ -171,12 +171,12 @@ def test_list_views_do_not_query_once_per_integration(
         ),
         "GET /tool": ([member], lambda: tool_api.list_tools(db_session, member)),
     }
-    created.extend(_add_integrations(db_session, admin, member))
+    _add_integrations(db_session, admin, member, created)
     before = {
         name: _query_count(db_session, users, read)
         for name, (users, read) in views.items()
     }
-    created.extend(_add_integrations(db_session, admin, member))
+    _add_integrations(db_session, admin, member, created)
     after = {
         name: _query_count(db_session, users, read)
         for name, (users, read) in views.items()
