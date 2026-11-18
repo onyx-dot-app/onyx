@@ -166,6 +166,7 @@ def test_agent_pod_spec() -> None:
     assert "--dial-max-streams=64" in args
     assert "--max-vms=60" in args
     assert "--slice-memory-percent=85" in args
+    assert "--starting-mem-divisor=2" in args
     assert not [a for a in args if a.startswith("--client-allowed-sans")]
     # The agent joins $POD_IP and the listen port itself (it brackets IPv6).
     assert not [a for a in args if a.startswith("--advertise-address")]

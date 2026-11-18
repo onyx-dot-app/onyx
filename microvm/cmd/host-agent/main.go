@@ -64,6 +64,7 @@ type flags struct {
 	uidBase        uint
 	uidCount       uint
 	minFreeMemMiB  uint64
+	startingMemDiv uint
 	maxVMs         int
 	minFreeDiskGB  uint64
 	maxScratchGiB  uint
@@ -138,7 +139,8 @@ func main() {
 	flag.BoolVar(&f.hostMountNS, "host-mount-ns", true, "start VMs in the host mount namespace (nsenter -t 1 -m); needs hostPID")
 	flag.UintVar(&f.uidBase, "uid-base", 1000000, "first jailer UID/GID")
 	flag.UintVar(&f.uidCount, "uid-count", 65536, "number of jailer UIDs")
-	flag.Uint64Var(&f.minFreeMemMiB, "min-free-mem-mib", 2048, "memory reserve: Create needs MemAvailable >= mem_mib + this")
+	flag.Uint64Var(&f.minFreeMemMiB, "min-free-mem-mib", 2048, "memory reserve: Create needs available memory >= charge of the starting VMs + charge of the new VM + this")
+	flag.UintVar(&f.startingMemDiv, "starting-mem-divisor", 2, "the admission charge of a starting VM is its guest memory divided by this (1 to 16; 1: full size)")
 	flag.Uint64Var(&f.minFreeDiskGB, "min-free-disk-gib", 10, "Create needs this much free space on the data disk")
 	flag.UintVar(&f.maxScratchGiB, "max-scratch-gib", 100, "largest scratch disk")
 	flag.IntVar(&f.maxVMs, "max-vms", 0, "most VMs on the node, template build VMs included; Create refuses over it with CAPACITY_VM_SLOTS (0 = no cap)")
@@ -169,7 +171,7 @@ func main() {
 	flag.StringVar(&f.egressCA, "egress-ca", "", "egress CA certificate file (PEM) of this deployment, read at each Create (cached 30s) and sent to the guest daemon, which installs it at Init. A root drive with another built-in CA is refused")
 	flag.StringVar(&f.egressCACM, "egress-ca-configmap", "", "like --egress-ca, but read from <namespace>/<name>[:<key>] (default key ca.crt) through the Kubernetes API; needs RBAC get on that ConfigMap")
 	flag.UintVar(&f.tplVCPUs, "template-vcpus", 2, "vCPUs of the built template (Create must ask for the same)")
-	flag.UintVar(&f.tplMemMiB, "template-mem-mib", 4096, "memory of the built template in MiB (Create must ask for the same)")
+	flag.UintVar(&f.tplMemMiB, "template-mem-mib", 8192, "memory of the built template in MiB (Create must ask for the same)")
 	flag.UintVar(&f.tplScratchGiB, "template-scratch-gib", 1, "scratch disk of the built template in GiB (Create can grow it)")
 	flag.IntVar(&f.tplKeep, "template-keep", 2, "templates to keep; older ones are removed unless a VM uses them")
 	flag.DurationVar(&f.tplTimeout, "template-build-timeout", 5*time.Minute, "limit for one template build")
@@ -224,7 +226,9 @@ func run(f flags, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("preflight: %w", err)
 	}
-	stats := hostinfo.Stats{DataDir: f.dataDir}
+	// The host cgroup tree through PID 1's root (hostPID): the agent's own
+	// cgroup mount can show only the pod's subtree.
+	stats := hostinfo.Stats{DataDir: f.dataDir, SliceDir: hostinfo.SliceCgroupDir("/proc/1/root/sys/fs/cgroup", f.slice)}
 	if ls != nil {
 		stats.NodeDir = ls.NodeDir
 	}
@@ -240,8 +244,12 @@ func run(f flags, log *slog.Logger) error {
 	if err := checkSystemdRun(cmd); err != nil {
 		return err
 	}
-	if err := capVMSlice(cmd, f.slicePercent, stats, log); err != nil {
+	if stats.SliceLimitBytes, err = capVMSlice(cmd, f.slicePercent, stats, log); err != nil {
 		return err
+	}
+	if _, err := os.Stat(stats.SliceDir); stats.SliceLimitBytes > 0 && err != nil {
+		log.Warn("VM slice cgroup not found; admission uses the slice limit as its room until the first VM starts",
+			"dir", stats.SliceDir, "err", err)
 	}
 	kernel, err := binaries.InstallKernel(filepath.Join(f.artifactsDir, "vmlinux"), filepath.Join(f.dataDir, "kernel"))
 	if err != nil {
@@ -286,14 +294,15 @@ func run(f flags, log *slog.Logger) error {
 		NoEgressCASource: caSrc == nil,
 	}
 	m := agent.NewManager(agent.Config{
-		MinFreeMemMiB:    f.minFreeMemMiB,
-		MinFreeDiskBytes: f.minFreeDiskGB * uint64(scratch.GiB),
-		MaxScratchGiB:    uint32(f.maxScratchGiB),
-		MaxVMs:           f.maxVMs,
-		StartTimeout:     f.startTimeout,
-		StopTimeout:      f.stopTimeout,
-		TombstoneTTL:     24 * time.Hour,
-		EndedRetention:   f.endedRetention,
+		MinFreeMemMiB:      f.minFreeMemMiB,
+		StartingMemDivisor: uint32(f.startingMemDiv),
+		MinFreeDiskBytes:   f.minFreeDiskGB * uint64(scratch.GiB),
+		MaxScratchGiB:      uint32(f.maxScratchGiB),
+		MaxVMs:             f.maxVMs,
+		StartTimeout:       f.startTimeout,
+		StopTimeout:        f.stopTimeout,
+		TombstoneTTL:       24 * time.Hour,
+		EndedRetention:     f.endedRetention,
 	},
 		store,
 		launcher,
@@ -928,6 +937,9 @@ func checkRanges(f flags) error {
 	if f.slicePercent != 0 && (f.slicePercent < 10 || f.slicePercent > 100) {
 		return fmt.Errorf("--slice-memory-percent %d must be 0 or 10 to 100", f.slicePercent)
 	}
+	if f.startingMemDiv < 1 || f.startingMemDiv > 16 {
+		return fmt.Errorf("--starting-mem-divisor %d must be 1 to 16", f.startingMemDiv)
+	}
 	if f.memOverhead < 16 || f.memOverhead > 4096 {
 		return fmt.Errorf("--vm-mem-overhead-mib %d must be 16 to 4096", f.memOverhead)
 	}
@@ -1040,30 +1052,30 @@ func splitList(s string) []string {
 	return out
 }
 
-// capVMSlice sets MemoryMax of the VM slice to percent of MemTotal.
-// kubelet does not see VM memory, so without the cap an overcommitted node
-// runs out of memory outside the slice. percent 0 removes a limit of an
-// earlier start; a failure then only logs, so 0 also works where systemctl
-// set-property does not.
-func capVMSlice(c jailer.Command, percent uint, stats hostinfo.Stats, log *slog.Logger) error {
+// capVMSlice sets MemoryMax of the VM slice to percent of MemTotal and
+// returns it (0: no limit). kubelet does not see VM memory, so without the
+// cap an overcommitted node runs out of memory outside the slice. percent 0
+// removes a limit of an earlier start; a failure then only logs, so 0 also
+// works where systemctl set-property does not.
+func capVMSlice(c jailer.Command, percent uint, stats hostinfo.Stats, log *slog.Logger) (uint64, error) {
 	if percent == 0 {
 		argv := c.SliceMemoryMaxArgv(0)
 		if out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput(); err != nil {
 			log.Warn("VM slice memory limit not removed", "slice", c.Slice, "err", err, "output", strings.TrimSpace(string(out)))
 		}
-		return nil
+		return 0, nil
 	}
 	total, _, err := stats.MemInfo()
 	if err != nil {
-		return fmt.Errorf("slice memory cap: %w", err)
+		return 0, fmt.Errorf("slice memory cap: %w", err)
 	}
 	limit := jailer.SliceMemoryMax(total, percent)
 	argv := c.SliceMemoryMaxArgv(limit)
 	if out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput(); err != nil {
-		return fmt.Errorf("%s: %w: %s", strings.Join(argv, " "), err, strings.TrimSpace(string(out)))
+		return 0, fmt.Errorf("%s: %w: %s", strings.Join(argv, " "), err, strings.TrimSpace(string(out)))
 	}
 	log.Info("VM slice memory cap", "slice", c.Slice, "memory_max_bytes", limit, "percent", percent, "mem_total_mib", total)
-	return nil
+	return limit, nil
 }
 
 func checkSystemdRun(c jailer.Command) error {

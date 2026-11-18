@@ -28,8 +28,10 @@ func (noLaunch) Launch(context.Context, agent.LaunchSpec) (agent.Process, error)
 
 type stats struct{}
 
-func (stats) MemInfo() (uint64, uint64, error) { return 1024, 512, nil }
-func (stats) DiskFreeBytes() (uint64, error)   { return 1 << 40, nil }
+func (stats) MemInfo() (uint64, uint64, error)    { return 1024, 512, nil }
+func (stats) DiskFreeBytes() (uint64, error)      { return 1 << 40, nil }
+func (stats) SliceRoomMiB() (uint64, bool, error) { return 0, false, nil }
+func (stats) SliceOOMKills() (uint64, error)      { return 0, nil }
 
 // TestTypedErrorsOverUnixSocket checks that a client gets the gRPC code and
 // the ErrorInfo reason.
@@ -145,8 +147,7 @@ func TestBuildTemplateAndTemplateInfo(t *testing.T) {
 	if err != nil || len(ni.GetTemplates()) != 1 || ni.GetTemplates()[0].GetCompatible() {
 		t.Fatalf("node info %v %v", ni, err)
 	}
-	// WriteFake writes the current layout: its VMs have the balloon.
-	if !ni.GetTemplates()[0].GetBalloon() || ni.GetTemplates()[0].GetManagedSlots() != 2 {
+	if ni.GetTemplates()[0].GetManagedSlots() != 2 {
 		t.Fatalf("template info %v", ni.GetTemplates()[0])
 	}
 }

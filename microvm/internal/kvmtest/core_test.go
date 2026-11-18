@@ -22,6 +22,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
 	"github.com/onyx-dot-app/onyx/microvm/internal/binaries"
+	"github.com/onyx-dot-app/onyx/microvm/internal/fcapi/client/operations"
 	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
 	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
@@ -245,6 +246,45 @@ func TestCoreKVM(t *testing.T) {
 		}
 	}
 	t.Logf("ping %d/%d, run %d/%d", okPing, e.VMs, okRun, e.VMs)
+
+	// 5a. A restored VM has the template's balloon (never inflated, deflate
+	// on OOM, statistics, free page reporting), its statistics come in, and
+	// the guest kernel has the driver and free page reporting.
+	api := fcvm.APIClient(lay.HostPath(ids[0], jailer.APISock))
+	bc, err := api.DescribeBalloonConfigContext(ctx, &operations.DescribeBalloonConfigParams{})
+	if err != nil {
+		t.Fatalf("GET /balloon: %v", err)
+	}
+	want := template.Balloon
+	if b := bc.Payload; *b.AmountMib != want.AmountMiB || *b.DeflateOnOom != want.DeflateOnOOM || b.StatsPollingIntervals != want.StatsIntervalS ||
+		b.FreePageReporting != want.FreePageReporting || b.FreePageHinting != want.FreePageHinting {
+		t.Errorf("balloon %+v, want %+v", b, want)
+	}
+	// The guest sends statistics every StatsIntervalS: wait two intervals.
+	var avail int64
+	statsWait := time.Duration(2*want.StatsIntervalS)*time.Second + time.Second
+	for deadline := time.Now().Add(statsWait); ; time.Sleep(500 * time.Millisecond) {
+		st, err := api.DescribeBalloonStatsContext(ctx, &operations.DescribeBalloonStatsParams{})
+		if err == nil {
+			avail = st.Payload.AvailableMemory
+		}
+		if avail > 0 || time.Now().After(deadline) {
+			if avail <= 0 || avail > int64(tplMemMiB)<<20 {
+				t.Errorf("balloon statistics: available_memory %d (want 1 to %d MiB), last error %v", avail, tplMemMiB, err)
+			}
+			break
+		}
+	}
+	gctx, gcancel := context.WithTimeout(ctx, 10*time.Second)
+	out, err := guestRun(gctx, lay.HostPath(ids[0], template.VsockUDS), "root",
+		"[ -d /sys/bus/virtio/drivers/virtio_balloon ] && echo driver; zcat /proc/config.gz | grep -xE 'CONFIG_(VIRTIO_BALLOON|PAGE_REPORTING)=y'")
+	gcancel()
+	for _, s := range []string{"driver\n", "CONFIG_VIRTIO_BALLOON=y", "CONFIG_PAGE_REPORTING=y"} {
+		if err != nil || !strings.Contains(out, s) {
+			t.Errorf("guest balloon: want %q in %q (%v)", s, out, err)
+		}
+	}
+	t.Logf("balloon: %+v, guest available %d MiB", want, avail>>20)
 
 	// 5b. Without the egress relay the VM has no host vsock listener, so every
 	// guest connect to the host is refused.

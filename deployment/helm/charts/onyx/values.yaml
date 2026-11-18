@@ -2120,6 +2120,13 @@ craft:
     # containerd, the host agent and the system. 0: no limit (the agent
     # removes a limit of an earlier start).
     sliceMemoryPercent: 85
+    # Admission charge of a starting VM (--starting-mem-divisor, 1 to 16): its
+    # guest memory (8 GiB) divided by this value. Running VMs count at what
+    # they use. 2 lets twice as many VMs start at once. If many VMs then use
+    # all their memory, the kernel kills a VM in the slice
+    # (sliceMemoryPercent; alert CraftFcVMOOMKills). Set 1 to count each
+    # starting VM at its full size.
+    startingMemDivisor: 2
     # Comma-separated DNS or URI SANs; the client certificate must have one.
     # Empty = the client certificate name with chart-made certificates, or
     # any certificate that the client CA (tls ca.crt) signed with existingSecret.

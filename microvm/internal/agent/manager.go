@@ -66,6 +66,11 @@ type Launcher interface {
 type HostStats interface {
 	MemInfo() (totalMiB, availableMiB uint64, err error)
 	DiskFreeBytes() (uint64, error)
+	// SliceRoomMiB is the memory that the VM slice can still take before its
+	// memory.max; limited is false when the slice has no limit.
+	SliceRoomMiB() (roomMiB uint64, limited bool, err error)
+	// SliceOOMKills counts the OOM kills in the VM slice.
+	SliceOOMKills() (uint64, error)
 }
 
 // Versions are the static versions of the node, for NodeInfo and the
@@ -96,9 +101,12 @@ func (v Versions) NodeKey() template.NodeKey {
 
 // Config holds the node limits.
 type Config struct {
-	// MinFreeMemMiB is the memory reserve: Create needs MemAvailable >=
-	// (guest memory of the starting VMs) + mem_mib + MinFreeMemMiB.
+	// MinFreeMemMiB is the memory reserve: Create needs available memory >=
+	// (charge of the starting VMs) + (charge of the new VM) + MinFreeMemMiB.
 	MinFreeMemMiB uint64
+	// StartingMemDivisor divides the guest memory of a starting VM into its
+	// admission charge (see memChargeMiB). 0 counts as 1.
+	StartingMemDivisor uint32
 	// MinFreeDiskBytes: Create needs this much free space on the data disk.
 	MinFreeDiskBytes uint64
 	MaxScratchGiB    uint32
@@ -450,7 +458,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 			SandboxID: req.SandboxID, Attempt: req.Attempt, Generation: m.nextGeneration(),
 			Template: tpl.Version, VCPUs: req.VCPUs, MemMiB: req.MemMiB, ScratchGiB: req.ScratchGiB,
 			State: pb.VMState_VM_STATE_STARTING, UID: uid, StartedAt: m.now(), TenantID: req.TenantID,
-			Managed: ManagedState{Slots: tpl.ManagedSlots(), Active: pb.ManagedSlot_MANAGED_SLOT_A},
+			Managed: ManagedState{Slots: template.ManagedSlots, Active: pb.ManagedSlot_MANAGED_SLOT_A},
 			Mounts:  newMounts(tpl.ManagedMounts()),
 		},
 		busy: make(chan struct{}),
@@ -578,37 +586,68 @@ func (m *Manager) admit(req CreateRequest) (*template.Template, error) {
 	return tpl, nil
 }
 
+// memChargeMiB is what a starting VM of memMiB guest memory counts in
+// admission: memMiB / divisor, rounded up. Firecracker maps guest memory
+// lazily, and a restored VM touches only part of it, so a VM rarely uses
+// its full size soon after it starts. Divisor 0 counts as 1.
+func memChargeMiB(memMiB, divisor uint32) uint64 {
+	d := uint64(max(divisor, 1))
+	return (uint64(memMiB) + d - 1) / d
+}
+
 // admitMemoryLocked admits a VM of memMiB on measured memory: the node's
-// MemAvailable must hold the guest memory of the VMs that are starting
-// (their pages are not in use yet), the full guest memory of the new VM and
-// the reserve. The balloon's free page reporting (layout 4) returns the
-// memory that guests free, so MemAvailable is the real use, not the sum of
-// guest sizes.
+// MemAvailable must hold the charge of the VMs that are starting (their
+// pages are not in use yet), the charge of the new VM and the reserve (see
+// memChargeMiB). The balloon's free page reporting returns the memory that
+// guests free, so MemAvailable is the real use, not the sum of guest sizes.
+// With a memory.max on the VM slice, the available memory is at most the
+// slice's room below it, so a start does not push the slice into an OOM
+// kill while the node still has memory.
 func (m *Manager) admitMemoryLocked(memMiB uint32) error {
 	total, avail, err := m.stats.MemInfo()
 	if err != nil {
 		// An unreadable statistic is a refusal: no VM started, another node may accept.
 		return apierr.New(pb.ErrorReason_CAPACITY_MEMORY, "read memory info: %v", err)
 	}
+	room, limited, err := m.stats.SliceRoomMiB()
+	if err != nil {
+		return apierr.New(pb.ErrorReason_CAPACITY_MEMORY, "read VM slice memory: %v", err)
+	}
+	usable := avail
+	if limited {
+		usable = min(avail, room)
+	}
 	starting := m.startingMiBLocked()
-	need := starting + uint64(memMiB) + m.cfg.MinFreeMemMiB
-	if avail >= need {
+	charge := memChargeMiB(memMiB, m.cfg.StartingMemDivisor)
+	need := starting + charge + m.cfg.MinFreeMemMiB
+	if usable >= need {
 		return nil
 	}
 	e := apierr.New(pb.ErrorReason_CAPACITY_MEMORY,
-		"node has %d MiB available of %d MiB; it needs %d MiB: %d MiB for the VM, %d MiB for %d starting VMs and a %d MiB reserve",
-		avail, total, need, memMiB, starting, m.startingCountLocked(), m.cfg.MinFreeMemMiB)
+		"node has %d MiB available of %d MiB (VM slice: %s); it needs %d MiB: %d MiB for the VM (%d MiB guest memory), %d MiB for %d starting VMs and a %d MiB reserve",
+		avail, total, sliceRoomText(room, limited), need, charge, memMiB, starting, m.startingCountLocked(), m.cfg.MinFreeMemMiB)
 	e.Metadata = map[string]string{
 		"mem_total_mib":     fmt.Sprint(total),
 		"mem_available_mib": fmt.Sprint(avail),
 		"mem_needed_mib":    fmt.Sprint(need),
 		"vm_mem_mib":        fmt.Sprint(memMiB),
+		"vm_mem_charge_mib": fmt.Sprint(charge),
 		"mem_starting_mib":  fmt.Sprint(starting),
 		"mem_reserve_mib":   fmt.Sprint(m.cfg.MinFreeMemMiB),
 	}
-	m.log.Warn("create refused: memory", "mem_available_mib", avail, "mem_needed_mib", need,
-		"mem_starting_mib", starting, "mem_reserve_mib", m.cfg.MinFreeMemMiB)
+	if limited {
+		e.Metadata["slice_room_mib"] = fmt.Sprint(room)
+	}
+	m.log.Warn("create refused: memory", "mem_available_mib", avail, "slice_room_mib", room, "slice_limited", limited,
+		"mem_needed_mib", need, "mem_starting_mib", starting, "mem_reserve_mib", m.cfg.MinFreeMemMiB)
 	return e
+}
+
+func sliceRoomText(room uint64, limited bool) string {
+	if !limited {
+		return "no limit"
+	}
+	return fmt.Sprintf("%d MiB below its limit", room)
 }
 
 // MaxVMs is the VM cap; 0 is no cap.
@@ -703,16 +742,16 @@ func (m *Manager) admitSlotLocked() error {
 	return e
 }
 
-// startingMiBLocked is the guest memory of the VMs that are starting and of
-// the template build VMs.
+// startingMiBLocked is the admission charge of the VMs that are starting and
+// of the template build VMs (see memChargeMiB).
 func (m *Manager) startingMiBLocked() uint64 {
 	var n uint64
 	for _, mib := range m.building {
-		n += uint64(mib)
+		n += memChargeMiB(mib, m.cfg.StartingMemDivisor)
 	}
 	for _, e := range m.vms {
 		if e.vm.State == pb.VMState_VM_STATE_STARTING {
-			n += uint64(e.vm.MemMiB)
+			n += memChargeMiB(e.vm.MemMiB, m.cfg.StartingMemDivisor)
 		}
 	}
 	return n
@@ -1032,8 +1071,8 @@ type NodeInfo struct {
 	VMCount         int
 	Templates       []*template.Template
 	Versions        Versions
-	// MemReserveMiB is the memory reserve; MemStartingMiB is the guest
-	// memory of the starting VMs (see admitMemoryLocked).
+	// MemReserveMiB is the memory reserve; MemStartingMiB is the admission
+	// charge of the starting VMs (see admitMemoryLocked).
 	MemReserveMiB  uint64
 	MemStartingMiB uint64
 	Drain          DrainStatus

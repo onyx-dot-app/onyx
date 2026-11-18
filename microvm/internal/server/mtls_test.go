@@ -105,8 +105,10 @@ func (g guestLauncher) Launch(context.Context, agent.LaunchSpec) (agent.Process,
 
 type bigStats struct{}
 
-func (bigStats) MemInfo() (uint64, uint64, error) { return 64 << 10, 32 << 10, nil }
-func (bigStats) DiskFreeBytes() (uint64, error)   { return 1 << 40, nil }
+func (bigStats) MemInfo() (uint64, uint64, error)    { return 64 << 10, 32 << 10, nil }
+func (bigStats) DiskFreeBytes() (uint64, error)      { return 1 << 40, nil }
+func (bigStats) SliceRoomMiB() (uint64, bool, error) { return 0, false, nil }
+func (bigStats) SliceOOMKills() (uint64, error)      { return 0, nil }
 
 // mtlsAgent serves a Manager with one running VM over mTLS on 127.0.0.1.
 func mtlsAgent(t *testing.T, ports ...uint32) (addr string, certs *testcerts.Set) {
