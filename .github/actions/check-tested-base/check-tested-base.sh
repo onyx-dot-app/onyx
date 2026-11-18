@@ -103,8 +103,10 @@ WAIT_FAILURE=""
 wait_for_entries() {
   local pairs="$1" entries line pending pair pr sha attempt
   for attempt in $(seq 1 80); do
+    # A failed read is not a removal: retry it, so one GitHub error does not
+    # eject the whole stack.
     # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
-    entries="$(gh api graphql \
+    if ! entries="$(gh api graphql \
       -f query='query($owner: String!, $name: String!, $branch: String!) {
         repository(owner: $owner, name: $name) {
           mergeQueue(branch: $branch) {
@@ -113,7 +115,11 @@ wait_for_entries() {
         }
       }' \
       -f owner="${REPO%%/*}" -f name="${REPO#*/}" -f branch="${TARGET}" \
-      --jq '.data.repository.mergeQueue.entries.nodes[] | "\(.pullRequest.number) \(.state) \(.pullRequest.headRefOid)"')"
+      --jq '.data.repository.mergeQueue.entries.nodes[] | "\(.pullRequest.number) \(.state) \(.pullRequest.headRefOid)"')"; then
+      echo "Could not read the merge queue (${attempt}/80). Trying again."
+      sleep 20
+      continue
+    fi
     pending=""
     for pair in ${pairs}; do
       pr="${pair%%:*}"
