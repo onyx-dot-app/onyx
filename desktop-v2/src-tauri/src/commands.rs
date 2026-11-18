@@ -5,7 +5,7 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 
-use crate::api::{normalize_server_url, SearchHit};
+use crate::api::{normalize_server_url, AuthMethods, SearchHit};
 use crate::ask::{self, AskEvent};
 use crate::main_window;
 use crate::shortcut;
@@ -47,6 +47,28 @@ pub fn save_server(url: String, app: AppHandle, state: State<'_, AppState>) -> R
 }
 
 #[tauri::command]
+pub async fn get_auth_methods(state: State<'_, AppState>) -> Result<AuthMethods, String> {
+    let server = state.server()?;
+    state.api.auth_methods(&server).await
+}
+
+/// Returns "browser" when sign-in continues in the system browser, or
+/// "window" when it fell back to the in-app sign-in window.
+#[tauri::command]
+pub async fn sign_in_with_sso(
+    browser: bool,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let server = state.server()?;
+    if browser && crate::sso::start_in_browser(&app, &server).await? {
+        return Ok("browser".into());
+    }
+    crate::sso::open(&app, &server)?;
+    Ok("window".into())
+}
+
+#[tauri::command]
 pub async fn login(
     email: String,
     password: String,
@@ -60,6 +82,8 @@ pub async fn login(
     if !state.commit_sign_in(&server, &token, epoch)? {
         return Err("Sign-in was cancelled.".into());
     }
+    // A pending SSO sign-in (possibly another account) must not replace this one.
+    crate::sso::cancel(&app);
     main_window::open(&app, &server, &token, "/app").await?;
     windows::close(&app, windows::LOGIN);
     Ok(())
@@ -98,6 +122,7 @@ pub fn set_hotkey(
 async fn end_session(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     state.end_epoch();
+    crate::sso::cancel(app);
     let Ok(server) = state.server() else {
         return Ok(());
     };

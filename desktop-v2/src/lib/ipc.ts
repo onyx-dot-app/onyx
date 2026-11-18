@@ -41,7 +41,24 @@ export const checkServer = (url: string): Promise<ServerInfo> =>
 export const saveServer = (url: string): Promise<void> =>
   invoke("save_server", { url });
 
+export interface SsoOption {
+  label: string;
+  // The built-in Google sign-in in the system browser; otherwise the server's
+  // login page in an app window.
+  browser: boolean;
+}
 
+export interface AuthMethods {
+  password: boolean;
+  sso: SsoOption[];
+  browserSso: boolean;
+}
+
+export const getAuthMethods = (): Promise<AuthMethods> => invoke("get_auth_methods");
+
+/** "browser": continue in the system browser; "window": the in-app fallback opened. */
+export const signInWithSso = (browser: boolean): Promise<"browser" | "window"> =>
+  invoke("sign_in_with_sso", { browser });
 
 export const login = (email: string, password: string): Promise<void> =>
   invoke("login", { email, password });

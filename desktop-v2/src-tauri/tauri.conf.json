@@ -36,5 +36,14 @@
     "macOS": {
       "minimumSystemVersion": "13.0"
     }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "onyx"
+        ]
+      }
+    }
   }
 }
