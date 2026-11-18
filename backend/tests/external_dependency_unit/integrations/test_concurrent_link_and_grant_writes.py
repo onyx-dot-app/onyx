@@ -12,11 +12,18 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.db.integration import list_integration_actions
-from onyx.db.models import Integration, User
+from onyx.db.integration_policy import list_persona_plugin_links
+from onyx.db.models import Integration, Persona, User
+from onyx.db.persona import upsert_persona
+from onyx.integrations.models import ActionSettings, LinkValue, PersonaPluginLink
 from onyx.integrations.service import member_actions, set_action_grants__no_commit
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.db.agent_sharing_helpers import (
+    create_test_persona,
+)
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
+    hold_in_plugin,
     make_openapi_integration,
 )
 
@@ -100,3 +107,40 @@ def test_concurrent_saves_of_one_user_grant_both_succeed(
     db_session.expire_all()
     actions = member_actions(db_session.get_one(User, user_id), integration, db_session)
     assert [action.user_policy for action in actions] == ["allow"]
+
+
+def test_concurrent_saves_of_one_agent_plugin_link_both_succeed(
+    db_session: Session, integration: Integration, make_test_user: MakeTestUser
+) -> None:
+    owner = make_test_user("link_race")
+    persona_id = create_test_persona(db_session, owner).id
+    plugin_id = hold_in_plugin(db_session, [integration]).id
+    link = PersonaPluginLink(
+        plugin_id=plugin_id, action_settings=ActionSettings(default=LinkValue.ASK)
+    )
+
+    def save(session: Session) -> None:
+        persona = session.get_one(Persona, persona_id)
+        # The same values as the stored agent, so only the link is written.
+        upsert_persona(
+            user=None,
+            name=persona.name,
+            description=persona.description,
+            starter_messages=None,
+            system_prompt=None,
+            task_prompt=None,
+            datetime_aware=None,
+            is_public=None,
+            db_session=session,
+            plugin_links=[link],
+            persona_id=persona_id,
+            commit=False,
+        )
+
+    _run_second_while_first_is_open(db_session, save, save)
+
+    db_session.expire_all()
+    links = list_persona_plugin_links(db_session, persona_id)
+    assert [(row.plugin_id, row.action_settings) for row in links] == [
+        (plugin_id, {"default": "ask"})
+    ]

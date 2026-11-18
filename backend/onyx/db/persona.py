@@ -41,6 +41,7 @@ from onyx.db.models import (
     Persona__User,
     Persona__UserGroup,
     PersonaLabel,
+    Plugin,
     StarterMessage,
     Tool,
     User,
@@ -1622,6 +1623,16 @@ def upsert_persona(
             include_deleted=recycling_deleted,
         )
 
+    if existing_persona is not None and (
+        plugin_links is not None or tool_ids is not None
+    ):
+        # Serializes the writes of persona__plugin rows of one agent.
+        db_session.execute(
+            select(Persona.id)
+            .where(Persona.id == existing_persona.id)
+            .with_for_update(key_share=True)
+        )
+
     # Built-in tools stay on persona__tool. An old custom or MCP tool id adds
     # the plugin of its integration; old rows of those tools stay as they are.
     tools = None
@@ -1948,6 +1959,16 @@ def _write_persona_plugins(
     if added and user is not None:
         visible = set(db_session.scalars(visible_plugin_ids(user.id)).all())
         if not added <= visible:
+            raise ValueError("You do not have access to one or more of the plugins.")
+    if added:
+        # Holds the new plugins until commit, so a concurrent delete waits.
+        locked = db_session.scalars(
+            select(Plugin.id)
+            .where(Plugin.id.in_(added))
+            .order_by(Plugin.id)
+            .with_for_update(read=True, key_share=True)
+        ).all()
+        if len(locked) != len(added):
             raise ValueError("You do not have access to one or more of the plugins.")
     write_persona_plugin_links__no_commit(
         persona_id, links, replace=True, db_session=db_session
