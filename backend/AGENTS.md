@@ -18,11 +18,22 @@ tests. Additive to the root `AGENTS.md`.
 
   A deliberate exception goes on the line as `# noqa: S101 - <reason>`. Do not add a file to
   `[tool.ruff.lint.per-file-ignores]` in `pyproject.toml` for `S101`.
+- Set a finite HTTP timeout. Ruff `S113` checks requests in application code.
+  Use an existing timeout that fits the call. Celery thread pools cannot enforce task time limits.
+- Use timezone-aware datetimes for timestamps. Ruff `DTZ` checks datetime construction and parsing.
+  Use `datetime.now(UTC)` for the current time in UTC.
+- Use Pydantic `BaseModel` for application models. Ruff `TID251` bans `dataclasses.dataclass`.
+  For a deliberate exception, use an inline `# noqa` with the rule code and reason.
 - Declare owned protocol implementations through explicit inheritance.
 
 - Put ALL db operations under the `backend/onyx/db` / `backend/ee/onyx/db` directories. Don't run
   queries outside of those directories. Exception: `backend/onyx/cache/postgres_backend.py` is the
   PostgreSQL implementation of `CacheBackend`, so its queries belong there.
+  `lint/check_db_ops_outside_db.py` enforces this on commit. It fails when a file outside
+  those directories gains a query, a statement or a session write. The existing ones are frozen
+  in `lint/db_ops_outside_db_baseline.txt`, and a count there can only go down. A deliberate
+  exception needs `# db-ops-outside-db: allow <reason>` on its line, or on a comment line above
+  the statement.
 - When creating new FastAPI APIs, do NOT use the `response_model` field. Instead, just type the
   function. `lint/check_no_response_model.py` enforces this on commit. `response_model=None`
   is allowed. `# no-response-model: allow <reason>` on the decorator marks a deliberate exception.
@@ -52,6 +63,39 @@ tests. Additive to the root `AGENTS.md`.
   that recomputes it on every call. If the configuration can be invalid, the loader returns
   `None` and logs instead of raising, so a bad value disables the feature rather than breaking
   imports. Tests patch the module constant.
+
+## Import Boundaries
+
+`lint/check_import_boundaries.py` (pre-commit hook `import-boundaries`) fails a commit that
+adds an import across one of these boundaries. The contracts are in `lint/import_boundaries.toml`.
+
+| Code | Must not import |
+| --- | --- |
+| `shared_configs` | Any other backend package |
+| `model_server` | `ee`, `scripts`, `lint`, `tests`, and `onyx` except the modules that `Dockerfile.model_server` copies |
+| `onyx`, `ee` | `model_server`, `scripts`, `lint` |
+| `ee`, `model_server`, `shared_configs`, `scripts`, `lint`, `alembic` | `tests` |
+| `onyx/server/features/build/sandbox/image` (sandbox daemon) | Any backend package |
+| `onyx/skills/builtin` | Any backend package. `onyx` and `ee` must not import it |
+| `onyx`, `ee` | The entry points `onyx.main`, `ee.onyx.main`, `onyx.mcp_server_main`, `onyx.webhook_server_main` |
+| `onyx`, `ee` | `onyx.mcp_server` and `onyx.webhook_server`, except from their entry points |
+| `onyx`, `ee`, `scripts`, `model_server` | `onyx.db._deprecated`. Only `alembic` migrations use it |
+| `onyx` | `ee`. Use `fetch_versioned_implementation` or `fetch_ee_implementation_or_noop` |
+| `onyx` | `tests` |
+| The `onyx` modules that `Dockerfile.model_server` copies | Any `onyx` module that the image does not copy |
+| `alembic` migrations | `ee` |
+| `onyx/configs` | Any `onyx` package except `configs` and `utils` |
+| `onyx`, `ee` outside `server` and `background` | `onyx.background`, except the Celery client app |
+| A connector in `onyx/connectors` | Another connector. Shared code goes in `cross_connector_utils`, `google_utils` or `microsoft_utils` |
+| A source in `ee/onyx/external_permissions` | Another source. Shared code goes in `microsoft_utils` |
+| A task package in `onyx/background/celery/tasks` | Another task package. Shared code goes in `shared` |
+
+- Every `import` statement counts: module level, inside a function, and under `TYPE_CHECKING`.
+- The failure message gives the contract and where the code goes. Move the code. Do not move the
+  import into a function to hide it.
+- A deliberate import needs a `[[contract.exception]]` entry with a reason.
+- Run all contracts with `python3 backend/lint/check_import_boundaries.py`.
+- A tree without Enterprise code, such as the FOSS mirror, skips the paths under `ee/`.
 
 ## Background Workers (Celery)
 
@@ -111,6 +155,9 @@ to ask the user to restart the celery worker. There is no auto-restart on code-c
 
 Run all `alembic` commands from `backend/` (where `alembic.ini` lives) through `uv run`.
 
+CI runs the pytest-alembic built-ins for both migration chains against fresh Postgres databases.
+To run them locally from `backend/`, use `uv run pytest -m alembic tests/integration/tests/migrations/`.
+
 ### Running Migrations
 
 ```bash
@@ -147,11 +194,33 @@ A deploy runs every pending revision in one transaction (`alembic/env.py`).
   `tests/integration/tests/migrations/test_no_deferrable_constraints.py` enforces this.
 - Add a CHECK constraint only when a race or another writer can break the rule that application
   code keeps. Name that case in a comment.
-- A new CHECK or FK on a large table scans every row under a lock that blocks the table. Add it
+- A new CHECK or FK on an existing table scans every row under a lock that blocks the table. Add it
   with `postgresql_not_valid=True`. Commit, then validate it, as `9d8f310ac672` does. A later
   revision is not enough, because it runs in the same transaction and keeps the lock.
 - Test a backfill with seeded rows and a single upgrade to `head`, as
   `tests/integration/tests/migrations/test_plugin_backfill_single_run_upgrade.py` does.
+
+The `migration-design` pre-commit hook checks both revision chains in
+`lint/check_migration_design.py`. It checks one head per chain and exempts DDL
+at and before `ff11c4042c42` in `alembic/versions` and `af8d808d89dd` in
+`alembic_tenants/versions`.
+
+- `not-valid` requires `postgresql_not_valid=True` on direct CHECK and FK
+  operations on existing tables. Add the column first, then add its foreign key
+  in a separate operation. Review the commit and validation sequence.
+- `deferrable` prohibits literal `deferrable=True` and `initially="DEFERRED"`
+  on constraint declarations in upgrades and their helpers.
+- `not-null` requires a server default for a direct NOT NULL column addition
+  on an existing table. You can add a nullable column, backfill it, then set NOT NULL.
+- `blocking-index` flags direct `op.create_index` calls on existing tables.
+  Commit first and use a separate AUTOCOMMIT connection, as in `9d8f310ac672`.
+  The concurrent option alone leaves the call inside the migration transaction.
+- `single-head` requires one head in each revision directory.
+
+For the table exemptions, create the literal table in the same function before
+the operation. The check reads Python call shapes. Review raw SQL and dynamic DDL.
+For a deliberate DDL exception, add `# migration-design: allow <rule> - <reason>`
+on a line of the call. Repair revision graph errors in the revision metadata.
 
 ## Testing Strategy
 
@@ -304,3 +373,6 @@ Rules:
 1. Add a new `LLMFlow` enum value before instrumenting a new operation. Don't pass raw strings.
 2. Flow tags name the **operation** (e.g. `IMAGE_EDIT`, `RERANK`) — not the provider. Provider lives in `model_config["model_provider"]`.
 3. Shared calls without a flow emit `LLMFlow.UNTAGGED_INVOKE` or `UNTAGGED_STREAM`. These sentinels indicate missing instrumentation. Fix the call site.
+
+Pre-commit runs `check_import_boundaries.py` to restrict provider SDK imports to adapters and recorded exceptions.
+The check covers import statements. Review HTTP calls and calls through shared clients for flow tags.

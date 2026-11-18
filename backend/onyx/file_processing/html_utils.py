@@ -1,10 +1,10 @@
 import re
 from copy import copy
-from dataclasses import dataclass
 from io import BytesIO
 from typing import IO
 
 import bs4
+from pydantic import BaseModel, ConfigDict
 
 from onyx.configs.app_configs import (
     HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY,
@@ -12,7 +12,7 @@ from onyx.configs.app_configs import (
     WEB_CONNECTOR_IGNORED_CLASSES,
     WEB_CONNECTOR_IGNORED_ELEMENTS,
 )
-from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
+from onyx.configs.constants import HtmlBasedConnectorTransformLinksStrategy
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -23,8 +23,9 @@ _HREF_ATTRIBUTE = "href"
 _TABLE_ELEMENT = "table"
 
 
-@dataclass
-class ParsedHTML:
+class ParsedHTML(BaseModel):
+    model_config = ConfigDict(strict=True)
+
     title: str | None
     cleaned_text: str
 

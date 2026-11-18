@@ -30,6 +30,7 @@ from onyx.chat.models import (
     ResponseStatus,
     SavedResponse,
     SavedToolApproval,
+    SavedToolQuestion,
     ToolRecordReference,
     ToolReplayData,
     accepted_input_messages,
@@ -71,9 +72,11 @@ from onyx.db.models import (
     ChatResponseCheckpoint,
     ChatResponseItem,
     ChatSession,
+    QuestionRequest,
     StoredToolResult,
     ToolCall,
 )
+from onyx.db.question_request import get_response_question_requests
 from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.staging import delete_files_best_effort
@@ -1395,6 +1398,15 @@ def read_response_replay_data(
         for run_id in run_ids:
             for request in chat_approvals.requests.get(int(run_id), []):
                 approvals.setdefault((run_id, request.tool_call_id), []).append(request)
+    # Only the root run asks questions.
+    questions = (
+        {
+            (execution.response.run_id, question.tool_call_id): question
+            for question in chat_approvals.questions.get(root.id, [])
+        }
+        if accepted and (status.is_terminal or status == RunStatus.SUSPENDED)
+        else {}
+    )
     # Background agents wait independently of this response's status; the
     # runs whose records the response shows are left out.
     agent_approvals: dict[tuple[str, str], list[AgentToolApproval]] = {}
@@ -1418,6 +1430,7 @@ def read_response_replay_data(
         documents=documents,
         approvals=approvals,
         agent_approvals=agent_approvals,
+        questions=questions,
     )
 
 
@@ -1425,13 +1438,25 @@ def load_chat_approvals(
     db_session: Session, chat_session_id: UUID, response_ids: Collection[int]
 ) -> ChatApprovals:
     """The approval requests of `response_ids` and of the runs that they
-    started, directly or through the runs they started, for the replays of
-    those responses. Requests always belong to the root chat session; a chat
-    without requests reads nothing else."""
+    started, directly or through the runs they started, and the questions of
+    `response_ids`, for the replays of those responses. Requests and
+    questions always belong to the root chat session; a chat without them
+    reads nothing else."""
     approvals = ChatApprovals()
-    if not response_ids or not db_session.scalar(
-        select(exists().where(ApprovalRequest.chat_session_id == chat_session_id))
-    ):
+    if not response_ids:
+        return approvals
+    has_approvals, has_questions = db_session.execute(
+        select(
+            exists().where(ApprovalRequest.chat_session_id == chat_session_id),
+            exists().where(QuestionRequest.chat_session_id == chat_session_id),
+        )
+    ).one()
+    if has_questions:
+        for question in get_response_question_requests(db_session, response_ids):
+            approvals.questions.setdefault(question.chat_message_id, []).append(
+                SavedToolQuestion.model_validate(question)
+            )
+    if not has_approvals:
         return approvals
     question = aliased(ChatMessage)
     started = (
@@ -1485,18 +1510,37 @@ def load_chat_approvals(
 
 
 def waiting_approval_reply_ids(db_session: Session, chat_session_id: UUID) -> set[int]:
-    """The chat's responses that have a request waiting for a decision, or
-    that started a run, directly or through the runs it started, that has
-    one; a chat without waiting requests reads nothing else."""
-    if not db_session.scalar(
+    """The chat's responses that have an approval request or a question
+    waiting for the user, or that started a run, directly or through the runs
+    it started, that has a request waiting; a chat without waiting requests
+    reads nothing else."""
+    approvals_wait, questions_wait = db_session.execute(
         select(
             exists().where(
                 ApprovalRequest.chat_session_id == chat_session_id,
                 ApprovalRequest.decision.is_(None),
+            ),
+            exists().where(
+                QuestionRequest.chat_session_id == chat_session_id,
+                QuestionRequest.outcome.is_(None),
+            ),
+        )
+    ).one()
+    # Only root responses ask, so a waiting question's response is a reply.
+    asking = (
+        set(
+            db_session.scalars(
+                select(QuestionRequest.chat_message_id).where(
+                    QuestionRequest.chat_session_id == chat_session_id,
+                    QuestionRequest.outcome.is_(None),
+                )
             )
         )
-    ):
-        return set()
+        if questions_wait
+        else set()
+    )
+    if not approvals_wait:
+        return asking
     approvals = load_chat_approvals(
         db_session,
         chat_session_id,
@@ -1512,8 +1556,12 @@ def waiting_approval_reply_ids(db_session: Session, chat_session_id: UUID) -> se
         for response_id, requests in approvals.requests.items()
         if any(request.decision is None for request in requests)
     }
-    return waiting | {
-        root_id
-        for root_id, runs in approvals.started_runs.items()
-        if any(run_id in waiting for run_id, _ in runs)
-    }
+    return (
+        asking
+        | waiting
+        | {
+            root_id
+            for root_id, runs in approvals.started_runs.items()
+            if any(run_id in waiting for run_id, _ in runs)
+        }
+    )

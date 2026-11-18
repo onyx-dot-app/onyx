@@ -1,6 +1,7 @@
 """Translate shared messages and tool results into chat browser packets."""
 
 from collections.abc import Mapping
+from typing import Literal
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 from typing_extensions import override
@@ -29,6 +30,7 @@ from onyx.coding_agent.tool_definitions import (
 )
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.db.enums import QuestionAnsweredVia, QuestionOutcome
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_NAME,
@@ -55,6 +57,7 @@ from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import (
     CODE_MODE_TOOL_NAME,
+    QUESTION_TOOL_NAMES,
     WAIT_CODE_TOOL_NAME,
 )
 from onyx.tools.interface import parse_tool_arguments
@@ -88,6 +91,10 @@ from onyx.tools.tool_implementations.images.models import FinalImageGenerationRe
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.question.models import (
+    QuestionArguments,
+    QuestionToolDetails,
+)
 from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchResult,
     SandboxExecResult,
@@ -509,6 +516,35 @@ def approval_outcome(answer: HumanToolAnswer | None) -> packets.ToolApprovalOutc
         return "approved"
     denial = answer.result.metadata if answer.result else None
     return denial.outcome if isinstance(denial, ToolApprovalDenial) else "rejected"
+
+
+_ANSWERED_VIA: dict[QuestionAnsweredVia, Literal["card", "message"]] = {
+    QuestionAnsweredVia.CARD: "card",
+    QuestionAnsweredVia.MESSAGE: "message",
+}
+
+
+def question_resolved(
+    request_id: str, answer: HumanToolAnswer | None
+) -> packets.ToolQuestionResolved:
+    """How a question ended, from the result its answer gave the call; a
+    question without an answer stopped waiting."""
+    details = answer.result.details if answer and answer.result else None
+    if (
+        not isinstance(details, QuestionToolDetails)
+        or details.outcome != QuestionOutcome.ANSWERED
+        or details.answered_via is None
+    ):
+        return packets.ToolQuestionResolved(
+            question_request_id=request_id, outcome="cancelled"
+        )
+    return packets.ToolQuestionResolved(
+        question_request_id=request_id,
+        outcome="answered",
+        answered_via=_ANSWERED_VIA[details.answered_via],
+        answers=details.answers,
+        message=details.message,
+    )
 
 
 class ToolRenderer:
@@ -997,6 +1033,54 @@ class ToolRenderer:
         return []
 
 
+class QuestionToolRenderer(ToolRenderer):
+    """A question call shows only its card: its questions, then how they
+    ended."""
+
+    @override
+    def consume(
+        self,
+        event: ToolStartEvent
+        | ToolUpdateEvent
+        | ToolEndEvent
+        | InputRequiredEvent
+        | InputEndedEvent,
+    ) -> list[packets.Packet]:
+        obj: packets.ToolQuestionRequest | packets.ToolQuestionResolved
+        if isinstance(event, InputRequiredEvent):
+            # The tool opened the request after it validated the arguments.
+            obj = packets.ToolQuestionRequest(
+                question_request_id=event.request.request_id,
+                tool_call_id=self.call.id,
+                questions=parse_tool_arguments(
+                    QuestionArguments, tool_arguments_for_display(self.call)
+                ).questions,
+            )
+        elif isinstance(event, InputEndedEvent):
+            obj = question_resolved(event.request.request_id, event.answer)
+        else:
+            return super().consume(event)
+        return [packets.Packet(placement=self.placement, obj=obj)]
+
+    @override
+    def start(self) -> list[packets.Packet]:
+        self._started = True
+        return []
+
+    @override
+    def update(
+        self, details: BaseModel | None, content: str = ""
+    ) -> list[packets.Packet]:
+        return []
+
+    @override
+    def complete(self, result: ToolResult | None) -> list[packets.Packet]:
+        if self._finished:
+            return []
+        self._finished = True
+        return [packets.Packet(placement=self.placement, obj=packets.SectionEnd())]
+
+
 def _stored_keys(window: CellWindow) -> list[str] | None:
     commit = window.commit
     if commit is None:
@@ -1197,6 +1281,13 @@ def tool_renderer(
     tool_id: int | None = None,
     display_name: str | None = None,
 ) -> ToolRenderer:
-    """The renderer of a tool call: a code mode card, or the generic tool display."""
-    renderer = CodeModeRenderer if call.name in CODE_MODE_TOOL_NAMES else ToolRenderer
+    """The renderer of a tool call: a code mode card, a question card, or the
+    generic tool display."""
+    renderer = (
+        CodeModeRenderer
+        if call.name in CODE_MODE_TOOL_NAMES
+        else QuestionToolRenderer
+        if call.name in QUESTION_TOOL_NAMES
+        else ToolRenderer
+    )
     return renderer(call, placement, tool_id, display_name)

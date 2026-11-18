@@ -106,6 +106,7 @@ from onyx.db.connector_credential_pair import (
     verify_user_can_edit_connector,
     verify_user_can_manage_all_cc_pairs,
 )
+from onyx.db.connector_edit_requests import request_prune__no_commit
 from onyx.db.connector_event_inbox import get_active_event_cc_pairs
 from onyx.db.credentials import (
     create_credential,
@@ -895,6 +896,10 @@ def update_connector_files(
         indexing_start=connector.indexing_start,
     )
 
+    if file_ids_list:
+        # Commits with the file list, so a failed task send below keeps the
+        # request for the pruning beat.
+        request_prune__no_commit(db_session, cc_pair.id)
     updated_connector = update_connector(connector_id, connector_base, db_session)
     if updated_connector is None:
         raise OnyxError(

@@ -114,6 +114,7 @@ from onyx.hooks.points.query_processing import (
     QueryProcessingPayload,
     QueryProcessingResponse,
 )
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.factory import (
     get_llm_for_persona,
     get_llm_token_counter,
@@ -135,12 +136,14 @@ from onyx.server.query_and_chat.models import (
     response_id_info,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    AWAITING_APPROVAL,
+    AWAITING_USER,
     OverallStop,
     Packet,
     StreamingError,
     ToolApprovalRequest,
     ToolApprovalResolved,
+    ToolQuestionRequest,
+    ToolQuestionResolved,
 )
 from onyx.server.query_and_chat.token_limit import (
     check_model_spend_limits,
@@ -153,7 +156,7 @@ from onyx.tools.constants import (
     FILE_READER_TOOL_ID,
     SEARCH_TOOL_ID,
 )
-from onyx.tools.models import SearchToolUsage
+from onyx.tools.models import CapabilityEntry, SearchToolUsage
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     sandbox_tools_for_model,
 )
@@ -167,6 +170,11 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
+# A send while the selected response waits for the user's approval decisions
+# or answers.
+USER_INPUT_PENDING = (
+    "Answer the pending requests or questions before you send a message"
+)
 # Delays before each retry of a resume whose start failed for a moment.
 RESUME_RETRY_DELAYS_S = (1.0, 2.0, 4.0, 8.0, 16.0)
 
@@ -289,7 +297,7 @@ def prepare_chat_turn(
     additional_context: str | None = None,
     queued_turn: QueuedChatTurn | None = None,
     agent_host: bool = False,
-    ask_for_approval: bool = True,
+    approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
     resumed_response_id: int | None = None,
     parked_agent_response_id: int | None = None,
     handed_admission: ChatTurnAdmission | None = None,
@@ -346,21 +354,21 @@ def prepare_chat_turn(
                 if resumed_response_id is not None
                 else parked_agent_response_id
             )
-            parked_model, parked_selection = (
+            parked_model, parked_options = (
                 parked_response_settings(db_session, parked_response_id)
                 if parked_response_id is not None
                 else (None, None)
             )
-            # Other turns that the server starts use the chat's current tools
-            # and filters.
-            saved_selection = parked_selection or chat_session.tool_selection
-            if server_started and saved_selection is not None:
-                new_msg_req = SendMessageRequest.model_validate(
-                    new_msg_req.model_dump() | saved_selection.model_dump()
+            # Other turns that the server starts use the chat's saved tool
+            # options.
+            saved_options = parked_options or chat_session.tool_options
+            if server_started and saved_options is not None:
+                new_msg_req = new_msg_req.model_copy(
+                    update={"tool_options": saved_options}
                 )
-            if parked_selection is not None:
+            if parked_options is not None:
                 # Document-set access can end while a run is parked.
-                filters = parked_selection.internal_search_filters
+                filters = parked_options.internal_search_filters
                 require_document_set_access(
                     db_session, filters.document_set if filters else None, user
                 )
@@ -408,10 +416,7 @@ def prepare_chat_turn(
             ):
                 # The route checked before the response parked and released
                 # admission; a send does not attach under a parked response.
-                raise OnyxError(
-                    OnyxErrorCode.APPROVAL_PENDING,
-                    "Approve or reject the pending requests before you send a message",
-                )
+                raise OnyxError(OnyxErrorCode.APPROVAL_PENDING, USER_INPUT_PENDING)
             stream_id: int | None = None
             if resumed_response_id is not None:
                 if parent_message.id != resumed_response_id or len(chat_history) < 2:
@@ -526,11 +531,14 @@ def prepare_chat_turn(
                         OnyxErrorCode.BAD_REQUEST,
                         "Deep research requires a model with at least 50,000 input tokens",
                     )
+            preferred_tool = (
+                new_msg_req.tool_options.preferred if new_msg_req.tool_options else None
+            )
             if (
                 chat_session.incognito_record_mode is not None
-                and new_msg_req.preferred_tool_id is not None
+                and isinstance(preferred_tool, CapabilityEntry)
                 and any(
-                    tool.id == new_msg_req.preferred_tool_id
+                    tool.id == preferred_tool.tool_id
                     and tool.in_code_tool_id == CODING_AGENT_TOOL_ID
                     for tool in chat_session.persona.tools
                 )
@@ -551,6 +559,19 @@ def prepare_chat_turn(
                 not in (MessageOrigin.SLACKBOT, MessageOrigin.DISCORDBOT)
                 and chat_session.incognito_record_mode is None
                 and len(selected_models) == 1
+            )
+            # The root agent can ask the user questions where approval
+            # requests can wait: a signed-in user's saved, single-model turn
+            # that is not deep research. Its run parks while it waits. An
+            # agent host runs no root; a resumed root gets the tool when its
+            # saved step declared it (restoration.py:restore_chat_agent).
+            question_tool = (
+                approval_mode == ApprovalMode.INTERACTIVE
+                and not agent_host
+                and not user.is_anonymous
+                and record_mode_persists_content(chat_session.incognito_record_mode)
+                and len(selected_models) == 1
+                and not new_msg_req.deep_research
             )
             # One read serves the catalog's context reservation and the skills
             # that an accepted question picked.
@@ -741,7 +762,6 @@ def prepare_chat_turn(
             if new_msg_req.deep_research and research_tool_id is None:
                 raise ValueError("Research tool configuration is missing")
             tool_names = {tool.id: tool.name for tool in tools}
-            preferred_tool_id = new_msg_req.preferred_tool_id
             summary_message = find_summary_for_branch(db_session, chat_history)
             checkpoint = checkpoint_from_summary(summary_message)
             descriptors = {
@@ -759,7 +779,7 @@ def prepare_chat_turn(
                 datetime_aware=persona.datetime_aware,
                 replace_base_system_prompt=persona.replace_base_system_prompt,
             )
-            tool_configuration = capture_persona_tool_configuration(persona)
+            tool_configuration = capture_persona_tool_configuration(persona, db_session)
             previous_run_id = (
                 next(
                     (
@@ -859,18 +879,19 @@ def prepare_chat_turn(
         # Inline project context replaces retrieval for this request.
         if (
             search_params.search_usage == SearchToolUsage.DISABLED
+            and isinstance(preferred_tool, CapabilityEntry)
             and (
-                new_msg_req.allowed_tool_ids is None
-                or preferred_tool_id in new_msg_req.allowed_tool_ids
+                new_msg_req.tool_options is None
+                or new_msg_req.tool_options.allows_tool(preferred_tool.tool_id)
             )
             and any(
-                tool.id == preferred_tool_id
+                tool.id == preferred_tool.tool_id
                 and tool.in_code_tool_id == SEARCH_TOOL_ID
                 and tool.enabled
                 for tool in tool_configuration.tools
             )
         ):
-            preferred_tool_id = None
+            preferred_tool = None
         # Temporary history is saved after the work that can reject the turn.
         if history_store is not None:
             admission.refresh()
@@ -904,6 +925,7 @@ def prepare_chat_turn(
             base_system_prompt=base_system_prompt,
             tool_configuration=tool_configuration,
             sandbox_tools=sandbox_tools,
+            question_tool=question_tool,
             research_tool_id=research_tool_id,
             checkpoint=checkpoint,
             user_message_id=user_message_id,
@@ -929,8 +951,8 @@ def prepare_chat_turn(
             search_params=search_params,
             all_injected_file_metadata=history.all_injected_file_metadata,
             available_files=available_files,
-            preferred_tool_id=preferred_tool_id,
-            preferred_tool_saved=server_started and saved_selection is not None,
+            preferred_tool=preferred_tool,
+            preferred_tool_saved=server_started and saved_options is not None,
             chat_files_for_tools=chat_files_for_tools,
             custom_agent_prompt=custom_prompt,
             user_memory_context=memory,
@@ -942,7 +964,7 @@ def prepare_chat_turn(
             litellm_additional_headers=litellm_additional_headers,
             custom_tool_additional_headers=custom_tool_additional_headers,
             mcp_headers=mcp_headers,
-            ask_for_approval=ask_for_approval,
+            approval_mode=approval_mode,
             resumed_response_id=resumed_response_id,
         )
     except BaseException:
@@ -1206,11 +1228,11 @@ def dispatch_pending_chat_messages(
                             if (
                                 run.model_configuration_id,
                                 run.temperature,
-                                run.tool_selection,
+                                run.tool_options,
                             ) == (
                                 hosted_agents[0].model_configuration_id,
                                 hosted_agents[0].temperature,
-                                hosted_agents[0].tool_selection,
+                                hosted_agents[0].tool_options,
                             ):
                                 fail_suspended_response(
                                     cache, get_current_tenant_id(), run.response_id
@@ -1311,7 +1333,7 @@ def _stream_chat_turn(
     slack_context: SlackContext | None = None,
     response_future: Future[ChatResponseOutcome] | None = None,
     query_observation: QueryObservation | None = None,
-    ask_for_approval: bool = True,
+    approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
 ) -> AnswerStream:
     """Prepare one request, then read its independently owned agent stream.
 
@@ -1333,7 +1355,7 @@ def _stream_chat_turn(
             mcp_headers=mcp_headers,
             slack_context=slack_context,
             additional_context=additional_context,
-            ask_for_approval=ask_for_approval,
+            approval_mode=approval_mode,
             on_reserved=saved_turn_packets.append,
         )
         stream = start_chat_turn(
@@ -1389,7 +1411,7 @@ def handle_stream_message_objects(
     slack_context: SlackContext | None = None,
     response_future: Future[ChatResponseOutcome] | None = None,
     query_observation: QueryObservation | None = None,
-    ask_for_approval: bool = True,
+    approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
 ) -> AnswerStream:
     """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``.
 
@@ -1408,7 +1430,7 @@ def handle_stream_message_objects(
         slack_context=slack_context,
         response_future=response_future,
         query_observation=query_observation,
-        ask_for_approval=ask_for_approval,
+        approval_mode=approval_mode,
     )
 
 
@@ -1422,7 +1444,7 @@ def handle_multi_model_stream(
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
     query_observation: QueryObservation | None = None,
-    ask_for_approval: bool = True,
+    approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
 ) -> AnswerStream:
     """Stream independent responses from two or three selected models."""
     n_models = len(llm_overrides)
@@ -1448,7 +1470,7 @@ def handle_multi_model_stream(
         litellm_additional_headers=litellm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
-        ask_for_approval=ask_for_approval,
+        approval_mode=approval_mode,
     )
 
 
@@ -1501,16 +1523,18 @@ def gather_stream_full(
 ) -> ChatFullResponse:
     """Read delivery metadata and project accepted execution content.
 
-    A response that stops because tool calls wait for the user's approval
-    returns the requests that still wait in `pending_tool_approvals`.
+    A response that stops because tool calls wait for the user returns the
+    approval requests that still wait in `pending_tool_approvals`, and the
+    questions in `pending_tool_questions`.
     """
     error: StreamingError | None = None
     message_id: int | None = None
     chat_session_id: UUID | None = None
     incognito = False
-    # Requests read from the stream, by approval ID; resolved ones are removed.
+    # Requests read from the stream, by ID; resolved ones are removed.
     waiting: dict[str, ToolApprovalRequest] = {}
-    awaiting_approval = False
+    asking: dict[str, ToolQuestionRequest] = {}
+    awaiting_user = False
 
     for packet in packets:
         if isinstance(packet, StreamingError):
@@ -1525,8 +1549,12 @@ def gather_stream_full(
                 waiting[packet.obj.approval_id] = packet.obj
             elif isinstance(packet.obj, ToolApprovalResolved):
                 waiting.pop(packet.obj.approval_id, None)
+            elif isinstance(packet.obj, ToolQuestionRequest):
+                asking[packet.obj.question_request_id] = packet.obj
+            elif isinstance(packet.obj, ToolQuestionResolved):
+                asking.pop(packet.obj.question_request_id, None)
             elif isinstance(packet.obj, OverallStop):
-                awaiting_approval = packet.obj.stop_reason == AWAITING_APPROVAL
+                awaiting_user = packet.obj.stop_reason == AWAITING_USER
 
     if message_id is None:
         if error is not None:
@@ -1564,7 +1592,8 @@ def gather_stream_full(
         chat_session_id=chat_session_id,
         incognito=incognito,
         error_msg=outcome.error or (error.error if error else None),
-        pending_tool_approvals=list(waiting.values()) if awaiting_approval else [],
+        pending_tool_approvals=list(waiting.values()) if awaiting_user else [],
+        pending_tool_questions=list(asking.values()) if awaiting_user else [],
     )
 
 
@@ -1576,10 +1605,10 @@ def run_chat_turn(
     mcp_headers: dict[str, str] | None = None,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
-    ask_for_approval: bool = True,
+    approval_mode: ApprovalMode = ApprovalMode.INTERACTIVE,
 ) -> ChatFullResponse:
     """Run one chat turn for in-process, non-streaming callers, to completion
-    or until tool calls wait for the user's approval.
+    or until tool calls wait for the user.
 
     These callers read one response, so the turn offers no agent tools.
     """
@@ -1593,6 +1622,6 @@ def run_chat_turn(
         additional_context=additional_context,
         slack_context=slack_context,
         response_future=response_future,
-        ask_for_approval=ask_for_approval,
+        approval_mode=approval_mode,
     )
     return gather_stream_full(packets, response_future)

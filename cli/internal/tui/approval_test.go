@@ -19,6 +19,7 @@ import (
 type decidingClient struct {
 	api.ClientAPI
 	decisions []models.ApprovalDecision
+	answers   []models.QuestionAnswers
 	// The decision the server saves; by default, the one sent.
 	result *models.ApprovalDecisionResult
 	// The continuation that the default result names.
@@ -73,7 +74,7 @@ func press(t *testing.T, m Model, key tea.KeyPressMsg) (Model, tea.Cmd) {
 func approvalEntry(t *testing.T, m Model, id string) string {
 	t.Helper()
 	for _, e := range m.viewport.entries {
-		if e.kind == entryApproval && e.approvalID == id {
+		if e.kind == entryCard && e.cardID == id {
 			return stripANSI(e.rendered)
 		}
 	}
@@ -328,7 +329,7 @@ func TestEscAfterTheStopForDecisionsDoesNothing(t *testing.T) {
 	m.chatSessionID = &session
 	m = receive(t, m, ch, models.MessageIDEvent{ReservedAgentMessageID: 2})
 	m = receive(t, m, ch, approvalRequest("a1"))
-	reason := models.StopReasonAwaitingApproval
+	reason := models.StopReasonAwaitingUser
 	m = receive(t, m, ch, models.StopEvent{StopReason: &reason})
 	// The stream has not closed yet.
 	for _, key := range []tea.KeyPressMsg{{Code: tea.KeyEscape}, {Code: 'c', Mod: tea.ModCtrl}} {
@@ -351,7 +352,7 @@ func TestApprovalCardStripsHostileContent(t *testing.T) {
 	m = receive(t, m, ch, request)
 	var rendered string
 	for _, e := range m.viewport.entries {
-		if e.kind == entryApproval {
+		if e.kind == entryCard {
 			rendered = e.rendered
 		}
 	}
@@ -444,7 +445,7 @@ func waitingSession(t *testing.T) *models.ChatSessionDetailResponse {
 		Packets: [][]json.RawMessage{{
 			packet(map[string]any{"type": "message_delta", "content": "Filing the ticket."}),
 			packet(map[string]any{"type": "tool_approval_request", "approval_id": "a1", "tool_name": "mcp__3__linear__create_issue", "display_name": "Create issue", "arguments": map[string]any{"title": "Bug"}}),
-			packet(map[string]any{"type": "stop", "stop_reason": "awaiting_approval"}),
+			packet(map[string]any{"type": "stop", "stop_reason": "awaiting_user"}),
 		}},
 	}
 }
@@ -497,7 +498,7 @@ func approvalPendingShowsTheWaitingRequest(t *testing.T, rejection models.Stream
 			warning = e.content
 		}
 	}
-	if !strings.Contains(warning, "waits for approval") || strings.Contains(warning, "409") {
+	if !strings.Contains(warning, "waits for an approval or an answer") || strings.Contains(warning, "409") {
 		t.Fatalf("message = %q", warning)
 	}
 
@@ -519,7 +520,7 @@ func approvalPendingShowsTheWaitingRequest(t *testing.T, rejection models.Stream
 			t.Fatalf("the unsent message shows: %q", e.content)
 		}
 		shown += strings.Count(e.content, "Filing the ticket.")
-		if e.kind == entryApproval {
+		if e.kind == entryCard {
 			cards++
 		}
 	}
@@ -543,7 +544,7 @@ func stoppedForDecisions(t *testing.T, client api.ClientAPI) Model {
 	m = receive(t, m, ch, models.MessageDeltaEvent{Content: "Filing the ticket."})
 	m = receive(t, m, ch, approvalRequest("a1"))
 	m = receive(t, m, ch, approvalRequest("a2"))
-	reason := models.StopReasonAwaitingApproval
+	reason := models.StopReasonAwaitingUser
 	m = receive(t, m, ch, models.StopEvent{StopReason: &reason})
 	updated, _ := m.Update(StreamDoneMsg{Channel: ch})
 	updated, _ = updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch})
@@ -563,7 +564,7 @@ func TestDecisionsFollowTheContinuationThatTheServerNames(t *testing.T) {
 	saved.Packets[0] = append(saved.Packets[0][:2],
 		savedPacket(t, map[string]any{"type": "tool_approval_resolved", "approval_id": "a1", "outcome": "approved"}),
 		savedPacket(t, map[string]any{"type": "tool_approval_request", "approval_id": "a2", "tool_name": "mcp__3__linear__create_issue", "display_name": "Create issue"}),
-		savedPacket(t, map[string]any{"type": "stop", "stop_reason": "awaiting_approval"}))
+		savedPacket(t, map[string]any{"type": "stop", "stop_reason": "awaiting_user"}))
 	client.saved = saved
 	m, cmd := press(t, m, tea.KeyPressMsg{Code: 'y', Text: "y"})
 	m, follow := run(t, m, cmd)
@@ -842,7 +843,7 @@ func TestApprovalCardShowsAllArgumentsOnRequest(t *testing.T) {
 	m, _ = press(t, m, tea.KeyPressMsg{Code: 'd', Text: "d"})
 	var full string
 	for _, e := range m.viewport.entries {
-		if e.kind == entryApproval {
+		if e.kind == entryCard {
 			full = e.rendered
 		}
 	}
@@ -1514,7 +1515,7 @@ func TestRootRequestsDecidedElsewhereFollowTheContinuation(t *testing.T) {
 	m = receive(t, m, ch, models.MessageIDEvent{ReservedAgentMessageID: 2})
 	m = receive(t, m, ch, approvalRequest("a1"))
 	m = receive(t, m, ch, approvalRequest("a2"))
-	reason := models.StopReasonAwaitingApproval
+	reason := models.StopReasonAwaitingUser
 	m = receive(t, m, ch, models.StopEvent{StopReason: &reason})
 	updated, _ := m.Update(StreamDoneMsg{Channel: ch})
 	updated, cmd := updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch})

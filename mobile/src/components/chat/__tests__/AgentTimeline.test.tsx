@@ -12,6 +12,7 @@ import {
 import { AgentTimeline } from "@/components/chat/AgentTimeline";
 import { ExpandedTimelineContent } from "@/components/chat/timeline/ExpandedTimelineContent";
 import type { FullChatState } from "@/components/chat/renderers/timelineContract";
+import type { AwaitingUser } from "@/hooks/timeline/useTimelineHeader";
 
 // StreamingMarkdown pulls a native markdown module; render its text so bodies stay assertable.
 jest.mock("@/components/chat/StreamingMarkdown", () => {
@@ -349,17 +350,20 @@ describe("AgentTimeline", () => {
       expect(screen.queryByText("branch one thinking")).toBeNull();
     });
 
-    it("shows the approval wait instead of the branch tabs", () => {
+    it.each<[AwaitingUser, string]>([
+      ["approval", "Waiting for your approval"],
+      ["answer", "Waiting for your answer"],
+    ])("shows the %s wait instead of the branch tabs", (awaiting, header) => {
       const { turnGroups } = turnGroupsFor(parallelPackets);
       render(
         <AgentTimeline
           turnGroups={turnGroups}
           chatState={chatState}
-          awaitingApproval
+          awaitingUser={awaiting}
         />,
       );
 
-      expect(screen.getByText("Waiting for your approval")).toBeTruthy();
+      expect(screen.getByText(header)).toBeTruthy();
       expect(screen.queryByText("Web Search")).toBeNull();
     });
   });

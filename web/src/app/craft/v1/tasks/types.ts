@@ -1,4 +1,10 @@
-import type { TaskAppActionPolicies } from "@/lib/plugins/types";
+import type { ExternalAppType } from "@/app/craft/v1/apps/registry";
+import type {
+  ConnectionState,
+  IntegrationKind,
+  LinkValue,
+  PolicyValue,
+} from "@/lib/integrations/types";
 /**
  * Shared types for the Scheduled Tasks feature.
  *
@@ -82,7 +88,7 @@ export interface ScheduledTaskDetail {
   next_run_at: string | null;
   next_runs: string[];
   last_run: ScheduledRunSummary | null;
-  action_policies: TaskAppActionPolicies[];
+  plugins: TaskPluginLink[];
   created_at: string;
   updated_at: string;
 }
@@ -94,7 +100,7 @@ export interface ScheduledTaskCreateBody {
   editor_payload: EditorPayload;
   status?: ScheduledTaskStatus;
   run_immediately?: boolean;
-  action_policies?: TaskAppActionPolicies[];
+  plugins?: TaskPluginLink[];
 }
 
 export interface ScheduledTaskPatchBody {
@@ -103,7 +109,7 @@ export interface ScheduledTaskPatchBody {
   editor_mode?: EditorMode;
   editor_payload?: EditorPayload;
   status?: ScheduledTaskStatus;
-  action_policies?: TaskAppActionPolicies[];
+  plugins?: TaskPluginLink[];
 }
 
 export interface ScheduledTaskListResponse {
@@ -133,4 +139,45 @@ export interface ScheduledRunContextResponse {
 
 export interface UnviewedTaskCountResponse {
   count: number;
+}
+
+export interface TaskActionSettings {
+  default: LinkValue;
+  actions: Record<string, LinkValue>;
+}
+
+/** A plugin the task uses, with its action settings. */
+export interface TaskPluginLink {
+  plugin_id: string;
+  action_settings: TaskActionSettings;
+}
+
+export interface TaskActionView {
+  key: string;
+  display_name: string;
+  description: string | null;
+  integration_policy: PolicyValue;
+  /** A task Allow keeps the integration policy. */
+  locked: boolean;
+}
+
+export interface TaskIntegrationView {
+  id: number;
+  name: string;
+  kind: IntegrationKind;
+  app_type: ExternalAppType | null;
+  status: {
+    state: ConnectionState;
+    reason: string | null;
+  };
+  actions: TaskActionView[];
+}
+
+/** A plugin a task can use; mirrors ``TaskPluginView`` in the backend. */
+export interface TaskPluginView {
+  plugin_id: string;
+  plugin_name: string;
+  enabled: boolean;
+  action_settings: TaskActionSettings | null;
+  integrations: TaskIntegrationView[];
 }

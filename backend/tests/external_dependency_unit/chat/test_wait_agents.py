@@ -199,7 +199,7 @@ def _start(
 ) -> None:
     """Run the root's first turn; it ends while every worker still runs."""
     # Agent tools come from the chat agent; persona tools play no part here.
-    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: {})
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: [])
     model = ScriptedLLM(workers.generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model

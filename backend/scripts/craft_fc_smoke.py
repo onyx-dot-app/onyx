@@ -41,6 +41,10 @@ from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.enums import AccountType
 from onyx.db.file_record import get_filerecord_by_file_id_optional
+from onyx.db.sandbox import (
+    create_sandbox__no_commit,
+    get_sandbox_by_user_id,
+)
 from onyx.db.users import (
     batch_add_ext_perm_user_if_not_exists,
     delete_user_from_db__no_commit,
@@ -54,10 +58,6 @@ from onyx.microvm.configs import FIRECRACKER_ENABLED, SANDBOX_FC_TEMPLATE
 from onyx.microvm.lifecycle import VmStopOutcome, stop_sandbox_vm
 from onyx.microvm.placement import PLACEMENT_LOCK_WAIT_SECONDS
 from onyx.microvm.registry import get_sandbox_placement
-from onyx.server.features.build.db.sandbox import (
-    create_sandbox__no_commit,
-    get_sandbox_by_user_id,
-)
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     FirecrackerHarnessSandbox,
 )

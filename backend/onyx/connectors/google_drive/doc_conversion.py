@@ -1,11 +1,10 @@
 import io
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import datetime
 from typing import NamedTuple, cast
 from urllib.parse import urlparse, urlunparse
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import (
@@ -26,11 +25,7 @@ from onyx.connectors.google_drive.constants import (
 )
 from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
 from onyx.connectors.google_drive.form_extraction import get_form_text
-from onyx.connectors.google_drive.models import (
-    DriveListingPayload,
-    GDriveMimeType,
-    GoogleDriveFileType,
-)
+from onyx.connectors.google_drive.models import DriveListingPayload, GDriveMimeType
 from onyx.connectors.google_drive.section_extraction import (
     HEADING_DELIMITER,
     get_document_sections,
@@ -41,6 +36,7 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
     is_transient_google_error,
 )
+from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -276,9 +272,10 @@ def onyx_document_id_from_drive_file(file: GoogleDriveFileType) -> str:
     return urlunparse(parsed_url)
 
 
-@dataclass(frozen=True)
-class _DriveFileRead:
+class _DriveFileRead(BaseModel):
     """One read of a Drive file's content as one user."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     file: GoogleDriveFileType
     ops: GoogleDriveSourceOperations

@@ -3,8 +3,8 @@ import math
 import pytest
 
 from onyx.cache import factory
-from onyx.cache.interface import CacheBackendType
 from onyx.cache.postgres_backend import PostgresCacheBackend
+from onyx.configs.constants import CacheBackendType
 
 
 @pytest.mark.parametrize("timeout", [0, -1, math.inf, math.nan])

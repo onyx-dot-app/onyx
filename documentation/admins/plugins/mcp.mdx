@@ -4,11 +4,6 @@ description: "Connect Model Context Protocol servers to Chat, custom agents, and
 icon: "server"
 ---
 
-<Note>
-  In Onyx 5.0, MCP servers moved from their own admin page to **Admin Panel → Plugins**.
-  See [Where things moved](/admins/plugins/overview#where-things-moved-in-onyx-5).
-</Note>
-
 An MCP plugin connects Onyx to a server that uses the [Model Context Protocol](https://modelcontextprotocol.io/).
 Onyx is the MCP client. It discovers the tools on the server, and agents call those tools during a conversation.
 
@@ -23,72 +18,71 @@ or when no built-in [Craft App](/admins/plugins/craft_apps) exists for the appli
 ## Add an MCP server
 
 <Steps>
-  <Step title="Open the MCP catalog">
-    Go to **Admin Panel → Plugins**, click **Add**, then select **MCP**.
+  <Step title="Open the Add dialog">
+    Go to **Admin Panel → Integrations**, click **Add**, then select **MCP server**.
 
-    <img className="rounded-image" src="/assets/admins/plugins/add_mcp_catalog.webp" alt="The MCP catalog with Linear, Notion, Sentry, Atlassian, and Add custom MCP server"/>
-
-    Select a catalog entry to fill in the server name and URL for that vendor.
-    Select **Add custom MCP server** for any other server.
+    <img className="rounded-image" src="/assets/admins/plugins/integrations_add_type.webp" alt="The Add an Integration dialog with MCP server, OpenAPI app, App, and Custom app"/>
   </Step>
 
   <Step title="Enter the server details">
-    Enter a **Server Name** and the **MCP Server URL**. Onyx checks the server and shows the authentication method,
-    connection transport, and client metadata document support that it detects.
+    Enter a **Name** and the **Server URL**. Select a server under **Suggested Servers** to fill in the URL for Linear,
+    Notion, Sentry, or Atlassian. Onyx checks the server and tells you what it found:
+    the number of tools of a public server, OAuth sign-in, or a server that needs a sign-in.
 
-    <img className="rounded-image" src="/assets/admins/plugins/mcp_custom_filled.webp" alt="The Add MCP Server dialog after Onyx detects no authentication and the Streamable HTTP transport"/>
+    <img className="rounded-image" src="/assets/admins/plugins/integrations_add_mcp.webp" alt="The Add an MCP Server dialog after Onyx found 3 tools on a server with no sign-in"/>
 
-    The Onyx API server must be able to reach the URL. Onyx blocks private, loopback,
-    and link-local addresses during setup checks.
+    The Onyx API server must be able to reach the URL.
+    Setup checks follow the [SSRF Protection](/admins/advanced_configs/security_hardening#ssrf-protection) level:
+    by default Onyx blocks private, loopback, and link-local addresses.
+    Cloud metadata addresses stay blocked at every level. **Transport** is **Streamable HTTP** by default.
+    Select **Server-sent events (SSE)** only if the server supports SSE alone.
   </Step>
 
-  <Step title="Set availability">
-    On the same page, set who can use the server and where it is available:
-
-    | Setting | Effect |
-    | --- | --- |
-    | **Access control** | **Organization** lets all users use the server. **User groups** limits it to the groups you select. Group-restricted servers require a **Business** or **Enterprise** plan. A Group Manager must select at least one group they manage. |
-    | **Enable in default Chat** | Makes the tools available in chats without a custom agent. |
-    | **Enable for Craft** | Makes the tools available in Craft sessions and scheduled tasks. This switch shows only when Craft is enabled. |
+  <Step title="Set the sign-in">
+    Select a **Sign-in Mode** and a **Sign-in Method**. See [Sign-in](#sign-in).
   </Step>
 
-  <Step title="Configure authentication">
-    Select an **Authentication Method**. Onyx marks the method it detected as **Recommended**.
-    See [Authentication](#authentication) for each method.
+  <Step title="Select the owner">
+    If you can manage actions for the whole organization, select **For the organization** or **For me** under **Owner**.
+    Onyx puts the integration in a plugin in the Organization library, or in your **My uploads**.
+    Other admins always add to their **My uploads**.
+  </Step>
 
-    <img className="rounded-image" src="/assets/admins/plugins/mcp_auth_methods.webp" alt="The Authentication Method menu with OAuth, API Key, and No authentication"/>
-
-    Click **Connect**. Onyx lists the server's tools and opens its settings.
+  <Step title="Add the server">
+    Click **Add**. Onyx opens the integration. For a server with no sign-in, Onyx loads its tools at once.
   </Step>
 </Steps>
 
-## Authentication
+People get the server through the plugin that holds it.
+Set the install setting of an Organization library plugin on **Admin Panel → Plugins**: **Required**, **Default**,
+**Available**, or **Not available**. **Default** and **Required** add the plugin to default Chat.
 
-| Method | Who signs in | Use it when |
+## Sign-in
+
+| Sign-in Mode | Sign-in Method | Who signs in |
 | --- | --- | --- |
-| **No authentication** | Nobody | The server is public, or a network control protects it. |
-| **API Key**, shared | The admin, once for everyone | All users can share one service account. |
-| **API Key**, personal | Each user | Each user has a personal token, and the server must apply that user's permissions. |
-| **OAuth** | Each user | The server supports OAuth. Each user signs in with their own account. |
-| **OAuth Pass-through** | Each user, with their Onyx sign-in | Onyx sends the user's Onyx OAuth token to the server. This method shows only when Onyx sign-in uses OAuth, OIDC, or Google OAuth. |
+| **No sign-in** | None | Nobody. Use it when the server is public, or a network control protects it. |
+| **One account for the organization** | **API key** or **OAuth** | An admin connects one account on the **Configuration** tab. All users act with that account. |
+| **Each user signs in** | **API key** or **OAuth** | Each user connects their own account from the [Plugins page](/overview/core_features/plugins). The server returns only data that the user's account can access. |
+| **Each user signs in** | **Onyx login** | Onyx sends the user's Onyx sign-in token to the server. Only an admin who manages actions for the whole organization can select it. |
 
-With personal API keys and OAuth,
-each user connects their own account from the [Plugins page](/overview/core_features/plugins).
-The MCP server then returns only data that the user's account can access.
+### API key
+
+Enter a **Header Name** and a **Header Value**. Click **Add Header** to send more headers.
+Put each credential in braces, for example `Bearer {api_key}`.
+Each placeholder becomes a field that the admin or each user fills in. Use `{user_email}` for the user's email address.
 
 ### OAuth
 
 OAuth is the best choice for most hosted vendor servers, such as Linear, Notion, Atlassian, and Sentry.
-
-<img className="rounded-image" src="/assets/admins/plugins/mcp_linear_oauth.webp" alt="OAuth settings with Set up automatically, Use your own OAuth client, and Use client metadata document"/>
+Under **OAuth Client**, select one of these options:
 
 | Option | Effect |
 | --- | --- |
-| **Set up automatically** | Onyx registers an OAuth client with the server's published settings. Use this when the server supports dynamic client registration. |
-| **Use your own OAuth client** | Enter a client ID from your provider. Add a client secret only if the provider requires it. |
-| **Use client metadata document** | The provider fetches the Onyx client metadata document over the public internet. Onyx checks this when it checks the server, and turns this setting off when the provider cannot fetch the document. Onyx then tries automatic client registration. If the connection still fails with a client metadata error, turn this setting off and connect again. |
+| **Register a client automatically** | Onyx registers an OAuth client with the server's published settings. Use this when the server supports dynamic client registration. |
+| **Enter the client details** | Enter the **Authorization URL**, the **Token URL**, and a **Client ID** from your provider. Add a **Client Secret** only if the provider requires it. |
 
-If you create your own OAuth client, set its redirect URI to:
+Add **Scopes** if the provider needs them. If you create your own OAuth client, set its redirect URI to:
 
 ```text
 https://<your-onyx-domain>/mcp/oauth/callback
@@ -98,34 +92,22 @@ https://<your-onyx-domain>/mcp/oauth/callback
   Onyx builds OAuth callback URLs from `WEB_DOMAIN`. Set `WEB_DOMAIN` to the URL that users open in their browser.
 </Warning>
 
-### API key
-
-<img className="rounded-image" src="/assets/admins/plugins/mcp_api_key.webp" alt="API Key settings with a choice of personal or shared token and a test credential field"/>
-
-Enter a key to test the server and load its tools. A test key is saved to your account only.
-
-### Advanced settings
-
-<img className="rounded-image" src="/assets/admins/plugins/mcp_advanced.webp" alt="Advanced settings with Custom Headers and Connection transport"/>
-
-- **Custom Headers** are sent with every request. Use `{api_key}` for each user's API key and `{user_email}` for the user's email address.
-  Any other `{placeholder}` asks each user for a value when they connect.
-- **Connection transport** is **Streamable HTTP** by default. Onyx tries Streamable HTTP first and then SSE
-  during the setup check. Select **SSE (legacy)** only if the server supports SSE alone.
-
 ## Manage tools
 
-<img className="rounded-image" src="/assets/admins/plugins/mcp_tab_tools.webp" alt="The Tools tab with the list of tools from an MCP server"/>
+<img className="rounded-image" src="/assets/admins/plugins/integration_actions_tab.webp" alt="The Actions tab with Default for New Actions and Allow, Ask, and Blocked for each tool"/>
 
-- In **Available tools**, turn tools on or off for the whole workspace.
-- Click **Refresh tools** after the server adds, removes, or changes tools. Save or discard pending changes first.
+The **Actions** tab lists the tools of the server, in **Read-Only Actions** and **Write Actions**.
+A tool that does not tell whether it changes data is in **Other Actions**. Click **Refresh** after the server adds,
+removes, or changes tools. Save or discard pending changes first. For a server where each user signs in,
+Onyx lists the tools with your own connection.
+Connect your account on the [Plugins page](/overview/core_features/plugins) first.
 
-The **Approval settings** tab sets the approval policy for each tool. The policy applies in Chat, in custom agents,
+The **Actions** tab also sets the approval policy for each tool. The policy applies in Chat, in custom agents,
 and in Craft.
 
 <Warning>
   **Upgrade note.** Before this release, approval policies applied only in Craft.
-  The upgrade sets **Auto-approve** for the tools that exist at upgrade time, so they keep running without a prompt,
+  The upgrade sets **Allow** for the tools that exist at upgrade time, so they keep running without a prompt,
   on these MCP servers:
 
   - all servers, if no one in the workspace has used Craft
@@ -142,25 +124,24 @@ and in Craft.
   such as the Onyx web app. Upgrade these clients.
 </Warning>
 
-<img className="rounded-image" src="/assets/admins/plugins/mcp_tools_approval.webp" alt="Approval settings with Auto-approve, Ask, and Disabled for each tool"/>
+**Default for New Actions** applies to each tool with no setting of its own, also to tools that the server adds later.
 
 | Policy | Effect in Chat and custom agents | Effect in Craft |
 | --- | --- | --- |
-| **Auto-approve** | The tool runs without a prompt. | The tool runs without a prompt. |
+| **Allow** | The tool runs without a prompt. | The tool runs without a prompt. |
 | **Ask** | The answer pauses until the user approves the call. See [Approvals in Chat](#approvals-in-chat). | Craft asks the user to approve each call. |
-| **Disabled** | The agent does not get the tool. | Craft never runs the tool. |
+| **Blocked** | The agent does not get the tool. | Craft never runs the tool. |
 
-Each tool starts at **Ask**. A tool that the server marks as read-only (`readOnlyHint`) starts at **Auto-approve**.
+Each tool starts at **Ask**. A tool that the server marks as read-only (`readOnlyHint`) starts at **Allow**.
 Onyx cannot confirm that a tool is read-only. If you do not trust the server, set its tools to **Ask**.
-Onyx reads the marks when it loads the tools. To read them again now, click **Refresh tools**.
+Onyx reads the marks when it loads the tools. To read them again now, click **Refresh**.
 Onyx saves a setting only when it is different from the tool's default.
 If a tool keeps its default and a refresh changes the default, the tool uses the new default. After a refresh,
 examine the tools and set **Ask** again where necessary.
 
-Tool availability and approval policies are separate.
-A tool that you turn off in **Available tools** is not available anywhere. In Chat,
-a policy change applies from the next message. An answer in progress keeps the policies it started with,
-with one exception: a tool that you set to **Disabled** does not run, even if the user approved it for the chat.
+A tool set to **Blocked** is not available anywhere. In Chat, a policy change applies from the next message.
+An answer in progress keeps the policies it started with, with one exception:
+a tool that you set to **Blocked** does not run, even if the user approved it for the chat.
 
 ### Approvals in Chat
 
@@ -194,7 +175,7 @@ the agent sees that the user rejected the call. After the answer stops to wait f
 To end the wait, the user rejects the call. An API client that sends a stop there does not end the wait.
 The stop pauses the chat's queued messages until the user sends a new message.
 
-If a tool becomes **Disabled** while its card waits, an approval saves a rejection. The call does not run,
+If a tool becomes **Blocked** while its card waits, an approval saves a rejection. The call does not run,
 the record shows **Disabled**, and the agent is told that the tool is disabled.
 If the tool is removed or its parameters change while the card waits, the call does not run after the decision.
 The agent is told that the tool is no longer available, and the answer continues.
@@ -219,8 +200,10 @@ and only when that decision call continues the answer.
 See [Send a decision](/developers/guides/chat_new_guide#send-a-decision).
 
 <Note>
-  The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval.
-  They cannot use tools with the **Disabled** policy.
+  The Slack and Discord bots cannot show approval requests, so a tool with the **Ask** policy is not available to them.
+  They can use the tools of their agent that run without approval.
+  Each tool that the agent of a bot had before integrations were added keeps running without approval.
+  They cannot use tools with the **Blocked** policy.
 </Note>
 
 In some chats, a tool call cannot wait for approval. There, a tool with the **Ask** policy does not run,
@@ -231,16 +214,21 @@ and the agent gets an error that explains why:
 
 ## Configuration tab
 
-<img className="rounded-image" src="/assets/admins/plugins/mcp_after_connect.webp" alt="The Configuration tab for an MCP server"/>
+<img className="rounded-image" src="/assets/admins/plugins/integration_configuration_tab.webp" alt="The Configuration tab with the server URL and the sign-in settings"/>
 
 | Setting | Effect |
 | --- | --- |
-| **Enable in default Chat** | Adds or removes the server from default Chat for the workspace. Custom agents keep their tools. |
-| **Let users manage approval settings** | Lets users change the approval policy of tools that you did not disable, for Chat and Craft. Users change policies in the plugin's **Approval settings** tab on the [Plugins page](/overview/core_features/plugins#review-tools). Craft is not necessary. When you turn this setting off, the workspace policies apply to all users. |
+| **Server URL** | The URL of the MCP server. |
+| **Sign-in** | The sign-in mode and method. See [Sign-in](#sign-in). |
+| **Users Can Save Always Allow** | Lets each user skip the approval prompt for a tool with the **Ask** policy, in Chat and Craft. When you turn this setting off, the policies on the **Actions** tab are final for all users. |
+| **Organization Connection** | Shows only for one account for the organization. Click **Connect** to connect the account. |
 
-If you change the server URL, Onyx removes the stored connections for that server. Users must connect again.
+If you change the server URL, the sign-in method, the client, the URLs, or the scopes,
+each connection needs a reconnect. A new placeholder in the header template has the same effect.
+Users must connect again.
 
-To delete a server, use the trash icon on the Plugins page. The settings dialog has no delete button.
+Use the **Overview** tab to change the name and the description, to turn the server off with **Enabled**,
+and to delete it.
 
 ## Use MCP tools in custom agents
 

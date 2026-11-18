@@ -83,7 +83,7 @@ from onyx.auth.oidc_client import log_token_exchange_failure
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import get_effective_permissions, has_global_permission
 from onyx.auth.pkce import generate_pkce_pair
-from onyx.auth.schemas import AuthBackend, UserCreate
+from onyx.auth.schemas import UserCreate
 from onyx.auth.session_tokens import (
     SESSION_TOKEN_GRACE_PERIOD_SECONDS,
     SessionRejection,
@@ -119,6 +119,7 @@ from onyx.configs.constants import (
     FASTAPI_USERS_AUTH_COOKIE_NAME,
     PASSWORD_SPECIAL_CHARS,
     UNNAMED_KEY_PLACEHOLDER,
+    AuthBackend,
     MilestoneRecordType,
     OnyxRedisLocks,
 )
@@ -143,6 +144,10 @@ from onyx.db.enums import AccountType, PatType, Permission
 from onyx.db.models import AccessToken, OAuthAccount, User
 from onyx.db.pat import resolve_pat, revoke_all_pats_for_user__no_commit
 from onyx.db.pinned_personas import seed_pinned_personas_from_featured
+from onyx.db.sandbox import (
+    get_sandbox_purge_targets,
+    get_user_sandbox_blob_paths,
+)
 from onyx.db.sso_provider import lock_sso_provider_for_share
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
@@ -150,6 +155,7 @@ from onyx.db.users import (
     fetch_user_by_id,
     get_user_by_email,
     get_user_by_oauth_account,
+    get_user_from_async_session,
     is_limited_user,
     promote_placeholder_to_web_login__no_commit,
     reconcile_user_email__no_commit,
@@ -169,10 +175,6 @@ from onyx.redis.redis_pool import (
     get_async_redis_connection,
     retrieve_auth_token_data,
     retrieve_ws_token_data,
-)
-from onyx.server.features.build.db.sandbox import (
-    get_sandbox_purge_targets,
-    get_user_sandbox_blob_paths,
 )
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes,
@@ -880,7 +882,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise error
 
                     if MULTI_TENANT:
-                        user_by_session = await db_session.get(User, user.id)
+                        user_by_session = await get_user_from_async_session(
+                            db_session, user.id
+                        )
                         if user_by_session:
                             user = user_by_session
 
@@ -911,7 +915,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # the user we just got by email. Note that this only applies
                     # to multi-tenant, due to the overwriting of the user_db
                     if MULTI_TENANT:
-                        user_by_session = await db_session.get(User, user.id)
+                        user_by_session = await get_user_from_async_session(
+                            db_session, user.id
+                        )
                         if user_by_session:
                             user = user_by_session
 
@@ -963,11 +969,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         """
         seat_added = False
         with get_session_with_current_tenant() as sync_db:
-            sync_user = (
-                sync_db.query(User)
-                .filter(User.id == user_id)  # ty: ignore[invalid-argument-type]
-                .first()
-            )
+            sync_user = fetch_user_by_id(sync_db, user_id)
             if sync_user:
                 if _upgrade_will_add_seat(
                     sync_user, will_become_active=bool(sync_user.is_active)
@@ -2683,7 +2685,7 @@ async def _get_user_from_token_data(token_data: dict) -> User | None:
         return None
 
     async with get_async_session_context_manager() as async_db_session:
-        user = await async_db_session.get(User, user_uuid)
+        user = await get_user_from_async_session(async_db_session, user_uuid)
         if user is None or not user.is_active:
             return None
         return user

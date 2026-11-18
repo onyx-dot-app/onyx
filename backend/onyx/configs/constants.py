@@ -211,9 +211,17 @@ PERMISSION_SYNC_TASK_EXPIRES = 6 * 60 * 60  # seconds
 # A NOT_STARTED attempt this old whose task is not in the broker queue lost its
 # task (e.g. a Redis restart without persistence), so the reaper fails it.
 PERMISSION_SYNC_LOST_TASK_GRACE = 10 * 60  # seconds
+# Celery drops a targeted reindex task that waited longer than this in the
+# queue. The stale-job validator then fails its NOT_STARTED job.
+TARGETED_REINDEX_TASK_EXPIRES = 10 * 60  # seconds
+TARGETED_REINDEX_TIMEOUT = 30 * 60  # seconds
 
-# how long a task should wait for associated fence to be ready
-CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
+# Celery drops a user-started export task that waited longer than this. The
+# hourly export cleanup fails its job once the expiry and the grace have passed.
+USER_EXPORT_TASK_EXPIRES = 60 * 60  # seconds
+USER_JOB_LOST_TASK_GRACE = 5 * 60  # seconds
+
+PRUNING_GENERATOR_TASK_EXPIRES = 10 * 60  # seconds
 
 # needs to be long enough to cover the maximum time it takes to download an object
 # if we can get callbacks as object bytes download, we could lower this a lot.
@@ -895,3 +903,40 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.YOUTRACK: "Issues and project tracking",
     DocumentSource.AZURE_DATALAKE: "Files in Azure Data Lake Storage containers",
 }
+
+# Prefix of the file id of a query-history report in the file store.
+QUERY_REPORT_NAME_PREFIX = "query-history"
+# Prefix of the task name of a query-history export.
+QUERY_HISTORY_TASK_NAME_PREFIX = OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK
+
+
+# Values of settings in app_configs.py.
+class AuthBackend(str, Enum):
+    REDIS = "redis"
+    POSTGRES = "postgres"
+    JWT = "jwt"
+
+
+class CacheBackendType(str, Enum):
+    REDIS = "redis"
+    POSTGRES = "postgres"
+
+
+class OpenSearchAuthMethod(str, Enum):
+    """Authentication method for connecting to OpenSearch.
+
+    BASIC uses HTTP basic auth (username/password); the only option for
+    self-hosted / docker-compose OpenSearch. IAM uses AWS SigV4 request signing
+    and is only valid against an AWS managed domain whose fine-grained access
+    control master is an IAM ARN.
+    """
+
+    BASIC = "basic"
+    IAM = "iam"
+
+
+class HtmlBasedConnectorTransformLinksStrategy(str, Enum):
+    # remove links entirely
+    STRIP = "strip"
+    # turn HTML links into markdown links
+    MARKDOWN = "markdown"

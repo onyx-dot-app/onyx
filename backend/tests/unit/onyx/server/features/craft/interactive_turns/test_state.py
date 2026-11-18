@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from uuid import UUID, uuid4
 
@@ -8,6 +9,7 @@ from onyx.server.features.build.interactive_turns.state import (
     TURN_STATUS_QUEUED,
     TURN_STATUS_RUNNING,
     InteractiveTurn,
+    _save_turn,
     acquire_active_turn_lock,
     claim_turn_for_runner,
     create_interactive_turn,
@@ -294,3 +296,33 @@ def test_touch_turn_does_not_clobber_concurrent_reclaim() -> None:
     active = get_active_turn(cache=cache, session_id=session_id, user_id=user_id)
     assert active is not None
     assert active.runner_id == reclaimed.runner_id
+
+
+def test_legacy_turn_payload_round_trips() -> None:
+    cache = FakeCache()
+    turn_id = UUID("a07bff97-7eb8-4453-a5e6-c9b721a28407")
+    key = f"craft:interactive_turn:{turn_id}"
+    legacy_payload = {
+        "turn_id": str(turn_id),
+        "session_id": "1e319b46-c604-460f-8061-07b0612800cf",
+        "user_id": "20e165db-8b06-4800-b9ed-4fc303fccb9c",
+        "prompt": "review the report",
+        "status": "RUNNING",
+        "turn_index": 2,
+        "attachments": [
+            {"name": "report", "path": "inputs/report", "mime_type": "text/plain"}
+        ],
+        "last_heartbeat_at": "2026-11-17T12:05:06+00:00",
+        "error_detail": None,
+        "runner_id": "runner-1",
+    }
+    cache.set(key, json.dumps(legacy_payload), ex=60)
+
+    turn = get_turn(cache, turn_id)
+    assert turn is not None
+    turn.reclaimed = True
+    _save_turn(cache, turn, ex=60)
+
+    raw = cache.get(key)
+    assert raw is not None
+    assert json.loads(raw) == legacy_payload

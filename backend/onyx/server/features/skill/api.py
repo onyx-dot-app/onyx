@@ -18,9 +18,9 @@ from onyx.db.enums import (
 )
 from onyx.db.external_app import (
     get_built_in_external_app,
-    get_external_app_by_id,
 )
-from onyx.db.models import Skill, User
+from onyx.db.integration import get_integration_by_kind_row
+from onyx.db.models import Integration, Skill, User
 from onyx.db.plugin import (
     check_sharing_allowed,
     get_organization_library_default,
@@ -59,10 +59,10 @@ from onyx.db.skill_limit import users_past_write_limit
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.credentials import resolve_injection_headers
-from onyx.external_apps.token_refresh import ensure_fresh_credentials
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
+from onyx.integrations.call_credentials import resolve_call_credentials
+from onyx.integrations.connections import ConnectionProblem
 from onyx.server.features.skill.models import (
     GitHubImportedSkill,
     GitHubSkillNotImported,
@@ -226,20 +226,28 @@ def _import_response(
 
 
 def _github_authorization_header(user: User) -> str | None:
+    """The Authorization header of the user's GitHub connection, or None."""
     tenant_id = get_current_tenant_id()
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         github_app = get_built_in_external_app(db_session, ExternalAppType.GITHUB)
-        if github_app is None or not github_app.enabled:
+        if github_app is None:
             return None
-        github_app_id = github_app.id
-
-    ensure_fresh_credentials(tenant_id, github_app_id, user.id)
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-        return resolve_injection_headers(
-            db_session,
-            github_app_id,
-            user.id,
-        ).get("Authorization")
+        integration = get_integration_by_kind_row(
+            Integration.external_app_id, github_app.id, db_session
+        )
+        if integration is None or not integration.enabled:
+            return None
+        credentials = resolve_call_credentials(integration, user, db_session)
+        if isinstance(credentials, ConnectionProblem):
+            return None
+        return next(
+            (
+                value
+                for name, value in credentials.headers.items()
+                if name.lower() == "authorization"
+            ),
+            None,
+        )
 
 
 def _bundle_to_edit(skill: Skill, user: User, db_session: Session) -> bytes:
@@ -650,20 +658,10 @@ def create_custom_skill_from_editor(
     instructions_markdown: Annotated[str, Form(min_length=1)],
     upload: Annotated[UploadFile | None, File()] = None,
     auto_enable: Annotated[bool, Form()] = True,
-    external_app_id: Annotated[int | None, Form(gt=0)] = None,
     sharing: Annotated[str | None, Form()] = None,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillEditableDetailResponse:
-    if external_app_id is not None:
-        if not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
-            raise OnyxError(
-                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                "Only administrators can create a skill for an external app.",
-            )
-        if get_external_app_by_id(db_session, external_app_id) is None:
-            raise OnyxError(OnyxErrorCode.NOT_FOUND, "External app not found.")
-
     share_request = _parse_skill_sharing(sharing)
 
     try:
@@ -699,7 +697,6 @@ def create_custom_skill_from_editor(
         instructions_markdown=create_request.instructions_markdown,
     )
     file_store = get_default_file_store()
-    should_auto_enable = auto_enable and external_app_id is None
     with ingested_skill_bundle(
         bundle_bytes,
         f"{canonical_name}.zip",
@@ -711,9 +708,8 @@ def create_custom_skill_from_editor(
             user,
             db_session,
             change=share_request.to_change() if share_request is not None else None,
-            external_app_id=external_app_id,
         )
-        if should_auto_enable and not enable_new_skill_if_name_available__no_commit(
+        if auto_enable and not enable_new_skill_if_name_available__no_commit(
             skill, user.id, db_session
         ):
             raise OnyxError(
@@ -722,7 +718,7 @@ def create_custom_skill_from_editor(
             )
         db_session.commit()
 
-    if should_auto_enable or share_request is not None:
+    if auto_enable or share_request is not None:
         push_skill_to_affected_sandboxes(skill, db_session)
         db_session.commit()
 
@@ -904,7 +900,7 @@ def approve_skill_review(
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
     skill = _editable_skill(skill_id, user, db_session, lock_for_update=True)
-    affected = approve_skill_review__no_commit(skill, version_id, db_session)
+    affected = approve_skill_review__no_commit(skill, version_id, user, db_session)
     db_session.commit()
     db_session.expire(skill)
     push_skills_and_commit(affected, db_session)

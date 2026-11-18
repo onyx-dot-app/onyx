@@ -33,6 +33,7 @@ import { ExpandedTimelineContent } from "./ExpandedTimelineContent";
 import { CollapsedStreamingContent } from "./CollapsedStreamingContent";
 import { TimelineRoot } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRoot";
 import { TimelineHeaderRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineHeaderRow";
+import type { AwaitingUser } from "@/lib/chat/toolApprovals";
 
 // =============================================================================
 // Private Wrapper Components
@@ -92,8 +93,9 @@ export interface AgentTimelineProps {
   toolProcessingDuration?: number;
   /** A code mode program works between tool calls; it has no step */
   codeModeWorking?: boolean;
-  /** A tool call in the latest turn waits for the user's approval */
-  awaitingApproval?: boolean;
+  /** A tool call in the latest turn waits for the user's approval or
+   * answers */
+  awaitingUser?: AwaitingUser | null;
 }
 
 /**
@@ -117,7 +119,7 @@ function areAgentTimelinePropsEqual(
     prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
     prev.codeModeWorking === next.codeModeWorking &&
-    prev.awaitingApproval === next.awaitingApproval
+    prev.awaitingUser === next.awaitingUser
   );
 }
 
@@ -135,14 +137,14 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   generatedImageCount = 0,
   toolProcessingDuration,
   codeModeWorking = false,
-  awaitingApproval = false,
+  awaitingUser = null,
 }: AgentTimelineProps) {
   // Header text and state flags
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason,
     codeModeWorking,
-    awaitingApproval
+    awaitingUser
   );
 
   // Memoized metrics derived from turn groups
@@ -239,7 +241,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     parallelActiveStepHasCollapsedContent,
     finalAnswerComing,
     codeModeWorking,
-    awaitingApproval,
+    awaitingUser: awaitingUser !== null,
   });
 
   const headerIsInteractive = useMemo(() => {

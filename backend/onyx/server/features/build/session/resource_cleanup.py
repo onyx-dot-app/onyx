@@ -5,20 +5,20 @@ from uuid import UUID
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLock, CacheLockLostError
+from onyx.db.build_session import get_orphan_build_session_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
-from onyx.server.features.build.configs import (
-    SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS,
-    SANDBOX_RESOURCE_GRACE_SECONDS,
-)
-from onyx.server.features.build.db.build_session import get_orphan_build_session_ids
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.sandbox import (
     fail_stale_provisioning__no_commit,
     get_sandbox_by_id,
     get_stale_provisioning_sandboxes,
     record_cleanup_checkpoint__no_commit,
     user_has_build_sessions,
+)
+from onyx.server.features.build.configs import (
+    SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS,
+    SANDBOX_RESOURCE_GRACE_SECONDS,
 )
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.locks import sandbox_provision_lock

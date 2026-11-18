@@ -4,8 +4,8 @@ import {
   PacketType,
   ToolApprovalRequest,
 } from "@/app/app/services/streamingModels";
-import { useChatSessionQueue, useToolApprovals } from "@/lib/chat/hooks";
-import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
+import { useChatSessionQueue, useToolRequests } from "@/lib/chat/hooks";
+import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { refreshChatSession } from "@/lib/chat/settleChatSession";
 
@@ -45,6 +45,28 @@ function resolved(approvalId: string, turnIndex: number): Packet {
   };
 }
 
+function question(questionRequestId: string, turnIndex: number): Packet {
+  return {
+    placement: { turn_index: turnIndex, tab_index: 0 },
+    obj: {
+      type: PacketType.TOOL_QUESTION_REQUEST,
+      question_request_id: questionRequestId,
+      tool_call_id: `call-${questionRequestId}`,
+      questions: [
+        {
+          id: "scope",
+          header: "Scope",
+          question: "Which scope?",
+          options: [
+            { label: "All", description: "Every file." },
+            { label: "Some", description: "Some files." },
+          ],
+        },
+      ],
+    },
+  };
+}
+
 function requestObj(packet: Packet): ToolApprovalRequest {
   if (packet.obj.type !== PacketType.TOOL_APPROVAL_REQUEST) {
     throw new Error("not a request");
@@ -53,27 +75,36 @@ function requestObj(packet: Packet): ToolApprovalRequest {
 }
 
 beforeEach(() =>
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null })
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  })
 );
 
-describe("useToolApprovals", () => {
+describe("useToolRequests", () => {
   it("keeps records of decided requests and leaves waiting ones out", () => {
     const first = request("first", 1);
     const packets = [first, request("second", 2), resolved("first", 1)];
 
-    const { result } = renderHook(() => useToolApprovals(packets));
+    const { result } = renderHook(() => useToolRequests(packets));
 
     expect(result.current).toEqual({
       records: [
-        { turnIndex: 1, request: requestObj(first), status: "approved" },
+        {
+          kind: "approval",
+          turnIndex: 1,
+          request: requestObj(first),
+          status: "approved",
+        },
       ],
-      awaitingApproval: true,
+      awaiting: "approval",
     });
   });
 
   it("follows packets appended to the same array", () => {
     const packets: Packet[] = [request("first", 1)];
-    const { result, rerender } = renderHook(() => useToolApprovals(packets));
+    const { result, rerender } = renderHook(() => useToolRequests(packets));
     expect(result.current.records).toEqual([]);
 
     // Streams append to the array they already passed.
@@ -81,15 +112,47 @@ describe("useToolApprovals", () => {
     rerender();
 
     expect(result.current.records[0]?.status).toBe("approved");
-    expect(result.current.awaitingApproval).toBe(false);
+    expect(result.current.awaiting).toBeNull();
   });
 
   it("does not wait on a background agent's request", () => {
     const packets = [request("agent", 1, "Researcher")];
 
-    const { result } = renderHook(() => useToolApprovals(packets));
+    const { result } = renderHook(() => useToolRequests(packets));
 
-    expect(result.current).toEqual({ records: [], awaitingApproval: false });
+    expect(result.current).toEqual({ records: [], awaiting: null });
+  });
+
+  it("waits for answers, then records how the user answered", () => {
+    const packets: Packet[] = [question("q", 1)];
+    const { result, rerender } = renderHook(() => useToolRequests(packets));
+    expect(result.current).toEqual({ records: [], awaiting: "answer" });
+
+    packets.push({
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: PacketType.TOOL_QUESTION_RESOLVED,
+        question_request_id: "q",
+        outcome: "answered",
+        answered_via: "message",
+        answers: null,
+        message: "Only the docs folder",
+      },
+    });
+    rerender();
+
+    expect(result.current.awaiting).toBeNull();
+    expect(result.current.records).toMatchObject([
+      {
+        kind: "question",
+        turnIndex: 1,
+        status: {
+          kind: "answered",
+          answers: null,
+          message: "Only the docs folder",
+        },
+      },
+    ]);
   });
 });
 

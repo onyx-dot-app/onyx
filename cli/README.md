@@ -94,6 +94,27 @@ A request from a background agent names the agent, for example
 messages while it waits, and its card stays after the response ends or stops.
 After you decide, the chat shows the outcome and the agent's later requests.
 
+#### Questions from the agent
+
+The agent can ask you 1 to 3 questions when your answer changes its work. The
+chat shows a card that asks each question in turn, with its choices and an
+**Other** row. The response waits until you answer. It has no time limit.
+
+| Key | Action |
+|-----|--------|
+| `Up` / `Down`, `Enter` | Select and confirm a choice |
+| Type a choice's number, `Enter` | Choose that choice |
+| `Enter` on **Other** | Type your own answer in the input, then press `Enter` |
+| Type a reply, `Enter` | Answer every question of the response with your reply |
+| `Escape` | Go back from **Other** to the choices |
+
+After the last question, the chat sends your answers, and the card changes to
+a record of them. A reply that you type shows as your message under the
+record. If a tool call of the response also waits for approval, decide it
+first. If you stop a running response before you answer, the record shows
+**Not answered**. As with approvals, a waiting response cannot be stopped, and
+`/resume` shows the card again.
+
 ### One-shot question
 
 ```shell
@@ -112,6 +133,7 @@ onyx-cli ask --json "Hello"
 | `--quiet` | Buffer output and print once at end |
 | `--max-output <int>` | Max bytes before truncating (0 to disable) |
 | `--approve <answer>` | Answer to tool approval requests when `ask` cannot prompt: `fail` (default), `reject`, `once`, or `session` |
+| `--questions <answer>` | Answer to the agent's questions when `ask` cannot prompt: `fail` (default) or `skip` |
 
 When a tool call needs approval and stderr is a terminal, `ask` shows the
 request on stderr and prompts:
@@ -138,9 +160,24 @@ uses `--approve` instead:
 
 If you set `--approve`, `ask` uses it on a terminal too. With `--json`, approval
 requests appear as `tool_approval_request` and `tool_approval_resolved` events.
-A `stop` event with `stop_reason` `awaiting_approval` marks where the response
+A `stop` event with `stop_reason` `awaiting_user` marks where the response
 waits for the answers; the events of its continuation follow. They do not
 repeat events that `ask` already printed.
+
+When the agent asks questions and stderr is a terminal, `ask` shows each
+question with its numbered choices on stderr and prompts, for a question with
+three choices: `[1-3] choose an option / type your own answer / [Enter] no answer`.
+Type a number to choose, or type your own answer. An empty answer tells the
+agent that you have no answer. Without a terminal, in CI, or with `--json`,
+`ask` uses `--questions` instead. Both values tell the agent that no one can
+answer, so it continues with its own judgment:
+
+- `fail` prints the rest of the answer and exits with code 12.
+- `skip` prints the rest of the answer and exits normally.
+
+If you set `--questions`, `ask` uses it on a terminal too. With `--json`,
+questions appear as `tool_question_request` and `tool_question_resolved`
+events.
 
 ### List agents
 
@@ -239,7 +276,8 @@ export ONYX_PAT="your-pat"
 | 8 | ServerError | Server returned 5xx |
 | 9 | NotAvailable | Feature/endpoint doesn't exist |
 | 10 | ApprovalRequired | A tool call needed approval and `ask --approve=fail` rejected it |
-| 11 | ApprovalPending | `ask` was interrupted at an approval prompt; the request still waits |
+| 11 | ApprovalPending | `ask` was interrupted at an approval or question prompt; the request still waits |
+| 12 | QuestionUnanswered | The agent asked questions and `ask --questions=fail` answered that no one can answer |
 
 ### Skill File
 
@@ -280,6 +318,7 @@ onyx-cli install-skill --agent claude-code
 | `Escape`, `Ctrl+C` | Cancel current generation |
 | `y` / `a` / `n` | Approve once / approve for this session / reject a tool call |
 | `d` | Show all arguments of a tool call that waits for approval |
+| `Up` / `Down`, `Enter` | Select and confirm an approval action or an answer to the agent's question |
 | `Ctrl+O` | Toggle source citations |
 | `Ctrl+D` | Quit (press twice) |
 | `Scroll` / `Shift+Up/Down` | Scroll chat history |
@@ -383,7 +422,7 @@ UV_BUILD_CONSTRAINT="$(git rev-parse --show-toplevel)/tools/requirements/build-c
 ```
 
 `tools/requirements/build-constraints.txt` is compiled from its `.in` by the
-`pip-compile` pre-commit hook, so a plain `pre-commit run pip-compile` refreshes
+`pip-compile` pre-commit hook, so `prek run pip-compile --all-files` refreshes
 it. To upgrade a pinned build dependency, edit `build-constraints.in` and the
 matching `[build-system] requires` in all three `pyproject.toml` files; the
 `build-constraints-drift` hook fails if they disagree.

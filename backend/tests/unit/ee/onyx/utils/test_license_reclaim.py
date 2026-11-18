@@ -22,8 +22,7 @@ from ee.onyx.utils.license import (
     verify_and_store_license,
 )
 from ee.onyx.utils.license_expiry import LICENSE_RECLAIM_WINDOW
-from onyx.cache.interface import CacheBackendType
-from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
+from onyx.configs.constants import CacheBackendType, OnyxCeleryPriority, OnyxCeleryTask
 
 
 def _make_license_payload(stripe_customer_id: str | None = None) -> LicensePayload:

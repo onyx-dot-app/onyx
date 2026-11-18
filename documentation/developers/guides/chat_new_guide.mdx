@@ -24,10 +24,9 @@ You can receive a streaming response or one complete response.
 | `message` | The user message to send to the Agent. |
 | `llm_override` | Pass an object to override the default LLM settings for this request. If `None`, you will get the default Onyx behavior. <br/><br/>You can pass or exclude any of the following fields: <br/>• `model_configuration_id` – the exact model configuration to use. Preferred over the name-based fields, since provider display names are not unique <br/>• `model_provider` <br/>• `model_version` – must match a model configured on the resolved provider. If it does not, the request is rejected with `INVALID_INPUT`: an HTTP `400` when `stream=false`, or an error packet with `"error_code": "INVALID_INPUT"` when streaming (the default). If no provider resolves, or you cannot use that provider, Onyx uses the default LLM instead. Onyx does not check `model_version` when you pass `model_configuration_id` <br/>• `temperature` <br/>• `display_name` – label shown for the model in the UI; falls back to `model_version` |
 | `llm_overrides` | Two or three `llm_override` objects to run in parallel (multi-model mode), one per model. <br/><br/>**Requires `stream=true`.** Sending more than one entry with `stream=false` fails with `400 {"error_code": "INVALID_INPUT"}`. A list with a single entry is ignored — use `llm_override` for an ordinary single-model request. |
-| `allowed_tool_ids` | Each Agent has a set of Actions (built-in tools, MCP Actions, and OpenAPI Actions from **Admin Panel** > **Plugins**) that it can invoke. Use this parameter to narrow that set for this request. List the Actions and their IDs with the [GET /tool](/developers/api_reference/actions/list_tools) endpoint. Pass an empty list to disable all Actions. Omit the field or pass `null` to allow every Action configured for the Agent. |
-| `preferred_tool_id` | Prefer one Action when it helps answer this request. The Agent can use other Actions or answer without an Action. The preference lasts for this request only. |
+| `tool_options` | Narrows the built-in tools and the Plugins that the Agent can use for this request, and sets an optional preference. See [Tool options](#tool-options). Omit the field or pass `null` to allow every tool and Plugin of the Agent. |
 | `file_descriptors` | A list of files to include with your request. Each entry is `{"id": ..., "type": ..., "name": ...}`. Upload files with [POST /user/projects/file/upload](/developers/api_reference/projects/upload_user_files) and read them back with [GET /user/projects/file/{file_id}](/developers/api_reference/projects/get_user_file). |
-| `internal_search_filters` | Filters to narrow down the internal search results used by the Agent. All filter arguments are optional and can be combined: <br/><br/>• `source_type` – Source types like `web`, `slack`, `google_drive`, `confluence` <br/>• `document_set` – The name of the document sets to search within <br/>• `created_at_range` / `updated_at_range` – An inclusive window, `{"start": ..., "end": ...}`, in ISO 8601 format: `YYYY-MM-DDTHH:MM:SSZ`. Either bound may be omitted to leave that side open; naive timestamps are treated as UTC <br/>• `tags` – A list of `{"tag_key": ..., "tag_value": ...}` objects <br/><br/>**Note:** `time_cutoff` is still accepted as a deprecated alias for the start of `updated_at_range`. |
+| `internal_search_filters` | Send the filters as `tool_options.internal_search_filters`. The top-level field is still accepted; do not send both. Filters narrow down the internal search results used by the Agent. All filter arguments are optional and can be combined: <br/><br/>• `source_type` – Source types like `web`, `slack`, `google_drive`, `confluence` <br/>• `document_set` – The name of the document sets to search within <br/>• `created_at_range` / `updated_at_range` – An inclusive window, `{"start": ..., "end": ...}`, in ISO 8601 format: `YYYY-MM-DDTHH:MM:SSZ`. Either bound may be omitted to leave that side open; naive timestamps are treated as UTC <br/>• `tags` – A list of `{"tag_key": ..., "tag_value": ...}` objects <br/><br/>**Note:** `time_cutoff` is still accepted as a deprecated alias for the start of `updated_at_range`. |
 | `deep_research` | Enables Deep Research mode for this request. <br/><br/>**Note:** This mode uses many more tokens than a normal request. |
 | `mcp_headers` | Headers forwarded to MCP tool calls made while answering this message, e.g. `{"Authorization": "Bearer <user_jwt>"}`. Use this to pass end-user credentials through to MCP servers that require them. |
 | `parent_message_id` | The ID of the parent message in the chat history. Omit it (or pass `-1`) to place the new message after the latest message in the session. Pass a specific message ID to branch from that point. <br/><br/>**Warning:** If set to `null`, the new message starts from the root of the session, as the first message. |
@@ -38,11 +37,46 @@ You can receive a streaming response or one complete response.
 | `additional_context` | A string of extra context injected into the LLM call for this request. The model sees it, but Onyx does **not store it** and it does not appear in chat history.<br></br>Use it for request-scoped information such as the user's current page URL or session metadata.<br></br>Pass `null` or omit the field to send no additional context. |
 | `origin` | Where the message comes from, for usage reporting. Set it to `api` for scripts and integrations. Other values: `webapp`, `chrome_extension`, `slackbot`, `widget`, `discordbot`, `mobile`. Defaults to `unset`. |
 
+## Tool options
+
+`tool_options` has three fields. Each field is optional.
+
+| Field | Description |
+|-------|-------------|
+| `allowed` | A list of entries. Each entry keeps one built-in tool or one Plugin of the Agent, and the Agent cannot use what the list leaves out. Pass an empty list to disable all tools and Plugins. Omit the field or pass `null` to allow everything. <br/><br/>• `{"type": "capability", "tool_id": 3}` – a built-in tool, by its ID <br/>• `{"type": "plugin", "plugin_id": "...", "actions": ["..."]}` – a Plugin. `actions` is optional and keeps only the Actions it names. Omit it to keep each Action of the Plugin |
+| `preferred` | One tool to prefer when it helps answer this request. The Agent can use other tools or answer without one. <br/><br/>• `{"type": "capability", "tool_id": 3}` – a built-in tool <br/>• `{"type": "action", "plugin_id": "...", "action": "..."}` – one Action of a Plugin |
+| `internal_search_filters` | The internal search filters, as in the table above. |
+
+List the built-in tools and their IDs with the [GET /tool](/developers/api_reference/actions/list_tools) endpoint.
+In the same list, each MCP or OpenAPI Action has `plugin_ids`, the Plugins that hold it.
+The Action key is the MCP tool name or the OpenAPI `operationId`.
+
+The options only narrow what the Agent can use. An Action that an admin or the Agent blocks stays blocked.
+Selecting a tool does not grant permission to use it or bypass approval. The options last for this request only.
+To save options on a chat, send them to `PATCH /chat/chat-session/{chat_session_id}/tool-options`.
+Messages that Onyx starts in that chat, such as queued messages and background agents, use the saved options.
+A field that the body does not set keeps its saved value.
+
+This request allows only web search and the `listOrders` Action of one Plugin, and prefers that Action:
+
+```json
+{
+  "message": "Which orders shipped this week?",
+  "tool_options": {
+    "allowed": [
+      {"type": "capability", "tool_id": 3},
+      {"type": "plugin", "plugin_id": "6f1c2b9e-1d4a-4f7e-9a51-2b8c0d3e4f5a", "actions": ["listOrders"]}
+    ],
+    "preferred": {"type": "action", "plugin_id": "6f1c2b9e-1d4a-4f7e-9a51-2b8c0d3e4f5a", "action": "listOrders"}
+  }
+}
+```
+
 <Note>
-  `forced_tool_id` is no longer supported. Requests with a non-null value receive a validation error.
-  Use `preferred_tool_id` for an optional preference. Action invocation is not guaranteed.
-  Selecting an Action does not grant permission to use it or bypass approval.
-  Deep Research does not accept an Action preference. An unavailable Action produces an error.
+  `allowed_tool_ids`, `preferred_tool_id` and `forced_tool_id` are no longer supported.
+  A request that sends one of them with a value receives a validation error that names `tool_options`.
+  Use `tool_options.preferred` for an optional preference. Tool invocation is not guaranteed.
+  Deep Research does not accept a preference. An unavailable preferred tool produces an error.
   Slack also uses a search preference; it does not guarantee a search on every request.
 </Note>
 
@@ -177,9 +211,9 @@ The packet has these fields:
 
 A request waits until the user decides. Other calls of the answer can continue while it waits.
 When only approval requests remain, Onyx saves the answer,
-and the stream ends with a `stop` packet whose `stop_reason` is `awaiting_approval`.
-That stop does not end the requests. Keep them open for a decision. After the decisions,
-the answer continues in a new stream. See [Send a decision](#send-a-decision). In a turn that compares models,
+and the stream ends with a `stop` packet whose `stop_reason` is `awaiting_user`. That stop does not end the requests.
+Keep them open for a decision. After the decisions, the answer continues in a new stream.
+See [Send a decision](#send-a-decision). In a turn that compares models,
 one answer can wait while the other answers continue in the same stream.
 Its new stream starts after the stream of the turn ends.
 
@@ -197,7 +231,7 @@ Stop applies only while the answer runs. When you stop a running answer,
 Onyx rejects each call of the answer that waits.
 The stream sends the `tool_approval_resolved` packet with `rejected` before its `stop` packet.
 If you close the stream after you send the stop, read the chat session to get the outcomes.
-After the stream ends with `awaiting_approval`, a stop does not end the wait, and the requests still wait.
+After the stream ends with `awaiting_user`, a stop does not end the wait, and the requests still wait.
 A stop without a `stream_id` still pauses the queue of the chat session:
 queued messages and results of background agents do not start a turn until the next message starts one.
 Do not offer Stop for an answer that waits for approval. To end the wait, reject each request.
@@ -232,8 +266,8 @@ read the status again every few seconds. Read the chat session again each time `
 for approval, so a client shows the same records and requests after a reload.
 Each request has its `tool_approval_request` packet, then its `tool_approval_resolved` packet if it has a decision,
 at the placement of the call's card.
-An answer that waits for approval ends with a `stop` packet whose `stop_reason` is `awaiting_approval`,
-as its stream did. In a saved answer:
+An answer that waits for approval ends with a `stop` packet whose `stop_reason` is `awaiting_user`, as its stream did.
+In a saved answer:
 
 - `tool_call_id` is the ID of the call whose card shows the request. For a call that a code mode program made,
   it is the ID of the program's call.
@@ -289,7 +323,7 @@ when the user decides while that stream still runs.
 Ignore a `continuation` whose `stream_id` is the stream that you read. It is `null` in these cases:
 
 - The decision leaves other requests of the answer open, and no continuation stream of the answer runs.
-- The answer's first stream still runs. For example, the decision came before that stream ended with `awaiting_approval`. Keep reading the current stream.
+- The answer's first stream still runs. For example, the decision came before that stream ended with `awaiting_user`. Keep reading the current stream.
 - Another stream of the chat runs, such as another answer of a turn that compares models.
   The continuation starts when that stream ends. Read the status, as described below.
 - The request is a background agent's request.
@@ -317,8 +351,10 @@ read `GET /chat/chat-session/{chat_session_id}/status` once. While an answer run
 and `current_stream` has the same `stream_id` and `response_ids` fields.
 `GET /chat/get-chat-session/{chat_session_id}` returns the same `current_stream`.
 
-While the latest answer waits for approval, that is, after its stream ended with `awaiting_approval`,
+While the latest answer waits for approval, that is, after its stream ended with `awaiting_user`,
 a new message to that session gets a `409` with the `error_code` `APPROVAL_PENDING`. Send the decisions first.
+The same applies while the latest answer waits for answers to questions.
+Send a message that the user types then to the answers route as `{"message": ...}`. See [Questions](#questions).
 Requests of background agents do not block new messages.
 Turns that start from queued messages can also wait for approval.
 
@@ -340,14 +376,61 @@ The answer does not continue until every request has a decision. Send the decisi
   `continuation.stream_id` from the response of the last decision, and `cursor=0`.
 
 The answer can stop again for more approvals after your decision. In the chat session,
-the message with `message_id` then ends with a `stop` packet whose `stop_reason` is `awaiting_approval`,
+the message with `message_id` then ends with a `stop` packet whose `stop_reason` is `awaiting_user`,
 and its `tool_approval_request` packets without a resolution are the requests that wait.
 A new message to the session gets a `409` with `APPROVAL_PENDING` while the answer waits for approval.
 
 <Note>
-  The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval.
-  They cannot use tools with the **Disabled** policy.
+  The Slack and Discord bots cannot show approval requests.
+  See [Approvals in Chat](/admins/plugins/mcp#approvals-in-chat) for the tools that they can use.
 </Note>
+
+## Questions
+
+The agent can ask the user 1-3 multiple-choice questions when the reply changes its work.
+The response then waits for the user, as it does for an approval. A question has no time limit.
+A question can pause any API turn, so read `tool_question_request` packets,
+or `pending_tool_questions` with `stream=false`. The Slack and Discord bots, anonymous users,
+incognito chats that save no content, turns that compare models, and Deep Research do not get questions.
+
+The stream sends a `tool_question_request` packet at the call's placement, with these fields:
+
+| Field | Description |
+|-------|-------------|
+| `question_request_id` | The ID to send with the answers. |
+| `tool_call_id` | The ID of the tool call that asks. |
+| `questions` | The questions. Each has an `id`, a short `header`, the `question` text, and 2-3 `options` with a `label` and a `description`. |
+
+When only approval requests and questions remain,
+the stream ends with a `stop` packet whose `stop_reason` is `awaiting_user`. With `stream=false`,
+the response lists the questions that wait in `pending_tool_questions`, with the same fields.
+
+Send the answers with `POST /chat/question-requests/{question_request_id}/answers`. Use one of these bodies:
+
+- Answers from a card: `{"answers": [{"question_id": "scope", "option_label": "Company", "user_note": "EU only"}]}`.
+  Answer each question once, with one of its option labels, a note, or both.
+- A message that the user typed instead: `{"message": "Only Ana and Raj"}`.
+  It answers every question of the response that waits, and the agent reads it as the user typed it.
+  While an approval request of the same response waits, a message gets a `409` with `APPROVAL_PENDING`.
+  Send the decisions first.
+
+The query hook of your workspace processes typed messages and notes, as it processes chat messages.
+The body can also have `mcp_headers`, as a decision can. The response contains `question_request_id` and `continuation`.
+Follow the continuation, read the status, and repeat an answer as for a decision.
+See [Send a decision](#send-a-decision). A repeated answer returns `200`. A different answer gets a `409`.
+
+A `tool_question_resolved` packet with `question_request_id` ends each question:
+
+| Field | Description |
+|-------|-------------|
+| `outcome` | `answered`, or `cancelled` when the response stopped before the user answered. |
+| `answered_via` | `card` or `message` for an answered question. |
+| `answers` | The card's answers. |
+| `message` | The text that the user typed. Show it as the user's message. |
+
+A stop of a running response cancels its questions. After the stream ends with `awaiting_user`,
+a stop does not end the wait.
+`GET /chat/get-chat-session/{chat_session_id}` returns the question packets of each response, as it does for approvals.
 
 ## Sample Request
 

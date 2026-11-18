@@ -28,6 +28,7 @@ from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.configs.constants import (
     PUBLIC_API_TAGS,
+    USER_EXPORT_TASK_EXPIRES,
     FileOrigin,
     FileType,
     OnyxCeleryPriority,
@@ -42,15 +43,18 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, TaskStatus
 from onyx.db.file_record import get_query_history_export_files
 from onyx.db.models import ChatSession, User
-from onyx.db.tasks import get_task_with_id, register_task
+from onyx.db.tasks import fail_task_with_id, get_task_with_id, register_task
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.query_and_chat.models import ChatSessionDetails, ChatSessionsResponse
 from onyx.server.settings.store import load_settings
+from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import parallel_yield
 from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 router = APIRouter()
 
@@ -286,13 +290,20 @@ def list_all_query_history_exports(
 ) -> list[QueryHistoryExport]:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
     try:
-        pending_tasks = [
-            QueryHistoryExport.from_task(task)
-            for task in get_all_query_history_export_tasks(db_session=db_session)
-        ]
+        tasks = get_all_query_history_export_tasks(db_session=db_session)
+        pending_tasks = [QueryHistoryExport.from_task(task) for task in tasks]
+        # A worker deletes the job row to publish its file. A file whose job
+        # row is still open is not published, for example a late upload.
+        unpublished = {
+            task.task_id for task in tasks if task.status != TaskStatus.SUCCESS
+        }
         generated_files = [
-            QueryHistoryExport.from_file(file)
-            for file in get_query_history_export_files(db_session=db_session)
+            export
+            for export in (
+                QueryHistoryExport.from_file(file)
+                for file in get_query_history_export_files(db_session=db_session)
+            )
+            if export.task_id not in unpublished
         ]
         merged = pending_tasks + generated_files
 
@@ -335,18 +346,27 @@ def start_query_history_export(
         start_time=start_time,
     )
 
-    client_app.send_task(  # celery-expires: allow (user-started job, nothing sends it again)
-        OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK,
-        task_id=task_id,
-        priority=OnyxCeleryPriority.MEDIUM,
-        queue=OnyxCeleryQueues.CSV_GENERATION,
-        kwargs={
-            "start": start,
-            "end": end,
-            "start_time": start_time,
-            "tenant_id": get_current_tenant_id(),
-        },
-    )
+    try:
+        client_app.send_task(
+            OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK,
+            expires=USER_EXPORT_TASK_EXPIRES,
+            task_id=task_id,
+            priority=OnyxCeleryPriority.MEDIUM,
+            queue=OnyxCeleryQueues.CSV_GENERATION,
+            kwargs={
+                "start": start,
+                "end": end,
+                "start_time": start_time,
+                "tenant_id": get_current_tenant_id(),
+            },
+        )
+    except Exception:
+        logger.exception("Failed to send query history export task_id=%r", task_id)
+        fail_task_with_id(db_session, task_id, TaskStatus.PENDING)
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Failed to start the query history export.",
+        )
 
     return {"request_id": task_id}
 
@@ -394,7 +414,12 @@ def download_query_history_csv(
 
     report_name = construct_query_history_report_name(request_id)
     file_store = get_default_file_store()
-    has_file = file_store.has_file(
+    # A worker deletes the job row to publish its file, so an open job row
+    # wins over a file that a late upload left.
+    task = get_task_with_id(db_session=db_session, task_id=request_id)
+    has_file = (
+        task is None or task.status == TaskStatus.SUCCESS
+    ) and file_store.has_file(
         file_id=report_name,
         file_origin=FileOrigin.QUERY_HISTORY_CSV,
         file_type=FileType.CSV,
@@ -417,7 +442,6 @@ def download_query_history_csv(
 
     # If the file doesn't exist yet, it may still be processing.
     # Therefore, we check the task queue to determine its status, if there is any.
-    task = get_task_with_id(db_session=db_session, task_id=request_id)
     if not task:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, f"No task with {request_id=} was found"

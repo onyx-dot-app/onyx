@@ -49,6 +49,9 @@ from onyx.document_index.opensearch.client import (
     OpenSearchIndexWriteBlockedError,
     wait_for_opensearch_with_timeout,
 )
+from onyx.document_index.opensearch.new_deployment import (
+    set_new_deployment_vector_quantization,
+)
 from onyx.document_index.opensearch.opensearch_document_index import set_cluster_state
 from onyx.indexing.models import IndexingSetting
 from onyx.key_value_store.factory import get_kv_store
@@ -136,6 +139,8 @@ def setup_onyx(
         # Ensure the document index is set up correctly. This step is
         # relatively near the end because the document index can take a bit of
         # time to start up.
+        set_new_deployment_vector_quantization(db_session, search_settings)
+
         logger.notice("Verifying the document index is available.")
         document_index = get_default_document_index(
             search_settings,

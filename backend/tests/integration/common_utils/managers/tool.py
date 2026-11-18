@@ -1,5 +1,3 @@
-import httpx
-
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestTool, DATestUser
@@ -36,17 +34,3 @@ class ToolManager:
             if tool.in_code_tool_id == in_code_tool_id:
                 return tool
         return None
-
-    @staticmethod
-    def set_enabled(
-        tool_ids: list[int],
-        enabled: bool,
-        user_performing_action: DATestUser,
-    ) -> httpx.Response:
-        response = client.patch(
-            url=f"{API_SERVER_URL}/admin/tool/status",
-            headers=user_performing_action.headers,
-            json={"tool_ids": tool_ids, "enabled": enabled},
-        )
-        response.raise_for_status()
-        return response

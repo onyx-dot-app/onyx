@@ -64,7 +64,7 @@ Neighbours own the rest:
 
 ```
 POST /user/projects/file/upload             server/features/projects/api.py:upload_user_files
-  upload_files_to_user_files_with_indexing  db/projects.py
+  upload_files_to_user_files_with_indexing  server/features/projects/upload.py
     create_user_files
       categorize_uploaded_files             extract text, count tokens, reject (in the request)
       upload_files(FileOrigin.USER_FILE)    blob + FileRecord

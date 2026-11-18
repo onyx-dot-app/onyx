@@ -54,7 +54,10 @@ from onyx.db.engine.shard_registry import (
     get_shard_spec,
     get_shard_specs,
 )
-from onyx.db.engine.sql_engine import get_catalog_session
+from onyx.db.engine.sql_engine import (
+    get_catalog_session,
+    get_session_for_schema_on_shard,
+)
 from onyx.db.engine.tenant_utils import validate_tenant_id
 from onyx.db.models import TenantSchemaSnapshot
 from onyx.utils.logger import setup_logger
@@ -451,24 +454,23 @@ def scratch_schema_name() -> str:
 def template_session(shard_name: str) -> Iterator[Session]:
     """Session on one shard's template. Tenant routing cannot reach it, since
     every shard holds a template under the same name."""
-    with (
-        get_engine_for_shard(shard_name)
-        .connect()
-        .execution_options(
-            schema_translate_map={None: TENANT_TEMPLATE_SCHEMA}
-        ) as connection
-    ):
-        session = Session(bind=connection, expire_on_commit=False)
-        try:
-            yield session
-        finally:
-            session.close()
+    with get_session_for_schema_on_shard(
+        shard_name=shard_name, schema_name=TENANT_TEMPLATE_SCHEMA
+    ) as session:
+        yield session
 
 
 def ensure_template_schema(shard_name: str) -> None:
     """Created before enumeration so the template is migrated in this run."""
     with get_engine_for_shard(shard_name).begin() as connection:
         connection.execute(CreateSchema(TENANT_TEMPLATE_SCHEMA, if_not_exists=True))
+
+
+def require_pg_dump() -> None:
+    """Dumping a template needs the PostgreSQL client, which only the `dev`
+    image stage installs."""
+    if shutil.which("pg_dump") is None:
+        raise RuntimeError("pg_dump is not installed, run from an image that has it")
 
 
 def dump_schema(shard_name: str, schema: str) -> str:
@@ -479,8 +481,7 @@ def dump_schema(shard_name: str, schema: str) -> str:
     cost, never a per-tenant one."""
     if not validate_tenant_id(schema):
         raise ValueError(f"Refusing to dump schema {schema!r}")
-    if shutil.which("pg_dump") is None:
-        raise RuntimeError("pg_dump is not installed, run from an image that has it")
+    require_pg_dump()
     command = [
         "pg_dump",
         "--schema",
@@ -538,15 +539,22 @@ def store_template_snapshots(alembic_revision: str) -> None:
     """Dump every shard's template after a migration run. A fresh dump each run
     keeps re-encrypted rows current and marks the running head as the newest."""
     for shard_name in sorted(get_shard_specs()):
-        _require_template_at(shard_name, alembic_revision)
-        dump = dump_schema(shard_name, TENANT_TEMPLATE_SCHEMA)
-        store_snapshot(shard_name, alembic_revision, dump)
-        logger.info(
-            "Stored template snapshot for shard %s at %s (%d bytes)",
-            shard_name,
-            alembic_revision,
-            len(dump),
-        )
+        refresh_template_snapshot(shard_name, alembic_revision)
+
+
+def refresh_template_snapshot(shard_name: str, alembic_revision: str) -> None:
+    """Re-dump one shard's template, which must sit at `alembic_revision`. Key
+    rotation calls this after it rewrites the template's rows, so a tenant cloned
+    later gets ciphertext under the current key."""
+    _require_template_at(shard_name, alembic_revision)
+    dump = dump_schema(shard_name, TENANT_TEMPLATE_SCHEMA)
+    store_snapshot(shard_name, alembic_revision, dump)
+    logger.info(
+        "Stored template snapshot for shard %s at %s (%d bytes)",
+        shard_name,
+        alembic_revision,
+        len(dump),
+    )
 
 
 def _require_template_at(shard_name: str, alembic_revision: str) -> None:
@@ -657,6 +665,17 @@ def _grant_readonly_usage(connection: Connection, tenant_id: str) -> None:
         $$;
         """,
     )
+
+
+@contextmanager
+def cloned_snapshot(shard_name: str, dump: str) -> Iterator[str]:
+    """A scratch schema built from the dump, as a new tenant would be, dropped
+    afterwards. Lets a check read what a clone will hold."""
+    engine = get_engine_for_shard(shard_name)
+    schema = scratch_schema_name()
+    with _dropped_afterwards(engine, schema):
+        apply_snapshot(engine, dump, schema)
+        yield schema
 
 
 def check_snapshot_parity(shard_name: str, dump: str) -> list[str]:

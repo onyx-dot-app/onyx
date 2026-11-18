@@ -2,7 +2,7 @@ import type { BackendChatSession, Message } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { readWaitingToolApprovals } from "@/lib/chat/toolApprovals";
+import { readWaitingToolRequests } from "@/lib/chat/toolApprovals";
 import type { ChatHistoryPage } from "@/lib/chat/types";
 
 /** Messages of the current branch that one page of a chat holds. */
@@ -10,8 +10,8 @@ export const CHAT_PAGE_SIZE = 20;
 
 /**
  * Keep loaded history when the latest page attaches to the selected branch.
- * The latest page holds every reply with a waiting approval card, so a loaded
- * older reply outside it that still shows one is stale; the older history is
+ * The latest page holds every reply with a waiting approval or question card,
+ * so a loaded older reply outside it that still shows one is stale; the older history is
  * then dropped and loads again on scroll.
  */
 export function mergeLatestChatPage(
@@ -25,7 +25,7 @@ export function mergeLatestChatPage(
   if (
     first?.parentNodeId == null ||
     !localChain.some((message) => message.messageId === first.parentNodeId) ||
-    readWaitingToolApprovals(local).some(
+    readWaitingToolRequests(local).some(
       ({ response }) =>
         response.messageId != null && !saved.has(response.messageId)
     )

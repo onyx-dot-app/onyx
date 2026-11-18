@@ -17,7 +17,6 @@ from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
-    ExternalAppType,
     SandboxStatus,
     SkillSharePermission,
 )
@@ -25,7 +24,6 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,
-    ExternalApp__Skill,
     Sandbox,
     Skill,
     User,
@@ -34,7 +32,6 @@ from onyx.db.models import (
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.db.plugin import lock_skill_plugin__no_commit
-from onyx.db.skill import set_skill_public_permission
 from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.skill.models import SkillResponse, SkillUserShareRequest
 from onyx.skills.built_in import BUILT_IN_SKILLS, BuiltInSkillDefinition
@@ -43,7 +40,6 @@ from onyx.skills.push import (
     push_skill_to_affected_sandboxes,
 )
 from onyx.utils.logger import setup_logger
-from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -350,60 +346,6 @@ def _rendered_company_search_lines(db_session: Session, user: User) -> list[str]
 
 
 class TestSkillPush:
-    def test_external_app_skill_requires_authentication_and_selection(
-        self,
-        k8s_admin_user: DATestUser,
-        running_sandbox: Callable[..., SandboxHandle],
-        db_session: Session,
-    ) -> None:
-        handle = running_sandbox()
-        user = handle.api_user
-        workspace = handle.workspace_path
-        app = ExternalAppManager.create(
-            user_performing_action=k8s_admin_user,
-            name=f"Credential-gated app {uuid4().hex[:8]}",
-            upstream_url_patterns=["https://api.example.com/*"],
-            auth_template={"Authorization": "Bearer {access_token}"},
-            organization_credentials={},
-            app_type=ExternalAppType.CUSTOM,
-        )
-        try:
-            assert app.associated_skills == []
-            skill_response = _create_skill(
-                k8s_admin_user,
-                f"credential-gated-skill-{uuid4().hex[:8]}",
-                body="credential gated skill body\n",
-            )
-            db_session.expire_all()
-            skill = db_session.get(Skill, skill_response.id)
-            assert skill is not None
-            set_skill_public_permission(
-                skill=skill,
-                public_permission=SkillSharePermission.VIEWER,
-                db_session=db_session,
-            )
-            db_session.add(
-                ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id)
-            )
-            db_session.commit()
-
-            push_skill_to_affected_sandboxes(skill, db_session)
-            db_session.commit()
-            skill_file = _skill_file_path(workspace, skill.name)
-            skill_file.wait_for_absent()
-
-            ExternalAppManager.upsert_user_credentials(
-                user_performing_action=user,
-                app_id=app.id,
-                credentials={"access_token": "integration-test-token"},
-            )
-
-            skill_file.wait_for_absent()
-            SkillManager.set_enabled(skill_response, user, True)
-            skill_file.wait_for_bytes(b"credential gated skill body\n")
-        finally:
-            ExternalAppManager.delete(k8s_admin_user, app.id)
-
     def test_public_skill_lands_only_after_each_user_enables_it(
         self,
         k8s_admin_user: DATestUser,

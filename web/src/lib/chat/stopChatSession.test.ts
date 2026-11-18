@@ -28,7 +28,11 @@ const params = {
   message: "Question",
   parentMessageId: null,
   chatSessionId: "session",
-  filters: null,
+  toolOptions: {
+    allowed: null,
+    preferred: null,
+    internal_search_filters: null,
+  },
 };
 const errorMessage = "Cannot confirm completion";
 const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();

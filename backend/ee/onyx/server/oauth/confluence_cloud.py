@@ -16,6 +16,7 @@ from onyx.configs.app_configs import (
     DEV_MODE,
     OAUTH_CONFLUENCE_CLOUD_CLIENT_ID,
     OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET,
+    REQUEST_TIMEOUT_SECONDS,
     WEB_DOMAIN,
 )
 from onyx.configs.constants import DocumentSource
@@ -215,6 +216,7 @@ def confluence_oauth_callback(
                 "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
             },
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
         token_response: ConfluenceCloudOAuth.TokenResponse | None = None
@@ -305,6 +307,7 @@ def confluence_oauth_accessible_resources(
                 "Authorization": f"Bearer {access_token}",
                 "Accept": "application/json",
             },
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
         response.raise_for_status()

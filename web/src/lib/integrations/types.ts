@@ -1,0 +1,250 @@
+export type IntegrationKind = "mcp" | "api";
+export type IntegrationShape = "mcp_server" | "openapi" | "preset" | "custom";
+export type AuthMode = "none" | "shared" | "individual";
+export type AuthMethod = "oauth2" | "api_key" | "onyx_login" | "managed";
+export type ConnectionState =
+  | "connected"
+  | "not_connected"
+  | "needs_reconnect"
+  | "not_set_up";
+export type PolicyValue = "allow" | "ask" | "blocked";
+
+export type LinkValue = "inherit" | PolicyValue;
+export type InstallationPolicy =
+  | "REQUIRED"
+  | "DEFAULT"
+  | "AVAILABLE"
+  | "NOT_AVAILABLE";
+export type McpTransport = "STREAMABLE_HTTP" | "SSE";
+export type OAuthProviderMode = "preset" | "manual" | "discovery";
+
+export interface IntegrationStatus {
+  state: ConnectionState;
+  reason: string | null;
+}
+
+export interface CredentialField {
+  key: string;
+  label: string;
+  secret: boolean;
+}
+
+export interface IntegrationPluginRef {
+  plugin_id: string;
+  plugin_name: string;
+  scope: "organization" | "personal";
+  owner_email: string | null;
+  installation_policy: InstallationPolicy | null;
+}
+
+export interface MemberPluginRef extends IntegrationPluginRef {
+  enabled: boolean;
+}
+
+/** `PUT /plugins/{id}/enabled`: the user's state of the plugin. */
+export interface MemberPluginState {
+  plugin_id: string;
+  enabled: boolean;
+  installation_policy: InstallationPolicy;
+}
+
+/** `POST /plugins/{id}/publish`: the name can change on a clash. */
+export interface PluginPublishResponse {
+  plugin_id: string;
+  name: string;
+}
+
+export type PluginSharePermission = "EDITOR" | "VIEWER";
+
+/** The shares of a private plugin that holds only integrations. */
+export interface PluginAccessView {
+  plugin_id: string;
+  user_shares: {
+    user_id: string;
+    email: string;
+    permission: PluginSharePermission;
+  }[];
+  group_shares: {
+    group_id: number;
+    group_name: string;
+    permission: PluginSharePermission;
+  }[];
+}
+
+/** The new set of shares; a share left out is removed. */
+export interface PluginAccessUpdate {
+  user_shares: { user_id: string; permission: PluginSharePermission }[];
+  group_shares: { group_id: number; permission: PluginSharePermission }[];
+}
+
+export interface IntegrationAction {
+  key: string;
+  display_name: string;
+  description: string | null;
+  read_only: boolean | null;
+  default_policy: PolicyValue;
+  admin_policy: PolicyValue | null;
+  effective_admin_policy: PolicyValue;
+  /** Craft asks before each call of this action, so Allow has no effect. */
+  always_asks: boolean;
+}
+
+/** One integration of a plugin in `GET /integrations/agent-catalog`. */
+export interface AgentCatalogIntegration {
+  id: number;
+  name: string;
+  kind: IntegrationKind;
+  shape: IntegrationShape;
+  users_can_save_always_allow: boolean;
+  actions: IntegrationAction[];
+}
+
+export interface AgentPluginOption {
+  plugin_id: string;
+  plugin_name: string;
+  description: string | null;
+  integrations: AgentCatalogIntegration[];
+}
+
+export interface AdminIntegration {
+  id: number;
+  kind: IntegrationKind;
+  shape: IntegrationShape;
+  name: string;
+  description: string | null;
+  preset_id: string | null;
+  enabled: boolean;
+  auth_mode: AuthMode;
+  auth_method: AuthMethod | null;
+  plugins: IntegrationPluginRef[];
+  created_by_email: string | null;
+  action_count: number;
+  needs_setup: boolean;
+  setup_reason: string | null;
+  organization_status: IntegrationStatus | null;
+  can_manage: boolean;
+}
+
+export interface OAuthClientInput {
+  provider_mode: OAuthProviderMode;
+  authorization_url: string;
+  token_url: string;
+  scopes: string[] | null;
+  additional_params: Record<string, string> | null;
+  pkce: boolean | null;
+  client_id: string | null;
+  client_secret: string | null;
+}
+
+export type OAuthClientView = Omit<OAuthClientInput, "client_secret"> & {
+  has_client_secret: boolean;
+};
+
+export type IntegrationConfig =
+  | { shape: "mcp_server"; server_url: string; transport: McpTransport }
+  | { shape: "openapi"; openapi_spec: Record<string, unknown> }
+  | {
+      shape: "preset";
+      preset_id: string;
+      organization_credentials: Record<string, string> | null;
+    }
+  | { shape: "custom"; upstream_url_patterns: string[] };
+
+export type IntegrationConfigView =
+  | Exclude<IntegrationConfig, { shape: "preset" }>
+  | { shape: "preset"; preset_id: string };
+
+export interface AdminIntegrationDetail extends AdminIntegration {
+  config: IntegrationConfigView;
+  credential_fields: CredentialField[];
+  header_template: Record<string, string> | null;
+  users_can_save_always_allow: boolean;
+  oauth_client: OAuthClientView | null;
+  /** False when the user cannot manage it, or when Onyx provides the app. */
+  can_delete: boolean;
+}
+
+export interface IntegrationPreset {
+  id: string;
+  name: string;
+  auth_methods: (AuthMethod | null)[];
+  required_org_credential_fields: CredentialField[];
+  setup_instructions: string | null;
+}
+
+export interface IntegrationCreate {
+  for_organization: boolean;
+  name: string;
+  description: string | null;
+  auth_mode: AuthMode;
+  auth_method: AuthMethod | null;
+  credential_fields?: CredentialField[] | null;
+  header_template: Record<string, string> | null;
+  oauth_client: OAuthClientInput | null;
+  config: IntegrationConfig;
+}
+
+export interface IntegrationUpdate {
+  name?: string;
+  description?: string | null;
+  enabled?: boolean;
+  auth_mode?: AuthMode;
+  auth_method?: AuthMethod | null;
+  credential_fields?: CredentialField[] | null;
+  header_template?: Record<string, string> | null;
+  users_can_save_always_allow?: boolean;
+  oauth_client?: OAuthClientInput | null;
+  config?: IntegrationConfig;
+}
+
+export interface IntegrationActionsResponse {
+  default_policy: PolicyValue | null;
+  actions: IntegrationAction[];
+}
+
+export interface IntegrationActionsUpdate {
+  /** Left out, the default row stays as it is. */
+  default_policy?: PolicyValue | null;
+  actions: Record<string, PolicyValue | null>;
+}
+
+export interface MemberIntegration {
+  id: number;
+  kind: IntegrationKind;
+  shape: IntegrationShape;
+  name: string;
+  description: string | null;
+  preset_id: string | null;
+  auth_mode: AuthMode;
+  auth_method: AuthMethod | null;
+  credential_fields: CredentialField[];
+  status: IntegrationStatus;
+  plugins: MemberPluginRef[];
+  users_can_save_always_allow: boolean;
+  /** The user's saved credential values, masked. */
+  credential_values: Record<string, string>;
+  external_app_id: number | null;
+  service_urls: string[];
+  mcp_server_id: number | null;
+  server_url: string | null;
+}
+
+export interface MemberAction extends IntegrationAction {
+  /** The user's saved "Always allow". */
+  user_policy: "allow" | null;
+}
+
+export interface MemberActionPolicies {
+  users_can_save_always_allow: boolean;
+  actions: MemberAction[];
+}
+
+export interface IntegrationOAuthCallbackResult {
+  integration_id: number;
+  return_path: string | null;
+}
+
+export interface AdminPluginEntry {
+  plugin: IntegrationPluginRef;
+  integrations: AdminIntegration[];
+}

@@ -10,7 +10,7 @@ from typing import Any
 from googleapiclient.errors import HttpError
 
 from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
-from onyx.connectors.google_drive.models import GoogleDriveFileType
+from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.retry_wrapper import retry_builder

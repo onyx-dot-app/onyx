@@ -6,7 +6,6 @@ from celery import Celery
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
 from onyx.configs.constants import (
     CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT,
     OnyxCeleryPriority,
@@ -14,6 +13,7 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
     OnyxRedisConstants,
 )
+from onyx.db.document import stream_document_ids
 from onyx.db.document_set import construct_document_id_select_by_docset
 from onyx.redis.redis_object_helper import RedisObjectHelper
 from onyx.redis.tenant_redis_client import TenantRedisClient
@@ -68,7 +68,7 @@ class RedisDocumentSet(RedisObjectHelper):
         num_tasks_sent = 0
 
         stmt = construct_document_id_select_by_docset(int(self._id), current_only=False)
-        for doc_id in db_session.scalars(stmt).yield_per(DB_YIELD_PER_DEFAULT):
+        for doc_id in stream_document_ids(db_session, stmt):
             doc_id = cast(str, doc_id)
             current_time = time.monotonic()
             if current_time - last_lock_time >= (

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import InternetContentProvider, InternetSearchProvider, User
+from onyx.db.models import User
 from onyx.db.web_search import (
     deactivate_web_content_provider,
     deactivate_web_search_provider,
@@ -26,7 +25,9 @@ from onyx.db.web_search import (
     set_web_content_provider_base_url,
     set_web_search_provider_base_url,
     upsert_web_content_provider,
+    upsert_web_content_provider_api_key__no_commit,
     upsert_web_search_provider,
+    upsert_web_search_provider_api_key__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -211,22 +212,13 @@ def upsert_search_provider_endpoint(
                 ):
                     # No matching endpoint; keep the sibling's key and URL paired.
                     break
-                stmt = (
-                    insert(InternetContentProvider)
-                    .values(
-                        name=name,
-                        provider_type=content_type.value,
-                        api_key=request.api_key,
-                        is_active=False,
-                        config=synced_config,
-                    )
-                    .on_conflict_do_update(
-                        index_elements=["name"],
-                        set_={"api_key": request.api_key},
-                    )
+                upsert_web_content_provider_api_key__no_commit(
+                    name=name,
+                    provider_type=content_type.value,
+                    api_key=request.api_key,
+                    config=synced_config,
+                    db_session=db_session,
                 )
-                db_session.execute(stmt)
-                db_session.flush()
                 if synced_config is not None and synced_config.base_url:
                     set_web_content_provider_base_url(
                         name=name,
@@ -418,22 +410,13 @@ def upsert_content_provider_endpoint(
                 if search_type == WebSearchProviderType.FIRECRAWL and not synced_config:
                     # No matching endpoint; keep the sibling's key and URL paired.
                     break
-                stmt = (
-                    insert(InternetSearchProvider)
-                    .values(
-                        name=name,
-                        provider_type=search_type.value,
-                        api_key=request.api_key,
-                        is_active=False,
-                        config=synced_config,
-                    )
-                    .on_conflict_do_update(
-                        index_elements=["name"],
-                        set_={"api_key": request.api_key},
-                    )
+                upsert_web_search_provider_api_key__no_commit(
+                    name=name,
+                    provider_type=search_type.value,
+                    api_key=request.api_key,
+                    config=synced_config,
+                    db_session=db_session,
                 )
-                db_session.execute(stmt)
-                db_session.flush()
                 if synced_config is not None and synced_config.get("base_url"):
                     set_web_search_provider_base_url(
                         name=name,

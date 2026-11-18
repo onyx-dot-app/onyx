@@ -167,3 +167,23 @@ def fetch_token_rate_limits_applying_to_user(
             ),
         )
     ).all()
+
+
+def enforced_token_rate_limit_exists(db_session: Session, is_model_limit: bool) -> bool:
+    """True when an enabled BLOCK limit exists in any scope: on a model, or
+    for False, on all models."""
+    model_filter = (
+        TokenRateLimit.model_configuration_id.is_not(None)
+        if is_model_limit
+        else TokenRateLimit.model_configuration_id.is_(None)
+    )
+    return (
+        db_session.scalar(
+            select(TokenRateLimit.id).where(
+                TokenRateLimit.enabled.is_(True),
+                TokenRateLimit.action == TokenRateLimitAction.BLOCK,
+                model_filter,
+            )
+        )
+        is not None
+    )

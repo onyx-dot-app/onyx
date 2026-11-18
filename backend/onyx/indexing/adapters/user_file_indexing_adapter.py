@@ -7,21 +7,22 @@ from collections import defaultdict
 from collections.abc import Generator
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_user_files
 from onyx.access.models import DocumentAccess
 from onyx.configs.constants import DEFAULT_BOOST, NotificationType
 from onyx.connectors.models import ConnectorStopSignal, Document
 from onyx.db.enums import UserFileStatus
-from onyx.db.models import Persona, UserFile
+from onyx.db.models import UserFile
 from onyx.db.notification import create_notification
 from onyx.db.user_file import (
     fetch_chunk_counts_for_user_files,
     fetch_persona_ids_for_user_files,
+    fetch_user_files_with_assistant_files,
     fetch_user_project_ids_for_user_files,
+    lock_user_file_statuses_nowait,
 )
 from onyx.file_store.utils import store_user_file_plaintext
 from onyx.indexing.indexing_pipeline import DocumentBatchPrepareContext
@@ -54,13 +55,8 @@ def _acquire_user_file_locks(db_session: Session, user_file_ids: list[str]) -> b
     """Acquire locks for the specified user files, skipping any being deleted."""
     # Convert to UUIDs for the DB comparison
     user_file_uuid_list = [UUID(user_file_id) for user_file_id in user_file_ids]
-    stmt = (
-        select(UserFile.id, UserFile.status)
-        .where(UserFile.id.in_(user_file_uuid_list))
-        .with_for_update(nowait=True)
-    )
     # will raise exception if any of the documents are already locked
-    rows = db_session.execute(stmt).all()
+    rows = lock_user_file_statuses_nowait(db_session, user_file_uuid_list)
 
     # make sure we found every document
     if len(rows) != len(set(user_file_ids)):
@@ -275,12 +271,7 @@ class UserFileIndexingAdapter:
             if doc.id not in failed_document_ids
         ]
 
-        user_files = (
-            db_session.query(UserFile)
-            .options(selectinload(UserFile.assistants).selectinload(Persona.user_files))
-            .filter(UserFile.id.in_(indexed_ids))
-            .all()
-        )
+        user_files = fetch_user_files_with_assistant_files(db_session, indexed_ids)
         for user_file in user_files:
             # don't update the status if the user file is being deleted
             if user_file.status != UserFileStatus.DELETING:

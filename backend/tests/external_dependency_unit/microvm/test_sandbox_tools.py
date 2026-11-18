@@ -16,7 +16,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import Request
 from pydantic import BaseModel, ConfigDict, JsonValue
-from sqlalchemy import delete, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from onyx.agents.models import RunStatus
@@ -44,19 +44,28 @@ from onyx.db.chat import (
     delete_chat_session,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import IncognitoRecordMode, SandboxStatus
-from onyx.db.mcp import create_mcp_server__no_commit
+from onyx.db.enums import (
+    ApprovalDecision,
+    IncognitoRecordMode,
+    PluginInstallationPolicy,
+    SandboxStatus,
+)
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
     ChatSession,
-    MCPServer,
     Sandbox,
     User,
 )
 from onyx.db.persona import upsert_persona
+from onyx.db.sandbox import (
+    create_sandbox__no_commit,
+    get_or_create_sandbox,
+    get_sandbox_by_user_id,
+)
 from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.agent import DeepResearchAgent
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import (
     AgentCancelled,
     CancellationSignal,
@@ -76,11 +85,6 @@ from onyx.llm.override_models import LLMOverride
 from onyx.microvm.daemon_client import SandboxDaemonErrorReason
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2
 from onyx.server.features.action_policies.models import ApprovalChoice
-from onyx.server.features.build.db.sandbox import (
-    create_sandbox__no_commit,
-    get_or_create_sandbox,
-    get_sandbox_by_user_id,
-)
 from onyx.server.features.build.sandbox import harness_factory
 from onyx.server.features.build.sandbox.firecracker import (
     harness_sandbox,
@@ -119,7 +123,7 @@ from onyx.server.query_and_chat.models import (
 from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolContext
+from onyx.tools.models import ToolContext, ToolOptions
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_implementations.code_mode import cells
 from onyx.tools.tool_implementations.sandbox import sandbox_tools
@@ -136,6 +140,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     WriteTool,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
+from tests.external_dependency_unit.chat.test_chat_tool_approvals import ACTION
 from tests.external_dependency_unit.chat.test_parked_agent_handoff import _gated
 from tests.external_dependency_unit.chat.test_wait_agents import (
     ScriptedLLM as WaitAgentsLLM,
@@ -149,8 +154,13 @@ from tests.external_dependency_unit.code_mode_helpers import (
     tool_step,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
-from tests.external_dependency_unit.db.test_chat_tool_selection import (
+from tests.external_dependency_unit.db.test_chat_tool_options import (
     ResearchCapableModel,
+)
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    hold_in_plugin,
+    make_mcp_integration,
 )
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
@@ -344,7 +354,7 @@ class SandboxChat(BaseModel):
                 "Work in the sandbox.",
                 code_mode=code_mode,
                 on_part=on_part,
-                allowed_tool_ids=[],
+                tool_options=ToolOptions(allowed=[]),
             )
         )
 
@@ -515,25 +525,20 @@ def test_a_program_call_whose_saved_output_is_cut_is_marked_truncated(
 
 
 @pytest.fixture
-def gated_server(db_session: Session, user: User) -> Generator[int, None, None]:
-    server = create_mcp_server__no_commit(
-        owner_email=user.email,
-        name=f"sandbox_gate_{uuid4().hex[:8]}",
-        description=None,
+def gated_integration(db_session: Session) -> Generator[int, None, None]:
+    integration, _ = make_mcp_integration(
+        db_session,
         server_url="https://example.com/mcp",
-        auth_type=None,
-        transport=None,
-        auth_performer=None,
-        db_session=db_session,
+        name=f"sandbox_gate_{uuid4().hex[:8]}",
+        tools=[ACTION],
     )
-    db_session.commit()
-    server_id = server.id
-    yield server_id
+    hold_in_plugin(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    )
+    integration_id = integration.id
+    yield integration_id
     assert chat_turn_work.wait_idle(timeout=30)
-    db_session.rollback()
-    # Cascades to the server's app identity and requests.
-    db_session.execute(delete(MCPServer).where(MCPServer.id == server_id))
-    db_session.commit()
+    delete_integrations(db_session, [integration_id])
 
 
 @pytest.mark.usefixtures("node")
@@ -542,15 +547,15 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     db_session: Session,
     sandbox: FirecrackerHarnessSandbox,
     chat: SandboxChat,
-    gated_server: int,
+    gated_integration: int,
 ) -> None:
     ended = _ended_turns(monkeypatch, sandbox)
-    gated = _gated(gated_server, [])
+    sent: list[str] = []
+    gated = _gated(gated_integration, sent)
     real_construct_tools = construct_tools
 
-    def with_gated_tool(**kwargs: Any) -> dict[int, list[Tool]]:
-        # Its own key, apart from the agent's tool rows.
-        return {**real_construct_tools(**kwargs), -1: [gated]}
+    def with_gated_tool(**kwargs: Any) -> list[Tool]:
+        return [*real_construct_tools(**kwargs), gated]
 
     monkeypatch.setattr("onyx.chat.execution.construct_tools", with_gated_tool)
     llm = ChatLLM(
@@ -568,7 +573,7 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     parts = chat.send(llm)
 
     ref = chat.ref(db_session)
-    assert _stops(parts) == [packets.AWAITING_APPROVAL]
+    assert _stops(parts) == [packets.AWAITING_USER]
     assert ended == [ref]
 
     # The approval resumes the root from its saved state with new agent and
@@ -595,6 +600,9 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
 
     _wait_until(completed)
     assert chat_turn_work.wait_idle(timeout=30)
+    db_session.refresh(approval)
+    assert approval.decision is ApprovalDecision.APPROVED
+    assert sent == ["team"]
     assert len(llm.requests) == 4
     assert ended == [ref, ref]
 
@@ -824,7 +832,9 @@ def test_incognito_and_multi_model_turns_offer_no_sandbox(
             "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
         )
         request = SendMessageRequest(
-            message="Work.", chat_session_id=chat.chat_session_id, allowed_tool_ids=[]
+            message="Work.",
+            chat_session_id=chat.chat_session_id,
+            tool_options=ToolOptions(allowed=[]),
         )
         parts = (
             handle_multi_model_stream(
@@ -876,11 +886,11 @@ def test_a_bot_turn_offers_no_sandbox(
         new_msg_req=SendMessageRequest(
             message="Work.",
             chat_session_id=chat.chat_session_id,
-            allowed_tool_ids=[],
+            tool_options=ToolOptions(allowed=[]),
             origin=origin,
         ),
         user=chat.user,
-        ask_for_approval=False,
+        approval_mode=ApprovalMode.NO_APPROVER,
     )
     [request] = llm.requests
     assert ExecCommandTool.NAME not in str(request.get("tools"))
@@ -906,7 +916,7 @@ def test_an_anonymous_turn_offers_no_sandbox(
                 new_msg_req=SendMessageRequest(
                     message="Work.",
                     chat_session_id=chat_session_id,
-                    allowed_tool_ids=[],
+                    tool_options=ToolOptions(allowed=[]),
                 ),
                 user=anonymous,
             )
@@ -1793,7 +1803,7 @@ def test_a_subagent_that_ends_during_a_root_call_leaves_the_turn_to_the_root(
         new_msg_req=SendMessageRequest(
             message="Work in the sandbox.",
             chat_session_id=chat.chat_session_id,
-            allowed_tool_ids=[],
+            tool_options=ToolOptions(allowed=[]),
             accepts_follow_ups=True,
         ),
         user=chat.user,

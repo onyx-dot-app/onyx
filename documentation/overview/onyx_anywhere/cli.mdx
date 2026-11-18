@@ -148,6 +148,25 @@ A request from a background agent names the agent, for example `triage wants to 
 It does not pause the chat: you can send messages while it waits, and its card stays after the response ends or stops.
 After you decide, the chat shows the outcome and the agent's later requests.
 
+#### Questions from the Agent
+
+The Agent can ask you 1 to 3 questions when your answer changes its work.
+The chat shows a card that asks each question in turn, with its choices and an **Other** row.
+The response waits until you answer. It has no time limit.
+
+| Key | Action |
+|-----|--------|
+| `Up` / `Down`, `Enter` | Select and confirm a choice |
+| Type a choice's number, `Enter` | Choose that choice |
+| `Enter` on **Other** | Type your own answer in the input, then press `Enter` |
+| Type a reply, `Enter` | Answer every question of the response with your reply |
+| `Escape` | Go back from **Other** to the choices |
+
+After the last question, the chat sends your answers, and the card changes to a record of them.
+A reply that you type shows as your message under the record. If a tool call of the response also waits for approval,
+decide it first. If you stop a running response before you answer, the record shows **Not answered**. As with approvals,
+a waiting response cannot be stopped, and `/resume` shows the card again.
+
 ### One-Shot Questions
 
 Ask a question and get a response without entering the TUI:
@@ -171,6 +190,7 @@ onyx-cli ask --agent-id 5 "Summarize our Q4 roadmap"
 | `--quiet` | Buffer output and print once at the end |
 | `--max-output <int>` | Max bytes before truncating (0 to disable) |
 | `--approve <answer>` | Answer to tool approval requests when `ask` cannot prompt: `fail` (default), `reject`, `once`, or `session` |
+| `--questions <answer>` | Answer to the Agent's questions when `ask` cannot prompt: `fail` (default) or `skip` |
 
 When a tool call needs approval and stderr is a terminal, `ask` shows the request on stderr and prompts: `[y]
 approve once / [a] approve for session / [d] show all arguments / [N] reject`.
@@ -190,6 +210,23 @@ Without a terminal, in CI, or with `--json`, `ask` does not wait for input. It u
 - `once` and `session` approve every tool call in the response that needs approval.
 
 If you set `--approve`, `ask` uses it on a terminal too.
+
+When the Agent asks questions and stderr is a terminal, `ask` shows each question with its numbered choices on stderr.
+Then it prompts for the answer. For a question with three choices, the prompt is:
+
+```text
+[1-3] choose an option / type your own answer / [Enter] no answer
+```
+
+Type a number to choose, or type your own answer. An empty answer tells the Agent that you have no answer.
+
+Without a terminal, in CI, or with `--json`, `ask` uses `--questions` instead.
+Both values tell the Agent that no one can answer, so it continues with its own judgment:
+
+- `fail` prints the rest of the answer and exits with code `12`.
+- `skip` prints the rest of the answer and exits normally.
+
+If you set `--questions`, `ask` uses it on a terminal too.
 
 ### Search Documents
 
@@ -311,7 +348,8 @@ it prints results to stdout and progress to stderr, uses no ANSI codes or prompt
 and truncates long `ask` output at 50000 bytes (use `--max-output 0` to disable). Exit codes identify the failure:
 `3` not configured, `4` authentication failed, `5` server unreachable, `6` rate limited,
 `10` a tool call needed approval and `ask --approve=fail` rejected it,
-`11` `ask` was interrupted at an approval prompt and the request still waits.
+`11` `ask` was interrupted at an approval or question prompt and the request still waits,
+`12` the Agent asked questions and `ask --questions=fail` answered that no one can answer.
 
 ### Configuration for agents
 
@@ -334,12 +372,14 @@ onyx-cli ask --json "List all active API integrations"
 | Event Type | Description |
 |------------|-------------|
 | `message_delta` | Content token — concatenate all `content` fields for the full answer |
-| `stop` | Stream complete. With `stop_reason` `awaiting_approval`, the response waits for approval answers, and its later events follow after them |
+| `stop` | Stream complete. With `stop_reason` `awaiting_user`, the response waits for the user, and its later events follow after them |
 | `error` | Error with `error` message field |
 | `search_tool_start` | Onyx started searching documents |
 | `citation_info` | Source citation with `citation_number` and `document_id` |
 | `tool_approval_request` | A tool call waits for approval. `ask` answers it with `--approve` |
 | `tool_approval_resolved` | How an approval request ended, in `outcome` |
+| `tool_question_request` | The Agent asks questions. `ask` answers them with `--questions` |
+| `tool_question_resolved` | How the questions ended, in `outcome`, with the `answers` |
 
 ## Keyboard Shortcuts
 
@@ -349,6 +389,7 @@ onyx-cli ask --json "List all active API integrations"
 | `Escape`, `Ctrl+C` | Cancel current generation |
 | `y` / `a` / `n` | Approve once / approve for this session / reject a tool call |
 | `d` | Show all arguments of a tool call that waits for approval |
+| `Up` / `Down`, `Enter` | Select and confirm an approval action or an answer to the Agent's question |
 | `Ctrl+O` | Toggle source citations |
 | `Ctrl+D` | Quit (press twice) |
 | `Scroll` / `Shift+Up/Down` | Scroll chat history |

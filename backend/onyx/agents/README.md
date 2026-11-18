@@ -257,7 +257,7 @@ The runtime logs a `withdraw_approval` that raises, so the waiting call still en
 The requests of a run that ends are the application's to close; the run store does it when it releases the run.
 Answers live in `RunProgress.human_tool_answers`. A request ends with the answer recorded there, or none, and the run reports it in `input_ended`.
 To stop a run with answers, such as the user's rejection on Stop, submit them and cancel while holding `Run.execution_lock`; the run applies them only after it sees the cancellation.
-A direct call that an answer denies keeps the denial as its result, so the model sees it in later runs.
+A direct call whose answer denies it or supplies its result keeps that result, so the model sees it in later runs.
 The runtime sets `PendingToolInput.approval` on the requests that `ToolApprovals` opens. That owner answers and withdraws only those requests; hook and question-tool requests do not have it.
 `PendingToolInput.display_name` carries the application's name for the action to the card that shows the request.
 Without `ToolApprovals`, such a call returns an error result.
@@ -691,7 +691,7 @@ streamed. Instructions that cannot fit after compaction fail the run. Public wai
 
 The SDK owns synchronous execution, typed events, safe suspension, and resumption.
 Tools return a result or a pending request. They do not manage checkpoint storage or ownership.
-Chat applies the MCP action policy through `approval_required` and `ChatRunStore.request_approval` (`onyx/chat/tool_approvals.py`); question forms are future product work.
+Chat applies the MCP action policy through `approval_required` and `ChatRunStore.request_approval` (`onyx/chat/tool_approvals.py`). The root chat agent's question tool returns a `RESULT` request that parks the run the same way (`onyx/chat/tool_questions.py`).
 The SDK accepts new user messages between model steps through `RunOwnership.receive_inputs`; the feature decides how each step uses them.
 
 A chat request follows this path:
@@ -820,10 +820,10 @@ Coding's temporary sandbox has no cross-process reconstruction factory.
 ### Delivery and failure boundaries
 
 There is no durable generic control ledger. Human messages sent to a running response are stored in `chat_input`, as described above.
-Tool approval decisions are saved in `approval_request` before the decision API returns, which then dispatches.
-A run that waits for them has handed off, so the resumed run reads the saved decisions; requests have no deadline.
+Tool approval decisions are saved in `approval_request`, and answers to questions in `question_request`, before their API returns, which then dispatches.
+A run that waits for them has handed off, so the resumed run reads the saved decisions and answers; requests have no deadline.
 When a run ends, the run store closes its open requests as it releases the run; a program's call that stops waiting while its run goes on ends its request through `withdraw_approval`.
-The user's Stop first saves the user's rejection of the requests that the root run and its foreground descendants wait on, then gives each of those runs its answers through `Run.submit` and cancels it, under the run's execution lock, so the requests end rejected, as with Reject.
+The user's Stop first saves the user's rejection of the requests that the root run and its foreground descendants wait on, and the cancellation of the root's questions, then gives each of those runs its answers through `Run.submit` and cancels it, under the run's execution lock, so the requests end rejected, as with Reject, and each question call has a result.
 The existing chat Stop route keeps its cache signal; child Stop requests also use tenant-scoped cache state.
 An expired owner is reported as interrupted when its response is inspected. Uncertain external work is never automatically replayed.
 

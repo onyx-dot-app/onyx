@@ -501,6 +501,16 @@ export class ChatPage {
     await expect(this.humanMessage(index)).toContainText(text);
   }
 
+  /** A bubble of the user's message that holds `text`, at any position. */
+  async expectHumanMessageBubble(
+    text: string,
+    timeout?: number
+  ): Promise<void> {
+    await expect(
+      this.humanMessageBubbles.filter({ hasText: text })
+    ).toBeVisible({ timeout });
+  }
+
   /** The skill chips of question bubble `index`, counting the bubbles of
    * messages that a running response accepted. */
   skillMentionChips(index = 0): Locator {

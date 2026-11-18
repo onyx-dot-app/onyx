@@ -13,13 +13,13 @@ from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
+from onyx.db.sandbox import get_running_sandboxes
 from onyx.server.features.build.configs import (
     SANDBOX_BACKEND,
     SANDBOX_NAMESPACE,
     SANDBOX_RESOURCE_GRACE_SECONDS,
     SandboxBackend,
 )
-from onyx.server.features.build.db.sandbox import get_running_sandboxes
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )

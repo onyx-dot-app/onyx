@@ -15,15 +15,15 @@ from onyx.cache.interface import CacheLock, CacheLockLostError
 from onyx.configs.constants import OnyxCeleryTask, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
+from onyx.db.sandbox import (
+    get_latest_snapshot_for_session,
+    get_running_sandboxes,
+    user_has_stale_active_session,
+)
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import (
     ENABLE_CRAFT,
     SANDBOX_IDLE_TIMEOUT_SECONDS,
-)
-from onyx.server.features.build.db.sandbox import (
-    get_latest_snapshot_for_session,
-    get_running_sandboxes,
-    user_has_stale_active_session,
 )
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager

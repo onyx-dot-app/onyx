@@ -112,7 +112,7 @@ def test_decision_models_require_chat_capability_for_craft(supports_chat: bool) 
             )
         ],
     )
-    selection = llm_config.GatewaySelection(3, "gpt-6-luna")
+    selection = llm_config.GatewaySelection(provider_id=3, model_name="gpt-6-luna")
     expected = (3, "gpt-6-luna") if supports_chat else None
 
     assert llm_config._select_gateway_default([provider], selection) == expected
@@ -144,7 +144,9 @@ def test_gateway_config_qualifies_collisions_and_selects_exact_default() -> None
     with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test/api"):
         config = llm_config.build_onyx_gateway_config(
             [bedrock, direct],
-            llm_config.GatewaySelection(7, "anthropic/claude-sonnet"),
+            llm_config.GatewaySelection(
+                provider_id=7, model_name="anthropic/claude-sonnet"
+            ),
         )
 
     assert config is not None
@@ -363,7 +365,9 @@ def test_small_input_override_does_not_reduce_provider_output() -> None:
 
 
 def test_gateway_selection_renders_storage_columns() -> None:
-    assert llm_config.GatewaySelection(17, "anthropic/claude-sonnet").to_columns() == (
+    assert llm_config.GatewaySelection(
+        provider_id=17, model_name="anthropic/claude-sonnet"
+    ).to_columns() == (
         "onyx",
         "17/anthropic/claude-sonnet",
     )
@@ -548,7 +552,8 @@ def test_manager_stored_selection_outranks_craft_default() -> None:
         ),
     ):
         config = manager.build_llm_configs(
-            user, llm_config.GatewaySelection(3, "claude-sonnet-5")
+            user,
+            llm_config.GatewaySelection(provider_id=3, model_name="claude-sonnet-5"),
         )
 
     assert config.model_name == "3/claude-sonnet-5"
@@ -607,8 +612,8 @@ def test_selection_outranks_configured_default() -> None:
     with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
         config = llm_config.build_onyx_gateway_config(
             [anthropic, bedrock],
-            llm_config.GatewaySelection(7, "bedrock-pro"),
-            [llm_config.GatewaySelection(3, "claude-sonnet-5")],
+            llm_config.GatewaySelection(provider_id=7, model_name="bedrock-pro"),
+            [llm_config.GatewaySelection(provider_id=3, model_name="claude-sonnet-5")],
         )
 
     assert config is not None
@@ -622,8 +627,8 @@ def test_stale_selection_falls_through_to_configured_default() -> None:
     with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
         config = llm_config.build_onyx_gateway_config(
             [anthropic, bedrock],
-            llm_config.GatewaySelection(7, "retired-model"),
-            [llm_config.GatewaySelection(3, "claude-sonnet-5")],
+            llm_config.GatewaySelection(provider_id=7, model_name="retired-model"),
+            [llm_config.GatewaySelection(provider_id=3, model_name="claude-sonnet-5")],
         )
 
     assert config is not None
@@ -652,7 +657,7 @@ def test_gateway_config_falls_back_when_requested_selection_is_stale() -> None:
     with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
         config = llm_config.build_onyx_gateway_config(
             [provider],
-            llm_config.GatewaySelection(99, "deleted-model"),
+            llm_config.GatewaySelection(provider_id=99, model_name="deleted-model"),
         )
 
     assert config is not None
@@ -782,14 +787,14 @@ def test_reconcile_parses_stored_gateway_selection() -> None:
     cache.get.return_value = None
     with (
         patch.object(manager_module, "get_cache_backend", return_value=cache),
-        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+        patch.object(manager_module, "list_connectable_apps", return_value=[]),
     ):
         manager.reconcile_session_llm_config(
             cast(Sandbox, MagicMock(id=1)), session, cast(User, MagicMock(spec=User))
         )
 
     assert build_llm_configs.call_args.args[1] == llm_config.GatewaySelection(
-        17, "anthropic/claude-sonnet"
+        provider_id=17, model_name="anthropic/claude-sonnet"
     )
 
 
@@ -813,14 +818,14 @@ def test_reconcile_forwards_legacy_provider_selection() -> None:
     cache.get.return_value = None
     with (
         patch.object(manager_module, "get_cache_backend", return_value=cache),
-        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+        patch.object(manager_module, "list_connectable_apps", return_value=[]),
     ):
         manager.reconcile_session_llm_config(
             cast(Sandbox, MagicMock(id=1)), session, cast(User, MagicMock(spec=User))
         )
 
     assert build_llm_configs.call_args.args[1] == llm_config.LegacySelection(
-        "anthropic", "claude-fable-5"
+        provider_type="anthropic", model_name="claude-fable-5"
     )
 
 
@@ -845,7 +850,7 @@ def test_empty_gateway_session_restarts_instance_for_changed_catalog() -> None:
     cache.get.return_value = None
     with (
         patch.object(manager_module, "get_cache_backend", return_value=cache),
-        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+        patch.object(manager_module, "list_connectable_apps", return_value=[]),
     ):
         manager.reconcile_session_llm_config(sandbox, session, user)
 
@@ -947,7 +952,7 @@ def test_dispose_timeout_after_rewrite_converges_on_next_turn() -> None:
 
     with (
         patch.object(manager_module, "get_cache_backend", return_value=cache),
-        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+        patch.object(manager_module, "list_connectable_apps", return_value=[]),
     ):
         sandbox_manager.read_file.return_value = b"stale"
         sandbox_manager.dispose_opencode_instance.side_effect = httpx.ReadTimeout(

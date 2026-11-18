@@ -18,6 +18,9 @@ from mitmproxy import http
 
 from onyx.sandbox_proxy.models import McpRpcClassification, McpRpcKind
 
+# The action of an MCP request that does not parse. It is always blocked.
+MCP_UNCLASSIFIABLE_ACTION_TYPE = "mcp.unclassifiable"
+
 _TOOL_CALL_METHOD = "tools/call"
 
 # Non-invocation JSON-RPC methods that operate the MCP session. Kept as an
@@ -58,7 +61,8 @@ def classify_mcp_request(request: http.Request) -> McpRpcClassification:
     * any message a well-formed ``tools/call`` (string ``params.name``) →
       ``TOOL_CALL`` over all such names;
     * anything else (unknown method, malformed body, a ``tools/call`` missing its
-      name) → ``UNCLASSIFIABLE``.
+      name, a message or ``params`` with two keys that differ only in case) →
+      ``UNCLASSIFIABLE``.
     """
     # Upgraded streams bypass HTTP request checks. MCP uses HTTP and SSE only.
     if "upgrade" in request.headers or "upgrade" in {
@@ -80,6 +84,8 @@ def classify_mcp_request(request: http.Request) -> McpRpcClassification:
 
     tool_names: list[str] = []
     for message in messages:
+        if _has_ambiguous_keys(message) or _has_ambiguous_keys(message.get("params")):
+            return _UNCLASSIFIABLE
         rpc_method = message.get("method")
         if not isinstance(rpc_method, str):
             return _UNCLASSIFIABLE
@@ -105,7 +111,7 @@ def _parse_messages(body: bytes | None) -> list[dict[str, Any]] | None:
     if not body:
         return None
     try:
-        payload = json.loads(body)
+        payload = json.loads(body, object_pairs_hook=_JsonObject)
     except (ValueError, TypeError, RecursionError):
         # RecursionError: a deeply-nested body must fail closed, not crash the
         # evaluator into the gate's fail-open path.
@@ -117,6 +123,20 @@ def _parse_messages(body: bytes | None) -> list[dict[str, Any]] | None:
             return None
         return payload
     return None
+
+
+class _JsonObject(dict[str, Any]):
+    """A JSON object that remembers a repeated key. A server can read the
+    first value of a repeated key, or match keys without case, and then run
+    a different method or tool from the one the gate classified."""
+
+    def __init__(self, pairs: list[tuple[str, Any]]) -> None:
+        super().__init__(pairs)
+        self.ambiguous = len({key.casefold() for key, _ in pairs}) != len(pairs)
+
+
+def _has_ambiguous_keys(value: object) -> bool:
+    return isinstance(value, _JsonObject) and value.ambiguous
 
 
 def _is_plumbing(method: str) -> bool:

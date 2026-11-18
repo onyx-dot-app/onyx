@@ -61,7 +61,7 @@ def purge_deleted_chat_sessions(user_id: UUID, session_ids: list[UUID]) -> None:
     def purge_sessions() -> None:
         try:
             from onyx.db.engine.sql_engine import get_session_with_current_tenant
-            from onyx.server.features.build.db.sandbox import (
+            from onyx.db.sandbox import (
                 get_sandbox_id_by_user_id,
             )
 
@@ -121,7 +121,7 @@ def purge_expired_harness_sessions(
     try:
         from onyx.cache.factory import get_cache_backend
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
-        from onyx.server.features.build.db.sandbox import (
+        from onyx.db.sandbox import (
             get_all_sandbox_ids,
             get_retained_session_ids,
         )

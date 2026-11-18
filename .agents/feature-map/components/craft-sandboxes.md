@@ -245,7 +245,7 @@ matches.
 (`backend/onyx/server/features/build/session/llm_config.py:build_onyx_gateway_config`). The egress proxy
 overwrites the auth headers for the API host with the Craft PAT.
 
-**The Craft PAT.** `server/features/build/db/sandbox.py:ensure_sandbox_pat`
+**The Craft PAT.** `db/sandbox.py:ensure_sandbox_pat`
 mints one `PatType.CRAFT` token per user, with only the `CRAFT_SANDBOX` scope
 and a 30-day expiry, and stores it encrypted on `Sandbox.encrypted_pat`. It
 reuses the stored token only when it is the user's single active Craft PAT
@@ -336,7 +336,7 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   `backend/onyx/tools/tool_implementations/sandbox/sandbox_tools.py`) call it with the
   user's `Sandbox` row and the chat session ID. The first call of a
   response's sandbox tools gets or creates the row
-  (`backend/onyx/server/features/build/db/sandbox.py:get_or_create_sandbox`,
+  (`backend/onyx/db/sandbox.py:get_or_create_sandbox`,
   safe against a race on the unique `user_id`; a new row is `TERMINATED`,
   with no pod runtime). Chat and the new Craft harness share one VM per
   user, in separate session directories. The row's
@@ -447,7 +447,7 @@ Harness sandboxes (the agent harness runs outside the sandbox):
    ready at the first read, with no polling fallback. Only a real cluster test
    shows this.
 5. `provisioning-writes-fenced` **Provisioning writes are fenced.** Status
-   updates in `server/features/build/db/sandbox.py` require the row to still
+   updates in `db/sandbox.py` require the row to still
    hold the attempt's `provisioning_attempt_number`. A superseded attempt's
    late write does nothing. Keep this condition on every new status write.
 6. `sleep-fail-closed` **Sleep is fail-closed.** If any snapshot or session
@@ -485,9 +485,9 @@ Harness sandboxes (the agent harness runs outside the sandbox):
     (`backend/onyx/server/features/build/session/resource_cleanup.py:_prepare_failed_resource_cleanup`). It deletes with
     the observed resource identity. The Redis retry key only delays a retry; a
     cache entry never authorizes a deletion. A heartbeat clears the proof
-    (`server/features/build/db/sandbox.py:update_sandbox_heartbeat`, which
+    (`db/sandbox.py:update_sandbox_heartbeat`, which
     flushes; a function of the same name in
-    `server/features/build/db/build_session.py` commits), so any path that writes
+    `db/build_session.py` commits), so any path that writes
     into a session workspace must commit a heartbeat before the write, as
     `SessionManager.upload_file` and `delete_file` do. Without it, a sweep can
     delete a volume or pod that holds files no checkpoint captured.

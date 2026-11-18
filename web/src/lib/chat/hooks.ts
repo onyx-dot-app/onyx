@@ -1,7 +1,14 @@
 "use client";
 
 import { useNavigation, useSearchParams } from "@opal/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type AnimationEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { getConfiguredSources } from "@/lib/connectors/utils";
 import type { OnSubmitProps } from "@/hooks/useChatController";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -12,7 +19,7 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { normalizeSourceSelection } from "@/lib/searchFilters/utils";
 import {
-  flushToolSelection,
+  flushToolOptions,
   type ToolConfigurationHandle,
 } from "@/lib/tools/hooks";
 
@@ -27,7 +34,15 @@ import {
   FetchError,
   skipRetryOnAuthError,
 } from "@/lib/fetcher";
-import { refreshChatSession } from "@/lib/chat/settleChatSession";
+import {
+  followChatStream,
+  refreshChatSession,
+} from "@/lib/chat/settleChatSession";
+import {
+  readChatSessionStatus,
+  waitForChatResponseEnd,
+} from "@/lib/chat/sessionReadiness";
+import { postQuestionAnswers } from "@/lib/chat/svc";
 import { requestMentions } from "@/lib/chat/mentions";
 import type {
   ChatSessionQueue,
@@ -43,17 +58,25 @@ import {
 } from "@/app/app/services/messageTree";
 import { getUnresolvedMultiModelTurn } from "@/app/app/message/multiModel";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import {
+  useChatSessionStore,
+  useCurrentMessageTree,
+} from "@/app/app/stores/useChatSessionStore";
 import {
   awaitsDecision,
+  type AwaitingUser,
   readToolApprovals,
-  readWaitingToolApprovals,
-  type ToolApproval,
+  readToolQuestions,
+  readWaitingQuestions,
+  readWaitingToolRequests,
+  type ToolRequestRecord,
   toolApprovalStatus,
-  useToolApprovalUi,
+  toolQuestionStatus,
+  useToolRequestUi,
+  type WaitingToolRequest,
 } from "@/lib/chat/toolApprovals";
 import type { Packet } from "@/app/app/services/streamingModels";
-import { APPROVAL_PENDING_ERROR_CODE } from "@/app/app/types";
+import { APPROVAL_PENDING_ERROR_CODE, type ChatStream } from "@/app/app/types";
 
 const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
 const SERVER_WORK_POLL_MS = 2000;
@@ -78,7 +101,8 @@ function pendingInputTarget(tree: MessageTreeState | undefined) {
   };
 }
 
-/** Whether the server refused input because the chat waits for a tool approval. */
+/** Whether the server refused input because the chat waits for the user:
+ * a tool approval or answers to questions. */
 function isApprovalPendingError(error: unknown): boolean {
   return (
     error instanceof FetchError &&
@@ -86,40 +110,58 @@ function isApprovalPendingError(error: unknown): boolean {
   );
 }
 
-export interface ResponseToolApprovals {
-  /** Requests that wait no more, as one-line records in the reply's timeline. */
-  records: ToolApproval[];
-  /** One of the reply's own requests waits for this user's decision. */
-  awaitingApproval: boolean;
+export interface ResponseToolRequests {
+  /** Requests and questions that wait no more, as records in the reply's
+   * timeline. */
+  records: ToolRequestRecord[];
+  /** What the reply's own requests wait for from this user, if anything. */
+  awaiting: AwaitingUser | null;
 }
 
 /**
- * The approval requests of one response, as its timeline shows them. Cards
- * that wait for a decision show in the transcript's trailing region.
+ * The approval requests and questions of one response, as its timeline
+ * shows them. Cards that wait for the user show in the transcript's trailing
+ * regions.
  */
-export function useToolApprovals(rawPackets: Packet[]): ResponseToolApprovals {
-  const { entries } = readToolApprovals(rawPackets);
+export function useToolRequests(rawPackets: Packet[]): ResponseToolRequests {
+  const approvals = readToolApprovals(rawPackets).entries;
+  const questions = readToolQuestions(rawPackets).entries;
   // Only this response's statuses, so other decisions do not re-render it.
-  const localStatuses = useToolApprovalUi(
+  const localStatuses = useToolRequestUi(
     useShallow((state) =>
-      entries.map((entry) => state.localStatuses.get(entry.request.approval_id))
+      approvals.map((entry) =>
+        state.localStatuses.get(entry.request.approval_id)
+      )
     )
   );
-  const resolvedIds = entries
-    .filter((entry) => entry.outcome !== null)
-    .map((entry) => entry.request.approval_id)
-    .join(" ");
+  const localAnswers = useToolRequestUi(
+    useShallow((state) =>
+      questions.map((entry) =>
+        state.localAnswers.get(entry.request.question_request_id)
+      )
+    )
+  );
+  const resolvedIds = [
+    ...approvals
+      .filter((entry) => entry.outcome !== null)
+      .map((entry) => entry.request.approval_id),
+    ...questions
+      .filter((entry) => entry.resolution !== null)
+      .map((entry) => entry.request.question_request_id),
+  ].join(" ");
   useEffect(() => {
     if (resolvedIds)
-      useToolApprovalUi.getState().forgetStatuses(resolvedIds.split(" "));
+      useToolRequestUi.getState().forgetStatuses(resolvedIds.split(" "));
   }, [resolvedIds]);
   return useMemo(() => {
-    const records: ToolApproval[] = [];
+    const records: ToolRequestRecord[] = [];
     let awaitingApproval = false;
-    entries.forEach((entry, index) => {
+    let awaitingAnswer = false;
+    approvals.forEach((entry, index) => {
       const status = toolApprovalStatus(entry, localStatuses[index]);
       if (!awaitsDecision(entry))
         records.push({
+          kind: "approval",
           turnIndex: entry.turnIndex,
           request: entry.request,
           status,
@@ -127,33 +169,236 @@ export function useToolApprovals(rawPackets: Packet[]): ResponseToolApprovals {
       else if (entry.request.agent_name === null && status === "pending")
         awaitingApproval = true;
     });
-    return { records, awaitingApproval };
-  }, [entries, localStatuses]);
+    questions.forEach((entry, index) => {
+      const status = toolQuestionStatus(entry, localAnswers[index]);
+      if (entry.resolution !== null)
+        records.push({
+          kind: "question",
+          turnIndex: entry.turnIndex,
+          request: entry.request,
+          status,
+        });
+      else if (status.kind === "pending") awaitingAnswer = true;
+    });
+    return {
+      records,
+      awaiting: awaitingApproval
+        ? "approval"
+        : awaitingAnswer
+          ? "answer"
+          : null,
+    };
+  }, [approvals, questions, localStatuses, localAnswers]);
 }
 
 /**
- * Shows why the server refused input: a reply waits for a tool approval.
- * Callers keep the draft. The reply's first waiting card comes into view. An
- * idle chat that shows no such card loads the server's cards; a busy chat
- * gets them from its reader or its settlement.
+ * Brings a waiting card into view and shakes it when a blocked send points
+ * the user at it. Clearing the nudge keeps a remounted card from repeating
+ * it.
  */
-export function useShowPendingApproval(): () => void {
-  const t = useTranslations("chat.input.pendingToolApproval");
+export function useNudgedCard(requestId: string) {
+  const nudge = useToolRequestUi((state) =>
+    state.nudge?.requestId === requestId ? state.nudge.seq : null
+  );
+  const ref = useRef<HTMLDivElement>(null);
+  const [shaking, setShaking] = useState(false);
+  useEffect(() => {
+    if (nudge === null) return;
+    useToolRequestUi.getState().clearNudge(nudge);
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    ref.current?.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "center",
+    });
+    // Restart a shake that is still running.
+    setShaking(false);
+    requestAnimationFrame(() => setShaking(true));
+  }, [nudge]);
+  return {
+    ref,
+    shaking,
+    onAnimationEnd: (event: AnimationEvent<HTMLDivElement>) => {
+      if (event.target === event.currentTarget) setShaking(false);
+    },
+  };
+}
+
+/**
+ * Shows why the server refused input: a reply waits for a tool approval or
+ * for answers to its questions. Callers keep the draft. The reply's first
+ * waiting card, of `kind` when given, comes into view. An idle chat that
+ * shows no such card loads the server's cards; a busy chat gets them from
+ * its reader or its settlement.
+ */
+export function useShowPendingRequest(): (
+  kind?: WaitingToolRequest["kind"]
+) => void {
+  const t = useTranslations("chat.input");
   const tReadiness = useTranslations("chat.readiness");
-  return useCallback(() => {
-    toast.warning(t("toast"));
-    const { currentSessionId, sessions } = useChatSessionStore.getState();
-    const session = currentSessionId ? sessions.get(currentSessionId) : null;
-    if (!currentSessionId || !session) return;
-    // A background subagent's request does not block input.
-    const waiting = readWaitingToolApprovals(session.messageTree).find(
-      ({ request }) => request.agent_name === null
-    );
-    if (waiting)
-      useToolApprovalUi.getState().nudgeApproval(waiting.request.approval_id);
-    else if (session.chatState === "input")
-      void refreshChatSession(currentSessionId, tReadiness("checkFailed"));
-  }, [t, tReadiness]);
+  return useCallback(
+    (kind) => {
+      const { currentSessionId, sessions } = useChatSessionStore.getState();
+      const session = currentSessionId ? sessions.get(currentSessionId) : null;
+      // A background subagent's request does not block input, and a
+      // question that this client answered waits only for its resolution.
+      const { localAnswers } = useToolRequestUi.getState();
+      const approval =
+        kind === "question" || !session
+          ? undefined
+          : readWaitingToolRequests(session.messageTree).flatMap((item) =>
+              item.kind === "approval" && item.request.agent_name === null
+                ? [item.request]
+                : []
+            )[0];
+      const question =
+        kind === "approval" || !session
+          ? undefined
+          : readWaitingQuestions(session.messageTree, localAnswers).find(
+              (item) => item.status.kind === "pending"
+            );
+      toast.warning(
+        t(
+          approval
+            ? "pendingToolApproval.toast"
+            : question
+              ? "pendingToolQuestion.toast"
+              : "pendingUserInput.toast"
+        )
+      );
+      if (!currentSessionId || !session) return;
+      const requestId =
+        approval?.approval_id ?? question?.request.question_request_id;
+      if (requestId) useToolRequestUi.getState().nudgeRequest(requestId);
+      else if (session.chatState === "input")
+        void refreshChatSession(currentSessionId, tReadiness("checkFailed"));
+    },
+    [t, tReadiness]
+  );
+}
+
+/**
+ * Follows the response that the user's approval decision or answer
+ * continues.
+ *
+ * `continued` follows the stream that the server names as the continuation.
+ * Without one, the response continues in a later turn or in a live reader,
+ * or an agent continues in the background: a status read hands the chat to
+ * its status subscriber, which follows server turns until the chat is idle
+ * and then loads the saved session. Incognito does not follow server turns
+ * from its status: it waits for the next stream and follows it when it
+ * writes its answers. A continuation that already ended is read from the
+ * saved answer through a refresh.
+ *
+ * `refused` handles a 409 or 404: the request no longer waits, and another
+ * decision or answer can have started the continuation. The status read
+ * also reaches the status subscriber.
+ */
+export function useFollowUserInput() {
+  const tReadiness = useTranslations("chat.readiness");
+  const { mutate } = useSWRConfig();
+  return useMemo(() => {
+    const checkFailed = tReadiness("checkFailed");
+    return {
+      continued: async (sessionId: string, continuation: ChatStream | null) => {
+        if (continuation) {
+          followChatStream(sessionId, continuation, checkFailed);
+          return;
+        }
+        if (
+          !useChatSessionStore.getState().sessions.get(sessionId)?.incognito
+        ) {
+          void mutate(SWR_KEYS.chatSessionStatus(sessionId));
+          return;
+        }
+        const next = await waitForChatResponseEnd(sessionId);
+        if (next) followChatStream(sessionId, next, checkFailed);
+        else await refreshChatSession(sessionId, checkFailed);
+      },
+      refused: async (sessionId: string) => {
+        const status = await readChatSessionStatus(sessionId);
+        if (status.is_processing && status.current_stream)
+          followChatStream(sessionId, status.current_stream, checkFailed);
+      },
+    };
+  }, [tReadiness, mutate]);
+}
+
+/** Whether the request no longer waits: the server answers 409 or 404. */
+export function isClosedRequestError(error: unknown): boolean {
+  return (
+    error instanceof FetchError &&
+    (error.status === 409 || error.status === 404)
+  );
+}
+
+/**
+ * The questions on the selected branch that wait for the user's answer, by
+ * request ID, oldest first. A typed message answers them all: it goes to the
+ * first, and the server answers every question of its response that waits.
+ * They wait also while a foreground part of their response still runs.
+ */
+export function useWaitingQuestionIds(): string[] {
+  const tree = useCurrentMessageTree();
+  const localAnswers = useToolRequestUi((state) => state.localAnswers);
+  const ids = useMemo(
+    () =>
+      tree
+        ? readWaitingQuestions(tree, localAnswers)
+            .filter((item) => item.status.kind === "pending")
+            .map((item) => item.request.question_request_id)
+            .join(" ")
+        : "",
+    [tree, localAnswers]
+  );
+  // A string key keeps the same list while the tree streams.
+  return useMemo(() => (ids ? ids.split(" ") : []), [ids]);
+}
+
+/**
+ * Sends text that the user typed as the answer to the waiting questions,
+ * and follows the response that it continues. The questions show as
+ * answered until their resolution arrives. Resolves to false when the
+ * server did not take the text, so the caller keeps it as a draft.
+ */
+export function useAnswerWithMessage(): (
+  questionRequestIds: string[],
+  message: string
+) => Promise<boolean> {
+  const t = useTranslations("chat.messages.toolQuestion");
+  const showPendingRequest = useShowPendingRequest();
+  const follow = useFollowUserInput();
+  return useCallback(
+    async (questionRequestIds, message) => {
+      const sessionId = useChatSessionStore.getState().currentSessionId;
+      const [first] = questionRequestIds;
+      if (sessionId === null || first === undefined) return false;
+      const { recordAnswer } = useToolRequestUi.getState();
+      try {
+        const response = await postQuestionAnswers(first, { message });
+        for (const id of questionRequestIds)
+          recordAnswer(id, { kind: "answered", answers: null, message });
+        void follow.continued(sessionId, response.continuation);
+        return true;
+      } catch (cause) {
+        if (isApprovalPendingError(cause)) {
+          // An approval of the same response still waits.
+          showPendingRequest("approval");
+        } else if (isClosedRequestError(cause)) {
+          for (const id of questionRequestIds)
+            recordAnswer(id, { kind: "closed" });
+          void follow.refused(sessionId);
+        } else {
+          // Such as a rejection by the admin's query hook, or text that is
+          // too long.
+          toast.error(fetchErrorDetail(cause) ?? t("submitError"));
+        }
+        return false;
+      }
+    },
+    [t, showPendingRequest, follow]
+  );
 }
 
 /**
@@ -267,13 +512,13 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const busy = busyKey !== null && busyKey === pendingKey;
   const hasActiveSubagents = status?.has_active_subagents ?? false;
-  const showPendingApproval = useShowPendingApproval();
+  const showPendingRequest = useShowPendingRequest();
 
   return useMemo(() => {
     // Any other 409 means the server already accepted the message.
     function toastPendingFailure(error: unknown, fallback: string) {
       if (isApprovalPendingError(error)) {
-        showPendingApproval();
+        showPendingRequest();
         return;
       }
       toast.error(
@@ -314,7 +559,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
             ? useChatSessionStore.getState().sessions.get(sessionId)
             : undefined;
           // A turn the server starts reads the chat's saved tools.
-          if (sessionId) await flushToolSelection(sessionId);
+          if (sessionId) await flushToolOptions(sessionId);
           try {
             const accepted = await errorHandlingFetchWith<PendingChatMessage>(
               key,
@@ -339,7 +584,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
             ]);
             return true;
           } catch (failure) {
-            if (isApprovalPendingError(failure)) showPendingApproval();
+            if (isApprovalPendingError(failure)) showPendingRequest();
             else toast.error(fetchErrorDetail(failure) ?? t("submitFailed"));
             return false;
           }
@@ -365,7 +610,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
         }),
       interrupt: async (id) => {
         await request(async (key) => {
-          if (sessionId) await flushToolSelection(sessionId);
+          if (sessionId) await flushToolOptions(sessionId);
           try {
             await errorHandlingFetchWith<PendingChatMessage>(
               `${key}/${id}/interrupt`,
@@ -405,7 +650,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     statusKey,
     mutate,
     t,
-    showPendingApproval,
+    showPendingRequest,
   ]);
 }
 

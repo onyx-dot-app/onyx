@@ -4,15 +4,16 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.background.celery.tasks.pruning.tasks import (
-    reset_prune_and_cancel_sync_record,
     try_creating_prune_generator_task,
+)
+from onyx.background.celery.tasks.shared.prune_records import (
+    reset_prune_and_cancel_sync_record,
 )
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
@@ -57,6 +58,7 @@ from onyx.db.connector_credential_pair import (
     verify_user_can_manage_all_cc_pairs,
     verify_user_has_access_to_cc_pair,
 )
+from onyx.db.connector_edit_requests import request_prune__no_commit
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.document import (
     get_document_counts_for_cc_pairs,
@@ -90,6 +92,7 @@ from onyx.db.index_attempt import (
     get_open_error_counts_for_index_attempts,
     get_paginated_index_attempts_for_cc_pair_id,
     get_queue_positions,
+    get_unfinished_index_attempts_for_cc_pair,
     get_waiting_index_attempt,
     has_queued_index_attempt,
 )
@@ -887,17 +890,8 @@ def update_cc_pair_status(
         redis_connector.stop.set_fence(True)
 
         # Request cancellation for any active indexing attempts for this cc_pair
-        active_attempts = (
-            db_session.execute(
-                select(IndexAttempt).where(
-                    IndexAttempt.connector_credential_pair_id == cc_pair_id,
-                    IndexAttempt.status.in_(
-                        [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-                    ),
-                )
-            )
-            .scalars()
-            .all()
+        active_attempts = get_unfinished_index_attempts_for_cc_pair(
+            db_session, cc_pair_id
         )
 
         for attempt in active_attempts:
@@ -1184,14 +1178,14 @@ def prune_cc_pair(
         cc_pair.credential_id,
         cc_pair.connector.name,
     )
+    request_prune__no_commit(db_session, cc_pair.id)
+    db_session.commit()
+
     payload_id = try_creating_prune_generator_task(
         client_app, cc_pair, db_session, r, tenant_id
     )
     if not payload_id:
-        raise OnyxError(
-            OnyxErrorCode.INTERNAL_ERROR,
-            "Pruning task creation failed.",
-        )
+        return StatusResponse(success=True, message="Pruning request queued.")
 
     logger.info("Pruning queued: cc_pair=%s id=%s", cc_pair.id, payload_id)
 

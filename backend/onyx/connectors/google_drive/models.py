@@ -12,7 +12,10 @@ from pydantic import (
     model_validator,
 )
 
-from onyx.connectors.google_utils.shared_constants import GoogleCredentialKind
+from onyx.connectors.google_utils.shared_constants import (
+    GoogleCredentialKind,
+    GoogleDriveFileType,
+)
 from onyx.connectors.interfaces import ConnectorCheckpoint
 from onyx.connectors.models import DocumentTypeLabel, ListingPayload
 from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
@@ -34,9 +37,6 @@ class GDriveMimeType(str, Enum):
     )
     PLAIN_TEXT = "text/plain"
     MARKDOWN = "text/markdown"
-
-
-GoogleDriveFileType = dict[str, Any]
 
 
 class ImpersonationError(Exception):
