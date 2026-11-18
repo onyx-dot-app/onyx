@@ -2004,10 +2004,12 @@ def _docprocessing_task(
         )
         if documents is not None and not documents:
             # The conversion stage stores a batch that gave no document, so a
-            # stopped worker loses no batch. Count it complete. The delete
-            # comes first: a stored batch is then never counted, and an
-            # error in the delete is counted once, by the failure handler.
-            storage.delete_batch_by_num(batch_num)
+            # stopped worker loses no batch. Count it complete. The count
+            # comes first, as for a batch with documents: the stored batch is
+            # the durable record until the count commits, so a stop before
+            # the count leaves it to be sent again. A delete error after the
+            # count must not count the batch again, so it is only logged; the
+            # attempt's cleanup removes the batch.
             with get_session_with_current_tenant() as db_session:
                 IndexingCoordination.update_batch_completion_and_docs(
                     db_session=db_session,
@@ -2015,6 +2017,15 @@ def _docprocessing_task(
                     total_docs_indexed=0,
                     new_docs_indexed=0,
                     total_chunks=0,
+                )
+            try:
+                storage.delete_batch_by_num(batch_num)
+            except Exception:
+                task_logger.warning(
+                    "Could not delete the empty batch %s of attempt %s",
+                    batch_num,
+                    index_attempt_id,
+                    exc_info=True,
                 )
             return
         if not documents:
