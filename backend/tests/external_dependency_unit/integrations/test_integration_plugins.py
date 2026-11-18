@@ -104,7 +104,11 @@ def test_share_and_publish_an_integration_plugin(db_session: Session) -> None:
         apply_plugin_access_change__no_commit(
             [plugin.id],
             PluginAccessChange(
-                user_grants=(PluginUserGrant(other.id, SkillSharePermission.EDITOR),),
+                user_grants=(
+                    PluginUserGrant(
+                        user_id=other.id, permission=SkillSharePermission.EDITOR
+                    ),
+                ),
                 publish=True,
                 on_name_clash="rename",
             ),
