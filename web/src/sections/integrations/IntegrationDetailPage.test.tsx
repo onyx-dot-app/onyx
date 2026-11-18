@@ -344,6 +344,50 @@ test("connects the organization account with an API key", async () => {
   );
 });
 
+test("shows each header of the template and saves the headers shown", async () => {
+  const detail = makeDetail({
+    auth_mode: "individual",
+    auth_method: "api_key",
+    oauth_client: null,
+    header_template: {
+      "X-Tenant": "{tenant}",
+      Authorization: "Bearer {api_key}",
+    },
+    credential_fields: [
+      { key: "tenant", label: "tenant", secret: true },
+      { key: "api_key", label: "api key", secret: true },
+    ],
+  });
+  const fetchMock = mockFetch({
+    [URL_DETAIL]: detail,
+    [`PATCH ${URL_DETAIL}`]: detail,
+    [URL_ACTIONS]: NO_ACTIONS,
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const nameLabel = copy.signIn.header.name.title;
+  expect(await view.findByLabelText(nameLabel)).toHaveValue("X-Tenant");
+  expect(view.getByLabelText(`${nameLabel} 2`)).toHaveValue("Authorization");
+  expect(
+    view.getByLabelText(`${copy.signIn.header.value.title} 2`)
+  ).toHaveValue("Bearer {api_key}");
+
+  await u.click(
+    view.getByRole("button", {
+      name: copy.signIn.header.remove.replace("{name}", "X-Tenant"),
+    })
+  );
+  await u.click(
+    view.getByRole("button", { name: detailCopy.configuration.save })
+  );
+  await waitFor(() => expect(patchBodies(fetchMock)).toHaveLength(1));
+  expect(patchBodies(fetchMock)[0]).toMatchObject({
+    header_template: { Authorization: "Bearer {api_key}" },
+  });
+});
+
 function patchBodies(fetchMock: jest.SpyInstance): unknown[] {
   return fetchMock.mock.calls
     .filter(

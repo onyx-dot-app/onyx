@@ -10520,14 +10520,17 @@
           "name": {
             "title": "Header Name",
             "placeholder": "Add a header name",
-            "error": "Add a header name."
+            "error": "Add a header name.",
+            "duplicate": "Use each header name once."
           },
           "value": {
             "title": "Header Value",
             "description": "Put each credential in braces, for example {example}. Each placeholder becomes a credential field.",
             "placeholder": "For example: {example}",
             "error": "Add at least one placeholder, for example {example}."
-          }
+          },
+          "add": "Add Header",
+          "remove": "Remove header {name}"
         },
         "oauth": {
           "providerMode": {

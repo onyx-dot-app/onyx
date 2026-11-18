@@ -10520,14 +10520,17 @@
           "name": {
             "title": "Header-Name",
             "placeholder": "Header-Namen eingeben",
-            "error": "Geben Sie einen Header-Namen ein."
+            "error": "Geben Sie einen Header-Namen ein.",
+            "duplicate": "Verwenden Sie jeden Header-Namen nur einmal."
           },
           "value": {
             "title": "Header-Wert",
             "description": "Setzen Sie jede Anmeldeinformation in geschweifte Klammern, z. B. {example}. Jeder Platzhalter wird zu einem Feld für Anmeldedaten.",
             "placeholder": "Zum Beispiel: {example}",
             "error": "Geben Sie mindestens einen Platzhalter ein, z. B. {example}."
-          }
+          },
+          "add": "Header hinzufügen",
+          "remove": "Header {name} entfernen"
         },
         "oauth": {
           "providerMode": {
