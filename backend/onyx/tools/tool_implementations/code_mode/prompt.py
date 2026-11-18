@@ -47,7 +47,7 @@ def _limits_text(limits: SandboxLimits) -> str:
 
 def _deferred_note(stubs: ToolStubs) -> str:
     groups = [
-        *(f"the MCP server `{namespace}`" for namespace in stubs.deferred_namespaces),
+        *(f"the tool group `{namespace}`" for namespace in stubs.deferred_namespaces),
         *(["other tools"] if stubs.has_deferred_functions_without_namespace else []),
     ]
     return (

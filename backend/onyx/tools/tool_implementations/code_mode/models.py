@@ -562,8 +562,13 @@ class SearchableFunction(BaseModel):
     description: str
     # The function's stub with the declarations of its result types.
     stub: str
-    # Text that the search matches: the name (weighted), namespace and description.
+    # Text that the search matches: the name (weighted), namespace and
+    # description.
     text: str
+    # The argument schema's property names and descriptions; scored apart from
+    # `text`, so a large schema does not dilute it, and weighted lower
+    # (tool_search.py:PARAMETER_WEIGHT).
+    parameter_text: str
 
 
 class CellCallRecord(BaseModel):

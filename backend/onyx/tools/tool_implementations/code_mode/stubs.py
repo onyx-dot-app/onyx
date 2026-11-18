@@ -6,11 +6,12 @@ import json
 import keyword
 import re
 import unicodedata
+from collections import deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from types import UnionType
 from typing import Literal, Union, get_args, get_origin
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import BaseModel, ConfigDict, JsonValue, SkipValidation
 
 from onyx.llm.models import ToolResult
 from onyx.tools.interface import Tool
@@ -53,6 +54,12 @@ from onyx.utils.pydantic_util import as_base
 MAX_STUB_CHARS = 16_000
 MAX_TOOL_DESCRIPTION_CHARS = 2_000
 MAX_ARGUMENT_DESCRIPTION_CHARS = 400
+# Schema keywords whose values are data, not schemas; tool_search skips them.
+_SCHEMA_DATA_KEYWORDS = frozenset({"enum", "const", "default", "examples", "example"})
+# Schema keywords whose values map arbitrary keys to schemas.
+_SCHEMA_MAP_KEYWORDS = frozenset(
+    {"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"}
+)
 MAX_REF_EXPANSIONS_PER_PATH = 2
 MAX_REF_EXPANSIONS_TOTAL = 32
 MAX_SCHEMA_DEPTH = 8
@@ -115,6 +122,8 @@ class ToolFunction(BaseModel):
     required_arguments: frozenset[str]
     nullable_arguments: frozenset[str]
     description: str
+    # The argument schema that the stub was rendered from, kept as is.
+    parameters: SkipValidation[dict[str, JsonValue]]
     # The function as a method of the `tools` class.
     stub: str
     # Declarations of the types that the stub names.
@@ -465,7 +474,8 @@ def _parameters(
     properties = parameters.get("properties")
     if not isinstance(properties, dict):
         return [], {}, extra
-    # OpenAPI-derived schemas omit `required`; every argument is then optional.
+    # Without `required` (as in OpenAPI-derived schemas), every argument is
+    # optional.
     required = _required_names(parameters)
     names = unique_identifiers(properties, str, argument_name)
     result: list[StubParameter] = []
@@ -707,6 +717,7 @@ def tool_function(
         required_arguments=frozenset(p.python_name for p in parameters if p.required),
         nullable_arguments=frozenset(p.python_name for p in parameters if p.nullable),
         description=description,
+        parameters=definition.parameters,
         stub=stub,
         declarations=result.declarations,
     )
@@ -715,6 +726,39 @@ def tool_function(
 def _searchable(function: ToolFunction) -> SearchableFunction:
     namespace = function.tool.code_mode_function_name.namespace or ""
     stub = "\n\n\n".join([*function.declarations, f"{_TOOLS_CLASS}\n\n{function.stub}"])
+    # Property names and descriptions at every depth of the argument schema,
+    # outer ones first; each distinct text once, within a fixed size.
+    parameter_texts: dict[str, None] = {}
+    parameter_chars = 0
+    pending: deque[JsonValue] = deque([function.parameters])
+    while pending and parameter_chars < MAX_TOOL_DESCRIPTION_CHARS:
+        node = pending.popleft()
+        if isinstance(node, list):
+            pending.extend(item for item in node if isinstance(item, (dict, list)))
+            continue
+        if not isinstance(node, dict):
+            continue
+        properties = node.get("properties")
+        texts = list(properties) if isinstance(properties, dict) else []
+        description = node.get("description")
+        if isinstance(description, str):
+            texts.append(description)
+        for text in texts:
+            if text not in parameter_texts:
+                parameter_texts[text] = None
+                parameter_chars += len(text) + 1
+        for key, value in node.items():
+            if key in _SCHEMA_DATA_KEYWORDS:
+                continue
+            # The values of a schema map are schemas, whatever their keys.
+            children = (
+                value.values()
+                if key in _SCHEMA_MAP_KEYWORDS and isinstance(value, dict)
+                else [value]
+            )
+            pending.extend(
+                child for child in children if isinstance(child, (dict, list))
+            )
     return SearchableFunction(
         name=function.function_name,
         description=function.description,
@@ -722,6 +766,7 @@ def _searchable(function: ToolFunction) -> SearchableFunction:
         # The name counts twice, so a match on it ranks above a match in prose.
         text=f"{function.function_name} {function.function_name} {namespace} "
         f"{function.description}",
+        parameter_text=_clip(" ".join(parameter_texts), MAX_TOOL_DESCRIPTION_CHARS),
     )
 
 

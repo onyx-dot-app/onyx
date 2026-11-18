@@ -276,3 +276,45 @@ def test_openapi_tool_preserves_external_schema_and_stays_non_strict() -> None:
     Draft202012Validator(definition.parameters).validate(
         {"requestBody": {"metadata": {"arbitrary_key": None}}}
     )
+
+
+def test_openapi_parameter_description_moves_into_its_property_schema() -> None:
+    method = MethodSpec(
+        name="list_incidents",
+        raw_name="list_incidents",
+        summary="List incidents",
+        path="/incidents/{team}",
+        method="get",
+        spec={
+            "parameters": [
+                {
+                    "name": "sev",
+                    "in": "query",
+                    "description": "Severity bucket of the outage.",
+                    "schema": {"type": "string", "description": "A shared level."},
+                },
+                {"name": "page", "in": "query", "schema": {"type": "integer"}},
+                {
+                    "name": "team",
+                    "in": "path",
+                    "description": "Team that owns the incident.",
+                    "schema": True,
+                },
+                {
+                    "name": "closed",
+                    "in": "query",
+                    "description": "Never accepted.",
+                    "schema": False,
+                },
+            ]
+        },
+    )
+    assert method.to_tool_definition().parameters == {
+        "type": "object",
+        "properties": {
+            "sev": {"type": "string", "description": "Severity bucket of the outage."},
+            "page": {"type": "integer"},
+            "team": {"description": "Team that owns the incident."},
+            "closed": False,
+        },
+    }
