@@ -19,10 +19,17 @@ inputs:
     description: "Everything else that changes the image: build args, platforms"
     required: false
     default: ""
+  extra-paths:
+    description: "The files that set the build options, such as target and build args. Not used when saving."
+    required: false
+    default: ""
   image-repo:
     description: "Repository that holds the image, from runs-on/action. Not used when saving."
     required: false
     default: ""
+  persist-pr-digest:
+    description: "Also persist the digest as an artifact scoped to a same-repository PR. Requires actions: read."
+    default: "false"
   save-key:
     description: "The save-key output of the find call"
     required: false
@@ -34,7 +41,7 @@ inputs:
 outputs:
   digest:
     description: "Digest of a reusable image in image-repo, or empty when the caller must build"
-    value: ${{ steps.verify.outputs.digest }}
+    value: ${{ steps.verify.outputs.digest || steps.artifact.outputs.digest }}
   save-key:
     description: "Cache key to save this run's build under, or empty when the image inputs cannot be hashed"
     value: ${{ steps.key.outputs.save-key }}
@@ -50,10 +57,13 @@ runs:
         CONTEXT: ${{ inputs.context }}
         DOCKERFILE: ${{ inputs.dockerfile }}
         BUILD_CONFIG: ${{ inputs.build-config }}
+        EXTRA_PATHS: ${{ inputs.extra-paths }}
         RUN_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
       run: |
         set -euo pipefail
         paths=("$DOCKERFILE" "$CONTEXT/.dockerignore")
+        read -r -a extras <<< "$EXTRA_PATHS"
+        paths+=("${extras[@]}")
         if grep -Eiq -- '--mount=type=bind|^[[:space:]]*(COPY|ADD)[[:space:]].*\[' "$DOCKERFILE"; then
           paths+=("$CONTEXT")
         else
@@ -105,21 +115,46 @@ runs:
       run: |
         if [ -f "$DIGEST_FILE" ]; then
           digest=$(cat "$DIGEST_FILE")
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            exit 0
+          fi
           if docker buildx imagetools inspect "${IMAGE_REPO}@${digest}" > /dev/null; then
             echo "Reusing ${IMAGE_REPO}@${digest}"
             echo "digest=${digest}" >> "$GITHUB_OUTPUT"
           fi
         fi
 
+    - name: Restore a verified digest from this PR
+      id: artifact
+      if: >-
+        inputs.persist-pr-digest == 'true' &&
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.id == github.event.repository.id &&
+        steps.key.outputs.prefix != '' && steps.verify.outputs.digest == ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        HEAD_BRANCH: ${{ github.head_ref }}
+        ARTIFACT_NAME: ${{ steps.key.outputs.prefix }}pr-${{ github.event.pull_request.number }}
+        IMAGE_REPO: ${{ inputs.image-repo }}
+      run: |
+        if ! bash "$GITHUB_ACTION_PATH/restore-pr-digest.sh"; then
+          echo "::notice::Could not restore the image digest artifact. Building the image."
+        fi
+
     - name: Write the digest of this build
+      id: write-digest
       if: inputs.save-digest != '' && inputs.save-key != ''
       shell: bash
       env:
         NAME: ${{ inputs.name }}
         DIGEST: ${{ inputs.save-digest }}
+        SAVE_KEY: ${{ inputs.save-key }}
       run: |
         mkdir -p ".prebuilt-image/${NAME}"
         echo "$DIGEST" > ".prebuilt-image/${NAME}/digest"
+        echo "prefix=${SAVE_KEY%"$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"}" >> "$GITHUB_OUTPUT"
 
     - name: Save the digest of this build
       if: inputs.save-digest != '' && inputs.save-key != ''
@@ -127,3 +162,18 @@ runs:
       with:
         path: .prebuilt-image/${{ inputs.name }}
         key: ${{ inputs.save-key }}
+
+    - name: Persist the digest for future runs of this PR
+      if: >-
+        inputs.persist-pr-digest == 'true' && github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.id == github.event.repository.id &&
+        (steps.write-digest.outputs.prefix != '' ||
+        (steps.key.outputs.prefix != '' && steps.verify.outputs.digest != ''))
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      continue-on-error: true
+      with:
+        name: ${{ steps.write-digest.outputs.prefix || steps.key.outputs.prefix }}pr-${{ github.event.pull_request.number }}
+        path: .prebuilt-image/${{ inputs.name }}/digest
+        include-hidden-files: true
+        retention-days: 7
+        overwrite: true

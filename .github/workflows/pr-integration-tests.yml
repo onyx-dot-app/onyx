@@ -221,7 +221,7 @@ jobs:
           # so pytest-split runs each one across this many jobs. It balances
           # the jobs with backend/tests/integration/.test_durations; refresh
           # that file with `pytest --store-durations` after a suite changes.
-          declare -A splits=([usergroup]=2 [connector]=2 [indexing]=2 [permissions_membership]=2)
+          declare -A splits=([usergroup]=2 [connector]=2 [indexing]=2 [permissions_membership]=2 [reindex_port]=3 [skills]=3 [llm_provider]=2 [query_history]=2)
 
           # Create JSON array with directory info
           all_dirs=""
@@ -259,6 +259,9 @@ jobs:
   build-model-server-image:
     needs: changes
     if: needs.changes.outputs.integration == 'true'
+    permissions:
+      actions: read
+      contents: read
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     runs-on:
@@ -291,10 +294,14 @@ jobs:
           docker-token: ${{ secrets.DOCKER_TOKEN }}
           # A PR test image does not ship; build on the public bases if dhi.io is down.
           dhi-required: "false"
+          persist-pr-digest: "true"
 
   build-devcontainer-image:
     needs: changes
     if: needs.changes.outputs.integration == 'true'
+    permissions:
+      actions: read
+      contents: read
     outputs:
       digest: ${{ steps.prebuilt.outputs.digest || steps.build.outputs.digest }}
     runs-on:
@@ -324,11 +331,15 @@ jobs:
         id: prebuilt
         uses: ./.github/actions/prebuilt-image
         with:
-          name: devcontainer
+          name: integration-devcontainer
           context: .devcontainer
           dockerfile: .devcontainer/Dockerfile
-          build-config: BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          build-config: |
+            target=integration-tests
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          extra-paths: .github/workflows/pr-integration-tests.yml
           image-repo: ${{ env.RUNS_ON_ECR_CACHE }}
+          persist-pr-digest: "true"
 
       - name: Build and push Devcontainer Docker image
         id: build
@@ -337,11 +348,12 @@ jobs:
         with:
           context: .devcontainer
           file: .devcontainer/Dockerfile
+          target: integration-tests
           # Push by digest: the devcontainer image is content-stable, so
           # per-run tags accumulated on a single ECR image digest until they
           # hit the 1000-tags-per-image cap. Downstream jobs pull
           # <repo>@<digest> via this job's `digest` output instead.
-          outputs: type=image,name=${{ env.RUNS_ON_ECR_CACHE }},push=true,push-by-digest=true
+          outputs: type=image,name=${{ env.RUNS_ON_ECR_CACHE }},push=true,push-by-digest=true,compression=gzip,compression-level=1
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           # Attestations attach as ECR referrers to the image digest, which is
@@ -351,21 +363,22 @@ jobs:
           # Any pull_request job can push to the RunsOn ECR cache, so only fork PR runs,
           # which get no secrets, import it. Other runs import only the published image.
           cache-from: |
-            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache-{1}', env.RUNS_ON_ECR_CACHE, runner.arch) || '' }}
-            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache', env.RUNS_ON_ECR_CACHE) || '' }}
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:integration-devcontainer-cache-{1}', env.RUNS_ON_ECR_CACHE, runner.arch) || '' }}
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:integration-devcontainer-cache', env.RUNS_ON_ECR_CACHE) || '' }}
             type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-devcontainer:latest
           # Bound cache tags per architecture, even when many PRs build the same digest.
           cache-to: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ runner.arch }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-devcontainer-cache-${{ runner.arch }},mode=max,compression=gzip,compression-level=1
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
 
       - name: Save the Devcontainer image digest
         if: steps.build.outcome == 'success'
         uses: ./.github/actions/prebuilt-image
         with:
-          name: devcontainer
+          name: integration-devcontainer
           save-key: ${{ steps.prebuilt.outputs.save-key }}
           save-digest: ${{ steps.build.outputs.digest }}
+          persist-pr-digest: "true"
 
   integration-tests:
     needs:
@@ -464,17 +477,14 @@ jobs:
       # same image with the same routes (INDEXING_ONLY only changes the log
       # request-id prefix), so the tests point both hosts at the one container
       # and skip a second load of the embedding model.
-      - name: Start Docker containers
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
-            --wait --wait-timeout 300 \
-            relational_db \
-            opensearch \
-            cache \
-            object-store \
-            inference_model_server
-        id: start_docker
+      - name: Install Python deps and start Docker services
+        uses: ./.github/actions/install-python-deps
+        env:
+          COMPOSE_FILE: docker-compose.yml:docker-compose.dev.yml
+        with:
+          compose-services: relational_db opensearch cache object-store inference_model_server
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
+          save-cache: ${{ strategy.job-index == 0 }}
 
       - name: Start Mock Services
         if: matrix.test-dir.path == 'tests/indexing'
@@ -496,12 +506,6 @@ jobs:
           cd cli
           GOARCH=arm64 GOOS=linux go build -o ${{ github.workspace }}/onyx-cli-test .
 
-      - name: Install Python deps
-        uses: ./.github/actions/install-python-deps
-        with:
-          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
-          save-cache: ${{ strategy.job-index == 0 }}
-
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
         id: integration-tests
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
@@ -516,7 +520,7 @@ jobs:
             # TCP api_server; run one inside the test container and make every
             # missing prerequisite a hard failure instead of a skip.
             GATEWAY_CLIENTS_STRICT=""
-            RUN_CMD="uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }} ${{ matrix.test-dir.splits && format('--splits {0} --group {1} --durations-path tests/integration/.test_durations', matrix.test-dir.splits, matrix.test-dir.group) || '' }}"
+            RUN_CMD="uv run --no-sync pytest -v --durations=5 --tb=short -rs tests/integration/${{ matrix.test-dir.path }} ${{ matrix.test-dir.splits && format('--splits {0} --group {1} --durations-path tests/integration/.test_durations', matrix.test-dir.splits, matrix.test-dir.group) || '' }}"
             if [ "${{ matrix.test-dir.path }}" = "tests/gateway_clients" ]; then
               GATEWAY_CLIENTS_STRICT="true"
               RUN_CMD="bash tests/integration/tests/gateway_clients/run_with_server.sh"
@@ -532,6 +536,7 @@ jobs:
             docker run --rm --network onyx_default \
               --name test-runner \
               --env-file deployment/docker_compose/.env \
+              -e CELERY_BEAT_SCHEDULER="${{ startsWith(matrix.test-dir.path, 'connector_job_tests/') && 'tests.integration.common_utils.beat_scheduler:ConnectorTestScheduler' || '' }}" \
               -v ${{ github.workspace }}:/workspace \
               -w /workspace/backend \
               $CLI_VOLUME \
@@ -669,17 +674,12 @@ jobs:
       # The api_server runs in-process inside pytest via FastAPI TestClient
       # (see tests/integration/conftest.py); only Postgres is needed from
       # compose for Onyx Lite.
-      - name: Start Docker containers (onyx-lite)
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d \
-            --wait --wait-timeout 300 \
-            relational_db
-        id: start_docker_onyx_lite
-
-      - name: Install Python deps
+      - name: Install Python deps and start Docker services
         uses: ./.github/actions/install-python-deps
+        env:
+          COMPOSE_FILE: docker-compose.yml:docker-compose.onyx-lite.yml:docker-compose.dev.yml
         with:
+          compose-services: relational_db
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
 
       - name: Run Onyx Lite Integration Tests
@@ -782,21 +782,12 @@ jobs:
 
       # NOTE: `indexing_model_server` is intentionally not started. See the
       # integration-tests job above.
-      - name: Start Docker containers for multi-tenant tests
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
-            --wait --wait-timeout 300 \
-            relational_db \
-            opensearch \
-            cache \
-            object-store \
-            inference_model_server
-        id: start_docker_multi_tenant
-
-      - name: Install Python deps
+      - name: Install Python deps and start Docker services
         uses: ./.github/actions/install-python-deps
+        env:
+          COMPOSE_FILE: docker-compose.yml:docker-compose.dev.yml
         with:
+          compose-services: relational_db opensearch cache object-store inference_model_server
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
 
       - name: Run Multi-Tenant Integration Tests
