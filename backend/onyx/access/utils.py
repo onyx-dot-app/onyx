@@ -40,9 +40,11 @@ SOURCES_YIELDING_BARE_GROUP_IDS: frozenset[DocumentSource] = frozenset(
     {
         DocumentSource.BOX,
         DocumentSource.CANVAS,
+        DocumentSource.CONFLUENCE,
         DocumentSource.EGNYTE,
         DocumentSource.GITHUB,
         DocumentSource.GOOGLE_DRIVE,
+        DocumentSource.JIRA,
         DocumentSource.LINEAR,
         DocumentSource.YOUTRACK,
         DocumentSource.ZOOM,
