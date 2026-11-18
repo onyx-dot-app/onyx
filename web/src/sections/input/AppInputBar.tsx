@@ -25,8 +25,7 @@ import { MinimalOnyxDocument } from "@/lib/search/types";
 import { ChatState } from "@/app/app/types";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { effectiveChatPreferredToolId } from "@/lib/plugins/chat";
-import type { MemberPlugin } from "@/lib/plugins/member";
+import { effectiveChatPreference } from "@/lib/plugins/chat";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import type {
@@ -60,7 +59,7 @@ import { ProjectFile } from "@/lib/projects/types";
 import { isFilePending } from "@/lib/projects/utils";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { ToolsPopover } from "@/lib/tools/components";
-import MCPConnectionPrompt from "@/lib/mcp/components/MCPConnectionPrompt";
+import IntegrationConnectPrompt from "@/sections/plugins/IntegrationConnectPrompt";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
@@ -115,7 +114,6 @@ export interface AppInputBarProps {
 
   // agents
   activeAgent: MinimalAgent | undefined;
-  memberPlugins?: readonly MemberPlugin[];
 
   handleFileUpload: (files: File[]) => void;
   deepResearchEnabled: boolean;
@@ -155,7 +153,6 @@ const AppInputBar = React.memo(
     onSubmit,
     chatState,
     activeAgent,
-    memberPlugins,
     handleFileUpload,
     llmManager,
     deepResearchEnabled,
@@ -338,6 +335,7 @@ const AppInputBar = React.memo(
     // Snapshot of the input, read non-reactively in the restore effect so
     // seeding doesn't re-run on every keystroke, and after awaits.
     const composedRef = useRef(composed);
+    const [sendHeld, setSendHeld] = useState(false);
     // One typed answer at a time.
     const answeringRef = useRef(false);
     const isRecordingRef = useRef(isRecording);
@@ -360,6 +358,7 @@ const AppInputBar = React.memo(
       // this one.
       if (prevDraftKeyRef.current !== chatDraftStorageKey) {
         prevDraftKeyRef.current = chatDraftStorageKey;
+        setSendHeld(false);
         clearMessage();
       }
     }, [chatDraftStorageKey, clearMessage]);
@@ -408,6 +407,12 @@ const AppInputBar = React.memo(
     const questionRefusesFiles =
       questionWaits && currentMessageFiles.length > 0;
 
+    useEffect(() => {
+      if (!sendHeld || !toolConfiguration.optionsLoaded) return;
+      setSendHeld(false);
+      submitMessage(composedRef.current);
+    }, [sendHeld, toolConfiguration.optionsLoaded]);
+
     function submitMessage(submitted: ComposedMessage) {
       if (!submitted.message.trim()) return;
       if (questionWaits) {
@@ -415,6 +420,10 @@ const AppInputBar = React.memo(
         return;
       }
       if (chatState !== "input") return;
+      if (!toolConfiguration.optionsLoaded) {
+        setSendHeld(true);
+        return;
+      }
       // Stop TTS first to prevent overlapping voices.
       stopTTS();
       onSubmit(submitted);
@@ -460,12 +469,15 @@ const AppInputBar = React.memo(
     }, [isNewSession, initialMessage]);
 
     const { clearPreferredTool } = toolConfiguration;
-    const preferredToolId = effectiveChatPreferredToolId({
+    const preference = effectiveChatPreference({
       requestedToolId: toolConfiguration.preferredToolId,
+      requestedAction: toolConfiguration.preferredAction,
       agent: activeAgent,
-      plugins: memberPlugins ?? [],
       incognito: incognitoEnabled,
+      isPluginEnabled: toolConfiguration.isPluginEnabled,
     });
+    const preferredToolId =
+      preference?.type === "capability" ? preference.tool_id : null;
     const { isLoading: isLoadingProjects } = useProjects();
     const activeProject = useActiveProject();
 
@@ -935,10 +947,9 @@ const AppInputBar = React.memo(
             )}
 
             {!isSearchMode && !controlsLoading && activeAgent && (
-              <MCPConnectionPrompt
-                key={`mcp-auth-${activeAgent.id}`}
-                isStreaming={chatState === "streaming"}
-                agent={activeAgent}
+              <IntegrationConnectPrompt
+                key={`integration-auth-${activeAgent.id}`}
+                agentId={activeAgent.id}
                 toolConfiguration={toolConfiguration}
                 disabled={disabled}
                 onConnectionsClosed={() => inputRef.current?.focus()}

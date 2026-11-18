@@ -35,7 +35,7 @@ or the organization when others should use them.
 | **Browser**          | Available when the deployment's browser runtime is enabled.                                      |
 | **Image generation** | Available after an admin configures a supported [image model](/admins/actions/image_generation). |
 | **Craft documentation** | Available with Craft and helps Craft answer questions about itself. |
-| **App Skills**       | One per App, such as Slack, Gmail, Google Drive, GitHub, Linear, Notion, HubSpot, or Zendesk. Available after the user connects the [App](/admins/plugins/craft_apps). |
+| **App Skills**       | One per App, such as Slack, Gmail, Google Drive, GitHub, Linear, Notion, HubSpot, or Zendesk. Available to users who have the [App](/admins/plugins/craft_apps), also before they connect it. |
 
 An unavailable built-in remains visible to Admins with the reason it cannot be used.
 Configure the missing dependency rather than uploading a custom Skill with the same slug.
@@ -196,7 +196,6 @@ select **Craft → Preferences**, and choose a value under **Skill Publishing**:
 
 The setting applies to every way to publish: the sharing dialog, **Publish update**, bulk sharing, uploads, the editor,
 and GitHub import. Users with the organization-wide `manage:plugins` permission always publish at once.
-Linking a Skill to an App is not affected.
 
 ### Set the default access
 
@@ -216,7 +215,6 @@ With **Not available**, a newly published Skill reaches only its author, the peo
 and the members of a group whose own setting for the Skill is more open.
 Other members get it after an Admin sets an installation policy on the Skill, **Available to install** too.
 In the sharing dialog, the **Default access** choice makes a Skill follow this setting again.
-A Skill that an App uses gets **Available to install** when it is linked, so this setting does not hide it.
 
 ### Control who shares
 
@@ -269,8 +267,7 @@ A published Skill shows **Organization** in the sharing dialog. It has no option
 
 <img className="rounded-image" src="/assets/admins/craft_skills/published_skill_sharing.webp" alt="The sharing dialog of a published Skill shows Organization with Can use"/>
 
-Linking a Skill to an App publishes it to the organization. If another published Skill has the same name,
-Onyx refuses the link or the publish.
+If another published Skill has the same name, Onyx refuses the publish.
 Transferring a private Skill to a person who has a Skill with the same name is also refused.
 
 ## Choose an installation policy
@@ -341,7 +338,7 @@ Onyx refuses a change by a user who is within both limits when the change puts t
 | A user turns on a Skill | Refused. The error shows the limit. |
 | A user edits, restores, or replaces the files of a Skill that they run, and the Skill gets larger | Refused. |
 | An admin changes an installation policy, a share, **Default Access**, or publishes, approves, or transfers a Skill | Always allowed. |
-| A user connects an App, or joins a group | Always allowed. |
+| A user joins a group | Always allowed. |
 
 A change that is always allowed can put users past the limit. Their sessions then leave out the Skills that do not fit.
 The admin banner lists those users and how many of their Skills did not load. The session notice names the Skills.

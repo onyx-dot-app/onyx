@@ -243,9 +243,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const canEditShares =
     skill?.user_permission === "OWNER" || skill?.user_permission === "EDITOR";
   const canEditOrgVisibility =
-    !!skill &&
-    !skill.external_app &&
-    canChangeOrganizationAccess(skill, isOrganizationManager);
+    !!skill && canChangeOrganizationAccess(skill, isOrganizationManager);
   // Publishing is one-way: a saved published skill shows no private option.
   const isPublished = props.mode === "edit" && initialState?.isPublic === true;
   const isPublishing = !!effectiveState?.isPublic && !isPublished;
@@ -557,13 +555,6 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                   : t("share.publishWarning.description")
               }
             />
-          )}
-          {skill.external_app && (
-            <Text color="text-03" font="secondary-body">
-              {t("share.externalAppNotice", {
-                appName: skill.external_app.name,
-              })}
-            </Text>
           )}
         </Section>
 

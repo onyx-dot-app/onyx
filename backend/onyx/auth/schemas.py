@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Any
 
 from fastapi_users import schemas
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import override
 
 from onyx.db.enums import AccountType
@@ -63,3 +64,11 @@ class UserUpdate(schemas.BaseUserUpdate):
         d.pop("email", None)
         d.pop("password", None)
         return d
+
+
+class RefreshedLoginToken(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    access_token: str = Field(repr=False)
+    refresh_token: str = Field(repr=False)
+    expires_at: int | None

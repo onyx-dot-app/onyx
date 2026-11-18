@@ -23,9 +23,7 @@ export type SkillSharingDraft = Pick<
   | "group_shares"
   | "public_permission"
   | "installation_policy"
-> & {
-  external_app: Pick<NonNullable<CustomSkill["external_app"]>, "name"> | null;
-};
+>;
 
 /** The author, or an organization-wide skill manager, changes organization
  * access: publish, and publish an update. An editor only saves versions. */
@@ -66,7 +64,6 @@ export function emptySkillSharingDraft(
     group_shares: [],
     public_permission: null,
     installation_policy: null,
-    external_app: null,
   };
 }
 
@@ -78,11 +75,9 @@ export function serializeSkillSharing(
     installation_policy: isOrganizationManager
       ? draft.installation_policy
       : undefined,
-    public_permission:
-      !draft.external_app &&
-      canChangeOrganizationAccess(draft, isOrganizationManager)
-        ? draft.public_permission
-        : undefined,
+    public_permission: canChangeOrganizationAccess(draft, isOrganizationManager)
+      ? draft.public_permission
+      : undefined,
     user_shares: draft.user_shares
       .filter((share) => share.user.id !== draft.owner?.id)
       .map((share) => ({

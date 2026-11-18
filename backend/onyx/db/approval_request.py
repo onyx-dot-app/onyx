@@ -4,11 +4,15 @@ from collections.abc import Collection
 from uuid import UUID
 
 from pydantic import JsonValue
-from sqlalchemy import and_, exists, func, insert, or_, select, union_all, update
+from sqlalchemy import and_, func, insert, or_, select, union_all, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
-from onyx.db.models import ApprovalRequest, ChatSession, QuestionRequest
+from onyx.db.models import (
+    ApprovalRequest,
+    ChatSession,
+    QuestionRequest,
+)
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
 
@@ -28,7 +32,7 @@ def create_approval_request__no_commit(
     *,
     chat_session_id: UUID,
     chat_message_id: int,
-    gated_app_id: int,
+    integration_id: int,
     action_id: str,
     tool_call_id: str,
     tool_name: str,
@@ -40,7 +44,7 @@ def create_approval_request__no_commit(
         .values(
             chat_session_id=chat_session_id,
             chat_message_id=chat_message_id,
-            gated_app_id=gated_app_id,
+            integration_id=integration_id,
             action_id=action_id,
             tool_call_id=tool_call_id,
             tool_name=tool_name,
@@ -51,23 +55,6 @@ def create_approval_request__no_commit(
         )
         .returning(ApprovalRequest.id)
     ).scalar_one()
-
-
-def has_session_grant(
-    db_session: Session, chat_session_id: UUID, gated_app_id: int, action_id: str
-) -> bool:
-    return bool(
-        db_session.scalar(
-            select(
-                exists().where(
-                    ApprovalRequest.chat_session_id == chat_session_id,
-                    ApprovalRequest.gated_app_id == gated_app_id,
-                    ApprovalRequest.action_id == action_id,
-                    ApprovalRequest.decided_via == ApprovalDecidedVia.SESSION_GRANT,
-                )
-            )
-        )
-    )
 
 
 def get_approval_request_for_user(
@@ -110,13 +97,17 @@ def record_approval_decision__no_commit(
         .values(decision=decision, decided_via=decided_via, decided_at=func.now())
         .returning(ApprovalRequest.id)
     )
-    if decided is None or decided_via != ApprovalDecidedVia.SESSION_GRANT:
+    if (
+        decided is None
+        or decided_via != ApprovalDecidedVia.SESSION_GRANT
+        or approval.integration_id is None
+    ):
         return
     db_session.execute(
         update(ApprovalRequest)
         .where(
             ApprovalRequest.chat_session_id == approval.chat_session_id,
-            ApprovalRequest.gated_app_id == approval.gated_app_id,
+            ApprovalRequest.integration_id == approval.integration_id,
             ApprovalRequest.action_id == approval.action_id,
             ApprovalRequest.decision.is_(None),
         )
@@ -132,7 +123,7 @@ def get_approval_requests(
     db_session: Session, approval_ids: Collection[UUID]
 ) -> dict[UUID, ApprovalRequest]:
     """The saved requests by ID; a deleted request is absent. Deleting its
-    tool's server, chat, or response deletes a request."""
+    chat or response deletes a request."""
     return {
         row.id: row
         for row in db_session.scalars(

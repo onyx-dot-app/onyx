@@ -20,7 +20,6 @@ function builtIn(
     enabled: true,
     can_toggle: false,
     is_available: true,
-    external_app: null,
     ...overrides,
   };
 }
@@ -52,7 +51,6 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     group_shares: [],
     public_permission: null,
     user_permission: "OWNER",
-    external_app: null,
     current_version_id: null,
     current_version_number: null,
     published_version_number: null,
@@ -69,7 +67,6 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     can_toggle: skill.can_toggle,
     author_email: skill.author_email,
     is_personal: true,
-    external_app: skill.external_app,
   };
 }
 
@@ -359,136 +356,6 @@ describe("SkillCard", () => {
       screen.getByText("Delete this invalid skill and create a new one.")
     ).toBeInTheDocument();
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
-  });
-
-  it("keeps a selected skill on while its app is unavailable", () => {
-    const { container } = render(
-      <SkillCard
-        item={custom({
-          enabled: true,
-          external_app: {
-            external_app_id: 42,
-            name: "Acme CRM",
-            enabled: true,
-            ready: false,
-          },
-        })}
-      />
-    );
-
-    expect(
-      screen.getByText("Connect app “Acme CRM” to use")
-    ).toBeInTheDocument();
-    const preferenceSwitch = screen.getByRole("switch", {
-      name: "Disable Report Writer for Acme CRM",
-    });
-    expect(preferenceSwitch).toBeChecked();
-    expect(preferenceSwitch).not.toHaveAttribute("aria-disabled");
-    expect(
-      container.querySelector(".opal-card[data-color='transparent']")
-    ).toBeInTheDocument();
-  });
-
-  it("does not offer an enable toggle until the app is connected", () => {
-    const { container } = render(
-      <SkillCard
-        item={custom({
-          enabled: false,
-          can_toggle: false,
-          installation_policy: "AVAILABLE",
-          external_app: {
-            external_app_id: 42,
-            name: "Acme CRM",
-            enabled: true,
-            ready: false,
-          },
-        })}
-      />
-    );
-
-    expect(
-      screen.getByText("Connect app “Acme CRM” to enable")
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
-    expect(
-      container.querySelector(".opal-card[data-disabled='true']")
-    ).toBeInTheDocument();
-  });
-
-  it("distinguishes an admin-disabled app dependency", () => {
-    render(
-      <SkillCard
-        item={custom({
-          external_app: {
-            external_app_id: 42,
-            name: "Acme CRM",
-            enabled: false,
-            ready: false,
-          },
-        })}
-      />
-    );
-
-    expect(screen.getByText("App “Acme CRM” is disabled")).toBeInTheDocument();
-    expect(
-      screen.getByRole("switch", {
-        name: "Disable Report Writer for Acme CRM",
-      })
-    ).toBeChecked();
-  });
-
-  it("shows a selected ready associated skill as active", () => {
-    const { container } = render(
-      <SkillCard
-        item={custom({
-          enabled: true,
-          external_app: {
-            external_app_id: 42,
-            name: "Acme CRM",
-            enabled: true,
-            ready: true,
-          },
-        })}
-      />
-    );
-
-    expect(screen.getByText("Uses app “Acme CRM”")).toBeInTheDocument();
-    expect(screen.getByText("App skill")).toBeInTheDocument();
-    expect(screen.queryByText("Custom")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("switch", {
-        name: "Disable Report Writer for Acme CRM",
-      })
-    ).toBeChecked();
-    expect(
-      container.querySelector(".opal-card[data-color='background-tint-00']")
-    ).toBeInTheDocument();
-  });
-
-  it("shows when another skill with the same name is enabled", () => {
-    render(
-      <SkillCard
-        item={custom({
-          enabled: false,
-          external_app: {
-            external_app_id: 42,
-            name: "Acme CRM",
-            enabled: true,
-            ready: true,
-          },
-        })}
-        hasEnabledNameConflict
-      />
-    );
-
-    expect(
-      screen.getByText("Another skill with this name is enabled")
-    ).toBeInTheDocument();
-    const preferenceSwitch = screen.getByRole("switch", {
-      name: "Enable Report Writer for Acme CRM",
-    });
-    expect(preferenceSwitch).not.toBeChecked();
-    expect(preferenceSwitch).not.toHaveAttribute("aria-disabled");
   });
 });
 

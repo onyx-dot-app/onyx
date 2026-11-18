@@ -66,6 +66,7 @@ from onyx.chat.run_store import (
 )
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.chat.stream_buffer import StreamChunkRead, read_stream_chunks
+from onyx.chat.tool_approvals import action_now_blocked
 from onyx.chat.tool_questions import card_answers
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import (
@@ -80,7 +81,6 @@ from onyx.configs.constants import (
 )
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.configs.tool_configs import CUSTOM_TOOL_PASS_THROUGH_HEADERS
-from onyx.db.action_policy import current_action_policy
 from onyx.db.approval_request import (
     approvals_version,
     close_pending_approval_requests__no_commit,
@@ -103,7 +103,7 @@ from onyx.db.chat import (
     get_owned_chat_session,
     get_selected_branch,
     set_as_latest_chat_message,
-    set_chat_session_tool_selection__no_commit,
+    set_chat_session_tool_options__no_commit,
     set_preferred_response,
     translate_db_message_to_chat_message_detail,
     update_chat_session,
@@ -126,7 +126,6 @@ from onyx.db.chat_response import load_chat_approvals, waiting_approval_reply_id
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
-    ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
     LLMModelFlowType,
@@ -163,6 +162,7 @@ from onyx.file_store.serving import (
     ensure_filename_extension,
     resolve_inline_disposition,
 )
+from onyx.integrations.models import ApprovalMode
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import (
     get_default_utility_llm,
@@ -239,7 +239,7 @@ from onyx.server.usage_limits import (
     is_usage_limits_enabled,
 )
 from onyx.server.utils import get_json_line
-from onyx.tools.models import ChatToolSelection
+from onyx.tools.models import ToolOptions
 from onyx.tracing.framework.create import ChatTraceMetadata, ensure_trace
 from onyx.utils.headers import get_relevant_headers
 from onyx.utils.logger import setup_logger
@@ -641,8 +641,8 @@ def get_chat_session(
         is_processing=is_processing,
         incognito=chat_session.incognito_record_mode is not None,
         has_older_messages=has_older_messages,
-        # Only the owner's composer reads the selection; a shared view shows none.
-        tool_selection=chat_session.tool_selection
+        # Only the owner's composer reads the options; a shared view shows none.
+        tool_options=chat_session.tool_options
         if user_id is not None and chat_session.user_id == user_id
         else None,
     )
@@ -1086,10 +1086,11 @@ def handle_send_chat_message(
             MessageOrigin.DISCORDBOT if discord_bot else MessageOrigin.API
         )
 
-    # TODO(wenxi-onyx): Discord cannot show approval requests
-    # yet, so turns of the Discord bot's service API key run the tools that
-    # would ask.
-    ask_for_approval = not discord_bot
+    # Discord cannot show approval requests, so a turn of the Discord bot's
+    # service API key is not offered an action that would ask.
+    approval_mode = (
+        ApprovalMode.NO_APPROVER if discord_bot else ApprovalMode.INTERACTIVE
+    )
 
     # Multi-model streaming path: 2-3 LLMs in parallel (streaming only)
     is_multi_model = (
@@ -1113,7 +1114,7 @@ def handle_send_chat_message(
                         request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS
                     ),
                     mcp_headers=chat_message_req.mcp_headers,
-                    ask_for_approval=ask_for_approval,
+                    approval_mode=approval_mode,
                 ):
                     yield get_json_line(obj.model_dump())
             except Exception as e:
@@ -1158,7 +1159,7 @@ def handle_send_chat_message(
             ),
             mcp_headers=chat_message_req.mcp_headers,
             additional_context=chat_message_req.additional_context,
-            ask_for_approval=ask_for_approval,
+            approval_mode=approval_mode,
         )
         # CreateChatSessionID is only yielded for newly-created sessions, so for
         # follow-up messages on an existing session the aggregated response would
@@ -1187,7 +1188,7 @@ def handle_send_chat_message(
                 mcp_headers=chat_message_req.mcp_headers,
                 additional_context=chat_message_req.additional_context,
                 response_future=response_future,
-                ask_for_approval=ask_for_approval,
+                approval_mode=approval_mode,
             ):
                 yield get_json_line(obj.model_dump())
 
@@ -1835,23 +1836,23 @@ def interrupt_with_pending_chat_message(
     return pending
 
 
-@router.patch("/chat-session/{session_id}/tool-selection")
-def update_chat_tool_selection(
+@router.patch("/chat-session/{session_id}/tool-options")
+def update_chat_tool_options(
     session_id: UUID,
-    body: ChatToolSelection,
+    body: ToolOptions,
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
-) -> ChatToolSelection | None:
-    """Save the fields of the chat's tool selection that the body sets.
+) -> ToolOptions | None:
+    """Save the fields of the chat's tool options that the body sets.
 
-    Returns the stored selection, or None for a chat that stores none.
+    Returns the stored options, or None for a chat that stores none.
     """
     if user.is_anonymous or user.id is None:
-        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to save a tool selection")
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to save tool options")
     chat_session = get_owned_chat_session(session_id, user.id, db_session)
     if chat_session is None or chat_session.deleted:
         raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found")
-    stored = set_chat_session_tool_selection__no_commit(
+    stored = set_chat_session_tool_options__no_commit(
         db_session, session_id, body, user
     )
     if db_session.dirty:
@@ -1925,14 +1926,12 @@ def decide_approval(
         and approval.decided_via == ApprovalDecidedVia.USER
     )
     if approval.decision is None or upgrades_to_grant:
-        blocked = (
-            current_action_policy(
-                db_session,
-                user_id=user.id,
-                gated_app_id=approval.gated_app_id,
-                action_id=approval.action_id,
-            )
-            == ActionPolicy.DENY
+        blocked = action_now_blocked(
+            db_session,
+            integration_id=approval.integration_id,
+            action_id=approval.action_id,
+            user_id=user.id,
+            chat_session_id=approval.chat_session_id,
         )
         record_approval_decision__no_commit(
             db_session,

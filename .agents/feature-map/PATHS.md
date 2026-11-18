@@ -139,10 +139,11 @@ covers new files that match it.
 |---|---|
 | `backend/onyx/db/persona.py`, `backend/onyx/db/persona_sharing.py`, `backend/onyx/db/pinned_personas.py`, `backend/onyx/server/features/persona/`, `backend/onyx/server/features/default_assistant/`, `backend/ee/onyx/db/persona.py` | agents-personas |
 | `backend/onyx/db/projects.py`, `backend/onyx/server/features/projects/` | projects |
-| `backend/onyx/skills/`, `backend/onyx/db/skill.py`, `backend/onyx/db/plugin.py`, `backend/onyx/db/plugin_access.py`, `backend/onyx/db/skill_limit.py`, `backend/onyx/server/features/skill/` | skills |
+| `backend/onyx/skills/`, `backend/onyx/db/skill.py`, `backend/onyx/db/plugin.py`, `backend/onyx/db/plugin_access.py`, `backend/onyx/db/skill_limit.py`, `backend/onyx/db/app_skill.py`, `backend/onyx/server/features/skill/` | skills |
 | `backend/onyx/server/features/action_policies/` | craft-external-apps, plugins |
-| `backend/onyx/db/mcp.py`, `backend/onyx/server/features/mcp/`, `backend/onyx/server/features/tool/`, `backend/onyx/db/tools.py`, `backend/ee/onyx/db/mcp.py` | mcp-and-custom-tools |
+| `backend/onyx/db/mcp.py`, `backend/onyx/server/features/mcp/`, `backend/onyx/server/features/tool/`, `backend/onyx/db/tools.py` | mcp-and-custom-tools |
 | `backend/onyx/server/features/tool/tool_visibility.py` | mcp-and-custom-tools, plugins |
+| `backend/onyx/integrations/`, `backend/onyx/db/integration.py`, `backend/onyx/db/integration_connection.py`, `backend/onyx/db/integration_policy.py`, `backend/onyx/server/features/integrations/` | mcp-and-custom-tools, craft-external-apps |
 | `terraform-provider-onyx/internal/client/custom_tool.go`, `terraform-provider-onyx/internal/client/custom_tool_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_availability_test.go`, `terraform-provider-onyx/docs/resources/custom_tool.md` | mcp-and-custom-tools |
 | `backend/onyx/db/input_prompt.py`, `backend/onyx/db/user_preferences.py`, `backend/onyx/server/features/input_prompt/` | chat-preferences |
 | `backend/onyx/server/settings/api.py`, `backend/onyx/server/settings/models.py`, `backend/onyx/server/settings/store.py`, `backend/onyx/server/settings/build_info.py` | chat-preferences |
@@ -156,7 +157,7 @@ covers new files that match it.
 | `backend/onyx/server/auth/mobile.py`, `backend/onyx/auth/mobile_sso/` | mobile-app, auth-and-identity |
 | `backend/ee/onyx/server/scim/`, `backend/ee/onyx/db/saml.py`, `backend/ee/onyx/db/scim.py`, `backend/ee/onyx/db/tenant_sso_domain.py`, `backend/ee/onyx/background/celery/tasks/sso_domain_revalidation/` | auth-and-identity |
 | `backend/onyx/db/users.py`, `backend/onyx/db/auth.py`, `backend/onyx/db/api_key.py`, `backend/onyx/db/pat.py`, `backend/onyx/db/saml.py`, `backend/onyx/db/sso_provider.py`, `backend/onyx/server/api_key/`, `backend/onyx/server/pat/`, `backend/onyx/server/manage/users.py` | auth-and-identity |
-| `backend/onyx/oauth/`, `backend/onyx/db/oauth_config.py`, `backend/onyx/server/features/oauth_config/`, `backend/onyx/server/features/user_oauth_token/` | auth-and-identity |
+| `backend/onyx/oauth/` | auth-and-identity |
 | `backend/onyx/oauth_provider/`, `backend/onyx/db/oauth_provider.py`, `backend/onyx/server/oauth_provider/` | auth-and-identity |
 | `backend/onyx/server/security/`, `backend/onyx/db/security_settings.py`, `backend/onyx/server/features/password/` | auth-and-identity |
 | `backend/onyx/utils/url.py`, `backend/onyx/utils/playwright_fetch.py` | auth-and-identity |
@@ -235,10 +236,10 @@ covers new files that match it.
 | `backend/onyx/server/features/build/api.py`, `backend/onyx/server/features/build/utils.py` | craft-admin, craft-sessions |
 | `backend/onyx/server/features/build/packets.py`, `backend/onyx/server/features/build/session/streaming.py`, `backend/onyx/server/features/build/interactive_turns/api.py` | craft-streaming, craft-sessions |
 | `backend/onyx/server/features/build/approvals/` | craft-external-apps |
-| `backend/onyx/server/features/build/external_apps/`, `backend/onyx/server/features/build/action_policies.py` | craft-external-apps, craft-admin |
+| `backend/onyx/server/features/build/external_apps/` | craft-external-apps, craft-admin |
 | `backend/onyx/server/features/build/connect_app.py`, `backend/onyx/server/features/build/sandbox/image/opencode-plugins/connect-app.ts` | craft-external-apps |
 | `backend/onyx/db/action_approval.py` | craft-external-apps |
-| `backend/onyx/db/action_policy.py`, `web/src/sections/actions/PolicyEditor.tsx` | craft-external-apps |
+| `web/src/sections/actions/PolicyEditor.tsx` | craft-external-apps |
 | `web/src/sections/approvals/`, `web/src/lib/approvals/` | chat-frontend, craft-frontend |
 | `backend/onyx/server/features/build/scheduled_tasks/`, `backend/onyx/db/scheduled_task.py`, `backend/onyx/background/celery/tasks/scheduled_tasks/`, `backend/onyx/background/celery/apps/scheduled_tasks.py` | craft-scheduled-tasks |
 | `backend/onyx/server/features/build/sandbox/` | craft-sandboxes |
@@ -254,7 +255,7 @@ covers new files that match it.
 | `backend/onyx/sandbox_proxy/`, `deployment/helm/charts/onyx/templates/sandbox-proxy/` | craft-external-apps |
 | `backend/onyx/server/features/microvm/api.py`, `backend/onyx/microvm/registry.py` | craft-external-apps |
 | `backend/onyx/microvm/` | craft-sandboxes |
-| `backend/onyx/external_apps/`, `backend/onyx/db/external_app.py`, `backend/onyx/db/external_app_readiness.py` | craft-external-apps, craft-admin |
+| `backend/onyx/external_apps/`, `backend/onyx/db/external_app.py` | craft-external-apps, craft-admin |
 | `deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`, `deployment/helm/charts/onyx/templates/sandbox-rbac.yaml`, `deployment/helm/charts/onyx/templates/network-policy-sandbox-egress.yaml`, `deployment/helm/charts/onyx/templates/network-policy-sandbox-push.yaml`, `deployment/helm/charts/onyx/templates/sandbox-image-prepuller.yaml`, `deployment/helm/charts/onyx/templates/craft-fc-preflight.yaml`, `deployment/helm/charts/onyx/scripts/craft-fc-preflight.sh` | craft-sandboxes |
 | `deployment/helm/dev/`, `.zed/run-all-k8s.sh`, `.zed/process-compose.k8s.yaml` | craft-sandboxes |
 | `microvm/` | craft-sandboxes |
@@ -265,7 +266,7 @@ covers new files that match it.
 |---|---|
 | `web/src/app/app/`, `web/src/views/AppPage.tsx` | chat-frontend |
 | `web/src/app/api/[...path]/route.ts` | chat-frontend |
-| `web/next.config.js` | chat-frontend |
+| `web/next.config.js` | chat-frontend, plugins |
 | `web/src/hooks/useChatController.ts`, `web/src/hooks/useChatSessionController.ts`, `web/src/hooks/useFeedbackController.ts`, `web/src/hooks/useMultiModelChat.ts`, `web/src/hooks/useChatSessions.ts`, `web/src/hooks/useQueuedMessageNavigation.ts`, `web/src/hooks/useDeepResearchToggle.ts`, `web/src/hooks/useContentEditable.ts` | chat-frontend |
 | `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/lib/app/components/AccountPopover.tsx`, `web/src/lib/app/components/AboutDetails.tsx`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/multiModel/`, `web/src/lib/sandbox/`, `web/src/lib/sidebar/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
 | `web/src/lib/navigation/`, `web/lib/opal/src/navigation/`, `web/tools/oxlint/navigation/` | chat-frontend |
@@ -307,7 +308,7 @@ covers new files that match it.
 | `web/tools/prepare-pdf-assets.cjs`, `web/src/lib/readSpreadsheetPreview.ts`, `web/src/lib/spreadsheetPreview.worker.ts`, `web/src/lib/spreadsheetPreview.ts` | craft-frontend |
 | `web/src/lib/docx/`, `web/src/lib/csv.ts` | chat-frontend, craft-frontend |
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
-| `web/src/app/craft/v1/apps/`, `web/src/lib/externalApps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |
+| `web/src/app/craft/v1/apps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |
 | `web/src/app/craft/v1/plugins/` | craft-external-apps, plugins |
 | `web/src/app/craft/v1/skills/`, `web/src/app/craft/components/SkillsStaleNotice.tsx`, `web/src/app/craft/components/SkillRuntimeNotice.tsx` | skills |
 | `web/src/app/admin/skills/` | skills |
@@ -318,7 +319,6 @@ covers new files that match it.
 | Path | Component(s) |
 |---|---|
 | `web/src/sections/modals/NewTeamModal.tsx`, `web/src/sections/modals/NewTenantModal.tsx` | multi-tenancy |
-| `web/src/app/admin/plugins/external-app/` | craft-admin, craft-external-apps |
 | `web/src/app/admin/craft/`, `web/src/views/admin/CraftPage/`, `web/src/views/admin/CraftPreferencesPage/` | craft-admin |
 | `web/src/app/admin/connector/`, `web/src/app/admin/connectors/`, `web/src/app/admin/indexing-status/` | cc-pairs-and-creds |
 | `web/src/app/admin/document-processing/` | file-store-and-user-files |
@@ -347,10 +347,10 @@ covers new files that match it.
 | `web/src/app/admin/decision-models/`, `web/src/views/admin/DecisionModelsPage.tsx`, `web/src/views/admin/DecisionModelSetting.tsx`, `backend/onyx/llm/decisions/` | llm-providers |
 | `web/src/app/admin/llm-gateway/`, `web/src/views/admin/LLMGatewayPage/` | llm-gateway |
 | `web/src/app/admin/voice/`, `web/src/views/admin/VoicePage/`, `web/src/lib/voice/` | voice |
-| `web/src/app/admin/plugins/`, `web/src/app/admin/mcp-actions/`, `web/src/app/admin/openapi-actions/` | plugins |
-| `web/src/sections/plugins/`, `web/src/lib/plugins/`, `web/src/sections/actions/modals/MCPPluginSetupModal.tsx` | plugins |
-| `web/src/sections/plugins/ExternalAppPluginDetail.tsx`, `web/src/sections/plugins/CraftAppEditorTabs.tsx` | craft-admin |
-| `web/src/sections/actions/`, `web/src/lib/mcp/`, `web/src/app/mcp/oauth/`, `web/src/app/api/chat/mcp/oauth/`, `web/src/hooks/useOpenApiTools.ts`, `web/src/lib/hooks/useToolOAuthStatus.ts` | plugins, mcp-and-custom-tools |
+| `web/src/app/admin/plugins/`, `web/src/app/admin/integrations/` | plugins |
+| `web/src/sections/integrations/`, `web/src/lib/integrations/`, `web/src/sections/oauth/IntegrationOAuthCallback.tsx`, `web/src/app/app/plugins/` | plugins |
+| `web/src/sections/plugins/`, `web/src/lib/plugins/` | plugins |
+| `web/src/sections/actions/`, `web/src/lib/mcp/`, `web/src/app/mcp/oauth/` | plugins, mcp-and-custom-tools |
 | `web/src/app/mcp/[[...path]]/` | mcp-server |
 | `web/src/app/admin/bots/`, `web/src/lib/updateSlackBotField.ts` | slack-bot |
 | `web/src/app/admin/discord-bot/` | discord-bot |

@@ -150,7 +150,7 @@ const CraftInputBar = memo(
       const { data: appsData } = useUserExternalApps();
       const { data: craftMcpData } = useCraftMcpServers();
       const pickerSections = useMemo(
-        () => toPickerSections(skillsData, appsData, craftMcpData?.mcp_servers),
+        () => toPickerSections(skillsData, appsData, craftMcpData),
         [skillsData, appsData, craftMcpData]
       );
 

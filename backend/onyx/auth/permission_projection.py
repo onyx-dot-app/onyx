@@ -140,30 +140,6 @@ def tool_permissions(*, can_manage: bool) -> dict[str, bool]:
     return cast(dict[str, bool], result)
 
 
-class MCPServerPermissions(TypedDict):
-    edit: bool
-    delete: bool
-    authenticate: bool
-    manage_status: bool
-
-
-MCP_SERVER_ACTIONS: frozenset[str] = frozenset(MCPServerPermissions.__annotations__)
-
-
-def mcp_server_permissions(*, can_manage: bool) -> dict[str, bool]:
-    """MCP server affordance map. Every action — edit, delete, authenticate (connect), and
-    manage_status (disconnect/refresh) — is owner-or-admin (``can_manage``): the owner fully
-    controls their server and an admin controls any, while a scoped manager may view servers
-    connected to their groups and create their own but not manage others'."""
-    result: MCPServerPermissions = {
-        "edit": can_manage,
-        "delete": can_manage,
-        "authenticate": can_manage,
-        "manage_status": can_manage,
-    }
-    return cast(dict[str, bool], result)
-
-
 class CustomSkillPermissions(TypedDict):
     edit: bool
     manage_access: bool

@@ -65,7 +65,7 @@ It does not own:
 - [[llm-providers]]: how the chat naming, search selection and decision models
   resolve,
   and the personal default model string.
-- [[tools-framework]]: why the memory tool skips `allowed_tool_ids`.
+- [[tools-framework]]: why the memory tool skips the tool options.
 - [[auth-and-identity]]: the user routes, the IdP profile snapshot, and the
   meaning of `invite_only_enabled` and `anonymous_user_enabled`.
 - [[plugins]]: Default Chat selection of MCP and OpenAPI tools.

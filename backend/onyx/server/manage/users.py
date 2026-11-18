@@ -1482,7 +1482,8 @@ def get_user_assistant_preferences(
     )
     return {
         config.assistant_id: UserSpecificAssistantPreference(
-            disabled_tool_ids=config.disabled_tool_ids
+            disabled_tool_ids=config.disabled_tool_ids,
+            disabled_plugin_ids=config.disabled_plugin_ids,
         )
         for config in assistant_specific_configs
     }

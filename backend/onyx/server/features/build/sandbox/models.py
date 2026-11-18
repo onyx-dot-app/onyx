@@ -59,16 +59,17 @@ class CraftLLMProviderConfig(BaseModel):
 
 
 class CraftMCPServerConfig(BaseModel):
-    """A craft-enabled MCP server resolved for opencode `mcp` emission (URL only;
-    the proxy injects credentials). ``key`` is the opencode server id.
+    """An MCP integration resolved for opencode `mcp` emission (URL only; the
+    proxy injects credentials). ``key`` is the opencode server id.
 
-    ``server_id`` is not emitted into ``opencode.json``; it feeds the per-session
-    runtime hash so a hot reload fires when the server set or tools change."""
+    ``integration_id`` is not emitted into ``opencode.json``; it feeds the
+    per-session runtime hash so a hot reload fires when the server set or tools
+    change."""
 
     key: str
     url: str
     disabled_tools: tuple[str, ...] = ()
-    server_id: int
+    integration_id: int
 
 
 class SandboxInfo(BaseModel):

@@ -67,9 +67,13 @@ From this page, you can:
   </Step>
 
   <Step title="Give your Agent Actions">
-    Use **Actions & Tools** to let the Agent do work. Actions include built-in tools such as Web Search,
-    Image Generation, and Code Interpreter, plus the MCP, OpenAPI,
-    and Craft App plugins from [Plugins](/admins/plugins/overview).
+    Use **Actions** to let the Agent do work. Turn on the built-in tools that the Agent needs, such as Web Search,
+    Image Generation, and Code Interpreter.
+
+    Then use **Plugins** to give the Agent the MCP servers and apps from [Plugins](/admins/plugins/overview).
+    Select **Add a plugin** and pick a plugin.
+    The list shows each plugin that you can see and that holds an integration. To remove a plugin,
+    click its delete icon.
 
     <img className="rounded-image" src="/assets/admins/agents/agent_actions.webp" alt="Onyx Agent Configuration page"/>
   </Step>
@@ -86,6 +90,43 @@ From this page, you can:
     <img className="rounded-image" src="/assets/admins/agents/agent_advanced.webp" alt="Onyx Agent advanced configuration options"/>
   </Step>
 </Steps>
+
+## Action Settings
+
+Each plugin of an Agent lists the actions of its integrations. Each action has one setting:
+
+| Setting | Effect |
+| --- | --- |
+| **Use the agent default** | The action uses the **Default for Other Actions** row of the plugin. This is the default. |
+| **Use the integration setting** | The action follows the policy that an admin set on the integration. |
+| **Allow** | The action runs without a prompt in this Agent. |
+| **Ask** | Onyx asks the user before the action runs. |
+| **Blocked** | The Agent cannot use the action. |
+
+The first row of each plugin, **Default for Other Actions**, applies to each action set to **Use the agent default**.
+It also applies to actions that the integration adds later. Its own default is **Use the integration setting**.
+
+When two plugins of an Agent hold the same integration, the strictest setting of the two applies.
+The editor tells you when another plugin sets a stricter setting for an action.
+
+**Allow** is not available when:
+
+- An admin set the action to **Blocked** on the integration.
+- The integration does not let users save **Always allow**. Then the admin policy is final.
+
+The Agent editor shows why **Allow** is not available. If an Agent already has **Allow** on a locked action,
+the editor shows it and you can change it, but the action follows the integration policy.
+
+Under each action, the editor shows the setting that applies, for example **Asks (integration setting)**.
+To run an action that asks with no prompt:
+
+- If the integration setting asks, an admin sets the action to **Allow** on the integration,
+  or each user picks **Always allow**. Admins see a link to the **Actions** tab of the integration.
+- If the Agent setting asks, change the Agent setting, or each user picks **Always allow**.
+  An integration setting of **Allow** does not remove an Agent setting of **Ask**.
+
+Users can pick **Always allow** only when the integration lets them save it.
+See [Approvals](/admins/plugins/overview#approvals).
 
 After you save the Agent, users find it on the **Explore Agents** page in the chat sidebar. On Business, Enterprise,
 and Cloud, Agent owners and admins can open usage statistics for an Agent.
