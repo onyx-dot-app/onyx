@@ -515,7 +515,7 @@ services:
         max-file: "6"
 
   nginx:
-    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.25.5-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.30.7-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up
