@@ -117,6 +117,10 @@ jobs:
         id: filter
         if: github.event_name == 'pull_request'
         with:
+          # A stacked PR diffs against the base of its whole stack: without a
+          # token, paths-filter runs git diff from `base`. See stack-position.
+          token: ${{ steps.stack.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ steps.stack.outputs.stack_base }}
           filters: |
             craft_k8s:
               - 'backend/Dockerfile'
