@@ -13,7 +13,7 @@ import {
   makeDetail,
   mockFetch,
   requestBody,
-} from "@/sections/integrations/__tests__/integrationFixtures";
+} from "@tests/setup/integrationTestUtils";
 
 const copy = messages.admin.integrations.detail.actions;
 const labels = messages.actions.policyToggle;
