@@ -736,6 +736,53 @@ def test_client_id_change_resets_connections_and_secret_change_does_not(
     assert stored.client_secret.get_value(apply_mask=False) == "secret-2"
 
 
+def test_a_new_header_field_resets_connections_and_a_literal_change_does_not(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    request = _openapi_create()
+    request.auth_mode = IntegrationAuthMode.INDIVIDUAL
+    detail = admin_api.create_integration(request, admin, db_session)
+    created.add(detail.id)
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None
+    connect_with_fields__no_commit(integration, member, {"api_key": "k"}, db_session)
+    db_session.commit()
+
+    def status() -> IntegrationConnectionStatus:
+        db_session.expire_all()
+        connection = get_connection(db_session, detail.id, member.id)
+        assert connection is not None
+        return connection.status
+
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(header_template={"X-Api-Key": "{api_key}", "X-Team": "a"}),
+        admin,
+        db_session,
+    )
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            credential_fields=[
+                CredentialField(key="api_key", label="Weather key", secret=True)
+            ]
+        ),
+        admin,
+        db_session,
+    )
+    assert status() is IntegrationConnectionStatus.CONNECTED
+
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            header_template={"X-Api-Key": "{api_key}", "X-Tenant": "{tenant}"}
+        ),
+        admin,
+        db_session,
+    )
+    assert status() is IntegrationConnectionStatus.NEEDS_RECONNECT
+
+
 def test_scoped_owner_starts_the_organization_sign_in_of_its_integration(
     db_session: Session, scoped: User, member: User, created: Created
 ) -> None:

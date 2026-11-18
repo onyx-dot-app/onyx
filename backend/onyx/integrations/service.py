@@ -869,6 +869,7 @@ def update_integration__no_commit(
     before = sign_in_settings_for(
         integration, stored_client, sign_in_host(integration, db_session)
     )
+    fields_before = set(credential_field_keys(integration))
 
     if "name" in fields and request.name is not None:
         name = request.name.strip()
@@ -962,7 +963,8 @@ def update_integration__no_commit(
         get_oauth_client(db_session, integration.id),
         sign_in_host(integration, db_session),
     )
-    if before != after:
+    # A new field leaves each saved connection without a value for it.
+    if before != after or not set(credential_field_keys(integration)) <= fields_before:
         mark_sign_in_settings_changed(integration.id, db_session)
     if needs_sync:
         sync_integration_actions__no_commit(integration, db_session)
