@@ -35,7 +35,8 @@
     ],
     "macOS": {
       "minimumSystemVersion": "13.0"
-    }
+    },
+    "createUpdaterArtifacts": false
   },
   "plugins": {
     "deep-link": {
@@ -44,6 +45,12 @@
           "onyx"
         ]
       }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFDNTMyMTg5MTVGMDI1RUQKUldUdEpmQVZpU0ZUclBwMDJ2VmtXS2Yxd3Y5eUQ2aWZRRXNSOXFva0VsNjRlRERNdzhteDNDdzEK",
+      "endpoints": [
+        "https://desktop.onyx.app/updates/stable/{{target}}-{{arch}}/latest.json"
+      ]
     }
   }
 }

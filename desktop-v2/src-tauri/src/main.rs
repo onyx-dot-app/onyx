@@ -15,6 +15,7 @@ mod session_store;
 mod shortcut;
 mod sso;
 mod state;
+mod updater;
 mod windows;
 
 use tauri::{Manager, RunEvent};
@@ -30,6 +31,7 @@ fn main() {
             windows::show_primary(app);
         }))
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         // Remember the main window's size and position; small windows stay centred.
@@ -69,6 +71,7 @@ fn main() {
             }
 
             main_window::spawn_session_renewal(handle);
+            updater::spawn_background_checks(handle);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -5,6 +5,7 @@ use tauri::{AppHandle, Manager, Wry};
 
 use crate::main_window;
 use crate::state::AppState;
+use crate::updater;
 use crate::windows;
 
 pub const PREFERENCES: &str = "preferences";
@@ -29,6 +30,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         true,
         &[
             &PredefinedMenuItem::about(app, Some("About Onyx"), None)?,
+            &updates_item(app)?,
             &separator()?,
             &MenuItem::with_id(app, PREFERENCES, "Preferences…", true, Some("CmdOrCtrl+,"))?,
             &separator()?,
@@ -94,6 +96,18 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     Menu::with_items(app, &[&app_menu, &file, &edit, &view, &window])
 }
 
+fn updates_item(app: &AppHandle) -> tauri::Result<MenuItem<Wry>> {
+    let item = MenuItem::with_id(
+        app,
+        updater::CHECK_ID,
+        "Check for Updates…",
+        true,
+        None::<&str>,
+    )?;
+    updater::register_menu_item(item.clone());
+    Ok(item)
+}
+
 pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(
         app,
@@ -101,6 +115,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             &MenuItem::with_id(app, OPEN, "Open Onyx", true, None::<&str>)?,
             &MenuItem::with_id(app, LAUNCHER, "Open Launcher", true, None::<&str>)?,
             &MenuItem::with_id(app, PREFERENCES, "Preferences…", true, None::<&str>)?,
+            &updates_item(app)?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, QUIT, "Quit Onyx", true, None::<&str>)?,
         ],
@@ -164,6 +179,7 @@ pub fn handle(app: &AppHandle, id: &str) {
             }
         }
         ZOOM_RESET | ZOOM_IN | ZOOM_OUT => set_zoom(app, id),
+        updater::CHECK_ID => updater::on_menu(app),
         _ => {}
     }
 }
