@@ -522,10 +522,10 @@ repos:
 
       - id: oxlint
         name: oxlint
-        entry: bash -c 'cd web && bun run lint'
+        entry: bash -c 'cd web && bun run oxlint'
         language: system
         pass_filenames: false
-        files: ^web/(?:.*\.(?:[cm]?[jt]s|[jt]sx)|\.oxlintrc\.json)$
+        types_or: [javascript, ts, tsx]
 
       # Type checks with the native TypeScript compiler (~10x faster than classic
       # tsc). web/ is checked by the `typescript-check` uv-run hook above. web/lib/shared

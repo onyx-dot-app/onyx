@@ -41,15 +41,9 @@ bun run test -- --verbose
 
 ## Test timing
 
-- Await the event that marks completion or use Testing Library's `waitFor`.
-  Use Jest fake timers to test timers and frames. Avoid real delays and manual
-  polling loops.
-- Set a fixed time for date fixtures. Use `jest.useFakeTimers().setSystemTime(...)`
-  when the code under test reads the current time.
-- Use the project timeout and retry settings. To disable a test, add
-  `// Skip: <reason> <issue URL>` directly above the call.
-- oxlint checks Jest test files. Remove a file from its warning override in
-  `web/.oxlintrc.json` once it is clean. Never add one.
+oxlint rejects real-time waits (`setTimeout` or a frame inside a `Promise`), per-test
+timeouts and retries, and skips without a reason. Wait with `waitFor` or drive Jest fake
+timers. To disable a test, put `// Skip: <reason> <issue URL>` directly above it.
 
 ## Core Concepts
 

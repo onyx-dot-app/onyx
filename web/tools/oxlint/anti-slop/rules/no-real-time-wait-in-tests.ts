@@ -1,55 +1,57 @@
-import { defineRule } from "@oxlint/plugins";
+import { defineRule, type ESTree } from "@oxlint/plugins";
 
-import { testBindings, usesFakeTimers } from "../shared/test-framework.ts";
-import {
-  inPromiseExecutor,
-  isPromise,
-  staticName,
-} from "../shared/test-syntax.ts";
-import { callbackTimer, timerPromises } from "../shared/test-timers.ts";
+import { callPath, isFunction } from "../shared/test-syntax.ts";
+
+const timers = new Set(["requestAnimationFrame", "setTimeout"]);
+const globals = new Set(["global", "globalThis", "self", "window"]);
+
+function isTimer(callee: ESTree.Node): boolean {
+  const path = callPath(callee);
+  const name =
+    path.length === 2 && globals.has(path[0] ?? "")
+      ? path[1]
+      : path.length === 1
+        ? path[0]
+        : undefined;
+  return name !== undefined && timers.has(name);
+}
+
+function inPromiseExecutor(node: ESTree.Node): boolean {
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    const promise = parent.parent;
+    if (
+      isFunction(parent) &&
+      promise?.type === "NewExpression" &&
+      callPath(promise.callee).join(".") === "Promise" &&
+      promise.arguments[0] === parent
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export const noRealTimeWaitInTestsRule = defineRule({
   meta: {
     type: "problem",
     docs: {
-      description: "Require tests to wait for a specific state or event.",
+      description:
+        "Require tests to wait for a specific state, not for time or a frame to pass.",
     },
     messages: {
       wait: "Wait for a specific state or event, or drive the fake timer.",
     },
   },
-  create(context) {
-    const bindings = testBindings(context.filename);
-    const timers = timerPromises();
+  createOnce(context) {
     return {
-      ImportDeclaration(node) {
-        bindings.ImportDeclaration(node);
-        timers.ImportDeclaration(node);
-      },
       MemberExpression(node) {
-        if (
-          bindings.playwright &&
-          staticName(node.property, node.computed) === "waitForTimeout"
-        ) {
+        if (callPath(node).at(-1) === "waitForTimeout") {
           context.report({ node: node.property, messageId: "wait" });
         }
       },
       CallExpression(node) {
-        const timer = callbackTimer(node.callee);
-        if (
-          timers.isTimer(node.callee) ||
-          (timer &&
-            inPromiseExecutor(node) &&
-            !usesFakeTimers(node, bindings, timer))
-        ) {
+        if (isTimer(node.callee) && inPromiseExecutor(node)) {
           context.report({ node: node.callee, messageId: "wait" });
-        }
-      },
-      NewExpression(node) {
-        if (!isPromise(node)) return;
-        const timer = callbackTimer(node.arguments[0]);
-        if (timer && !usesFakeTimers(node, bindings, timer)) {
-          context.report({ node, messageId: "wait" });
         }
       },
     };

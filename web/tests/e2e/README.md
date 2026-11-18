@@ -150,13 +150,7 @@ Do not add sleeps, skips, or retries to make a flaky test pass. Find and fix
 the root cause. If you delete the test, write down why and tell the user.
 After three failed fix rounds, stop and ask a human for help.
 
-- Wait for the state the test needs. Use a locator assertion, a specific response,
-  or `expect.poll`. Avoid fixed delays, `networkidle`, frame waits, and custom
-  polling loops. Keep timeouts and retries in the project config.
-- Use a fixed clock for time assertions. Use unique IDs for fixture names.
-- Give a conditional `test.skip` a reason that explains the condition. For a
-  disabled test or a `test.fixme`, put a `// Skip: <reason> <issue URL>` comment
-  directly above the call. Link a GitHub or Linear issue.
-- For a necessary lint exception, use the standard oxlint suppression with a reason.
-- The test overrides in `web/.oxlintrc.json` warn on existing violations.
-  Remove a file from a warning override once it is clean. Never add one.
+oxlint enforces this. It rejects `waitForTimeout`, frame waits, `networkidle`, raised
+timeouts and retries, and skips without a reason. Wait with a locator assertion, a specific
+response, or `expect.poll`. Give a conditional `test.skip` a reason as its second argument. Put
+`// Skip: <reason> <issue URL>` directly above a disabled test.

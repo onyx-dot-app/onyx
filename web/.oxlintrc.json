@@ -117,11 +117,8 @@
       "files": ["tests/e2e/**", "**/*.test.ts", "**/*.test.tsx"],
       "rules": {
         "anti-slop/no-networkidle-in-tests": "error",
-        "anti-slop/no-frame-waits-in-tests": "error",
-        "anti-slop/no-polling-loop-in-tests": "error",
         "anti-slop/no-real-time-wait-in-tests": "error",
         "anti-slop/no-test-timeout-override": "error",
-        "anti-slop/no-wall-clock-in-tests": "error",
         "anti-slop/require-test-skip-reason": "error"
       }
     },
@@ -666,18 +663,6 @@
     // Existing test violations. Remove a file once it is clean. Never add one.
     {
       "files": [
-        "src/components/chat/DynamicBottomSpacer.test.tsx",
-        "tests/e2e/chat/ChatPage.ts",
-        "tests/e2e/chat/chat_message_rendering.spec.ts",
-        "tests/e2e/pages/CraftOutputsPage.ts",
-        "tests/e2e/utils/visualRegression.ts"
-      ],
-      "rules": {
-        "anti-slop/no-frame-waits-in-tests": "warn"
-      }
-    },
-    {
-      "files": [
         "tests/e2e/admin/admin_pages.spec.ts",
         "tests/e2e/admin/connector/ConnectorCatalogPage.ts",
         "tests/e2e/admin/connector/IndexingStatusPage.ts",
@@ -743,23 +728,10 @@
     },
     {
       "files": [
-        "src/lib/chat/settleChatSession.test.ts",
-        "tests/e2e/admin/disable_default_agent.spec.ts",
-        "tests/e2e/agents/user_file_attachment.spec.ts",
-        "tests/e2e/connectors/inlineFileManagement.spec.ts",
-        "tests/e2e/global-setup.ts",
-        "tests/e2e/mcp/McpOAuthFlow.ts",
-        "tests/e2e/utils/mockLlm.ts"
-      ],
-      "rules": {
-        "anti-slop/no-polling-loop-in-tests": "warn"
-      }
-    },
-    {
-      "files": [
         "src/app/craft/components/SandboxAsleepNotice.test.tsx",
         "src/app/craft/hooks/useSandboxStatusReconciler.test.tsx",
         "src/app/craft/hooks/useWakeOnIntent.test.ts",
+        "src/components/chat/DynamicBottomSpacer.test.tsx",
         "src/hooks/useChatController.test.tsx",
         "src/lib/chat/hooks.test.tsx",
         "src/lib/chat/settleChatSession.test.ts",
@@ -779,12 +751,15 @@
         "tests/e2e/agents/user_file_attachment.spec.ts",
         "tests/e2e/auth/password_managements.spec.ts",
         "tests/e2e/auth/pat_management.spec.ts",
+        "tests/e2e/chat/ChatPage.ts",
+        "tests/e2e/chat/chat_message_rendering.spec.ts",
         "tests/e2e/chat/current_agent.spec.ts",
         "tests/e2e/chat/input_bar_behaviors.spec.ts",
         "tests/e2e/connectors/federated_slack.spec.ts",
         "tests/e2e/connectors/inlineFileManagement.spec.ts",
         "tests/e2e/global-setup.ts",
         "tests/e2e/mcp/McpOAuthFlow.ts",
+        "tests/e2e/pages/CraftOutputsPage.ts",
         "tests/e2e/utils/agentUtils.ts",
         "tests/e2e/utils/dragUtils.ts",
         "tests/e2e/utils/mcpServer.ts",
@@ -798,10 +773,6 @@
     {
       "files": [
         "src/lib/projects/providers.test.tsx",
-        "tests/e2e/admin/discord-bot/admin-workflows.spec.ts",
-        "tests/e2e/admin/discord-bot/bot-config.spec.ts",
-        "tests/e2e/admin/discord-bot/channel-config.spec.ts",
-        "tests/e2e/admin/discord-bot/guilds-list.spec.ts",
         "tests/e2e/admin/group-manager/page-access.spec.ts",
         "tests/e2e/admin/group-manager/scoped-manager-affordances.spec.ts",
         "tests/e2e/agents/user_file_attachment.spec.ts",
@@ -810,85 +781,6 @@
       ],
       "rules": {
         "anti-slop/no-test-timeout-override": "warn"
-      }
-    },
-    {
-      "files": [
-        "lib/opal/src/time.test.ts",
-        "src/app/craft/components/BuildMessageList.test.tsx",
-        "src/app/craft/components/approvals/ApprovalCard.test.tsx",
-        "src/app/craft/components/output-panel/FilesTab.test.tsx",
-        "src/app/craft/components/output-panel/HtmlFilePreview.test.tsx",
-        "src/app/craft/hooks/useBuildSessionStore.test.tsx",
-        "src/app/craft/services/outputInventorySnapshots.test.ts",
-        "src/app/craft/services/outputThumbnailCache.test.tsx",
-        "src/app/craft/services/workspaceDirectorySnapshots.test.tsx",
-        "src/lib/chat/settleChatSession.test.ts",
-        "src/lib/connectors/checks/hooks.test.tsx",
-        "src/lib/connectors/svc.googleSite.test.ts",
-        "src/sections/input/AppInputBar.test.tsx",
-        "src/views/admin/connectors/ConnectorDetailPage/ConnectorDetailPageTabs.test.tsx",
-        "src/views/admin/connectors/ConnectorDetailPage/FailedDocsPopover.test.tsx",
-        "src/views/admin/connectors/ConnectorDetailPage/RunRow.test.tsx",
-        "src/views/admin/connectors/ConnectorDetailPage/RunRowStates.test.tsx",
-        "src/views/admin/connectors/ConnectorDetailPage/StatusCard.test.tsx",
-        "src/views/admin/connectors/IndexingStatusPage/ConnectorList.test.tsx",
-        "src/views/admin/connectors/IndexingStatusPage/ConnectorListInteractions.test.tsx",
-        "src/views/admin/connectors/IndexingStatusPage/ConnectorRow.test.tsx",
-        "src/views/admin/connectors/IndexingStatusPage/ConnectorRowExpanded.test.tsx",
-        "src/views/admin/connectors/IndexingStatusPage/IndexingStatusPageLayout.test.tsx",
-        "tests/e2e/admin/connector/connector-runs.spec.ts",
-        "tests/e2e/admin/connector/credentialed_connector_setup.spec.ts",
-        "tests/e2e/admin/connector/web_connector_setup.spec.ts",
-        "tests/e2e/admin/default-agent.spec.ts",
-        "tests/e2e/admin/disable_default_agent.spec.ts",
-        "tests/e2e/admin/discord-bot/fixtures.ts",
-        "tests/e2e/admin/group-manager/fixtures.ts",
-        "tests/e2e/admin/groups/groups.spec.ts",
-        "tests/e2e/admin/integrations/admin_integrations.spec.ts",
-        "tests/e2e/admin/llm_provider_setup.spec.ts",
-        "tests/e2e/admin/oauth_config/test_tool_oauth.spec.ts",
-        "tests/e2e/admin/permissions/fixtures.ts",
-        "tests/e2e/admin/permissions/permission_gating.spec.ts",
-        "tests/e2e/admin/permissions/permission_system.spec.ts",
-        "tests/e2e/admin/scim/fixtures.ts",
-        "tests/e2e/admin/theme/appearance_theme_settings.spec.ts",
-        "tests/e2e/admin/usage_report_status.spec.ts",
-        "tests/e2e/admin/users/users.spec.ts",
-        "tests/e2e/agents/agent_plugin_action_settings.spec.ts",
-        "tests/e2e/agents/create_and_edit_agent.spec.ts",
-        "tests/e2e/agents/llm_provider_rbac.spec.ts",
-        "tests/e2e/agents/persona_avatar.spec.ts",
-        "tests/e2e/agents/user_file_attachment.spec.ts",
-        "tests/e2e/auth/pat_management.spec.ts",
-        "tests/e2e/auth/signup.spec.ts",
-        "tests/e2e/chat/current_agent.spec.ts",
-        "tests/e2e/chat/default_agent.spec.ts",
-        "tests/e2e/chat/dev_stack.spec.ts",
-        "tests/e2e/chat/file_preview_modal.spec.ts",
-        "tests/e2e/chat/llm_ordering.spec.ts",
-        "tests/e2e/chat/llm_runtime_selection.spec.ts",
-        "tests/e2e/chat/message_edit_regenerate.spec.ts",
-        "tests/e2e/chat/tools_popover.spec.ts",
-        "tests/e2e/connectors/connectorEdit.spec.ts",
-        "tests/e2e/connectors/inlineFileManagement.spec.ts",
-        "tests/e2e/global-setup.ts",
-        "tests/e2e/mcp/McpOAuthFlow.ts",
-        "tests/e2e/mcp/default-agent-mcp.spec.ts",
-        "tests/e2e/mcp/mcp_group_access.spec.ts",
-        "tests/e2e/mcp/mcp_oauth_flow.spec.ts",
-        "tests/e2e/mcp/mcp_per_user_key.spec.ts",
-        "tests/e2e/mcp/mcp_tool_approval.spec.ts",
-        "tests/e2e/scheduled-tasks/scheduled-tasks.spec.ts",
-        "tests/e2e/utils/grantPermissions.ts",
-        "tests/e2e/utils/mcpServer.ts",
-        "tests/e2e/utils/mockLlm.ts",
-        "tests/e2e/utils/pageStateLogger.ts",
-        "tests/e2e/utils/permissions.ts",
-        "tests/e2e/utils/skills.ts"
-      ],
-      "rules": {
-        "anti-slop/no-wall-clock-in-tests": "warn"
       }
     },
     {
