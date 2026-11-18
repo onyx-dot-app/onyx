@@ -17,7 +17,7 @@ from onyx.db.llm import (
     fetch_user_group_ids,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
-from onyx.db.models import Persona, SearchSettings, User
+from onyx.db.models import ModelConfiguration, Persona, SearchSettings, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
