@@ -1,6 +1,4 @@
-/* oxlint-disable react-doctor/no-ref-current-in-render -- render-phase
-   incremental processing is the core design: the packet cursor makes
-   replays idempotent and consumers need the state in the same commit. */
+// The packet cursor makes replays idempotent. Consumers need the state in the same commit.
 import { useRef, useState, useMemo, useCallback } from "react";
 import {
   Packet,
