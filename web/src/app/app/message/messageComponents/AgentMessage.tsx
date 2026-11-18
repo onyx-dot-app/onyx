@@ -298,6 +298,7 @@ const AgentMessage = React.memo(function AgentMessage({
         },
         turnIndex: record.turnIndex,
         toolGroups: [],
+        interimGroups: [],
         displayGroups: before.displayGroups.filter(
           (group) => group.turn_index > record.turnIndex
         ),
