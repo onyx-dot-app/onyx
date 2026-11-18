@@ -93,6 +93,9 @@ export function renderToolCallHeader(toolCall: ToolCallState): ReactNode {
 }
 
 export function renderToolCallBody(toolCall: ToolCallState): ReactNode {
+  if (failedFileCallError(toolCall)) {
+    return <GenericBody toolCall={toolCall} />;
+  }
   if (toolCall.toolName === "websearch") {
     return <WebSearchBody toolCall={toolCall} />;
   }
@@ -114,9 +117,19 @@ export function renderToolCallBody(toolCall: ToolCallState): ReactNode {
   }
 }
 
+/** A failed edit or write call shows its error, not the attempted diff. */
+function failedFileCallError(toolCall: ToolCallState): boolean {
+  return (
+    toolCall.status === "failed" &&
+    (toolCall.kind === "edit" || toolCall.toolName === "write") &&
+    !!toolCall.rawOutput
+  );
+}
+
 /** Whether the per-tool body has anything worth rendering. Mirrors the
  *  early-return conditions in each body component. */
 export function hasToolCallBody(toolCall: ToolCallState): boolean {
+  if (failedFileCallError(toolCall)) return true;
   if (toolCall.toolName === "websearch" || toolCall.toolName === "webfetch") {
     return !!toolCall.rawOutput;
   }

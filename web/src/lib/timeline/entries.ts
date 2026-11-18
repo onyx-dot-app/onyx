@@ -8,17 +8,20 @@ import type { TimelineEntry, TimelineGroup } from "@/lib/timeline/types";
 export function groupTimelineEntries<P>(
   entries: readonly TimelineEntry<P>[]
 ): TimelineGroup<P>[] {
-  const groups = new Map<string, TimelineEntry<P>[]>();
+  // Group ids and entry ids are separate namespaces, so an ungrouped entry
+  // never joins a group whose id equals its own.
+  const groups = new Map<string, { id: string; entries: TimelineEntry<P>[] }>();
   for (const entry of entries) {
-    const key = entry.groupId ?? entry.id;
+    const key =
+      entry.groupId === null ? `entry:${entry.id}` : `group:${entry.groupId}`;
     const group = groups.get(key);
     if (group) {
-      group.push(entry);
+      group.entries.push(entry);
     } else {
-      groups.set(key, [entry]);
+      groups.set(key, { id: entry.groupId ?? entry.id, entries: [entry] });
     }
   }
-  return Array.from(groups, ([id, groupEntries]) => ({
+  return Array.from(groups.values(), ({ id, entries: groupEntries }) => ({
     id,
     entries: groupEntries,
     isParallel: groupEntries.length > 1,
