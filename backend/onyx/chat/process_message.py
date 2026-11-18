@@ -95,7 +95,12 @@ from onyx.db.chat_inputs import (
 )
 from onyx.db.document_set import require_document_set_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import HookPoint, Permission, record_mode_persists_content
+from onyx.db.enums import (
+    AccountType,
+    HookPoint,
+    Permission,
+    record_mode_persists_content,
+)
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatSession, User
 from onyx.db.skill import list_chat_skills
@@ -127,6 +132,7 @@ from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
+from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.server.query_and_chat.models import (
     MessageOrigin,
     MessageResponseIDInfo,
@@ -550,15 +556,17 @@ def prepare_chat_turn(
                 )
             # One sandbox serves one user, and anonymous visitors share one
             # user. Incognito cleanup does not reach the sandbox's files. Two
-            # models must not change one session directory at once. Bots
-            # get no sandbox until they have service-account sandboxes.
+            # models must not change one session directory at once. Bots and
+            # service accounts get no sandbox until they have service-account
+            # sandboxes. The sandbox follows the user's Craft access.
             sandbox_tools = (
                 HARNESS_SANDBOX_ENABLED
-                and not user.is_anonymous
+                and user.account_type == AccountType.STANDARD
                 and new_msg_req.origin
                 not in (MessageOrigin.SLACKBOT, MessageOrigin.DISCORDBOT)
                 and chat_session.incognito_record_mode is None
                 and len(selected_models) == 1
+                and is_craft_enabled_for_user(user)
             )
             # The root agent can ask the user questions where approval
             # requests can wait: a signed-in user's saved, single-model turn

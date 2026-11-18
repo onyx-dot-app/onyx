@@ -45,6 +45,7 @@ from onyx.db.chat import (
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
+    AccountType,
     ApprovalDecision,
     IncognitoRecordMode,
     PluginInstallationPolicy,
@@ -65,6 +66,7 @@ from onyx.db.sandbox import (
 )
 from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.agent import DeepResearchAgent
+from onyx.feature_flags.interface import NoOpFeatureFlagProvider
 from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import (
     AgentCancelled,
@@ -85,6 +87,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.microvm.daemon_client import SandboxDaemonErrorReason
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2
 from onyx.server.features.action_policies.models import ApprovalChoice
+from onyx.server.features.build import utils as build_utils
 from onyx.server.features.build.sandbox import harness_factory
 from onyx.server.features.build.sandbox.firecracker import (
     harness_sandbox,
@@ -121,6 +124,7 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
+from onyx.server.settings.models import Tier
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext, ToolOptions
@@ -214,6 +218,12 @@ def sandbox(
     monkeypatch.setattr(harness_factory, "HARNESS_SANDBOX_ENABLED", True)
     monkeypatch.setattr(harness_factory, "_instance", instance)
     monkeypatch.setattr(process_message, "HARNESS_SANDBOX_ENABLED", True)
+    # The sandbox tools follow Craft access: turn Craft on for the deployment.
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", True)
+    monkeypatch.setattr(
+        build_utils, "get_default_feature_flag_provider", NoOpFeatureFlagProvider
+    )
+    monkeypatch.setattr(build_utils, "get_current_tier", lambda: Tier.BUSINESS)
     return instance
 
 
@@ -894,6 +904,67 @@ def test_a_bot_turn_offers_no_sandbox(
     )
     [request] = llm.requests
     assert ExecCommandTool.NAME not in str(request.get("tools"))
+
+
+def _set_user(
+    db_session: Session,
+    user: User,
+    *,
+    craft_enabled: bool | None = None,
+    account_type: AccountType = AccountType.STANDARD,
+) -> None:
+    row = db_session.get(User, user.id)
+    if row is None:
+        raise RuntimeError("the test user exists")
+    row.craft_enabled = craft_enabled
+    row.account_type = account_type
+    db_session.commit()
+    user.craft_enabled = craft_enabled
+    user.account_type = account_type
+
+
+def _offers_sandbox(monkeypatch: pytest.MonkeyPatch, chat: SandboxChat) -> bool:
+    """Send one message; returns whether its model request had the sandbox tools."""
+    llm = ChatLLM([Delta(content="Maybe a sandbox.")])
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
+    )
+    run_chat_turn(
+        new_msg_req=SendMessageRequest(
+            message="Work.",
+            chat_session_id=chat.chat_session_id,
+            tool_options=ToolOptions(allowed=[]),
+        ),
+        user=chat.user,
+        approval_mode=ApprovalMode.NO_APPROVER,
+    )
+    [request] = llm.requests
+    return ExecCommandTool.NAME in str(request.get("tools"))
+
+
+@pytest.mark.usefixtures("node")
+def test_a_user_without_craft_access_gets_no_sandbox(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, chat: SandboxChat
+) -> None:
+    assert _offers_sandbox(monkeypatch, chat)
+
+    # An admin turned Craft off for this user.
+    _set_user(db_session, chat.user, craft_enabled=False)
+    assert not _offers_sandbox(monkeypatch, chat)
+
+    # Craft is off for the deployment, and the user has no override.
+    _set_user(db_session, chat.user, craft_enabled=None)
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", False)
+    assert not _offers_sandbox(monkeypatch, chat)
+
+
+@pytest.mark.usefixtures("node")
+def test_a_service_account_turn_offers_no_sandbox(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, chat: SandboxChat
+) -> None:
+    # An API key acts as a service account.
+    _set_user(db_session, chat.user, account_type=AccountType.SERVICE_ACCOUNT)
+    assert not _offers_sandbox(monkeypatch, chat)
 
 
 @pytest.mark.usefixtures("sandbox", "node")

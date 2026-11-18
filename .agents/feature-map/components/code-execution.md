@@ -49,10 +49,12 @@
   `SANDBOX_FC_TEMPLATE`), every chat agent gives the model `exec_command`,
   `write_stdin` and file tools: `edit` and `write` for Claude models (in
   the shapes of Claude Code's Edit and Write), `apply_patch` for all other
-  models. This applies except in anonymous,
-  incognito and multi-model turns and in Slack and Discord bot turns (bots
-  get service-account sandboxes later). Admins cannot turn them off
-  per agent, and users cannot pick or force them. Commands run in the user's
+  models. This applies only to a standard user with Craft access
+  (`is_craft_enabled_for_user`: the deployment's Craft availability, the
+  workspace default and the per-user override). Anonymous, service-account
+  (API key) and bot accounts, incognito and multi-model turns, and Slack and
+  Discord bot turns get none (bots get service-account sandboxes later).
+  Admins cannot turn them off per agent, and users cannot pick or force them. Commands run in the user's
   private VM, in the chat's session directory, whose files stay for later
   turns. The user sees each command and its output as it streams, and the
   files that each patch, edit or write changed, on the same patch card.
