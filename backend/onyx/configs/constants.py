@@ -223,9 +223,6 @@ USER_JOB_LOST_TASK_GRACE = 5 * 60  # seconds
 
 PRUNING_GENERATOR_TASK_EXPIRES = 10 * 60  # seconds
 
-# how long a task should wait for associated fence to be ready
-CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
-
 # needs to be long enough to cover the maximum time it takes to download an object
 # if we can get callbacks as object bytes download, we could lower this a lot.
 CELERY_PRUNING_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)

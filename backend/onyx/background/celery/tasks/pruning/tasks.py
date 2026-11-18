@@ -31,7 +31,6 @@ from onyx.configs.app_configs import ALLOW_SIMULTANEOUS_PRUNING, JOB_TIMEOUT
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     CELERY_PRUNING_LOCK_TIMEOUT,
-    CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT,
     DANSWER_REDIS_FUNCTION_LOCK_PREFIX,
     PRUNING_GENERATOR_TASK_EXPIRES,
     DocumentSource,
@@ -600,52 +599,30 @@ def connector_pruning_generator_task(
 
     r = get_redis_client()
 
-    # this wait is needed to avoid a race condition where
-    # the primary worker sends the task and it is immediately executed
-    # before the primary worker can finalize the fence
-    start = time.monotonic()
-    while True:
-        if time.monotonic() - start > CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT:
-            raise ValueError(
-                f"connector_prune_generator_task - timed out waiting for fence to be ready: "
-                f"fence={redis_connector.prune.fence_key}"
-            )
-
-        if not redis_connector.prune.fenced:  # The fence must exist
-            raise ValueError(
-                f"connector_prune_generator_task - fence not found: fence={redis_connector.prune.fence_key}"
-            )
-
-        payload = redis_connector.prune.payload  # The payload must exist
-        if not payload:
-            raise ValueError(
-                "connector_prune_generator_task: payload invalid or not found"
-            )
-
-        if payload.celery_task_id is None:
-            logger.info(
-                "connector_prune_generator_task - Waiting for fence: fence=%s",
-                redis_connector.prune.fence_key,
-            )
-            time.sleep(1)
-            continue
-
-        # A stale dispatch must not run under a newer prune's fence.
-        if payload.celery_task_id != self.request.id:
-            task_logger.info(
-                f"Pruning canceled, the fence belongs to another task: "
-                f"cc_pair={cc_pair_id} fence_task_id={payload.celery_task_id}"
-            )
-            return None
-
-        payload_id = payload.id
-
-        logger.info(
-            "connector_prune_generator_task - Fence found, continuing...: fence=%s payload_id=%s",
-            redis_connector.prune.fence_key,
-            payload.id,
+    if not redis_connector.prune.fenced:  # The fence must exist
+        raise ValueError(
+            f"connector_prune_generator_task - fence not found: fence={redis_connector.prune.fence_key}"
         )
-        break
+
+    payload = redis_connector.prune.payload  # The payload must exist
+    if not payload:
+        raise ValueError("connector_prune_generator_task: payload invalid or not found")
+
+    # A stale dispatch must not run under a newer prune's fence.
+    if payload.celery_task_id != self.request.id:
+        task_logger.info(
+            f"Pruning canceled, the fence belongs to another task: "
+            f"cc_pair={cc_pair_id} fence_task_id={payload.celery_task_id}"
+        )
+        return None
+
+    payload_id = payload.id
+
+    logger.info(
+        "connector_prune_generator_task - Fence found, continuing...: fence=%s payload_id=%s",
+        redis_connector.prune.fence_key,
+        payload.id,
+    )
 
     # set thread_local=False since we don't control what thread the indexing/pruning
     # might run our callback with
