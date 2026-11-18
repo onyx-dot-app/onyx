@@ -67,7 +67,7 @@ hand_off() {
     context="${entry#*:}"
     run="$(gh run list --repo "${REPO}" --workflow "${workflow}" --branch "${parent_ref}" \
       --commit "${head}" --event pull_request --limit 1 \
-      --json databaseId,status,conclusion --jq '.[0] | [.databaseId, .status, (.conclusion // "")] | @tsv')"
+      --json databaseId,status,conclusion --jq '.[0] // empty | [.databaseId, .status, (.conclusion // "")] | @tsv')"
     if [[ -z "${run}" ]]; then
       echo "PR #${parent}: no ${workflow} run on ${head}."
       continue
