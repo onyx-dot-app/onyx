@@ -9,12 +9,12 @@ require updates in `deployment/helm/charts/onyx/Chart.yaml`:
   unless the chart's purpose changes.
 
 The `helm-release` pre-commit hook checks both requirements. Agent stop hooks
-also run pre-commit. CI uses the same check for chart pull requests.
+also run the hooks. CI uses the same check for chart pull requests.
 The check includes deletions and all files inside both chart directories.
 Changes to `deployment/helm/README.md` or `deployment/helm/dev/` alone do not require a chart release.
 
 Run `git fetch origin main` to refresh the local release baseline, then run
-`pre-commit run helm-release --all-files`. One update covers all commits in a branch.
+`prek run helm-release --all-files`. One update covers all commits in a branch.
 Release branches (including their merge queue runs) and application release tag builds do not
 publish charts and are exempt.
 

@@ -12540,7 +12540,8 @@
         },
         "stopSubagentsButton": {
           "label": "Detener subagentes"
-        }
+        },
+        "questionAttachmentsHint": "Las respuestas a las preguntas del agente no pueden incluir archivos. Quita los archivos para responder."
       },
       "baseInputBar": {
         "input": {
@@ -12688,6 +12689,12 @@
       },
       "pendingToolApproval": {
         "toast": "Primero aprueba o rechaza las llamadas a herramientas pendientes."
+      },
+      "pendingToolQuestion": {
+        "toast": "Responde primero a las preguntas del agente."
+      },
+      "pendingUserInput": {
+        "toast": "Responde primero a las solicitudes de aprobación o preguntas pendientes."
       }
     },
     "mcpApiKey": {
@@ -13139,6 +13146,9 @@
           "waitingForApproval": {
             "label": "Esperando tu aprobación"
           },
+          "waitingForAnswer": {
+            "label": "Esperando tu respuesta"
+          },
           "runningCommand": {
             "label": "Ejecutando comando"
           },
@@ -13328,6 +13338,28 @@
       },
       "toolApproval": {
         "agentRequest": "{agent} quiere ejecutar {tool}"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {El agente tiene una pregunta} other {El agente tiene # preguntas}}",
+        "other": {
+          "placeholder": "Otra: escribe tu propia respuesta",
+          "ariaLabel": "Otra respuesta para {header}"
+        },
+        "submit": "Enviar",
+        "page": {
+          "progress": "Pregunta {current} de {total}",
+          "next": "Siguiente",
+          "unanswered": "{count, plural, one {Responde la pregunta {numbers} para enviar.} other {Responde las preguntas {numbers} para enviar.}}"
+        },
+        "submitError": "No se pudieron enviar tus respuestas. Inténtalo de nuevo.",
+        "record": {
+          "answered": "Respondida",
+          "answeredInChat": "Respondida en el chat",
+          "cancelled": "Sin respuesta",
+          "closed": "Ya no está en espera",
+          "answer": "{header}: {answer}",
+          "optionAndNote": "{option} ({note})"
+        }
       },
       "toolbar": {
         "dislikeButton": {

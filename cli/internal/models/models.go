@@ -188,6 +188,30 @@ type ApprovalDecisionResult struct {
 	Continuation *ChatStream `json:"continuation"`
 }
 
+// ToolQuestionAnswer is the user's answer to one of the agent's questions: a
+// listed option's label, a note, or both.
+type ToolQuestionAnswer struct {
+	QuestionID  string `json:"question_id"`
+	OptionLabel string `json:"option_label,omitempty"`
+	UserNote    string `json:"user_note,omitempty"`
+}
+
+// QuestionAnswers answers a question request: Answers from its card, one for
+// each question, or a Message that the user typed in the chat instead. A
+// message answers every question of the response that waits.
+type QuestionAnswers struct {
+	Answers []ToolQuestionAnswer `json:"answers,omitempty"`
+	Message string               `json:"message,omitempty"`
+}
+
+// QuestionAnswersResult is the server's reply to answers.
+type QuestionAnswersResult struct {
+	QuestionRequestID string `json:"question_request_id"`
+	// Continuation is the stream that continues the response after the
+	// answer, or nil while the response still waits or nothing resumed.
+	Continuation *ChatStream `json:"continuation"`
+}
+
 // SendMessagePayload is the request body for POST /api/chat/send-chat-message.
 type SendMessagePayload struct {
 	Message          string                   `json:"message"`

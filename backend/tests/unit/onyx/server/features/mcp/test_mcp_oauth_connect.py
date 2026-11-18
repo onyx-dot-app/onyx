@@ -149,7 +149,9 @@ def test_token_expiry_controls_fast_path_without_dropping_oauth_state(
         return_value=(
             api.OAuthAlreadyAuthenticated()
             if stored_credentials_usable and not force_reauthentication
-            else api.OAuthAuthorizationRedirect("https://accounts.example.com/consent")
+            else api.OAuthAuthorizationRedirect(
+                url="https://accounts.example.com/consent"
+            )
         )
     )
 

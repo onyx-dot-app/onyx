@@ -17,21 +17,23 @@ eligible for re-claiming.  No long-lived sessions or advisory locks.
 from collections.abc import Sequence
 from uuid import UUID
 
-import sqlalchemy as sa
 from celery import Celery
 from fastapi import BackgroundTasks
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     CELERY_USER_FILE_DELETE_TASK_EXPIRES,
+    QUERY_REPORT_NAME_PREFIX,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
 )
-from onyx.db.enums import UserFileStatus
-from onyx.db.models import UserFile
+from onyx.db.user_file import (
+    claim_next_processing_user_file__no_commit,
+    lock_next_deleting_user_file_id,
+    lock_next_sync_user_file_id,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -39,8 +41,6 @@ logger = setup_logger()
 # ------------------------------------------------------------------
 # Query-history report helpers (pre-existing, used by all modes)
 # ------------------------------------------------------------------
-
-QUERY_REPORT_NAME_PREFIX = "query-history"
 
 
 def construct_query_history_report_name(
@@ -68,21 +68,10 @@ def _claim_next_processing_file(db_session: Session) -> UUID | None:
 
     Returns the file id, or None when no eligible files remain.
     """
-    file_id = db_session.execute(
-        select(UserFile.id)
-        .where(UserFile.status == UserFileStatus.PROCESSING)
-        .order_by(UserFile.created_at)
-        .limit(1)
-        .with_for_update(skip_locked=True)
-    ).scalar_one_or_none()
+    file_id = claim_next_processing_user_file__no_commit(db_session)
     if file_id is None:
         return None
 
-    db_session.execute(
-        sa.update(UserFile)
-        .where(UserFile.id == file_id)
-        .values(status=UserFileStatus.INDEXING)
-    )
     db_session.commit()
     return file_id
 
@@ -97,16 +86,7 @@ def _claim_next_deleting_file(
     The short-lived FOR UPDATE lock prevents concurrent claims.
     *exclude_ids* prevents re-processing the same file if the impl fails.
     """
-    stmt = (
-        select(UserFile.id)
-        .where(UserFile.status == UserFileStatus.DELETING)
-        .order_by(UserFile.created_at)
-        .limit(1)
-        .with_for_update(skip_locked=True)
-    )
-    if exclude_ids:
-        stmt = stmt.where(UserFile.id.notin_(exclude_ids))
-    file_id = db_session.execute(stmt).scalar_one_or_none()
+    file_id = lock_next_deleting_user_file_id(db_session, exclude_ids)
     db_session.commit()
     return file_id
 
@@ -121,24 +101,7 @@ def _claim_next_sync_file(
     success.  The short-lived FOR UPDATE lock prevents concurrent claims.
     *exclude_ids* prevents re-processing the same file if the impl fails.
     """
-    stmt = (
-        select(UserFile.id)
-        .where(
-            sa.and_(
-                sa.or_(
-                    UserFile.needs_project_sync.is_(True),
-                    UserFile.needs_persona_sync.is_(True),
-                ),
-                UserFile.status == UserFileStatus.COMPLETED,
-            )
-        )
-        .order_by(UserFile.created_at)
-        .limit(1)
-        .with_for_update(skip_locked=True)
-    )
-    if exclude_ids:
-        stmt = stmt.where(UserFile.id.notin_(exclude_ids))
-    file_id = db_session.execute(stmt).scalar_one_or_none()
+    file_id = lock_next_sync_user_file_id(db_session, exclude_ids)
     db_session.commit()
     return file_id
 

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import AZURE_IMAGE_API_KEY
 from onyx.db.connector import check_connectors_exist
 from onyx.db.document import check_docs_exist
-from onyx.db.models import LLMProvider
+from onyx.db.llm import fetch_existing_llm_providers
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import find_model_obj, get_model_map
 from onyx.tools.interface import Tool
@@ -23,7 +23,12 @@ def explicit_tool_calling_supported(model_provider: str, model_name: str) -> boo
 
 
 def is_image_generation_available(db_session: Session) -> bool:
-    providers = db_session.query(LLMProvider).all()
+    providers = fetch_existing_llm_providers(
+        db_session,
+        flow_type_filter=[],
+        exclude_image_generation_providers=False,
+        include_model_configurations=False,
+    )
     for provider in providers:
         if provider.provider == LlmProviderNames.OPENAI:
             return True

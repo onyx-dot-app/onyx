@@ -22,11 +22,11 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import BuildSessionStatus, SandboxStatus
 from onyx.db.models import BuildSession, Sandbox, User
-from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.sandbox import (
     create_snapshot__no_commit,
     get_running_sandboxes,
 )
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     FilesystemEntry,
     OutputsManifestEntry,

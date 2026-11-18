@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { TurnGroup } from "@/app/app/message/messageComponents/timeline/transformers";
+import type { AwaitingUser } from "@/lib/chat/toolApprovals";
 import {
   Packet,
   PacketType,
@@ -91,7 +92,7 @@ export function useTimelineHeader(
   turnGroups: TurnGroup[],
   stopReason?: StopReason,
   codeModeWorking = false,
-  awaitingApproval = false
+  awaitingUser: AwaitingUser | null = null
 ): TimelineHeaderResult {
   const t = useTranslations("chat.messages.timeline");
   const locale = useLocale();
@@ -104,9 +105,13 @@ export function useTimelineHeader(
     // Get the last (current) turn group
     const currentTurn = turnGroups.at(-1);
 
-    if (awaitingApproval) {
+    if (awaitingUser) {
       return {
-        headerText: t("header.waitingForApproval.label"),
+        headerText: t(
+          awaitingUser === "approval"
+            ? "header.waitingForApproval.label"
+            : "header.waitingForAnswer.label"
+        ),
         hasPackets,
         userStopped,
       };
@@ -128,5 +133,5 @@ export function useTimelineHeader(
     const headerText =
       stepHeaderText(currentStep.packets, t, locale) ?? thinkingHeader;
     return { headerText, hasPackets, userStopped };
-  }, [turnGroups, stopReason, codeModeWorking, awaitingApproval, t, locale]);
+  }, [turnGroups, stopReason, codeModeWorking, awaitingUser, t, locale]);
 }

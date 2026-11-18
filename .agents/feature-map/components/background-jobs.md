@@ -165,12 +165,13 @@ time, so an old queued job that just started is safe. The worker uploads the
 file without a row lock, then locks the started row to publish. A late worker
 whose job cleanup failed deletes its file. Before cleanup purges an expired
 failure, it deletes that job's file, because without the row the file looks
-published. Cleanup skips rows that a worker locks. The start route fails its
-new row when the broker send fails. Manual usage exports follow the same rules,
-and delete the job row in the same transaction that records the report. Scheduled usage exports do
-not create job rows. Usage generation runs on the primary worker, which
-registers that task; query-history generation and the shared hourly cleanup run
-on the heavy worker.
+published. A failed delete keeps its row and does not stop the cleanup.
+Cleanup skips rows that a worker locks. The start route fails its new row when
+the broker send fails. Manual usage exports follow the same rules, and delete
+the job row in the same transaction that records the report. Scheduled usage
+exports do not create job rows. Usage generation runs on the primary worker,
+which registers that task; query-history generation and the shared hourly
+cleanup run on the heavy worker.
 Celery time limits do not stop these thread workers.
 
 **Other periodic flows.** Each owner documents its flow; this list says where

@@ -1,167 +1,386 @@
-"""Tests for EE AES-CBC encryption/decryption with explicit key support.
+"""Behavior of the two ciphertext formats and the keyring that reads them.
 
-With EE mode enabled (via conftest), fetch_versioned_implementation resolves
-to the EE implementations, so no patching of the MIT layer is needed.
+EE mode is on for this directory, so the `encrypt_string_to_bytes` and
+`decrypt_bytes_to_string` wrappers resolve to the EE implementation.
 """
 
+import base64
+import json
+from collections.abc import Generator
 from unittest.mock import patch
 
 import pytest
 
 from ee.onyx.utils.encryption import (
-    _decrypt_bytes,
-    _encrypt_string,
-    _get_trimmed_key,
+    ENVELOPE_MAGIC,
+    ENVELOPE_VERSION,
+    LEGACY_KEY_ID,
+    CiphertextFormat,
+    DecryptionError,
+    EncryptionConfigError,
+    Keyring,
+    UnsupportedCiphertextError,
+    build_keyring,
+    decrypt_with_keyring,
+    describe_keyring,
+    encrypt_with_keyring,
+    get_keyring,
+    is_current_ciphertext,
+    parse_envelope_header,
+)
+from onyx.utils.encryption import (
     decrypt_bytes_to_string,
     encrypt_string_to_bytes,
+    validate_encryption_configuration,
 )
 
 EE_MODULE = "ee.onyx.utils.encryption"
 
-# Keys must be exactly 16, 24, or 32 bytes for AES
-KEY_16 = "a" * 16
-KEY_16_ALT = "b" * 16
-KEY_24 = "d" * 24
-KEY_32 = "c" * 32
+LEGACY_SECRET = "legacy-secret-value-0123456789ab"
+# AES-CBC bytes written by the format that predates envelopes, under
+# LEGACY_SECRET, for the plaintext below. Frozen so a change to the legacy
+# reader cannot go unnoticed.
+LEGACY_VECTOR = bytes.fromhex(
+    "000102030405060708090a0b0c0d0e0f"
+    "1fdc2e4f8aa06b52c15254de5ef01f906e5e89cc32843e214b5363dfa95cfe2c"
+)
+LEGACY_VECTOR_PLAINTEXT = '{"api_key": "sk-legacy"}'
+
+KEY_A = base64.b64encode(b"a" * 32).decode()
+KEY_B = base64.b64encode(b"b" * 32).decode()
 
 
-@pytest.fixture(autouse=True)
-def _clear_key_cache() -> None:
-    _get_trimmed_key.cache_clear()
+def _keys_json(**keys: str) -> str:
+    return json.dumps(keys)
 
 
-class TestEncryptDecryptRoundTrip:
-    def test_roundtrip_with_env_key(self) -> None:
-        with patch(f"{EE_MODULE}.ENCRYPTION_KEY_SECRET", KEY_16):
-            encrypted = _encrypt_string("hello world")
-            assert encrypted != b"hello world"
-            assert _decrypt_bytes(encrypted) == "hello world"
-
-    def test_roundtrip_with_explicit_key(self) -> None:
-        encrypted = _encrypt_string("secret data", key=KEY_32)
-        assert encrypted != b"secret data"
-        assert _decrypt_bytes(encrypted, key=KEY_32) == "secret data"
-
-    def test_roundtrip_no_key(self) -> None:
-        """Without any key, data is raw-encoded (no encryption)."""
-        with patch(f"{EE_MODULE}.ENCRYPTION_KEY_SECRET", ""):
-            encrypted = _encrypt_string("plain text")
-            assert encrypted == b"plain text"
-            assert _decrypt_bytes(encrypted) == "plain text"
-
-    def test_explicit_key_overrides_env(self) -> None:
-        with patch(f"{EE_MODULE}.ENCRYPTION_KEY_SECRET", KEY_16):
-            encrypted = _encrypt_string("data", key=KEY_16_ALT)
-            with pytest.raises(ValueError):
-                _decrypt_bytes(encrypted, key=KEY_16)
-            assert _decrypt_bytes(encrypted, key=KEY_16_ALT) == "data"
-
-    def test_different_encryptions_produce_different_bytes(self) -> None:
-        """Each encryption uses a random IV, so results differ."""
-        a = _encrypt_string("same", key=KEY_16)
-        b = _encrypt_string("same", key=KEY_16)
-        assert a != b
-
-    def test_roundtrip_empty_string(self) -> None:
-        encrypted = _encrypt_string("", key=KEY_16)
-        assert encrypted != b""
-        assert _decrypt_bytes(encrypted, key=KEY_16) == ""
-
-    def test_roundtrip_unicode(self) -> None:
-        text = "日本語テスト 🔐 émojis"
-        encrypted = _encrypt_string(text, key=KEY_16)
-        assert _decrypt_bytes(encrypted, key=KEY_16) == text
+def _legacy_only() -> Keyring:
+    return build_keyring(LEGACY_SECRET, "", "")
 
 
-class TestDecryptFallbackBehavior:
-    def test_wrong_env_key_falls_back_to_raw_decode(self) -> None:
-        """Default key path: AES fails on non-AES data → fallback to raw decode."""
-        raw = "readable text".encode()
-        with patch(f"{EE_MODULE}.ENCRYPTION_KEY_SECRET", KEY_16):
-            assert _decrypt_bytes(raw) == "readable text"
-
-    def test_explicit_wrong_key_raises(self) -> None:
-        """Explicit key path: AES fails → raises, no fallback."""
-        encrypted = _encrypt_string("secret", key=KEY_16)
-        with pytest.raises(ValueError):
-            _decrypt_bytes(encrypted, key=KEY_16_ALT)
-
-    def test_explicit_none_key_with_no_env(self) -> None:
-        """key=None with empty env → raw decode."""
-        with patch(f"{EE_MODULE}.ENCRYPTION_KEY_SECRET", ""):
-            assert _decrypt_bytes(b"hello", key=None) == "hello"
-
-    def test_explicit_empty_string_key(self) -> None:
-        """key='' means no encryption."""
-        encrypted = _encrypt_string("test", key="")
-        assert encrypted == b"test"
-        assert _decrypt_bytes(encrypted, key="") == "test"
+def _staged(write_key_id: str = "") -> Keyring:
+    """Legacy secret plus a new key: phase B when write_key_id is empty, phase C
+    when it names the new key."""
+    return build_keyring(LEGACY_SECRET, _keys_json(k2026=KEY_A), write_key_id)
 
 
-class TestKeyValidation:
-    def test_key_too_short_raises(self) -> None:
-        with pytest.raises(RuntimeError, match="too short"):
-            _encrypt_string("data", key="short")
-
-    def test_16_byte_key(self) -> None:
-        encrypted = _encrypt_string("data", key=KEY_16)
-        assert _decrypt_bytes(encrypted, key=KEY_16) == "data"
-
-    def test_24_byte_key(self) -> None:
-        encrypted = _encrypt_string("data", key=KEY_24)
-        assert _decrypt_bytes(encrypted, key=KEY_24) == "data"
-
-    def test_32_byte_key(self) -> None:
-        encrypted = _encrypt_string("data", key=KEY_32)
-        assert _decrypt_bytes(encrypted, key=KEY_32) == "data"
-
-    def test_long_key_truncated_to_32(self) -> None:
-        """Keys longer than 32 bytes are truncated to 32."""
-        long_key = "e" * 64
-        encrypted = _encrypt_string("data", key=long_key)
-        assert _decrypt_bytes(encrypted, key=long_key) == "data"
-
-    def test_20_byte_key_trimmed_to_16(self) -> None:
-        """A 20-byte key is trimmed to the largest valid AES size that fits (16)."""
-        key_20 = "f" * 20
-        encrypted = _encrypt_string("data", key=key_20)
-        assert _decrypt_bytes(encrypted, key=key_20) == "data"
-
-        # Verify it was trimmed to 16 by checking that the first 16 bytes
-        # of the key can also decrypt it
-        key_16_same_prefix = "f" * 16
-        assert _decrypt_bytes(encrypted, key=key_16_same_prefix) == "data"
-
-    def test_25_byte_key_trimmed_to_24(self) -> None:
-        """A 25-byte key is trimmed to the largest valid AES size that fits (24)."""
-        key_25 = "g" * 25
-        encrypted = _encrypt_string("data", key=key_25)
-        assert _decrypt_bytes(encrypted, key=key_25) == "data"
-
-        key_24_same_prefix = "g" * 24
-        assert _decrypt_bytes(encrypted, key=key_24_same_prefix) == "data"
-
-    def test_30_byte_key_trimmed_to_24(self) -> None:
-        """A 30-byte key is trimmed to the largest valid AES size that fits (24)."""
-        key_30 = "h" * 30
-        encrypted = _encrypt_string("data", key=key_30)
-        assert _decrypt_bytes(encrypted, key=key_30) == "data"
-
-        key_24_same_prefix = "h" * 24
-        assert _decrypt_bytes(encrypted, key=key_24_same_prefix) == "data"
+def _retired() -> Keyring:
+    """Legacy secret removed after rotation."""
+    return build_keyring("", _keys_json(k2026=KEY_A), "k2026")
 
 
-class TestWrapperFunctions:
-    """Test encrypt_string_to_bytes / decrypt_bytes_to_string pass key through.
+class TestLegacyCompatibility:
+    def test_frozen_legacy_vector_decrypts(self) -> None:
+        value = decrypt_with_keyring(_legacy_only(), LEGACY_VECTOR)
+        assert value.plaintext == LEGACY_VECTOR_PLAINTEXT
+        assert value.format == CiphertextFormat.LEGACY_CBC
+        assert value.key_id == LEGACY_KEY_ID
 
-    With EE mode enabled, the wrappers resolve to EE implementations automatically.
-    """
+    def test_legacy_only_configuration_still_writes_legacy_cbc(self) -> None:
+        keyring = _legacy_only()
+        data = encrypt_with_keyring(keyring, "hello")
+        assert not data.startswith(ENVELOPE_MAGIC)
+        assert keyring.write_format == CiphertextFormat.LEGACY_CBC
+        assert decrypt_with_keyring(keyring, data).format == CiphertextFormat.LEGACY_CBC
 
-    def test_wrapper_passes_key(self) -> None:
-        encrypted = encrypt_string_to_bytes("payload", key=KEY_16)
-        assert decrypt_bytes_to_string(encrypted, key=KEY_16) == "payload"
+    def test_staged_keys_without_write_key_keep_legacy_writes(self) -> None:
+        keyring = _staged()
+        assert keyring.write_key_id is None
+        data = encrypt_with_keyring(keyring, "hello")
+        assert decrypt_with_keyring(_legacy_only(), data).plaintext == "hello"
 
-    def test_wrapper_no_key_uses_env(self) -> None:
-        with patch(f"{EE_MODULE}.ENCRYPTION_KEY_SECRET", KEY_32):
-            encrypted = encrypt_string_to_bytes("payload")
-            assert decrypt_bytes_to_string(encrypted) == "payload"
+    def test_no_key_stores_plain_text(self) -> None:
+        keyring = build_keyring("", "", "")
+        assert encrypt_with_keyring(keyring, "plain") == b"plain"
+        value = decrypt_with_keyring(keyring, b"plain")
+        assert value.format == CiphertextFormat.PLAINTEXT
+        assert value.key_id is None
+
+    def test_plain_text_stored_before_a_key_existed_is_readable(self) -> None:
+        value = decrypt_with_keyring(_legacy_only(), b"readable text")
+        assert value.plaintext == "readable text"
+        assert value.format == CiphertextFormat.PLAINTEXT
+
+    def test_legacy_bytes_under_another_secret_are_unreadable(self) -> None:
+        other = build_keyring("another-secret-value-0123456789", "", "")
+        with pytest.raises(DecryptionError):
+            decrypt_with_keyring(other, LEGACY_VECTOR)
+
+    def test_legacy_secret_is_trimmed_to_an_aes_key_size(self) -> None:
+        # 20 bytes trims to 16, so the 16-byte prefix reads the same bytes.
+        data = encrypt_with_keyring(build_keyring("f" * 20, "", ""), "data")
+        assert (
+            decrypt_with_keyring(build_keyring("f" * 16, "", ""), data).plaintext
+            == "data"
+        )
+
+    def test_legacy_secret_too_short_fails(self) -> None:
+        with pytest.raises(EncryptionConfigError, match="too short"):
+            build_keyring("short", "", "")
+
+
+class TestEnvelope:
+    def test_round_trip_carries_version_and_key_id(self) -> None:
+        keyring = _staged("k2026")
+        data = encrypt_with_keyring(keyring, "secret data")
+        parsed = parse_envelope_header(data)
+        assert parsed is not None
+        header, _ = parsed
+        assert header.version == ENVELOPE_VERSION
+        assert header.key_id == "k2026"
+        value = decrypt_with_keyring(keyring, data)
+        assert value.plaintext == "secret data"
+        assert value.format == CiphertextFormat.ENVELOPE
+        assert value.key_id == "k2026"
+
+    def test_each_write_uses_a_fresh_nonce(self) -> None:
+        keyring = _staged("k2026")
+        assert encrypt_with_keyring(keyring, "same") != encrypt_with_keyring(
+            keyring, "same"
+        )
+
+    @pytest.mark.parametrize("text", ["", "日本語テスト 🔐 émojis", "x" * 10_000])
+    def test_round_trip_edge_texts(self, text: str) -> None:
+        keyring = _staged("k2026")
+        assert (
+            decrypt_with_keyring(keyring, encrypt_with_keyring(keyring, text)).plaintext
+            == text
+        )
+
+    def test_legacy_secret_can_write_envelopes_under_a_derived_key(self) -> None:
+        keyring = build_keyring(LEGACY_SECRET, "", LEGACY_KEY_ID)
+        data = encrypt_with_keyring(keyring, "same secret")
+        parsed = parse_envelope_header(data)
+        assert parsed is not None
+        assert parsed[0].key_id == LEGACY_KEY_ID
+        assert is_current_ciphertext(keyring, data)
+        assert decrypt_with_keyring(_legacy_only(), data).plaintext == "same secret"
+        # The AES-CBC key bytes themselves never serve AES-GCM.
+        assert keyring.legacy_key is not None
+        assert keyring.keys[LEGACY_KEY_ID] != keyring.legacy_key
+        assert len(keyring.keys[LEGACY_KEY_ID]) == 32
+
+    def test_is_current_only_for_the_write_key(self) -> None:
+        under_a = encrypt_with_keyring(_staged("k2026"), "v")
+        assert is_current_ciphertext(_staged("k2026"), under_a)
+        assert not is_current_ciphertext(_staged(), under_a)
+        assert not is_current_ciphertext(_staged("k2026"), LEGACY_VECTOR)
+        two_keys = build_keyring("", _keys_json(k2026=KEY_A, k2027=KEY_B), "k2027")
+        assert not is_current_ciphertext(two_keys, under_a)
+
+
+class TestMixedPhases:
+    def test_envelope_reader_reads_legacy_writer_output(self) -> None:
+        data = encrypt_with_keyring(_legacy_only(), "from an old pod")
+        assert (
+            decrypt_with_keyring(_staged("k2026"), data).plaintext == "from an old pod"
+        )
+
+    def test_staged_reader_reads_envelope_writer_output(self) -> None:
+        data = encrypt_with_keyring(_staged("k2026"), "from a new pod")
+        assert decrypt_with_keyring(_staged(), data).plaintext == "from a new pod"
+
+    def test_retired_legacy_key_cannot_read_legacy_bytes(self) -> None:
+        with pytest.raises(DecryptionError):
+            decrypt_with_keyring(_retired(), LEGACY_VECTOR)
+
+    def test_old_envelope_key_stays_readable_after_a_second_rotation(self) -> None:
+        data = encrypt_with_keyring(_retired(), "under k2026")
+        next_keyring = build_keyring("", _keys_json(k2026=KEY_A, k2027=KEY_B), "k2027")
+        assert decrypt_with_keyring(next_keyring, data).plaintext == "under k2026"
+        assert not is_current_ciphertext(next_keyring, data)
+
+
+class TestFailsSafely:
+    def test_tampered_body_fails_authentication(self) -> None:
+        keyring = _staged("k2026")
+        data = bytearray(encrypt_with_keyring(keyring, "payload"))
+        data[-1] ^= 0x01
+        with pytest.raises(DecryptionError, match="authentication"):
+            decrypt_with_keyring(keyring, bytes(data))
+
+    def test_tampered_header_fails_authentication(self) -> None:
+        keyring = build_keyring("", _keys_json(k2026=KEY_A, k2027=KEY_A), "k2026")
+        data = encrypt_with_keyring(keyring, "payload")
+        # Same key material under another id: only the authenticated header differs.
+        swapped = data.replace(b"k2026", b"k2027", 1)
+        with pytest.raises(DecryptionError, match="authentication"):
+            decrypt_with_keyring(keyring, swapped)
+
+    def test_unknown_key_id_is_unsupported(self) -> None:
+        data = encrypt_with_keyring(_staged("k2026"), "payload")
+        with pytest.raises(UnsupportedCiphertextError, match="k2026"):
+            decrypt_with_keyring(_legacy_only(), data)
+
+    def test_unknown_version_is_unsupported(self) -> None:
+        keyring = _staged("k2026")
+        data = bytearray(encrypt_with_keyring(keyring, "payload"))
+        data[len(ENVELOPE_MAGIC)] = ENVELOPE_VERSION + 1
+        with pytest.raises(UnsupportedCiphertextError, match="version"):
+            decrypt_with_keyring(keyring, bytes(data))
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            ENVELOPE_MAGIC,
+            ENVELOPE_MAGIC + bytes([ENVELOPE_VERSION]),
+            ENVELOPE_MAGIC + bytes([ENVELOPE_VERSION, 0]) + b"\x00" * 40,
+            ENVELOPE_MAGIC + bytes([ENVELOPE_VERSION, 3]) + b"k 1" + b"\x00" * 40,
+            ENVELOPE_MAGIC + bytes([ENVELOPE_VERSION, 5]) + b"k2026" + b"\x00" * 10,
+        ],
+        ids=["magic-only", "no-key-length", "empty-key-id", "bad-key-id", "too-short"],
+    )
+    def test_malformed_envelope_never_reads_as_legacy(
+        self, data: bytes, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # The message names the envelope: the legacy reader was never tried.
+        with pytest.raises(DecryptionError, match="^Envelope"):
+            decrypt_with_keyring(_staged("k2026"), data)
+        with pytest.raises(DecryptionError, match="^Envelope"):
+            parse_envelope_header(data)
+        assert "reading it as plain text" not in caplog.text
+
+    def test_authentication_failure_is_not_read_as_plain_text(self) -> None:
+        keyring = _staged("k2026")
+        header_and_nonce = encrypt_with_keyring(keyring, "x")[: 7 + 5 + 12]
+        forged = header_and_nonce + b"plain text that is valid UTF-8!!"
+        with pytest.raises(DecryptionError, match="authentication"):
+            decrypt_with_keyring(keyring, forged)
+
+    def test_tampered_key_id_length_is_not_read_under_another_id(self) -> None:
+        keyring = build_keyring("", _keys_json(k202=KEY_A, k2026=KEY_A), "k2026")
+        data = bytearray(encrypt_with_keyring(keyring, "payload"))
+        data[len(ENVELOPE_MAGIC) + 1] -= 1
+        # Same key material under the shorter id: only the authenticated header differs.
+        with pytest.raises(DecryptionError, match="authentication"):
+            decrypt_with_keyring(keyring, bytes(data))
+
+    def test_truncated_body_fails_authentication(self) -> None:
+        keyring = _staged("k2026")
+        data = encrypt_with_keyring(keyring, "payload that is long enough")
+        with pytest.raises(DecryptionError, match="authentication"):
+            decrypt_with_keyring(keyring, data[:-1])
+
+    def test_legacy_envelope_is_unsupported_once_the_secret_is_retired(self) -> None:
+        data = encrypt_with_keyring(
+            build_keyring(LEGACY_SECRET, "", LEGACY_KEY_ID), "p"
+        )
+        with pytest.raises(UnsupportedCiphertextError, match="'legacy'"):
+            decrypt_with_keyring(_retired(), data)
+
+    def test_plain_text_fallback_logs_a_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level("WARNING"):
+            decrypt_with_keyring(_legacy_only(), b"readable text")
+        assert "reading it as plain text" in caplog.text
+
+    def test_random_bytes_are_unreadable(self) -> None:
+        with pytest.raises(DecryptionError, match="not UTF-8"):
+            decrypt_with_keyring(_staged("k2026"), b"\x80\x81\x82\x83" * 8)
+
+    def test_error_messages_carry_no_key_material(self) -> None:
+        with pytest.raises(UnsupportedCiphertextError) as info:
+            decrypt_with_keyring(
+                _legacy_only(), encrypt_with_keyring(_staged("k2026"), "p")
+            )
+        assert LEGACY_SECRET not in str(info.value)
+        assert KEY_A not in str(info.value)
+
+
+class TestKeyringConfiguration:
+    @pytest.mark.parametrize(
+        ("keys_json", "match"),
+        [
+            ("not json", "not valid JSON"),
+            ('["k"]', "JSON object"),
+            ('{"bad id!": "%s"}' % KEY_A, "key id #1 must match"),
+            ('{"": "%s"}' % KEY_A, "key id #1 must match"),
+            ('{"%s": "%s"}' % ("x" * 33, KEY_A), "key id #1 must match"),
+            ('{"legacy": "%s"}' % KEY_A, "reserved"),
+            ('{"k": 5}', "base64 string"),
+            ('{"k": "not*base64"}', "not standard base64"),
+            ('{"k": "%s"}' % base64.b64encode(b"a" * 16).decode(), "16 bytes, not 32"),
+            ('{"k": "%s", "k": "%s"}' % (KEY_A, KEY_B), "more than once"),
+        ],
+    )
+    def test_invalid_keys_json(self, keys_json: str, match: str) -> None:
+        with pytest.raises(EncryptionConfigError, match=match):
+            build_keyring("", keys_json, "")
+
+    @pytest.mark.parametrize(
+        ("keys_json", "write_key_id"),
+        [
+            ('{"%s": "k2026"}' % KEY_A, ""),
+            ('{"%s": "a", "%s": "b"}' % (KEY_A, KEY_A), ""),
+            (_keys_json(k2026=KEY_A), KEY_A),
+        ],
+        ids=["key-as-id", "duplicate-key-as-id", "key-as-write-id"],
+    )
+    def test_key_material_in_an_id_setting_is_not_echoed(
+        self, keys_json: str, write_key_id: str
+    ) -> None:
+        with pytest.raises(EncryptionConfigError) as info:
+            build_keyring("", keys_json, write_key_id)
+        assert KEY_A not in str(info.value)
+
+    def test_write_key_must_be_configured(self) -> None:
+        with pytest.raises(EncryptionConfigError, match="not in ENCRYPTION_KEYS"):
+            build_keyring("", _keys_json(k2026=KEY_A), "k2027")
+        with pytest.raises(EncryptionConfigError, match="not in ENCRYPTION_KEYS"):
+            build_keyring("", "", "k2026")
+
+    def test_legacy_write_key_needs_the_legacy_secret(self) -> None:
+        with pytest.raises(EncryptionConfigError, match="needs ENCRYPTION_KEY_SECRET"):
+            build_keyring("", _keys_json(k2026=KEY_A), LEGACY_KEY_ID)
+
+    def test_readable_ids_include_legacy_only_when_the_secret_is_set(self) -> None:
+        assert sorted(_staged().keys) == ["k2026", LEGACY_KEY_ID]
+        assert sorted(_retired().keys) == ["k2026"]
+
+    def test_description_names_ids_and_write_mode_only(self) -> None:
+        text = describe_keyring(_staged("k2026"))
+        assert "k2026" in text and "legacy" in text
+        assert LEGACY_SECRET not in text and KEY_A not in text
+        assert describe_keyring(_legacy_only()).endswith("writes legacy_cbc")
+        assert describe_keyring(build_keyring("", "", "")).endswith("writes plaintext")
+
+
+class TestProcessEntryPoints:
+    """The versioned wrappers and the startup check use the process keyring."""
+
+    def test_wrappers_round_trip_through_the_process_keyring(self) -> None:
+        with patch(f"{EE_MODULE}.get_keyring", return_value=_staged("k2026")):
+            data = encrypt_string_to_bytes("payload")
+            assert data.startswith(ENVELOPE_MAGIC)
+            assert decrypt_bytes_to_string(data) == "payload"
+
+    @pytest.fixture
+    def process_settings(self) -> Generator[None, None, None]:
+        """The real loader, reading patched settings instead of the cached ones."""
+        get_keyring.cache_clear()
+        with (
+            patch(f"{EE_MODULE}.ENCRYPTION_KEY_SECRET", LEGACY_SECRET),
+            patch(f"{EE_MODULE}.ENCRYPTION_KEYS_JSON", "{"),
+            patch(f"{EE_MODULE}.ENCRYPTION_WRITE_KEY_ID", ""),
+        ):
+            yield
+        get_keyring.cache_clear()
+
+    @pytest.mark.usefixtures("process_settings")
+    def test_startup_validation_rejects_bad_configuration(self) -> None:
+        with pytest.raises(EncryptionConfigError, match="not valid JSON"):
+            validate_encryption_configuration()
+        with pytest.raises(EncryptionConfigError, match="not valid JSON"):
+            encrypt_string_to_bytes("payload")
+
+    def test_startup_validation_passes_and_logs_ids_only(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with (
+            patch(f"{EE_MODULE}.get_keyring", return_value=_staged("k2026")),
+            caplog.at_level("INFO"),
+        ):
+            validate_encryption_configuration()
+        assert "k2026" in caplog.text
+        assert LEGACY_SECRET not in caplog.text and KEY_A not in caplog.text

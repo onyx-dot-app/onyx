@@ -6,10 +6,10 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MessageType
+from onyx.db.build_session import create_message
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import BuildSession, User
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.build_session import create_message
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.naming import generate_session_name
 

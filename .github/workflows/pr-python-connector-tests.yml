@@ -169,6 +169,11 @@ jobs:
               - 'backend/onyx/connectors/github/**'
               - 'backend/tests/daily/connectors/github/**'
               - 'uv.lock'
+            zoom:
+              - 'backend/onyx/connectors/zoom/**'
+              - 'backend/ee/onyx/external_permissions/zoom/**'
+              - 'backend/tests/daily/connectors/zoom/**'
+              - 'uv.lock'
             file_processing:
               - 'backend/onyx/file_processing/**'
               - 'uv.lock'
@@ -231,7 +236,7 @@ jobs:
 
       # The prod image has no uv or .venv; run pytest with the system
       # interpreter directly, where the deps installed above live.
-      - name: Run Tests (excluding HubSpot, Salesforce, GitHub, Coda, and Egnyte)
+      - name: Run Tests (excluding HubSpot, Salesforce, GitHub, Coda, Egnyte, and Zoom)
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           docker exec onyx-connector-tests bash -c '
@@ -247,7 +252,8 @@ jobs:
               --ignore backend/tests/daily/connectors/salesforce \
               --ignore backend/tests/daily/connectors/github \
               --ignore backend/tests/daily/connectors/coda \
-              --ignore backend/tests/daily/connectors/egnyte
+              --ignore backend/tests/daily/connectors/egnyte \
+              --ignore backend/tests/daily/connectors/zoom
           '
 
       - name: Run HubSpot Connector Tests
@@ -293,6 +299,22 @@ jobs:
               -xv \
               --ff \
               backend/tests/daily/connectors/github
+          '
+
+      # Zoom rate limits are per account, and every run shares one test account.
+      # Many parallel runs get 429s and pass the job timeout, so these tests run
+      # only on the daily schedule or when Zoom code changes.
+      - name: Run Zoom Connector Tests
+        if: ${{ github.event_name == 'schedule' || steps.changes.outputs.zoom == 'true' }}
+        shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
+        run: |
+          docker exec onyx-connector-tests bash -c '
+            python -m pytest \
+              --durations=8 \
+              -o junit_family=xunit2 \
+              -xv \
+              --ff \
+              backend/tests/daily/connectors/zoom
           '
 
       # Egnyte allows 1,000 API calls per token per day, so these tests run on

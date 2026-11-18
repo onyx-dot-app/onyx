@@ -17,12 +17,9 @@ from onyx.connectors.google_drive.connector import (
     GoogleDriveConnector,
     UnreachableTargetsError,
 )
-from onyx.connectors.google_drive.models import (
-    GoogleDriveFileType,
-    ListingPartitionKind,
-    ListingShard,
-)
+from onyx.connectors.google_drive.models import ListingPartitionKind, ListingShard
 from onyx.connectors.google_drive.source_operations import GoogleDriveHttpError
+from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
 from tests.external_dependency_unit.connectors.google_drive.test_checkpointed_slim_listing import (
     _file_id,

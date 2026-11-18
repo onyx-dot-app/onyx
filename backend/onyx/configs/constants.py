@@ -900,3 +900,40 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.YOUTRACK: "Issues and project tracking",
     DocumentSource.AZURE_DATALAKE: "Files in Azure Data Lake Storage containers",
 }
+
+# Prefix of the file id of a query-history report in the file store.
+QUERY_REPORT_NAME_PREFIX = "query-history"
+# Prefix of the task name of a query-history export.
+QUERY_HISTORY_TASK_NAME_PREFIX = OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK
+
+
+# Values of settings in app_configs.py.
+class AuthBackend(str, Enum):
+    REDIS = "redis"
+    POSTGRES = "postgres"
+    JWT = "jwt"
+
+
+class CacheBackendType(str, Enum):
+    REDIS = "redis"
+    POSTGRES = "postgres"
+
+
+class OpenSearchAuthMethod(str, Enum):
+    """Authentication method for connecting to OpenSearch.
+
+    BASIC uses HTTP basic auth (username/password); the only option for
+    self-hosted / docker-compose OpenSearch. IAM uses AWS SigV4 request signing
+    and is only valid against an AWS managed domain whose fine-grained access
+    control master is an IAM ARN.
+    """
+
+    BASIC = "basic"
+    IAM = "iam"
+
+
+class HtmlBasedConnectorTransformLinksStrategy(str, Enum):
+    # remove links entirely
+    STRIP = "strip"
+    # turn HTML links into markdown links
+    MARKDOWN = "markdown"

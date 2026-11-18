@@ -9,6 +9,7 @@ from fastapi_users.password import PasswordHelper
 from sqlalchemy import Select, case, delete, func, literal, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, lazyload, selectinload
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.elements import ColumnElement, KeyedColumnElement
@@ -36,19 +37,20 @@ from onyx.db.models import (
     Persona__User,
     Plugin,
     SamlAccount,
+    ScimUserMapping,
     User,
     User__ExternalUserGroupId,
     User__UserGroup,
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.utils import is_check_violation, is_fk_violation
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.sandbox import (
     get_sandbox_purge_targets,
     get_user_sandbox_blob_paths,
 )
+from onyx.db.utils import is_check_violation, is_fk_violation
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes_in_background,
 )
@@ -717,6 +719,14 @@ def fetch_user_by_id(
     return query.first()
 
 
+async def get_user_from_async_session(
+    db_session: AsyncSession, user_id: UUID
+) -> User | None:
+    """Primary-key lookup: returns the instance the session already holds, if
+    any, without a query."""
+    return await db_session.get(User, user_id)
+
+
 def _generate_password_hash() -> str:
     password_helper = PasswordHelper()
     return password_helper.hash(password_helper.generate())
@@ -1161,3 +1171,12 @@ def set_user_groups__no_commit(
         db_session.execute(insert_stmt)
 
     recompute_user_permissions__no_commit(user_id, db_session)
+
+
+def fetch_scim_synced_user_ids(db_session: Session, user_ids: list[UUID]) -> set[UUID]:
+    """The given users that have a SCIM mapping."""
+    return set(
+        db_session.scalars(
+            select(ScimUserMapping.user_id).where(ScimUserMapping.user_id.in_(user_ids))
+        ).all()
+    )

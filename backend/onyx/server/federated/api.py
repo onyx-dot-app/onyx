@@ -14,6 +14,7 @@ from onyx.db.federated import (
 )
 from onyx.db.federated import (
     delete_federated_connector,
+    delete_federated_connector_oauth_token__no_commit,
     fetch_all_federated_connectors,
     fetch_federated_connector_by_id,
     update_federated_connector,
@@ -637,7 +638,7 @@ def disconnect_oauth_token(
             break
 
     if oauth_token:
-        db_session.delete(oauth_token)
+        delete_federated_connector_oauth_token__no_commit(db_session, oauth_token)
         db_session.commit()
         return True
     else:

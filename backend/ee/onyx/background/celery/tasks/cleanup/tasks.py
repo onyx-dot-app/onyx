@@ -11,6 +11,9 @@ from onyx.configs.constants import (
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.tasks import cleanup_stale_tasks, get_expired_failed_task_ids
 from onyx.file_store.file_store import get_default_file_store
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 @shared_task(
@@ -23,19 +26,30 @@ def export_query_history_cleanup_task(*, tenant_id: str) -> None:
         expired = get_expired_failed_task_ids(
             db_session, QUERY_HISTORY_TASK_NAME_PREFIX
         )
+        # End the read, so no transaction stays open during file deletes.
+        db_session.commit()
         # A worker that stopped after its upload leaves an unpublished file.
-        # Delete it first: without the failure row, the file looks published.
+        # Purge a failure only after its file is gone: the row hides the file.
         file_store = get_default_file_store()
+        deleted: list[str] = []
         for task_id in expired:
-            file_store.delete_file(
-                construct_query_history_report_name(task_id), error_on_missing=False
-            )
+            try:
+                file_store.delete_file(
+                    construct_query_history_report_name(task_id),
+                    error_on_missing=False,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to delete the file of failed export %s", task_id
+                )
+                continue
+            deleted.append(task_id)
         cleanup_stale_tasks(
             db_session,
             QUERY_HISTORY_TASK_NAME_PREFIX,
             pending_timeout=USER_EXPORT_TASK_EXPIRES + USER_JOB_LOST_TASK_GRACE,
             started_timeout=JOB_TIMEOUT + USER_JOB_LOST_TASK_GRACE,
-            expired_failed_task_ids=expired,
+            expired_failed_task_ids=deleted,
         )
         # Usage reports list report rows, not files, so no file can leak.
         cleanup_stale_tasks(

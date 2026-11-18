@@ -34,6 +34,7 @@ type ButtonBaseProps = InteractiveContract & {
   className?: string;
   // Required for icon-only buttons — without text a screen reader announces just "button".
   accessibilityLabel?: string;
+  accessibilityHint?: string;
 };
 
 // A label or a leading icon, never neither; icon-only must supply `accessibilityLabel`.
@@ -56,6 +57,7 @@ function Button({
   disabled = false,
   loading = false,
   accessibilityLabel,
+  accessibilityHint,
   icon,
   rightIcon,
   children,
@@ -78,6 +80,7 @@ function Button({
       onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: disabled || loading, busy: loading }}
       // RN stretches flex children cross-axis; `self-start` shrink-wraps `fit` (no `fit-content`).
       className={cn(width === "full" ? "w-full" : "self-start", className)}

@@ -144,7 +144,7 @@ def _convert_code_to_document(
         sections=[TextSection(link=file_url, text=file_content)],
         source=DocumentSource.GITLAB,
         semantic_identifier=file["name"],
-        doc_updated_at=datetime.now().replace(tzinfo=timezone.utc),
+        doc_updated_at=datetime.now(timezone.utc),
         primary_owners=[],  # Add owners if needed
         metadata={"type": "CodeFile"},
     )

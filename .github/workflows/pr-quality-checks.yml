@@ -71,16 +71,19 @@ jobs:
         if: steps.changes.outputs.docs_only != 'true'
         working-directory: ./widget
         run: bun run test
-      - uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece
+      - uses: j178/prek-action@44924fe9ef4a6f88253c4b6b1bf11c689d3ce53d # ratchet:j178/prek-action@v3.1.0
         env:
-          SKIP: ty,desktop-rust-fmt,desktop-rust-clippy
+          SKIP: ty,desktop-rust-fmt,desktop-rust-clippy,desktop-v2-rust-fmt,desktop-v2-rust-clippy
           # All-files checks need the push range for translation comparisons.
           PRE_COMMIT_FROM_REF: ${{ github.event_name == 'push' && github.ref_name == 'main' && github.event.before != '0000000000000000000000000000000000000000' && github.event.before || '' }}
           # Lets the zizmor hook run its online audits. Read-only: the job
           # grants `contents: read` and nothing else.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          prek-version: '0.3.4'
+          # Same version as the prek group in pyproject.toml. sha256 is the
+          # release's prek-x86_64-unknown-linux-gnu.tar.gz.
+          prek-version: '0.5.10'
+          sha256: 5c832a9ccd0855b7c054320d8921d90165a37459d3ac175923bdf121ff1aa9b1
           extra-args: ${{ github.event_name == 'pull_request' && format('--from-ref {0} --to-ref {1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || github.event_name == 'merge_group' && format('--from-ref {0} --to-ref {1}', github.event.merge_group.base_sha, github.event.merge_group.head_sha) || github.ref_name == 'main' && '--all-files' || '' }}
       - name: Check Actions
         uses: giner/check-actions@28d366c7cbbe235f9624a88aa31a628167eee28c # ratchet:giner/check-actions@v1.0.1

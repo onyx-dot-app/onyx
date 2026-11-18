@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
 from uuid import UUID, uuid4
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.cache.interface import CacheBackend, CacheLock
 from onyx.server.features.build.sandbox.models import PromptAttachment
@@ -45,8 +46,9 @@ class InteractiveTurnLockError(Exception):
     """Raised when the session active-turn lock cannot be acquired."""
 
 
-@dataclass
-class InteractiveTurn:
+class InteractiveTurn(BaseModel):
+    model_config = ConfigDict(strict=True)
+
     turn_id: UUID
     session_id: UUID
     user_id: UUID
@@ -287,11 +289,7 @@ def _runner_is_stale(
 
 
 def _save_turn(cache: CacheBackend, turn: InteractiveTurn, *, ex: int) -> None:
-    payload = asdict(turn)
-    payload.pop("reclaimed", None)
-    payload["attachments"] = [
-        attachment.model_dump() for attachment in turn.attachments
-    ]
+    payload = turn.model_dump(exclude={"reclaimed"})
     for field in ("turn_id", "session_id", "user_id"):
         payload[field] = str(payload[field])
     for field in ("last_heartbeat_at",):

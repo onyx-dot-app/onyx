@@ -39,10 +39,12 @@ from celery.backends.database.session import (
 )
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.utils.variable_functionality import set_is_ee_if_available
+from onyx.utils.encryption import validate_encryption_configuration
 
 # Match the app processes' edition so migrations that use versioned
 # implementations (e.g. encrypt_string_to_bytes) resolve the EE variants.
 set_is_ee_if_available()
+validate_encryption_configuration()
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
 # hidden! (defaults to level=WARN)
@@ -536,8 +538,10 @@ def run_migrations_online() -> None:
             context.configure(
                 connection=connection,
                 target_metadata=target_metadata,
-                version_table_schema=schema_name,
-                include_schemas=True,
+                version_table_schema=(
+                    None if schema_name == POSTGRES_DEFAULT_SCHEMA else schema_name
+                ),
+                include_schemas=schema_name != POSTGRES_DEFAULT_SCHEMA,
                 compare_type=True,
                 compare_server_default=True,
                 script_location=config.get_main_option("script_location"),

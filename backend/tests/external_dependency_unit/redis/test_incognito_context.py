@@ -27,7 +27,7 @@ from onyx.agents.models import (
     ToolExecutionRecord,
 )
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CacheBackendType, CacheLockLostError
+from onyx.cache.interface import CacheLockLostError
 from onyx.chat import incognito_context
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.history_store import RedisChatHistoryStore
@@ -55,7 +55,7 @@ from onyx.chat.models import (
 from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.chat.stream_buffer import _chunk_key
-from onyx.configs.constants import DocumentSource, MessageType
+from onyx.configs.constants import CacheBackendType, DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, FileToolMetadata

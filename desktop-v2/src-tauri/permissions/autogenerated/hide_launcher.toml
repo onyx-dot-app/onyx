@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hide-launcher"
+description = "Enables the hide_launcher command without any pre-configured scope."
+commands.allow = ["hide_launcher"]
+
+[[permission]]
+identifier = "deny-hide-launcher"
+description = "Denies the hide_launcher command without any pre-configured scope."
+commands.deny = ["hide_launcher"]

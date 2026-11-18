@@ -16,7 +16,6 @@ from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl, BaseModel
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
@@ -56,6 +55,7 @@ from onyx.db.mcp import (
     delete_connection_config,
     delete_mcp_server,
     delete_user_connection_configs_for_server,
+    fetch_mcp_tools,
     get_all_mcp_servers,
     get_connection_config_by_id,
     get_craft_enabled_mcp_servers,
@@ -66,6 +66,7 @@ from onyx.db.mcp import (
     get_mcp_servers_for_persona,
     get_user_connection_config,
     get_user_connection_configs,
+    lock_mcp_server_row,
     update_connection_config,
     update_connection_config__no_commit,
     update_mcp_server__no_commit,
@@ -1738,9 +1739,7 @@ def _sync_mcp_server_tools(
     caller then sees the rows the first one committed instead of inserting them
     again. The commit at the end releases the lock.
     """
-    db.execute(
-        select(DbMCPServer.id).where(DbMCPServer.id == mcp_server_id).with_for_update()
-    )
+    lock_mcp_server_row(mcp_server_id, db)
 
     existing_by_name: dict[str, Tool] = {}
     for db_tool in get_tools_by_mcp_server_id(mcp_server_id, db, order_by_id=True):
@@ -2453,13 +2452,9 @@ def get_all_mcp_tools(
     ),
 ) -> list:
     """Get all tools associated with MCP servers, including both enabled and disabled tools"""
-    from sqlalchemy import select
-
-    # Query MCP tools ordered by ID to maintain consistent ordering
-    stmt = select(Tool).where(Tool.mcp_server_id.is_not(None)).order_by(Tool.id)
-
     # Scope-match the /servers list: a scoped manager only sees tools on servers they own or
     # that a group they manage is connected to; a global holder sees every server's tools.
+    visible_server_ids: set[int] | None = None
     if (
         has_permission(user, Permission.MANAGE_ACTIONS)
         is not PermissionAuthority.GLOBAL
@@ -2472,9 +2467,9 @@ def get_all_mcp_tools(
             for server in get_all_mcp_servers(db)
             if server.owner == user.email or server.id in connected
         }
-        stmt = stmt.where(Tool.mcp_server_id.in_(visible_server_ids))
 
-    mcp_tools = db.scalars(stmt).all()
+    # Ordered by id to keep the order stable.
+    mcp_tools = fetch_mcp_tools(db, visible_server_ids)
 
     # Convert to ToolSnapshot format
     return [ToolSnapshot.from_model(tool) for tool in mcp_tools]

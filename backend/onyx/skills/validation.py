@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import zipfile
 from contextlib import closing
-from dataclasses import dataclass
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -23,8 +24,9 @@ from onyx.skills.metadata import parse_skill_document
 from onyx.skills.models import SKILL_NAME_MAX_LENGTH, SKILL_NAME_PATTERN
 
 
-@dataclass(frozen=True)
-class SkillValidationResult:
+class SkillValidationResult(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     is_valid: bool | None
     normalized_bundle: bytes | None
     detail: str | None = None

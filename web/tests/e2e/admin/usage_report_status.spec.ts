@@ -90,3 +90,45 @@ test("a report that finishes during page load appears", async ({ page }) => {
   await reports.goto();
   await reports.expectReport("All time");
 });
+
+test("a report that finishes while cached jobs show appears", async ({
+  page,
+}) => {
+  const reportId = crypto.randomUUID();
+  let delayJobs = false;
+  let committed = false;
+  await page.route("**/api/admin/usage-report-jobs", async (route) => {
+    if (delayJobs) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      committed = true;
+    }
+    await route.fulfill({ json: [] });
+  });
+  await page.route("**/api/admin/usage-report", (route) =>
+    route.fulfill({
+      json: committed
+        ? [
+            {
+              report_name: `2026-01-01_${reportId}_usage_report.zip`,
+              requestor: "admin_user@example.com",
+              time_created: new Date().toISOString(),
+              period_from: null,
+              period_to: null,
+            },
+          ]
+        : [],
+    })
+  );
+  const reports = new UsageReportsPage(page);
+  // Reports load after the jobs read, so the empty jobs list is cached then.
+  const reportsRead = page.waitForResponse((response) =>
+    response.url().endsWith("/api/admin/usage-report")
+  );
+  await reports.goto();
+  await reportsRead;
+  await reports.leave();
+  // The page mounts again with the cached empty jobs list.
+  delayJobs = true;
+  await reports.goBack();
+  await reports.expectReport("All time");
+});

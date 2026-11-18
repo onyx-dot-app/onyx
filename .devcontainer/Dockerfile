@@ -114,17 +114,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # fd-find installs as fdfind on Debian/Ubuntu — symlink to fd
 RUN ln -sf "$(which fdfind)" /usr/local/bin/fd
 
-# Install prek (https://github.com/j178/prek) — a fast Rust reimplementation of
-# pre-commit and a drop-in replacement for it. Symlinked to `pre-commit` so the
-# repo's `.pre-commit-config.yaml` plus any `pre-commit ...` muscle memory and CI
-# invocations work unchanged.
-ARG PREK_VERSION=0.4.3
+# Install prek (https://github.com/j178/prek), the repo's hook runner for
+# `.pre-commit-config.yaml`. Keep the version equal to the prek group in
+# pyproject.toml.
+ARG PREK_VERSION=0.5.10
 RUN set -eux; \
   case "$(dpkg --print-architecture)" in \
     amd64) PREK_TRIPLE=x86_64-unknown-linux-gnu; \
-           PREK_SHA256=8a8210d64476657cac3e797afa109011d8d872c09e3a407f50c5a4dde063b381 ;; \
+           PREK_SHA256=5c832a9ccd0855b7c054320d8921d90165a37459d3ac175923bdf121ff1aa9b1 ;; \
     arm64) PREK_TRIPLE=aarch64-unknown-linux-gnu; \
-           PREK_SHA256=02e5731ce90e737bade91abef4c76c13495b9cc9290f609dfcb2e7b2a05b532e ;; \
+           PREK_SHA256=6ee3e5696f0b76bb4c95708579a54714aabd9a20e89c998f69a1a5cc41dbbbee ;; \
     *) echo "unsupported arch for prek: $(dpkg --print-architecture)" >&2; exit 1 ;; \
   esac; \
   curl -fsSL -o /tmp/prek.tar.gz \
@@ -132,7 +131,6 @@ RUN set -eux; \
   echo "${PREK_SHA256}  /tmp/prek.tar.gz" | sha256sum -c -; \
   tar -xzf /tmp/prek.tar.gz -C /tmp; \
   install -m 0755 "/tmp/prek-${PREK_TRIPLE}/prek" /usr/local/bin/prek; \
-  ln -s prek /usr/local/bin/pre-commit; \
   rm -rf /tmp/prek.tar.gz "/tmp/prek-${PREK_TRIPLE}"; \
   prek --version
 

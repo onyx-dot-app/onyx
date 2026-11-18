@@ -13,8 +13,9 @@ limiter fails open with a logged warning so core invite flows continue to
 work.
 """
 
-from dataclasses import dataclass
 from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.cache.interface import (
     CACHE_TRANSIENT_ERRORS,
@@ -65,8 +66,9 @@ _LOCK_LEASE_SECONDS = 10
 _LOCK_WAIT_SECONDS = 5
 
 
-@dataclass(frozen=True)
-class _Bucket:
+class _Bucket(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     key: str
     limit: int
     ttl_seconds: int

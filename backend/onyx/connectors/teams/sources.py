@@ -2,10 +2,10 @@
 
 import threading
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
 from typing import TypeVar
 
 import requests
+from pydantic import BaseModel, ConfigDict
 
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import SlimDocument
@@ -89,12 +89,13 @@ class SlimWalk:
         self.report_progress(1)
 
 
-@dataclass
-class PagedListing:
+class PagedListing(BaseModel):
     """One paged listing of a walk. Refused at its first request, the app lost
     access: the listing is empty, so pruning removes what it held and indexing
     records nothing. Refused after it answered, the listing broke and the rest
     still exists, so the attempt fails and the next one decides."""
+
+    model_config = ConfigDict(strict=True, arbitrary_types_allowed=True)
 
     walk: SlimWalk | None = None
     pages: int = 0

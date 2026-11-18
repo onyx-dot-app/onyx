@@ -252,3 +252,9 @@ def disable_input_prompt_for_user(
         ipu.disabled = True
 
     db_session.commit()
+
+
+def add_input_prompt_user__no_commit(
+    input_prompt_id: int, user_id: UUID, db_session: Session
+) -> None:
+    db_session.add(InputPrompt__User(input_prompt_id=input_prompt_id, user_id=user_id))

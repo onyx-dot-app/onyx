@@ -109,6 +109,21 @@ describe.each([
     );
   });
 
+  it("hands a native app's sign-in back to its deep link", async () => {
+    const deepLink = "onyx://auth/callback?code=one-time&state=app-state";
+    const headers = new Headers({ location: deepLink });
+    headers.append("set-cookie", PKCE_CLEANUP_COOKIE);
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(new Response(null, { status: 302, headers }));
+
+    const result = await handler(callbackRequest(path));
+
+    expect(result.status).toBe(302);
+    expect(result.headers.get("location")).toBe(deepLink);
+    expect(result.headers.getSetCookie()).toEqual([PKCE_CLEANUP_COOKIE]);
+  });
+
   it("sends a cookieless success to the error page", async () => {
     jest.spyOn(global, "fetch").mockResolvedValue(
       new Response(null, {

@@ -5,14 +5,13 @@ import urllib.parse
 from datetime import datetime, timezone
 from typing import cast
 
-from onyx.auth.schemas import AuthBackend
-from onyx.cache.interface import CacheBackendType
-from onyx.configs.constants import FileStoreType, QueryHistoryType
-from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
-from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
-from onyx.prompts.image_analysis import (
-    DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
-    DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
+from onyx.configs.constants import (
+    AuthBackend,
+    CacheBackendType,
+    FileStoreType,
+    HtmlBasedConnectorTransformLinksStrategy,
+    OpenSearchAuthMethod,
+    QueryHistoryType,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -163,6 +162,14 @@ PASSWORD_REQUIRE_SPECIAL_CHAR = (
 # information. This provides an extra layer of security on top of Postgres access controls
 # and is available in Onyx EE
 ENCRYPTION_KEY_SECRET = os.environ.get("ENCRYPTION_KEY_SECRET") or ""
+# Keys for the envelope ciphertext format: a JSON object of key id -> base64 of
+# 32 random bytes, e.g. {"2026-11": "<base64>"}. Every key here can decrypt.
+# ENCRYPTION_KEY_SECRET stays the key for legacy ciphertext and is also readable
+# as an envelope key under the reserved id "legacy".
+ENCRYPTION_KEYS_JSON = os.environ.get("ENCRYPTION_KEYS", "").strip()
+# Key id that new writes use. Unset keeps the legacy write format: AES-CBC under
+# ENCRYPTION_KEY_SECRET, or plain text when that is unset too.
+ENCRYPTION_WRITE_KEY_ID = (os.environ.get("ENCRYPTION_WRITE_KEY_ID") or "").strip()
 
 # Turn off mask if admin users should see full credentials for data connectors.
 MASK_CREDENTIAL_PREFIX = (
@@ -1337,10 +1344,8 @@ CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE = cast(
 
 
 def get_current_tz_offset() -> int:
-    # datetime now() gets local time, datetime.now(timezone.utc) gets UTC time.
-    # remove tzinfo to compare non-timezone-aware objects.
-    time_diff = datetime.now() - datetime.now(timezone.utc).replace(tzinfo=None)
-    return round(time_diff.total_seconds() / 3600)
+    offset = datetime.now(timezone.utc).astimezone().utcoffset()
+    return round(offset.total_seconds() / 3600) if offset is not None else 0
 
 
 # enter as a floating point offset from UTC in hours (-24 < val < 24)
@@ -2099,6 +2104,19 @@ TENANT_WORK_GATING_FULL_FANOUT_INTERVAL_SECONDS = int(
 
 
 # Image summarization configuration
+# Used for creating embeddings of images for vector search
+DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT = """
+You are an assistant for summarizing images for retrieval.
+Summarize the content of the following image and be as precise as possible.
+The summary will be embedded and used to retrieve the original image.
+Therefore, write a concise summary of the image that is optimized for retrieval.
+"""
+
+# Prompt for generating image descriptions with filename context
+DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT = """
+Describe precisely and concisely what the image shows.
+"""
+
 IMAGE_SUMMARIZATION_SYSTEM_PROMPT = os.environ.get(
     "IMAGE_SUMMARIZATION_SYSTEM_PROMPT",
     DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,

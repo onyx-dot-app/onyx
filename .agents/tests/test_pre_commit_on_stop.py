@@ -1,4 +1,4 @@
-"""Exercise turn hooks with real Git repositories and a controlled pre-commit."""
+"""Exercise turn hooks with real Git repositories and a controlled prek."""
 
 import json
 import os
@@ -69,7 +69,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     _commit(repo, "base.txt")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    executable = bin_dir / "pre-commit"
+    executable = bin_dir / "prek"
     executable.write_text(
         f"#!{sys.executable}\n"
         "import json, os, sys\n"
@@ -202,12 +202,12 @@ def test_stop_after_a_brief_checks_the_edits_once(
     (repo / "base.txt").write_text("edit")
     assert json.loads(_run(repo, "Stop").stdout)["decision"] == "block"
 
-    # The edits the brief led to fail pre-commit on the next stop.
+    # The edits the brief led to fail the hooks on the next stop.
     (repo / "doc.md").write_text("edit")
     monkeypatch.setenv("CHECK_EXIT", "1")
     second = _run(repo, "Stop", stop_hook_active=True)
     assert second.returncode == 2
-    assert "pre-commit failed" in second.stderr
+    assert "prek failed" in second.stderr
     assert "Brief for" not in second.stderr
     assert _checked(repo) == {"base.txt", "doc.md"}
 
@@ -238,7 +238,7 @@ def test_brief_follows_a_pre_commit_failure(
     result = _run(repo, "Stop")
     assert result.returncode == 2
     assert result.stdout == ""
-    assert result.stderr.index("pre-commit failed") < result.stderr.index("Brief for")
+    assert result.stderr.index("prek failed") < result.stderr.index("Brief for")
 
     # The edits that answer the brief are checked on the next stop.
     (repo / "doc.md").write_text("edit")
@@ -258,7 +258,7 @@ def test_failures_and_rewrites_still_block(
     monkeypatch.setenv(failure, "1")
     result = _run(repo, "Stop")
     assert result.returncode == 2
-    assert "pre-commit failed" in result.stderr
+    assert "prek failed" in result.stderr
 
 
 @pytest.mark.parametrize("operation", ["cherry-pick", "revert"])

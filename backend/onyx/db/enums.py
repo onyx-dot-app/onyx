@@ -515,6 +515,20 @@ class ApprovalDecidedVia(str, PyEnum):
     POLICY = "POLICY"
 
 
+class QuestionOutcome(str, PyEnum):
+    """How a question that the agent asked the user ended; `outcome IS NULL`
+    means it waits."""
+
+    ANSWERED = "ANSWERED"
+    CANCELLED = "CANCELLED"
+
+
+class QuestionAnsweredVia(str, PyEnum):
+    # The question's card, or a message that the user typed in the chat.
+    CARD = "CARD"
+    MESSAGE = "MESSAGE"
+
+
 class ScheduledTaskStatus(str, PyEnum):
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"

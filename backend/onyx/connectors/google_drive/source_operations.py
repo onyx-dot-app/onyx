@@ -43,7 +43,6 @@ from onyx.connectors.google_drive.models import (
     DriveBatchResult,
     GoogleDirectoryUser,
     GoogleDriveAuth,
-    GoogleDriveFileType,
     GoogleGroupMember,
     GoogleSharedDrive,
 )
@@ -64,6 +63,7 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
     USER_FIELDS,
     GoogleCredentialKind,
+    GoogleDriveFileType,
 )
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.source_operations import (

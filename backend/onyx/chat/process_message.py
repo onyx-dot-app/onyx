@@ -135,12 +135,14 @@ from onyx.server.query_and_chat.models import (
     response_id_info,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    AWAITING_APPROVAL,
+    AWAITING_USER,
     OverallStop,
     Packet,
     StreamingError,
     ToolApprovalRequest,
     ToolApprovalResolved,
+    ToolQuestionRequest,
+    ToolQuestionResolved,
 )
 from onyx.server.query_and_chat.token_limit import (
     check_model_spend_limits,
@@ -167,6 +169,11 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
+# A send while the selected response waits for the user's approval decisions
+# or answers.
+USER_INPUT_PENDING = (
+    "Answer the pending requests or questions before you send a message"
+)
 # Delays before each retry of a resume whose start failed for a moment.
 RESUME_RETRY_DELAYS_S = (1.0, 2.0, 4.0, 8.0, 16.0)
 
@@ -408,10 +415,7 @@ def prepare_chat_turn(
             ):
                 # The route checked before the response parked and released
                 # admission; a send does not attach under a parked response.
-                raise OnyxError(
-                    OnyxErrorCode.APPROVAL_PENDING,
-                    "Approve or reject the pending requests before you send a message",
-                )
+                raise OnyxError(OnyxErrorCode.APPROVAL_PENDING, USER_INPUT_PENDING)
             stream_id: int | None = None
             if resumed_response_id is not None:
                 if parent_message.id != resumed_response_id or len(chat_history) < 2:
@@ -551,6 +555,19 @@ def prepare_chat_turn(
                 not in (MessageOrigin.SLACKBOT, MessageOrigin.DISCORDBOT)
                 and chat_session.incognito_record_mode is None
                 and len(selected_models) == 1
+            )
+            # The root agent can ask the user questions where approval
+            # requests can wait: a signed-in user's saved, single-model turn
+            # that is not deep research. Its run parks while it waits. An
+            # agent host runs no root; a resumed root gets the tool when its
+            # saved step declared it (restoration.py:restore_chat_agent).
+            question_tool = (
+                ask_for_approval
+                and not agent_host
+                and not user.is_anonymous
+                and record_mode_persists_content(chat_session.incognito_record_mode)
+                and len(selected_models) == 1
+                and not new_msg_req.deep_research
             )
             # One read serves the catalog's context reservation and the skills
             # that an accepted question picked.
@@ -904,6 +921,7 @@ def prepare_chat_turn(
             base_system_prompt=base_system_prompt,
             tool_configuration=tool_configuration,
             sandbox_tools=sandbox_tools,
+            question_tool=question_tool,
             research_tool_id=research_tool_id,
             checkpoint=checkpoint,
             user_message_id=user_message_id,
@@ -1501,16 +1519,18 @@ def gather_stream_full(
 ) -> ChatFullResponse:
     """Read delivery metadata and project accepted execution content.
 
-    A response that stops because tool calls wait for the user's approval
-    returns the requests that still wait in `pending_tool_approvals`.
+    A response that stops because tool calls wait for the user returns the
+    approval requests that still wait in `pending_tool_approvals`, and the
+    questions in `pending_tool_questions`.
     """
     error: StreamingError | None = None
     message_id: int | None = None
     chat_session_id: UUID | None = None
     incognito = False
-    # Requests read from the stream, by approval ID; resolved ones are removed.
+    # Requests read from the stream, by ID; resolved ones are removed.
     waiting: dict[str, ToolApprovalRequest] = {}
-    awaiting_approval = False
+    asking: dict[str, ToolQuestionRequest] = {}
+    awaiting_user = False
 
     for packet in packets:
         if isinstance(packet, StreamingError):
@@ -1525,8 +1545,12 @@ def gather_stream_full(
                 waiting[packet.obj.approval_id] = packet.obj
             elif isinstance(packet.obj, ToolApprovalResolved):
                 waiting.pop(packet.obj.approval_id, None)
+            elif isinstance(packet.obj, ToolQuestionRequest):
+                asking[packet.obj.question_request_id] = packet.obj
+            elif isinstance(packet.obj, ToolQuestionResolved):
+                asking.pop(packet.obj.question_request_id, None)
             elif isinstance(packet.obj, OverallStop):
-                awaiting_approval = packet.obj.stop_reason == AWAITING_APPROVAL
+                awaiting_user = packet.obj.stop_reason == AWAITING_USER
 
     if message_id is None:
         if error is not None:
@@ -1564,7 +1588,8 @@ def gather_stream_full(
         chat_session_id=chat_session_id,
         incognito=incognito,
         error_msg=outcome.error or (error.error if error else None),
-        pending_tool_approvals=list(waiting.values()) if awaiting_approval else [],
+        pending_tool_approvals=list(waiting.values()) if awaiting_user else [],
+        pending_tool_questions=list(asking.values()) if awaiting_user else [],
     )
 
 
@@ -1579,7 +1604,7 @@ def run_chat_turn(
     ask_for_approval: bool = True,
 ) -> ChatFullResponse:
     """Run one chat turn for in-process, non-streaming callers, to completion
-    or until tool calls wait for the user's approval.
+    or until tool calls wait for the user.
 
     These callers read one response, so the turn offers no agent tools.
     """

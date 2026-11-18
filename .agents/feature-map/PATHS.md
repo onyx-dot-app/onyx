@@ -44,6 +44,7 @@ covers new files that match it.
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly |
 | `backend/onyx/chat/citation_processor.py`, `backend/onyx/chat/citation_utils.py` | citations |
 | `backend/onyx/chat/tool_approvals.py`, `backend/onyx/db/approval_request.py` | mcp-and-custom-tools |
+| `backend/onyx/chat/tool_questions.py`, `backend/onyx/db/question_request.py` | mcp-and-custom-tools, tools-framework |
 | `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat_subagents.py`, `backend/onyx/db/chat_inputs.py` | chat-persistence |
 | `backend/onyx/db/chat.py`, `backend/onyx/db/chat_search.py`, `backend/onyx/db/feedback.py` | chat-persistence |
 | `backend/ee/onyx/background/celery/tasks/ttl_management/` | chat-persistence, background-jobs |
@@ -87,7 +88,7 @@ covers new files that match it.
 | `backend/onyx/server/manage/search_settings.py`, `backend/onyx/server/manage/embedding/` | document-index |
 | `backend/onyx/background/celery/tasks/vespa/`, `backend/onyx/background/celery/tasks/port/`, `backend/onyx/background/celery/tasks/index_reclaim/`, `backend/onyx/background/celery/tasks/cc_pair_ids_backfill/` | document-index |
 | `backend/model_server/`, `backend/shared_configs/embedding_models.py` | document-index |
-| `backend/onyx/access/`, `backend/ee/onyx/access/`, `backend/onyx/db/document_access.py` | access-control |
+| `backend/onyx/access/`, `backend/ee/onyx/access/`, `backend/onyx/db/document_access.py`, `backend/onyx/db/access.py` | access-control |
 | `backend/onyx/db/document_set.py`, `backend/onyx/db/user_group.py`, `backend/onyx/server/features/document_set/`, `backend/ee/onyx/db/document_set.py` | access-control |
 | `backend/ee/onyx/server/user_group/`, `backend/ee/onyx/db/user_group.py` | access-control, authorization |
 | `terraform-provider-onyx/internal/provider/user_group_resource.go`, `terraform-provider-onyx/docs/resources/user_group.md`, `terraform-provider-onyx/examples/resources/onyx_user_group/`, `terraform-provider-onyx/README.md` | authorization |
@@ -122,7 +123,7 @@ covers new files that match it.
 | `backend/onyx/file_store/document_batch_storage.py`, `backend/onyx/db/targeted_reindex.py`, `backend/onyx/redis/redis_docprocessing.py` | indexing-pipeline |
 | `backend/onyx/db/connector.py`, `backend/onyx/db/credentials.py`, `backend/onyx/db/connector_credential_pair.py`, `backend/onyx/db/credential_capability.py`, `backend/ee/onyx/db/connector.py`, `backend/ee/onyx/db/credentials.py` | cc-pairs-and-creds |
 | `backend/onyx/db/cc_pair_runs.py`, `backend/onyx/db/cc_pair_runs_models.py`, `backend/onyx/db/cc_pair_run_resolution.py`, `backend/onyx/db/deletion_attempt.py` | cc-pairs-and-creds |
-| `backend/onyx/utils/encryption.py`, `backend/onyx/utils/sensitive.py`, `backend/ee/onyx/utils/encryption.py`, `backend/onyx/db/rotate_encryption_key.py` | cc-pairs-and-creds |
+| `backend/onyx/utils/encryption.py`, `backend/onyx/utils/sensitive.py`, `backend/ee/onyx/utils/encryption.py`, `backend/ee/onyx/db/rotate_encryption_key.py`, `backend/scripts/reencrypt_secrets.py`, `backend/scripts/decrypt.py` | cc-pairs-and-creds |
 | `backend/onyx/server/manage/administrative.py` | cc-pairs-and-creds, indexing-pipeline |
 | `backend/ee/onyx/server/oauth/` | cc-pairs-and-creds |
 | `backend/ee/onyx/server/documents/`, `backend/ee/onyx/db/connector_credential_pair.py` | cc-pairs-and-creds, permission-sync |
@@ -164,13 +165,13 @@ covers new files that match it.
 | `backend/onyx/server/auth_check.py`, `backend/ee/onyx/server/auth_check.py` | authorization |
 | `backend/onyx/server/pat/models.py` | authorization |
 | `backend/onyx/db/tenant_shard.py`, `backend/onyx/db/engine/` | multi-tenancy |
-| `backend/ee/onyx/server/tenants/`, `backend/ee/onyx/db/user_tenant_mapping.py`, `backend/ee/onyx/db/tenant_snapshot.py`, `backend/ee/onyx/background/celery/tasks/tenant_provisioning/` | multi-tenancy |
+| `backend/ee/onyx/server/tenants/`, `backend/ee/onyx/db/user_tenant_mapping.py`, `backend/ee/onyx/db/tenant_snapshot.py`, `backend/ee/onyx/db/tenant_provisioning.py`, `backend/ee/onyx/background/celery/tasks/tenant_provisioning/` | multi-tenancy |
 | `backend/shared_configs/contextvars.py`, `backend/alembic/run_multitenant_migrations.py`, `backend/alembic/env.py`, `backend/alembic_tenants/`, `backend/onyx/redis/tenant_redis_client.py`, `backend/onyx/redis/redis_pool.py` | multi-tenancy |
 | `backend/onyx/utils/threadpool_concurrency.py`, `backend/onyx/utils/middleware.py` | multi-tenancy |
 | `backend/ee/onyx/server/middleware/tenant_tracking.py` | multi-tenancy, billing |
 | `backend/onyx/server/middleware/rate_limiting.py` | rate-and-usage-limits |
 | `backend/onyx/server/middleware/latency_logging.py` | observability |
-| `backend/onyx/background/celery/`, `backend/onyx/background/periodic_poller.py`, `backend/onyx/background/task_utils.py`, `backend/onyx/background/error_logging.py`, `backend/onyx/background/README.md`, `backend/ee/onyx/background/`, `backend/onyx/db/tasks.py`, `backend/onyx/db/sync_record.py`, `backend/onyx/db/background_error.py` | background-jobs |
+| `backend/onyx/background/celery/`, `backend/onyx/background/periodic_poller.py`, `backend/onyx/background/task_utils.py`, `backend/onyx/background/README.md`, `backend/ee/onyx/background/`, `backend/onyx/db/tasks.py`, `backend/onyx/db/sync_record.py`, `backend/onyx/db/background_error.py` | background-jobs |
 | `backend/onyx/redis/redis_connector_prune.py`, `backend/onyx/redis/redis_connector_delete.py`, `backend/onyx/redis/redis_connector_stop.py` | background-jobs |
 | `backend/onyx/feature_flags/`, `backend/ee/onyx/feature_flags/`, `backend/onyx/utils/variable_functionality.py`, `backend/scripts/make_foss_repo.sh` | editions-and-gating |
 | `backend/ee/onyx/server/middleware/tier_gate.py`, `backend/ee/onyx/configs/license_enforcement_config.py`, `backend/onyx/server/settings/tier_order.py`, `web/src/lib/tiers/` | editions-and-gating |
@@ -223,7 +224,7 @@ covers new files that match it.
 | `backend/onyx/agents/` | agent-runtime |
 | `backend/onyx/agents/compaction.py` | agent-runtime, context-assembly |
 | `backend/onyx/agents/tool_execution.py`, `backend/onyx/agents/tools.py` | agent-runtime, tools-framework |
-| `backend/onyx/llm/`, `backend/onyx/server/manage/llm/`, `backend/onyx/db/llm.py` | llm-providers |
+| `backend/onyx/llm/`, `backend/onyx/server/manage/llm/`, `backend/onyx/db/llm.py`, `backend/onyx/db/model_configuration.py` | llm-providers |
 | `cli/internal/parser/`, `cli/internal/models/events.go` | streaming-protocol |
 
 ## Backend: Craft
@@ -236,7 +237,7 @@ covers new files that match it.
 | `backend/onyx/server/features/build/approvals/` | craft-external-apps |
 | `backend/onyx/server/features/build/external_apps/`, `backend/onyx/server/features/build/action_policies.py` | craft-external-apps, craft-admin |
 | `backend/onyx/server/features/build/connect_app.py`, `backend/onyx/server/features/build/sandbox/image/opencode-plugins/connect-app.ts` | craft-external-apps |
-| `backend/onyx/server/features/build/db/action_approval.py` | craft-external-apps |
+| `backend/onyx/db/action_approval.py` | craft-external-apps |
 | `backend/onyx/db/action_policy.py`, `web/src/sections/actions/PolicyEditor.tsx` | craft-external-apps |
 | `web/src/sections/approvals/`, `web/src/lib/approvals/` | chat-frontend, craft-frontend |
 | `backend/onyx/server/features/build/scheduled_tasks/`, `backend/onyx/db/scheduled_task.py`, `backend/onyx/background/celery/tasks/scheduled_tasks/`, `backend/onyx/background/celery/apps/scheduled_tasks.py` | craft-scheduled-tasks |
@@ -245,9 +246,10 @@ covers new files that match it.
 | `backend/onyx/server/features/build/sandbox/opencode/`, `backend/onyx/server/features/build/sandbox/event_schema.py`, `backend/onyx/server/features/build/sandbox/sse.py` | craft-streaming |
 | `backend/onyx/server/features/build/sandbox/serve_transport.py` | craft-streaming, craft-sandboxes |
 | `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py` | craft-sandboxes, craft-sessions |
-| `backend/onyx/server/features/build/session/sandbox_lifecycle.py`, `backend/onyx/server/features/build/db/sandbox.py`, `backend/onyx/server/features/build/session/resource_cleanup.py`, `backend/onyx/background/celery/tasks/build/tasks.py` | craft-sandboxes |
+| `backend/onyx/server/features/build/session/sandbox_lifecycle.py`, `backend/onyx/db/sandbox.py`, `backend/onyx/server/features/build/session/resource_cleanup.py`, `backend/onyx/background/celery/tasks/build/tasks.py` | craft-sandboxes |
 | `backend/onyx/server/features/build/static_preview.py`, `backend/onyx/server/features/build/webapp_proxy.py`, `backend/onyx/server/features/build/sandbox/nextjs_dev.py`, `backend/onyx/server/features/build/templates/` | craft-webapp-proxy |
 | `backend/onyx/server/features/build/sandbox/image/opencode-plugins/webapp.ts`, `backend/onyx/server/features/build/sandbox/image/templates/outputs/web/` | craft-webapp-proxy |
+| `backend/onyx/db/build_session.py`, `backend/onyx/db/artifact.py`, `backend/onyx/db/receipt.py`, `backend/onyx/db/user_library.py` | craft-sessions |
 | `backend/onyx/server/features/build/session/output_cards.py` | craft-sessions, craft-scheduled-tasks |
 | `backend/onyx/sandbox_proxy/`, `deployment/helm/charts/onyx/templates/sandbox-proxy/` | craft-external-apps |
 | `backend/onyx/server/features/microvm/api.py`, `backend/onyx/microvm/registry.py` | craft-external-apps |
@@ -292,7 +294,7 @@ covers new files that match it.
 | `web/src/app/nrf/`, `web/src/app/components/nrf/`, `web/src/lib/extension/` | desktop-widget-extensions, chat-frontend |
 | `mobile/` | mobile-app |
 | `mobile/src/chat/streamingModels.ts`, `mobile/src/chat/ndjson.ts` | mobile-app, streaming-protocol |
-| `desktop/`, `widget/`, `extensions/` | desktop-widget-extensions |
+| `desktop/`, `desktop-v2/`, `widget/`, `extensions/` | desktop-widget-extensions |
 
 ## Frontend: Craft
 
@@ -384,7 +386,7 @@ the admin routes and check that each has a row above, run
 | `backend/onyx/db/seeding/`, `backend/onyx/seeding/`, `backend/ee/onyx/server/seeding.py` | Seed data for rows that several components own. The default agent and the built-in tool rows come from migrations. |
 | `backend/onyx/evals/`, `backend/onyx/server/evals/`, `backend/ee/onyx/server/evals/` | The eval harness. Read the component being evaluated. A prompt or retrieval change needs an eval, not only a unit test. |
 | `backend/onyx/main.py`, `backend/ee/onyx/main.py`, `backend/onyx/setup.py` | App assembly: router and middleware registration and startup. Read the component of each router or middleware you change. |
-| `backend/onyx/cache/`, `backend/onyx/redis/`, `backend/onyx/key_value_store/`, `backend/onyx/db/encrypted_kv_store.py` | Cache and key-value libraries. Fences, rate limits and the stream buffer use them, so check the callers. |
+| `backend/onyx/cache/`, `backend/onyx/redis/`, `backend/onyx/key_value_store/`, `backend/onyx/db/encrypted_kv_store.py`, `backend/onyx/db/kv_store.py` | Cache and key-value libraries. Fences, rate limits and the stream buffer use them, so check the callers. |
 | `backend/onyx/error_handling/` | `OnyxError` and the error codes that clients see. |
 | `backend/onyx/utils/` | Shared helpers. Check the callers. |
 | `backend/onyx/configs/`, `backend/ee/onyx/configs/app_configs.py`, `backend/shared_configs/` | Settings for every area. Read the component that documents the setting. |
@@ -398,8 +400,12 @@ the admin routes and check that each has a row above, run
 | `tools/`, `backend/scripts/`, `backend/lint/`, `backend/requirements/` | Developer tooling and dependency files. |
 | `web/src/lib/common/` | App components meant for any feature: the list states `NoResults` and `NoItems`, and `GridSearchInput`. The agents catalog is their only caller so far. Check the callers. |
 | `web/.oxlintrc.json` | Lint config for `web/`, with the design-system, layout and navigation baselines. A file in a baseline only warns. When you move a baselined file, change its path; never add a new file (`web/AGENTS.md`). |
+| `AGENTS.md` | Repository-wide standards for agents. Read it before changing the repository. |
 | `web/AGENTS.md` | Frontend standards for every agent. Read it before you work in `web/`. |
+| `web/playwright.config.ts` | Shared Playwright projects, retry settings, and reporters for end-to-end tests. |
 | `backend/AGENTS.md` | Backend standards for every agent: workers, migrations, tests, errors and tracing. Read it before you work in `backend/`. |
+| `AGENTS.md` | Repo-wide agent guidance (`CLAUDE.md` links to it): setup, the hook runner, docs, the feature map, writing and testing rules. |
+| `contributing_guides/best_practices.md` | Code standards for contributors across the repository. |
 | `pyproject.toml`, `uv.lock` | Python dependencies and tool config for the repo: uv, ruff and ty. `uv.lock` pins the resolved versions. The ruff per-file ignores hold the C901 ratchet list, which only shrinks. |
 | `backend/.gitignore` | Git ignore rules for local backend files. No product surface reads it. |
 | `web/bun.lock` | The `web/` dependency lockfile. `bun install` writes it; do not edit it by hand. |

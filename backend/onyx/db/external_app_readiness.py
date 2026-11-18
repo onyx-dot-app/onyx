@@ -5,10 +5,10 @@ use it."""
 
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
@@ -55,8 +55,9 @@ def is_user_authenticated_for_app(
     return all(k in stored for k in required)
 
 
-@dataclass(frozen=True)
-class SkillExternalAppDependencyState:
+class SkillExternalAppDependencyState(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     external_app_id: int
     name: str
     enabled: bool

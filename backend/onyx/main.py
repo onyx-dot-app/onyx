@@ -20,7 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.types import Lifespan
 
 from onyx import __version__
-from onyx.auth.schemas import AuthBackend, UserCreate, UserRead, UserUpdate
+from onyx.auth.schemas import UserCreate, UserRead, UserUpdate
 from onyx.auth.users import (
     auth_backend,
     create_onyx_oauth_router,
@@ -29,7 +29,6 @@ from onyx.auth.users import (
     verify_auth_setting,
     verify_user_auth_secret,
 )
-from onyx.cache.interface import CacheBackendType
 from onyx.chat.execution import chat_turn_work
 from onyx.configs.app_configs import (
     API_SERVER_THREADPOOL_SIZE,
@@ -55,7 +54,7 @@ from onyx.configs.app_configs import (
     WEB_DOMAIN,
 )
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
-from onyx.configs.constants import POSTGRES_WEB_APP_NAME
+from onyx.configs.constants import POSTGRES_WEB_APP_NAME, AuthBackend, CacheBackendType
 from onyx.db.engine.async_sql_engine import (
     get_sqlalchemy_async_engine,
     reset_sqlalchemy_async_engine,
@@ -181,6 +180,7 @@ from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx, setup_onyx
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.client_ip import ClientIPMiddleware
+from onyx.utils.encryption import validate_encryption_configuration
 from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import setup_logger, setup_uvicorn_logger
 from onyx.utils.middleware import (
@@ -548,6 +548,7 @@ def log_http_error(request: Request, exc: Exception) -> JSONResponse:
 
 
 def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
+    validate_encryption_configuration()
     application = FastAPI(
         title="Onyx Backend",
         version=__version__,
@@ -565,10 +566,12 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     )
     if SENTRY_DSN:
         from onyx.configs.sentry import init_sentry
+        from onyx.utils.telemetry import get_or_generate_uuid
 
         init_sentry(
             traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
             integrations=[StarletteIntegration(), FastApiIntegration()],
+            instance_id_resolver=get_or_generate_uuid,
         )
     else:
         logger.debug("Sentry DSN not provided, skipping Sentry initialization")

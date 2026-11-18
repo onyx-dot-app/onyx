@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ask"
+description = "Enables the ask command without any pre-configured scope."
+commands.allow = ["ask"]
+
+[[permission]]
+identifier = "deny-ask"
+description = "Denies the ask command without any pre-configured scope."
+commands.deny = ["ask"]

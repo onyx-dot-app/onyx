@@ -189,7 +189,9 @@ async def test_auto_discovery_saves_prefixed_state_and_restorable_context(
         authorization = oauth_provider.build_resumable_authorization_request()
         assert oauth_provider.authorization_request_handler is not None
         await oauth_provider.authorization_request_handler(authorization, context)
-        return setup_oauth.OAuthAuthorizationRedirect(authorization.authorization_url)
+        return setup_oauth.OAuthAuthorizationRedirect(
+            url=authorization.authorization_url
+        )
 
     with patch.object(setup_oauth, "run_oauth_discovery", side_effect=discover):
         _, storage, url = await setup_oauth.start_setup_oauth(
