@@ -35,9 +35,11 @@ from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationOptions,
     GenerationRequest,
     TextContent,
     ToolCall,
+    ToolChoiceOptions,
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
@@ -1004,3 +1006,77 @@ def test_handoff_resumes_when_other_tool_configuration_changes(change: str) -> N
     finally:
         resumed.cancel()
         assert resumed.wait_for_idle(3)
+
+
+def test_resume_at_the_extra_step_does_not_take_another() -> None:
+    entered = threading.Event()
+    release = threading.Event()
+    requests: list[GenerationRequest] = []
+    lookup = AgentTool(
+        definition=ToolDefinition(name="lookup", description="", parameters={}),
+        execute=lambda _: pytest.fail("A denied call must not run"),
+    )
+
+    def no_tools(_state: StepInput) -> PreparedStep:
+        return PreparedStep(
+            allowed_tool_names=frozenset(),
+            options=GenerationOptions(tool_choice=ToolChoiceOptions.NONE),
+        )
+
+    def calls(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        return AssistantMessage(
+            content=[ToolCall(id=f"call-{len(requests)}", name="lookup", arguments={})]
+        )
+
+    def complete(_result: StepResult) -> bool:
+        entered.set()
+        assert release.wait(2)
+        return True
+
+    agent = Agent(
+        FakeModelClient(calls),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[lookup],
+        prepare_step=no_tools,
+        after_step=complete,
+    )
+    run = agent.start(max_steps=1)
+    try:
+        assert entered.wait(2)
+        run.suspend()
+        release.set()
+        assert run.wait_until_settled(2).status == RunStatus.SUSPENDED
+        captured = run.handoff()
+        progress = captured.run_state.progress
+        assert progress is not None
+        assert (progress.step_index, progress.step_limit) == (1, 2)
+        restored = CheckpointStorage({}).load(
+            CheckpointStorage({}).save(
+                captured.run_state,
+                captured.agent_state,
+                CheckpointBinding(
+                    tenant_id="tenant", response_id=captured.run_state.run_id
+                ),
+            )
+        )
+        replacement = Agent(
+            FakeModelClient(calls),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            state=restored.agent_state,
+            agent_id=restored.run_state.agent_id,
+            tools=[lookup],
+            prepare_step=no_tools,
+            after_step=lambda _: True,
+        )
+        resumed = replacement.resume(restored.run_state)
+        with pytest.raises(RunFailed):
+            resumed.result(2)
+        assert resumed.wait_for_idle(2)
+        assert len(requests) == 2
+    finally:
+        release.set()
+        run.cancel()
+        assert run.wait_for_idle(2)

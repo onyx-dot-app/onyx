@@ -182,9 +182,10 @@ or an agent that replaces the base prompt.
 **Tool definitions.** Action preferences keep the full tool definitions and order.
 The selected Action appears in a request-only trailing reminder, outside the cached
 prefix. When project files replace retrieval, preparation omits an enabled,
-configured, allowed Search preference and its reminder. Final steps use `NONE`; providers that cannot enforce it omit definitions.
-Those provider exceptions can invalidate cache reuse. The shared policy lives in
-`llm/model_capabilities.py` and `llm/multi_llm.py`.
+configured, allowed Search preference and its reminder. Chat's final step uses `NONE` and
+keeps the same tool definitions and system prompt; the cache effect depends on the
+provider ([[llm-providers#none-tool-choice-keeps-tools]]). The coding and research
+agents change their system prompt on the final step, so their prefix changes there.
 
 **Custom agent prompt.** `chat/process_message.py:prepare_chat_turn` labels
 project and agent instructions when both exist, and tells the model to follow

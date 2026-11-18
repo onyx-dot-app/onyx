@@ -371,6 +371,8 @@ class Agent:
         """Start a worker, or execute here until suspension or completion with background=False.
 
         At `deadline_at` the run is cancelled and records a `DEADLINE` failure.
+        `max_steps` bounds the steps, with one exception; see "Preparing and
+        completing steps" in the agents README.
         """
         AgentStep(index=0, limit=max_steps)
         with self._lock:
@@ -1676,8 +1678,9 @@ def _advance_loop(
     run: Run, llm: LLM
 ) -> Literal[RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.SUSPENDED]:
     cancellation_signal = run.cancellation_signal
-    max_steps = run._progress.step_limit
-    while run._progress.step_index < max_steps:
+    # _complete_step can raise or lower the limit so that an extra step is the
+    # run's last step.
+    while run._progress.step_index < run._progress.step_limit:
         cancellation_signal.check()
         progress = run._progress
         if progress.action == RunAction.FINISH:
@@ -1702,7 +1705,7 @@ def _advance_loop(
         if progress.action == RunAction.PREPARE:
             if not run.begin_work_cycle():
                 return RunStatus.SUSPENDED
-            step = AgentStep(index=progress.step_index, limit=max_steps)
+            step = AgentStep(index=progress.step_index, limit=progress.step_limit)
             prepare = run._prepare_step
             prepared = run._defaults
             ownership = (
@@ -2190,18 +2193,43 @@ def _complete_step(run: Run) -> None:
         if after_step is not None
         else bool(calls)
     ) and not terminated
+    step_limit = progress.step_limit
+    # A step that declares tools but lets none run; the rule is in "Preparing
+    # and completing steps" in the agents README.
+    if (
+        progress.tools
+        and progress.options is not None
+        and progress.options.tool_choice == ToolChoiceOptions.NONE
+    ):
+        previous = (
+            run._state.steps[progress.step_index - 1] if progress.step_index else None
+        )
+        took_extra_step = (
+            previous is not None
+            and progress.previous_options is not None
+            and progress.previous_options.tool_choice == ToolChoiceOptions.NONE
+            and bool(previous.message.tool_calls)
+        )
+        should_continue = bool(calls) and not took_extra_step
+        if should_continue:
+            step_limit = progress.step_index + 2
+        elif not step.message.text.strip():
+            raise RuntimeError(
+                "The model did not return a final answer after tool execution."
+            )
     cancellation_signal.check()
     has_delegated_work = run.coordination is not None and bool(
         run.coordination.delegated_runs()
     )
     # Collect delegated results before accepting an early answer or using the last step.
     wait_for_children = has_delegated_work and (
-        not should_continue or progress.step_index + 2 >= progress.step_limit
+        not should_continue or progress.step_index + 2 >= step_limit
     )
     should_continue = should_continue or has_delegated_work
     ownership = run.coordination.coordinator.ownership if run.coordination else None
     with run.execution_lock:
         progress.previous_options = progress.options
+        progress.step_limit = step_limit
         can_continue = progress.step_index + 1 < progress.step_limit
         if (
             not should_continue

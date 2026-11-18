@@ -245,12 +245,9 @@ class CodingAgent(Agent):
             ),
         )
 
-    def _after_step(self, result: StepResult) -> bool:
-        if result.options.tool_choice != ToolChoiceOptions.NONE:
-            return True
-        if not result.message.text:
-            raise ValueError("Coding agent produced no final answer")
-        return False
+    def _after_step(self, _result: StepResult) -> bool:
+        # Investigation steps continue; the runtime ends the final answer step.
+        return True
 
     def _bash(self, invocation: ToolInvocation) -> ToolResult:
         result = self.bash_tool.run(invocation, ToolContext())

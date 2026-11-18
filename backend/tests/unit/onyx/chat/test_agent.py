@@ -17,8 +17,10 @@ from onyx.agents.models import (
     AgentStep,
     RunStatus,
     StepInput,
+    StepResult,
 )
-from onyx.agents.runtime import Run
+from onyx.agents.runtime import Run, RunFailed
+from onyx.agents.tool_execution import NO_TOOL_CAN_RUN_RESULT
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
@@ -28,7 +30,11 @@ from onyx.chat.models import (
     PersonaPromptConfig,
     PromptMetadata,
 )
-from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.presentation import (
+    ResponsePresenter,
+    project_response,
+    replay_response,
+)
 from onyx.chat.run_store import agent_result_message
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -37,7 +43,7 @@ from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
 from onyx.integrations.models import CallCredentials
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.interfaces import LLM, LLMConfig
+from onyx.llm.interfaces import LLM
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -62,7 +68,11 @@ from onyx.prompts.chat_prompts import (
     ROOT_AGENT_INSTRUCTIONS,
     SUBAGENT_INSTRUCTIONS,
 )
-from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+from onyx.server.query_and_chat.streaming_models import (
+    CustomToolStart,
+    OverallStop,
+    Packet,
+)
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import CapabilityEntry, ChatFile
@@ -115,23 +125,10 @@ def chat_agent(
 @pytest.mark.parametrize(
     "render, observer_fails", [(True, False), (False, False), (True, True)]
 )
-@pytest.mark.parametrize(
-    ("model_name", "deployment_name", "last_has_tools"),
-    [
-        ("test-model", None, True),
-        ("claude-haiku-4-5", None, True),
-        ("qwen3.7-plus", None, False),
-        ("z-ai/glm-5.3", None, False),
-        ("alias", "glm-5.3", False),
-    ],
-)
 def test_chat_preserves_parallel_tool_history_preference_and_packets(
     render: bool,
     observer_fails: bool,
     monkeypatch: pytest.MonkeyPatch,
-    model_name: str,
-    deployment_name: str | None,
-    last_has_tools: bool,
     multiple_operations: bool,
 ) -> None:
     class SecondOperation(EchoTool):
@@ -149,19 +146,6 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
             return "other"
 
     runs: list[Run] = []
-    monkeypatch.setattr(
-        ScriptedLLM,
-        "config",
-        property(
-            lambda self: LLMConfig(
-                model_provider="openai",
-                model_name=model_name,
-                deployment_name=deployment_name,
-                max_input_tokens=self.max_input_tokens,
-                temperature=0,
-            )
-        ),
-    )
     if observer_fails:
 
         def broken_observer(_presenter: ResponsePresenter, _event: AgentEvent) -> None:
@@ -250,12 +234,7 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
         assert "The user selected these operations for this request: " in str(
             request["prompt"]
         )
-    if last_has_tools:
-        assert [tool["function"]["name"] for tool in llm.requests[1]["tools"]] == [
-            tool.name for tool in agent.application_tools
-        ]
-    else:
-        assert llm.requests[1]["tools"] is None
+    assert llm.requests[1]["tools"] == llm.requests[0]["tools"]
     assert llm.requests[1]["tool_choice"] == ToolChoiceOptions.NONE
     assert [message.role for message in agent.state.messages] == [
         "user",
@@ -300,6 +279,104 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
     packets = [output.get_nowait() for _ in range(output.qsize())]
     assert isinstance(packets[-1], Packet)
     assert isinstance(packets[-1].obj, OverallStop)
+
+
+def _late_call(call_id: str, lead_in: str | None = None) -> Delta:
+    return Delta(
+        content=lead_in,
+        tool_calls=[
+            ChatCompletionDeltaToolCall(
+                id=call_id,
+                index=0,
+                function=ResponseFunctionCall(name="echo", arguments='{"value":"hi"}'),
+            )
+        ],
+    )
+
+
+def test_last_step_call_is_denied_and_the_extra_step_answers() -> None:
+    runs: list[Run] = []
+    output: queue.Queue[Packet] = queue.Queue()
+    llm = ScriptedLLM(
+        [_late_call("late-call", "Let me search for that."), Delta(content="Answer")]
+    )
+    agent = chat_agent(llm, [EchoTool()])
+    result = run_agent(
+        agent,
+        runs=runs,
+        messages=[UserMessage(content="Hello")],
+        max_steps=1,
+        listener=ResponsePresenter(
+            Emitter(model_idx=0, publish=output.put_nowait)
+        ).consume,
+    )
+    denied, extra = llm.requests
+    assert [tool["function"]["name"] for tool in denied["tools"]] == [
+        tool.name for tool in agent.application_tools
+    ]
+    assert extra["tools"] == denied["tools"]
+    assert denied["tool_choice"] == extra["tool_choice"] == ToolChoiceOptions.NONE
+    assert NO_TOOL_CAN_RUN_RESULT in str(extra["prompt"])
+    rejected = agent.state.messages[2]
+    assert isinstance(rejected, ToolResultMessage)
+    assert rejected.tool_call_id == "late-call" and rejected.is_error
+    assert rejected.text == NO_TOOL_CAN_RUN_RESULT
+    assert result.stop_reason == RunStatus.COMPLETE
+    assert result.output.text == "Answer"
+    snapshot = runs[-1].snapshot()
+    assert snapshot is not None and snapshot.answer_step_index == 1
+    projection = project_response(snapshot, tool_ids={})
+    assert projection.answer == "Answer"
+    assert projection.response is not None
+    # The denied call shows as a closed tool card, live and on replay.
+    live = [output.get_nowait() for _ in range(output.qsize())]
+    replayed = replay_response(projection.response, {}, projection.presentation, {})
+    cards = [
+        [
+            type(packet.obj).__name__
+            for packet in packets
+            if packet.placement
+            == next(
+                card.placement
+                for card in packets
+                if isinstance(card.obj, CustomToolStart)
+            )
+        ]
+        for packets in (live, replayed)
+    ]
+    assert cards[0] == cards[1]
+    assert cards[0][0] == "CustomToolStart" and cards[0][-1] == "SectionEnd"
+
+
+def test_extra_step_without_an_answer_fails_the_turn() -> None:
+    llm = ScriptedLLM([_late_call("late-call"), _late_call("again", " ")])
+    with pytest.raises(RunFailed):
+        run_agent(
+            chat_agent(llm, [EchoTool()]),
+            messages=[UserMessage(content="Hello")],
+            max_steps=1,
+        )
+    assert len(llm.requests) == 2
+
+
+def test_after_step_runs_on_the_denied_step(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: list[tuple[int, list[str]]] = []
+    after_step = ChatAgent._after_step
+
+    def observe(agent: ChatAgent, result: StepResult) -> bool:
+        observed.append(
+            (result.step.index, [message.text for message in result.tool_results])
+        )
+        return after_step(agent, result)
+
+    monkeypatch.setattr(ChatAgent, "_after_step", observe)
+    llm = ScriptedLLM([_late_call("late-call"), Delta(content="Answer")])
+    run_agent(
+        chat_agent(llm, [EchoTool()]),
+        messages=[UserMessage(content="Hello")],
+        max_steps=1,
+    )
+    assert observed == [(0, [NO_TOOL_CAN_RUN_RESULT]), (1, [])]
 
 
 class _PythonTool(EchoTool):
