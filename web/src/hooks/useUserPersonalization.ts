@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { MemoryItem, User, UserPersonalization } from "@/lib/types";
 
 const DEFAULT_PERSONALIZATION: UserPersonalization = {
@@ -111,9 +111,12 @@ export default function useUserPersonalization(
     [user]
   );
 
-  useEffect(() => {
+  const [syncedPersonalization, setSyncedPersonalization] =
+    useState(basePersonalization);
+  if (syncedPersonalization !== basePersonalization) {
+    setSyncedPersonalization(basePersonalization);
     setPersonalizationValues(basePersonalization);
-  }, [basePersonalization]);
+  }
 
   const updatePersonalizationField = useCallback(
     (field: "name" | "role", value: string) => {

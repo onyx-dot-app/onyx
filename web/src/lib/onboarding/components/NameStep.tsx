@@ -22,6 +22,7 @@ const NameStep = React.memo(
 
     // The step's only control: ready to type as soon as the step appears.
     const inputRef = useRef<HTMLInputElement>(null);
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus to the name input when the step appears
     useEffect(() => {
       inputRef.current?.focus();
     }, []);

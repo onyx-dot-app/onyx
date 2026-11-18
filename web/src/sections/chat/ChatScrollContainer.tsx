@@ -119,6 +119,7 @@ const ChatScrollContainer = React.memo(
 
       // Layout effect: queued rAF/observer callbacks fire after commit, so a
       // passive sync could let them scroll with a stale autoScroll flag.
+      // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest autoScroll and callback in refs for the rAF and observer callbacks
       useLayoutEffect(() => {
         onScrollButtonVisibilityChangeRef.current =
           onScrollButtonVisibilityChange;
@@ -228,6 +229,7 @@ const ChatScrollContainer = React.memo(
         [updateScrollState]
       );
 
+      // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the pending auto-scroll timer on unmount
       useEffect(
         () => () => {
           if (autoScrollTimeoutRef.current !== null) {
@@ -238,6 +240,7 @@ const ChatScrollContainer = React.memo(
       );
 
       // Catch up on content that arrived while the typewriter paused following.
+      // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the container to the bottom when auto-scroll resumes
       useEffect(() => {
         const resumed = autoScroll && !previousAutoScrollRef.current;
         previousAutoScrollRef.current = autoScroll;
@@ -300,6 +303,7 @@ const ChatScrollContainer = React.memo(
       // change (it is keyed by `sessionId`).
       // NOT characterData — typewriter reveals don't change scrollHeight
       // and firing per-char thrashed auto-scroll.
+      // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- mutation and resize observers that follow new content to the bottom
       useEffect(() => {
         const container = scrollContainerRef.current;
         const contentWrapper = contentWrapperRef.current;
@@ -361,6 +365,7 @@ const ChatScrollContainer = React.memo(
       // Handle session changes and anchor changes. A layout effect: opening a
       // chat whose messages are already rendered scrolls it into place before
       // the browser paints, so switching to a cached chat shows no blank frame.
+      // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the container into place before paint on a session or anchor change
       useLayoutEffect(() => {
         const container = scrollContainerRef.current;
         if (!container) return;

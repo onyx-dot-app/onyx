@@ -100,6 +100,7 @@ export default function ScrollIndicatorDiv({
     }, SCROLL_THROTTLE_MS);
   }, [updateScrollIndicators]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scroll listener and resize observer that update the scroll indicators
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -130,6 +131,7 @@ export default function ScrollIndicatorDiv({
   }, [updateScrollIndicators, handleScroll]);
 
   // Update when children change
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- re-measures the scroll indicators after the children render
   useEffect(() => {
     updateScrollIndicators();
   }, [children]);

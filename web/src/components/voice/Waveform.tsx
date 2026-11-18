@@ -48,6 +48,7 @@ function Waveform({
   const lastPushTimeRef = useRef(0);
   const audioLevelRef = useRef(audioLevel);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest audio level in a ref for the animation frame loop
   useEffect(() => {
     audioLevelRef.current = audioLevel;
   }, [audioLevel]);
@@ -63,6 +64,7 @@ function Waveform({
   }, []);
 
   // ─── Recording: Timer effect ───────────────────────────────────────────────
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- one-second interval that counts the recording time
   useEffect(() => {
     if (variant !== "recording") return;
 
@@ -79,6 +81,7 @@ function Waveform({
   }, [variant, isActive]);
 
   // ─── Recording: Audio level visualization effect ───────────────────────────
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- animation frame loop that scrolls the audio level bars
   useEffect(() => {
     if (variant !== "recording") return;
 

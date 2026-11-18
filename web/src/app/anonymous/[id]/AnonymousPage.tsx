@@ -37,6 +37,7 @@ export default function AnonymousPage({
     }
   };
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- signs in as the anonymous user through the server once on mount
   useEffect(() => {
     loginAsAnonymousUser();
   }, []);

@@ -43,6 +43,7 @@ export function useTypewriter(
   // Read inside the rAF loop without restarting it.
   const streamFinishedRef = useRef(streamFinished);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest target and flags in refs for the animation frame loop
   useEffect(() => {
     targetRef.current = target;
     enabledRef.current = enabled;
@@ -67,6 +68,7 @@ export function useTypewriter(
   // Retain fractional progress between frames, including high-refresh displays.
   const displayedLengthRef = useRef(displayedLength);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- advances the animation frame loop's displayed length when the visible prefix grows
   useEffect(() => {
     const visible = Math.min(visiblePrefixLength, target.length);
     if (displayedLengthRef.current < visible) {
@@ -78,6 +80,7 @@ export function useTypewriter(
   // Clamp (not reset) on target shrink — preserves already-revealed chars
   // across user-cancel freeze and regeneration.
   const prevTargetLengthRef = useRef(target.length);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clamps the animation frame loop's displayed length when the target shrinks
   useEffect(() => {
     if (target.length < prevTargetLengthRef.current) {
       const clamped = Math.min(displayedLengthRef.current, target.length);
@@ -93,6 +96,7 @@ export function useTypewriter(
   const runningRef = useRef(false);
   const startLoopRef = useRef<(() => void) | null>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- animation frame loop that reveals the target text
   useEffect(() => {
     let lastFrameTime = performance.now();
     const tick = (now: number) => {
@@ -176,6 +180,7 @@ export function useTypewriter(
   }, []);
 
   // Restart the loop when target grows past what's currently displayed.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- restarts the animation frame loop when the target grows
   useEffect(() => {
     if (target.length > displayedLength && startLoopRef.current) {
       startLoopRef.current();
@@ -184,6 +189,7 @@ export function useTypewriter(
 
   // When the user navigates away and back (tab switch, window focus),
   // snap to all collected content so they see the full response immediately.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- visibilitychange listener that shows all collected text when the tab returns
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {

@@ -15,6 +15,7 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
 }) => {
   const [dots, setDots] = useState("...");
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- interval that cycles the loading dots
   useEffect(() => {
     const interval = setInterval(() => {
       setDots((prevDots) => {

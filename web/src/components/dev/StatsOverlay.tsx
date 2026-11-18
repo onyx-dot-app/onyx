@@ -10,6 +10,7 @@ import { useEffect } from "react";
  * Uses dynamic import to prevent stats.js from being bundled in production.
  */
 export default function StatsOverlay() {
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- mounts the stats.js FPS and memory panels on document.body
   useEffect(() => {
     let animationFrameId: number | undefined;
     let container: HTMLDivElement | null = null;

@@ -529,6 +529,7 @@ export default function HooksPage() {
       );
   }, [specs, hooksByPoint, search, t, locale]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- toasts and redirects the router away when hooks are not available
   useEffect(() => {
     if (settings.isLoading) return;
     if (!enterpriseTier) {

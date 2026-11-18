@@ -93,6 +93,7 @@ export default function ChatPluginsPopover({
     hoverTimer.current = setTimeout(() => changeOpen(next), next ? 100 : 250);
   }
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the pending hover timer on unmount
   useEffect(
     () => () => {
       if (hoverTimer.current !== null) clearTimeout(hoverTimer.current);

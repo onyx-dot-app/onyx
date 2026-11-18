@@ -72,6 +72,7 @@ export default function NRFChrome() {
   const footerRef = useRef<HTMLElement>(null);
 
   // Publishes the footer height so NRFPage can keep scrollable content clear of it
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that publishes the footer height as a CSS variable on the host
   useEffect(() => {
     const footer = footerRef.current;
     const host = footer?.parentElement;

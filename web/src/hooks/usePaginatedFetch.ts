@@ -71,6 +71,7 @@ function usePaginatedFetch<T extends PaginatedType>({
     [endpoint, query, filter, itemsPerPage, pagesPerBatch]
   );
   const requestKeyRef = useRef(requestKey);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest request key in a ref so stale batch responses are dropped
   useEffect(() => {
     requestKeyRef.current = requestKey;
   }, [requestKey]);
@@ -89,6 +90,7 @@ function usePaginatedFetch<T extends PaginatedType>({
   }, [currentPage, pagesPerBatch]);
 
   const currentBatchRef = useRef(batchAndPageIndices.batchNum);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the current batch number in a ref for the batch fetch callbacks
   useEffect(() => {
     currentBatchRef.current = batchAndPageIndices.batchNum;
   }, [batchAndPageIndices]);

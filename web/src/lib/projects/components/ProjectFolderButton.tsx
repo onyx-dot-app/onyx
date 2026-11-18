@@ -1,12 +1,6 @@
 "use client";
 
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import React, { createContext, useContext, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useDroppable } from "@dnd-kit/core";
 import {
@@ -159,10 +153,12 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
 
   // Unfold whichever project the user moves into, so its chats are visible on
   // arrival. Only ever opens — folding it again while still inside the project
-  // sticks, because the effect does not re-run until the active project changes.
-  useEffect(() => {
+  // sticks, because this runs only when the active project changes.
+  const [wasActiveProject, setWasActiveProject] = useState(isActiveProject);
+  if (wasActiveProject !== isActiveProject) {
+    setWasActiveProject(isActiveProject);
     if (isActiveProject) setOpen(true);
-  }, [isActiveProject]);
+  }
 
   // Make project droppable
   const dropId = `project-${project.id}`;

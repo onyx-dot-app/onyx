@@ -50,6 +50,7 @@ export default function WindowedRow({
 
   const mounted = !scrollContainer || pinned || nearViewport;
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- IntersectionObserver subscription that mounts the row near the viewport
   useEffect(() => {
     const row = rowRef.current;
     if (!observeNearViewport || !row) return;
@@ -61,6 +62,7 @@ export default function WindowedRow({
     });
   }, [observeNearViewport]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that caches the row height and corrects the scroll position
   useEffect(() => {
     const root = scrollContainerRef?.current;
     const row = rowRef.current;

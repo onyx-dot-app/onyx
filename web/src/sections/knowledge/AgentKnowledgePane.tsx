@@ -1,12 +1,6 @@
 "use client";
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import * as TableLayouts from "@/layouts/table-layouts";
 import useCCPairs from "@/hooks/useCCPairs";
@@ -106,18 +100,16 @@ export default function AgentKnowledgePane({
     activeSource: undefined,
   });
 
-  useEffect(() => {
-    if (!enableKnowledge) {
-      setView("main");
-      if (isSearchMode) {
-        setIsSearchMode(false);
-        setSearchQuery("");
-        setCommittedQuery("");
-        setSearchResults(null);
-        setActiveSourceFilter(null);
-      }
+  if (!enableKnowledge && (view !== "main" || isSearchMode)) {
+    setView("main");
+    if (isSearchMode) {
+      setIsSearchMode(false);
+      setSearchQuery("");
+      setCommittedQuery("");
+      setSearchResults(null);
+      setActiveSourceFilter(null);
     }
-  }, [enableKnowledge, isSearchMode]);
+  }
 
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const connectedSources: ConnectedSource[] = useMemo(() => {

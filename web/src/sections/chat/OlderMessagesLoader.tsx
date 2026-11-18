@@ -33,6 +33,7 @@ export default function OlderMessagesLoader({
   const isLoading = useIsLoadingOlderMessages();
 
   // Observed again after each page: a loader still in range loads the next.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- IntersectionObserver that loads older messages when the loader nears the viewport
   useEffect(() => {
     const loader = loaderRef.current;
     if (!observeNearViewport || !loader || isLoading) return;

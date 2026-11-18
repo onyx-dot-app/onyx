@@ -166,6 +166,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     new Set()
   );
   const trackedUploadIdsRef = useRef<Set<string>>(trackedUploadIds);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest tracked upload ids in a ref that the status poller reads
   useEffect(() => {
     trackedUploadIdsRef.current = trackedUploadIds;
   }, [trackedUploadIds]);
@@ -566,6 +567,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     []
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest message files in a ref that the status poller reads
   useEffect(() => {
     currentMessageFilesRef.current = currentMessageFiles;
   }, [currentMessageFiles]);
@@ -574,6 +576,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   // them too so their status does not stay pending. Each attach registers
   // once, so a file the server stops reporting is not re-polled forever.
   const autoTrackedIdsRef = useRef<Set<string>>(new Set());
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- registers newly attached pending files with the upload status poller
   useEffect(() => {
     const attachedIds = new Set(currentMessageFiles.map((f) => f.id));
     autoTrackedIdsRef.current.forEach((id) => {
@@ -619,11 +622,14 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   }, [recentFiles]);
 
   // Clear project details when switching projects to show skeleton
-  useEffect(() => {
+  const [detailsProjectId, setDetailsProjectId] = useState(currentProjectId);
+  if (!Object.is(detailsProjectId, currentProjectId)) {
+    setDetailsProjectId(currentProjectId);
     setCurrentProjectDetails(null);
     setAllCurrentProjectFiles([]);
-  }, [currentProjectId]);
+  }
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- loads the selected project's details from the server
   useEffect(() => {
     if (currentProjectId) {
       refreshCurrentProjectDetails();
@@ -631,6 +637,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   }, [currentProjectId, refreshCurrentProjectDetails]);
 
   // Targeted polling for tracked uploaded files only
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- polls the server for the status of tracked uploads
   useEffect(() => {
     const ids = Array.from(trackedUploadIds);
     const shouldPoll = ids.length > 0;

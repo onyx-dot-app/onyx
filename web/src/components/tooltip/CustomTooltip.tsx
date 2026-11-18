@@ -111,6 +111,7 @@ export const CustomTooltip = ({
     }
   };
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the tooltip delay timer on unmount
   useEffect(() => {
     return () => {
       if (timeoutRef.current) {

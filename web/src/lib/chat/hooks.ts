@@ -149,6 +149,7 @@ export function useToolRequests(rawPackets: Packet[]): ResponseToolRequests {
       .filter((entry) => entry.resolution !== null)
       .map((entry) => entry.request.question_request_id),
   ].join(" ");
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- drops resolved question statuses from the tool request UI store
   useEffect(() => {
     if (resolvedIds)
       useToolRequestUi.getState().forgetStatuses(resolvedIds.split(" "));
@@ -202,6 +203,7 @@ export function useNudgedCard(requestId: string) {
   );
   const ref = useRef<HTMLDivElement>(null);
   const [shaking, setShaking] = useState(false);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the nudged request into view and restarts its shake on the next animation frame
   useEffect(() => {
     if (nudge === null) return;
     useToolRequestUi.getState().clearNudge(nudge);
@@ -464,6 +466,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
   // A reader owns a busy session; an idle one attaches to turns the server
   // started, whichever status read found them.
   const checkFailed = tReadiness("checkFailed");
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- refreshes the chat session from the server when its status shows a turn the client lacks
   useEffect(() => {
     if (!sessionId || !status || !idle) return;
     const session = useChatSessionStore.getState().sessions.get(sessionId);
@@ -481,6 +484,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
   // empty version of a chat with no request: a clean send keeps its streamed
   // messages, and any request refreshes.
   const approvalsVersion = status?.approvals_version;
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- refreshes the chat session from the server when the approvals version changes
   useEffect(() => {
     if (!sessionId || approvalsVersion === undefined || !idle) return;
     if (approvalsVersion !== (loadedApprovalsVersion ?? ""))
@@ -495,6 +499,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     sessionId: string | null;
     responseId: number | null | undefined;
   }>({ sessionId, responseId: latestResponseId });
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- revalidates the SWR pending requests when a new response arrives in the same session
   useEffect(() => {
     const previous = seenResponse.current;
     seenResponse.current = { sessionId, responseId: latestResponseId };
@@ -735,6 +740,7 @@ export function useSendChatMessageFromURL({
   // the query is processed — without this the effect re-runs inside that
   // window and queues the same prompt twice.
   const sentForRef = useRef<string | null>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- queues the send-on-load query from the URL once per query
   useEffect(() => {
     if (!searchParams?.get(SEARCH_PARAM_NAMES.SEND_ON_LOAD)) return;
     const query = searchParams.toString();
@@ -744,6 +750,7 @@ export function useSendChatMessageFromURL({
   }, [searchParams, setQueuedQuery]);
 
   // The extension navigating the embedded page without a reload.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- window message listener for the extension's page change
   useEffect(() => {
     function onPageChange(event: MessageEvent) {
       if (event.data.type !== SUBMIT_MESSAGE_TYPES.PAGE_CHANGE) return;
@@ -761,6 +768,7 @@ export function useSendChatMessageFromURL({
   // Processes the queued query once every dimension it names has settled.
   // Re-runs as the loading flags flip, so a query that arrived early waits
   // here instead of resolving names against half-fetched lists.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- applies the queued URL query to the tool configuration and strips it from the URL once its lists load
   useEffect(() => {
     if (queuedQuery === null) return;
     if (window.location.pathname !== queuedPathnameRef.current) {
@@ -856,6 +864,7 @@ export function useSendChatMessageFromURL({
 
   // Submits one render after the filter write above landed, so `onSubmit`'s
   // closure reads the configuration the query scoped, not the previous one.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- sends the queued URL prompt one commit after its filters land, so onSubmit reads them
   useEffect(() => {
     if (pendingMessage === null) return;
     setPendingMessage(null);

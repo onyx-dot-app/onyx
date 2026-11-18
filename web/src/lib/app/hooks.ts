@@ -23,6 +23,7 @@ export function useAppDocumentTitle(): void {
   const appPosition = useAppPosition();
   const { appName } = useSettings();
   const { currentChatSession } = useChatSessions();
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- writes the chat name and app name to document.title
   useLayoutEffect(() => {
     const appendChatNameToDocumentTitle =
       appPosition.isChattable() && currentChatSession?.name;
@@ -35,6 +36,7 @@ export function useAppDocumentTitle(): void {
 export function useAdminDocumentTitle(): void {
   const pathname = usePathname();
   const { appName } = useSettings();
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- writes the admin title to document.title on each route
   useLayoutEffect(() => {
     document.title = `Admin | ${appName}`;
   }, [pathname, appName]);

@@ -130,14 +130,24 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const [upToDateUser, setUpToDateUser] = useState<User | null>(null);
 
-  useEffect(() => {
+  const [mergedFrom, setMergedFrom] = useState<{
+    fetchedUser: typeof fetchedUser;
+    merge: typeof mergeUserPreferences;
+  } | null>(null);
+  if (
+    mergedFrom === null ||
+    mergedFrom.fetchedUser !== fetchedUser ||
+    mergedFrom.merge !== mergeUserPreferences
+  ) {
+    setMergedFrom({ fetchedUser, merge: mergeUserPreferences });
     setUpToDateUser(mergeUserPreferences(fetchedUser ?? null));
-  }, [fetchedUser, mergeUserPreferences]);
+  }
 
   const [meRetriesExhausted, setMeRetriesExhausted] = useState(false);
 
   const meRetryCountRef = useRef(0);
   const meFirstErrorAtRef = useRef<number | null>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- retry and deadline timers for a failed /me request
   useEffect(() => {
     if (!userError) {
       meRetryCountRef.current = 0;
@@ -183,6 +193,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         ? "unavailable"
         : "resolved";
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- identifies or resets the PostHog user when the fetched user changes
   useEffect(() => {
     if (!posthog) return;
 
@@ -210,6 +221,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const { setTheme, theme } = useTheme();
   const hasSyncedThemeRef = useRef(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- applies the saved theme preference to next-themes once per session
   useEffect(() => {
     // Only sync once per session
     if (hasSyncedThemeRef.current) return;
@@ -248,6 +260,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const effectiveLanguage: Locale | undefined =
     upToDateUser?.preferences?.language ?? workspaceLanguage;
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- refetches the user and refreshes the route when the html lang differs from the user's language
   useEffect(() => {
     if (!isSupportedLocale(effectiveLanguage)) return;
     if (document.documentElement.lang === effectiveLanguage) return;

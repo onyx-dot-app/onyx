@@ -77,6 +77,7 @@ export default function useContainerCenter(): ContainerCenter {
     return m ?? NULL_MEASURE;
   });
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- MutationObserver that finds the app layout container as the DOM changes
   useEffect(() => {
     let frame = 0;
     const sync = () => {
@@ -103,6 +104,7 @@ export default function useContainerCenter(): ContainerCenter {
     };
   }, []);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that measures the container's center
   useEffect(() => {
     if (!container) return;
 

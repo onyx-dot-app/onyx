@@ -108,6 +108,7 @@ export function useSessionWatcher(): SessionWatcherResult {
     setSessionEndReasonState(sessionEndReason);
   }
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- timer that refetches the user just after the session expires
   useEffect(() => {
     if (inAuthFlow || !user) return;
     const seconds = computeSecondsUntilExpiration(user);
@@ -123,12 +124,14 @@ export function useSessionWatcher(): SessionWatcherResult {
     );
   }, [inAuthFlow, user, mutateUser]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the session expiry timer on unmount
   useEffect(() => {
     return () => {
       if (expiryTimeoutRef.current) clearTimeout(expiryTimeoutRef.current);
     };
   }, []);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- logs out through the server when /me returns 403 after a signed-in session
   useEffect(() => {
     if (inAuthFlow) return;
     if (userError?.status === 403 && hasSeenAuthenticatedUser) {
@@ -177,6 +180,7 @@ export function useTokenRefresh(
   const lastAttemptRef = useRef<number>(Date.now());
   const isFirstLoadRef = useRef(true);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- interval and visibilitychange listener that refresh the auth token
   useEffect(() => {
     // Wait only for the initial metadata load. On persistent error we still
     // refresh so a transient /auth/type failure cannot silently kill sessions.

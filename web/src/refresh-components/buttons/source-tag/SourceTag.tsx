@@ -65,6 +65,7 @@ function useIsTruncated(text: string) {
   const [isTruncated, setIsTruncated] = useState(false);
   const textRef = useRef<HTMLSpanElement>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- measures text truncation after layout and on window resize
   useLayoutEffect(() => {
     function checkTruncation() {
       if (textRef.current) {

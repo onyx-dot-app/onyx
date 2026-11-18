@@ -10,6 +10,7 @@ export default function GlobalError({
 }: {
   error: Error & { digest?: string };
 }) {
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reports the error to Sentry
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
       Sentry.captureException(error);

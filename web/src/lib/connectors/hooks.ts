@@ -305,6 +305,7 @@ export function useBoundFieldsGate({
   const [result, setResult] = useState<BindingCheckResult | null>(null);
   const resultRef = useRef(result);
   const latestRef = useRef({ key, config, credentialId, ready });
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest binding check inputs in a ref that the timer reads
   useEffect(() => {
     latestRef.current = { key, config, credentialId, ready };
   });
@@ -361,11 +362,13 @@ export function useBoundFieldsGate({
     [send, setResultFor]
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- timer that runs the binding check after the credential changes
   useEffect(() => {
     if (credentialKey === null) return;
     schedule(BINDING_CHECK_CREDENTIAL_DELAY_MS);
   }, [credentialKey, credentialUpdatedAt, schedule]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- cancels the pending binding check timer on unmount
   useEffect(
     () => () => {
       generationRef.current += 1;
@@ -466,6 +469,7 @@ interface ChartBins {
 function useChartBins(): ChartBins {
   const [element, setElement] = useState<HTMLDivElement | null>(null);
   const [bins, setBins] = useState<number | null>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that measures the chart width to size its bins
   useEffect(() => {
     if (element === null) return;
     const measure = () => {

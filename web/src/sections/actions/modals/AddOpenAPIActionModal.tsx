@@ -153,6 +153,7 @@ function FormContent({ onBusyChange, handleClose, title }: FormContentProps) {
     [validateDefinition]
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- debounce timer that validates the definition with the server after it changes
   useEffect(() => {
     setDefinitionError(null);
     if (values.definition.trim()) {

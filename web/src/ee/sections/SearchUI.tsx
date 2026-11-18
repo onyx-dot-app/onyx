@@ -63,6 +63,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   const prevErrorRef = useRef<string | null>(null);
 
   // Show a toast notification when a new error occurs
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- raises a toast for each new search error
   useEffect(() => {
     if (error && error !== prevErrorRef.current) {
       toast.error(error);
@@ -103,10 +104,12 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   };
 
   // Reset source filter and pagination when results change
-  useEffect(() => {
+  const [syncedResults, setSyncedResults] = useState(results);
+  if (syncedResults !== results) {
+    setSyncedResults(results);
     setSelectedSources([]);
     setCurrentPage(1);
-  }, [results]);
+  }
 
   // Create a set for fast lookup of LLM-selected docs
   const llmSelectedSet = useMemo(

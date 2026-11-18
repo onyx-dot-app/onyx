@@ -88,15 +88,21 @@ export default function ImportSkillsFromGitHubModal({
     );
   const { data: externalApps } = useUserExternalApps();
 
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (!open) {
+      setRepository("");
+      setPreview(null);
+      setSelectedPaths([]);
+      setResult(null);
+      setError(null);
+      setSharing(null);
+    }
+  }
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- closes the sharing modal store when this modal closes
   useEffect(() => {
-    if (open) return;
-    setRepository("");
-    setPreview(null);
-    setSelectedPaths([]);
-    setResult(null);
-    setError(null);
-    setSharing(null);
-    sharingModal.toggle(false);
+    if (!open) sharingModal.toggle(false);
   }, [open, sharingModal.toggle]);
 
   async function submit() {

@@ -520,12 +520,11 @@ export default function ModelSelectorContent({
 
   // Applied once the options first resolve, so a pick that moves the first
   // selected group does not swap the expanded group while the menu fades out.
-  const defaultGroupAppliedRef = useRef(false);
-  useEffect(() => {
-    if (defaultGroupAppliedRef.current || groupedOptions.length === 0) return;
-    defaultGroupAppliedRef.current = true;
+  const [defaultGroupApplied, setDefaultGroupApplied] = useState(false);
+  if (!defaultGroupApplied && groupedOptions.length > 0) {
+    setDefaultGroupApplied(true);
     setExpandedGroups(new Set([defaultGroupKey]));
-  }, [defaultGroupKey, groupedOptions.length]);
+  }
 
   const isSearching = searchQuery.trim().length > 0;
 
@@ -569,6 +568,7 @@ export default function ModelSelectorContent({
   // search stays unremembered and retries once the page load settles.
   const lastServerSearchRef = useRef("");
   const trimmedQuery = searchQuery.trim();
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- debounce timer that searches the server when the loaded models have no match
   useEffect(() => {
     if (!trimmedQuery || !modelPaging?.hasMore || filteredOptions.length > 0) {
       return;
@@ -604,6 +604,7 @@ export default function ModelSelectorContent({
     }
   }, [modelPaging, isSearching, trimmedQuery, pageableProviderIds]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scroll listener on the list that loads the next window near the end
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -621,9 +622,11 @@ export default function ModelSelectorContent({
   // a few windows per expansion.
   const autofillCountRef = useRef(0);
   const pageableKey = pageableProviderIds.join(",");
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- resets the budget of the DOM overflow check below when the providers or query change
   useEffect(() => {
     autofillCountRef.current = 0;
   }, [pageableKey, trimmedQuery]);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- measures whether the list overflows its scroll container and loads more until it does
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container || isLoading || autofillCountRef.current >= AUTOFILL_CAP) {

@@ -67,6 +67,7 @@ export default function AdminChrome({
     matched !== undefined &&
     !hasPermission(adminCapabilities, matched.requiredPermission);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- redirects through the router when the admin lacks permission for this page
   useEffect(() => {
     if (!denied) return;
     // Some reach left → first permitted page; fully revoked → /app (else they'd bounce to an

@@ -212,13 +212,6 @@ export default function useChatController({
 
   const navigatingAway = useRef(false);
 
-  // Sync store state changes
-  useEffect(() => {
-    if (currentSessionId) {
-      // Keep track of current session ID for internal use
-    }
-  }, [currentSessionId]);
-
   const getCurrentSessionId = (): string => {
     return currentSessionId || existingChatSessionId || "";
   };
@@ -1642,6 +1635,7 @@ export default function useChatController({
     [activeAgent, llmManager, toolConfiguration]
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- aborts the current session's stream request on route change or unmount
   useEffect(() => {
     return () => {
       // Cleanup which only runs when the component unmounts (i.e. when you navigate away).
@@ -1653,6 +1647,7 @@ export default function useChatController({
     };
   }, [pathname]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- seeds a chat from Slack through the server and redirects the router
   useEffect(() => {
     const handleSlackChatRedirect = async () => {
       const slackChatId = searchParams.get("slackChatId");
@@ -1764,6 +1759,7 @@ export default function useChatController({
   }, [imageFileInMessageHistory]);
 
   // set isReady once component is mounted
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- marks the current session ready in the chat session store on mount
   useEffect(() => {
     const currentSessionId = getCurrentSessionId();
     if (currentSessionId) {

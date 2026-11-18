@@ -185,9 +185,11 @@ describe("useDraft", () => {
     function useGatedDraft(key: string) {
       const { loaded, draft, save } = useDraft<string>({ key });
       const seededRef = useRef(false);
+      // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- test double that resets the seeded flag when the key changes
       useEffect(() => {
         seededRef.current = false;
       }, [key]);
+      // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- test double that marks the draft as seeded once loaded
       useEffect(() => {
         if (!loaded || seededRef.current) return;
         seededRef.current = true;

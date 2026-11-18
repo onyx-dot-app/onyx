@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { InputSingleComboBox } from "@opal/components";
 import { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
@@ -41,15 +41,15 @@ export function TransferOwnershipView({
   users,
 }: TransferOwnershipViewProps) {
   const t = useTranslations("chat.modals.share");
-  const [inputValue, setInputValue] = useState("");
+  const [inputValue, setInputValue] = useState(selectedTarget?.value ?? "");
 
-  useEffect(() => {
-    // Only sync the field when a real selection arrives. A null target comes
-    // from the user typing to change the selection, where their input must stand.
-    if (selectedTarget) {
-      setInputValue(selectedTarget.value);
-    }
-  }, [selectedTarget]);
+  // Only sync the field when a real selection arrives. A null target comes
+  // from the user typing to change the selection, where their input must stand.
+  const [syncedTarget, setSyncedTarget] = useState(selectedTarget);
+  if (syncedTarget !== selectedTarget) {
+    setSyncedTarget(selectedTarget);
+    if (selectedTarget) setInputValue(selectedTarget.value);
+  }
 
   const options = useMemo(() => {
     const ownerUserId = agent?.owner?.id;

@@ -313,6 +313,7 @@ export function QueryControllerProvider({
   );
 
   // Sync state with navigation context
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- resets the query controller when the router's app position changes
   useEffect(reset, [appPosition, reset]);
 
   return (

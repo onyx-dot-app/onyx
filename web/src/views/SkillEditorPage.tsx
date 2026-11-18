@@ -2,13 +2,7 @@
 
 import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-} from "react";
+import { useCallback, useMemo, useState, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import {
@@ -156,11 +150,10 @@ export default function SkillEditorPage({
     setBaseVersionId(nextSkill.current_version_id);
   }, []);
 
-  useEffect(() => {
-    if (!skill || hydratedSkillId === skill.id) return;
+  if (skill && hydratedSkillId !== skill.id) {
     syncEditableFields(skill);
     setHydratedSkillId(skill.id);
-  }, [hydratedSkillId, skill, syncEditableFields]);
+  }
 
   const isDirty = useMemo(() => {
     if (isCreating) {

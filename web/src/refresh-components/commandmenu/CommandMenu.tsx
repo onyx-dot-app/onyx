@@ -109,6 +109,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
   const prevItemsRevisionRef = useRef(itemsRevision);
 
   // Reset state when menu closes
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the item callback registry and the highlight when the menu closes
   useEffect(() => {
     if (!open) {
       setHighlightedValue(null);
@@ -118,6 +119,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
   }, [open]);
 
   // Ensure valid highlight when menu is open and items change
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the rendered item order from the DOM a frame after open or item changes
   useEffect(() => {
     if (open) {
       const frame = requestAnimationFrame(() => {
@@ -302,6 +304,7 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
   // Scroll highlighted item into view on keyboard nav
   // Uses manual scroll calculation instead of scrollIntoView to only scroll
   // the list container, not the modal or other ancestors
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the list container to keep the keyboard highlight in view
   useEffect(() => {
     if (isKeyboardNav && highlightedValue) {
       const container = document.querySelector("[data-command-menu-list]");
@@ -573,6 +576,7 @@ function CommandMenuFilter({
   } = useCommandMenuContext();
 
   // Register callback on mount - NO keyboard listener needed
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- registers this item's callback in the menu registry until unmount
   useEffect(() => {
     if (!isApplied && onSelect) {
       registerItem(value, () => onSelect(), "filter");
@@ -635,6 +639,7 @@ function CommandMenuItem({
   } = useCommandMenuContext();
 
   // Register callback on mount - NO keyboard listener needed
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- registers this item's callback in the menu registry until unmount
   useEffect(() => {
     registerItem(value, () => onSelect?.(value));
     return () => unregisterItem(value);
@@ -694,6 +699,7 @@ function CommandMenuAction({
   } = useCommandMenuContext();
 
   // Register callback on mount - NO keyboard listener needed
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- registers this item's callback in the menu registry until unmount
   useEffect(() => {
     registerItem(value, () => onSelect?.(value), "action", defaultHighlight);
     return () => unregisterItem(value);

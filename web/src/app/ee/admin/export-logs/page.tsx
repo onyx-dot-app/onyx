@@ -147,6 +147,7 @@ export default function ExportLogsPage() {
 
   // Re-attach to an in-flight export after a refresh or navigation; the id is
   // mirrored into the URL when an export starts. Malformed ids are scrubbed.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reattaches to an in-flight export from the URL query param on mount
   useEffect(() => {
     const fromUrl = new URL(window.location.href).searchParams.get(
       EXPORT_ID_QUERY_PARAM
@@ -178,6 +179,7 @@ export default function ExportLogsPage() {
   // accessible; drop it immediately. Other errors are transient (interval
   // polling keeps running and self-heals), but only up to a cap: a server that
   // stays down must not leave the page collecting forever.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- counts failed status polls, then toasts and drops the export from the URL when polling gives up
   useEffect(() => {
     if (statusError === undefined) {
       consecutivePollFailuresRef.current = 0;
@@ -208,6 +210,7 @@ export default function ExportLogsPage() {
     setExportId(null);
   }, [status, statusError, t, navigation]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the pending download timer and revokes its blob URL on unmount
   useEffect(() => {
     return () => {
       if (pendingRevokeRef.current !== null) {
@@ -265,6 +268,7 @@ export default function ExportLogsPage() {
   // Download exactly once per export, as soon as it is ready. Arming happens
   // while the export is still collecting (or at start, in handleExport), so
   // attaching to an already-finished export never auto-fires.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- starts the browser download once when an armed export finishes
   useEffect(() => {
     if (exportId === null || status === undefined) {
       return;

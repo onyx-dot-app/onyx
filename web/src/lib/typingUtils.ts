@@ -21,6 +21,7 @@ export function handleEnterPress(
 }
 
 export function useEscapePress(callback: () => void, enabled?: boolean) {
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- document keydown listener that calls back on Escape
   useEffect(() => {
     if (!enabled) return;
 

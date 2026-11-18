@@ -164,6 +164,7 @@ export default function ExpandableTextDisplay({
 
   // Truncation detection (read-only, doesn't need to block paint). The end of
   // a stream swaps the container, so isStreaming re-runs the measure.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- measures whether the text container overflows
   useEffect(() => {
     if (!plainStreamingTail && scrollRef.current) {
       setIsMeasuredTruncated(
@@ -182,6 +183,7 @@ export default function ExpandableTextDisplay({
   // Shift content upward during streaming for renderContent mode,
   // snapping to element boundaries so blocks are never partially clipped.
   // Must block paint to avoid flicker.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- shifts the streaming content in the DOM before paint to show its tail
   useLayoutEffect(() => {
     if (
       !isStreaming ||

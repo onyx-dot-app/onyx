@@ -23,6 +23,7 @@ function formatDay(dateStr: string, locale: string): string {
 
 /** Keeps the underlying failure in the console when a chart shows its error card. */
 export function useLoggedChartError(label: string, error: unknown): void {
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- logs a failed analytics request to the console
   React.useEffect(() => {
     if (error) console.error(`${label} analytics request failed:`, error);
   }, [label, error]);

@@ -48,6 +48,7 @@ export function CraftStreamingProvider({
     )
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reloads the page or clears the build session store when the signed-in user changes
   useLayoutEffect(() => {
     if (
       ownerId === userId ||
@@ -95,6 +96,7 @@ function CraftTurnAttachment({ sessionId }: { sessionId: string }) {
   const isInterrupting = useBuildSessionStore(
     (state) => state.sessions.get(sessionId)?.isInterrupting
   );
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- streams the turn's server events until the turn ends or is interrupted
   useEffect(() => {
     if (!turnId || isInterrupting) return;
     const controller = new AbortController();

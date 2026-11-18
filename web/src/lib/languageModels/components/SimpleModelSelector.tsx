@@ -229,6 +229,7 @@ export default function SimpleModelSelector<Nullable extends boolean = false>({
   const trimmedQuery = query.trim();
   const currentQueryRef = useRef("");
   const lastServerSearchRef = useRef("");
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- debounce timer that runs the server model search after SERVER_SEARCH_DEBOUNCE_MS
   useEffect(() => {
     currentQueryRef.current = trimmedQuery;
     if (trimmedQuery === "") {

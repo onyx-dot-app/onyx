@@ -25,6 +25,7 @@ import { initPostHog } from "@/app/providers";
 export function PostHogRuntimeInitializer(): null {
   const { posthog_key, posthog_host } = useSettings();
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- initializes the PostHog client when its key is known
   useEffect(() => {
     if (posthog_key) {
       initPostHog(posthog_key, posthog_host);
@@ -67,6 +68,7 @@ function PostHogPageTrackerInner(): null {
   const searchParams = useSearchParams();
   const posthog = usePostHog();
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- sends a PostHog pageview on each route change
   useEffect(() => {
     if (!posthog) return;
 
@@ -109,6 +111,7 @@ export function CustomAnalyticsScript(): null {
   const customAnalyticsScript = useCustomAnalyticsScript();
   const injectedRef = useRef(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- injects the custom analytics script into the document head once
   useEffect(() => {
     if (!customAnalyticsScript || injectedRef.current) return;
     injectedRef.current = true;

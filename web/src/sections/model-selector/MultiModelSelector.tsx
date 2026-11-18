@@ -76,6 +76,7 @@ export default function MultiModelSelector({
     getBoundingClientRect: () => openerRectRef.current,
   });
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- window resize listener that re-measures the popover anchor
   useEffect(() => {
     if (!open) return;
     const remeasure = () => {

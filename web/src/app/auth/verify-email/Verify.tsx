@@ -56,6 +56,7 @@ export default function Verify({ user }: VerifyProps) {
     }
   }, [searchParams, t, navigation]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- sends the email verification request to the server once on mount
   useEffect(() => {
     verify();
   }, [verify]);

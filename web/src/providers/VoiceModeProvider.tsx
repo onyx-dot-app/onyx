@@ -508,6 +508,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
     }
   }, [getWebSocketUrl, initMediaSource, playbackSpeed]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- opens the TTS WebSocket for a pending connection and handles its events
   useEffect(() => {
     if (!pendingWsConnection) {
       return;
@@ -945,6 +946,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
 
   // Audio element and manual handler track the committed mute state, so every
   // path that changes it (toggle, reset) stays in sync.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- applies the mute state to the audio element and the manual mute handler
   useEffect(() => {
     if (audioElementRef.current) {
       audioElementRef.current.muted = isTTSMuted;
@@ -963,6 +965,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   );
 
   // Animation loop to track audio playback progress for progressive text reveal
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- animation frame loop that tracks audio playback to reveal text
   useEffect(() => {
     if (!isTTSPlaying || !audioElementRef.current) {
       return;
@@ -1024,6 +1027,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   // Reset TTS state when voice auto-playback is disabled
   // This prevents the mic button from being stuck disabled
   const prevAutoPlaybackRef = useRef(autoPlayback);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- stops the TTS audio and its socket when auto-playback turns off
   useEffect(() => {
     if (prevAutoPlaybackRef.current && !autoPlayback) {
       // Auto-playback was just disabled, clean up TTS state
@@ -1033,6 +1037,7 @@ export function VoiceModeProvider({ children }: { children: React.ReactNode }) {
   }, [autoPlayback, resetTTS]);
 
   // Cleanup on unmount
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- closes the timers, the WebSocket and the audio element on unmount
   useEffect(() => {
     return () => {
       if (flushTimerRef.current) clearTimeout(flushTimerRef.current);

@@ -135,6 +135,7 @@ const ChatUI = React.memo(
     // anchoring cannot be relied on: Safari has none, and Chrome skips it at
     // the very top, where a page most often arrives.
     const lastScrollTopRef = useRef(0);
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scroll listener that records the last scroll position
     useEffect(() => {
       const root = scrollContainerRef?.current;
       if (!root) return;
@@ -148,6 +149,7 @@ const ChatUI = React.memo(
 
     const firstRowRef = useRef<{ nodeId: number; top: number } | null>(null);
     const firstNodeId = messages[0]?.nodeId;
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the scroll position steady before paint when older messages load above
     useLayoutEffect(() => {
       const root = scrollContainerRef?.current;
       if (!root || firstNodeId === undefined) return;
@@ -186,6 +188,7 @@ const ChatUI = React.memo(
     const currentMessageFilesRef = useRef(currentMessageFiles);
     const selectedModelsRef = useRef(selectedModels);
 
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest submit inputs in refs that the stable submit callbacks read
     useEffect(() => {
       onSubmitRef.current = onSubmit;
       deepResearchEnabledRef.current = deepResearchEnabled;

@@ -96,16 +96,19 @@ export function useDraft<T>({
   const writeRef = useRef<(() => void) | null>(null);
   const isEmptyRef = useRef(isEmpty);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest isEmpty in a ref for the debounced write timer
   useEffect(() => {
     isEmptyRef.current = isEmpty;
   }, [isEmpty]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the stored draft from localStorage when the key changes
   useEffect(() => {
     setEntry({ key, draft: readDraft<T>(key) });
   }, [key]);
 
   // Cancel a pending write on key change/unmount so it can't land under the old
   // key.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- cancels the pending draft write timer on key change or unmount
   useEffect(() => {
     return () => {
       if (timerRef.current !== null) {
@@ -117,6 +120,7 @@ export function useDraft<T>({
 
   // A page unload skips React cleanup, so write the pending value before the
   // timer is lost.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- pagehide listener that writes the pending draft before unload
   useEffect(() => {
     const flush = () => {
       if (timerRef.current === null) return;

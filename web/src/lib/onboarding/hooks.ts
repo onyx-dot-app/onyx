@@ -90,6 +90,7 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
   // after both user data and provider data have loaded.  After initialization,
   // user actions (Next / Prev / goToStep) drive navigation; the effect never
   // re-runs so it cannot override user-driven state (e.g. button active).
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- initializes onboarding once per user from loaded providers and the progress saved in localStorage
   useEffect(() => {
     if (
       isLoadingProviders ||
@@ -311,6 +312,7 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
     dispatch({ type: OnboardingActionType.RESET });
   }, []);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the pending name update timer on unmount
   useEffect(() => {
     return () => {
       if (nameUpdateTimeoutRef.current) {
@@ -355,6 +357,7 @@ export function useShowOnboarding({
   const { isAdmin } = useUser();
 
   // Read localStorage once userId is available to check if onboarding was dismissed
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the onboarding dismissed flag from localStorage once the user id is known
   useEffect(() => {
     if (userId === undefined) return;
     const dismissed =
@@ -379,6 +382,7 @@ export function useShowOnboarding({
   // Evaluate onboarding once per user after data loads.
   // Show onboarding only if no LLM providers are configured.
   // Skip entirely if user has existing chat sessions.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- decides once per user from loaded data and localStorage progress whether to show onboarding
   useEffect(() => {
     // If onboarding was previously dismissed, never show it again
     if (onboardingDismissed) {
@@ -440,6 +444,7 @@ export function useShowOnboarding({
   // On a user switch, the first run still holds the previous user's step, so
   // it saves nothing.
   const progressUserIdRef = useRef(userId);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- writes the current onboarding step to localStorage
   useEffect(() => {
     if (progressUserIdRef.current !== userId) {
       progressUserIdRef.current = userId;

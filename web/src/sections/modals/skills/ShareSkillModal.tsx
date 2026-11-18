@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
@@ -188,16 +188,21 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
 
   // Hydrate once per open session: a background SWR refresh of `skill` must
   // not wipe in-progress staged edits.
-  useEffect(() => {
-    if (!open) {
-      setShowIndividualAccess(false);
-      setHydrated(false);
-      setTab(initialTab);
-      setDetailsVisited(initialTab === "details");
-      setDraftState(null);
-      return;
-    }
-    if (!skill || hydrated || (skillId && isValidating)) return;
+  if (
+    !open &&
+    (showIndividualAccess ||
+      hydrated ||
+      tab !== initialTab ||
+      detailsVisited !== (initialTab === "details") ||
+      draftState !== null)
+  ) {
+    setShowIndividualAccess(false);
+    setHydrated(false);
+    setTab(initialTab);
+    setDetailsVisited(initialTab === "details");
+    setDraftState(null);
+  }
+  if (open && skill && !hydrated && !(skillId && isValidating)) {
     const nextState: SkillShareDraftState = {
       groupShares: skill.group_shares,
       isPublic: skill.public_permission !== null,
@@ -228,7 +233,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     setTransferTarget(null);
     setView("share");
     setHydrated(true);
-  }, [open, skill, loadedSkill, hydrated, skillId, isValidating, initialTab]);
+  }
 
   const effectiveState = useMemo(() => {
     if (!draftState) return null;

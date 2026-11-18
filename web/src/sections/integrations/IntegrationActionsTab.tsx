@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 import { useTranslations } from "next-intl";
@@ -101,9 +101,11 @@ export default function IntegrationActionsTab({
   const [busy, setBusy] = useState(false);
   // An edit that newer saved values already match is dropped, so a later
   // change of that row is not covered by it.
-  useEffect(() => {
-    if (data) setEdits((previous) => changes(previous, savedDraft(data)));
-  }, [data]);
+  const [syncedData, setSyncedData] = useState(data);
+  if (syncedData !== data) {
+    setSyncedData(data);
+    if (data) setEdits(changes(edits, savedDraft(data)));
+  }
   const navigation = useNavigation();
   const readOnly = !integration.can_manage;
   const isMcp = integration.shape === "mcp_server";
