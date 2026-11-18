@@ -45,3 +45,5 @@ def make_short_id() -> str:
     to trace it through a flow. This is definitely not guaranteed to be unique and is
     targeted at the stated use case."""
     return base64.b32encode(os.urandom(5)).decode("utf-8")[:8]  # 5 bytes → 8 chars
+
+# stack CI test 1, do not merge
