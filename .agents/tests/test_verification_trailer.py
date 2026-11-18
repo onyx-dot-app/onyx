@@ -108,3 +108,29 @@ def test_enforce_accepts_stamp_above_verbose_diff(
     monkeypatch.setenv("GIT_EDITOR", str(editor))
     result = git(repo, "commit", "--verbose", check=False)
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("contents", ["", "invalid", "-1", "99"])
+def test_enforce_recovers_invalid_counter(repo: Path, contents: str) -> None:
+    git(repo, "config", "onyx.verificationMode", "enforce")
+    counter = repo / ".git" / "onyx-verification-blocks"
+    counter.write_text(contents, encoding="utf-8")
+
+    assert commit(repo).returncode != 0
+    assert counter.read_text(encoding="utf-8") == "1"
+    assert commit(repo).returncode != 0
+    assert commit(repo).returncode == 0
+    assert not counter.exists()
+
+
+def test_enforce_counts_validation_errors(repo: Path) -> None:
+    git(repo, "config", "onyx.verificationMode", "enforce")
+    hook = repo / ".git" / "hooks" / "commit-msg"
+    command = hook.read_text(encoding="utf-8")
+    hook.write_text(command.replace('"$@"', ".git/missing-message"), encoding="utf-8")
+
+    for _ in range(2):
+        result = commit(repo)
+        assert result.returncode != 0
+        assert "Verification trailer check could not run" in result.stderr
+    assert commit(repo).returncode == 0
