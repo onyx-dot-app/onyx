@@ -126,14 +126,20 @@ export function CompletedHeader({
 
   if (isMemoryOnly) {
     return (
-      <div className="flex flex-1 min-w-0 items-center px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        gap={0}
+        height="fit"
+        className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
+      >
         <MemoryTagWithTooltip
           memoryText={memoryText}
           memoryOperation={memoryOperation}
           memoryId={memoryId}
           memoryIndex={memoryIndex}
         />
-      </div>
+      </Section>
     );
   }
 
@@ -156,11 +162,17 @@ export function CompletedHeader({
   // never swaps the summary.
   return (
     <Presence.Swap swapKey={shownText}>
-      <div className="flex flex-1 min-w-0 items-center px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        gap={0}
+        height="fit"
+        className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
+      >
         <Text as="p" font="main-ui-action" color="text-03">
           {shownText}
         </Text>
-      </div>
+      </Section>
     </Presence.Swap>
   );
 }
