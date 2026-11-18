@@ -63,6 +63,7 @@ from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.models import AssistantMessage, TextContent
 from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.create import ensure_trace, get_current_trace
 from onyx.tracing.framework.traces import TraceContentMode
 
 
@@ -384,6 +385,14 @@ def _raise_for_bad_doc(**kwargs: Any) -> IndexingPipelineResult:
         total_chunks=2 * len(documents),
         failures=[],
     )
+
+
+def test_trace_start_failure_does_not_retry_committed_work() -> None:
+    index = MagicMock(side_effect=_raise_for_bad_doc)
+    start_trace = Mock(side_effect=RuntimeError("trace unavailable"))
+    result = _index_batch_with_handler(index, ["a", "b"], start_trace)
+    assert not result.failures
+    index.assert_called_once()
 
 
 def test_batch_handler_fails_only_the_document_that_raises() -> None:
@@ -1052,9 +1061,17 @@ def test_run_pipeline_owns_llm_enrichment_trace(
     vision_llm = MagicMock()
     document = _make_image_doc("image-doc", [ImageSection(image_file_id="1")])
 
+    active_ids: list[str] = []
+
     def index(**kwargs: Any) -> IndexingPipelineResult:
         if changed:
-            kwargs["on_prepared"]({document.id})
+            docs = kwargs["document_batch"]
+            kwargs["on_prepared"]({d.id for d in docs})
+            active = get_current_trace()
+            assert active is not None
+            active_ids.append(active.trace_id)
+            if len(docs) > 1:
+                raise RuntimeError("retry individually")
         return expected_result
 
     with (
@@ -1075,11 +1092,11 @@ def test_run_pipeline_owns_llm_enrichment_trace(
             f"{_PATCH_PREFIX}.index_doc_batch",
             side_effect=index,
         ) as index_doc_batch,
-        patch(f"{_PATCH_PREFIX}.ensure_trace", return_value=nullcontext()) as ensure,
+        patch(f"{_PATCH_PREFIX}.ensure_trace", wraps=ensure_trace) as ensure,
     ):
         result = run_indexing_pipeline(
             written_search_settings_id=1,
-            document_batch=[document],
+            document_batch=[document, _make_doc("other")],
             embedder=MagicMock(),
             document_index=MagicMock(),
             db_session=MagicMock(),
@@ -1088,7 +1105,10 @@ def test_run_pipeline_owns_llm_enrichment_trace(
             chunker=MagicMock(),
         )
 
-    assert result is expected_result
+    assert not result.failures
+    assert get_current_trace() is None
+    if changed:
+        assert len(active_ids) == 3 and len(set(active_ids)) == 1
     assert index_doc_batch.call_args.kwargs["image_summarization_llm"] is vision_llm
     if not changed:
         ensure.assert_not_called()

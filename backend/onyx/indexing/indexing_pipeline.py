@@ -549,9 +549,13 @@ def index_doc_batch_with_handler(
     prepared: set[str] = set()
 
     def record_prepared(document_ids: set[str]) -> None:
-        if document_ids and not prepared and on_indexable_batch is not None:
-            on_indexable_batch()
+        first_prepare = not prepared and bool(document_ids)
         prepared.update(document_ids)
+        if first_prepare and on_indexable_batch is not None:
+            try:
+                on_indexable_batch()
+            except Exception:
+                logger.exception("Could not start indexing trace")
 
     def _index(
         documents: list[Document], force_update: bool
