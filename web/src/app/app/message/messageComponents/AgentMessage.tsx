@@ -632,9 +632,12 @@ const AgentMessage = React.memo(function AgentMessage({
                         chatState={effectiveChatState}
                         stopPacketSeen={stopPacketSeen || !isLastSection}
                         stopReason={isLastSection ? stopReason : undefined}
-                        hasDisplayContent={segments
-                          .slice(index + 1)
-                          .some((s) => s.kind === "text")}
+                        // The empty run of a text-only section comes after
+                        // the text, which still counts.
+                        hasDisplayContent={(segment.turnGroups.length === 0
+                          ? segments
+                          : segments.slice(index + 1)
+                        ).some((s) => s.kind === "text")}
                         processingDurationSeconds={processingDurationSeconds}
                         generatedImageCount={section.images.length}
                         finalAnswerComing={
