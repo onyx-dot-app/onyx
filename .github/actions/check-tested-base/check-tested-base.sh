@@ -97,12 +97,14 @@ too_deep() {
 # an entry above them fails, and the stack tip's entry can pass while a PR
 # below it fails. So a lower PR that relies on the tip's verdict waits for
 # every PR up to the tip. The waits clear from the top down, one poll for each
-# level. 80 polls of 20 seconds stay under the queue's 30-minute check timeout.
-# Sets WAIT_FAILURE when it returns 1.
+# level. All waits share 80 polls of 20 seconds, which stay under the queue's
+# 30-minute check timeout. Sets WAIT_FAILURE when it returns 1.
 WAIT_FAILURE=""
+POLLS_LEFT=80
 wait_for_entries() {
-  local pairs="$1" entries line pending pair pr sha attempt
-  for attempt in $(seq 1 80); do
+  local pairs="$1" entries line pending="" pair pr sha
+  while ((POLLS_LEFT > 0)); do
+    POLLS_LEFT=$((POLLS_LEFT - 1))
     # A failed read is not a removal: retry it, so one GitHub error does not
     # eject the whole stack.
     # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
@@ -116,7 +118,7 @@ wait_for_entries() {
       }' \
       -f owner="${REPO%%/*}" -f name="${REPO#*/}" -f branch="${TARGET}" \
       --jq '.data.repository.mergeQueue.entries.nodes[] | "\(.pullRequest.number) \(.state) \(.pullRequest.headRefOid)"')"; then
-      echo "Could not read the merge queue (${attempt}/80). Trying again."
+      echo "Could not read the merge queue (${POLLS_LEFT} polls left). Trying again."
       sleep 20
       continue
     fi
@@ -146,7 +148,7 @@ wait_for_entries() {
       echo "Every PR up to the stack tip passed its merge queue checks."
       return 0
     fi
-    echo "Waiting in the merge queue for${pending} (${attempt}/80)"
+    echo "Waiting in the merge queue for${pending} (${POLLS_LEFT} polls left)"
     sleep 20
   done
   WAIT_FAILURE="These PRs did not pass their merge queue checks in time:${pending}."
@@ -322,6 +324,8 @@ while IFS=$'\t' read -r number head_sha chain; do
   if ! wait_for_entries "${pairs}"; then
     echo "PR #${number} tested this PR, but ${WAIT_FAILURE}"
     not_passed+=" ${WAIT_FAILURE}"
+    # The queue changed during the wait.
+    QUEUE_LOADED=false
     continue
   fi
   echo "${CONTEXT} for PR #${PR_NUMBER} accepted: descendant PR #${number} tested ${head_sha}, which contains ${HEAD_SHA}, and passed in the merge queue with it."
