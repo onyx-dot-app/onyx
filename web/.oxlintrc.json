@@ -30,6 +30,19 @@
     "correctness": "error"
   },
   "rules": {
+    // Opt in to compiler rules individually after auditing their diagnostics.
+    "react/error-boundaries": "off",
+    "react/globals": "off",
+    "react/immutability": "off",
+    "react/incompatible-library": "off",
+    "react/preserve-manual-memoization": "off",
+    "react/purity": "off",
+    "react/refs": "off",
+    "react/set-state-in-effect": "off",
+    "react/set-state-in-render": "off",
+    "react/static-components": "off",
+    "react/use-memo": "off",
+    "react/void-use-memo": "off",
     "navigation/no-naked-navigation": "error",
     "nextjs/no-img-element": "off",
     "jsx-a11y/prefer-tag-over-role": "off",
