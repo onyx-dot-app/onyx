@@ -10,7 +10,7 @@ use crate::windows;
 
 pub const PREFERENCES: &str = "preferences";
 const NEW_CHAT: &str = "new_chat";
-const LAUNCHER: &str = "launcher";
+pub const LAUNCHER: &str = "launcher";
 const RELOAD: &str = "reload";
 const ZOOM_RESET: &str = "zoom_reset";
 const ZOOM_IN: &str = "zoom_in";
@@ -139,6 +139,7 @@ pub fn handle(app: &AppHandle, id: &str) {
             let _ = windows::open_preferences(app);
         }
         LAUNCHER => windows::toggle_launcher(app),
+        crate::aonyx::HIDE => crate::aonyx::hide(app),
         OPEN => windows::show_primary(app),
         QUIT => app.exit(0),
         NEW_CHAT => {

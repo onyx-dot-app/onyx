@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod aonyx;
 mod api;
 mod ask;
 mod commands;
@@ -91,6 +92,9 @@ fn main() {
             commands::open_chat_in_main,
             commands::open_external,
             commands::hide_launcher,
+            commands::toggle_aonyx,
+            commands::aonyx_clicked,
+            commands::aonyx_menu,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the Onyx desktop app");
@@ -98,7 +102,12 @@ fn main() {
     app.run(|app, event| match event {
         // After setup, so a fast server cannot race window creation ahead of
         // the event loop.
-        RunEvent::Ready => windows::route(app),
+        RunEvent::Ready => {
+            windows::route(app);
+            // Showing a panel during setup, before AppKit has finished
+            // launching, raises an exception.
+            aonyx::restore(app);
+        }
         // Closing the last window keeps the app in the tray; Quit passes an exit code.
         RunEvent::ExitRequested {
             api, code: None, ..

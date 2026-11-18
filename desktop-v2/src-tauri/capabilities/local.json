@@ -3,7 +3,7 @@
   "identifier": "local-windows",
   "description": "Bundled local windows only. The main window shows the remote server UI and gets no IPC.",
   "local": true,
-  "windows": ["onboarding", "login", "launcher", "preferences"],
+  "windows": ["onboarding", "login", "launcher", "preferences", "aonyx"],
   "permissions": [
     "core:event:default",
     "core:window:allow-start-dragging",
@@ -21,6 +21,9 @@
     "allow-search",
     "allow-open-chat-in-main",
     "allow-open-external",
-    "allow-hide-launcher"
+    "allow-hide-launcher",
+    "allow-toggle-aonyx",
+    "allow-aonyx-clicked",
+    "allow-aonyx-menu"
   ]
 }

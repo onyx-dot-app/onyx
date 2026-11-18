@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   Button,
   CompactMarkdown,
@@ -90,6 +91,17 @@ function Launcher() {
   useEffect(() => {
     resultsRef.current?.scrollTo({ top: resultsRef.current.scrollHeight });
   }, [turns.length]);
+
+  // Easter egg: five quick clicks on the logo bring Aonyx onto the screen.
+  const logoClicks = useRef<number[]>([]);
+  function onLogoClick() {
+    const now = Date.now();
+    logoClicks.current = [...logoClicks.current.filter((t) => now - t < 1500), now];
+    if (logoClicks.current.length >= 5) {
+      logoClicks.current = [];
+      void invoke("toggle_aonyx");
+    }
+  }
 
   function newChat() {
     askId.current += 1;
@@ -287,7 +299,15 @@ function Launcher() {
       <Section gap={0} justifyContent="start" alignItems="stretch">
         <div className="drag-region" data-tauri-drag-region>
           <Section flexDirection="row" gap={1} justifyContent="start" height="fit" padding={3}>
-            <img src="/onyx-logo.svg" alt="" className="me-1 h-4 w-4" />
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label="Onyx"
+              className="me-1 cursor-default"
+              onClick={onLogoClick}
+            >
+              <img src="/onyx-logo.svg" alt="" className="h-4 w-4" />
+            </button>
             <Button
               size="sm"
               prominence={mode === "ask" ? "secondary" : "tertiary"}

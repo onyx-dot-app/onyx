@@ -321,6 +321,8 @@ pub fn toggle(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle) + Send +
             .and_then(|()| platform::show(&handle))
         {
             log::warn!("could not show launcher: {e}");
+        } else {
+            crate::aonyx::set_mood(&handle, crate::aonyx::Mood::Hop);
         }
     });
 }

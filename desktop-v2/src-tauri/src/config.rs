@@ -12,6 +12,10 @@ pub struct Config {
     pub server_url: Option<String>,
     pub hotkey: Option<String>,
     pub zoom: Option<f64>,
+    /// The desktop pet is on screen (an easter egg, see aonyx.rs).
+    pub aonyx: Option<bool>,
+    /// Where the pet sits, in logical screen coordinates.
+    pub aonyx_position: Option<[f64; 2]>,
 }
 
 impl Config {

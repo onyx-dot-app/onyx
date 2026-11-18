@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-aonyx-clicked"
+description = "Enables the aonyx_clicked command without any pre-configured scope."
+commands.allow = ["aonyx_clicked"]
+
+[[permission]]
+identifier = "deny-aonyx-clicked"
+description = "Denies the aonyx_clicked command without any pre-configured scope."
+commands.deny = ["aonyx_clicked"]

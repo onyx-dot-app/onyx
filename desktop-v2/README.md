@@ -50,6 +50,16 @@ shipping unchanged and stays the default desktop app. v2 has its own bundle ID
 Closing the main window keeps the app running in the menu bar; the Dock icon, the tray's
 **Open Onyx** or a second launch brings it back.
 
+### Aonyx (easter egg)
+
+Click the Onyx logo in the launcher five times quickly and Aonyx, the Onyx otter, appears in
+the bottom-right corner of the screen (`src-tauri/src/aonyx.rs`, `src/pages/Aonyx.tsx`). It is
+a small transparent panel above other apps and on every Space that never takes focus. It
+thinks while a launcher answer streams, is happy when it is done, and hops when the launcher
+opens. Click it to open the launcher, drag it anywhere, right-click to hide it. Five more logo
+clicks send it away. Whether it is shown and where it sits are saved in `config.json`. The
+sprite sheets in `public/aonyx/` are played faster than the pack's timing.
+
 ## Keyboard shortcuts
 
 | Shortcut | Action |
