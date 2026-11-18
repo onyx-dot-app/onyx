@@ -6,6 +6,7 @@ and check again, under the lock, that the run is still worth its model calls.
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from celery import Task, shared_task
@@ -37,6 +38,7 @@ from onyx.secondary_llm_flows.suggested_questions import (
 )
 from onyx.server.features.suggested_questions.config import (
     SQ_LOCK_BUSY_RETRY_S,
+    SQ_POOL_BUSY_RETRY_S,
     SQ_POOL_LOCK_HELD_S,
     SQ_RUN_BUDGET_S,
     SQ_RUN_RETRIES,
@@ -89,11 +91,14 @@ def generate_suggested_questions_pool(
     if not _start(lambda: release_pool_flag(tenant_id)):
         return
     try:
-        # Without waiting: a run that holds the pool covers this request.
         with pool_lock(0):
             _run_pool(tenant_id, reason)
     except CacheLockAcquisitionError:
-        task_logger.info("Suggested questions: a run holds the pool, skipping")
+        # Try again later rather than drop the request: documents indexed
+        # during the running run are not in it. worth_running decides then.
+        _retry_when_busy(
+            self, SQ_POOL_BUSY_RETRY_S, {"tenant_id": tenant_id, "reason": reason}
+        )
     except Exception as e:
         task_logger.exception("Suggested questions: pool run failed (%s)", reason)
         raise self.retry(exc=e, countdown=SQ_RUN_RETRY_DELAY_S)
@@ -118,10 +123,11 @@ def generate_suggested_questions_for_user(
         with pool_lock(0):
             _run_topup(tenant_id, UUID(user_id), attempt)
     except CacheLockAcquisitionError:
-        # The person is waiting, so try again soon rather than skip.
-        raise self.retry(
-            countdown=SQ_LOCK_BUSY_RETRY_S,
-            kwargs={"tenant_id": tenant_id, "user_id": user_id, **attempt},
+        # The person is waiting, so try again soon.
+        _retry_when_busy(
+            self,
+            SQ_LOCK_BUSY_RETRY_S,
+            {"tenant_id": tenant_id, "user_id": user_id, **attempt},
         )
     except Exception as e:
         task_logger.exception("Suggested questions: top-up failed for %s", user_id)
@@ -130,6 +136,15 @@ def generate_suggested_questions_for_user(
             countdown=SQ_RUN_RETRY_DELAY_S,
             kwargs={"tenant_id": tenant_id, "user_id": user_id, **attempt},
         )
+
+
+def _retry_when_busy(task: Task, countdown: int, kwargs: dict[str, Any]) -> None:
+    """Retry a run that found the pool locked. After the last retry, stop
+    quietly: the run holding the pool is doing the same work."""
+    if task.max_retries is not None and task.request.retries >= task.max_retries:
+        task_logger.info("Suggested questions: pool still busy, giving up")
+        return
+    raise task.retry(countdown=countdown, kwargs=kwargs)
 
 
 def _start(release_flag: Callable[[], None]) -> bool:

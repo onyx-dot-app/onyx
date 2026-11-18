@@ -120,17 +120,37 @@ def test_pool_run_skipped_makes_no_model_call(run: dict[str, Any]) -> None:
     assert run["saved"] is None
 
 
-def test_pool_run_stops_when_another_run_holds_the_pool(
+def _busy(_wait: float) -> Any:
+    raise CacheLockAcquisitionError("held")
+
+
+def test_pool_run_retries_later_when_another_run_holds_the_pool(
     run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def busy(_wait: float) -> Any:
-        raise CacheLockAcquisitionError("held")
-
-    monkeypatch.setattr(tasks, "pool_lock", busy)
-    retry = MagicMock()
+    monkeypatch.setattr(tasks, "pool_lock", _busy)
+    retry = MagicMock(side_effect=Retry())
     monkeypatch.setattr(tasks.generate_suggested_questions_pool, "retry", retry)
 
-    _pool_task()
+    with pytest.raises(Retry):
+        _pool_task()
+
+    assert retry.call_args.kwargs["countdown"] == tasks.SQ_POOL_BUSY_RETRY_S
+    assert retry.call_args.kwargs["kwargs"]["reason"] == "growth"
+    assert run["saved"] is None
+
+
+def test_a_busy_pool_on_the_last_retry_stops_quietly(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    task: Any = tasks.generate_suggested_questions_pool
+    monkeypatch.setattr(tasks, "pool_lock", _busy)
+    retry = MagicMock()
+    monkeypatch.setattr(task, "retry", retry)
+    task.push_request(retries=task.max_retries)
+    try:
+        task.run(tenant_id="tenant", reason="growth")
+    finally:
+        task.pop_request()
 
     retry.assert_not_called()
     assert run["saved"] is None
