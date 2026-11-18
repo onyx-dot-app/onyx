@@ -1,4 +1,5 @@
 import asyncio
+import gc
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -973,3 +974,8 @@ def test_discovery_under_contention_works_on_each_new_event_loop(
                 "https://idp.example.com/t",
                 "https://idp.example.com/t",
             ]
+    # A used lock refers to its loop; a lock kept here would keep the loop.
+    gc.collect()
+    assert all(
+        len(locks) == 0 for locks in oauth_refresher._OIDC_DISCOVERY_LOCKS.values()
+    )

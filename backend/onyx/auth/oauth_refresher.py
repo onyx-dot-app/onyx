@@ -60,9 +60,10 @@ OIDC_DISCOVERY_NEGATIVE_TTL_SECONDS: int = 45
 
 # Per-discovery-URL locks so one IdP's hanging fetch never blocks another's.
 # An asyncio lock works on one event loop only, and the sync refresh runs each
-# call on a new loop, so each loop has its own locks.
+# call on a new loop, so each loop has its own locks. A used lock refers to
+# its loop, so the locks are held weakly or the loop is never freed.
 _OIDC_DISCOVERY_LOCKS: weakref.WeakKeyDictionary[
-    asyncio.AbstractEventLoop, Dict[str, asyncio.Lock]
+    asyncio.AbstractEventLoop, weakref.WeakValueDictionary[str, asyncio.Lock]
 ] = weakref.WeakKeyDictionary()
 _OIDC_DISCOVERY_LOCKS_GUARD = threading.Lock()
 
@@ -70,8 +71,15 @@ _OIDC_DISCOVERY_LOCKS_GUARD = threading.Lock()
 def _get_discovery_lock(config_url: str) -> asyncio.Lock:
     loop = asyncio.get_running_loop()
     with _OIDC_DISCOVERY_LOCKS_GUARD:
-        locks = _OIDC_DISCOVERY_LOCKS.setdefault(loop, {})
-        return locks.setdefault(config_url, asyncio.Lock())
+        locks = _OIDC_DISCOVERY_LOCKS.get(loop)
+        if locks is None:
+            locks = weakref.WeakValueDictionary()
+            _OIDC_DISCOVERY_LOCKS[loop] = locks
+        lock = locks.get(config_url)
+        if lock is None:
+            lock = asyncio.Lock()
+            locks[config_url] = lock
+        return lock
 
 
 # The cache lock serializes the refresh of one user's login tokens across
