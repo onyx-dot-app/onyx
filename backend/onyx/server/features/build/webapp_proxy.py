@@ -24,15 +24,15 @@ from websockets.exceptions import ConnectionClosed
 
 from onyx.auth.users import current_user_from_websocket_cookie, optional_user
 from onyx.cache.factory import get_cache_backend
+from onyx.db.build_session import (
+    get_webapp_access_async,
+    get_webapp_target_async,
+)
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.enums import SharingScope
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.build_session import (
-    get_webapp_access_async,
-    get_webapp_target_async,
-)
 from onyx.server.features.build.preview_activity import mark_preview_activity
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.nextjs_dev import webapp_base_path

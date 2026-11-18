@@ -97,7 +97,7 @@ import {
   stopChatSession,
   STOP_BEFORE_DISPATCH,
 } from "@/lib/chat/stopChatSession";
-import { useShowPendingApproval } from "@/lib/chat/hooks";
+import { useShowPendingRequest } from "@/lib/chat/hooks";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -214,7 +214,7 @@ export default function useChatController({
   const currentMessageTree = useCurrentMessageTree();
   const currentMessageHistory = useCurrentMessageHistory();
   const tReadiness = useTranslations("chat.readiness");
-  const showPendingApproval = useShowPendingApproval();
+  const showPendingRequest = useShowPendingRequest();
 
   const navigatingAway = useRef(false);
 
@@ -1439,7 +1439,7 @@ export default function useChatController({
 
         if (stack.approvalPending) {
           restoreTreeBeforeSend();
-          showPendingApproval();
+          showPendingRequest();
         } else {
           // Surface FIFO errors (e.g. 429 before any packets arrive) so the
           // catch block replaces the thinking placeholder with an error message.
@@ -1595,7 +1595,7 @@ export default function useChatController({
       searchParams,
       resetInputBar,
       restoreInputBar,
-      showPendingApproval,
+      showPendingRequest,
       t,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,

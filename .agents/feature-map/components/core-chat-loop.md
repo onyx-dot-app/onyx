@@ -40,11 +40,16 @@
   child-result delivery can check the same stop request. Anonymous users cannot
   stop ([[#anonymous-send]]).
 - **A tool call waits for approval.** When nothing but approval requests
-  remains, the turn stops with `awaiting_approval` and the session is idle;
+  remains, the turn stops with `awaiting_user` and the session is idle;
   the user can draft but not send. Once the user decides every request, the
   response continues in a new stream, on any server
   ([[mcp-and-custom-tools#chat-approval-durable-wait]]). A Stop of a live turn
   rejects its waiting requests.
+- **The agent asks the user a question.** The root agent's question tool
+  shows 1-3 multiple-choice questions and waits like an approval request. The
+  user answers on the card, or types a message, which the agent reads as the
+  answer to every waiting question of the response; a Stop of a live turn
+  cancels the questions ([[tools-framework]]).
 - **Leaving is not stopping.** If the user closes the tab, navigates away or loses
   the network, the run continues on the server and is saved. When the user returns
   while the run is live, the client resumes the stream ([[streaming-protocol]]).

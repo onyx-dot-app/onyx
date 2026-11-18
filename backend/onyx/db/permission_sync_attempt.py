@@ -4,10 +4,10 @@ This module contains all CRUD operations for both DocPermissionSyncAttempt
 and ExternalGroupPermissionSyncAttempt models, along with shared utilities.
 """
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, cast
 
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import ColumnElement, Select, delete, func, or_, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
@@ -47,20 +47,22 @@ _AttemptModel = (
 )
 
 
-@dataclass
-class DocPermissionSyncProgress:
+class DocPermissionSyncProgress(BaseModel):
     """Running counts the worker updates in memory. The lease heartbeat writes
     them, so the attempt row shows progress while the sync runs."""
+
+    model_config = ConfigDict(strict=True)
 
     total_docs_synced: int = 0
     docs_with_permission_errors: int = 0
     last_progress_at: datetime | None = None
 
 
-@dataclass
-class ExternalGroupSyncProgress:
+class ExternalGroupSyncProgress(BaseModel):
     """Running counts the worker updates in memory. The lease heartbeat writes
     them, so the attempt row shows progress while the sync runs."""
+
+    model_config = ConfigDict(strict=True)
 
     total_users_processed: int = 0
     total_groups_processed: int = 0

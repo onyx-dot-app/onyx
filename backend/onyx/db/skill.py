@@ -32,12 +32,11 @@ roll back atomically.
 """
 
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, SkipValidation
 from sqlalchemy import (
     ColumnElement,
     Row,
@@ -133,25 +132,28 @@ class SkillManagementPolicy(str, Enum):
     EDIT = "edit"
 
 
-@dataclass(frozen=True)
-class SkillValidityUpdate:
+class SkillValidityUpdate(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
+
     skill_id: UUID
     bundle_file_id: str | None
     is_valid: bool
 
 
-@dataclass(frozen=True)
-class RuntimeSkillVersion:
+class RuntimeSkillVersion(BaseModel):
     """The plugin version a user runs (``version_user_runs``)."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     id: UUID
     bundle_file_id: str | None
     is_valid: bool | None
 
 
-@dataclass(frozen=True)
-class RuntimeSkill:
-    skill: Skill
+class RuntimeSkill(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
+
+    skill: SkipValidation[Skill]
     # The name in the version the user runs; the row name for a built-in.
     name: str
     # None for a built-in skill.
@@ -161,8 +163,9 @@ class RuntimeSkill:
     usage: SkillUsage | None = None
 
 
-@dataclass(frozen=True)
-class SkillUserState:
+class SkillUserState(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
+
     enabled: bool
     can_toggle: bool
     external_app_dependency: SkillExternalAppDependencyState | None
@@ -1115,12 +1118,13 @@ def persist_skill_validity(
         db_session.commit()
 
 
-@dataclass(frozen=True)
-class SkillSharingChange:
+class SkillSharingChange(BaseModel):
     """A partial update to a skill's access, as the skills API sends it. None
     shares leave that kind unchanged; set_public_permission marks
     public_permission as supplied. ``installation_policy``: UNSET keeps it,
     None means "use the marketplace default", and a value sets that value."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     public_permission: SkillSharePermission | None = None
     set_public_permission: bool = False
@@ -1302,8 +1306,9 @@ def share_skill__no_commit(
     return result.affected_user_ids
 
 
-@dataclass(frozen=True)
-class SkillBulkShareResult:
+class SkillBulkShareResult(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
+
     succeeded: list[UUID]
     # Skill id and the reason, in skill id order.
     failed: list[tuple[UUID, str]]

@@ -425,12 +425,21 @@ func (c *Client) StopChatSession(ctx context.Context, sessionID string, streamID
 }
 
 // DecideApproval answers a tool approval request and returns the decision the
-// server saved. An error for which IsApprovalNoLongerWaiting is true means the
+// server saved. An error for which IsNoLongerWaiting is true means the
 // request no longer waits.
 func (c *Client) DecideApproval(ctx context.Context, approvalID string, decision models.ApprovalDecision) (models.ApprovalDecisionResult, error) {
 	body := map[string]models.ApprovalDecision{"decision": decision}
 	var result models.ApprovalDecisionResult
 	err := c.doJSON(ctx, "POST", "/chat/approvals/"+url.PathEscape(approvalID)+"/decision", body, &result)
+	return result, err
+}
+
+// AnswerQuestions answers a question request and returns the stream that
+// continues its response, if any. An error for which IsNoLongerWaiting is true
+// means the questions no longer wait; IsApprovalPending refuses a message.
+func (c *Client) AnswerQuestions(ctx context.Context, questionRequestID string, answers models.QuestionAnswers) (models.QuestionAnswersResult, error) {
+	var result models.QuestionAnswersResult
+	err := c.doJSON(ctx, "POST", "/chat/question-requests/"+url.PathEscape(questionRequestID)+"/answers", answers, &result)
 	return result, err
 }
 
@@ -534,6 +543,7 @@ type ClientAPI interface {
 	StopChatSession(ctx context.Context, sessionID string, streamID int)
 	ChatSessionStatus(ctx context.Context, sessionID string) (models.ChatSessionStatus, error)
 	DecideApproval(ctx context.Context, approvalID string, decision models.ApprovalDecision) (models.ApprovalDecisionResult, error)
+	AnswerQuestions(ctx context.Context, questionRequestID string, answers models.QuestionAnswers) (models.QuestionAnswersResult, error)
 	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload, llmOverride *models.LLMOverride) <-chan models.StreamEvent
 	ResumeChatStream(ctx context.Context, sessionID string, streamID *int, cursor int) <-chan models.StreamEvent
 	Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error)

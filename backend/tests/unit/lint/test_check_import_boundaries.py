@@ -294,3 +294,21 @@ def test_repo_contracts_hold() -> None:
 
 def test_changed_mode_checks_only_the_given_files() -> None:
     assert check_import_boundaries.main(["--changed"]) == 0
+
+
+@pytest.mark.parametrize(
+    "source",
+    ["import openai", "from google import genai", "from litellm import completion"],
+)
+def test_application_cannot_import_provider_sdk(source: str) -> None:
+    backend_dir = check_import_boundaries.BACKEND_DIR
+    contracts = check_import_boundaries.load_contracts(
+        check_import_boundaries.CONFIG_PATH, backend_dir
+    )
+    violations, stale = check_import_boundaries.check_file(
+        "onyx/chat/provider_example.py", source, contracts, backend_dir
+    )
+    assert [violation.contract.name for violation in violations] == [
+        "provider-sdk-boundary"
+    ]
+    assert not stale

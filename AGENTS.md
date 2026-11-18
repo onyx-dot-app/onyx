@@ -163,6 +163,12 @@ and deeper detail in `backend/tests/README.md`. Prefer integration tests over th
 - Run each README command and Playwright spec that you add or change before you push. If you
   cannot run one, say so in the PR description.
 
+## Flaky tests
+
+Do not add sleeps, skips, or retries to make a flaky test pass. Find and fix
+the root cause. If you delete the test, write down why and tell the user.
+After three failed fix rounds, stop and ask a human for help.
+
 ## Logs
 
 When (1) writing integration tests or (2) doing live tests (e.g. curl / playwright) you can get access

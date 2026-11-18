@@ -287,6 +287,21 @@ it deletes the old one.
   index preloads `.veq`, not the float32 `.vec`, so it keeps its memory saving.
   Stored text is not preloaded: only the top hits read it. AWS managed indexes
   do not set it. The setting applies only when the index is created.
+- **A new self-hosted deployment starts with 7-bit quantization.**
+  `document_index/opensearch/new_deployment.py:set_new_deployment_vector_quantization`
+  changes a SearchSettings row from NONE to 7-bit just before its first index
+  is created. Two paths can create it, so both call the rule: startup
+  (`setup.py:setup_onyx`) and the swap (`db/swap_index.py`). On a new
+  deployment the migrations leave the old default as PRESENT and the default
+  model as FUTURE, and the first swap, often from a Celery worker before the
+  API starts, creates the index. A column default cannot do this: the first
+  rows predate quantization. If an index for the row already exists (Postgres
+  reset, OpenSearch kept, as the integration-test reset does), the row takes
+  that index's quantization instead, so its mapping update does not fail. The
+  rule skips on any sign of earlier use: documents, connectors, user files, a
+  FUTURE row, multi-tenant, or a cluster not reachable. It sets 7-bit only on
+  OpenSearch 2.16 or later. Quantization is part of the mapping, so it must not
+  change once the index exists.
 
 ## Known issues
 

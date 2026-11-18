@@ -73,7 +73,7 @@ jobs:
         run: bun run test
       - uses: j178/prek-action@44924fe9ef4a6f88253c4b6b1bf11c689d3ce53d # ratchet:j178/prek-action@v3.1.0
         env:
-          SKIP: ty,desktop-rust-fmt,desktop-rust-clippy
+          SKIP: ty,desktop-rust-fmt,desktop-rust-clippy,desktop-v2-rust-fmt,desktop-v2-rust-clippy
           # All-files checks need the push range for translation comparisons.
           PRE_COMMIT_FROM_REF: ${{ github.event_name == 'push' && github.ref_name == 'main' && github.event.before != '0000000000000000000000000000000000000000' && github.event.before || '' }}
           # Lets the zizmor hook run its online audits. Read-only: the job

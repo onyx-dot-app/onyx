@@ -21,7 +21,6 @@ Functions here flush and never commit.
 
 import hashlib
 from collections.abc import Callable, Collection, Iterable, Mapping
-from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
@@ -391,10 +390,11 @@ def get_plugin_version(
     return version
 
 
-@dataclass(frozen=True)
-class StoredVersionContent:
+class StoredVersionContent(BaseModel):
     """What the database holds of one version's content. ``file_manifest`` and
     ``skill_md`` are None for a version copied from a legacy skill row."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     bundle_file_id: str | None
     # Name and description in the frontmatter of the skill at the bundle root.
@@ -440,10 +440,11 @@ def get_stored_version_content(
     )
 
 
-@dataclass(frozen=True)
-class StoredSkillMd:
+class StoredSkillMd(BaseModel):
     """The raw root SKILL.md of a version, None where the version stores no
     text (over 256 KiB or not yet repaired), and the bundle that holds it."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     bundle_file_id: str | None
     skill_md: str | None
@@ -849,10 +850,11 @@ def transfer_plugin__no_commit(
     db_session.flush()
 
 
-@dataclass(frozen=True)
-class PluginGroupRow:
+class PluginGroupRow(BaseModel):
     """The state of one plugin__user_group row. No permission: the row holds
     only a group install setting and grants no access."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     permission: SkillSharePermission | None
     installation_policy: PluginInstallationPolicy | None
@@ -928,15 +930,17 @@ class PluginAccessMode(str, Enum):
     ADD_ONLY = "add_only"
 
 
-@dataclass(frozen=True)
-class PluginUserGrant:
+class PluginUserGrant(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
+
     user_id: UUID
     permission: SkillSharePermission
 
 
-@dataclass(frozen=True)
-class PluginGroupGrant:
+class PluginGroupGrant(BaseModel):
     """A group share. The group keeps its install setting."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     group_id: int
     permission: SkillSharePermission
@@ -953,8 +957,7 @@ class PluginGroupSetting(BaseModel):
     installation_policy: PluginInstallationPolicy | None
 
 
-@dataclass(frozen=True)
-class PluginAccessChange:
+class PluginAccessChange(BaseModel):
     """One access change for one or more plugins. A field at its default does
     not change anything.
 
@@ -962,6 +965,8 @@ class PluginAccessChange:
     marketplace default", and a value sets that value. ``group_settings`` apply
     after ``group_grants``. ``on_name_clash`` applies when ``publish`` moves a
     plugin to the Organization library."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     user_grants: tuple[PluginUserGrant, ...] | None = None
     group_grants: tuple[PluginGroupGrant, ...] | None = None
@@ -972,11 +977,12 @@ class PluginAccessChange:
     mode: PluginAccessMode = PluginAccessMode.REPLACE
 
 
-@dataclass(frozen=True)
-class PluginAccessResult:
+class PluginAccessResult(BaseModel):
     """``affected_user_ids``: users with a running sandbox who could see one
     of the plugins before or after the change. ``failures``: plugins whose
     change was refused or failed and rolled back."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     affected_user_ids: set[UUID]
     failures: dict[UUID, OnyxError]
@@ -986,8 +992,9 @@ class PluginAccessResult:
             raise self.failures[plugin_id]
 
 
-@dataclass
-class _LockedPlugin:
+class _LockedPlugin(BaseModel):
+    model_config = ConfigDict(strict=True, arbitrary_types_allowed=True)
+
     plugin: Plugin
     # The legacy skill row with the same id, while the skill tables exist.
     skill: Skill | None

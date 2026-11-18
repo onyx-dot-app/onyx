@@ -49,6 +49,7 @@ from onyx.db.search_settings import (
     get_search_settings_by_id,
 )
 from onyx.db.user_file import (
+    add_user_file__no_commit,
     consume_user_file_processing_attempt,
     delete_user_file__no_commit,
     fetch_user_file_ids_by_status,
@@ -327,7 +328,7 @@ def _process_user_file_without_vector_db(
         uf.token_count = token_count
         uf.chunk_count = 0  # no chunks without vector DB
         uf.last_project_sync_at = datetime.datetime.now(datetime.timezone.utc)
-        db_session.add(uf)
+        add_user_file__no_commit(db_session, uf)
         db_session.commit()
 
     task_logger.info(
@@ -449,7 +450,7 @@ def _process_user_file_with_indexing(
             uf = get_user_file_by_pk(db_session, _as_uuid(user_file_id))
             if uf is not None and uf.status != UserFileStatus.DELETING:
                 uf.status = UserFileStatus.FAILED
-                db_session.add(uf)
+                add_user_file__no_commit(db_session, uf)
                 db_session.commit()
         raise RuntimeError(f"Indexing pipeline failed for user file {user_file_id}")
 
@@ -699,7 +700,7 @@ def process_user_file_impl(
                     and current_user_file.status != UserFileStatus.DELETING
                 ):
                     current_user_file.status = UserFileStatus.FAILED
-                    db_session.add(current_user_file)
+                    add_user_file__no_commit(db_session, current_user_file)
                     db_session.commit()
             return
 
@@ -713,7 +714,7 @@ def process_user_file_impl(
             if uf:
                 if uf.status != UserFileStatus.DELETING:
                     uf.status = UserFileStatus.FAILED
-                db_session.add(uf)
+                add_user_file__no_commit(db_session, uf)
                 db_session.commit()
 
         task_logger.exception(
@@ -1125,7 +1126,7 @@ def project_sync_user_file_impl(
                     not secondary_consistent
                     and user_file.status == UserFileStatus.COMPLETED
                 )
-                db_session.add(user_file)
+                add_user_file__no_commit(db_session, user_file)
                 db_session.commit()
 
     except Exception as e:

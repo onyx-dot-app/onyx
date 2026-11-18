@@ -14,7 +14,6 @@ threshold that marks a credential invalid, so it is not interchangeable with
 import base64
 import binascii
 import json
-from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, assert_never
@@ -25,7 +24,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from msal.exceptions import MsalServiceError
 from office365.runtime.auth.token_response import TokenResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, SkipValidation
 from pydantic import ValidationError as PydanticValidationError
 
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -76,12 +75,13 @@ class MicrosoftAuthMethod(Enum):
             ) from None
 
 
-@dataclass(frozen=True)
-class MicrosoftAuthContext:
+class MicrosoftAuthContext(BaseModel):
     """An MSAL client together with the credential type behind it, since the
     method decides which Microsoft surfaces the token may be sent to."""
 
-    app: msal.ConfidentialClientApplication
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
+
+    app: SkipValidation[msal.ConfidentialClientApplication]
     method: MicrosoftAuthMethod
     # The certificate's end date, for a certificate account.
     certificate_not_after: datetime | None = None

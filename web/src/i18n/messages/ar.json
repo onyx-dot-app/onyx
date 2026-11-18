@@ -12540,7 +12540,8 @@
         },
         "stopSubagentsButton": {
           "label": "إيقاف الوكلاء الفرعيين"
-        }
+        },
+        "questionAttachmentsHint": "لا يمكن أن تتضمن الإجابات عن أسئلة الوكيل ملفات. أزل الملفات للإجابة."
       },
       "baseInputBar": {
         "input": {
@@ -12688,6 +12689,12 @@
       },
       "pendingToolApproval": {
         "toast": "وافق على استدعاءات الأدوات المعلقة أو ارفضها أولاً."
+      },
+      "pendingToolQuestion": {
+        "toast": "أجب عن أسئلة الوكيل أولًا."
+      },
+      "pendingUserInput": {
+        "toast": "تعامل مع طلبات الموافقة أو الأسئلة المعلقة أولًا."
       }
     },
     "mcpApiKey": {
@@ -13139,6 +13146,9 @@
           "waitingForApproval": {
             "label": "في انتظار موافقتك"
           },
+          "waitingForAnswer": {
+            "label": "في انتظار إجابتك"
+          },
           "runningCommand": {
             "label": "جارٍ تشغيل الأمر"
           },
@@ -13328,6 +13338,28 @@
       },
       "toolApproval": {
         "agentRequest": "يريد {agent} تشغيل {tool}"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {لدى الوكيل سؤال} other {لدى الوكيل # أسئلة}}",
+        "other": {
+          "placeholder": "أخرى: اكتب إجابتك الخاصة",
+          "ariaLabel": "إجابة أخرى عن {header}"
+        },
+        "submit": "إرسال",
+        "page": {
+          "progress": "السؤال {current} من {total}",
+          "next": "التالي",
+          "unanswered": "{count, plural, one {أجب عن السؤال {numbers} للإرسال.} other {أجب عن الأسئلة {numbers} للإرسال.}}"
+        },
+        "submitError": "تعذر إرسال إجاباتك. حاول مرة أخرى.",
+        "record": {
+          "answered": "تمت الإجابة",
+          "answeredInChat": "تمت الإجابة في الدردشة",
+          "cancelled": "لم تتم الإجابة",
+          "closed": "لم يعد في الانتظار",
+          "answer": "{header}: {answer}",
+          "optionAndNote": "{option} ({note})"
+        }
       },
       "toolbar": {
         "dislikeButton": {

@@ -20,12 +20,14 @@ from onyx.server.metrics.prometheus_setup import (
     create_prometheus_instrumentator,
     expose_prometheus_metrics,
 )
+from onyx.utils.encryption import validate_encryption_configuration
 from onyx.utils.variable_functionality import set_is_ee_if_available
 from onyx.webhook_server.routes import build_webhook_router
 
 
 def create_webhook_app() -> FastAPI:
     set_is_ee_if_available()
+    validate_encryption_configuration()
 
     app = FastAPI(
         title="Onyx Webhook Server",

@@ -591,7 +591,7 @@ class ChatSource(OrganizerSource):
         """The days of one organizer's meeting chats, with the ids the indexing
         walk writes. A refused organizer or chat lists nothing and the walk
         goes on: the app lost those chats, so pruning removes them."""
-        listing = PagedListing(walk)
+        listing = PagedListing(walk=walk)
         chats = fetch_meeting_chats(
             self._session.graph(), organizer.id, listing.before_page
         )
@@ -618,7 +618,7 @@ class ChatSource(OrganizerSource):
     def _slim_chat(
         self, organizer: Organizer, chat: MeetingChat, walk: SlimWalk
     ) -> Iterator[SlimDocument]:
-        listing = PagedListing(walk)
+        listing = PagedListing(walk=walk)
         days = _until_refused(
             organizer,
             chat,

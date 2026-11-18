@@ -18,6 +18,11 @@ from fastapi_users.password import PasswordHelper
 from sqlalchemy.orm import Query, Session
 
 from onyx.configs.constants import FileOrigin, MessageType
+from onyx.db.build_session import (
+    get_user_build_sessions,
+    reserve_nextjs_port__no_commit,
+    session_runtime_stale,
+)
 from onyx.db.enums import (
     AccountType,
     ArtifactType,
@@ -26,18 +31,13 @@ from onyx.db.enums import (
     SessionOrigin,
 )
 from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox, Snapshot, User
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.db.build_session import (
-    get_user_build_sessions,
-    reserve_nextjs_port__no_commit,
-    session_runtime_stale,
-)
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.sandbox import (
     get_sandbox_by_user_id,
     set_sandbox_skills_states__no_commit,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.user_library import (
     USER_LIBRARY_MOUNT_PATH,
@@ -1181,11 +1181,11 @@ class TestPortAllocator:
         # Narrow the search range to [50000, 50004) so the test stays fast and
         # uses high ports unlikely to clash with anything on the test host.
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_START",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_START",
             50000,
         )
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_END",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_END",
             50004,
         )
 
@@ -1221,11 +1221,11 @@ class TestPortAllocator:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_START",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_START",
             50100,
         )
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_END",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_END",
             50103,
         )
 
@@ -1261,11 +1261,11 @@ class TestPortAllocator:
         # Ports only collide within one user's sandbox: another user holding
         # the sole port in the range must not block this user's allocation.
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_START",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_START",
             50250,
         )
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_END",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_END",
             50251,
         )
 
@@ -1312,11 +1312,11 @@ class TestPortAllocator:
         # reservation must roll back just that attempt and take the next
         # port instead of failing.
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_START",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_START",
             50200,
         )
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_END",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_END",
             50204,
         )
 

@@ -10,6 +10,10 @@ from onyx.server.features.build.sandbox.models import ExecCompletionName
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import CustomToolErrorInfo, GeneratedImage
 from onyx.tools.tool_implementations.code_mode.models import CodeModeStatus
+from onyx.tools.tool_implementations.question.models import (
+    ToolQuestion,
+    ToolQuestionAnswer,
+)
 from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchFileChange,
     FileToolName,
@@ -62,6 +66,8 @@ class StreamingType(Enum):
     CUSTOM_TOOL_DELTA = "custom_tool_delta"
     TOOL_APPROVAL_REQUEST = "tool_approval_request"
     TOOL_APPROVAL_RESOLVED = "tool_approval_resolved"
+    TOOL_QUESTION_REQUEST = "tool_question_request"
+    TOOL_QUESTION_RESOLVED = "tool_question_resolved"
     REPLAY_END = "replay_end"
     FILE_READER_START = "file_reader_start"
     FILE_READER_RESULT = "file_reader_result"
@@ -113,9 +119,9 @@ class SectionEnd(BaseObj):
     type: Literal["section_end"] = StreamingType.SECTION_END.value
 
 
-# The stop reason of a response whose run waits for the user's approval
-# decisions; it continues in a new stream after them.
-AWAITING_APPROVAL = "awaiting_approval"
+# The stop reason of a response whose run waits for the user: approval
+# decisions or answers to its questions. It continues in a new stream after them.
+AWAITING_USER = "awaiting_user"
 
 
 class OverallStop(BaseObj):
@@ -588,6 +594,28 @@ class ToolApprovalResolved(BaseObj):
     outcome: ToolApprovalOutcome
 
 
+# A question call waits for the user's answers; placed at the call.
+class ToolQuestionRequest(BaseObj):
+    type: Literal["tool_question_request"] = StreamingType.TOOL_QUESTION_REQUEST.value
+
+    question_request_id: str
+    tool_call_id: str
+    questions: list[ToolQuestion]
+
+
+# How a question call ended: answered on its card (`answers`) or by a message
+# that the user typed in the chat (`message`), or cancelled because its run
+# stopped first.
+class ToolQuestionResolved(BaseObj):
+    type: Literal["tool_question_resolved"] = StreamingType.TOOL_QUESTION_RESOLVED.value
+
+    question_request_id: str
+    outcome: Literal["answered", "cancelled"]
+    answered_via: Literal["card", "message"] | None = None
+    answers: list[ToolQuestionAnswer] | None = None
+    message: str | None = None
+
+
 ################################################
 # Packet Object
 ################################################
@@ -620,6 +648,8 @@ PacketObj = Union[
     CustomToolDelta,
     ToolApprovalRequest,
     ToolApprovalResolved,
+    ToolQuestionRequest,
+    ToolQuestionResolved,
     ReplayEnd,
     FileReaderStart,
     FileReaderResult,

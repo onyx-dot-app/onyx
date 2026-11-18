@@ -12540,7 +12540,8 @@
         },
         "stopSubagentsButton": {
           "label": "Stop subagents"
-        }
+        },
+        "questionAttachmentsHint": "Answers to the agent's questions can't include files. Remove the files to answer."
       },
       "baseInputBar": {
         "input": {
@@ -12688,6 +12689,12 @@
       },
       "pendingToolApproval": {
         "toast": "Approve or reject the pending tool calls first."
+      },
+      "pendingToolQuestion": {
+        "toast": "Answer the agent's questions first."
+      },
+      "pendingUserInput": {
+        "toast": "Answer the pending approval requests or questions first."
       }
     },
     "mcpApiKey": {
@@ -13139,6 +13146,9 @@
           "waitingForApproval": {
             "label": "Waiting for your approval"
           },
+          "waitingForAnswer": {
+            "label": "Waiting for your answer"
+          },
           "runningCommand": {
             "label": "Running command"
           },
@@ -13328,6 +13338,28 @@
       },
       "toolApproval": {
         "agentRequest": "{agent} wants to run {tool}"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {The agent has a question} other {The agent has # questions}}",
+        "other": {
+          "placeholder": "Other: type your own answer",
+          "ariaLabel": "Other answer to {header}"
+        },
+        "submit": "Submit",
+        "page": {
+          "progress": "Question {current} of {total}",
+          "next": "Next",
+          "unanswered": "{count, plural, one {Answer question {numbers} to submit.} other {Answer questions {numbers} to submit.}}"
+        },
+        "submitError": "Could not send your answers. Try again.",
+        "record": {
+          "answered": "Answered",
+          "answeredInChat": "Answered in the chat",
+          "cancelled": "Not answered",
+          "closed": "No longer waiting",
+          "answer": "{header}: {answer}",
+          "optionAndNote": "{option} ({note})"
+        }
       },
       "toolbar": {
         "dislikeButton": {

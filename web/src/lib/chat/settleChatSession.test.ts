@@ -20,8 +20,8 @@ import {
   writesAnswer,
 } from "@/lib/chat/settleChatSession";
 import {
-  readWaitingToolApprovals,
-  useToolApprovalUi,
+  readWaitingToolRequests,
+  useToolRequestUi,
 } from "@/lib/chat/toolApprovals";
 import {
   fetchSettledChatSession,
@@ -72,9 +72,11 @@ async function waitFor(assertion: () => void, timeoutMs = 3000) {
 }
 
 function waitingApprovalIds(): string[] {
-  return readWaitingToolApprovals(
+  return readWaitingToolRequests(
     useChatSessionStore.getState().sessions.get("session")!.messageTree
-  ).map(({ request }) => request.approval_id);
+  ).flatMap((item) =>
+    item.kind === "approval" ? [item.request.approval_id] : []
+  );
 }
 
 function approvalRequest(approvalId: string, modelIndex?: number): Packet {
@@ -169,7 +171,11 @@ beforeEach(() => {
   jest.mocked(resumeStream).mockImplementation(actualLib.resumeStream);
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
   useChatSessionStore.getState().createSession("session");
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
 });
 
 afterEach(() => jest.restoreAllMocks());
@@ -708,7 +714,7 @@ describe("with stubbed server checks", () => {
     const asked = approvalRequest("approval");
     const waited: Packet = {
       placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_USER },
     };
     const finalText: Packet = {
       placement: { turn_index: 2, tab_index: 0 },
@@ -775,7 +781,7 @@ describe("with stubbed server checks", () => {
     const asked = approvalRequest("approval");
     const waited: Packet = {
       placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_USER },
     };
     const finalText: Packet = {
       placement: { turn_index: 2, tab_index: 0 },
@@ -846,7 +852,7 @@ describe("with stubbed server checks", () => {
     const asked = approvalRequest("approval");
     const waited: Packet = {
       placement: { turn_index: 0, tab_index: 0 },
-      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_USER },
     };
     const finalText: Packet = {
       placement: { turn_index: 2, tab_index: 0 },
@@ -1505,7 +1511,7 @@ describe("with a scripted fetch", () => {
   describe("a continuation the server names", () => {
     const awaitingStop: Packet = {
       placement: { turn_index: 0 },
-      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_USER },
     };
     const resolved: Packet = {
       placement: { turn_index: 1, tab_index: 0 },
@@ -1661,7 +1667,7 @@ describe("with a scripted fetch", () => {
     });
     const awaitingStop: Packet = {
       placement: { turn_index: 0 },
-      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_USER },
     };
     const resolved: Packet = {
       placement: { turn_index: 1, tab_index: 0 },
@@ -2010,7 +2016,7 @@ describe("with a scripted fetch", () => {
       type: "assistant",
       packets: [approvalRequest("approval")],
     });
-    expect(readWaitingToolApprovals(merged)).toHaveLength(1);
+    expect(readWaitingToolRequests(merged)).toHaveLength(1);
   });
 
   test.each(["completion", "refresh"])(
@@ -2126,7 +2132,7 @@ describe("with a scripted fetch", () => {
         (message) => message.messageId
       )
     ).toEqual(history.slice(20).map((message) => message.message_id));
-    expect(readWaitingToolApprovals(session.messageTree)).toEqual([]);
+    expect(readWaitingToolRequests(session.messageTree)).toEqual([]);
     expect(session.hasOlderMessages).toBe(true);
   });
 

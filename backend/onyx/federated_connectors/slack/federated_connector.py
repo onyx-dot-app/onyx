@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from slack_sdk import WebClient
 from typing_extensions import override
 
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.slack_configs import (
     SLACK_API_URL,
     SLACK_OAUTH_ACCESS_URL,
@@ -262,6 +263,7 @@ class SlackFederatedConnector(FederatedConnector):
                 "code": code,
                 "redirect_uri": redirect_uri,
             },
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         return response.json()

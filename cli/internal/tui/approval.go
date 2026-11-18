@@ -17,6 +17,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/approval"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"github.com/onyx-dot-app/onyx/cli/internal/parser"
+	"github.com/onyx-dot-app/onyx/cli/internal/question"
 )
 
 // approvalCard is a tool approval request whose outcome the server has not
@@ -145,58 +146,91 @@ func (m Model) activeApproval() int {
 	return -1
 }
 
-func (m Model) renderApprovals() {
+// renderCards renders the approval and question cards.
+func (m Model) renderCards() {
 	active := m.activeApproval()
 	// Stop ends the chat's running response, not a background agent.
-	running := m.isStreaming && !m.awaitingApproval
+	running := m.isStreaming && !m.awaitingUser
 	for i, card := range m.approvals {
 		stoppable := running && card.request.AgentName == ""
-		m.viewport.setApproval(card.request.ApprovalID, renderApprovalCard(card, i == active, stoppable, m.viewport.width))
+		m.viewport.setCard(card.request.ApprovalID, renderApprovalCard(card, i == active, stoppable, m.viewport.width))
 	}
+	m.renderQuestions()
 }
 
-// showSavedApprovals shows the waiting requests of a session load, including
-// the requests of background agents, and the outcomes of shown requests. The
-// load's approvals version becomes the version that the cards reflect.
-func (m Model) showSavedApprovals(detail *models.ChatSessionDetailResponse) Model {
-	m.approvalsVersion = detail.ApprovalsVersion
-	// The packets hold one list for each assistant message, in order.
+// savedRequests is what the packets of a session load say about its
+// approval requests and questions.
+type savedRequests struct {
+	approvals []approvalCard
+	// outcomes holds the outcome of each ended approval request, by ID.
+	outcomes  map[string]string
+	questions []questionCard
+	// answered holds the resolution of each ended question, by request ID.
+	answered map[string]models.ToolQuestionResolvedEvent
+}
+
+// readSavedRequests reads the requests of a session load. The packets hold
+// one list for each assistant message, in order.
+func readSavedRequests(detail *models.ChatSessionDetailResponse) savedRequests {
 	var responseIDs []int
 	for _, message := range detail.Messages {
 		if message.MessageType == "assistant" {
 			responseIDs = append(responseIDs, message.MessageID)
 		}
 	}
-	var requests []approvalCard
-	outcomes := map[string]string{}
+	saved := savedRequests{outcomes: map[string]string{}, answered: map[string]models.ToolQuestionResolvedEvent{}}
 	for i, packets := range detail.Packets {
 		responseID := 0
 		if i < len(responseIDs) {
 			responseID = responseIDs[i]
 		}
 		for _, packet := range packets {
-			if !bytes.Contains(packet, []byte("tool_approval_")) {
+			if !bytes.Contains(packet, []byte("tool_approval_")) && !bytes.Contains(packet, []byte("tool_question_")) {
 				continue
 			}
 			switch e := parser.ParseStreamLine(string(packet)).(type) {
 			case models.ToolApprovalRequestEvent:
-				requests = append(requests, approvalCard{request: e, responseID: responseID})
+				saved.approvals = append(saved.approvals, approvalCard{request: e, responseID: responseID})
 			case models.ToolApprovalResolvedEvent:
-				outcomes[e.ApprovalID] = e.Outcome
+				saved.outcomes[e.ApprovalID] = e.Outcome
+			case models.ToolQuestionRequestEvent:
+				saved.questions = append(saved.questions, questionCard{request: e, responseID: responseID})
+			case models.ToolQuestionResolvedEvent:
+				saved.answered[e.QuestionRequestID] = e
 			}
 		}
 	}
-	for _, card := range requests {
+	return saved
+}
+
+// showSavedRequests shows the waiting approval requests and questions of a
+// session load, including the requests of background agents, and the
+// outcomes of shown requests. The load's approvals version becomes the
+// version that the cards reflect.
+func (m Model) showSavedRequests(approvalsVersion string, saved savedRequests) Model {
+	m.approvalsVersion = approvalsVersion
+	for _, card := range saved.questions {
+		id := card.request.QuestionRequestID
+		index := m.questionIndex(id)
+		resolved, isResolved := saved.answered[id]
+		switch {
+		case isResolved && index >= 0:
+			m = m.resolveQuestion(index, question.Outcome(card.request, resolved), resolved.Message)
+		case !isResolved && index < 0 && !m.resolvedRequests[id]:
+			m.questions = append(m.questions, card)
+		}
+	}
+	for _, card := range saved.approvals {
 		index := m.approvalIndex(card.request.ApprovalID)
-		outcome, resolved := outcomes[card.request.ApprovalID]
+		outcome, resolved := saved.outcomes[card.request.ApprovalID]
 		switch {
 		case resolved && index >= 0:
 			m = m.resolveApproval(index, approval.OutcomeLabel(outcome))
-		case !resolved && index < 0 && !m.resolvedApprovals[card.request.ApprovalID]:
+		case !resolved && index < 0 && !m.resolvedRequests[card.request.ApprovalID]:
 			m.approvals = append(m.approvals, card)
 		}
 	}
-	m.renderApprovals()
+	m.renderCards()
 	return m
 }
 
@@ -238,12 +272,18 @@ func (m Model) handleApprovalsLoaded(msg approvalsLoadedMsg) (tea.Model, tea.Cmd
 			waiting = append(waiting, card)
 		}
 	}
-	m = m.showSavedApprovals(msg.detail)
+	asked := m.questions
+	m = m.showSavedRequests(msg.detail.ApprovalsVersion, readSavedRequests(msg.detail))
 	if m.isStreaming {
 		return m, nil
 	}
 	for _, card := range waiting {
 		if m.approvalIndex(card.request.ApprovalID) < 0 {
+			return m.followResponse(*m.chatSessionID, card.responseID)
+		}
+	}
+	for _, card := range asked {
+		if m.questionIndex(card.request.QuestionRequestID) < 0 {
 			return m.followResponse(*m.chatSessionID, card.responseID)
 		}
 	}
@@ -342,7 +382,7 @@ func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 // or wait to resume, while a card waits or a session load runs, which can add
 // one, and, without a stream, while a turn can start or a response prepares.
 func (m Model) watchesStatus(status models.ChatSessionStatus) bool {
-	return status.HasActiveSubagents || len(m.approvals) > 0 || m.approvalsLoadVersion != "" ||
+	return status.HasActiveSubagents || len(m.approvals) > 0 || len(m.questions) > 0 || m.approvalsLoadVersion != "" ||
 		(!m.isStreaming && (status.HasStartableInput || status.IsProcessing))
 }
 
@@ -362,21 +402,21 @@ func (m Model) reloadUnseenResponse(sessionID string, status models.ChatSessionS
 // resolveApproval replaces a card with a one-line record of how it ended.
 func (m Model) resolveApproval(index int, label string) Model {
 	id := m.approvals[index].request.ApprovalID
-	resolved := maps.Clone(m.resolvedApprovals)
+	resolved := maps.Clone(m.resolvedRequests)
 	if resolved == nil {
 		resolved = map[string]bool{}
 	}
 	resolved[id] = true
-	m.resolvedApprovals = resolved
-	m.viewport.setApproval(id, approvalRecord(m.approvals[index].request, label))
+	m.resolvedRequests = resolved
+	m.viewport.setCard(id, approvalRecord(m.approvals[index].request, label))
 	m.approvals = append(m.approvals[:index:index], m.approvals[index+1:]...)
-	m.renderApprovals()
+	m.renderCards()
 	return m
 }
 
 func (m Model) decideApproval(index int, decision models.ApprovalDecision) (Model, tea.Cmd) {
 	m.approvals[index].sending = decision
-	m.renderApprovals()
+	m.renderCards()
 	client, approvalID := m.client, m.approvals[index].request.ApprovalID
 	agent := m.approvals[index].request.AgentName != ""
 	responseID := m.approvals[index].responseID
@@ -394,7 +434,7 @@ func (m Model) decideApproval(index int, decision models.ApprovalDecision) (Mode
 }
 
 func (m Model) handleApprovalDecided(msg approvalDecidedMsg) (tea.Model, tea.Cmd) {
-	noLongerWaiting := api.IsApprovalNoLongerWaiting(msg.err)
+	noLongerWaiting := api.IsNoLongerWaiting(msg.err)
 	// A card that the stream already resolved is gone.
 	if index := m.approvalIndex(msg.approvalID); index >= 0 {
 		m.approvals[index].sending = ""
@@ -406,36 +446,44 @@ func (m Model) handleApprovalDecided(msg approvalDecidedMsg) (tea.Model, tea.Cmd
 		default:
 			m.viewport.addError("Could not send the approval decision: " + msg.err.Error())
 		}
-		m.renderApprovals()
+		m.renderCards()
 	}
-	if m.chatSessionID == nil || msg.sessionID != *m.chatSessionID {
+	return m.continueAfterAnswer(msg.sessionID, msg.responseID, msg.streams, msg.agent, msg.result.Continuation, msg.err)
+}
+
+// continueAfterAnswer follows the response after this client's decision or
+// answer for responseID was sent from the chat sessionID while the model's
+// stream count was streams: on the continuation that the server named, or on
+// the stream that the status names.
+func (m Model) continueAfterAnswer(sessionID string, responseID, streams int, agent bool, continuation *models.ChatStream, err error) (Model, tea.Cmd) {
+	if m.chatSessionID == nil || sessionID != *m.chatSessionID {
 		// The user left the chat that showed the request.
 		return m, nil
 	}
-	if msg.streams != m.streams {
+	if streams != m.streams {
 		// A newer stream started, for example the continuation that a status
 		// read followed, or the user's next message.
 		return m, nil
 	}
 	switch {
-	case msg.err == nil && msg.result.Continuation != nil:
-		return m.followContinuation(*msg.result.Continuation)
-	case msg.err == nil && msg.agent:
+	case err == nil && continuation != nil:
+		return m.followContinuation(*continuation)
+	case err == nil && agent:
 		// A background agent continues without a stream, and its outcome and
 		// later requests show only in a session load.
 		m.approvalsPoll++
-		return m, pollApprovals(m.client, msg.sessionID, m.approvalsPoll, 0)
-	case msg.err != nil && !noLongerWaiting:
+		return m, pollApprovals(m.client, sessionID, m.approvalsPoll, 0)
+	case err != nil && !api.IsNoLongerWaiting(err):
 		return m, nil
 	}
 	// The response continues on a stream that the status names: after
-	// another client's decision, or after this decision once the turn that
-	// holds the chat releases it.
-	if m.isStreaming && !m.stopReceived && *m.parentMessageID == msg.responseID {
+	// another client's answer, or after this answer once the turn that holds
+	// the chat releases it.
+	if m.isStreaming && !m.stopReceived && *m.parentMessageID == responseID {
 		// The stream that this client reads writes the response.
 		return m, nil
 	}
-	return m.followResponse(msg.sessionID, msg.responseID)
+	return m.followResponse(sessionID, responseID)
 }
 
 // followResponse reads the status until a stream continues the decided
@@ -501,7 +549,7 @@ func (m Model) handleApprovalKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 		if key == "down" && card.selected < len(approvalActions)-1 {
 			card.selected++
 		}
-		m.renderApprovals()
+		m.renderCards()
 		return m, nil, true
 	}
 	if m.input.textInput.Value() != "" {
@@ -513,7 +561,7 @@ func (m Model) handleApprovalKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 		return m, cmd, true
 	case "d":
 		card.expanded = !card.expanded
-		m.renderApprovals()
+		m.renderCards()
 		return m, nil, true
 	}
 	for _, action := range approvalActions {

@@ -15,6 +15,13 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
+from onyx.db import action_approval
+from onyx.db.action_approval import (
+    get_action_approval,
+    get_action_approval_for_user,
+    insert_action_approval,
+    try_record_decision,
+)
 from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
@@ -35,13 +42,6 @@ from onyx.server.features.build.approvals.api import (
     submit_decision,
 )
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-from onyx.server.features.build.db import action_approval
-from onyx.server.features.build.db.action_approval import (
-    get_action_approval,
-    get_action_approval_for_user,
-    insert_action_approval,
-    try_record_decision,
-)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import action_entry
 from tests.common.craft.payloads import default_action_entries as _default_actions
@@ -779,8 +779,8 @@ def test_concurrent_session_approvals_do_not_deadlock(
     monkeypatch: pytest.MonkeyPatch,
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
+    from onyx.db import action_approval
     from onyx.db.models import User
-    from onyx.server.features.build.db import action_approval
     from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
     user = make_user(db_session, email_prefix="concurrent_grants")
@@ -842,7 +842,7 @@ def test_status_poll_omits_payloads_and_reports_expiry(
 ) -> None:
     from sqlalchemy import inspect
 
-    from onyx.server.features.build.db.action_approval import (
+    from onyx.db.action_approval import (
         list_session_action_approvals,
     )
 

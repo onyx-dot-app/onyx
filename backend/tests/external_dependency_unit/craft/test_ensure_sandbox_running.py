@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox, User
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
+from onyx.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.session.errors import SandboxProvisioningError
 from onyx.server.features.build.session.manager import SessionManager

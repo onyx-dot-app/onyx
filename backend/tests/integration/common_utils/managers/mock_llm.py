@@ -3,6 +3,13 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from tenacity import (
+    RetryError,
+    Retrying,
+    retry_if_result,
+    stop_before_delay,
+    wait_fixed,
+)
 
 from onyx.configs.chat_configs import CODE_MODE_ENABLED
 from onyx.llm.constants import LlmProviderNames
@@ -114,6 +121,19 @@ class MockLLMScript:
 
     def requests_in(self, name: str) -> list[RecordedRequest]:
         return [r for r in self.requests if r.conversation == name]
+
+    def wait_for_requests(
+        self, name: str, count: int, *, timeout: float, failure_message: str
+    ) -> None:
+        poll = Retrying(
+            retry=retry_if_result(lambda requests: len(requests) < count),
+            stop=stop_before_delay(timeout),
+            wait=wait_fixed(0.2),
+        )
+        try:
+            poll(self.requests_in, name)
+        except RetryError as exc:
+            raise AssertionError(failure_message) from exc
 
     def verify(self) -> None:
         """Fail on unmatched requests or unused required replies."""

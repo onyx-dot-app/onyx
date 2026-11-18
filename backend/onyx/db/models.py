@@ -125,6 +125,8 @@ from onyx.db.enums import (
     PluginInstallationPolicy,
     PortAttemptStatus,
     ProcessingMode,
+    QuestionAnsweredVia,
+    QuestionOutcome,
     ReceiptStatus,
     SandboxStatus,
     ScheduledTaskRunStatus,
@@ -173,6 +175,7 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.question.models import QuestionToolDetails
 from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchResult,
     SandboxExecResult,
@@ -3690,6 +3693,58 @@ class ApprovalRequest(Base):
     )
 
 
+class QuestionRequest(Base):
+    """Questions that a response's agent asked the user, and their answers.
+
+    The ID is the run's input request ID. ``outcome IS NULL`` waits. An
+    ANSWERED request has ``answers`` from its card, or the ``message`` that
+    the user typed in the chat instead.
+    """
+
+    __tablename__ = "question_request"
+    __table_args__ = (
+        Index("ix_question_request_chat_message", "chat_message_id"),
+        Index("ix_question_request_chat_session", "chat_session_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # The response that waits for the answers.
+    chat_message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=False
+    )
+    # The call of the response's step that asked; places the request's record
+    # when the saved response is shown again.
+    tool_call_id: Mapped[str] = mapped_column(String, nullable=False)
+    # The call's questions (`ToolQuestion`), as the card shows them.
+    questions: Mapped[list[dict[str, JsonValue]]] = mapped_column(
+        PGJSONB, nullable=False
+    )
+    # The card's answers (`ToolQuestionAnswer`), in question order.
+    answers: Mapped[list[dict[str, JsonValue]] | None] = mapped_column(
+        PGJSONB, nullable=True
+    )
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outcome: Mapped[QuestionOutcome | None] = mapped_column(
+        Enum(QuestionOutcome, native_enum=False, name="questionoutcome"),
+        nullable=True,
+    )
+    answered_via: Mapped[QuestionAnsweredVia | None] = mapped_column(
+        Enum(QuestionAnsweredVia, native_enum=False, name="questionansweredvia"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    resolved_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class ChatMessage(Base):
     """Questions, complete responses, and context summaries in a conversation tree."""
 
@@ -4042,7 +4097,8 @@ SavedToolResultDetails = Annotated[
     | CodeModeExecutionResult
     | AgentWaitDetails
     | SandboxExecResult
-    | ApplyPatchResult,
+    | ApplyPatchResult
+    | QuestionToolDetails,
     Field(discriminator="type"),
 ]
 SAVED_TOOL_RESULT_TYPES: tuple[type[BaseModel], ...] = get_args(

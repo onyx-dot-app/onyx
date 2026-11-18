@@ -46,6 +46,7 @@ from onyx.chat.run_store import (
     ChatRunStore,
     fail_suspended_response,
 )
+from onyx.chat.tool_questions import CANCELLED_QUESTION_MESSAGE
 from onyx.configs.constants import MessageType
 from onyx.db.action_policy import replace_workspace_action_policies
 from onyx.db.approval_request import create_approval_request__no_commit
@@ -57,6 +58,8 @@ from onyx.db.enums import (
     ApprovalDecidedVia,
     ApprovalDecision,
     GatedAppKind,
+    QuestionAnsweredVia,
+    QuestionOutcome,
 )
 from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.models import (
@@ -66,6 +69,7 @@ from onyx.db.models import (
     ChatSession,
     GatedApp,
     MCPServer,
+    QuestionRequest,
     Tool,
     User,
 )
@@ -88,19 +92,24 @@ from onyx.llm.models import (
 )
 from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.query_and_chat.chat_backend import (
-    _reject_while_approval_waits,
+    _reject_while_user_input_waits,
+    answer_questions,
     decide_approval,
     delete_chat_session_by_id,
 )
 from onyx.server.query_and_chat.models import (
     ApprovalDecisionResponse,
     ChatApprovalDecisionRequest,
+    ChatQuestionAnswersRequest,
+    QuestionAnswersResponse,
 )
 from onyx.server.query_and_chat.streaming_models import (
     Packet,
     ToolApprovalRequest,
     ToolApprovalResolved,
+    ToolQuestionResolved,
 )
+from onyx.tools.constants import REQUEST_USER_INPUT_TOOL_NAME
 from onyx.tools.interface import Tool as ChatTool
 from onyx.tools.models import ToolApprovalScope, ToolContext
 from onyx.tools.tool_implementations.code_mode import sandbox
@@ -113,6 +122,8 @@ from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     WaitCodeTool,
 )
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+from onyx.tools.tool_implementations.question.models import ToolQuestionAnswer
+from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tracing.flows import LLMFlow
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.chat.test_run_store import (
@@ -181,6 +192,42 @@ class ApprovalChat(BaseModel):
                 user=self.user,
                 db_session=db_session,
             )
+
+    def answer(
+        self,
+        db_session: Session,
+        question_request_id: UUID,
+        body: ChatQuestionAnswersRequest,
+    ) -> QuestionAnswersResponse:
+        """Save an answer to the response's questions, without the dispatch."""
+        with patch(
+            "onyx.server.query_and_chat.chat_backend.dispatch_pending_chat_messages"
+        ):
+            return answer_questions(
+                question_request_id=question_request_id,
+                body=body,
+                request=MagicMock(headers={}),
+                user=self.user,
+                db_session=db_session,
+            )
+
+    def questions(self, db_session: Session) -> list[QuestionRequest]:
+        return list(
+            db_session.scalars(
+                select(QuestionRequest)
+                .where(QuestionRequest.chat_session_id == self.chat_session_id)
+                .execution_options(populate_existing=True)
+            )
+        )
+
+    def asking(self) -> QuestionTool:
+        """The response's question tool, as a turn that offers it builds it."""
+        return QuestionTool(
+            REQUEST_USER_INPUT_TOOL_NAME,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            chat_session_id=self.chat_session_id,
+            response_id=self.response_id,
+        )
 
 
 @pytest.fixture
@@ -603,7 +650,7 @@ def test_a_decision_and_a_stop_of_the_live_turn_keep_the_first(
     if first == "decision":
         chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
     # Saves the rejection, gives it to the run, and cancels the run.
-    owned.owner.reject_waiting_approvals()
+    owned.owner.reject_waiting_inputs()
     assert owned.run.wait_for_idle(10)
     assert owned.run.status == RunStatus.CANCELLED
     if first == "stop":
@@ -619,6 +666,133 @@ def test_a_decision_and_a_stop_of_the_live_turn_keep_the_first(
     assert [resolved.outcome for resolved in ended] == [
         "approved" if first == "decision" else "rejected"
     ]
+
+
+_CARD = ChatQuestionAnswersRequest(
+    answers=[ToolQuestionAnswer(question_id="scope", option_label="Company")]
+)
+
+
+def _asks(tool: QuestionTool) -> Callable[..., AssistantMessage]:
+    """The model asks one question with `tool`, then answers "done"."""
+    return _replies(
+        AssistantMessage(
+            content=[
+                ToolCall(
+                    id="ask",
+                    name=tool.name,
+                    arguments={
+                        "questions": [
+                            {
+                                "id": "scope",
+                                "header": "Scope",
+                                "question": "Who should get the email?",
+                                "options": [
+                                    {"label": "Team", "description": "The team."},
+                                    {"label": "Company", "description": "All."},
+                                ],
+                            }
+                        ]
+                    },
+                )
+            ]
+        )
+    )
+
+
+@pytest.mark.parametrize("first", ["answer", "stop"])
+def test_an_answer_and_a_stop_of_the_live_turn_keep_the_first(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun], first: str
+) -> None:
+    """A Stop cancels the question that the live run waits on, and the call
+    keeps the result of whichever came first, so the next turn's history has
+    it. The card shows how the question ended."""
+    tool = chat.asking()
+    ended: list[ToolQuestionResolved] = []
+    owned = _start(
+        chat,
+        owned_runs,
+        reply=_asks(tool),
+        tools=[tool.bind(ToolContext)],
+        gated=[],
+        on_event=ResponsePresenter(
+            Emitter(
+                lambda packet: (
+                    ended.append(packet.obj)
+                    if isinstance(packet.obj, ToolQuestionResolved)
+                    else None
+                )
+            )
+        ).consume,
+    )
+    assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
+    [row] = chat.questions(db_session)
+    db_session.commit()
+
+    if first == "answer":
+        chat.answer(db_session, row.id, _CARD)
+    owned.owner.reject_waiting_inputs()
+    assert owned.run.wait_for_idle(10)
+    assert owned.run.status == RunStatus.CANCELLED
+    if first == "stop":
+        with pytest.raises(OnyxError) as conflict:
+            chat.answer(db_session, row.id, _CARD)
+        assert conflict.value.error_code == OnyxErrorCode.CONFLICT
+
+    [saved] = chat.questions(db_session)
+    assert saved.outcome == (
+        QuestionOutcome.ANSWERED if first == "answer" else QuestionOutcome.CANCELLED
+    )
+    assert owned.first_result("ask") == (
+        json.dumps({"answers": {"scope": {"answers": ["Company"]}}})
+        if first == "answer"
+        else CANCELLED_QUESTION_MESSAGE
+    )
+    assert [resolved.outcome for resolved in ended] == [
+        "answered" if first == "answer" else "cancelled"
+    ]
+
+
+def test_a_typed_answer_waits_for_the_responses_approval_requests(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """A typed message answers the response's questions only once no approval
+    request of the response waits; the card still answers its question."""
+    tool = chat.asking()
+    _hand_off(
+        _start(
+            chat,
+            owned_runs,
+            reply=_asks(tool),
+            tools=[tool.bind(ToolContext)],
+            gated=[],
+        )
+    )
+    create_approval_request__no_commit(
+        db_session,
+        chat_session_id=chat.chat_session_id,
+        chat_message_id=chat.response_id,
+        gated_app_id=chat.gated_app_id,
+        action_id=ACTION,
+        tool_call_id="send",
+        tool_name=ACTION,
+        display_name="Send email",
+        arguments={},
+    )
+    db_session.commit()
+    [row] = chat.questions(db_session)
+    with pytest.raises(OnyxError) as pending:
+        chat.answer(db_session, row.id, ChatQuestionAnswersRequest(message="Team"))
+    assert pending.value.error_code == OnyxErrorCode.APPROVAL_PENDING
+    db_session.rollback()
+    chat.answer(db_session, row.id, _CARD)
+    [saved] = chat.questions(db_session)
+    assert (saved.outcome, saved.answered_via) == (
+        QuestionOutcome.ANSWERED,
+        QuestionAnsweredVia.CARD,
+    )
+    # The approval request still waits, so the response stays parked.
+    assert _resumable(db_session, chat) == []
 
 
 def test_a_call_whose_server_was_deleted_gets_no_longer_available(
@@ -906,7 +1080,7 @@ def test_a_stop_rejects_the_requests_of_a_foreground_agent_that_parked(
         until(lambda: _poll(owned) and _parked(row.chat_message_id))
         assert not _parked(chat.response_id)
 
-        owned.owner.reject_waiting_approvals()
+        owned.owner.reject_waiting_inputs()
 
         [row] = chat.rows(db_session)
         assert row.decision == ApprovalDecision.REJECTED
@@ -1227,7 +1401,7 @@ def test_a_park_refused_for_its_size_ends_the_request_and_does_not_block_sends(
     assert [p.obj for p in live if isinstance(p.obj, ToolApprovalResolved)] == [
         ToolApprovalResolved(approval_id=request.approval_id, outcome="cancelled")
     ]
-    _reject_while_approval_waits(db_session, chat.chat_session_id)
+    _reject_while_user_input_waits(db_session, chat.chat_session_id)
 
 
 def _storage_error(code: str, status: int) -> ClientError:
@@ -1462,7 +1636,7 @@ def test_a_parked_response_off_the_selected_branch_still_resumes(
     db_session.flush()
     question.latest_child_message_id = sibling.id
     db_session.commit()
-    _reject_while_approval_waits(db_session, chat.chat_session_id)
+    _reject_while_user_input_waits(db_session, chat.chat_session_id)
     [row] = chat.rows(db_session)
     assert _resumable(db_session, chat) == []
 
@@ -1494,4 +1668,4 @@ def test_a_suspended_response_without_its_checkpoint_is_repaired(
         get_cache_backend(), POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, unfinished
     ) == {chat.response_id}
     assert _status(chat.response_id) == RunStatus.ERROR
-    _reject_while_approval_waits(db_session, chat.chat_session_id)
+    _reject_while_user_input_waits(db_session, chat.chat_session_id)

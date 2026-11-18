@@ -257,7 +257,7 @@ def test_challenge_stores_resumable_flow_and_skips_fallback(
     monkeypatch.setattr(oauth_flow, "_start_oauth_from_well_known_metadata", fallback)
 
     assert _start_flow(_server()) == oauth_flow.OAuthAuthorizationRedirect(
-        "https://accounts.example.com/consent"
+        url="https://accounts.example.com/consent"
     )
     attempt_store.store.assert_called_once()
     store_call = attempt_store.store.call_args
@@ -291,7 +291,7 @@ def test_forced_reauthentication_ignores_tokens_and_strips_bearer_header(
         },
     )
     assert result == oauth_flow.OAuthAuthorizationRedirect(
-        "https://accounts.example.com/consent"
+        url="https://accounts.example.com/consent"
     )
     assert providers[0].load_stored_tokens is False
     initialize_call = initialize.await_args
@@ -331,7 +331,7 @@ def test_public_initialization_uses_safe_well_known_discovery(
         },
     )
     assert result == oauth_flow.OAuthAuthorizationRedirect(
-        "https://accounts.example.com/consent"
+        url="https://accounts.example.com/consent"
     )
     assert request_urls == [
         "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
@@ -473,7 +473,7 @@ def test_nested_single_authorization_handoff_is_returned(
     )
 
     assert _start_flow(_server()) == oauth_flow.OAuthAuthorizationRedirect(
-        authorization.authorization_url
+        url=authorization.authorization_url
     )
 
 
@@ -481,7 +481,7 @@ def test_concurrent_client_registration_retries_with_the_elected_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     completed = oauth_flow.OAuthAuthorizationRedirect(
-        "https://accounts.example.com/consent"
+        url="https://accounts.example.com/consent"
     )
     start_once = AsyncMock(
         side_effect=[oauth.MCPClientRegistrationConflict(), completed]
@@ -619,7 +619,7 @@ def test_accepted_client_metadata_document_redirects(
     _install_discovery_responses(monkeypatch, [302])
 
     assert _start_flow(_server()) == oauth_flow.OAuthAuthorizationRedirect(
-        "https://accounts.example.com/consent"
+        url="https://accounts.example.com/consent"
     )
     attempt_store.store.assert_called_once()
 
@@ -642,6 +642,6 @@ def test_unreachable_authorization_endpoint_still_redirects(
         )
 
     assert _start_flow(_server()) == oauth_flow.OAuthAuthorizationRedirect(
-        "https://accounts.example.com/consent"
+        url="https://accounts.example.com/consent"
     )
     attempt_store.store.assert_called_once()

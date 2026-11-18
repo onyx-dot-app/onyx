@@ -36,7 +36,13 @@ from onyx.chat.mention_models import Mentions, PickedSkillMessage, RecordedMenti
 from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, IncognitoRecordMode
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    IncognitoRecordMode,
+    QuestionAnsweredVia,
+    QuestionOutcome,
+)
 from onyx.db.models import SAVED_TOOL_RESULT_TYPES, SavedToolResultDetails
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.file_store.models import (
@@ -65,6 +71,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     StreamingError,
     ToolApprovalRequest,
+    ToolQuestionRequest,
 )
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles, SavedLoadedFile
 from onyx.tools.models import (
@@ -80,6 +87,10 @@ from onyx.tools.tool_implementations.code_mode.models import (
     SavedCodeCell,
 )
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
+from onyx.tools.tool_implementations.question.models import (
+    ToolQuestion,
+    ToolQuestionAnswer,
+)
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 
@@ -642,10 +653,12 @@ class ChatFullResponse(BaseModel):
     # packet does. A server that omits it did not honor an incognito request.
     incognito: bool = False
     error_msg: str | None = None
-    # Set when the response stopped because tool calls wait for the user's
-    # approval (stop reason `awaiting_approval`). After the decisions the
-    # response continues in the chat session. Empty for a finished response.
+    # Set when the response stopped because tool calls wait for the user
+    # (stop reason `awaiting_user`): for approval decisions, or for answers to
+    # the agent's questions. After them the response continues in the chat
+    # session. Empty for a finished response.
     pending_tool_approvals: list[ToolApprovalRequest] = []
+    pending_tool_questions: list[ToolQuestionRequest] = []
 
 
 class ChatHistoryResult(BaseModel):
@@ -890,6 +903,8 @@ class ChatTurnSetup(BaseModel):
     tool_configuration: PersonaToolConfiguration
     # The turn offers the sandbox tools (sandbox_tools.py:sandbox_tools_for_model).
     sandbox_tools: bool
+    # The root agent gets the question tool (question_tool.py).
+    question_tool: bool = False
     research_tool_id: int | None
     checkpoint: CompactionCheckpoint | None
     # Child-result delivery has no new user message.
@@ -1025,6 +1040,23 @@ class SavedToolApproval(BaseModel):
     decided_at: datetime | None
 
 
+class SavedToolQuestion(BaseModel):
+    """A saved question request of a chat response's call (`question_request`)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    chat_message_id: int
+    tool_call_id: str
+    questions: list[ToolQuestion]
+    answers: list[ToolQuestionAnswer] | None
+    message: str | None
+    outcome: QuestionOutcome | None
+    answered_via: QuestionAnsweredVia | None
+    created_at: datetime
+    resolved_at: datetime | None
+
+
 class AgentToolApproval(BaseModel):
     """A background agent's approval request, shown at the root response's
     call that started the agent."""
@@ -1034,8 +1066,8 @@ class AgentToolApproval(BaseModel):
 
 
 class ChatApprovals(BaseModel):
-    """The approval requests of a page of chat responses, read once for the
-    replays of those responses."""
+    """The approval requests and questions of a page of chat responses, read
+    once for the replays of those responses."""
 
     # The requests of the responses and of the runs that they started, by
     # response (the request's chat message), in the order they were made.
@@ -1045,11 +1077,14 @@ class ChatApprovals(BaseModel):
     # The runs that each response's calls started, directly or through the
     # runs they started, with the ID of the response's call.
     started_runs: dict[int, list[tuple[int, str]]] = Field(default_factory=dict)
+    # The questions of the responses, by response, in the order they were
+    # asked. Only root responses ask.
+    questions: dict[int, list[SavedToolQuestion]] = Field(default_factory=dict)
 
 
 class ResponseReplayData(BaseModel):
-    """Detached source documents, tool identities and approval requests for
-    response replay."""
+    """Detached source documents, tool identities, approval requests and
+    questions for response replay."""
 
     tools: dict[tuple[str, str], ToolReplayData]
     documents: dict[str, SearchDoc]
@@ -1061,3 +1096,6 @@ class ResponseReplayData(BaseModel):
     agent_approvals: dict[tuple[str, str], list[AgentToolApproval]] = Field(
         default_factory=dict
     )
+    # The questions of an ended or suspended response, by its run ID and the
+    # call that asked.
+    questions: dict[tuple[str, str], SavedToolQuestion] = Field(default_factory=dict)

@@ -15,10 +15,11 @@ export type SessionWait =
   // The caller no longer owns the session.
   | { kind: "released" };
 
-// Whether the saved session holds what this device does not show: approval requests that opened or
-// resolved since the shown load, or a newer response, such as one that started and finished
-// between two status reads. The server reports "" while the chat has no approval request, so a
-// session with no shown load, such as a chat this device created, has that empty baseline.
+// Whether the saved session holds what this device does not show: approval requests or questions
+// that opened or resolved since the shown load (`approvals_version` covers both), or a newer
+// response, such as one that started and finished between two status reads. The server reports ""
+// while the chat has no approval request or question, so a session with no shown load, such as a
+// chat this device created, has that empty baseline.
 export function savedSessionChanged(
   sessionId: string,
   status: ChatSessionStatus,

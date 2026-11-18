@@ -251,6 +251,8 @@ class DynamicTenantScheduler(PersistentScheduler):
 def on_beat_init(sender: Any, **kwargs: Any) -> None:
     task_logger.info("beat_init signal received.")
 
+    app_base.validate_encryption_configuration_or_exit()
+
     # Celery beat shouldn't touch the db at all. But just setting a low minimum here.
     SqlEngine.set_app_name(POSTGRES_CELERY_BEAT_APP_NAME)
     SqlEngine.init_engine(pool_size=2, max_overflow=0)

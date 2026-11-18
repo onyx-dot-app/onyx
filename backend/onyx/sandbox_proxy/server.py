@@ -68,6 +68,7 @@ from onyx.server.features.build.configs import (
     SANDBOX_RUNTIME,
     SandboxRuntime,
 )
+from onyx.utils.encryption import validate_encryption_configuration
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import set_is_ee_if_available
 
@@ -322,6 +323,7 @@ def main() -> int:
     destination_policy = _build_destination_policy()
     relay_tls = build_relay_tls_listener()
     set_is_ee_if_available()
+    validate_encryption_configuration()
 
     logger.info(
         "Starting sandbox proxy host=%s listen=%d healthz=%d namespace=%s",

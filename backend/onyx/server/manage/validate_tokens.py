@@ -1,5 +1,6 @@
 import requests
 
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import SLACK_USER_TOKEN_PREFIX
 from onyx.configs.slack_configs import SLACK_API_URL as SLACK_API_BASE_URL
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -11,7 +12,9 @@ SLACK_CONNECTIONS_OPEN_URL = f"{SLACK_API_BASE_URL}apps.connections.open"
 
 def validate_bot_token(bot_token: str) -> bool:
     headers = {"Authorization": f"Bearer {bot_token}"}
-    response = requests.post(SLACK_API_URL, headers=headers)
+    response = requests.post(
+        SLACK_API_URL, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS
+    )
 
     if response.status_code != 200:
         raise OnyxError(
@@ -30,7 +33,9 @@ def validate_bot_token(bot_token: str) -> bool:
 
 def validate_app_token(app_token: str) -> bool:
     headers = {"Authorization": f"Bearer {app_token}"}
-    response = requests.post(SLACK_CONNECTIONS_OPEN_URL, headers=headers)
+    response = requests.post(
+        SLACK_CONNECTIONS_OPEN_URL, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS
+    )
 
     if response.status_code != 200:
         raise OnyxError(
@@ -70,7 +75,9 @@ def validate_user_token(user_token: str | None) -> None:
 
     # Test the token with Slack API to ensure it's valid
     headers = {"Authorization": f"Bearer {user_token}"}
-    response = requests.post(SLACK_API_URL, headers=headers)
+    response = requests.post(
+        SLACK_API_URL, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS
+    )
 
     if response.status_code != 200:
         raise OnyxError(

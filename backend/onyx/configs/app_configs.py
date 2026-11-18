@@ -162,6 +162,14 @@ PASSWORD_REQUIRE_SPECIAL_CHAR = (
 # information. This provides an extra layer of security on top of Postgres access controls
 # and is available in Onyx EE
 ENCRYPTION_KEY_SECRET = os.environ.get("ENCRYPTION_KEY_SECRET") or ""
+# Keys for the envelope ciphertext format: a JSON object of key id -> base64 of
+# 32 random bytes, e.g. {"2026-11": "<base64>"}. Every key here can decrypt.
+# ENCRYPTION_KEY_SECRET stays the key for legacy ciphertext and is also readable
+# as an envelope key under the reserved id "legacy".
+ENCRYPTION_KEYS_JSON = os.environ.get("ENCRYPTION_KEYS", "").strip()
+# Key id that new writes use. Unset keeps the legacy write format: AES-CBC under
+# ENCRYPTION_KEY_SECRET, or plain text when that is unset too.
+ENCRYPTION_WRITE_KEY_ID = (os.environ.get("ENCRYPTION_WRITE_KEY_ID") or "").strip()
 
 # Turn off mask if admin users should see full credentials for data connectors.
 MASK_CREDENTIAL_PREFIX = (
@@ -1336,10 +1344,8 @@ CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE = cast(
 
 
 def get_current_tz_offset() -> int:
-    # datetime now() gets local time, datetime.now(timezone.utc) gets UTC time.
-    # remove tzinfo to compare non-timezone-aware objects.
-    time_diff = datetime.now() - datetime.now(timezone.utc).replace(tzinfo=None)
-    return round(time_diff.total_seconds() / 3600)
+    offset = datetime.now(timezone.utc).astimezone().utcoffset()
+    return round(offset.total_seconds() / 3600) if offset is not None else 0
 
 
 # enter as a floating point offset from UTC in hours (-24 < val < 24)

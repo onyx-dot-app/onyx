@@ -35,9 +35,8 @@ from __future__ import annotations
 
 import enum
 from collections import defaultdict
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
+from pydantic import BaseModel, ConfigDict, SkipValidation
 from sqlalchemy import inspect
 
 from onyx.configs.constants import RETURN_SEPARATOR, DocumentSource
@@ -61,13 +60,10 @@ from onyx.indexing.chunker import (
 )
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.models import DocAwareChunk, IndexChunk
+from onyx.llm.interfaces import LLM
+from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.tracing.framework.create import ensure_trace
 from onyx.tracing.framework.traces import TraceContentMode
-
-if TYPE_CHECKING:
-    from onyx.llm.interfaces import LLM
-    from onyx.natural_language_processing.utils import BaseTokenizer
-
 
 CONTEXTUAL_RAG_REEMBED_TRACE_NAME = "contextual_rag_reembed"
 
@@ -83,18 +79,19 @@ class ReembedStrategy(enum.Enum):
     COPY_VECTORS = "copy_vectors"
 
 
-@dataclass
-class AugmentationReembedContext:
+class AugmentationReembedContext(BaseModel):
     """Everything the AUGMENTATION path needs beyond the embedder. Built once by
     the port copier (which holds a DB session); `re_embed_chunks` itself stays
     DB-free. `future_embedding_tokenizer` (the FUTURE embedding model's) is always
     needed to reproduce the chunker's metadata-tail skip; the LLM + `tokenizer` (the
     contextual LLM's) + budgets are required only when regenerating (FUTURE RAG on)."""
 
+    model_config = ConfigDict(strict=True, arbitrary_types_allowed=True)
+
     future_enable_contextual_rag: bool
-    future_embedding_tokenizer: "BaseTokenizer"
-    llm: "LLM | None" = None
-    tokenizer: "BaseTokenizer | None" = None
+    future_embedding_tokenizer: SkipValidation[BaseTokenizer]
+    llm: SkipValidation[LLM | None] = None
+    tokenizer: SkipValidation[BaseTokenizer | None] = None
     chunk_token_limit: int = 0
     contextual_rag_reserved_tokens: int = 0
 

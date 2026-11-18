@@ -9,9 +9,11 @@ import multiprocessing as mp
 import sys
 import traceback
 from collections.abc import Callable
-from dataclasses import dataclass
 from multiprocessing.context import SpawnProcess
+from multiprocessing.queues import Queue
 from typing import Any, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
@@ -130,14 +132,15 @@ def _run_in_process(
     _initializer(func, queue, args, kwargs)
 
 
-@dataclass
-class SimpleJob:
+class SimpleJob(BaseModel):
     """Drop in replacement for `dask.distributed.Future`"""
+
+    model_config = ConfigDict(strict=True, arbitrary_types_allowed=True)
 
     id: int
     process: Optional["SpawnProcess"] = None
-    queue: Optional[mp.Queue] = None
-    _exception: Optional[str] = None
+    queue: Queue | None = None
+    _exception: Optional[str] = PrivateAttr(default=None)
 
     def cancel(self) -> bool:
         return self.release()

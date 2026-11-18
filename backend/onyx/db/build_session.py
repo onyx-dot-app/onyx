@@ -78,6 +78,29 @@ def get_build_session(
     return db_session.scalar(stmt)
 
 
+def get_build_session_by_id(
+    db_session: Session, session_id: UUID
+) -> BuildSession | None:
+    return db_session.query(BuildSession).filter(BuildSession.id == session_id).first()
+
+
+def get_build_session_id_for_user(
+    db_session: Session, session_id: UUID, user_id: UUID
+) -> UUID | None:
+    stmt = (
+        select(BuildSession.id)
+        .where(BuildSession.id == session_id)
+        .where(BuildSession.user_id == user_id)
+    )
+    return db_session.scalar(stmt)
+
+
+def build_session_has_messages(db_session: Session, session_id: UUID) -> bool:
+    return db_session.query(
+        exists().where(BuildMessage.session_id == session_id)
+    ).scalar()
+
+
 def get_orphan_build_session_ids(
     session_ids: list[UUID],
     user_id: UUID,

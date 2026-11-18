@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-chat-in-main"
+description = "Enables the open_chat_in_main command without any pre-configured scope."
+commands.allow = ["open_chat_in_main"]
+
+[[permission]]
+identifier = "deny-open-chat-in-main"
+description = "Denies the open_chat_in_main command without any pre-configured scope."
+commands.deny = ["open_chat_in_main"]

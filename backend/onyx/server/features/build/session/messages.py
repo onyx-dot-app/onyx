@@ -11,21 +11,21 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import PUBLIC_API_TAGS, MessageType
-from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
-from onyx.db.enums import Permission
-from onyx.db.models import User
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.build_session import (
+from onyx.db.build_session import (
     count_user_messages,
     create_message,
     get_build_session,
     session_runtime_stale,
 )
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
+from onyx.db.enums import Permission
+from onyx.db.models import User
+from onyx.db.sandbox import (
     get_sandbox_by_user_id,
     update_sandbox_heartbeat,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.interactive_turns.executor import (
     start_interactive_turn_runner,
 )
@@ -133,7 +133,7 @@ def send_message(
         turn_index = count_user_messages(session_id, db_session)
         if request.provider_id is not None and request.model:
             session.agent_provider, session.agent_model = GatewaySelection(
-                request.provider_id, request.model
+                provider_id=request.provider_id, model_name=request.model
             ).to_columns()
         elif request.provider and request.model:
             session.agent_provider = request.provider

@@ -284,7 +284,7 @@ function handleStreamingStatusPacket(
 function handleStopPacket(state: ProcessedMessageState, packet: Packet): void {
   if (
     packet.obj.type !== PacketType.STOP ||
-    packet.obj.stop_reason === StopReason.AWAITING_APPROVAL ||
+    packet.obj.stop_reason === StopReason.AWAITING_USER ||
     state.stopPacketSeen
   ) {
     return;

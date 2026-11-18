@@ -81,6 +81,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
     chatState,
     submit,
     stop,
+    answersQuestions,
     isHydrating,
     conversationPersonaId,
   } = useChatController(sessionId, personaId, projectId);
@@ -161,6 +162,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
         onStop={stop}
         chatState={chatState}
         attachments={draft}
+        answersQuestions={answersQuestions}
       />
     </Animated.View>
   );

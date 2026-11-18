@@ -12540,7 +12540,8 @@
         },
         "stopSubagentsButton": {
           "label": "停止子代理"
-        }
+        },
+        "questionAttachmentsHint": "回答智能体的问题时不能包含文件。请移除文件后再回答。"
       },
       "baseInputBar": {
         "input": {
@@ -12688,6 +12689,12 @@
       },
       "pendingToolApproval": {
         "toast": "请先批准或拒绝待处理的工具调用。"
+      },
+      "pendingToolQuestion": {
+        "toast": "请先回答智能体的问题。"
+      },
+      "pendingUserInput": {
+        "toast": "请先处理待处理的批准请求或问题。"
       }
     },
     "mcpApiKey": {
@@ -13139,6 +13146,9 @@
           "waitingForApproval": {
             "label": "正在等待你的批准"
           },
+          "waitingForAnswer": {
+            "label": "正在等待你的回答"
+          },
           "runningCommand": {
             "label": "正在运行命令"
           },
@@ -13328,6 +13338,28 @@
       },
       "toolApproval": {
         "agentRequest": "{agent} 想要运行 {tool}"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {智能体有一个问题} other {智能体有 # 个问题}}",
+        "other": {
+          "placeholder": "其他：输入您自己的答案",
+          "ariaLabel": "{header} 的其他答案"
+        },
+        "submit": "提交",
+        "page": {
+          "progress": "第 {current} 个问题，共 {total} 个",
+          "next": "下一步",
+          "unanswered": "{count, plural, one {请回答问题 {numbers} 后提交。} other {请回答问题 {numbers} 后提交。}}"
+        },
+        "submitError": "无法发送你的答案。请重试。",
+        "record": {
+          "answered": "已回答",
+          "answeredInChat": "已在聊天中回答",
+          "cancelled": "未回答",
+          "closed": "不再等待",
+          "answer": "{header}：{answer}",
+          "optionAndNote": "{option}（{note}）"
+        }
       },
       "toolbar": {
         "dislikeButton": {

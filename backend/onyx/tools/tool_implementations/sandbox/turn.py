@@ -4,7 +4,7 @@ import threading
 from uuid import UUID
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.server.features.build.db.sandbox import get_or_create_sandbox
+from onyx.db.sandbox import get_or_create_sandbox
 from onyx.server.features.build.sandbox.harness_base import HarnessSandbox
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef
 from onyx.utils.logger import setup_logger

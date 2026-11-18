@@ -14,6 +14,7 @@ from onyx.auth.users import User
 from onyx.db.auth import get_user_count
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
+from onyx.db.sandbox import get_sandbox_purge_targets
 from onyx.db.users import (
     delete_user_from_db,
     delete_user_from_db__no_commit,
@@ -21,7 +22,6 @@ from onyx.db.users import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.sandbox import get_sandbox_purge_targets
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes,
 )

@@ -2092,3 +2092,7 @@ def parent_session_id(db_session: Session, session: ChatSession) -> UUID | None:
     if parent_id is None:
         raise ValueError("Agent creation message is unavailable")
     return parent_id
+
+
+def add_chat_session__no_commit(db_session: Session, row: ChatSession) -> None:
+    db_session.add(row)
