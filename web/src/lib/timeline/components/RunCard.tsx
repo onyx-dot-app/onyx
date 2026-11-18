@@ -88,14 +88,19 @@ export function RunCard<S extends RunCardStep>({
   // A card that arrives while its run works rises in; a saved run's card
   // appears at once.
   const [arrivedLive] = useState(isRunning);
-  const toggle = () => setIsOpen((prev) => !prev);
+  // A card the user folded or opened keeps their choice.
+  const userToggled = useRef(false);
+  const toggle = () => {
+    userToggled.current = true;
+    setIsOpen((prev) => !prev);
+  };
 
   // Fold closed once text follows; fire once so a manual re-open sticks.
   const didAutoCollapse = useRef(false);
   useEffect(() => {
     if (autoCollapse && !didAutoCollapse.current) {
       didAutoCollapse.current = true;
-      setIsOpen(false);
+      if (!userToggled.current) setIsOpen(false);
     }
   }, [autoCollapse]);
 
@@ -103,9 +108,10 @@ export function RunCard<S extends RunCardStep>({
   const [startedAt] = useState<number | undefined>(() =>
     isRunning ? (streamingStartTime ?? Date.now()) : undefined
   );
-  // The live timer; the server's duration, when it has one, stops it.
+  // The live timer runs while the run works; the server's duration, when it
+  // has one, stops it.
   const elapsedSeconds = useStreamingDuration(
-    durationSeconds === undefined,
+    isRunning,
     startedAt,
     durationSeconds
   );
