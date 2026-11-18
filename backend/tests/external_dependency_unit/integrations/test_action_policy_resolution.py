@@ -22,8 +22,6 @@ from onyx.db.enums import (
 )
 from onyx.db.integration import list_integration_actions
 from onyx.db.integration_policy import (
-    get_policy_rows,
-    get_session_granted_actions,
     list_policy_rows,
     list_session_granted_actions,
 )
@@ -196,26 +194,9 @@ def _resolve(
     )[action_key]
 
 
-def test_bulk_policy_and_grant_reads_match_individual_reads(
-    db_session: Session, world: PolicyWorld, integrations: list[int]
+def test_bulk_reads_of_no_integration_or_no_chat_are_empty(
+    world: PolicyWorld, integrations: list[int], db_session: Session
 ) -> None:
-    for rows in (
-        Rows(admin_default=ASK, user_action=ALLOW, chat_grant=True),
-        Rows(admin_action=BLOCKED),
-        Rows(),
-    ):
-        _integration(db_session, integrations, rows, world)
-    for user_id in (None, world.user.id, uuid4()):
-        policies = list_policy_rows(db_session, integrations, user_id)
-        assert policies == {
-            key: get_policy_rows(db_session, key, user_id) for key in integrations
-        }
-    for chat_id in (world.chat_session_id, uuid4()):
-        grants = list_session_granted_actions(db_session, chat_id, integrations)
-        assert grants == {
-            key: get_session_granted_actions(db_session, chat_id, key)
-            for key in integrations
-        }
     assert list_policy_rows(db_session, [], world.user.id) == {}
     assert list_session_granted_actions(db_session, None, integrations) == {
         key: set() for key in integrations

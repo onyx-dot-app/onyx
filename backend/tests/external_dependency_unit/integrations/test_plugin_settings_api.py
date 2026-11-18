@@ -97,12 +97,17 @@ def no_craft_reload() -> Generator[None, None, None]:
 
 
 def _create(
-    user: User, db_session: Session, created: list[int], *, for_organization: bool
+    user: User,
+    db_session: Session,
+    created: list[int],
+    *,
+    for_organization: bool,
+    name: str | None = None,
 ) -> UUID:
     detail = admin_api.create_integration(
         IntegrationCreate(
             for_organization=for_organization,
-            name=f"weather-{uuid4().hex[:8]}",
+            name=name or f"weather-{uuid4().hex[:8]}",
             auth_mode=IntegrationAuthMode.SHARED,
             auth_method=IntegrationAuthMethod.API_KEY,
             header_template={"X-Api-Key": "{api_key}"},
@@ -515,34 +520,12 @@ def test_a_basic_token_reaches_only_the_plugins_of_its_user(
     )
 
 
-def _create_named(
-    user: User,
-    name: str,
-    db_session: Session,
-    created: list[int],
-    *,
-    for_organization: bool,
-) -> UUID:
-    detail = admin_api.create_integration(
-        IntegrationCreate(
-            for_organization=for_organization,
-            name=name,
-            auth_mode=IntegrationAuthMode.NONE,
-            config=OpenApiConfigInput(openapi_spec=OPENAPI_SPEC),
-        ),
-        user,
-        db_session,
-    )
-    created.append(detail.id)
-    return detail.plugins[0].plugin_id
-
-
 def test_publish_returns_the_new_name_and_refuses_the_name_of_a_skill(
     db_session: Session, admin: User, created: list[int]
 ) -> None:
     name = f"weather-{uuid4().hex[:8]}"
-    _create_named(admin, name, db_session, created, for_organization=True)
-    plugin_id = _create_named(admin, name, db_session, created, for_organization=False)
+    _create(admin, db_session, created, for_organization=True, name=name)
+    plugin_id = _create(admin, db_session, created, for_organization=False, name=name)
 
     published = plugins_api.publish_plugin(
         _http_request(), plugin_id, admin, db_session
@@ -552,8 +535,8 @@ def test_publish_returns_the_new_name_and_refuses_the_name_of_a_skill(
     skill = make_skill(db_session, name=f"skill-{uuid4().hex[:8]}", is_public=True)
     db_session.commit()
     try:
-        clashing = _create_named(
-            admin, skill.name, db_session, created, for_organization=False
+        clashing = _create(
+            admin, db_session, created, for_organization=False, name=skill.name
         )
         assert (
             _status(

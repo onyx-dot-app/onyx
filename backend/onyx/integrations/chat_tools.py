@@ -18,7 +18,6 @@ from onyx.db.enums import (
     PluginInstallationPolicy,
 )
 from onyx.db.integration import (
-    list_integration_actions,
     list_integration_actions_by_id,
     list_mcp_servers_by_integration,
     list_openapi_tools_by_integration,
@@ -59,7 +58,7 @@ def _integration_tools(
     user: User,
     request: IntegrationChatRequest,
     *,
-    actions: Sequence[IntegrationAction] | None = None,
+    actions: Sequence[IntegrationAction],
     connections: Mapping[tuple[int, UUID | None], IntegrationConnection] | None = None,
     policy_rows: PolicyRows | None = None,
     granted_actions: set[str] | None = None,
@@ -77,8 +76,6 @@ def _integration_tools(
             "Skipping integration %s: %s", integration.id, credentials.code.value
         )
         return []
-    if actions is None:
-        actions = list_integration_actions(integration.id, db_session)
     actions = [
         action
         for action in actions
@@ -221,18 +218,8 @@ def build_integration_chat_tools(
     grants = list_session_granted_actions(
         db_session, request.chat_session_id, list(selected)
     )
-    api_ids = [
-        key
-        for key, (links, _) in selected.items()
-        if links.integration.kind is IntegrationKind.API
-    ]
-    mcp_ids = [
-        key
-        for key, (links, _) in selected.items()
-        if links.integration.kind is IntegrationKind.MCP
-    ]
-    api_tools = list_openapi_tools_by_integration(api_ids, db_session)
-    servers = list_mcp_servers_by_integration(mcp_ids, db_session)
+    api_tools = list_openapi_tools_by_integration(list(selected), db_session)
+    servers = list_mcp_servers_by_integration(list(selected), db_session)
     for integration_id, (links, allowed) in selected.items():
         integration = links.integration
         try:

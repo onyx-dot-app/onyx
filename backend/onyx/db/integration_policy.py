@@ -30,20 +30,7 @@ def get_policy_rows(
     db_session: Session, integration_id: int, user_id: UUID | None
 ) -> PolicyRows:
     """The admin rows, and the rows of ``user_id`` when given."""
-    owner = IntegrationActionPolicy.user_id.is_(None)
-    if user_id is not None:
-        owner = or_(owner, IntegrationActionPolicy.user_id == user_id)
-    admin: dict[str, IntegrationActionPolicyValue] = {}
-    user: dict[str, IntegrationActionPolicyValue] = {}
-    for row_user_id, action, policy in db_session.execute(
-        select(
-            IntegrationActionPolicy.user_id,
-            IntegrationActionPolicy.action,
-            IntegrationActionPolicy.policy,
-        ).where(IntegrationActionPolicy.integration_id == integration_id, owner)
-    ).tuples():
-        (admin if row_user_id is None else user)[action] = policy
-    return PolicyRows(admin=admin, user=user)
+    return list_policy_rows(db_session, [integration_id], user_id)[integration_id]
 
 
 def list_admin_policy_rows(
@@ -114,15 +101,9 @@ def get_session_granted_actions(
 ) -> set[str]:
     """The actions of the integration that "Approve for this chat" approved
     in the chat."""
-    return set(
-        db_session.scalars(
-            select(ApprovalRequest.action_id).where(
-                ApprovalRequest.chat_session_id == chat_session_id,
-                ApprovalRequest.integration_id == integration_id,
-                ApprovalRequest.decided_via == ApprovalDecidedVia.SESSION_GRANT,
-            )
-        ).all()
-    )
+    return list_session_granted_actions(db_session, chat_session_id, [integration_id])[
+        integration_id
+    ]
 
 
 def list_persona_plugin_links(
