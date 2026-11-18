@@ -124,20 +124,7 @@ export default function IntegrationActionsTab({
   function setDraft(next: Draft) {
     setEdits(
       changes(
-        {
-          default_policy:
-            next.defaultPolicy !== current.defaultPolicy
-              ? next.defaultPolicy
-              : edits.default_policy,
-          actions: {
-            ...edits.actions,
-            ...Object.fromEntries(
-              Object.entries(next.actions).filter(
-                ([key, value]) => value !== (current.actions[key] ?? null)
-              )
-            ),
-          },
-        },
+        { default_policy: next.defaultPolicy, actions: next.actions },
         saved
       )
     );

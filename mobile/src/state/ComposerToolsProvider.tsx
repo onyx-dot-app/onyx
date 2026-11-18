@@ -503,7 +503,7 @@ export function useComposerToolsState({
         preferencesLoaded &&
         (availableToolsLoaded ||
           (disabledToolIds.length === 0 && disabledPluginIds.length === 0)),
-      toolOptionsFailed: !preferencesLoaded && preferencesFailed,
+      toolOptionsFailed: preferencesFailed,
       retryToolOptions: reloadPreferences,
       // Gated on `showDeepResearch` so a control the admin has since hidden can't send true.
       resolveToolOptions: () => {

@@ -486,12 +486,12 @@ const AppInputBar = React.memo(
       chatState === "input" && !disabled && !isClassifying && !hasPendingFiles;
 
     useEffect(() => {
-      if (heldSendKey === null) return;
-      if (heldSendKey !== chatDraftStorageKey) {
-        setHeldSendKey(null);
+      if (
+        heldSendKey !== chatDraftStorageKey ||
+        !toolConfiguration.optionsLoaded ||
+        hasPendingFiles
+      )
         return;
-      }
-      if (!toolConfiguration.optionsLoaded || hasPendingFiles) return;
       setHeldSendKey(null);
       submitMessage(composedRef.current);
     }, [
