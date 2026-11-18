@@ -16,6 +16,7 @@ import { noForbiddenTermInSymbolNamesRule } from "./rules/no-shape-in-symbol-nam
 import { noTestTimeoutOverrideRule } from "./rules/no-test-timeout-override.ts";
 import { noUnknownParametersRule } from "./rules/no-unknown-parameters.ts";
 import { noUnknownReturnsRule } from "./rules/no-unknown-returns.ts";
+import { noUnreasonedStateSyncRule } from "./rules/no-unreasoned-state-sync.ts";
 import { noUnknownTypeAliasesRule } from "./rules/no-unknown-type-aliases.ts";
 import { noUnsafeDictionaryTypeRule } from "./rules/no-unsafe-dictionary-type.ts";
 import { noWidenThenAssertRule } from "./rules/no-widen-then-assert.ts";
@@ -44,6 +45,7 @@ const antiSlopPlugin = eslintCompatPlugin({
     "no-shape-in-symbol-names": noForbiddenTermInSymbolNamesRule,
     "no-unknown-parameters": noUnknownParametersRule,
     "no-unknown-returns": noUnknownReturnsRule,
+    "no-unreasoned-state-sync": noUnreasonedStateSyncRule,
     "no-unknown-type-aliases": noUnknownTypeAliasesRule,
     "no-widen-then-assert": noWidenThenAssertRule,
     "require-safety-comment-for-type-assertion":
