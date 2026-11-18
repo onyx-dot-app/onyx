@@ -31,8 +31,8 @@ shipping unchanged and stays the default desktop app. v2 has its own bundle ID
   works from any app. On macOS it is a non-activating `NSPanel` (`src-tauri/src/launcher.rs`),
   like Spotlight or Claude Desktop's quick entry: it appears over the app you are in, also
   full-screen apps and on every Space, without bringing Onyx's other windows forward, and it
-  hides when you click away. **Ask** streams an answer through
-  `POST /api/chat/send-chat-message`. **Search** calls `POST /api/search/send-search-message`
+  hides when you click away. It opens empty each time. **Ask** streams an answer through
+  `POST /api/chat/send-chat-message` and shows it as markdown. **Search** calls `POST /api/search/send-search-message`
   (EE). `Tab` switches mode, `Cmd+Enter` opens the chat in the main window, `Esc` closes.
 - SSO in the system browser, where you are often signed in already. The browser runs the
   server's normal OAuth flow with Onyx's mobile SSO parameters and PKCE, and the server ends it

@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { Button, InputTypeIn, LineItemButton, Text } from "@opal/components";
+import { listen } from "@tauri-apps/api/event";
+import {
+  Button,
+  CompactMarkdown,
+  type CompactMarkdownProps,
+  InputTypeIn,
+  LineItemButton,
+  Text,
+} from "@opal/components";
 import { Section } from "@opal/layouts";
 import { mount } from "@/lib/mount";
 import {
@@ -51,9 +59,25 @@ function Launcher() {
     function focus() {
       inputRef.current?.focus();
     }
+    // Like Claude's quick entry, the launcher opens fresh each time;
+    // ⌘↵ continues an answer in the main window.
+    function reset() {
+      askId.current += 1;
+      searchId.current += 1;
+      setMode("ask");
+      setQuery("");
+      setAnswer(EMPTY_ANSWER);
+      setHits(null);
+      setSearching(false);
+      setSearchError(null);
+    }
     focus();
     window.addEventListener("focus", focus);
-    return () => window.removeEventListener("focus", focus);
+    const unlisten = listen("launcher-hidden", reset);
+    return () => {
+      window.removeEventListener("focus", focus);
+      void unlisten.then((stop) => stop());
+    };
   }, []);
 
   async function runAsk(question: string) {
@@ -102,11 +126,11 @@ function Launcher() {
     }
   }
 
-  // Citations are buttons; search results are rows with role="button".
+  // Answer links, citation buttons, and search result rows (role="button").
   function results(): HTMLElement[] {
     return Array.from(
       resultsRef.current?.querySelectorAll<HTMLElement>(
-        'button:not(:disabled), [role="button"]:not([aria-disabled="true"])'
+        'a[href], button:not(:disabled), [role="button"]:not([aria-disabled="true"])'
       ) ?? []
     );
   }
@@ -220,6 +244,28 @@ function Launcher() {
   );
 }
 
+// A local window cannot follow links itself; they open through the app, which
+// opens web links and server paths only. Other links show as plain text.
+const OPENABLE_LINK = /^(https?:|\/)/i;
+
+const ANSWER_COMPONENTS: CompactMarkdownProps["components"] = {
+  a: ({ children, href }) =>
+    href && OPENABLE_LINK.test(href) ? (
+      <a
+        href={href}
+        className="text-link hover:text-link-hover underline underline-offset-2"
+        onClick={(event) => {
+          event.preventDefault();
+          void openExternal(href);
+        }}
+      >
+        {children}
+      </a>
+    ) : (
+      <>{children}</>
+    ),
+};
+
 interface AnswerViewProps {
   answer: AnswerState;
 }
@@ -242,9 +288,9 @@ function AnswerView({ answer }: AnswerViewProps) {
   return (
     <Section gap={3} alignItems="start" justifyContent="start" height="fit">
       {answer.text || answer.streaming ? (
-        <Text font="main-content-body" color="text-04">
+        <CompactMarkdown components={ANSWER_COMPONENTS}>
           {answer.streaming ? `${answer.text}▍` : answer.text}
-        </Text>
+        </CompactMarkdown>
       ) : null}
       {answer.approval ? (
         <Text font="main-ui-body" color="text-03">

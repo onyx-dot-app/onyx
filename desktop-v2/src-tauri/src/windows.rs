@@ -168,7 +168,10 @@ pub fn route(app: &AppHandle) {
                 main_window::renew_session(&app, &server, &token).await;
             }
             Ok(false) => {
-                let _ = state.clear_token(&server);
+                // A sign-in that finished meanwhile keeps its session and windows.
+                if matches!(state.clear_rejected_token(&server, &token), Ok(false)) {
+                    return;
+                }
                 // The rejected account's answers must not reach the next one.
                 reset_launcher(&app);
                 let _ = open_login(&app);
