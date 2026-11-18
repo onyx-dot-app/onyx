@@ -39,13 +39,16 @@ All versions and hashes are `ARG` values at the top of `Dockerfile.artifacts`:
   SHA256 and the release's `.sha256.txt`. Then it checks each file against the
   `SHA256SUMS` file in the tarball.
 
-The config fragment has three changes:
+The config fragment has four changes:
 
 1. `CONFIG_CRYPTO_FIPS140_EXTMOD` off. With the stock config, a self-built kernel
    panics at boot in the FIPS140 module loader.
 2. `CONFIG_CGROUP_MISC` on.
 3. `CONFIG_IKCONFIG` and `CONFIG_IKCONFIG_PROC` on, so the guest shows its config
    at `/proc/config.gz`.
+4. `CONFIG_VIRTIO_BALLOON` and `CONFIG_PAGE_REPORTING` on (the base config has
+   them too). The template VMs' balloon needs them to return freed guest memory
+   to the node.
 
 ## Build locally
 

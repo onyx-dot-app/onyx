@@ -1,7 +1,8 @@
 #!/bin/bash
 # PID 1 of a Craft Firecracker guest. Installed as /sbin/craft-init.
 #
-# 1. Mounts proc, sys, dev, cgroup2, /run, /tmp and /dev/shm.
+# 1. Mounts proc, sys, dev, cgroup2, /run, /tmp and /dev/shm, and makes the
+#    Onyx directories in /tmp.
 # 2. Attaches the scratch and managed drives (see attach.sh), unless the
 #    kernel command line has craft.scratch=defer. Then the guest daemon runs
 #    attach after a snapshot restore. If attach fails, init starts no service.
@@ -68,6 +69,12 @@ mnt /dev/shm -t tmpfs -o nosuid,nodev,mode=1777 tmpfs
 mnt /sys/fs/cgroup -t cgroup2 -o nosuid,nodev,noexec,nsdelegate cgroup2
 mnt /run -t tmpfs -o nosuid,nodev,mode=0755 tmpfs
 mnt /tmp -t tmpfs -o nosuid,nodev,mode=1777 tmpfs
+# Onyx directories for files that Onyx puts in the VM. The sandbox user owns
+# them, so commands can add and delete files there. The template boot makes
+# them and its snapshot keeps them, so every VM restored from it has them.
+if ! { mkdir -p /tmp/onyx/tool-results /tmp/onyx/search-files /tmp/onyx/artifacts && chown -R 1000:1000 /tmp/onyx; }; then
+  log "/tmp/onyx failed"
+fi
 for link in fd:/proc/self/fd stdin:/proc/self/fd/0 stdout:/proc/self/fd/1 stderr:/proc/self/fd/2; do
   [ -e "/dev/${link%%:*}" ] || ln -s "${link#*:}" "/dev/${link%%:*}"
 done

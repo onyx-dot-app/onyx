@@ -478,11 +478,13 @@ message NodeInfoResponse {
   repeated ManagedImageInfo managed_images = 10;
 
   // Memory admission and drain. Create needs
-  // mem_available_mib >= mem_starting_mib + mem_mib + mem_reserve_mib.
+  // min(mem_available_mib, VM slice room below its memory.max) >=
+  // mem_starting_mib + mem_mib / --starting-mem-divisor (rounded up) +
+  // mem_reserve_mib.
   // The memory reserve (--min-free-mem-mib).
   uint64 mem_reserve_mib = 11;
-  // Guest memory of the VMs that are starting. Their memory is not in
-  // mem_available_mib yet, so Create counts it.
+  // Guest memory / --starting-mem-divisor of the VMs that are starting.
+  // Their memory is not in mem_available_mib yet, so Create counts it.
   uint64 mem_starting_mib = 12;
   DrainStatus drain = 13;
   // The VM cap (--max-vms); 0 is no cap. Create refuses with
@@ -536,14 +538,13 @@ message TemplateInfo {
   // True when the template key fits this node. Create refuses the others
   // with TEMPLATE_INCOMPATIBLE.
   bool compatible = 13;
-  // Managed drive slots of the template's VMs: 2 (layout 3 and later, the VMs can
-  // swap the managed drive) or 1.
+  // Managed drive slots of the template's VMs: 2 (slot A and the spare
+  // slot B of a swap).
   uint32 managed_slots = 14;
 
-  // True when the template VMs have the balloon device with free page
-  // reporting (layout 4 and later): the guest returns free
-  // memory to the node.
-  bool balloon = 15;
+  // Every template that the agent restores has the balloon device.
+  reserved 15;
+  reserved "balloon";
   // Managed mounts that the template's VMs can swap: "skills" from layout
   // 3, also "user-uploads" and "spaces" from layout 5 when the root drive's
   // guest daemon serves them (rootfs manifest managed_mounts). Empty from

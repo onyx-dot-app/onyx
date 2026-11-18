@@ -86,7 +86,13 @@ In a Firecracker VM, managed content mounts on read-only, noexec drives at
 `/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces` (each swappable with the
 same A/B slot mechanism); scripts run through interpreters. Each session has
 `/home/onyx/workspaces/<session-id>`, the default working directory of its
-commands; commands can still reach any path in the VM. Publishing the
+commands; commands can still reach any path in the VM. The template boot
+makes `/tmp/onyx/{tool-results,search-files,artifacts}` on the `/tmp` tmpfs,
+owned by the sandbox user, and the template snapshot keeps them. A VM has
+8 GiB of guest memory by default; the host agent charges a starting VM half
+of it in memory admission (`--starting-mem-divisor`) and owns admission;
+placement only ranks nodes by free memory. Every VM has a Firecracker balloon
+with free page reporting. Publishing the
 userspace image does not change the current pod/Docker image settings.
 
 Rootfs delivery (Firecracker only): `.github/workflows/craft-fc-rootfs.yml` converts a

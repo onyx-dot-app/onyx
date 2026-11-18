@@ -9,7 +9,7 @@ and pull its images from a private registry.
 
 ## microVM size
 
-Each new microVM has 2 vCPUs, 4096 MiB of memory, and a working disk of 32 GiB by default.
+Each new microVM has 2 vCPUs, 8192 MiB of memory, and a working disk of 32 GiB by default.
 The host agent sets CPU and memory when it builds the node template.
 The working disk grows from the template size when Onyx creates a microVM.
 A template with a larger working disk keeps that size. Filesystem metadata uses part of the disk,
@@ -23,12 +23,20 @@ Hosts must allow at least 32 GiB through `--max-scratch-gib`; its default is 100
 The host agent admits a new microVM only when the node has enough memory:
 
 ```text
-available memory >= memory of the microVMs that are starting + 4096 MiB + 2048 MiB reserve
+available memory >= 4096 MiB for each microVM that is starting + 4096 MiB + 2048 MiB reserve
 ```
 
-A starting microVM counts at its full 4096 MiB. A running microVM counts only at the memory that it uses:
-idle guests give free memory back to the node.
+A starting microVM counts at half of its 8192 MiB, because it does not use all of its memory soon after it starts.
+A running microVM counts only at the memory that it uses: idle guests give free memory back to the node.
 So memory limits how many microVMs start at the same time more than how many run.
+
+The available memory is also at most the room below the slice limit (see below).
+
+The node can run microVMs that together have more memory than the node.
+If many microVMs use most of their memory at the same time, the kernel stops one microVM,
+and the [CraftFcVMOOMKills](/deployment/kubernetes/craft-firecracker-operations#craftfcvmoomkills) alert fires.
+`craft.hostAgent.startingMemDivisor` (default `2`) sets the divisor for starting microVMs.
+Set it to `1` to count each starting microVM at its full memory, or raise it if your microVMs use little memory.
 
 Kubelet does not count microVM memory. Do not run other workloads on KVM nodes.
 
@@ -41,7 +49,8 @@ The host agent removes it when it starts again.
 ## Measured limits
 
 Onyx measured these numbers on Amazon EKS with `m8i.4xlarge` nodes (16 vCPUs, 64 GiB, nested virtualization)
-and a gp3 root volume with 6000 IOPS and 500 MiB/s:
+and a gp3 root volume with 6000 IOPS and 500 MiB/s, with 4096 MiB microVMs.
+Onyx has not measured them with 8192 MiB microVMs:
 
 | Limit | Value | Cause |
 | --- | --- | --- |
