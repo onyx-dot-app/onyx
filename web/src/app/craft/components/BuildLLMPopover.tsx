@@ -187,13 +187,14 @@ export function BuildLLMPopover({
   ]);
 
   // Reset expanded groups when popover opens
-  useEffect(() => {
-    if (isOpen) {
-      setExpandedGroups([currentGroupKey]);
-    }
-  }, [isOpen, currentGroupKey]);
+  const [shown, setShown] = useState({ isOpen, currentGroupKey });
+  if (shown.isOpen !== isOpen || shown.currentGroupKey !== currentGroupKey) {
+    setShown({ isOpen, currentGroupKey });
+    if (isOpen) setExpandedGroups([currentGroupKey]);
+  }
 
   // Auto-scroll to selected model
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- timer that scrolls the selected model row into view after the popover opens
   useEffect(() => {
     if (isOpen) {
       const timer = setTimeout(() => {

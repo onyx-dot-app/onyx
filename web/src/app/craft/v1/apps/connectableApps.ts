@@ -1,5 +1,5 @@
 import { useSearchParams } from "@opal/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 /** Which system a connectable came from. Surfaced to the user: the two are
  * connected and governed differently, so a row must never be ambiguous. */
@@ -26,6 +26,10 @@ export function useConnectableTab(): [
     useSearchParams().get(CRAFT_APPS_TAB_PARAM)
   );
   const [tab, setTab] = useState<ConnectableKind>(urlTab);
-  useEffect(() => setTab(urlTab), [urlTab]);
+  const [syncedUrlTab, setSyncedUrlTab] = useState(urlTab);
+  if (syncedUrlTab !== urlTab) {
+    setSyncedUrlTab(urlTab);
+    setTab(urlTab);
+  }
   return [tab, setTab];
 }

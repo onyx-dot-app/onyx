@@ -180,6 +180,7 @@ function OutputResources({
           (card) => card.kind === "file" && card.path === active.path
         )
       : undefined;
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- marks the open file as viewed on the server
   useEffect(() => {
     if (
       isOpen &&
@@ -209,6 +210,7 @@ function OutputResources({
   const [search, setSearch] = useState("");
   const [sessionlessOutputsSearch, setSessionlessOutputsSearch] = useState("");
   // Move the welcome query into its provisioned session before the next paint.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves the welcome search into the provisioned session's store entry before paint
   useLayoutEffect(() => {
     if (
       sessionId ||
@@ -256,6 +258,7 @@ function OutputResources({
   const exporting = activeResource?.exportState === "pending";
   const exportError = activeResource?.exportState === "failed";
   const scopeAlive = useRef(true);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- tracks mount so async export results skip updates after unmount
   useEffect(() => {
     scopeAlive.current = true;
     return () => {

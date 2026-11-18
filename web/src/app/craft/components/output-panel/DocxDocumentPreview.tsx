@@ -27,6 +27,7 @@ export default function DocxDocumentPreview({
   const host = useRef<HTMLDivElement>(null);
   const reportError = useEffectEvent(onError);
   const [loaded, setLoaded] = useState<Blob>();
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- renders the docx into the host element's shadow DOM
   useLayoutEffect(() => {
     let cancelled = false;
     if (!host.current) return;

@@ -40,6 +40,7 @@ export function usePreProvisionPolling({
   // Use ref to track if we're currently checking (prevents overlapping requests)
   const isCheckingRef = useRef(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- polls the server to check the pre-provisioned sandbox is still unclaimed
   useEffect(() => {
     // Only poll when enabled (welcome page) and we have a ready session
     if (!enabled || !sessionId) {

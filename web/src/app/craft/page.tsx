@@ -15,6 +15,7 @@ export default function BuildPage() {
   const t = useTranslations("craft.redirect");
   const navigation = useNavigation();
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- redirects to the Craft route on mount
   useEffect(() => {
     navigation.go(CRAFT_PATH, { replace: true });
   }, [navigation]);

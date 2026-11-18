@@ -30,6 +30,7 @@ jest.mock("react-pdf", () => ({
     onLoadSuccess: (pdf: { numPages: number }) => void;
     onLoadError: () => void;
   }) => {
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- test double for react-pdf Document that reports a load after mount
     useEffect(() => {
       mockDocumentCallbacks.push({ onLoadSuccess, onLoadError });
       onLoadSuccess({ numPages: 3 });
@@ -50,6 +51,7 @@ jest.mock("react-pdf", () => ({
       getViewport: () => { width: number; height: number };
     }) => void;
   }) => {
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- test double for react-pdf Page that reports a render after mount
     useEffect(() => {
       onRenderSuccess?.();
       onLoadSuccess?.({

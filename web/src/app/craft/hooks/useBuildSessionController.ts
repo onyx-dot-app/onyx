@@ -142,6 +142,7 @@ export function useBuildSessionController({
   );
 
   // Effect: Handle session changes based on URL
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- drives the session store and pre-provisioning from the URL session id
   useEffect(() => {
     const prevExistingSessionId = prevExistingSessionIdRef.current;
     prevExistingSessionIdRef.current = existingSessionId;
@@ -244,6 +245,7 @@ export function useBuildSessionController({
   // Effect: Auto-retry provisioning after backoff period
   // When provisioning fails, we set a retryAt timestamp. This effect schedules
   // a timer to retry after the backoff period elapses.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- timer that retries pre-provisioning after the backoff
   useEffect(() => {
     // Only set up timer if in failed state and on new-build page
     if (
@@ -281,6 +283,7 @@ export function useBuildSessionController({
   ]);
 
   // Effect: Refresh cached session state and re-validate pre-provisioning on focus.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- window focus listener that refreshes the cached session and pre-provisioned sandbox
   useEffect(() => {
     const handleFocus = async () => {
       if (existingSessionId) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Collapsible, Text } from "@opal/components";
@@ -80,9 +80,11 @@ export default function TodoListCard({
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   // Update isOpen when defaultOpen changes (for auto-collapse behavior)
-  useEffect(() => {
+  const [syncedDefaultOpen, setSyncedDefaultOpen] = useState(defaultOpen);
+  if (syncedDefaultOpen !== defaultOpen) {
+    setSyncedDefaultOpen(defaultOpen);
     setIsOpen(defaultOpen);
-  }, [defaultOpen]);
+  }
 
   // Calculate progress stats
   const total = todoList.todos.length;

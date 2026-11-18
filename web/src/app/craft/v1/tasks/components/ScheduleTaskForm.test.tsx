@@ -80,6 +80,7 @@ jest.mock("@/app/craft/v1/tasks/components/TaskActionPolicies", () => ({
     onChange: (value: unknown) => void;
   }) {
     const { useEffect } = jest.requireActual("react");
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- test double that reports the plugin selection after mount, like the real picker
     useEffect(() => {
       onChange([
         {

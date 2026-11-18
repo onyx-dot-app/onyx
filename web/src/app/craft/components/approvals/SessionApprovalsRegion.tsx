@@ -31,6 +31,7 @@ export default function SessionApprovalsRegion({
     sessionId: string | null;
     items: ApprovalStatusView[];
   } | null>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- revalidates the approvals SWR cache when the live approval status diverges from it
   useEffect(() => {
     if (!status || !data) return;
     const previous = lastStatus.current;

@@ -45,6 +45,7 @@ export default function BrowserTab({
   const reportLoading = useEffectEvent((id: string, loading: boolean) => {
     onLoadingChange?.(id, loading);
   });
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears this resource's loading flag in the parent registry on unmount or resource change
   useEffect(() => () => reportLoading(resourceId, false), [resourceId]);
   const app = apps.find((candidate) => candidate.id === appId);
   const [lastReadyApp, setLastReadyApp] = useState<RegisteredWebapp | null>(

@@ -22,6 +22,7 @@ export default function MediaPreview({
 }: MediaPreviewProps) {
   const [source, setSource] = useState<{ blob: Blob; url: string }>();
   const media = useRef<HTMLMediaElement | null>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- creates the media object URL and revokes it, pausing playback, on change
   useEffect(() => {
     const url = URL.createObjectURL(blob);
     setSource({ blob, url });
@@ -30,6 +31,7 @@ export default function MediaPreview({
       URL.revokeObjectURL(url);
     };
   }, [blob]);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- pauses the media element when its tab is hidden
   useEffect(() => {
     if (!isActive) media.current?.pause();
   }, [isActive]);

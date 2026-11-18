@@ -29,6 +29,7 @@ export function FilePreviewScrollArea({
   const element = useRef<HTMLDivElement>(null);
   const position = useRef(initialScrollTop);
   const restored = useRef(false);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- restores the preview DOM scroll position once the content is ready
   useLayoutEffect(() => {
     if (!contentReady) restored.current = false;
     if (isActive && contentReady && element.current && !restored.current) {

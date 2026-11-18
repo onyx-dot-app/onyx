@@ -121,6 +121,7 @@ export default function PdfDocumentViewer({
   useEffect(() => {
     if (pageCount) reportPage();
   }, [activePage, pageCount]);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the page viewport DOM to the top when the page changes
   useEffect(() => {
     viewportRef.current?.scrollTo?.({ top: 0, left: 0 });
   }, [activePage]);
@@ -372,6 +373,7 @@ function PdfThumbnail({
   const visible = useInView(ref, { margin: "100px" });
   const [rendered, setRendered] = useState(false);
   const shouldRender = rendered || (isActive && (visible || active));
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the active thumbnail DOM node into view
   useEffect(() => {
     if (active && isActive) ref.current?.scrollIntoView?.({ block: "nearest" });
   }, [active, isActive]);

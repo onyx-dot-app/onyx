@@ -47,6 +47,7 @@ function TypewriterText({
   // Animation frame ID for cleanup
   const animationRef = useRef<NodeJS.Timeout | null>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- restarts the typewriter timer animation when the text prop changes
   useEffect(() => {
     // Skip animation on first render unless animateOnMount is true
     if (isFirstRender.current) {
@@ -98,6 +99,7 @@ function TypewriterText({
     };
   }, [text, animateOnMount]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- typewriter timer that adds or removes one character per tick
   useEffect(() => {
     // Handle the animation loop
     if (isDeleting) {

@@ -71,6 +71,7 @@ export default function PptxPreview({
   // Keep the selection in bounds before rendering a replacement deck.
   if (data && currentSlide !== activeSlide) setCurrentSlide(activeSlide);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the selected slide thumbnail DOM node into view
   useEffect(() => {
     if (isActive) {
       selectedThumbnailRef.current?.scrollIntoView({

@@ -544,6 +544,7 @@ test.each(["complete", "error"] as const)(
     store().createSession("other");
     let acceptedObsoleteBytes = false;
     function DelayedPreviewCommit() {
+      // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- test double that writes the thumbnail cache during a later commit
       useLayoutEffect(() => {
         readOutputThumbnailCache("cache-user")?.set(key, {
           data: {

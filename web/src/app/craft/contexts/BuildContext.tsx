@@ -35,6 +35,7 @@ export function BuildProvider({ children }: BuildProviderProps) {
   const [leftSidebarFolded, setLeftSidebarFolded] = useState(false);
   const [videoBackgroundEnabled, setVideoBackgroundEnabled] = useState(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the video background preference from localStorage after hydration
   useEffect(() => {
     setVideoBackgroundEnabled(
       localStorage.getItem(VIDEO_BACKGROUND_STORAGE_KEY) === "true"

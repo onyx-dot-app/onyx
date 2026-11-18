@@ -2,7 +2,7 @@
 
 import { useNavigation, usePathname } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
-import { memo, useCallback, useState, useEffect, useRef } from "react";
+import { memo, useCallback, useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
@@ -120,21 +120,14 @@ function BuildSessionButton({
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Track title changes for typewriter animation (only for auto-naming, not manual rename)
-  const prevTitleRef = useRef(historyItem.title);
+  const [prevTitle, setPrevTitle] = useState(historyItem.title);
   const [shouldAnimate, setShouldAnimate] = useState(false);
 
   // Detect when title changes from "Fresh Craft" to a real name (auto-naming)
-  useEffect(() => {
-    const prevTitle = prevTitleRef.current;
-    if (
-      prevTitle !== historyItem.title &&
-      prevTitle === "Fresh Craft" &&
-      !renaming
-    ) {
-      setShouldAnimate(true);
-    }
-    prevTitleRef.current = historyItem.title;
-  }, [historyItem.title, renaming]);
+  if (prevTitle !== historyItem.title) {
+    setPrevTitle(historyItem.title);
+    if (prevTitle === "Fresh Craft" && !renaming) setShouldAnimate(true);
+  }
 
   const closeModal = useCallback(() => {
     toggleDeleteModal(false);
@@ -306,6 +299,7 @@ const MemoizedBuildSidebarInner = memo(() => {
   );
 
   // Fetch session history on mount
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- loads the session history from the server into the build session store on mount
   useEffect(() => {
     refreshSessionHistory();
   }, [refreshSessionHistory]);

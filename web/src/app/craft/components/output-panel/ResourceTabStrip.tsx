@@ -145,6 +145,7 @@ export default function ResourceTabStrip({
   const nodes = useRef(new Map<string, HTMLDivElement>());
   const suppressClick = useRef(false);
   const closedTab = useRef<string | null>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus to the next tab or the plus button after a tab closes
   useLayoutEffect(() => {
     if (
       !closedTab.current ||
@@ -185,6 +186,7 @@ export default function ResourceTabStrip({
         : { start: left, end: right }
     );
   }
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that updates the tab strip edge fades
   useEffect(() => {
     const element = strip.current;
     if (!element) return;
@@ -194,6 +196,7 @@ export default function ResourceTabStrip({
     updateEdges();
     return () => observer.disconnect();
   }, [direction]);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the tab strip DOM so the active tab is visible
   useEffect(() => {
     const element = nodes.current.get(activeTabId ?? "");
     const scroller = strip.current;

@@ -1328,6 +1328,7 @@ export function useBuildStreaming({
     [streamMessage, updateSessionData]
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- build session store subscription that streams queued messages
   useEffect(() => {
     if (!isEnabled) return;
     const dispatch = () => {

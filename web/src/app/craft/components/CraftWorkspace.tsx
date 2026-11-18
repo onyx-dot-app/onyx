@@ -66,6 +66,7 @@ export default function CraftWorkspace({
   const layoutReady =
     workspaceWidth > 0 &&
     (existingSessionId === null || sessionId === existingSessionId);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- animation frame that turns on layout transitions after the first measured layout
   useEffect(() => {
     if (!layoutReady || transitionsEnabled) return;
     const frame = requestAnimationFrame(() => setTransitionsEnabled(true));
@@ -88,6 +89,7 @@ export default function CraftWorkspace({
   const mediumWidth = workspaceWidth * boundedProportion;
   const coversChat = open && (mode === "full" || narrow);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus off the chat and sets it inert while the output panel covers it
   useLayoutEffect(() => {
     const element = chat.current;
     if (!element) return;
@@ -101,6 +103,7 @@ export default function CraftWorkspace({
 
   useOutputPanelPersistence();
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that tracks the workspace width
   useEffect(() => {
     const element = workspace.current;
     if (!element) return;
@@ -111,6 +114,7 @@ export default function CraftWorkspace({
     return () => observer.disconnect();
   }, []);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- window keydown listener that leaves full mode on Escape
   useEffect(() => {
     function restore(event: globalThis.KeyboardEvent) {
       const state = useBuildSessionStore.getState();
@@ -136,6 +140,7 @@ export default function CraftWorkspace({
     return () => window.removeEventListener("keydown", restore);
   }, [setMode]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- disables body text selection while a resize drag is in progress
   useEffect(() => {
     if (!dragging) return;
     const previous = document.body.style.userSelect;
@@ -145,6 +150,7 @@ export default function CraftWorkspace({
     };
   }, [dragging]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- cancels the resize gesture's animation frame on unmount
   useEffect(
     () => () => {
       const gesture = resizeGesture.current;
@@ -154,6 +160,7 @@ export default function CraftWorkspace({
     []
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- cancels the resize gesture's animation frame when the session, mode or width class changes
   useEffect(() => {
     const gesture = resizeGesture.current;
     if (!gesture) return;

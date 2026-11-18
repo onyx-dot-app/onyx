@@ -54,6 +54,7 @@ export default function HtmlFilePreview({
       onRefreshingChange: isActive ? onRefreshingChange : undefined,
     }
   );
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- timer that renews the preview token a minute before it expires
   useEffect(() => {
     if (!data) return;
     const timer = setTimeout(
