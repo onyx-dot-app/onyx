@@ -3,7 +3,14 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
-import { Button, CopyButton, InputTypeIn, Text } from "@opal/components";
+import {
+  Button,
+  CopyButton,
+  InputTypeIn,
+  MessageCard,
+  Text,
+} from "@opal/components";
+import { IconLoader } from "@opal/loaders";
 import { richNodes } from "@opal/utils";
 import {
   SvgArrowUpRight,
@@ -15,8 +22,10 @@ import {
 import { ConfirmationModalLayout, Section } from "@opal/layouts";
 import { toast } from "@opal/layouts";
 import { useNavigation } from "@opal/navigation";
-import { FetchError } from "@/lib/fetcher";
-import useShareableUsers from "@/hooks/useShareableUsers";
+import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
+import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { AccountType } from "@/lib/types";
 import {
   TransferOwnershipView,
   type TransferOwnershipTarget,
@@ -29,7 +38,10 @@ import {
   resetPassword,
   transferPrivatePlugins,
 } from "@/views/admin/UsersPage/svc";
-import type { PrivatePlugin } from "@/views/admin/UsersPage/types";
+import type {
+  FullUserSnapshot,
+  PrivatePlugin,
+} from "@/views/admin/UsersPage/types";
 
 // ---------------------------------------------------------------------------
 // Shared helper
@@ -300,7 +312,17 @@ export function DeleteUserModal({
   );
   const [transferTarget, setTransferTarget] =
     useState<TransferOwnershipTarget>(null);
-  const { data: users } = useShareableUsers({ includeApiKeys: false });
+  const owners = useSWR<FullUserSnapshot[]>(
+    privatePlugins ? SWR_KEYS.acceptedUsers : null,
+    errorHandlingFetcher
+  );
+  // The server accepts only an active standard user as the new owner.
+  const candidates = (owners.data ?? []).filter(
+    (user) =>
+      user.email !== email &&
+      user.is_active &&
+      user.account_type === AccountType.STANDARD
+  );
 
   function showPrivateSkillsToast(err: unknown): boolean {
     const plugins = privatePluginsFrom(err);
@@ -332,7 +354,7 @@ export function DeleteUserModal({
 
   async function transferAllThenDelete(newOwner: string) {
     const result = await transferPrivatePlugins(email, newOwner);
-    await deleteUser(email);
+    // The transfer is committed, so report the renames even if the delete fails.
     if (result.renames.length > 0) {
       toast.info(t("deleteModal.toasts.renamed"), {
         description: result.renames
@@ -340,6 +362,7 @@ export function DeleteUserModal({
           .join(", "),
       });
     }
+    await deleteUser(email);
   }
 
   if (privatePlugins) {
@@ -388,13 +411,33 @@ export function DeleteUserModal({
               </Text>
             ))}
           </Section>
-          <TransferOwnershipView
-            agent={null}
-            groups={[]}
-            onSelectedTargetChange={setTransferTarget}
-            selectedTarget={transferTarget}
-            users={(users ?? []).filter((user) => user.email !== email)}
-          />
+          {owners.isLoading ? (
+            <IconLoader />
+          ) : owners.error ? (
+            <Section alignItems="start" gap={2} height="auto">
+              <MessageCard
+                variant="error"
+                title={t("deleteModal.transfer.ownersLoadFailed")}
+              />
+              <Button
+                prominence="secondary"
+                onClick={() => void owners.mutate()}
+              >
+                {t("deleteModal.transfer.retry")}
+              </Button>
+            </Section>
+          ) : (
+            <TransferOwnershipView
+              agent={null}
+              groups={[]}
+              onSelectedTargetChange={setTransferTarget}
+              selectedTarget={transferTarget}
+              users={candidates.map((user) => ({
+                id: user.id,
+                email: user.email,
+              }))}
+            />
+          )}
         </Section>
       </ConfirmationModalLayout>
     );

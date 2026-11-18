@@ -95,6 +95,7 @@ from onyx.db.plugin_access import (
     visible_plugin_ids,
 )
 from onyx.db.skill_limit import check_skill_limit, lock_user_skill_preferences
+from onyx.db.skill_models import PluginRename, PrivatePluginsTransfer
 from onyx.db.users import fetch_user_by_id
 from onyx.db.utils import UNSET, UnsetType, is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -800,18 +801,6 @@ def transfer_skill_ownership(
     ).raise_first_failure()
 
 
-class PluginRename(BaseModel):
-    plugin_id: UUID
-    old_name: str
-    new_name: str
-
-
-class PrivatePluginsTransfer(BaseModel):
-    plugin_ids: list[UUID]
-    renames: list[PluginRename]
-    affected_user_ids: set[UUID]
-
-
 def transfer_private_plugins__no_commit(
     *,
     user_id: UUID,
@@ -826,9 +815,15 @@ def transfer_private_plugins__no_commit(
             "The new owner must be a different user.",
         )
     fetch_new_skill_owner(new_owner_user_id, db_session)
-    plugins = db_session.scalars(
-        private_plugins_blocking_user_delete(user_id).with_for_update(of=Plugin)
+    # Lock in id order, as the other plugin writers do, then rename in name
+    # order.
+    locked = db_session.scalars(
+        private_plugins_blocking_user_delete(user_id)
+        .order_by(None)
+        .order_by(Plugin.id)
+        .with_for_update(of=Plugin)
     ).all()
+    plugins = sorted(locked, key=lambda plugin: (plugin.name, plugin.id))
     plugin_ids = [plugin.id for plugin in plugins]
     affected_user_ids = affected_user_ids_for_plugins(plugin_ids, db_session)
     renames: list[PluginRename] = []

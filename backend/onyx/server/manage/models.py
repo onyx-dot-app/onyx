@@ -24,7 +24,7 @@ from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
 from onyx.db.models import StandardAnswer as StandardAnswerModel
 from onyx.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
 from onyx.db.port_attempt import ReindexProgressCounts
-from onyx.db.skill import PluginRename
+from onyx.db.skill_models import PluginRename
 from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
 from onyx.server.features.persona.models import FullPersonaSnapshot, PersonaSnapshot

@@ -9284,7 +9284,9 @@
           "description": "<strong>{email}</strong> possède {count, plural, one {# skill privé} other {# skills privés}}. Transférez la propriété à un autre utilisateur, puis le compte sera supprimé.",
           "submit": {
             "label": "Tout transférer et supprimer"
-          }
+          },
+          "ownersLoadFailed": "Impossible de charger les utilisateurs qui peuvent recevoir les compétences.",
+          "retry": "Réessayer"
         }
       },
       "editModal": {
