@@ -299,16 +299,15 @@ build their own clients.
     tool choice. `llm/model_capabilities.py:model_supports_none_tool_choice`
     says whether the provider and model can take `NONE`: Bedrock, Bedrock
     Converse, Ollama and Ollama Chat cannot (`PROVIDERS_WITHOUT_NONE_TOOL_CHOICE`),
-    and Qwen and GLM deployments can reject it. Those requests send `AUTO`, and
-    response decoding then recovers tool calls written as text. The agent runtime
-    owns the rejection of any call that comes back ([[core-chat-loop#stopping-tools]]).
+    and Qwen and GLM deployments can reject it. Those requests send `AUTO`. The
+    agent runtime denies any call that comes back ([[core-chat-loop#stopping-tools]]).
     Only the providers that receive `AUTO` reuse the whole cached prefix on a
     final step. Claude through Anthropic, Vertex, OpenRouter or a proxy receives
     `NONE`, and its prompt cache counts a changed tool choice as a change to the
     messages, so the message history misses on that step. Raw calls
-    (`invoke_raw`, `stream_raw`, used by the gateway) keep their behavior:
-    `_completion` omits the schemas of a `NONE` request to the providers in
-    `PROVIDERS_WITHOUT_NONE_TOOL_CHOICE` and sends `NONE` to other models.
+    (`invoke_raw`, `stream_raw`, used by the gateway) do not send `AUTO` for
+    `NONE`: `_completion` omits the schemas of a `NONE` request to the providers
+    in `PROVIDERS_WITHOUT_NONE_TOOL_CHOICE` and sends `NONE` to other models.
 
 ---
 

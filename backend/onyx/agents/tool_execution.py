@@ -46,8 +46,11 @@ if TYPE_CHECKING:
 
 logger = setup_logger()
 
-# The result of a call on a step where no tool can run.
-NO_TOOL_CAN_RUN_RESULT = "No more tools can run in this response."
+# The result of a call on a step where no tool can run; the runtime then takes
+# one more step for the answer.
+NO_TOOL_CAN_RUN_RESULT = (
+    "No more tools can run in this response. Write your final answer now."
+)
 
 
 def _tool_view(message: Message) -> Message:
@@ -391,12 +394,7 @@ class ToolBatch:
         step = self.step
         options = self.options
         tool = self.tools.get(call.name)
-        # A call on a step where no tool can run is not shown as started.
-        self.run.start_tool_calls(
-            calls,
-            tool.display_name if tool else None,
-            publish=options.tool_choice != ToolChoiceOptions.NONE,
-        )
+        self.run.start_tool_calls(calls, tool.display_name if tool else None)
         cancellation_signal.check()
         if (
             tool is None

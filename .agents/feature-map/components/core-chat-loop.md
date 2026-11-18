@@ -421,13 +421,13 @@ termination grace period is much shorter, so it ends running turns first
     `chat/agent.py:ChatAgent._prepare_step` uses `NONE` at the step cap.
     The request keeps the tool definitions of earlier steps
     ([[llm-providers#none-tool-choice-keeps-tools]]). The runtime
-    (`agents/runtime.py:_complete_step`) does not run a call on a step that
-    declares tools but allows none. The call gets the error result
-    `agents/tool_execution.py:NO_TOOL_CAN_RUN_RESULT`, and chat does not show it.
-    A step with text is the answer: the run ends `COMPLETE` with that step as
-    the answer step. A step with only calls gets one more step, as the last
-    step, to answer from that history. If that step also has no text, the turn
-    fails.
+    (`agents/runtime.py:_complete_step`) ends a step that declares tools but
+    allows none. A call on that step does not run: it gets the error result
+    `agents/tool_execution.py:NO_TOOL_CAN_RUN_RESULT`, which tells the model to
+    answer, and shows as a tool error card. A step with calls, with or without
+    text, gets one more step with the same tools and choice, at most once per
+    run. A step without calls ends the run `COMPLETE` with its text as the
+    answer. A step without calls or non-blank text fails the turn.
     Image generation does not remove tools, even when the image call fails.
     The default cap is six cycles, including the final answer cycle; code mode
     uses `CODE_MODE_MAX_LLM_CYCLES` instead.

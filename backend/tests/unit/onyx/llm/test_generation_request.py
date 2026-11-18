@@ -179,33 +179,6 @@ def test_tool_permissions_preserve_declared_tools_and_semantic_options(
 
 
 @pytest.mark.parametrize(
-    "model_provider, recovers", [("ollama_chat", True), ("openai", False)]
-)
-def test_final_step_recovers_text_calls_where_the_provider_received_auto(
-    model_provider: str, recovers: bool
-) -> None:
-    text = '<function_calls><invoke name="lookup"></invoke></function_calls>'
-    provider = RecordingProvider(
-        _response(Message(content=text)),
-        config=_config(model_provider=model_provider, model_name="llama3.2"),
-    )
-    message = provider.invoke(
-        GenerationRequest(
-            messages=[UserMessage(content="question")],
-            tools=[ToolDefinition(name="lookup", description="", parameters={})],
-            allowed_tool_names=frozenset(),
-            options=GenerationOptions(tool_choice=ToolChoiceOptions.NONE),
-        )
-    )
-    if recovers:
-        assert [call.name for call in message.tool_calls] == ["lookup"]
-        assert not message.text
-    else:
-        assert message.tool_calls == []
-        assert message.text == text
-
-
-@pytest.mark.parametrize(
     "allowed,choice,error",
     [
         (frozenset({"unknown"}), ToolChoiceOptions.AUTO, "not declared"),

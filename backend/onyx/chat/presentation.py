@@ -28,7 +28,6 @@ from onyx.agents.models import (
     RunState,
     RunStatus,
 )
-from onyx.agents.tool_execution import NO_TOOL_CAN_RUN_RESULT
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
@@ -67,13 +66,7 @@ from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
 from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
-from onyx.llm.models import (
-    AssistantMessage,
-    ToolCall,
-    ToolResult,
-    ToolResultMessage,
-    UserMessage,
-)
+from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage, UserMessage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     AWAITING_USER,
@@ -524,12 +517,7 @@ class ResponsePresenter:
                 InputEndedEvent,
             ),
         ):
-            key = (event.run_id, event.message_id, event.tool_call.id)
-            if isinstance(event, ToolEndEvent) and _no_tool_could_run(event.result):
-                # The runtime does not start these calls, so they have no card.
-                self.tools.pop(key, None)
-                return
-            tool = self.tools.get(key)
+            tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
             if tool is None:
                 return
             output = tool.consume(event)
@@ -568,15 +556,6 @@ class ResponsePresenter:
                 )
         for packet in output:
             self.emitter.emit(packet)
-
-
-def _no_tool_could_run(result: ToolResult | None) -> bool:
-    """A call on a step where no tool can run; the user does not see it."""
-    return (
-        result is not None
-        and result.is_error
-        and result.content == NO_TOOL_CAN_RUN_RESULT
-    )
 
 
 def overall_stop(status: RunStatus, failure: RunFailure | None) -> OverallStop:
@@ -634,13 +613,7 @@ def replay_response(
         calls = [
             call
             for call in message.tool_calls
-            if call.name not in HIDDEN_TOOLS
-            and call.name != setting.think_tool
-            and not _no_tool_could_run(
-                execution.result
-                if (execution := step.tools.get(call.id)) is not None
-                else None
-            )
+            if call.name not in HIDDEN_TOOLS and call.name != setting.think_tool
         ]
         if not calls:
             continue

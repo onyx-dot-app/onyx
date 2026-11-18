@@ -2643,7 +2643,7 @@ _BEDROCK_CLAUDE = "anthropic.claude-sonnet-4-20250514-v1:0"
         (LlmProviderNames.OPENROUTER, "qwen/qwen3.7-plus", True),
     ],
 )
-def test_raw_none_request_keeps_its_provider_behavior(
+def test_raw_none_request_omits_schemas_where_the_adapter_cannot_forbid_calls(
     model_provider: str, model_name: str, keeps_tools: bool
 ) -> None:
     """Gateway requests use the raw layer: NONE omits the schemas where the

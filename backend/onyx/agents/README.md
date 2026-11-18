@@ -178,6 +178,10 @@ Saved steps retain both advertised declarations and execution permissions. Resto
 Return `True` to continue or `False` to finish. Without this callback, the agent continues after tool calls
 unless all results request termination. It stops after a final answer.
 A continuation request at the step limit produces `LIMIT`; it does not prepare or execute another step.
+The runtime decides the outcome of a step that declares tools and allows none; `after_step` still runs for it.
+A call on that step gets the error result `NO_TOOL_CAN_RUN_RESULT`, which asks for the final answer.
+If the step has calls, the run takes one extra step, as its last step, even past the step limit. This happens at most once per run.
+Otherwise the step's text is the answer. A step with no call and no non-blank text fails the run.
 Raise from `after_step` when output validation fails. The run retains the completed output and records the failure.
 
 Both callbacks run on the execution thread. Request assembly and compaction use that thread too.
@@ -199,8 +203,6 @@ Each model call receives a separate context copy. Compaction applies its own tra
 Generation options remain part of `PreparedStep`, since tool choice and token limits can change between steps.
 The executor enforces step permissions, `NONE`, and `NamedToolChoice` before tool approval or execution.
 Other tool definitions remain in the request for cache reuse; the LLM adapter sends `AUTO` where a provider cannot take `NONE`.
-On a step that declares tools and allows none, a call gets the error result `NO_TOOL_CAN_RUN_RESULT` and no tool events.
-Text on that step is the answer, and the run ends `COMPLETE`. A step with only calls gets one more step, as the last step; the second such step goes to `after_step`.
 Explicit calls recovered from model text follow the same permission checks as native calls.
 A forbidden call returns a tool error so the model can retry; generation alone does not authorize execution.
 

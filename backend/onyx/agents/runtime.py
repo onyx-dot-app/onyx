@@ -371,6 +371,8 @@ class Agent:
         """Start a worker, or execute here until suspension or completion with background=False.
 
         At `deadline_at` the run is cancelled and records a `DEADLINE` failure.
+        `max_steps` bounds the steps, except that a step that allows no tool
+        and returns calls gets one extra step for the answer, once per run.
         """
         AgentStep(index=0, limit=max_steps)
         with self._lock:
@@ -766,11 +768,7 @@ class Run:
             return self._execution_request == ExecutionRequest.SUSPEND
 
     def start_tool_calls(
-        self,
-        calls: Sequence[ToolCall],
-        display_name: str | None,
-        *,
-        publish: bool = True,
+        self, calls: Sequence[ToolCall], display_name: str | None
     ) -> None:
         with self.execution_lock:
             self.cancellation_signal.check()
@@ -784,8 +782,6 @@ class Run:
                 record.tools[call.id] = ToolExecutionRecord(
                     status=ExecutionStatus.RUNNING, display_name=display_name
                 )
-                if not publish:
-                    continue
                 self.publish_event(
                     ToolStartEvent(
                         **self.event_context,
@@ -2187,57 +2183,53 @@ def _complete_step(run: Run) -> None:
     ]
     # A step whose tool results all set `terminate` ends the run.
     terminated = bool(results) and all(result.terminate for result in results)
-    # On a step that declares tools but lets none run, text is the answer.
-    no_tool_can_run = (
-        bool(progress.tools)
+    should_continue = (
+        after_step(
+            _step_result(run, progress.options, progress.step_index).model_copy(
+                deep=True
+            )
+        )
+        if after_step is not None
+        else bool(calls)
+    ) and not terminated
+    step_limit = progress.step_limit
+    # The runtime ends a step that declares tools but lets none run. Its calls
+    # got denial results that ask for the answer, so the run takes one more
+    # step, at most once per run; otherwise the step's text is the answer.
+    if (
+        progress.tools
         and progress.options is not None
         and progress.options.tool_choice == ToolChoiceOptions.NONE
-    )
-    previous = (
-        run._state.steps[progress.step_index - 1] if progress.step_index else None
-    )
-    # Calls there get rejection results. Only calls and no text get one more
-    # step, as the last step, to answer from that history; a second such step
-    # goes to after_step, which can fail it.
-    retry = (
-        no_tool_can_run
-        and bool(calls)
-        and not step.message.text
-        and not (
+    ):
+        previous = (
+            run._state.steps[progress.step_index - 1] if progress.step_index else None
+        )
+        took_extra_step = (
             previous is not None
             and progress.previous_options is not None
             and progress.previous_options.tool_choice == ToolChoiceOptions.NONE
             and bool(previous.message.tool_calls)
-            and not previous.message.text
         )
-    )
-    should_continue = retry or (
-        (
-            after_step(
-                _step_result(run, progress.options, progress.step_index).model_copy(
-                    deep=True
-                )
+        should_continue = bool(calls) and not took_extra_step
+        if should_continue:
+            step_limit = progress.step_index + 2
+        elif not step.message.text.strip():
+            raise RuntimeError(
+                "The model did not return a final answer after tool execution."
             )
-            if after_step is not None
-            else bool(calls)
-        )
-        and not terminated
-        and not (no_tool_can_run and bool(step.message.text))
-    )
     cancellation_signal.check()
     has_delegated_work = run.coordination is not None and bool(
         run.coordination.delegated_runs()
     )
     # Collect delegated results before accepting an early answer or using the last step.
     wait_for_children = has_delegated_work and (
-        not should_continue or progress.step_index + 2 >= progress.step_limit
+        not should_continue or progress.step_index + 2 >= step_limit
     )
     should_continue = should_continue or has_delegated_work
     ownership = run.coordination.coordinator.ownership if run.coordination else None
     with run.execution_lock:
         progress.previous_options = progress.options
-        if retry:
-            progress.step_limit = progress.step_index + 2
+        progress.step_limit = step_limit
         can_continue = progress.step_index + 1 < progress.step_limit
         if (
             not should_continue
