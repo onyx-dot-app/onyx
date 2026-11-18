@@ -33,9 +33,11 @@ const MCP_ASSERTED_TOOL_NAME = "tool_0";
  * `beforeAll`; tests then drive only the UI surface under test. One UI
  * "create-flow" test is retained to keep the Add-Server + auth modal covered.
  */
-// fixme: drives the old admin MCP setup dialog and the old member plugin pages.
-// Rewrite on the integration pages (U7) and the member pages (U8).
-test.describe.fixme("Default Agent MCP Integration", () => {
+test.describe("Default Agent MCP Integration", () => {
+  test.fixme(
+    true,
+    "Drives the old admin MCP dialog and member plugin pages until U8 rewrites it."
+  );
   test.describe.configure({ mode: "serial" });
 
   let serverProcess: McpServerProcess | null = null;

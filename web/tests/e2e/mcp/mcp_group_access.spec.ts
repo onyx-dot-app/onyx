@@ -9,9 +9,11 @@ import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
  * Group read/filter behaviour is covered by external-dependency unit tests that
  * seed access rows directly. The create/edit selector is EE/business-tier only.
  */
-// fixme: drives the old admin MCP setup dialog and the old member plugin pages.
-// Rewrite on the integration pages (U7) and the member pages (U8).
-test.describe.fixme("MCP server group access control", () => {
+test.describe("MCP server group access control", () => {
+  test.fixme(
+    true,
+    "Drives the old admin MCP dialog and member plugin pages until U8 rewrites it."
+  );
   test.describe.configure({ mode: "serial" });
 
   const createdServerIds: number[] = [];

@@ -147,9 +147,11 @@ async function verifyToolUsableFromChat(
   );
 }
 
-// fixme: drives the old admin MCP setup dialog and the old member plugin pages.
-// Rewrite on the integration pages (U7) and the member pages (U8).
-test.describe.fixme("MCP OAuth flows", () => {
+test.describe("MCP OAuth flows", () => {
+  test.fixme(
+    true,
+    "Drives the old admin MCP dialog and member plugin pages until U8 rewrites it."
+  );
   test.describe.configure({ mode: "serial" });
   test.setTimeout(MCP_OAUTH_FLOW_TEST_TIMEOUT_MS);
 

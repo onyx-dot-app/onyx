@@ -40,9 +40,11 @@ const AUTH_TEMPLATE = {
  * builder; the remaining tests are the credential-gating regressions that must
  * run against the real UI.
  */
-// fixme: drives the old admin MCP setup dialog and the old member plugin pages.
-// Rewrite on the integration pages (U7) and the member pages (U8).
-test.describe.fixme("MCP per-user API key auth (multi-field template)", () => {
+test.describe("MCP per-user API key auth (multi-field template)", () => {
+  test.fixme(
+    true,
+    "Drives the old admin MCP dialog and member plugin pages until U8 rewrites it."
+  );
   test.describe.configure({ mode: "serial" });
 
   let serverProcess: McpServerProcess | null = null;
