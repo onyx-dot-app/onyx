@@ -6,6 +6,9 @@ is one Drive request, and Drive quota limits indexing throughput."""
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
+from onyx.connectors.google_drive import doc_conversion
 from onyx.connectors.google_drive.doc_conversion import (
     SMART_CHIP_CHAR,
     convert_drive_item_to_document,
@@ -113,6 +116,21 @@ def test_a_doc_with_smart_chips_is_exported_for_their_text() -> None:
 
 def test_a_doc_near_the_size_threshold_is_exported_for_the_size_skip() -> None:
     """The export decides the size skip, as before the Docs API came first."""
+    ops = _ops(_google_doc("x" * 600 + "\n"))
+    ops.export_file.side_effect = ExportSizeThresholdExceeded("too large")
+
+    result = _convert(ops, size_threshold=1_000)
+
+    assert result is None
+    ops.export_file.assert_called_once()
+
+
+def test_a_doc_with_many_sections_near_the_size_threshold_is_exported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The size skip comes before the section limit: a doc with too many
+    sections to align still gets the export's size check."""
+    monkeypatch.setattr(doc_conversion, "ADVANCED_PARSE_MAX_SECTIONS", 1)
     ops = _ops(_google_doc("x" * 600 + "\n"))
     ops.export_file.side_effect = ExportSizeThresholdExceeded("too large")
 
