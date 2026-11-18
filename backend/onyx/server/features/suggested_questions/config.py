@@ -56,3 +56,26 @@ SQ_RULES_MAX_CHUNK_ID = 2
 # With fewer documents than this left after triage, keep two chunks per
 # document instead of one.
 SQ_FEW_DOCUMENTS = 6
+
+# The writing call: a small model, fixed here like the triage models.
+SQ_WRITING_OPENAI_MODEL = os.environ.get("SQ_WRITING_OPENAI_MODEL") or "gpt-6-luna"
+SQ_WRITING_MAX_TOKENS = 1200
+# Seconds for one writing call. Triage uses the decision client default, also 30.
+SQ_LLM_TIMEOUT_S = 30.0
+# Passages sent to the writing call, and characters per passage (about 350
+# tokens).
+SQ_PASSAGES_MAX = 20
+SQ_PASSAGE_CHARS = 1400
+# Questions kept from one writing call, in all and per passage.
+SQ_QUESTIONS_PER_RUN = 12
+SQ_QUESTIONS_PER_PASSAGE = 2
+SQ_QUESTION_MAX_CHARS = 90
+
+# Search test: keep a question when its document is among the first
+# SQ_TOP_K_DOCS distinct documents of a search for SQ_SEARCH_LIMIT chunks.
+SQ_TOP_K_DOCS = 3
+SQ_SEARCH_LIMIT = 10
+# Searches, and triage requests, run at the same time. Both call shared
+# services (the model server, the decision provider), so keep it small.
+SQ_SEARCH_WORKERS = 4
+SQ_TRIAGE_WORKERS = 4

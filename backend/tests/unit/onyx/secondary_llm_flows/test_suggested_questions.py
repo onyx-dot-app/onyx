@@ -1,3 +1,4 @@
+import json
 import re
 from typing import Any
 from unittest.mock import MagicMock
@@ -19,8 +20,9 @@ from onyx.llm.decisions.models import (
     RefusalAnswer,
     ScoreAnswer,
 )
-from onyx.secondary_llm_flows import suggested_questions as triage
-from onyx.server.features.suggested_questions.models import UseCase
+from onyx.llm.models import GenerationRequest, ReasoningEffort
+from onyx.secondary_llm_flows import suggested_questions as sq
+from onyx.server.features.suggested_questions.models import TriagedChunk, UseCase
 from onyx.tracing.flows import LLMFlow
 
 
@@ -90,7 +92,7 @@ def _client(verdicts: dict[str, dict[str, Any]] | None = None) -> MagicMock:
     return client
 
 
-def _ids(triaged: list[triage.TriagedChunk]) -> list[str]:
+def _ids(triaged: list[sq.TriagedChunk]) -> list[str]:
     return [item.chunk.document_id for item in triaged]
 
 
@@ -108,7 +110,7 @@ def test_keeps_useful_chunks_and_drops_private_ones() -> None:
     names = "useful useless private refused-privacy refused-usable engineering refused-topic"
     chunks = [_chunk(document_id) for document_id in names.split()]
 
-    kept = triage.triage_chunks(chunks, [client])
+    kept = sq.triage_chunks(chunks, [client])
 
     assert _ids(kept) == ["useful", "engineering", "refused-topic"]
     assert [item.topic for item in kept] == [UseCase.HR, UseCase.ENGINEERING, None]
@@ -118,10 +120,10 @@ def test_keeps_useful_chunks_and_drops_private_ones() -> None:
 def test_asks_four_questions_per_chunk_on_a_short_snippet(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(triage, "SQ_TRIAGE_SNIPPET_CHARS", 10)
+    monkeypatch.setattr(sq, "SQ_TRIAGE_SNIPPET_CHARS", 10)
     client = _client()
 
-    triage.triage_chunks([_chunk("doc", content="0123456789 cut here")], [client])
+    sq.triage_chunks([_chunk("doc", content="0123456789 cut here")], [client])
 
     request: DecisionRequest = client.decide.call_args.args[0]
     names = [question.name for question in request.questions]
@@ -132,7 +134,7 @@ def test_asks_four_questions_per_chunk_on_a_short_snippet(
 def test_splits_chunks_into_requests_of_fifty() -> None:
     client = _client()
 
-    kept = triage.triage_chunks([_chunk(f"doc-{i}") for i in range(120)], [client])
+    kept = sq.triage_chunks([_chunk(f"doc-{i}") for i in range(120)], [client])
 
     sizes = sorted(len(call.args[0].questions) for call in client.decide.call_args_list)
     assert sizes == [80, 200, 200]
@@ -156,7 +158,7 @@ def test_falls_back_to_the_next_provider(failure: Any) -> None:
     failing.decide.side_effect = failure
     second = _client()
 
-    kept = triage.triage_chunks([_chunk("doc")], [failing, second])
+    kept = sq.triage_chunks([_chunk("doc")], [failing, second])
 
     assert _ids(kept) == ["doc"]
     second.decide.assert_called_once()
@@ -174,7 +176,7 @@ def test_rules_decide_when_no_provider_answers(has_provider: bool) -> None:
         _chunk("pay", 0, "The salary band for level 3 is 120k."),
     ]
 
-    kept = triage.triage_chunks(chunks, [failing] if has_provider else [])
+    kept = sq.triage_chunks(chunks, [failing] if has_provider else [])
 
     assert _ids(kept) == ["early-with-number", "early-with-name"]
     assert all(item.topic is None for item in kept)
@@ -189,9 +191,9 @@ def test_build_triage_clients_tries_openai_then_zoom(
         requested.append((provider, model))
         return None if provider == DecisionProvider.ZOOM_AI else MagicMock()
 
-    monkeypatch.setattr(triage, "get_decision_client_for_provider", get_client)
+    monkeypatch.setattr(sq, "get_decision_client_for_provider", get_client)
 
-    clients = triage.build_triage_clients()
+    clients = sq.build_triage_clients()
 
     assert requested == [
         (DecisionProvider.OPENAI, "gpt-6-luna"),
@@ -206,7 +208,7 @@ def test_a_full_refusal_keeps_nothing_even_when_rules_would() -> None:
     # The rules alone would keep this chunk: early, with a number.
     chunk = _chunk("address", 0, "Alice's home address is 25 Oak Street.")
 
-    assert triage.triage_chunks([chunk], [refusing]) == []
+    assert sq.triage_chunks([chunk], [refusing]) == []
 
 
 @pytest.mark.parametrize(
@@ -222,6 +224,90 @@ def test_build_triage_clients_skips_a_provider_it_cannot_use(
             raise error
         return MagicMock()
 
-    monkeypatch.setattr(triage, "get_decision_client_for_provider", get_client)
+    monkeypatch.setattr(sq, "get_decision_client_for_provider", get_client)
 
-    assert len(triage.build_triage_clients()) == 1
+    assert len(sq.build_triage_clients()) == 1
+
+
+def _passages(count: int) -> list[TriagedChunk]:
+    return [
+        TriagedChunk(
+            chunk=_chunk(f"doc-{n}", content="x" * 2000),
+            usable=2,
+            sensitive=0,
+            topic=None,
+            has_fact=1,
+        )
+        for n in range(1, count + 1)
+    ]
+
+
+def _llm(questions: list[dict[str, Any]]) -> MagicMock:
+    llm = MagicMock()
+    llm.invoke.return_value.text = json.dumps({"questions": questions})
+    return llm
+
+
+def test_write_questions_sends_numbered_passages_and_asks_for_json() -> None:
+    llm = _llm([])
+
+    sq.write_questions(_passages(25), llm, "Acme", ["engineer", "sales"])
+
+    request: GenerationRequest = llm.invoke.call_args.args[0]
+    system, user = request.messages
+    assert "people at Acme" in system.text and "engineer, sales" in system.text
+    assert user.text.startswith("[1] doc-1\n" + "x" * 1400 + "\n\n[2] doc-2")
+    assert "[21]" not in user.text  # at most 20 passages
+    assert request.options.structured_response_format == {"type": "json_object"}
+    assert request.options.reasoning_effort == ReasoningEffort.OFF
+    context = llm.invoke.call_args.kwargs["context"]
+    assert context.flow == LLMFlow.SUGGESTED_QUESTIONS
+
+
+def test_write_questions_drops_questions_that_break_the_rules() -> None:
+    def item(passage: int, question: str, best_for: str = "hr") -> dict[str, Any]:
+        return {"passage": passage, "question": question, "best_for": best_for}
+
+    llm = _llm(
+        [
+            item(1, "How many days of leave do we get?"),
+            item(1, "Who approves a trip abroad?", "any"),
+            item(1, "What is the third question?"),  # over 2 per passage
+            item(2, "How many days of leave do we get?"),  # duplicate
+            item(2, "Is remote work allowed?"),  # yes/no
+            item(2, "What does the document say about travel?"),  # names the source
+            item(2, "What is the travel budget"),  # not a question
+            item(2, "What is " + "very " * 20 + "long?"),  # too long
+            item(9, "Which passage does not exist?"),
+            item(2, "Which team owns the deploy pipeline?", "engineering"),
+        ]
+    )
+
+    drafts = sq.write_questions(_passages(2), llm, None, [])
+
+    assert [(d.text, d.chunk.document_id, d.best_for) for d in drafts] == [
+        ("How many days of leave do we get?", "doc-1", UseCase.HR),
+        ("Who approves a trip abroad?", "doc-1", None),
+        ("Which team owns the deploy pipeline?", "doc-2", UseCase.ENGINEERING),
+    ]
+
+
+def test_write_questions_reads_json_inside_a_code_block() -> None:
+    llm = MagicMock()
+    question = {"passage": 1, "question": "Who approves leave?", "best_for": "hr"}
+    llm.invoke.return_value.text = (
+        "Here you go:\n```json\n" + json.dumps({"questions": [question]}) + "\n```"
+    )
+
+    drafts = sq.write_questions(_passages(1), llm, None, [])
+
+    assert [draft.text for draft in drafts] == ["Who approves leave?"]
+
+
+@pytest.mark.parametrize("text", ["not json", '{"questions": "wrong shape"}'])
+def test_write_questions_raises_on_invalid_output(text: str) -> None:
+    llm = MagicMock()
+    llm.invoke.return_value.text = text
+
+    with pytest.raises(ValueError):
+        sq.write_questions(_passages(1), llm, None, [])
