@@ -230,6 +230,7 @@ local hold_ms = tonumber(ARGV[8])
 local recut_ms = tonumber(ARGV[9])
 local window_ms = tonumber(ARGV[10])
 local meta_ttl = tonumber(ARGV[11])
+local period = tonumber(ARGV[12])
 roll(meta, now, window_ms)
 redis.call('HINCRBY', meta, 'ref_cur', count)
 local refused = estimate(meta, now, window_ms, 'ref')
@@ -260,7 +261,8 @@ if refused >= min_refusals and refused_share >= threshold then
                'ref_prev', 0, 'req_cur', 0, 'ref_cur', 0)
   end
 end
-redis.call('PEXPIRE', meta, meta_ttl)
+-- The running total in the meta hash must live as long as the log.
+redis.call('PEXPIRE', meta, math.max(period, meta_ttl))
 return {math.floor(factor * 1000 + 0.5), applied,
         math.floor(refused_share * 1000 + 0.5)}
 """
@@ -359,6 +361,7 @@ class RedisRateWindows:
                     int(STORM_RECUT_SECONDS * 1000),
                     int(REFUSAL_WINDOW_SECONDS * 1000),
                     _META_TTL_SECONDS * 1000,
+                    int(window.period_seconds * 1000),
                 ],
             )
         except RedisError as error:

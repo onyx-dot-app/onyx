@@ -44,6 +44,8 @@ from onyx.db.enums import (
     IndexingStatus,
 )
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt
+from onyx.db.search_settings import get_current_search_settings
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -474,6 +476,45 @@ def test_a_stop_during_docfetching_validation_leaves_the_pair_active(
             db_session, cc_pair.credential_id, cc_pair.connector_id
         )
         is None
+    )
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_stop_during_docfetching_validation_cancels_the_attempt(
+    db_session: Session,
+    docfetching_validation: tuple[IndexAttempt, MagicMock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stop while validation waits for the source-API limiter ends the
+    attempt as canceled, as a stop during extraction does, not as failed."""
+    # Precondition.
+    attempt, instantiate_mock = docfetching_validation
+    instantiate_mock.return_value.validate_connector_settings.side_effect = (
+        ConnectorStopSignal("canceled")
+    )
+    attempt.search_settings_id = get_current_search_settings(db_session).id
+    attempt.status = IndexingStatus.IN_PROGRESS
+    db_session.commit()
+    monkeypatch.setattr(run_docfetching, "get_document_batch_storage", MagicMock())
+
+    # Under test.
+    run_docfetching.connector_document_extraction(
+        app=MagicMock(),
+        index_attempt_id=attempt.id,
+        cc_pair_id=attempt.connector_credential_pair_id,
+        search_settings_id=attempt.search_settings_id,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        callback=None,
+    )
+
+    # Postcondition.
+    db_session.expire_all()
+    refreshed = db_session.get(IndexAttempt, attempt.id)
+    assert refreshed is not None
+    assert refreshed.status == IndexingStatus.CANCELED
+    assert (
+        refreshed.connector_credential_pair.status
+        == ConnectorCredentialPairStatus.ACTIVE
     )
 
 

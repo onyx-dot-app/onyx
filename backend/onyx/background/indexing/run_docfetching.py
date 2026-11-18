@@ -758,16 +758,27 @@ def connector_document_extraction(
         # TODO: maybe memory tracer here
 
         # Set up connector runner
-        connector_runner = _get_connector_runner(
-            db_session=db_session,
-            attempt=index_attempt,
-            batch_size=INDEX_BATCH_SIZE,
-            start_time=window_start,
-            end_time=window_end,
-            include_permissions=should_fetch_permissions_during_indexing,
-            raw_file_callback=raw_file_callback,
-            should_stop=callback.should_stop if callback is not None else None,
-        )
+        try:
+            connector_runner = _get_connector_runner(
+                db_session=db_session,
+                attempt=index_attempt,
+                batch_size=INDEX_BATCH_SIZE,
+                start_time=window_start,
+                end_time=window_end,
+                include_permissions=should_fetch_permissions_during_indexing,
+                raw_file_callback=raw_file_callback,
+                should_stop=callback.should_stop if callback is not None else None,
+            )
+        except ConnectorStopSignal as e:
+            # A stop while validation waits for the source's API budget cancels
+            # the attempt, as a stop during extraction does.
+            logger.info(
+                "Marking attempt %s as canceled due to a stop signal during validation.",
+                index_attempt_id,
+            )
+            mark_attempt_canceled(index_attempt_id, db_session, reason=str(e))
+            memory_tracer.stop()
+            return
 
         # don't use a checkpoint if we're explicitly indexing from
         # the beginning in order to avoid weird interactions between
