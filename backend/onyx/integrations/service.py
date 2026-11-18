@@ -388,14 +388,19 @@ def _validate_url_patterns(patterns: list[str]) -> None:
 
 
 def _credential_fields_json(
-    fields: list[CredentialField] | None, header_template: Mapping[str, str] | None
+    fields: list[CredentialField] | None,
+    header_template: Mapping[str, str] | None,
+    stored: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]] | None:
+    """The sent fields, else a field for each key of the template. A key
+    that ``stored`` has keeps its stored label and secret setting."""
     if fields is not None:
         return [field.model_dump() for field in fields]
     if not header_template:
         return None
+    kept = {field.get("key"): field for field in stored or []}
     return [
-        {"key": key, "label": key.replace("_", " "), "secret": True}
+        kept.get(key) or {"key": key, "label": key.replace("_", " "), "secret": True}
         for key in header_field_keys(header_template)
     ] or None
 
@@ -920,7 +925,13 @@ def update_integration__no_commit(
     integration.header_template = header_template
     if "credential_fields" in fields or "header_template" in fields:
         integration.credential_fields = (
-            _credential_fields_json(request.credential_fields, header_template)
+            _credential_fields_json(
+                request.credential_fields,
+                header_template,
+                None
+                if "credential_fields" in fields
+                else integration.credential_fields,
+            )
             if auth_method is IntegrationAuthMethod.API_KEY
             else None
         )
