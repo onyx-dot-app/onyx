@@ -334,6 +334,45 @@ TOOL_SNAPSHOT_KEYS = {
 }
 
 
+def test_agent_hides_the_tools_of_a_plugin_the_viewer_cannot_see(
+    admin_user: DATestUser, basic_user: DATestUser, created: list[int]
+) -> None:
+    detail = IntegrationManager.create(
+        _openapi_body(for_organization=False), admin_user
+    )
+    created.append(detail.id)
+    plugin_id = str(detail.plugins[0].plugin_id)
+    response = client.post(
+        f"{API_SERVER_URL}/persona",
+        json={**_persona_body([], [{"plugin_id": plugin_id}]), "is_public": True},
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 200, response.text
+    persona_url = f"{API_SERVER_URL}/persona/{response.json()['id']}"
+    try:
+
+        def custom_tools(user: DATestUser) -> list[dict[str, Any]]:
+            persona = client.get(persona_url, headers=user.headers)
+            assert persona.status_code == 200, persona.text
+            return [
+                tool
+                for tool in persona.json()["tools"]
+                if tool["in_code_tool_id"] is None
+            ]
+
+        assert [tool["plugin_ids"] for tool in custom_tools(admin_user)] == [
+            [plugin_id]
+        ]
+        hidden = custom_tools(basic_user)
+        assert [tool["plugin_ids"] for tool in hidden] == [[plugin_id]]
+        assert hidden[0]["definition"] is None
+        assert hidden[0]["custom_headers"] is None
+        assert hidden[0]["user_id"] is None
+        assert custom_tools(admin_user)[0]["definition"] is not None
+    finally:
+        client.delete(persona_url, headers=admin_user.headers)
+
+
 def test_public_tool_aliases_keep_their_shapes(
     admin_user: DATestUser, basic_user: DATestUser, created: list[int]
 ) -> None:
