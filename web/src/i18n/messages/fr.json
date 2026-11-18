@@ -10663,6 +10663,7 @@
           "useDefaults": "Utiliser les valeurs par défaut",
           "readOnly": "Actions en lecture seule ({count})",
           "write": "Actions d’écriture ({count})",
+          "other": "Autres actions ({count})",
           "empty": "Cette intégration n’a aucune action.",
           "connectFirst": {
             "title": "Connectez d’abord le serveur",

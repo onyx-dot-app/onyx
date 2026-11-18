@@ -10663,6 +10663,7 @@
           "useDefaults": "使用默认值",
           "readOnly": "只读操作 ({count})",
           "write": "写入操作 ({count})",
+          "other": "其他操作 ({count})",
           "empty": "此集成没有操作。",
           "connectFirst": {
             "title": "请先连接服务器",

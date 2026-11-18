@@ -10663,6 +10663,7 @@
           "useDefaults": "Usar padrões",
           "readOnly": "Ações somente leitura ({count})",
           "write": "Ações de gravação ({count})",
+          "other": "Outras ações ({count})",
           "empty": "Esta integração não tem ações.",
           "connectFirst": {
             "title": "Conecte o servidor primeiro",

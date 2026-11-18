@@ -50,6 +50,34 @@ function rowOf(name: string): HTMLElement {
 
 afterEach(() => jest.restoreAllMocks());
 
+test("groups actions with an unknown read-only state apart from write actions", async () => {
+  mockFetch({
+    [URL_ACTIONS]: {
+      default_policy: null,
+      actions: [
+        ...actions,
+        makeAction({
+          key: "read_wiki",
+          display_name: "Read wiki",
+          read_only: null,
+          default_policy: "ask",
+        }),
+      ],
+    },
+  });
+  render(
+    <IntegrationActionsTab
+      integration={makeDetail()}
+      onOpenConfiguration={jest.fn()}
+    />
+  );
+  expect(
+    await screen.findByText(copy.other.replace("{count}", "1"))
+  ).toBeInTheDocument();
+  expect(screen.getByText("Write Actions (1)")).toBeInTheDocument();
+  expect(screen.getByText("Read-Only Actions (2)")).toBeInTheDocument();
+});
+
 test("shows the default row, then read-only and write actions with counts", async () => {
   mockFetch({ [URL_ACTIONS]: { default_policy: null, actions } });
   render(

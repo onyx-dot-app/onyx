@@ -10663,6 +10663,7 @@
           "useDefaults": "기본값 사용",
           "readOnly": "읽기 전용 액션({count})",
           "write": "쓰기 액션({count})",
+          "other": "기타 액션({count})",
           "empty": "이 연동에는 액션이 없습니다.",
           "connectFirst": {
             "title": "먼저 서버를 연결하세요",
