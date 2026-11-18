@@ -310,6 +310,10 @@ def test_openapi_match_picks_the_path_before_the_method_under_an_encoded_server_
         ("/files/v{version}", "/files/v", False),
         ("/files/{id}", "/files/a/b", False),
         ("/", "/", True),
+        ("/files/team%20one", "/files/team one", True),
+        ("/files/team%20{id}", "/files/team one", True),
+        ("/files/%7Bid%7D", "/files/{id}", True),
+        ("/files/%7Bid%7D", "/files/x", False),
     ],
 )
 def test_openapi_path_matches(template: str, path: str, expected: bool) -> None:
