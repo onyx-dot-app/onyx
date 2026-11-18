@@ -68,7 +68,10 @@ jobs:
           "$ONYX_CLI" deploy install --dir "$ONYX_DEPLOY_DIR"
           --no-prompt --local --tag edge
       - name: Check MCP discovery and challenge
-        run: python3 .github/scripts/check-mcp-compatibility.py --base-url http://localhost:3000
+        run: |
+          # mcp_server has no healthcheck, so nginx can answer 502 until it listens.
+          timeout 120 sh -c 'until curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:3000/mcp | grep -qvE "^(000|50[234])$"; do sleep 2; done'
+          python3 .github/scripts/check-mcp-compatibility.py --base-url http://localhost:3000
       # An install from an older CLI can lack files that this CLI manages.
       # A restart with --local must write them again before nginx starts.
       - name: Remove the nginx include files and restart
@@ -82,7 +85,10 @@ jobs:
             "$ONYX_DEPLOY_DIR"/data/nginx/webhook.conf.inc
           "$ONYX_CLI" deploy install --dir "$ONYX_DEPLOY_DIR" --no-prompt --local --tag edge
       - name: Check MCP discovery and challenge after the restart
-        run: python3 .github/scripts/check-mcp-compatibility.py --base-url http://localhost:3000
+        run: |
+          # mcp_server has no healthcheck, so nginx can answer 502 until it listens.
+          timeout 120 sh -c 'until curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:3000/mcp | grep -qvE "^(000|50[234])$"; do sleep 2; done'
+          python3 .github/scripts/check-mcp-compatibility.py --base-url http://localhost:3000
       - name: Dump deployment diagnostics
         if: failure()
         run: |
