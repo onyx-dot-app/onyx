@@ -81,6 +81,8 @@ fn local_window(
 /// the app: from the tray or the launcher, the window would open behind the
 /// app in front.
 pub fn bring_forward(app: &AppHandle, window: &WebviewWindow) {
+    // Queued on the main thread ahead of the focus change below.
+    crate::launcher::keep_app_shown(app);
     let _ = window.show();
     let _ = window.unminimize();
     activate_app(app);

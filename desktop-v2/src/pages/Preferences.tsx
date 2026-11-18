@@ -150,6 +150,8 @@ function ShortcutRecorder({ value, onRecord }: ShortcutRecorderProps) {
         buttonRef.current?.focus();
         setRecording(true);
       }}
+      // Focus moving to another control ends recording, so a later ⌘C is not taken.
+      onBlur={() => setRecording(false)}
     >
       {recording ? "Press the new shortcut… (Esc cancels)" : value ? displayShortcut(value) : ""}
     </button>

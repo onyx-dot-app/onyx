@@ -194,6 +194,14 @@ mod platform {
         }
     }
 
+    /// Another window is coming forward: the app stays shown, so a later
+    /// launcher hide must not hide it again.
+    pub fn keep_app_shown(app: &AppHandle) {
+        if OVER_HIDDEN_APP.swap(false, Ordering::SeqCst) {
+            set_others_invisible(app, false);
+        }
+    }
+
     pub fn is_visible(app: &AppHandle) -> bool {
         app.get_webview_panel(LAUNCHER)
             .map(|panel| panel.is_visible())
@@ -248,6 +256,8 @@ mod platform {
         }
     }
 
+    pub fn keep_app_shown(_app: &AppHandle) {}
+
     pub fn is_visible(app: &AppHandle) -> bool {
         app.get_webview_window(LAUNCHER)
             .is_some_and(|w| w.is_visible().unwrap_or(false))
@@ -263,6 +273,13 @@ const HISTORY_KEY: &str = "onyx.launcher.history";
 pub fn hide(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || platform::hide(&handle));
+}
+
+/// Called before another Onyx window comes forward (Dock, tray, Cmd+Enter),
+/// so the launcher losing focus to it does not hide the app again.
+pub fn keep_app_shown(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || platform::keep_app_shown(&handle));
 }
 
 /// Hides the panel and reloads its page, which clears the question, answer,

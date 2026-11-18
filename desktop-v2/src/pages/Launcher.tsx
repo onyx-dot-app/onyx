@@ -48,10 +48,15 @@ function loadHistory(): string[] {
   }
 }
 
+// History is optional: a full or unavailable store never blocks a question.
 function remember(question: string) {
   const history = loadHistory().filter((q) => q !== question);
   history.push(question);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(-HISTORY_SIZE)));
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(-HISTORY_SIZE)));
+  } catch {
+    // Not saved; the question still runs.
+  }
 }
 
 function Launcher() {
@@ -226,6 +231,8 @@ function Launcher() {
     }
   }
 
+  const awaitingApproval = turns.at(-1)?.approval != null;
+
   // ↑ in an empty input steps back through recent questions; ↓ steps forward.
   function browseHistory(event: KeyboardEvent<HTMLInputElement>): boolean {
     const browsing = historyAt.current !== null;
@@ -257,6 +264,9 @@ function Launcher() {
       setMode((m) => (m === "ask" ? "search" : "ask"));
     } else if (event.key === "Enter" && !event.metaKey && query.trim() !== "") {
       event.preventDefault();
+      // The server takes no new message while an answer waits for approval:
+      // keep the draft; ⌘↵ approves in the window, ⌘N starts a new chat.
+      if (mode === "ask" && awaitingApproval) return;
       const text = query.trim();
       remember(text);
       historyAt.current = null;
@@ -315,7 +325,9 @@ function Launcher() {
             placeholder={
               mode === "search"
                 ? "Search your company's knowledge…"
-                : turns.length > 0
+                : awaitingApproval
+                  ? "Approve with ⌘↵ in the Onyx window, or ⌘N for a new chat"
+                  : turns.length > 0
                   ? "Ask a follow-up…"
                   : "Ask Onyx anything…"
             }
