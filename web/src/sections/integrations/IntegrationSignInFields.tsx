@@ -119,15 +119,23 @@ export default function IntegrationSignInFields({
           {draft.headers.map((header, index) => {
             const suffix = index === 0 ? "" : ` ${index + 1}`;
             const last = index === draft.headers.length - 1;
+            const name = header.name.trim().toLowerCase();
+            const repeated = draft.headers
+              .slice(0, index)
+              .some((other) => other.name.trim().toLowerCase() === name);
             return (
               <Section key={index} gap={2} alignItems="stretch" height="auto">
                 <InputVertical
                   title={t("header.name.title")}
                   error={
-                    last
-                      ? (errorFor("headerName", t("header.name.error")) ??
-                        errorFor("headerDuplicate", t("header.name.duplicate")))
-                      : undefined
+                    !name
+                      ? errorFor("headerName", t("header.name.error"))
+                      : repeated
+                        ? errorFor(
+                            "headerDuplicate",
+                            t("header.name.duplicate")
+                          )
+                        : undefined
                   }
                 >
                   <Section

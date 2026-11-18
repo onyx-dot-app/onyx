@@ -383,9 +383,44 @@ test("shows each header of the template and saves the headers shown", async () =
     view.getByRole("button", { name: detailCopy.configuration.save })
   );
   await waitFor(() => expect(patchBodies(fetchMock)).toHaveLength(1));
-  expect(patchBodies(fetchMock)[0]).toMatchObject({
-    header_template: { Authorization: "Bearer {api_key}" },
+  expect(patchBodies(fetchMock)[0]).toHaveProperty("header_template", {
+    Authorization: "Bearer {api_key}",
   });
+});
+
+test("shows a header name error on the row that needs it", async () => {
+  const detail = makeDetail({
+    auth_mode: "individual",
+    auth_method: "api_key",
+    oauth_client: null,
+    header_template: {
+      "X-Tenant": "{tenant}",
+      Authorization: "Bearer {api_key}",
+    },
+    credential_fields: [
+      { key: "tenant", label: "tenant", secret: true },
+      { key: "api_key", label: "api key", secret: true },
+    ],
+  });
+  mockFetch({
+    [URL_DETAIL]: detail,
+    [URL_ACTIONS]: NO_ACTIONS,
+    "/api/admin/integrations": [],
+  });
+  const u = user();
+  open("configuration");
+  const view = await inPanel();
+  const nameLabel = copy.signIn.header.name.title;
+  await u.clear(await view.findByLabelText(nameLabel));
+  await u.click(
+    view.getByRole("button", { name: detailCopy.configuration.save })
+  );
+
+  const error = await view.findByText(copy.signIn.header.name.error);
+  const second = view.getByLabelText(`${nameLabel} 2`);
+  expect(
+    error.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING
+  ).toBeTruthy();
 });
 
 function patchBodies(fetchMock: jest.SpyInstance): unknown[] {
