@@ -149,3 +149,8 @@ does not match. Tag a spec when its backend flow or rendering differs in code mo
 Do not add sleeps, skips, or retries to make a flaky test pass. Find and fix
 the root cause. If you delete the test, write down why and tell the user.
 After three failed fix rounds, stop and ask a human for help.
+
+oxlint enforces this. It rejects `waitForTimeout`, frame waits, `networkidle`, raised
+timeouts and retries, and skips without a reason. Wait with a locator assertion, a specific
+response, or `expect.poll`. Give a conditional `test.skip` a reason as its second argument. Put
+`// Skip: <reason> <issue URL>` directly above a disabled test.

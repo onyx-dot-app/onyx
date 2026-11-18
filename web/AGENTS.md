@@ -138,6 +138,8 @@ the contract keeps Opal host-agnostic while the app supplies real translations.
 - Component tests (Jest + React Testing Library): `web/tests/README.md`.
 - E2E (Playwright): `web/tests/e2e/README.md` holds the hard rules (Page Object Model, locator
   priority).
+- oxlint enforces the test timing rules under `tests/e2e/` and in Jest test files. The warning overrides in
+  `.oxlintrc.json` list files with existing violations. Remove a file once it is clean. Never add one.
 - Run an e2e test with `cd web && bun run playwright <TEST_NAME>`. Do not use `bunx` or `npx`;
   they can fetch an unpinned Playwright.
 - `ods type-coverage typescript --check` type-checks `web/` and gates type coverage (the share of
