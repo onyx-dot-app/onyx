@@ -4,11 +4,16 @@ from contextlib import contextmanager
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.schema import CreateSchema
 
 from onyx.cache import factory as cache_factory
 from onyx.configs import app_configs
 from onyx.configs.constants import CacheBackendType
 from onyx.db.engine.sql_engine import SYNC_DB_API, SqlEngine, build_connection_string
+from shared_configs.configs import (
+    POSTGRES_DEFAULT_SCHEMA,
+    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+)
 from tests.external_dependency_unit.db.shard_test_utils import (
     admin_engine,
     temporary_database,
@@ -46,6 +51,11 @@ def alembic_engine(monkeypatch: pytest.MonkeyPatch) -> Generator[Engine, None, N
         monkeypatch.setattr(SqlEngine, "_engine", engine)
         monkeypatch.setattr(cache_factory, "CACHE_BACKEND", CacheBackendType.POSTGRES)
         try:
+            if POSTGRES_DEFAULT_SCHEMA != POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
+                with engine.begin() as connection:
+                    connection.execute(
+                        CreateSchema(POSTGRES_DEFAULT_SCHEMA, if_not_exists=True)
+                    )
             yield engine
         finally:
             engine.dispose()
