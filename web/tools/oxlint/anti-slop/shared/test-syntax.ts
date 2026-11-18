@@ -27,6 +27,8 @@ export function callPath(node: ESTree.Node | undefined): string[] {
     }
     case "CallExpression":
       return callPath(node.callee);
+    case "TaggedTemplateExpression":
+      return callPath(node.tag);
     case "ChainExpression":
     case "TSAsExpression":
     case "TSNonNullExpression":

@@ -123,6 +123,24 @@ test("flags wall time after switching back from fake timers", () => {
   ]);
 });
 
+test("flags per-case timeouts on array and tagged-table Jest tests", () => {
+  expect(
+    lint(
+      "src/example.test.ts",
+      `
+        it.each([1])("has a timeout", () => {}, 60000);
+        it.each\`value
+          \${1}
+        \`("has a timeout", () => {}, 60000);
+        it.each([1])("uses the project timeout", () => {});
+      `
+    )
+  ).toEqual([
+    "anti-slop(no-test-timeout-override)",
+    "anti-slop(no-test-timeout-override)",
+  ]);
+});
+
 test("allows observable waits, bounded microtask flushes, and tracked skips", () => {
   expect(
     lint(

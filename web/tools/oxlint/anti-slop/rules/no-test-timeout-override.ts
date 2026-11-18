@@ -43,7 +43,7 @@ export const noTestTimeoutOverrideRule = defineRule({
           !bindings.playwright &&
           name &&
           name !== "describe" &&
-          method !== "each" &&
+          (method !== "each" || node.callee.type !== "MemberExpression") &&
           method !== "todo" &&
           node.arguments.length > (testHooks.has(name) ? 1 : 2);
         const retries = bindings.jest.has(root) && method === "retryTimes";
