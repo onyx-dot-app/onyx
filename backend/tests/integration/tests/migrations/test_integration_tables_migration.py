@@ -1532,7 +1532,10 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
         # The foreign keys that a delete of an integration or a user follows.
         assert set(
             conn.execute(
-                text("SELECT indexname FROM pg_indexes WHERE indexname = ANY(:names)"),
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    "WHERE schemaname = current_schema() AND indexname = ANY(:names)"
+                ),
                 {
                     "names": [
                         "ix_integration_connection_integration_id",
