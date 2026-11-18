@@ -6,9 +6,6 @@ description: >-
   skipped PR only when a descendant's passing run contains its head (see
   .github/actions/check-tested-base).
 outputs:
-  child:
-    description: "Number of an open, ready, same-repository PR whose base is this PR's head branch, or empty"
-    value: ${{ steps.position.outputs.child }}
   stack_base:
     description: >-
       For a PR whose base is the head branch of an open same-repository PR: the
@@ -77,7 +74,6 @@ runs:
           echo "::notice::${skip_reason}"
         fi
         {
-          echo "child=${child}"
           echo "stack_base=${stack_base}"
           echo "skip_reason=${skip_reason}"
         } >> "$GITHUB_OUTPUT"
