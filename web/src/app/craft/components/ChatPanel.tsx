@@ -376,12 +376,15 @@ function ChatPanelContent({
   // Scroll detection for auto-scroll "magnet"
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const prevScrollRef = useRef({ sessionId, top: 0 });
-  const [scrollSessionId, setScrollSessionId] = useState(sessionId);
-  if (scrollSessionId !== sessionId) {
-    setScrollSessionId(sessionId);
+  // Each session change starts a new scroll epoch, so a stored offset from an
+  // earlier visit to the same session is never reused.
+  const [scrollSession, setScrollSession] = useState({ sessionId, epoch: 0 });
+  if (scrollSession.sessionId !== sessionId) {
+    setScrollSession({ sessionId, epoch: scrollSession.epoch + 1 });
     setIsAtBottom(true);
   }
+  const scrollEpoch = scrollSession.epoch;
+  const prevScrollRef = useRef({ epoch: scrollEpoch, top: 0 });
 
   // Check if user is at bottom of scroll container
   const checkIfAtBottom = useCallback(() => {
@@ -404,8 +407,7 @@ function ChatPanelContent({
 
     const currentScrollTop = container.scrollTop;
     const prevScroll = prevScrollRef.current;
-    const prevScrollTop =
-      prevScroll.sessionId === sessionId ? prevScroll.top : 0;
+    const prevScrollTop = prevScroll.epoch === scrollEpoch ? prevScroll.top : 0;
     const wasAtBottom = checkIfAtBottom();
 
     // Detect if user scrolled up (scrollTop decreased)
@@ -423,8 +425,8 @@ function ChatPanelContent({
     }
     // If scrollTop increased but we're still at bottom, it's content growth - do nothing
 
-    prevScrollRef.current = { sessionId, top: currentScrollTop };
-  }, [checkIfAtBottom, sessionId]);
+    prevScrollRef.current = { epoch: scrollEpoch, top: currentScrollTop };
+  }, [checkIfAtBottom, scrollEpoch]);
 
   // Scroll to bottom and resume auto-scroll
   const scrollToBottom = useCallback(() => {

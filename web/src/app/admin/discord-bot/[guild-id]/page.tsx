@@ -179,7 +179,9 @@ export default function Page({ params }: Props) {
   >([]);
 
   // Sync local state with fetched channels
-  const [loadedChannels, setLoadedChannels] = useState(channels);
+  const [loadedChannels, setLoadedChannels] = useState<
+    DiscordChannelConfig[] | undefined
+  >(undefined);
   if (channels && loadedChannels !== channels) {
     setLoadedChannels(channels);
     setLocalChannels(channels);

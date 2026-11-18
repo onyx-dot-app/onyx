@@ -71,8 +71,11 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
   const currentText: string =
     props.mode === "file" ? "" : (props.value ?? ownText);
 
-  // A value set from outside (a form reset) no longer matches the text the
-  // source describes, so the source is ignored.
+  // A value set from outside (a form reset) replaces the text the source
+  // describes, so the source is forgotten.
+  if (source && source.text !== currentText) {
+    setSource(null);
+  }
   const shownSource = source?.text === currentText ? source : null;
 
   // What the control shows: the file's name, "Pasted text", or, for a value

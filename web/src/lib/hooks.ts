@@ -488,19 +488,22 @@ export function useLlmManager(
   // from any previously-seen defined session. Tracks only the last
   // *defined* session id so a round-trip through new-chat (A → undefined
   // → B) still resets, while A → undefined (new-chat) preserves it.
-  const currentSessionId = currentChatSession?.id;
-  const [prevDefinedSessionId, setPrevDefinedSessionId] = useState<
-    string | undefined
-  >(undefined);
-  if (
-    currentSessionId !== undefined &&
-    currentSessionId !== prevDefinedSessionId
-  ) {
-    setPrevDefinedSessionId(currentSessionId);
-    if (prevDefinedSessionId !== undefined) {
+  // Runs after commit, with the chatSession sync below, so the temperature
+  // effect never sees the next session's model under the previous session.
+  const prevDefinedSessionIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const nextId = currentChatSession?.id;
+    if (
+      nextId !== undefined &&
+      prevDefinedSessionIdRef.current !== undefined &&
+      nextId !== prevDefinedSessionIdRef.current
+    ) {
       setUserHasManuallyOverriddenLLM(false);
     }
-  }
+    if (nextId !== undefined) {
+      prevDefinedSessionIdRef.current = nextId;
+    }
+  }, [currentChatSession?.id]);
 
   function getValidLlmDescriptor(
     modelName: string | null | undefined
