@@ -83,7 +83,6 @@
 1 backend/tests/integration/tests/craft/docker_e2e/test_serve_streaming_docker.py
 1 backend/tests/integration/tests/craft/docker_e2e/test_snapshot_roundtrip_docker.py
 8 backend/tests/integration/tests/craft/k8s/k8s_fixtures.py
-3 backend/tests/integration/tests/craft/k8s/test_approval_gate.py
 1 backend/tests/integration/tests/craft/k8s/test_bun_node_modules_dedup.py
 1 backend/tests/integration/tests/craft/k8s/test_cleanup_recovery.py
 1 backend/tests/integration/tests/craft/k8s/test_messages_api_k8s.py
