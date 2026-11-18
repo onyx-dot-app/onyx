@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.db.models import Skill, User
+from onyx.db.models import User
 from onyx.db.skill import RuntimeSkill, RuntimeSkillVersion
 from onyx.file_store.file_store import FileStore
 from onyx.skills import push
@@ -37,19 +37,9 @@ def _skill(
     name: str = "canonical-name",
     is_valid: bool | None = None,
 ) -> RuntimeSkill:
-    """A custom skill with the version the user runs. The legacy row holds a
-    different name and no bundle, so a read of it fails the test."""
+    """A custom skill with the version the user runs."""
     return RuntimeSkill(
-        skill=cast(
-            Skill,
-            SimpleNamespace(
-                id=uuid4(),
-                name="legacy-row-name",
-                bundle_file_id=None,
-                built_in_skill_id=None,
-                is_valid=False,
-            ),
-        ),
+        id=uuid4(),
         name=name,
         version=RuntimeSkillVersion(
             id=uuid4(), bundle_file_id="bundle-id", is_valid=is_valid
@@ -91,7 +81,7 @@ def test_assemble_classifies_and_hydrates_valid_unclassified_skill(
     persist.assert_called_once_with(
         [
             push.SkillValidityUpdate(
-                skill_id=skill.skill.id,
+                skill_id=skill.id,
                 bundle_file_id="bundle-id",
                 is_valid=True,
             )
@@ -117,7 +107,7 @@ def test_assemble_marks_invalid_legacy_name_and_does_not_hydrate(
     persist.assert_called_once_with(
         [
             push.SkillValidityUpdate(
-                skill_id=skill.skill.id,
+                skill_id=skill.id,
                 bundle_file_id="bundle-id",
                 is_valid=False,
             )
@@ -298,7 +288,7 @@ def test_assemble_skips_oversized_expansion_and_keeps_other_skills(
     assert set(files) == {"healthy/SKILL.md", "healthy/scripts/run.py"}
     assert files["healthy/scripts/run.py"] == b"print('hello')\n"
     assert len(validity_updates) == 1
-    assert validity_updates[0].skill_id == oversized.skill.id
+    assert validity_updates[0].skill_id == oversized.id
     assert validity_updates[0].bundle_file_id == "bundle-id"
     assert validity_updates[0].is_valid is True
     file_store.save_file.assert_not_called()

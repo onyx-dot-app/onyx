@@ -598,7 +598,7 @@ def test_organization_library_integration_needs_global_manager(
     created.add(detail.id)
     plugin = _plugin_of(db_session, detail.id)
     publish_or_request_review__no_commit(
-        plugin, None, plugin.current_version_id, None, "rename", db_session
+        plugin, plugin.current_version_id, None, "rename", db_session
     )
     db_session.commit()
 
@@ -651,7 +651,7 @@ def test_publishing_a_plugin_with_an_integration_needs_global_manager(
         pytest.raises(OnyxError) as error,
     ):
         publish_or_request_review__no_commit(
-            plugin, None, plugin.current_version_id, scoped, "raise", db_session
+            plugin, plugin.current_version_id, scoped, "raise", db_session
         )
     assert error.value.status_code == 403
     db_session.rollback()
@@ -661,7 +661,6 @@ def test_publishing_a_plugin_with_an_integration_needs_global_manager(
     with pytest.raises(OnyxError):
         publish_or_request_review__no_commit(
             plugin,
-            None,
             plugin.current_version_id,
             None,
             "raise",
@@ -673,7 +672,6 @@ def test_publishing_a_plugin_with_an_integration_needs_global_manager(
     assert plugin is not None
     publish_or_request_review__no_commit(
         plugin,
-        None,
         plugin.current_version_id,
         None,
         "raise",
@@ -2009,7 +2007,7 @@ def test_literal_header_values_are_masked_and_kept_on_save(
     # A reader that cannot manage the integration gets no header values.
     plugin = _plugin_of(db_session, detail.id)
     publish_or_request_review__no_commit(
-        plugin, None, plugin.current_version_id, None, "rename", db_session
+        plugin, plugin.current_version_id, None, "rename", db_session
     )
     db_session.commit()
     view = admin_api.get_integration_admin(detail.id, scoped, db_session)

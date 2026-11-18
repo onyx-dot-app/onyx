@@ -156,8 +156,7 @@ When it fails:
 
 ## Scope
 
-This component owns the skill row, its shares, installation policy and user
-preferences; the plugin tables ([[#plugin-tables]]); bundle parsing and validation; built-in skill definitions;
+This component owns the built-in skill rows; the plugin tables ([[#plugin-tables]]); bundle parsing and validation; built-in skill definitions;
 per-user rendering of templates; GitHub import; the push of a user's skill
 files into a sandbox; and the skills library UI.
 
@@ -202,24 +201,25 @@ session start: sandbox_lifecycle.py:build_managed_content_payload
   uses the same payload and hash, before the sandbox is RUNNING
 ```
 
-**Two data models.** Each custom skill is also a plugin with the same id
-(`db/plugin.py`). Every write goes to the legacy skill rows and the plugin
-rows in one transaction. Every read of a custom skill uses the plugin rows
-(`db/plugin_access.py`, [[#plugin-tables]]): access, names, validity, bundles
-and content. Built-in skills have no plugin. Each access
-write in `db/skill.py` and
-`ee/onyx/db/community_downgrade.py` calls one `db/plugin.py` helper that
-mirrors it. Lock order: the skill row, then the plugin row; many in id order.
-A skill switch locks its target skill `FOR NO KEY UPDATE`: another user's
-switch inserts a preference for that skill while it holds a plugin lock, and
-a `FOR UPDATE` blocks that foreign-key check into a deadlock.
+**One data model.** A custom skill is a plugin (`db/plugin.py`,
+[[#plugin-tables]]) whose version holds one skill at the bundle root; the
+skill id is the plugin id. `db/skill.py` passes the `Plugin` row for a custom
+skill and the `Skill` row for a built-in (`StoredSkill`). Every read and write
+of a custom skill uses the plugin rows: access, names, validity, bundles and
+content. Built-in skills have no plugin. Old custom `skill` rows and the
+tables `skill__user`, `skill__user_group` and `user_skill_preference` stay in
+the database for a rollback, with no model; `alembic/env.py` keeps
+autogenerate from dropping them. No code reads or writes them, except that a
+skill delete also deletes the old row with the same id. Every query on
+`Skill` filters `built_in_skill_id IS NOT NULL`. Lock order: the user's
+preference lock, then plugin rows in id order.
 
 **The runtime gate.** `db/skill.py:list_runtime_skills_for_user` decides what
-a sandbox gets. It combines visibility (`skill_visible_to_user`), enablement
+a sandbox gets. It combines visibility, enablement
 and the name order (`_user_skill_selection`), bundle validity
 (`is_valid` of the version the user runs not false), the built-in app skills
 the user gets ([[#built-in-app-skill-rule]]) and built-in availability
-(`_exclude_unavailable_built_in_skills`). These inputs stay independent. A
+(`_built_in_skill_select`). Every user gets each available built-in. These inputs stay independent. A
 required skill still needs a valid bundle. No input checks an app connection.
 
 **Enablement.** `db/plugin_access.py:load_user_plugin_states` is the one rule
@@ -380,24 +380,24 @@ the app from the same rule
    never go stale. The hash covers the bytes of the version each user runs, so a
    change to `published_version_id` re-pushes to organization-only users.
 2. `affected-users-before-change` **Compute affected users before the
-   change.** `db/skill.py:affected_user_ids_for_skill` finds users with a running sandbox
-   who can see the skill, by the plugin visibility rule in one query
-   (`db/plugin_access.py:affected_user_ids_for_plugins`, which takes a set and
-   reads `_user_plugin_pairs`). It ignores preferences on purpose, so that a delete
+   change.** `db/plugin_access.py:affected_user_ids_for_plugins` finds users with a running sandbox
+   who can see the skill, by the plugin visibility rule in one query (it
+   takes a set and reads `_user_plugin_pairs`). It ignores preferences on purpose, so that a delete
    or a disable still pushes to the users who had the skill. The delete route
    reads the audience before it deletes. The share, transfer and edit routes
    push to the union of the audience before and after. A new mutation must do
    the same, or a user who loses access keeps the files.
 3. `shared-read-predicates` **Every new read path must use the shared
-   predicates.** Reads use `db/skill.py:skill_visible_to_user`. Edits use
-   `db/skill.py:_is_editable_by_user`, through
-   `db/skill.py:_skill_select_for_management_policy`. A
-   query on `Skill` without them skips sharing. For a custom skill both read
+   predicates.** Reads use `db/skill.py:fetch_skill` and `list_skills`
+   (`_visible_custom_skill_select`). Edits use `db/skill.py:fetch_editable_skill`
+   (`_editable_by_user`). A query on `Plugin` without them skips sharing. Both
+   list only a plugin whose version is a skill
+   (`db/plugin_access.py:holds_one_root_skill`): the home plugin of an
+   integration is not a skill. Both read
    the plugin tables through `db/plugin_access.py`: visibility and the install
    setting come only from `db/plugin_access.py:_user_plugin_pairs` (through
    `visible_plugin_ids`, `load_user_plugin_states` and
-   `affected_user_ids_for_plugins`); edits use `plugin_editable_by_user`. There is no organization-wide edit: a legacy
-   organization `EDITOR` row gives view access only. A `plugin__user_group`
+   `affected_user_ids_for_plugins`); edits use `plugin_editable_by_user`. There is no organization-wide edit. A `plugin__user_group`
    row with no permission holds only a group install setting and grants
    nothing. Only such a row can be `NOT_AVAILABLE`: a row with a share and
    `NOT_AVAILABLE` is refused (400, "Remove the group's share first"). The
@@ -420,16 +420,8 @@ the app from the same rule
    free name (`db/plugin.py:free_plugin_name`); a concurrent create that takes
    it first fails and the user tries again. Publish and transfer
    refuse a clash with `CONFLICT`. Skill names repeat across plugins; never
-   compare one with `plugin.name`. The legacy index
-   `uq_skill_automatic_name` stays until the legacy column goes: an
-   organization-wide Default or Required on a second skill with the same name
-   gets `SKILL_NAME_CONFLICT` (`db/plugin.py:_apply_to_plugin__no_commit`).
-   Group settings are not in the legacy column, so the run-time name order
-   picks one of two same-name skills that group settings turn on. The dual write stores `AVAILABLE` for
-   `NOT_AVAILABLE` and for no setting. The legacy `uq_user_skill_preference_name` allows one enabled
-   legacy choice per user and name; `db/skill.py:_write_legacy_choice__no_commit`
-   skips a legacy row it refuses, because reads use `user_plugin_preference`.
-   A toggle conflicts only with skills the user can see. Every write that
+   compare one with `plugin.name`. Two skills with one name can both be
+   Default or Required; the run-time name order picks one. A toggle conflicts only with skills the user can see. Every write that
    enables a preference first takes `db/skill_limit.py:lock_user_skill_preferences`,
    a `FOR NO KEY UPDATE` lock on the user row. The lock orders concurrent
    enables of one name, so the second one gets `SKILL_NAME_CONFLICT`. The
@@ -451,8 +443,7 @@ the app from the same rule
    `skills/validation.py:validate_stored_custom_skill` passes for an
    unclassified version (it checks the name in the version's frontmatter).
    `db/skill.py:persist_skill_validity` writes the result to the plugin
-   versions that hold that bundle and are still unclassified, and copies it to
-   the legacy skill row only while that row points at the same bundle.
+   versions that hold that bundle and are still unclassified.
    Writes check four limits in `skills/bundle.py:normalize_custom_bundle`.
    Count all non-directory archive entries, including ignored files. Check
    both the incoming and normalized ZIP sizes. Raw uploads use the per-file
@@ -501,9 +492,9 @@ the app from the same rule
     setting-only row; None removes the setting and deletes a row with no
     permission), `publish`, a three-state company install setting, and a mode:
     replace or add-only) and the actor. A skill has no access of its own: the skills API
-    passes the plugin with the skill's id. The function locks the legacy skill
-    rows, then the plugins, in id order; checks the rules once for the set;
-    writes each plugin and its legacy rows in a savepoint, so one failure rolls
+    passes the plugin with the skill's id. The function locks the plugins in
+    id order; checks the rules once for the set;
+    writes each plugin in a savepoint, so one failure rolls
     back that plugin only; and reads the affected users for the whole set
     before and after. The routes then commit and push once. The skills layer
     calls it through `db/skill.py:share_skill__no_commit` (share route, editor
@@ -513,8 +504,7 @@ the app from the same rule
     `db/skill.py:replace_skill_shares`, `set_skill_installation_policy`,
     `set_skill_public_permission` and `transfer_skill_ownership` are thin
     callers with no actor, so they skip the permission checks. Do not write
-    `plugin__user`, `plugin__user_group`, `skill__user` or
-    `skill__user_group` anywhere else.
+    `plugin__user` or `plugin__user_group` anywhere else.
     Rules: a company install setting needs organization-wide `MANAGE_PLUGINS`
     (`has_global_permission`; never `has_permission`, which accepts a scoped
     grant). In `SkillShareRequest`, a missing `installation_policy` changes
@@ -630,18 +620,18 @@ the app from the same rule
     path. The push checks a Skill's recorded size, or its zip directory, against
     the transport cap (`skills/limits.py:SKILL_RUNTIME_MAX_BYTES`, 900 MiB)
     before it reads the files ([[#runtime-skill-limit]]).
-19. `plugin-tables` **Access reads come from the plugin tables;
-    the skill rows are still written.** Migration `cdec9dd9ca3d` adds `plugin_marketplace`,
+19. `plugin-tables` **A custom skill lives only in the plugin tables.**
+    Migration `cdec9dd9ca3d` adds `plugin_marketplace`,
     `plugin`, `plugin_version`, `plugin_skill`, `plugin__user`,
     `plugin__user_group` and `user_plugin_preference` (`db/models.py:Plugin`
     and its neighbours), and fills them from each custom skill. Built-in
-    skills get no plugin. A plugin and the legacy skill row share one id,
-    except a plugin that holds only integrations (`plugin__integration`,
-    migration `730bce2814a0`): its version has no bundle and no
-    `plugin_skill` row, and no skill row has its id. An integration stands
+    skills get no plugin. A backfilled plugin has the id of its old skill
+    row; a skill made later has no skill row. A plugin that holds only
+    integrations (`plugin__integration`, migration `730bce2814a0`) has a
+    version with no bundle and no `plugin_skill` row. An integration stands
     alone: several plugins can hold it, and a plugin delete does not delete
     it. A join from `plugin` to
-    `plugin_skill` or `skill` must be an outer join or filter on purpose. A
+    `plugin_skill` must be an outer join or filter on purpose. A
     name held by such a plugin does not block a skill publish or transfer:
     the skill's plugin label takes a free name
     (`db/plugin.py:_move_plugin__no_commit`), unless another skill of the
@@ -655,18 +645,15 @@ the app from the same rule
     (`db/plugin.py:free_plugin_name` in app code). The skill name lives only
     in `plugin_skill.frontmatter` (NOT NULL, a check requires a string
     `name`); the backfill seeds it with the name and description of the
-    legacy row. No column stores the kind (skill or plugin):
+    old skill row. No column stores the kind (skill or plugin):
     `db/plugin.py:is_skill_version` reads it from the layout of each
-    version. Creates, bundle changes, deletes, shares, publishing, install
-    settings, choices and transfers write the plugin rows and the skill rows
-    ([[#bundle-change-adds-version]]). Visibility, edit, enablement, the
-    runtime list, affected users, the scoped-manager checks, the skill
-    responses (`db/plugin_access.py:load_plugin_access`), the community
-    downgrade and the user-delete guard read the plugin rows. The list and
+    version. Every write and read of a custom skill uses the plugin rows
+    ([[#bundle-change-adds-version]]); the skill responses read
+    `db/plugin_access.py:load_plugin_access`. The list and
     runtime names and descriptions come from the frontmatter of the version
-    the user runs. A custom skill with no plugin is hidden from everyone but
-    an admin; an admin write makes its plugin from the legacy rows first
-    (`db/plugin.py:lock_skill_plugin__no_commit`). A user delete moves the
+    the user runs. An old custom skill row with no plugin is ignored. Migration
+    `65f8d8cd1bf3` drops `ck_private_skill_has_owner`: old rows go stale, and
+    the check would refuse a user delete. A user delete moves the
     user's private integrations to the Organization library as NOT_AVAILABLE
     (`db/plugin.py:release_private_integrations__no_commit`), then is refused
     while the user's "My uploads" holds a plugin (`db/users.py:delete_user_from_db__no_commit`);
@@ -682,22 +669,18 @@ the app from the same rule
     Content of a version comes from one function,
     `skills/content.py:read_version_contents`: `plugin_version.file_manifest`
     and `plugin_skill.skill_md` from the database, and the bundle only when
-    they are NULL (a version copied from a legacy row).
-    The legacy `bundle_file_id`, `bundle_sha256` and `is_valid` columns are
-    only written, by the dual writes; `db/plugin.py:legacy_skill_version_content`
-    reads them once to make a plugin for a skill that has none.
+    they are NULL (a version copied from an old skill row).
 20. `bundle-change-adds-version` **A file change adds a plugin version and
     keeps the old bundle.** Each create and each change to a custom skill's
     files goes through `db/skill.py:create_custom_skill__no_commit` or
     `db/skill.py:replace_skill_bundle`, which call `db/plugin.py`. In one
-    transaction they lock the skill row, then the plugin row, add the next
+    transaction they take the user lock, then the plugin row, add the next
     `plugin_version` with its file list (`skills/bundle.py:compute_bundle_manifest`)
-    and `plugin_skill` row, move `current_version_id`, and copy the bundle,
-    name and description to the legacy skill row. A save never moves
+    and `plugin_skill` row, and move `current_version_id`. A save never moves
     `published_version_id`: on a published skill the organization keeps the
     published version until a publish update ([[#publishing-review]]). An editor save
     whose file list equals the current version's adds no version, and the
-    route deletes the new blob. A version copied from a legacy row has no
+    route deletes the new blob. A version copied from an old skill row has no
     file list, so editor routes pass `previous_manifest`, the list of the
     stored bundle; the bytes of a rewritten ZIP differ even when its files
     do not. A bundle upload always adds one. An edit
@@ -779,7 +762,7 @@ the app from the same rule
     or publish, which can turn the skill on for the author), upload, import
     and editor create, and bundle save, restore and replace. A bundle save
     ingests with no lock; `db/skill.py:replace_skill_bundle` then takes the
-    user lock and the skill row, the toggle's order. Admin changes
+    user lock and the plugin row, the toggle's order. Admin changes
     (settings, shares, Default access, publish, approve, transfer), app connect
     and group membership are never checked: the run-time rule and the admin
     banner handle a user they put past the limit. A user already over is not
@@ -885,7 +868,7 @@ the app from the same rule
   ([[#templates-built-in-only]]). Put every value the renderer reads into the
   rendered bytes ([[#rendering-input-changes-hash]]).
 - `add-skill-mutation-route` **Add a skill mutation route.** Copy `share_current_user_skill` in
-  `server/features/skill/api.py`: compute `affected_user_ids_for_skill`
+  `server/features/skill/api.py`: compute `affected_user_ids_for_plugins`
   before the change, apply it, compute it again, commit, call
   `push_skills_for_users` with the union, then commit again
   ([[#affected-users-before-change]]).

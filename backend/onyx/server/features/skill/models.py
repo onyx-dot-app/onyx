@@ -12,7 +12,7 @@ from onyx.db.enums import (
     SkillAccessLevel,
     SkillSharePermission,
 )
-from onyx.db.models import Skill
+from onyx.db.models import Plugin, Skill
 from onyx.db.plugin_access import PluginAccess
 from onyx.db.skill import SkillSharingChange
 from onyx.db.utils import UNSET
@@ -118,8 +118,8 @@ class SkillResponse(BaseModel):
     @classmethod
     def from_custom(
         cls,
-        skill: Skill,
-        access: PluginAccess | None,
+        plugin: Plugin,
+        access: PluginAccess,
         *,
         enabled: bool,
         can_toggle: bool = True,
@@ -130,14 +130,13 @@ class SkillResponse(BaseModel):
         group_summaries: list[SkillGroupSummary] | None = None,
         current_version_id: UUID | None = None,
     ) -> "SkillResponse":
-        """Access fields come from the skill's plugin; ``access`` is None only
-        for a custom skill with no plugin, which no one but an admin sees."""
+        """Every field comes from the skill's plugin."""
         user_shares = [
             SkillUserShare(
                 user=MinimalUserSnapshot(id=share.user_id, email=share.email),
                 permission=share.permission,
             )
-            for share in (access.user_shares if access is not None else ())
+            for share in access.user_shares
         ]
         group_shares = [
             SkillGroupShare(
@@ -145,57 +144,40 @@ class SkillResponse(BaseModel):
                 group_name=share.group_name,
                 permission=share.permission,
             )
-            for share in (access.group_shares if access is not None else ())
+            for share in access.group_shares
         ]
-        author_user_id = access.author_user_id if access is not None else None
-        author_email = access.author_email if access is not None else None
-        published = access is not None and access.published
         return cls(
             source="custom",
-            id=skill.id,
-            name=(access.name if access is not None else None) or skill.name,
-            description=(
-                access.description if access is not None else skill.description
-            ),
-            is_valid=access.is_valid if access is not None else None,
-            installation_policy=(
-                access.installation_policy if access is not None else None
-            ),
-            default_installation_policy=(
-                access.marketplace_default_policy if access is not None else None
-            ),
+            id=plugin.id,
+            name=access.name or plugin.name,
+            description=access.description,
+            is_valid=access.is_valid,
+            installation_policy=access.installation_policy,
+            default_installation_policy=access.marketplace_default_policy,
             can_delete=can_delete,
             required_for_user=required_for_user,
             enabled=enabled,
             can_toggle=can_toggle,
-            author_user_id=author_user_id,
-            author_email=author_email,
+            author_user_id=access.author_user_id,
+            author_email=access.author_email,
             owner=(
-                MinimalUserSnapshot(id=author_user_id, email=author_email)
-                if author_user_id is not None and author_email is not None
+                MinimalUserSnapshot(id=access.author_user_id, email=access.author_email)
+                if access.author_user_id is not None and access.author_email is not None
                 else None
             ),
-            ownership_vacant=author_email is None
-            or access is None
-            or not access.author_is_active,
-            created_at=skill.created_at,
-            updated_at=skill.updated_at,
+            ownership_vacant=access.author_email is None or not access.author_is_active,
+            created_at=plugin.created_at,
+            updated_at=plugin.updated_at,
             user_shares=user_shares if include_share_details else [],
             group_shares=group_shares if include_share_details else [],
             group_summaries=group_summaries or [],
-            public_permission=SkillSharePermission.VIEWER if published else None,
-            is_personal=not published and not user_shares and not group_shares,
+            public_permission=SkillSharePermission.VIEWER if access.published else None,
+            is_personal=not access.published and not user_shares and not group_shares,
             user_permission=user_permission,
             current_version_id=current_version_id,
-            current_version_number=(
-                access.current_version_number if access is not None else None
-            ),
-            published_version_number=(
-                access.published_version_number if access is not None else None
-            ),
-            pending_version_number=(
-                access.pending_version_number if access is not None else None
-            ),
+            current_version_number=access.current_version_number,
+            published_version_number=access.published_version_number,
+            pending_version_number=access.pending_version_number,
         )
 
 
@@ -231,19 +213,17 @@ class SkillPreviewResponse(BaseModel):
     @classmethod
     def from_custom(
         cls,
-        skill: Skill,
-        access: PluginAccess | None,
+        plugin: Plugin,
+        access: PluginAccess,
         *,
         instructions_markdown: str,
     ) -> "SkillPreviewResponse":
         return cls(
             source="custom",
-            id=skill.id,
-            name=(access.name if access is not None else None) or skill.name,
-            description=(
-                access.description if access is not None else skill.description
-            ),
-            author_email=access.author_email if access is not None else None,
+            id=plugin.id,
+            name=access.name or plugin.name,
+            description=access.description,
+            author_email=access.author_email,
             instructions_markdown=instructions_markdown,
         )
 

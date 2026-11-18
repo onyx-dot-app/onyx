@@ -140,7 +140,6 @@ from onyx.db.enums import (
     ScheduledTaskTriggerSource,
     SessionOrigin,
     SharingScope,
-    SkillInstallationPolicy,
     SkillSharePermission,
     SSOProviderType,
     SwitchoverType,
@@ -870,65 +869,6 @@ class Persona__User(Base):
     )
 
     user: Mapped["User | None"] = relationship("User")
-
-
-class Skill__User(Base):
-    __tablename__ = "skill__user"
-
-    skill_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("skill.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    permission: Mapped[SkillSharePermission] = mapped_column(
-        Enum(SkillSharePermission, native_enum=False),
-        nullable=False,
-        default=SkillSharePermission.VIEWER,
-        server_default=SkillSharePermission.VIEWER.value,
-    )
-
-    user: Mapped["User"] = relationship("User")
-
-    __table_args__ = (Index("ix_skill__user_user_id", "user_id"),)
-
-
-class UserSkillPreference(Base):
-    __tablename__ = "user_skill_preference"
-
-    user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
-    )
-    skill_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-    )
-    # Denormalized for name uniqueness; the composite FK keeps it exact.
-    name: Mapped[str] = mapped_column(String(64), nullable=False)
-
-    enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true")
-    )
-
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["name", "skill_id"],
-            ["skill.name", "skill.id"],
-            name="fk_user_skill_preference_skill_name",
-            ondelete="CASCADE",
-        ),
-        Index("ix_user_skill_preference_skill_id", "skill_id"),
-        Index(
-            "uq_user_skill_preference_name",
-            "user_id",
-            "name",
-            unique=True,
-            postgresql_where=text("enabled"),
-        ),
-    )
 
 
 class DocumentSet__User(Base):
@@ -5616,12 +5556,8 @@ class FileContent(Base):
 
 
 class Skill(Base):
-    """A built-in or custom skill.
-
-    Skill metadata is shared schema state. Group-based grants use user_group,
-    which is available in the base migration chain even though its ORM model
-    currently lives in the Enterprise Edition section below.
-    """
+    """A built-in skill. Old custom rows stay in the table for a rollback, with
+    columns this model does not map (``alembic/env.py``)."""
 
     __tablename__ = "skill"
 
@@ -5633,35 +5569,10 @@ class Skill(Base):
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Discriminator: when set, definition (source files, has_template, etc.)
-    # comes from BUILT_IN_SKILLS in `onyx.skills.built_in`. When NULL, the
-    # row is a custom (admin-uploaded) skill and bundle_file_id is set.
-    # Exactly one of (built_in_skill_id, bundle_file_id) is non-null —
-    # enforced by `ck_skill_definition_source` below.
+    # The definition (source files, has_template, etc.) comes from
+    # BUILT_IN_SKILLS in `onyx.skills.built_in`. NULL only on an old custom
+    # row, which no code reads: a custom skill is a plugin.
     built_in_skill_id: Mapped[str | None] = mapped_column(String, nullable=True)
-
-    # Bundle bytes for custom skills. NULL for built-ins (their source
-    # files live on disk under BUILTIN_SKILLS_PATH).
-    bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # Existing custom rows are classified lazily before sandbox hydration.
-    is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-
-    author_user_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("user.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    public_permission: Mapped[SkillSharePermission | None] = mapped_column(
-        Enum(SkillSharePermission, native_enum=False),
-        nullable=True,
-    )
-    installation_policy: Mapped[SkillInstallationPolicy] = mapped_column(
-        Enum(SkillInstallationPolicy, native_enum=False),
-        nullable=False,
-        default=SkillInstallationPolicy.AVAILABLE,
-        server_default=SkillInstallationPolicy.AVAILABLE.value,
-    )
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -5673,55 +5584,7 @@ class Skill(Base):
         nullable=False,
     )
 
-    author: Mapped[User | None] = relationship(
-        "User",
-        foreign_keys=[author_user_id],
-    )
-
-    users: Mapped[list[User]] = relationship(
-        "User",
-        secondary=Skill__User.__table__,
-        viewonly=True,
-        overlaps="user_shares",
-    )
-    user_shares: Mapped[list[Skill__User]] = relationship(
-        "Skill__User",
-        viewonly=True,
-        overlaps="users",
-    )
-    group_shares: Mapped[list["Skill__UserGroup"]] = relationship(
-        "Skill__UserGroup",
-        viewonly=True,
-        overlaps="groups",
-    )
-    groups: Mapped[list["UserGroup"]] = relationship(
-        "UserGroup",
-        secondary="skill__user_group",
-        viewonly=True,
-        overlaps="group_shares",
-    )
-
-    __table_args__ = (
-        UniqueConstraint("name", "id", name="uq_skill_name_id"),
-        Index(
-            "uq_skill_automatic_name",
-            "name",
-            unique=True,
-            postgresql_where=text("installation_policy <> 'AVAILABLE'"),
-        ),
-        CheckConstraint(
-            "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
-            name="ck_skill_definition_source",
-        ),
-        CheckConstraint(
-            "built_in_skill_id IS NOT NULL OR public_permission IS NOT NULL OR author_user_id IS NOT NULL",
-            name="ck_private_skill_has_owner",
-        ),
-    )
-
-    @property
-    def is_custom(self) -> bool:
-        return self.built_in_skill_id is None
+    __table_args__ = (UniqueConstraint("name", "id", name="uq_skill_name_id"),)
 
 
 class Marketplace(Base):
@@ -6642,29 +6505,6 @@ class Persona__UserGroup(Base):
     user_group: Mapped["UserGroup"] = relationship("UserGroup")
 
 
-class Skill__UserGroup(Base):
-    __tablename__ = "skill__user_group"
-
-    skill_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("skill.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    user_group_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("user_group.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    permission: Mapped[SkillSharePermission] = mapped_column(
-        Enum(SkillSharePermission, native_enum=False),
-        nullable=False,
-        default=SkillSharePermission.VIEWER,
-        server_default=SkillSharePermission.VIEWER.value,
-    )
-
-    user_group: Mapped["UserGroup"] = relationship("UserGroup")
-
-
 class LLMProvider__Persona(Base):
     """Association table restricting LLM providers to specific personas.
 
@@ -6762,11 +6602,6 @@ class UserGroup(Base):
     personas: Mapped[list[Persona]] = relationship(
         "Persona",
         secondary=Persona__UserGroup.__table__,
-        viewonly=True,
-    )
-    skills: Mapped[list[Skill]] = relationship(
-        "Skill",
-        secondary=Skill__UserGroup.__table__,
         viewonly=True,
     )
     document_sets: Mapped[list[DocumentSet]] = relationship(

@@ -9,7 +9,7 @@ from onyx.db.enums import (
     SkillAccessLevel,
     SkillSharePermission,
 )
-from onyx.db.models import Skill, User
+from onyx.db.models import Plugin, User
 from onyx.db.plugin_access import (
     PluginAccess,
     PluginGroupRowAccess,
@@ -38,7 +38,7 @@ def _user(*, is_admin: bool = False) -> User:
 class _Case:
     """A custom skill and its plugin grants."""
 
-    skill: Skill
+    skill: Plugin
     published: bool
     user_shares: list[PluginUserShare] = field(default_factory=list)
     group_shares: list[PluginGroupShare] = field(default_factory=list)
@@ -74,20 +74,12 @@ class _Case:
         )
 
 
-def _skill(
-    author: User,
-    *,
-    is_public: bool = False,
-    public_permission: SkillSharePermission = SkillSharePermission.VIEWER,
-) -> _Case:
-    """``public_permission`` is the legacy organization level. A published
-    plugin gives the organization view access only, whatever it was."""
-    skill = Skill(
+def _skill(author: User, *, is_public: bool = False) -> _Case:
+    skill = Plugin(
         id=uuid4(),
         name=f"skill-{uuid4().hex}",
         description="Description",
         author_user_id=author.id,
-        public_permission=public_permission if is_public else None,
     )
     return _Case(skill=skill, published=is_public)
 
@@ -124,7 +116,7 @@ def _permission(
     in_managed_scope: bool = False,
 ) -> SkillAccessLevel | None:
     return user_permission_for_skill(
-        case.skill, case.access(), user, user_group_ids, in_managed_scope
+        case.access(), user, user_group_ids, in_managed_scope
     )
 
 
@@ -167,32 +159,8 @@ def test_viewer_grants_do_not_grant_editor() -> None:
     _share_with_groups(group_viewer, [1], SkillSharePermission.VIEWER)
     assert _permission(group_viewer, basic, {1}) == SkillAccessLevel.VIEWER
 
-    org_viewer = _skill(
-        author,
-        is_public=True,
-        public_permission=SkillSharePermission.VIEWER,
-    )
+    org_viewer = _skill(author, is_public=True)
     assert _permission(org_viewer, basic, set()) == SkillAccessLevel.VIEWER
-
-
-def test_organization_editor_row_gives_view_only() -> None:
-    """There is no organization-wide edit: a published skill whose legacy row
-    says organization EDITOR is view-only for the organization."""
-    author = _user()
-    basic = _user()
-
-    assert (
-        _permission(
-            _skill(
-                author,
-                is_public=True,
-                public_permission=SkillSharePermission.EDITOR,
-            ),
-            basic,
-            set(),
-        )
-        == SkillAccessLevel.VIEWER
-    )
 
 
 def test_editor_grants_from_direct_or_group_share_grant_editor() -> None:
@@ -242,11 +210,7 @@ def test_any_editor_grant_wins_over_viewer_grants() -> None:
         _permission(direct_viewer_group_editor, basic, {1}) == SkillAccessLevel.EDITOR
     )
 
-    public_viewer_direct_editor = _skill(
-        author,
-        is_public=True,
-        public_permission=SkillSharePermission.VIEWER,
-    )
+    public_viewer_direct_editor = _skill(author, is_public=True)
     _share_with_user(
         public_viewer_direct_editor,
         basic.id,

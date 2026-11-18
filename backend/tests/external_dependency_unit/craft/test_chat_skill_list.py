@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import (
     PluginInstallationPolicy,
-    SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.models import Plugin, User
@@ -116,7 +115,7 @@ def test_chat_skills_use_the_version_each_user_runs(
             set_public_permission=True,
         ),
     )
-    set_skill_installation_policy(skill, SkillInstallationPolicy.DEFAULT, db_session)
+    set_skill_installation_policy(skill, PluginInstallationPolicy.DEFAULT, db_session)
     plugin = db_session.get(Plugin, skill.id)
     assert plugin is not None
     first_version_id: UUID = plugin.current_version_id
@@ -168,7 +167,7 @@ def test_chat_skills_use_the_version_each_user_runs(
     built_in_names = {
         runtime.name
         for runtime in list_runtime_skills_for_user(db_session=db_session, user=author)
-        if runtime.skill.built_in_skill_id is not None
+        if runtime.built_in_skill_id is not None
     }
     assert built_in_names
     assert not built_in_names & set(author_skills)
@@ -222,9 +221,9 @@ def test_chat_skills_follow_install_settings_and_the_name_order(
     for skill in (hidden, required, published, own):
         set_current_version_validity(db_session, skill.id, True)
     for skill, policy in (
-        (hidden, SkillInstallationPolicy.DEFAULT),
-        (published, SkillInstallationPolicy.DEFAULT),
-        (required, SkillInstallationPolicy.AVAILABLE),
+        (hidden, PluginInstallationPolicy.DEFAULT),
+        (published, PluginInstallationPolicy.DEFAULT),
+        (required, None),
     ):
         set_skill_installation_policy(skill, policy, db_session)
     share_plugin_with_group(

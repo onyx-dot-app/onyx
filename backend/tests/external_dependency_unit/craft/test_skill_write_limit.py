@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import PluginInstallationPolicy
-from onyx.db.models import Plugin, PluginVersion, Skill, User
+from onyx.db.models import Plugin, PluginVersion, User
 from onyx.db.plugin import set_plugin_preferences__no_commit
 from onyx.db.plugin_access import load_user_plugin_states, skill_usage_by_user
 from onyx.db.skill import (
@@ -133,7 +133,7 @@ def test_toggle_does_not_wait_for_a_save_that_is_still_ingesting(
 ) -> None:
     """A save reads the skill without a lock while it ingests the bundle, so
     the same user's toggle finishes at once. The save then takes the user's
-    lock and the skill row, in the toggle's order, and finishes too."""
+    lock and the plugin row, in the toggle's order, and finishes too."""
     user = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, author_user_id=user.id)
     set_plugin_preferences__no_commit(user.id, [skill.id], True, db_session)
@@ -157,7 +157,7 @@ def test_toggle_does_not_wait_for_a_save_that_is_still_ingesting(
             with get_session_with_current_tenant() as session:
                 saver = session.get(User, user_id)
                 assert saver is not None
-                skill_to_save = session.get(Skill, skill_id)
+                skill_to_save = session.get(Plugin, skill_id)
                 assert skill_to_save is not None
                 save_read_skill.set()
                 toggle_done.wait(timeout=30)
@@ -317,7 +317,7 @@ def test_a_file_edit_and_a_toggle_take_locks_in_one_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A file edit reads the bundle under the save locks (the user's lock,
-    then the skill row, then the plugin). A toggle by the same user meanwhile
+    then the plugin row). A toggle by the same user meanwhile
     waits for the edit and does not deadlock with it."""
     user = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, author_user_id=user.id)
@@ -335,7 +335,7 @@ def test_a_file_edit_and_a_toggle_take_locks_in_one_order(
         try:
             with get_session_with_current_tenant() as session:
                 editor = session.get(User, user_id)
-                skill_to_edit = session.get(Skill, skill_id)
+                skill_to_edit = session.get(Plugin, skill_id)
                 assert editor is not None and skill_to_edit is not None
                 skill_api._bundle_to_edit(skill_to_edit, editor, session)
                 edit_read_bundle.set()

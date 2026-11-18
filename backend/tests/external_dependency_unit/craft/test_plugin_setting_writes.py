@@ -370,13 +370,12 @@ def test_external_app_delete(
     assert db_session.get(UserPluginPreference, (other.id, skill.id)) is not None
 
 
-def test_group_setting_is_not_limited_by_the_automatic_name_index(
+def test_two_same_name_skills_can_both_install_automatically(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    """uq_skill_automatic_name sees only the organization-wide setting
-    (test_automatic_skill_name_conflicts). A group Required on a second skill
-    with the same name is allowed; the run-time name order picks one."""
+    """A company Default on one skill and a group Required on a second skill
+    with the same name are allowed; the run-time name order picks one."""
     admin = make_user(db_session, is_admin=True)
     name = f"automatic-{uuid4().hex[:8]}"
     first = make_skill(db_session, name=name, is_public=True)
