@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
-from onyx.configs.slack_configs import slack_url_pattern
+from onyx.configs.slack_configs import SLACK_API_URL, slack_url_pattern
 from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
@@ -262,9 +262,7 @@ def test_sandbox_calls_a_preset_app_a_custom_app_and_an_mcp_server(
     )
     add_connection(db_session, mcp, user.id, ConnectionSecret(access_token="mcp-tok"))
 
-    slack_request = _request(
-        "https://slack.com/api/chat.postMessage", b'{"channel": "C1"}'
-    )
+    slack_request = _request(f"{SLACK_API_URL}chat.postMessage", b'{"channel": "C1"}')
     matched = _evaluate(slack_request, user)
     assert isinstance(matched, AllMatchedActions)
     assert matched.target.integration_id == slack.id
