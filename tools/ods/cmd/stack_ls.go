@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -100,8 +101,9 @@ With --idle DURATION, prune also stops each isolated stack whose worktree had
 no activity for DURATION. Activity is the stack start, a Git operation in the
 worktree (commit, checkout, add, rebase), a change to a modified or untracked
 file, or a running coding agent (claude, codex, opencode, cursor-agent) whose
-working directory is in the worktree. Shared stacks serve several worktrees
-and are never stopped as idle. Run 'ods stack up' in the worktree to start a
+working directory is in the worktree. prune checks the activity again after
+it holds the stack lock, and skips a stack that had activity. Shared stacks
+serve several worktrees and are never stopped as idle. Run 'ods stack up' in the worktree to start a
 pruned stack again.`,
 		Example: `  ods stack prune
   ods stack prune --idle 6h --yes
@@ -118,7 +120,10 @@ pruned stack again.`,
 			now := time.Now()
 			agents := []string{}
 			if idle > 0 {
-				agents = devstack.AgentDirs()
+				var err error
+				if agents, err = devstack.AgentDirs(); err != nil {
+					log.Fatalf("--idle needs the running coding agents: %v", err)
+				}
 			}
 			rows := pruneRows(inv.Rows, idle, volumes, now, func(row devstack.StackRow) time.Time {
 				return devstack.LastActivity(row, agents, now)
@@ -160,8 +165,15 @@ pruned stack again.`,
 			for _, row := range rows {
 				// An idle stack still has its worktree, so it needs Force and keeps its volumes.
 				orphan := row.Status == devstack.StatusOrphaned
-				result, err := devstack.CleanupRow(context.Background(), registry, row, composeDownProject,
-					devstack.ProjectOptions{StopTimeout: stopTimeout, LockWait: lockWait, Volumes: volumes && orphan, Force: !orphan})
+				opts := devstack.ProjectOptions{StopTimeout: stopTimeout, LockWait: lockWait, Volumes: volumes && orphan, Force: !orphan}
+				if !orphan {
+					opts.IdleCutoff = now.Add(-idle)
+				}
+				result, err := devstack.CleanupRow(context.Background(), registry, row, composeDownProject, opts)
+				if errors.Is(err, devstack.ErrNotIdle) {
+					log.Infof("%s: skipped, it had activity after it was listed", stackRowName(row))
+					continue
+				}
 				if err != nil {
 					log.Errorf("%s: %v", stackRowName(row), err)
 					failed++
@@ -213,7 +225,7 @@ func filterStackRows(rows []devstack.StackRow, all, orphaned bool) []devstack.St
 				continue
 			}
 		case !all:
-			if !row.Running() {
+			if !row.Running() && (row.Status != devstack.StatusOrphaned || !row.OnlyVolumes()) {
 				continue
 			}
 		}

@@ -4,6 +4,7 @@ package devstack
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -203,6 +204,39 @@ func TestOwnerWithoutStateKeepsItsVolumesUntilTheyAreDeleted(t *testing.T) {
 	}
 	if len(compose.projects) != 2 || compose.projects[1] != "removed-1" || !compose.volumes[1] || !result.RemovedVolumes || !result.RemovedOwner {
 		t.Fatalf("volumes were not deleted: calls %v %v, result %+v", compose.projects, compose.volumes, result)
+	}
+}
+
+func TestOwnerWithoutStateStaysWhenTheVolumesCannotBeListed(t *testing.T) {
+	registry := &Registry{Dir: t.TempDir()}
+	path := ownerPath(registry, "removed-1")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"state_dir":"/missing/ods-stack"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	discover := DiscoverOptions{
+		ListContainers: func() ([]docker.ComposeContainer, error) { return nil, nil },
+		ListVolumes:    func() (map[string]int, error) { return nil, errors.New("docker volume ls failed") },
+	}
+	var row StackRow
+	for _, r := range Discover(registry, discover).Rows {
+		if r.OwnerRecord == path {
+			row = r
+		}
+	}
+	if row.Status != StatusOrphaned {
+		t.Fatalf("owner without state: %+v", row)
+	}
+	for _, volumes := range []bool{false, true} {
+		opts := ProjectOptions{LockWait: time.Second, Discover: discover, Volumes: volumes}
+		if _, err := CleanupRow(context.Background(), registry, row, (&fakeCompose{}).down, opts); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("volumes %v: the owner record was removed while its volumes are unknown: %v", volumes, err)
+		}
 	}
 }
 

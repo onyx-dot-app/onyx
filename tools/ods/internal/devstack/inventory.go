@@ -80,6 +80,9 @@ type StackRow struct {
 
 	state      *State
 	containers int
+	// volumesUnknown is set when Docker could not list the volumes, so
+	// Volumes == 0 does not prove that none are left.
+	volumesUnknown bool
 }
 
 // OnlyVolumes reports whether nothing of the stack is left but its Docker
@@ -457,8 +460,11 @@ func buildInventory(in inventoryInput) Inventory {
 		}
 	}
 	for _, row := range rows {
-		if row.Project != "" && row.Mode != Frontend {
-			row.Volumes = in.Volumes[row.Project]
+		if row.Mode != Frontend {
+			row.volumesUnknown = in.VolumesErr != nil
+			if row.Project != "" {
+				row.Volumes = in.Volumes[row.Project]
+			}
 		}
 	}
 	for _, row := range rows {

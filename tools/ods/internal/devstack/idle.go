@@ -1,6 +1,8 @@
 package devstack
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,12 +16,17 @@ import (
 var agentCommands = []string{"claude", "codex", "opencode", "cursor-agent"}
 
 // AgentDirs returns the working directory of each running coding agent. It
-// reads /proc on Linux and lsof on macOS, and returns nothing elsewhere.
-func AgentDirs() []string {
+// reads /proc on Linux and lsof on macOS. It fails on other systems and when
+// the lookup cannot run, because an empty list would make every stack look
+// idle.
+func AgentDirs() ([]string, error) {
 	var dirs []string
 	switch runtime.GOOS {
 	case "linux":
-		procs, _ := filepath.Glob("/proc/[0-9]*")
+		procs, err := filepath.Glob("/proc/[0-9]*")
+		if err != nil || len(procs) == 0 {
+			return nil, fmt.Errorf("cannot read /proc to find coding agents: %v", err)
+		}
 		for _, proc := range procs {
 			comm, err := os.ReadFile(filepath.Join(proc, "comm"))
 			if err != nil || !isAgentCommand(strings.TrimSpace(string(comm))) {
@@ -34,14 +41,22 @@ func AgentDirs() []string {
 		for _, name := range agentCommands {
 			args = append(args, "-c", name)
 		}
-		out, _ := exec.Command("lsof", args...).Output()
+		out, err := exec.Command("lsof", args...).Output()
+		// lsof exits 1 with no output when no process matches.
+		var exitErr *exec.ExitError
+		noMatch := errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && len(out) == 0
+		if err != nil && !noMatch {
+			return nil, fmt.Errorf("cannot run lsof to find coding agents: %w", err)
+		}
 		for _, line := range strings.Split(string(out), "\n") {
 			if dir, ok := strings.CutPrefix(line, "n"); ok && dir != "" {
 				dirs = append(dirs, dir)
 			}
 		}
+	default:
+		return nil, fmt.Errorf("finding coding agents is not supported on %s", runtime.GOOS)
 	}
-	return dirs
+	return dirs, nil
 }
 
 func isAgentCommand(name string) bool {

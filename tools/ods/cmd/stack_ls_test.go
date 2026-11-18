@@ -213,8 +213,8 @@ exit 0
 	}
 	writeFile(t, owner, `{"state_dir":"/missing/ods-stack"}`)
 
-	code, out := runStackCLI(t, "stack", "ls", "--orphaned")
-	if code != 3 || !strings.Contains(out, "removed-1") || !strings.Contains(out, "ods stack prune --volumes") {
+	code, out := runStackCLI(t, "stack", "ls")
+	if code != 0 || !strings.Contains(out, "removed-1") || !strings.Contains(out, "ods stack prune --volumes") {
 		t.Fatalf("ls exit %d:\n%s", code, out)
 	}
 	code, out = runStackCLI(t, "stack", "prune", "--yes")

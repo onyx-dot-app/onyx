@@ -21,9 +21,17 @@ type ProjectOptions struct {
 	// Force stops a stack that still runs in an existing worktree.
 	Force bool
 	// Volumes also removes the Compose volumes.
-	Volumes  bool
-	Discover DiscoverOptions
+	Volumes bool
+	// IdleCutoff, when set, stops the stack only if it still has no activity
+	// since the cutoff after the locks are held. Otherwise CleanupRow returns
+	// ErrNotIdle.
+	IdleCutoff time.Time
+	Discover   DiscoverOptions
 }
+
+// ErrNotIdle reports that a stack selected as idle had activity before it
+// was stopped.
+var ErrNotIdle = errors.New("the stack is no longer idle")
 
 // ProjectResult reports what a project stop or down changed.
 type ProjectResult struct {
@@ -112,6 +120,9 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 		}
 		defer release()
 	}
+	if !opts.IdleCutoff.IsZero() && stack == nil {
+		return nil, ErrNotIdle
+	}
 	infra := compose != nil && row.Mode != Frontend && row.Project != ""
 	if lockDir := projectLockDir(registry, row, infra); lockDir != "" {
 		lock := &Stack{StateDir: lockDir}
@@ -129,6 +140,20 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 		}
 		if st != nil && st.Project != row.Project {
 			return nil, fmt.Errorf("the state in %s now records project %s; run 'ods stack ls' again", row.StateDir, st.Project)
+		}
+		if !opts.IdleCutoff.IsZero() {
+			if st == nil {
+				return nil, ErrNotIdle
+			}
+			agents, err := AgentDirs()
+			if err != nil {
+				return nil, err
+			}
+			fresh := row
+			fresh.state = st
+			if !LastActivity(fresh, agents, time.Now()).Before(opts.IdleCutoff) {
+				return nil, ErrNotIdle
+			}
 		}
 		if st != nil {
 			if !opts.Force && liveInWorktree(st) {
@@ -181,7 +206,7 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 	}
 	// The owner record is the only link from a removed worktree to its
 	// volumes, so it stays until the volumes are deleted.
-	if row.Status == StatusOrphaned && (row.Project != "" || row.OwnerRecord != "") && (opts.Volumes || row.Volumes == 0) {
+	if row.Status == StatusOrphaned && (row.Project != "" || row.OwnerRecord != "") && (result.RemovedVolumes || (row.Volumes == 0 && !row.volumesUnknown)) {
 		removed, err := removeOrphanOwner(registry, row)
 		if err != nil {
 			return result, err
