@@ -130,3 +130,5 @@ SQ_RUN_RETRY_DELAY_S = 30
 SQ_SAVE_MARGIN_S = 30.0
 # A top-up that finds a run holding the pool tries again after this long.
 SQ_LOCK_BUSY_RETRY_S = 60
+# A pool run that finds the pool locked tries again after this long.
+SQ_POOL_BUSY_RETRY_S = 120
