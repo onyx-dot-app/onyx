@@ -72,18 +72,18 @@ jobs:
       pull-requests: read
     outputs:
       # A draft PR, or a PR with an open, ready child PR, skips the suite (see
-      # .github/actions/stack-position). A stacked tip runs every optional
-      # suite, because its path filters see only the tip's own diff.
+      # .github/actions/stack-position). The path filters of a stacked tip
+      # see every change in its stack.
       skip_reason: ${{ steps.stack.outputs.skip_reason }}
-      integration: ${{ github.event_name != 'pull_request' && 'true' || steps.stack.outputs.skip_reason != '' && 'false' || steps.stack.outputs.stacked == 'true' && 'true' || (steps.filter.outputs.integration == 'true' || steps.backend_src.outputs.backend == 'true') && 'true' || 'false' }}
-      gateway: ${{ steps.stack.outputs.stacked == 'true' && 'true' || steps.filter.outputs.gateway || 'true' }}
+      integration: ${{ github.event_name != 'pull_request' && 'true' || steps.stack.outputs.skip_reason != '' && 'false' || (steps.filter.outputs.integration == 'true' || steps.backend_src.outputs.backend == 'true') && 'true' || 'false' }}
+      gateway: ${{ steps.filter.outputs.gateway || 'true' }}
       # Live connector suites that this run skips. See the "Pick live connector
       # suites" step.
       skipped_connector_suites: ${{ steps.connectors.outputs.skipped }}
       # The reindex port suite is slow (each test waits for a full re-embed and
       # swap). PRs run it only for related changes, and main runs skip it; the
       # daily run and tag runs always include it.
-      reindex_port: ${{ github.event_name == 'pull_request' && (steps.stack.outputs.stacked == 'true' && 'true' || steps.filter.outputs.reindex_port) || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'false' || 'true' }}
+      reindex_port: ${{ github.event_name == 'pull_request' && steps.filter.outputs.reindex_port || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'false' || 'true' }}
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request'
@@ -103,6 +103,10 @@ jobs:
         id: backend_src
         if: github.event_name == 'pull_request'
         with:
+          # A stacked PR diffs against the base of its whole stack: without a
+          # token, paths-filter runs git diff from `base`. See stack-position.
+          token: ${{ steps.stack.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ steps.stack.outputs.stack_base }}
           # `every`: a file matches only if it matches all patterns, so a PR
           # that changes only unit or external-dependency tests skips this suite.
           predicate-quantifier: every
@@ -115,6 +119,10 @@ jobs:
         id: filter
         if: github.event_name == 'pull_request'
         with:
+          # A stacked PR diffs against the base of its whole stack: without a
+          # token, paths-filter runs git diff from `base`. See stack-position.
+          token: ${{ steps.stack.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ steps.stack.outputs.stack_base }}
           filters: |
             integration:
               - 'cli/**'
@@ -210,11 +218,10 @@ jobs:
         id: connectors
         env:
           EVENT_NAME: ${{ github.event_name }}
-          STACKED: ${{ steps.stack.outputs.stacked }}
           FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
         run: |
           skipped=""
-          if [[ "$EVENT_NAME" == "pull_request" && "$STACKED" != "true" ]]; then
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
             for suite in azure_datalake github google jira onedrive sharepoint slack; do
               if [[ "$(jq -r --arg suite "$suite" '.[$suite] // "false"' <<< "$FILTER_OUTPUTS")" != "true" ]]; then
                 skipped="$skipped $suite"

@@ -97,16 +97,16 @@ jobs:
       pull-requests: read
     outputs:
       # A draft PR, or a PR with an open, ready child PR, skips the suite (see
-      # .github/actions/stack-position). A stacked tip runs every optional
-      # suite, because its path filters see only the tip's own diff.
+      # .github/actions/stack-position). The path filters of a stacked tip
+      # see every change in its stack.
       skip_reason: ${{ steps.stack.outputs.skip_reason }}
-      playwright: ${{ github.event_name != 'pull_request' && 'true' || steps.stack.outputs.skip_reason != '' && 'false' || steps.stack.outputs.stacked == 'true' && 'true' || (steps.filter.outputs.playwright == 'true' || steps.backend_src.outputs.backend == 'true') && 'true' || 'false' }}
-      airgap: ${{ steps.stack.outputs.skip_reason != '' && 'false' || steps.stack.outputs.stacked == 'true' && 'true' || steps.filter.outputs.airgap || 'true' }}
+      playwright: ${{ github.event_name != 'pull_request' && 'true' || steps.stack.outputs.skip_reason != '' && 'false' || (steps.filter.outputs.playwright == 'true' || steps.backend_src.outputs.backend == 'true') && 'true' || 'false' }}
+      airgap: ${{ steps.stack.outputs.skip_reason != '' && 'false' || steps.filter.outputs.airgap || 'true' }}
       # Whether this change touches MCP-OAuth-relevant code. Drives whether a
       # same-repo PR validates the OAuth spec against the real Okta org instead of
       # the mock IdP. A push to main always runs it; other events without the
       # filter default to 'false'.
-      mcp_oauth: ${{ steps.stack.outputs.stacked == 'true' && 'true' || steps.filter.outputs.mcp_oauth || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'true' || 'false' }}
+      mcp_oauth: ${{ steps.filter.outputs.mcp_oauth || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'true' || 'false' }}
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request'
@@ -126,6 +126,10 @@ jobs:
         id: backend_src
         if: github.event_name == 'pull_request'
         with:
+          # A stacked PR diffs against the base of its whole stack: without a
+          # token, paths-filter runs git diff from `base`. See stack-position.
+          token: ${{ steps.stack.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ steps.stack.outputs.stack_base }}
           # `every`: a file matches only if it matches all patterns, so a PR
           # that changes only unit or external-dependency tests skips this suite.
           predicate-quantifier: every
@@ -138,6 +142,10 @@ jobs:
         id: filter
         if: github.event_name == 'pull_request'
         with:
+          # A stacked PR diffs against the base of its whole stack: without a
+          # token, paths-filter runs git diff from `base`. See stack-position.
+          token: ${{ steps.stack.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ steps.stack.outputs.stack_base }}
           filters: |
             playwright:
               - 'web/**'

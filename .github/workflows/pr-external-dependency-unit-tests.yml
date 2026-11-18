@@ -5,18 +5,9 @@ concurrency:
 
 on:
   pull_request:
-    paths:
-      - "backend/**"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/pr-external-dependency-unit-tests.yml"
-      - ".github/actions/setup-python-and-install-dependencies/**"
-      - ".github/actions/stack-position/**"
-      - ".github/actions/login-ecr-pullthrough-cache/**"
-      - "deployment/docker_compose/docker-compose.yml"
-      - "deployment/docker_compose/docker-compose.dev.yml"
-      - "deployment/helm/**"
-    # A draft skips the slow suites, so they run again when the draft state changes.
+    # No `paths:` filter: a stacked tip must see every change in its stack, so
+    # the `relevant` filter in discover-test-dirs decides. A draft skips the
+    # slow suites, so they run again when the draft state changes.
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     tags:
@@ -73,6 +64,7 @@ jobs:
       # A draft PR, or a PR with an open, ready child PR, skips the tests (see
       # .github/actions/stack-position).
       skip_reason: ${{ steps.stack.outputs.skip_reason }}
+      relevant: ${{ steps.filter.outputs.relevant || 'true' }}
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
@@ -94,10 +86,25 @@ jobs:
         id: filter
         if: github.event_name == 'pull_request'
         with:
+          # A stacked PR diffs against the base of its whole stack: without a
+          # token, paths-filter runs git diff from `base`. See stack-position.
+          token: ${{ steps.stack.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ steps.stack.outputs.stack_base }}
           list-files: json
           filters: |
             changed:
               - '**'
+            relevant:
+              - 'backend/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/pr-external-dependency-unit-tests.yml'
+              - '.github/actions/setup-python-and-install-dependencies/**'
+              - '.github/actions/stack-position/**'
+              - '.github/actions/login-ecr-pullthrough-cache/**'
+              - 'deployment/docker_compose/docker-compose.yml'
+              - 'deployment/docker_compose/docker-compose.dev.yml'
+              - 'deployment/helm/**'
 
       - name: Discover test directories
         id: set-matrix
@@ -151,7 +158,7 @@ jobs:
 
   external-dependency-unit-tests:
     needs: discover-test-dirs
-    if: needs.discover-test-dirs.outputs.skip_reason == ''
+    if: needs.discover-test-dirs.outputs.skip_reason == '' && needs.discover-test-dirs.outputs.relevant == 'true'
     # Use larger runner with more resources for OpenSearch
     runs-on:
       - runs-on

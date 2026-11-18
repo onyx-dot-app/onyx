@@ -9,9 +9,13 @@ outputs:
   child:
     description: "Number of an open, ready, same-repository PR whose base is this PR's head branch, or empty"
     value: ${{ steps.position.outputs.child }}
-  stacked:
-    description: "'true' when this PR's base is the head branch of an open same-repository PR"
-    value: ${{ steps.position.outputs.stacked }}
+  stack_base:
+    description: >-
+      For a PR whose base is the head branch of an open same-repository PR: the
+      commit where the stack leaves its root branch. Pass it as the base of
+      dorny/paths-filter, so the filters see every change in the stack and not
+      only this PR's change. Empty for a PR that is not stacked.
+    value: ${{ steps.position.outputs.stack_base }}
   skip_reason:
     description: "Why this PR skips the slow suites, or empty when it runs them"
     value: ${{ steps.position.outputs.skip_reason }}
@@ -31,7 +35,7 @@ runs:
       run: |
         set -euo pipefail
         child=""
-        stacked=false
+        stack_base=""
         pr=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefName,baseRefName,isDraft)
         draft=$(jq -r .isDraft <<< "$pr")
         if [[ "$SAME_REPO" == "true" ]]; then
@@ -41,11 +45,20 @@ runs:
           child=$(gh pr list --repo "$REPO" --base "$HEAD_REF" --state open \
             --json number,isCrossRepository,isDraft \
             --jq '[.[] | select(.isCrossRepository == false and .isDraft == false) | .number] | first // empty')
-          parent=$(gh pr list --repo "$REPO" --head "$BASE_REF" --state open \
-            --json number,isCrossRepository \
-            --jq '[.[] | select(.isCrossRepository == false) | .number] | first // empty')
-          if [[ -n "$parent" ]]; then
-            stacked=true
+          # Walk down the stack to its root branch, the base of its lowest PR.
+          root="$BASE_REF"
+          for _ in $(seq 1 100); do
+            below=$(gh pr list --repo "$REPO" --head "$root" --state open \
+              --json baseRefName,isCrossRepository \
+              --jq '[.[] | select(.isCrossRepository == false) | .baseRefName] | first // empty')
+            [[ -n "$below" ]] || break
+            root="$below"
+          done
+          if [[ "$root" != "$BASE_REF" ]]; then
+            # GITHUB_SHA is the PR's merge commit, so this is the newest root
+            # branch commit that the stack contains.
+            stack_base=$(gh api "repos/${REPO}/compare/${root}...${GITHUB_SHA}?per_page=1" \
+              --jq .merge_base_commit.sha)
           fi
         fi
         skip_reason=""
@@ -54,9 +67,9 @@ runs:
         elif [[ -n "$child" ]]; then
           skip_reason="PR #${child} is stacked on this PR. The stack tip runs the slow suites for this PR's changes."
         fi
-        echo "child=${child} stacked=${stacked} draft=${draft}"
+        echo "child=${child} stack_base=${stack_base} draft=${draft}"
         {
           echo "child=${child}"
-          echo "stacked=${stacked}"
+          echo "stack_base=${stack_base}"
           echo "skip_reason=${skip_reason}"
         } >> "$GITHUB_OUTPUT"
