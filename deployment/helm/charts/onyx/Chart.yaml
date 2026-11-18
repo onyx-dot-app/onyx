@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.54
+version: 0.9.55
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,9 +20,11 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: security
-      description: Disable HTTP/2 by default in the bundled Ingress NGINX
-        controller to mitigate CVE-2026-123007 and CVE-2026-123633.
+    - kind: added
+      description: New worker celery_worker_docconversion, off by default. When
+        enabled, the chart deploys it and sets ENABLE_CONVERSION_STAGE on the
+        docfetching worker, so docfetching lists Google Drive files and this
+        worker fetches and parses them.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
