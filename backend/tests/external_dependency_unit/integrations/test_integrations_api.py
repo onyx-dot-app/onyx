@@ -1525,6 +1525,32 @@ def test_legacy_tool_ids_of_two_servers_in_one_plugin_allow_both_tools(
     }
 
 
+def test_legacy_tool_ids_do_not_allow_a_shared_name_that_another_server_left_out(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    first, first_server = make_mcp_integration(
+        db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("alpha", "beta")
+    )
+    second, second_server = make_mcp_integration(
+        db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("beta",)
+    )
+    created.add(first.id)
+    created.add(second.id)
+    plugin = hold_in_plugin(db_session, [first, second])
+    alpha = _old_mcp_tool(db_session, first_server.id, "alpha")
+    beta = _old_mcp_tool(db_session, second_server.id, "beta")
+
+    persona_id = _persona(
+        db_session, admin, tool_ids=[alpha.id, beta.id], plugin_links=None
+    )
+
+    links = {
+        link.plugin_id: link.action_settings
+        for link in list_persona_plugin_links(db_session, persona_id)
+    }
+    assert links[plugin.id] == {"default": "blocked", "actions": {"alpha": "inherit"}}
+
+
 def test_legacy_tool_ids_keep_the_plugin_that_the_agent_holds(
     db_session: Session, admin: User, member: User, created: Created
 ) -> None:

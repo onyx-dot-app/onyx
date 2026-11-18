@@ -5,6 +5,7 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecidedVia, IntegrationActionPolicyValue
+from onyx.db.integration import list_integration_actions_by_id
 from onyx.db.models import (
     ApprovalRequest,
     ChatSession,
@@ -265,6 +266,7 @@ def legacy_tool_plugin_links(
         if plugin_id is not None:
             links.setdefault(plugin_id, PersonaPluginLink(plugin_id=plugin_id))
     mcp_names: dict[UUID, set[str]] = {}
+    selected: dict[int, set[str]] = {}
     for server_id, names in sorted(mcp_tool_names.items()):
         server_integration_id = server_integrations.get(server_id)
         if server_integration_id is None:
@@ -273,6 +275,23 @@ def legacy_tool_plugin_links(
         if plugin_id is None or plugin_id in links:
             continue
         mcp_names.setdefault(plugin_id, set()).update(names)
+        selected[server_integration_id] = set(names)
+    # The settings of a plugin name actions, not servers: a name that another
+    # server of the plugin has but was not selected on stays blocked.
+    held = [
+        (plugin_id, integration.id)
+        for plugin_id, integration in list_plugin_integrations(
+            db_session, list(mcp_names)
+        )
+        if integration.mcp_server_id is not None
+    ]
+    actions = list_integration_actions_by_id(
+        [integration_id for _, integration_id in held], db_session
+    )
+    for plugin_id, integration_id in held:
+        mcp_names[plugin_id] -= {
+            action.key for action in actions[integration_id]
+        } - selected.get(integration_id, set())
     for plugin_id, names in mcp_names.items():
         links[plugin_id] = PersonaPluginLink(
             plugin_id=plugin_id,
