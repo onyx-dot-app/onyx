@@ -14302,6 +14302,11 @@
         "label": "추천 모델만 표시"
       }
     },
+    "messageList": {
+      "turnFailed": {
+        "message": "턴이 실패했습니다."
+      }
+    },
     "onboarding": {
       "livingMap": {
         "examplePrompts": {

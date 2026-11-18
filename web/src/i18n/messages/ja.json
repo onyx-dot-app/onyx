@@ -14302,6 +14302,11 @@
         "label": "おすすめのモデルのみ"
       }
     },
+    "messageList": {
+      "turnFailed": {
+        "message": "ターンが失敗しました。"
+      }
+    },
     "onboarding": {
       "livingMap": {
         "examplePrompts": {

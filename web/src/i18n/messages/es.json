@@ -14302,6 +14302,11 @@
         "label": "Solo modelos recomendados"
       }
     },
+    "messageList": {
+      "turnFailed": {
+        "message": "El turno falló."
+      }
+    },
     "onboarding": {
       "livingMap": {
         "examplePrompts": {

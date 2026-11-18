@@ -14302,6 +14302,11 @@
         "label": "Recommended Models Only"
       }
     },
+    "messageList": {
+      "turnFailed": {
+        "message": "Turn failed."
+      }
+    },
     "onboarding": {
       "livingMap": {
         "examplePrompts": {
