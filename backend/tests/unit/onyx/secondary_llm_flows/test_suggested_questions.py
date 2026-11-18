@@ -251,12 +251,14 @@ def _llm(questions: list[dict[str, Any]]) -> MagicMock:
 def test_write_questions_sends_numbered_passages_and_asks_for_json() -> None:
     llm = _llm([])
 
-    sq.write_questions(_passages(25), llm, "Acme", ["engineer", "sales"])
+    sq.write_questions(_passages(25), [llm], "Acme", ["engineer", "sales"])
 
     request: GenerationRequest = llm.invoke.call_args.args[0]
     system, user = request.messages
     assert "people at Acme" in system.text and "engineer, sales" in system.text
     assert user.text.startswith("[1] doc-1\n" + "x" * 1400 + "\n\n[2] doc-2")
+    # OpenAI's JSON mode needs "json" in the input messages, not only the system.
+    assert user.text.endswith("Return the questions as JSON.")
     assert "[21]" not in user.text  # at most 20 passages
     assert request.options.structured_response_format == {"type": "json_object"}
     assert request.options.reasoning_effort == ReasoningEffort.OFF
@@ -283,7 +285,7 @@ def test_write_questions_drops_questions_that_break_the_rules() -> None:
         ]
     )
 
-    drafts = sq.write_questions(_passages(2), llm, None, [])
+    drafts = sq.write_questions(_passages(2), [llm], None, [])
 
     assert [(d.text, d.chunk.document_id, d.best_for) for d in drafts] == [
         ("How many days of leave do we get?", "doc-1", UseCase.HR),
@@ -299,7 +301,7 @@ def test_write_questions_reads_json_inside_a_code_block() -> None:
         "Here you go:\n```json\n" + json.dumps({"questions": [question]}) + "\n```"
     )
 
-    drafts = sq.write_questions(_passages(1), llm, None, [])
+    drafts = sq.write_questions(_passages(1), [llm], None, [])
 
     assert [draft.text for draft in drafts] == ["Who approves leave?"]
 
@@ -310,7 +312,7 @@ def test_write_questions_raises_on_invalid_output(text: str) -> None:
     llm.invoke.return_value.text = text
 
     with pytest.raises(ValueError):
-        sq.write_questions(_passages(1), llm, None, [])
+        sq.write_questions(_passages(1), [llm], None, [])
 
 
 @pytest.mark.parametrize(
@@ -331,7 +333,7 @@ def test_write_questions_raises_on_invalid_output(text: str) -> None:
 def test_write_questions_drops_yes_no_questions(question: str, kept: bool) -> None:
     llm = _llm([{"passage": 1, "question": question, "best_for": "hr"}])
 
-    drafts = sq.write_questions(_passages(1), llm, None, [])
+    drafts = sq.write_questions(_passages(1), [llm], None, [])
 
     assert bool(drafts) is kept
 
@@ -358,6 +360,48 @@ def test_best_for_never_fails_the_output(best_for: Any, expected: Any) -> None:
         ]
     )
 
-    drafts = sq.write_questions(_passages(1), llm, None, [])
+    drafts = sq.write_questions(_passages(1), [llm], None, [])
 
     assert [draft.best_for for draft in drafts] == [expected, None]
+
+
+def test_write_questions_falls_back_to_the_next_model() -> None:
+    failing = MagicMock()
+    failing.invoke.side_effect = RuntimeError("no credits remaining")
+    fallback = _llm(
+        [{"passage": 1, "question": "Who approves leave?", "best_for": "hr"}]
+    )
+
+    drafts = sq.write_questions(_passages(1), [failing, fallback], None, [])
+
+    assert [draft.text for draft in drafts] == ["Who approves leave?"]
+
+
+def test_write_questions_raises_when_every_model_fails() -> None:
+    first, second = MagicMock(), MagicMock()
+    first.invoke.side_effect = RuntimeError("down")
+    second.invoke.return_value.text = "not json"
+
+    with pytest.raises(ValueError):
+        sq.write_questions(_passages(1), [first, second], None, [])
+    with pytest.raises(ValueError):
+        sq.write_questions(_passages(1), [], None, [])
+
+
+def test_build_writing_llms_tries_openai_then_anthropic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested: list[tuple[str, str]] = []
+
+    def get_llm(provider: str, model: str) -> MagicMock | None:
+        requested.append((provider, model))
+        if provider == "openai":
+            raise OnyxError(OnyxErrorCode.RATE_LIMITED, "over the cost limit")
+        return MagicMock()
+
+    monkeypatch.setattr(sq, "get_llm_for_provider", get_llm)
+
+    llms = sq.build_writing_llms()
+
+    assert requested == [("openai", "gpt-6-luna"), ("anthropic", "claude-haiku-5-5")]
+    assert len(llms) == 1

@@ -58,7 +58,12 @@ SQ_RULES_MAX_CHUNK_ID = 2
 SQ_FEW_DOCUMENTS = 6
 
 # The writing call: a small model, fixed here like the triage models.
+# Chosen by testing on real documents: gpt-6-luna matched the best pass rate at
+# the lowest price. The fallback is as cheap, from another provider.
 SQ_WRITING_OPENAI_MODEL = os.environ.get("SQ_WRITING_OPENAI_MODEL") or "gpt-6-luna"
+SQ_WRITING_ANTHROPIC_MODEL = (
+    os.environ.get("SQ_WRITING_ANTHROPIC_MODEL") or "claude-haiku-5-5"
+)
 SQ_WRITING_MAX_TOKENS = 1200
 # Seconds for one writing call. Triage uses the decision client default, also 30.
 SQ_LLM_TIMEOUT_S = 30.0

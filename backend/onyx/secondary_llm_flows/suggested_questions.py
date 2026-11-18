@@ -16,6 +16,7 @@ import httpx
 
 from onyx.context.search.models import InferenceChunk
 from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.decisions.client import DecisionClient
 from onyx.llm.decisions.models import (
     ChoiceAnswer,
@@ -65,6 +66,7 @@ from onyx.server.features.suggested_questions.config import (
     SQ_TRIAGE_SNIPPET_CHARS,
     SQ_TRIAGE_WORKERS,
     SQ_TRIAGE_ZOOM_MODEL,
+    SQ_WRITING_ANTHROPIC_MODEL,
     SQ_WRITING_MAX_TOKENS,
     SQ_WRITING_OPENAI_MODEL,
 )
@@ -280,21 +282,44 @@ _MENTIONS_SOURCE = re.compile(
 )
 
 
-def build_writing_llm() -> LLM | None:
-    """The small model on the tenant's OpenAI provider, or None when it is not
-    set up. Fixed in code for the same reason as the triage models."""
-    return get_llm_for_provider(DecisionProvider.OPENAI, SQ_WRITING_OPENAI_MODEL)
+def build_writing_llms() -> list[LLM]:
+    """OpenAI first, then Anthropic, so an outage or an empty quota at one
+    provider does not stop runs. A provider the tenant has not set up, or one
+    over its cost limit, is skipped. Fixed in code for the same reason as the
+    triage models."""
+    llms = []
+    for provider, model in (
+        (LlmProviderNames.OPENAI, SQ_WRITING_OPENAI_MODEL),
+        (LlmProviderNames.ANTHROPIC, SQ_WRITING_ANTHROPIC_MODEL),
+    ):
+        try:
+            llm = get_llm_for_provider(provider, model)
+        except (OnyxError, ValueError):
+            logger.warning(
+                "Suggested questions: cannot use %s for writing",
+                provider.value,
+                exc_info=True,
+            )
+            continue
+        if llm is not None:
+            llms.append(llm)
+    return llms
 
 
 def write_questions(
-    passages: list[TriagedChunk], llm: LLM, company: str | None, roles: list[str]
+    passages: list[TriagedChunk],
+    llms: list[LLM],
+    company: str | None,
+    roles: list[str],
 ) -> list[DraftQuestion]:
     """One call that writes questions about the passages, then drops the ones
-    that break the prompt's rules. Raises when the call fails or its JSON is
-    invalid, so the run can retry."""
+    that break the prompt's rules. Tries the LLMs in order; raises when every
+    one fails, so the run can retry."""
     passages = passages[:SQ_PASSAGES_MAX]
     if not passages:
         return []
+    if not llms:
+        raise ValueError("No writing model is set up")
     system_prompt = SQ_WRITING_SYSTEM_PROMPT.format(
         company=company or "the company",
         roles=", ".join(roles) or "any role",
@@ -302,11 +327,39 @@ def write_questions(
         max_questions=SQ_QUESTIONS_PER_RUN,
         per_passage=SQ_QUESTIONS_PER_PASSAGE,
     )
-    user_prompt = "\n\n".join(
+    passages_text = "\n\n".join(
         f"[{number}] {item.chunk.semantic_identifier}\n"
         f"{item.chunk.content[:SQ_PASSAGE_CHARS]}"
         for number, item in enumerate(passages, start=1)
     )
+    # OpenAI's JSON mode needs the word "json" in the input messages, and
+    # LiteLLM sends the system prompt outside them.
+    user_prompt = f"{passages_text}\n\nReturn the questions as JSON."
+    for position, llm in enumerate(llms, start=1):
+        try:
+            written = _write(llm, system_prompt, user_prompt)
+        except Exception:
+            if position == len(llms):
+                raise
+            logger.warning(
+                "Suggested questions: writing failed on %s, trying the next model",
+                llm.config.model_name,
+                exc_info=True,
+            )
+            continue
+        drafts = _keep_valid_questions(written, passages)
+        logger.info(
+            "Suggested questions: %s wrote %d questions from %d passages, kept %d",
+            llm.config.model_name,
+            len(written),
+            len(passages),
+            len(drafts),
+        )
+        return drafts
+    return []
+
+
+def _write(llm: LLM, system_prompt: str, user_prompt: str) -> list[WrittenQuestion]:
     response = llm.invoke(
         GenerationRequest(
             messages=[
@@ -327,15 +380,7 @@ def write_questions(
     parsed = parse_llm_json_response(response.text)
     if parsed is None:
         raise ValueError("The writing call returned no JSON object")
-    written = WritingOutput.model_validate(parsed).questions
-    drafts = _keep_valid_questions(written, passages)
-    logger.info(
-        "Suggested questions: wrote %d questions from %d passages, kept %d",
-        len(written),
-        len(passages),
-        len(drafts),
-    )
-    return drafts
+    return WritingOutput.model_validate(parsed).questions
 
 
 def _keep_valid_questions(
