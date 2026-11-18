@@ -70,6 +70,64 @@ load_queue() {
   fi
 }
 
+# The merge queue tests at most this many entries at once. A stack deeper than
+# this cannot merge as one unit: its lower PRs wait for an entry that the queue
+# does not start until they merge.
+BUILD_LIMIT=""
+load_build_limit() {
+  if [[ -z "${BUILD_LIMIT}" ]]; then
+    BUILD_LIMIT="$(gh api "repos/${REPO}/rules/branches/${TARGET}" \
+      --jq '[.[] | select(.type == "merge_queue") | .parameters.max_entries_to_build] | first // empty')"
+    : "${BUILD_LIMIT:?Cannot read max_entries_to_build of the ${TARGET} merge queue.}"
+  fi
+}
+
+too_deep() {
+  load_build_limit
+  if (($1 > BUILD_LIMIT)); then
+    echo "::error::PR #${PR_NUMBER} is in a stack of $1 PRs. The merge queue tests at most ${BUILD_LIMIT} entries at once, so this stack cannot merge as one unit. Split it into stacks of at most ${BUILD_LIMIT} PRs."
+    return 0
+  fi
+  return 1
+}
+
+# Waits until the merge queue entry of PR $1 passes its checks. GitHub merges
+# the lower PRs of a stack even when an entry above them fails, so a lower PR
+# that relies on the stack tip's verdict must not pass before the tip does.
+# 80 polls of 20 seconds stay under the queue's 30-minute check timeout.
+wait_for_entry() {
+  local pr="$1" state attempt
+  for attempt in $(seq 1 80); do
+    # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
+    state="$(gh api graphql \
+      -f query='query($owner: String!, $name: String!, $branch: String!) {
+        repository(owner: $owner, name: $name) {
+          mergeQueue(branch: $branch) { entries(first: 100) { nodes { state pullRequest { number } } } }
+        }
+      }' \
+      -f owner="${REPO%%/*}" -f name="${REPO#*/}" -f branch="${TARGET}" \
+      --jq ".data.repository.mergeQueue.entries.nodes[] | select(.pullRequest.number == ${pr}) | .state")"
+    case "${state}" in
+      MERGEABLE | LOCKED)
+        echo "PR #${pr} passed its merge queue checks."
+        return 0
+        ;;
+      UNMERGEABLE)
+        echo "::error::PR #${pr} failed its merge queue checks, so PR #${PR_NUMBER} does not merge without it."
+        return 1
+        ;;
+      "")
+        echo "::error::PR #${pr} left the merge queue, so PR #${PR_NUMBER} does not merge without it."
+        return 1
+        ;;
+    esac
+    echo "Waiting for PR #${pr} in the merge queue (${state}, ${attempt}/80)"
+    sleep 20
+  done
+  echo "::error::PR #${pr} did not pass its merge queue checks in time."
+  return 1
+}
+
 # A PR in a GitHub stack merges only with the whole stack (gh stack merge),
 # because the stack tip's run is the one that tests the PRs below it.
 # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
@@ -85,6 +143,7 @@ stack_json="$(gh api graphql \
   --jq '.data.repository.pullRequest.stack')"
 if [[ -n "${stack_json}" && "${stack_json}" != "null" ]]; then
   STACK_NUMBER="$(jq -r '.number' <<<"${stack_json}")"
+  too_deep "$(jq '[.entries.nodes[].pullRequest | select(.state == "OPEN")] | length' <<<"${stack_json}")" && exit 1
   load_queue
   missing=""
   for pr in $(jq -r '.entries.nodes[].pullRequest | select(.state == "OPEN") | .number' <<<"${stack_json}"); do
@@ -217,6 +276,9 @@ while IFS=$'\t' read -r number head_sha chain; do
   if ! is_ancestor "${HEAD_SHA}" "${head_sha}" || ! base_landed "${record}"; then
     continue
   fi
+  # shellcheck disable=SC2086 # chain is a space-separated list of PR numbers.
+  set -- ${chain}
+  too_deep "$(($# + 1))" && exit 1
   load_queue
   missing=""
   for pr in ${chain}; do
@@ -227,7 +289,8 @@ while IFS=$'\t' read -r number head_sha chain; do
     not_queued+=" #${number}"
     continue
   fi
-  echo "${CONTEXT} for PR #${PR_NUMBER} accepted: descendant PR #${number} tested ${head_sha}, which contains ${HEAD_SHA}, and merges with it."
+  wait_for_entry "${number}" || exit 1
+  echo "${CONTEXT} for PR #${PR_NUMBER} accepted: descendant PR #${number} tested ${head_sha}, which contains ${HEAD_SHA}, and passed in the merge queue with it."
   exit 0
 done < <(descendants)
 
