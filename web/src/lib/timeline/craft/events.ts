@@ -240,8 +240,9 @@ export function craftPacketToEvents(raw: unknown): TimelineEvent[] {
   if (!isRecord(raw)) return [];
   const meta = decodeMeta(raw._meta);
 
-  // A subagent's events belong on its own page.
-  if (meta?.sessionId !== undefined && meta.parentSessionId !== undefined) {
+  // A subagent's events belong on its own page. Null ids are absent, as in
+  // Craft's subagent routing.
+  if (meta?.sessionId != null && meta.parentSessionId != null) {
     return [];
   }
 
