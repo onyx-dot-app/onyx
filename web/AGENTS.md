@@ -81,21 +81,16 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
 
 ## React effects
 
-Use effects to sync with systems outside React, such as subscriptions, DOM nodes, and timers.
-Derive values from props or state during render. Handle user actions in event handlers.
-When you keep a `useEffect` or `useLayoutEffect`, state what it syncs with and why on the line
-above the call.
+Use effects only to sync with systems outside React, such as subscriptions, DOM nodes, timers, and
+focus. Derive values from props or state during render. Handle user actions in event handlers. To
+reset state when a prop changes, key the component on that prop. To keep an effect, state what it
+syncs with on the line above the call:
 
 ```ts
 // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- debounce timer that publishes the value after delayMs
-useEffect(() => {
-  const timer = setTimeout(() => setDebouncedValue(value), delayMs);
-  return () => clearTimeout(timer);
-}, [value, delayMs]);
 ```
 
-The effect baseline in `.oxlintrc.json` warns on existing calls. Remove a file once it is clean.
-Never add one.
+The effect baseline in `.oxlintrc.json` only warns. Remove a file once it is clean. Never add one.
 
 ## Style
 
