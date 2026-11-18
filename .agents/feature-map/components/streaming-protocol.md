@@ -501,8 +501,8 @@ its background task end ([[#pure-asgi-middleware]]).
 
 ## Known issues
 
-- No client knows `publish_files_start` and `publish_files_end` yet, so the
-  web, mobile, widget and CLI clients show nothing for a `publish_files` call
+- Only the web client knows `publish_files_start` and `publish_files_end`, so
+  the mobile, widget and CLI clients show nothing for a `publish_files` call
   ([[#unknown-packet-renders-nothing]]).
 - The web enum keeps `MESSAGE_END`. The mobile enum keeps `MESSAGE_END` and
   `TOP_LEVEL_BRANCHING`. The backend sends neither. Mobile drops

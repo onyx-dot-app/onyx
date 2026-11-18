@@ -95,6 +95,49 @@ export class ChatPage {
     });
   }
 
+  /** The download cards of the files that an AI message published. */
+  publishedFileCards(index = 0): Locator {
+    return this.aiMessage(index).getByRole("button", { name: /^Preview / });
+  }
+
+  /** A published file's card, by the title it shows (else its file name). */
+  publishedFileCard(title: string, index = 0): Locator {
+    return this.publishedFileCards(index).filter({ hasText: title });
+  }
+
+  /** Checks a published file's card: its details and download link. */
+  async expectPublishedFile(
+    title: string,
+    {
+      fileName,
+      details,
+      href,
+    }: { fileName: string; details: RegExp; href: string },
+    index = 0
+  ): Promise<void> {
+    const card = this.publishedFileCard(title, index);
+    await expect(card).toBeVisible();
+    await expect(card).toHaveAccessibleName(`Preview ${fileName}`);
+    await expect(card).toContainText(details);
+    const download = card.getByRole("link", { name: "Download" });
+    await expect(download).toHaveAttribute("href", href);
+    await expect(download).toHaveAttribute("download", fileName);
+  }
+
+  /** Opens a published file's preview and checks that it shows the text. */
+  async expectPublishedFilePreview(
+    title: string,
+    text: string,
+    index = 0
+  ): Promise<void> {
+    await this.publishedFileCard(title, index).click();
+    const preview = this.page.getByRole("dialog");
+    await expect(preview).toContainText(text);
+    await expect(preview.getByRole("link", { name: "Download" })).toBeVisible();
+    await this.page.keyboard.press("Escape");
+    await expect(preview).toBeHidden();
+  }
+
   answerText(text: string, index = 0): Locator {
     return this.aiMessage(index).getByText(text, { exact: true });
   }

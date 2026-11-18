@@ -13,6 +13,7 @@ import { OnyxDocument } from "@/lib/search/types";
 import {
   ProcessorState,
   PlacedImage,
+  PlacedPublishedFile,
   GroupedPacket,
   createInitialState,
   processPackets,
@@ -41,6 +42,7 @@ export interface UsePacketProcessorResult {
   /** Packets through the latest accepted user message. */
   acceptedPacketCount: number;
   generatedImages: PlacedImage[];
+  publishedFiles: PlacedPublishedFile[];
   // Whether final answer is coming (MESSAGE_START seen)
   finalAnswerComing: boolean;
   // Tool processing duration from backend (via MESSAGE_START packet)
@@ -178,6 +180,7 @@ export function usePacketProcessor(
     stopReason: state.stopReason,
     acceptedPacketCount: state.acceptedPacketCount,
     generatedImages: state.generatedImages,
+    publishedFiles: state.publishedFiles,
     finalAnswerComing: state.finalAnswerComing,
     toolProcessingDuration: state.toolProcessingDuration,
 

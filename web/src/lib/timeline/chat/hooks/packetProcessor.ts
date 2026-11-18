@@ -9,6 +9,7 @@ import {
   PostgresToolDocuments,
   GeneratedImage,
   MessageStart,
+  PublishedFile,
   ToolCallArgumentDelta,
   isCodeInterpreterToolType,
 } from "@/app/app/services/streamingModels";
@@ -42,6 +43,12 @@ export { parseToolKey };
 
 export interface PlacedImage extends GeneratedImage {
   turnIndex: number;
+}
+
+export interface PlacedPublishedFile extends PublishedFile {
+  turnIndex: number;
+  // 1 for the first file of its name in the response, then 2, 3, ...
+  version: number;
 }
 
 export interface ProcessorState {
@@ -81,6 +88,10 @@ export interface ProcessorState {
   // Images from every image generation call, nested calls included, in
   // arrival order and unique by file_id
   generatedImages: PlacedImage[];
+
+  // Files from every publish_files call, nested calls included, in arrival
+  // order and unique by file_id
+  publishedFiles: PlacedPublishedFile[];
 
   // Streaming status
   finalAnswerComing: boolean;
@@ -133,6 +144,7 @@ export function createInitialState(nodeId: number): ProcessorState {
     toolGroupKeys: new Set(),
     displayGroupKeys: new Set(),
     generatedImages: [],
+    publishedFiles: [],
     finalAnswerComing: false,
     stopPacketSeen: false,
     stopReason: undefined,
@@ -188,6 +200,7 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.EXEC_COMMAND_START,
   PacketType.WRITE_STDIN_START,
   PacketType.APPLY_PATCH_START,
+  PacketType.PUBLISH_FILES_START,
 ]);
 
 function hasContentPackets(packets: Packet[]): boolean {
@@ -299,6 +312,34 @@ function handleImagePacket(state: ProcessorState, packet: Packet): void {
   if (newImages.length > 0) {
     // A new array, so memoized consumers see the change
     state.generatedImages = [...state.generatedImages, ...newImages];
+  }
+}
+
+function handlePublishedFilesPacket(
+  state: ProcessorState,
+  packet: Packet
+): void {
+  if (packet.obj.type !== PacketType.PUBLISH_FILES_END) {
+    return;
+  }
+  const seenFileIds = new Set(state.publishedFiles.map((f) => f.file_id));
+  const newFiles: PlacedPublishedFile[] = [];
+  for (const file of packet.obj.files) {
+    if (seenFileIds.has(file.file_id)) continue;
+    seenFileIds.add(file.file_id);
+    const version =
+      [...state.publishedFiles, ...newFiles].filter(
+        (published) => published.name === file.name
+      ).length + 1;
+    newFiles.push({
+      ...file,
+      turnIndex: packet.placement.turn_index,
+      version,
+    });
+  }
+  if (newFiles.length > 0) {
+    // A new array, so memoized consumers see the change
+    state.publishedFiles = [...state.publishedFiles, ...newFiles];
   }
 }
 
@@ -474,6 +515,7 @@ function processPacket(state: ProcessorState, packet: Packet): void {
 
   // Handle specific packet types
   handleImagePacket(state, packet);
+  handlePublishedFilesPacket(state, packet);
   handleCitationPacket(state, packet);
   handleDocumentPacket(state, packet);
   handleStreamingStatusPacket(state, packet);

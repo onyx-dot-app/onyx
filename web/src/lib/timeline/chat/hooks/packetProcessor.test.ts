@@ -1076,6 +1076,89 @@ describe("packetProcessor", () => {
     });
   });
 
+  describe("published files", () => {
+    const published = (fileId: string, path: string) => ({
+      file_id: fileId,
+      name: path.split("/").pop(),
+      title: null,
+      path,
+      size: 10,
+      mime_type: "text/csv",
+    });
+
+    test("collects every publish_files result once per file, with versions by name", () => {
+      const state = createInitialState(1);
+      const packets = [
+        createPacket(
+          PacketType.PUBLISH_FILES_START,
+          { turn_index: 0 },
+          { files: [{ path: "report.csv", title: null }], description: null }
+        ),
+        createPacket(
+          PacketType.PUBLISH_FILES_END,
+          { turn_index: 0 },
+          { files: [published("a", "/w/report.csv")], error: null }
+        ),
+        createPacket(PacketType.SECTION_END, { turn_index: 0 }),
+        createPacket(
+          PacketType.CODE_MODE_START,
+          { turn_index: 1 },
+          { code: "await publish_files(files=[...])" }
+        ),
+        createPacket(
+          PacketType.PUBLISH_FILES_END,
+          { turn_index: 1, sub_turn_index: 0 },
+          {
+            // Files of one name are versions of one file, whatever the path.
+            files: [
+              published("b", "/w/out/report.csv"),
+              published("c", "/w/x.md"),
+            ],
+            error: null,
+          }
+        ),
+        // A repeated report of the same call adds nothing.
+        createPacket(
+          PacketType.PUBLISH_FILES_END,
+          { turn_index: 1, sub_turn_index: 0 },
+          { files: [published("b", "/w/out/report.csv")], error: null }
+        ),
+      ];
+      const result = processPackets(state, packets);
+
+      expect(
+        result.publishedFiles.map(({ file_id, turnIndex, version }) => ({
+          file_id,
+          turnIndex,
+          version,
+        }))
+      ).toEqual([
+        { file_id: "a", turnIndex: 0, version: 1 },
+        { file_id: "b", turnIndex: 1, version: 2 },
+        { file_id: "c", turnIndex: 1, version: 1 },
+      ]);
+      expect(result.toolGroupKeys.has("0-0")).toBe(true);
+      expect(result.toolGroups.map((g) => g.turn_index)).toContain(0);
+    });
+
+    test("a failed call publishes nothing", () => {
+      const state = createInitialState(1);
+      const result = processPackets(state, [
+        createPacket(
+          PacketType.PUBLISH_FILES_START,
+          { turn_index: 0 },
+          { files: [{ path: "missing.csv", title: null }], description: null }
+        ),
+        createPacket(
+          PacketType.PUBLISH_FILES_END,
+          { turn_index: 0 },
+          { files: [], error: "missing.csv is not a file" }
+        ),
+      ]);
+      expect(result.publishedFiles).toEqual([]);
+    });
+  });
+
   describe("buildGroupsFromKeys", () => {
     test("filters out groups without content packets", () => {
       const state = createInitialState(1);

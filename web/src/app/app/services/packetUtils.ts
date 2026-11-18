@@ -50,6 +50,8 @@ export function isToolPacket(
     PacketType.EXEC_END,
     PacketType.APPLY_PATCH_START,
     PacketType.APPLY_PATCH_END,
+    PacketType.PUBLISH_FILES_START,
+    PacketType.PUBLISH_FILES_END,
     PacketType.CODE_MODE_START,
     PacketType.CODE_MODE_DELTA,
     PacketType.IMAGE_GENERATION_TOOL_START,

@@ -12482,6 +12482,9 @@
           },
           "editingFiles": {
             "label": "Dateien werden bearbeitet"
+          },
+          "publishingFiles": {
+            "label": "Dateien werden veröffentlicht"
           }
         },
         "internalSearch": {
@@ -12667,7 +12670,8 @@
           "terminal": "Terminal",
           "applyPatch": "Patch anwenden",
           "editFile": "Datei bearbeiten",
-          "writeFile": "Datei schreiben"
+          "writeFile": "Datei schreiben",
+          "publishFiles": "Dateien veröffentlichen"
         },
         "webSearch": {
           "searching": {
@@ -12713,6 +12717,14 @@
           },
           "stopped": {
             "status": "Gestoppt"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, one {# Datei veröffentlicht} other {# Dateien veröffentlicht}}"
+            },
+            "failed": {
+              "status": "Veröffentlichung fehlgeschlagen"
+            }
           }
         }
       },
@@ -13354,6 +13366,16 @@
     "readiness": {
       "stopFailed": "Die Antwort konnte nicht gestoppt werden. Versuche es erneut.",
       "checkFailed": "Das Ende der Antwort konnte nicht bestätigt werden. Prüfe erneut, bevor du eine weitere Nachricht sendest."
+    },
+    "publishedFiles": {
+      "card": {
+        "updated": {
+          "description": "Aktualisierte Version · {details}"
+        },
+        "preview": {
+          "ariaLabel": "Vorschau von {name}"
+        }
+      }
     }
   },
   "common": {

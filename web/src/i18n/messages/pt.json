@@ -12482,6 +12482,9 @@
           },
           "editingFiles": {
             "label": "Editando arquivos"
+          },
+          "publishingFiles": {
+            "label": "Publicando arquivos"
           }
         },
         "internalSearch": {
@@ -12667,7 +12670,8 @@
           "terminal": "Terminal",
           "applyPatch": "Aplicar patch",
           "editFile": "Editar arquivo",
-          "writeFile": "Gravar arquivo"
+          "writeFile": "Gravar arquivo",
+          "publishFiles": "Publicar arquivos"
         },
         "webSearch": {
           "searching": {
@@ -12713,6 +12717,14 @@
           },
           "stopped": {
             "status": "Interrompido"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, one {# arquivo publicado} other {# arquivos publicados}}"
+            },
+            "failed": {
+              "status": "Falha ao publicar"
+            }
           }
         }
       },
@@ -13354,6 +13366,16 @@
     "readiness": {
       "stopFailed": "Não foi possível parar a resposta. Tente novamente.",
       "checkFailed": "Não foi possível confirmar o fim da resposta. Verifique novamente antes de enviar outra mensagem."
+    },
+    "publishedFiles": {
+      "card": {
+        "updated": {
+          "description": "Versão atualizada · {details}"
+        },
+        "preview": {
+          "ariaLabel": "Visualizar {name}"
+        }
+      }
     }
   },
   "common": {

@@ -22,6 +22,7 @@ export const COLLAPSED_STREAMING_PACKET_TYPES = new Set<PacketType>([
   PacketType.EXEC_COMMAND_START,
   PacketType.WRITE_STDIN_START,
   PacketType.APPLY_PATCH_START,
+  PacketType.PUBLISH_FILES_START,
 ]);
 
 // A packet from a tool call nested under a parent tool (code mode, research
@@ -197,11 +198,12 @@ export const stepHasCollapsedStreamingContent = (
     return true;
   }
 
-  // Sandbox tools show the command or patch from the start packet onward
+  // Sandbox tools show their command, patch or files from the start packet
   if (
     packetTypes.has(PacketType.EXEC_COMMAND_START) ||
     packetTypes.has(PacketType.WRITE_STDIN_START) ||
-    packetTypes.has(PacketType.APPLY_PATCH_START)
+    packetTypes.has(PacketType.APPLY_PATCH_START) ||
+    packetTypes.has(PacketType.PUBLISH_FILES_START)
   ) {
     return true;
   }

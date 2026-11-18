@@ -28,6 +28,7 @@ const TOOL_START_PACKET_TYPES = new Set<PacketType>([
   PacketType.WRITE_STDIN_START,
   PacketType.APPLY_PATCH_START,
   PacketType.POSTGRES_TOOL_START,
+  PacketType.PUBLISH_FILES_START,
 ]);
 
 /**

@@ -185,6 +185,13 @@
   answer gets its own part. If the stream drops while the run continues, the
   chat attaches again and later output, such as an approval card, still
   appears.
+- **The model publishes files from its sandbox.** Each published file shows
+  as a download card after the answer, with its title (else its file name),
+  type and size. A click opens the file preview; HTML shows as source, never
+  as a rendered page. A later publish of a file with the same name in the
+  same answer adds a card marked as an updated version. The timeline step lists the
+  files that the call asked for and how it ended. Shared chats show the same
+  cards.
 - **A user rates, copies or shares an answer.** Copy turns markdown tables into
   tab-separated text so a spreadsheet keeps the columns. Each answer table
   also has its own copy button, which writes HTML with links and full source
@@ -344,7 +351,12 @@ that arrive first do not decide the kind. `buildGroupsFromKeys` drops a group wi
 `CONTENT_PACKET_TYPES_SET`. Citation and stop packets update state instead of
 making their own step. Generated images accumulate across tool steps, unique
 by file ID, and render once above the answer as soon as they arrive. Later tool
-calls do not hide them. An image call does not mark the
+calls do not hide them. Published files work the same way: each
+`publish_files_end` adds its files, unique by file ID, to
+`ProcessorState.publishedFiles` with a version per file name, and
+`AgentMessage` shows them after the answer of their section
+(`sections/chat/PublishedFileCards.tsx`, which opens `PreviewModal` and
+downloads from `/api/chat/file/{file_id}`). An image call does not mark the
 answer as final; later search or image calls can continue the timeline.
 
 A group closes on its own parent-level `SECTION_END` or `ERROR`

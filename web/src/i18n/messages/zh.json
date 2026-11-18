@@ -12482,6 +12482,9 @@
           },
           "editingFiles": {
             "label": "正在编辑文件"
+          },
+          "publishingFiles": {
+            "label": "正在发布文件"
           }
         },
         "internalSearch": {
@@ -12667,7 +12670,8 @@
           "terminal": "终端",
           "applyPatch": "应用补丁",
           "editFile": "编辑文件",
-          "writeFile": "写入文件"
+          "writeFile": "写入文件",
+          "publishFiles": "发布文件"
         },
         "webSearch": {
           "searching": {
@@ -12713,6 +12717,14 @@
           },
           "stopped": {
             "status": "已停止"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, other {已发布 # 个文件}}"
+            },
+            "failed": {
+              "status": "发布失败"
+            }
           }
         }
       },
@@ -13354,6 +13366,16 @@
     "readiness": {
       "stopFailed": "无法停止回复。请重试。",
       "checkFailed": "无法确认回复是否已完成。请再次检查后再发送消息。"
+    },
+    "publishedFiles": {
+      "card": {
+        "updated": {
+          "description": "更新版本 · {details}"
+        },
+        "preview": {
+          "ariaLabel": "预览 {name}"
+        }
+      }
     }
   },
   "common": {

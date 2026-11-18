@@ -21,7 +21,10 @@ import { FeedbackType } from "@/app/app/types";
 import { Section } from "@opal/layouts";
 import { HumanMessageBubble } from "@/app/app/message/HumanMessage";
 import type { TurnGroup } from "@/lib/timeline/chat/transformers";
-import type { GroupedPacket } from "@/lib/timeline/chat/hooks/packetProcessor";
+import type {
+  GroupedPacket,
+  PlacedPublishedFile,
+} from "@/lib/timeline/chat/hooks/packetProcessor";
 import { handleCopy } from "@/app/app/message/copyingUtils";
 import {
   type AuthError,
@@ -35,6 +38,7 @@ import {
 import { getMessageSwitching } from "@/app/app/message/messageComponents/messageSwitching";
 import { RendererComponent } from "@/app/app/message/messageComponents/renderMessageComponent";
 import { GeneratedImageGrid } from "@/app/app/message/messageComponents/renderers/ImageToolRenderer";
+import { PublishedFileCards } from "@/sections/chat/PublishedFileCards";
 import { usePacketProcessor } from "@/lib/timeline/chat/hooks/usePacketProcessor";
 import { usePacedTurnGroups } from "@/lib/timeline/chat/hooks/usePacedTurnGroups";
 import MessageToolbar from "@/app/app/message/messageComponents/MessageToolbar";
@@ -85,6 +89,7 @@ interface ResponseSection {
   toolGroups: TurnGroup[];
   displayGroups: GroupedPacket[];
   images: GeneratedImage[];
+  publishedFiles: PlacedPublishedFile[];
   authErrors: AuthError[];
   toolRequests: ToolRequestRecord[];
 }
@@ -170,6 +175,7 @@ const AgentMessage = React.memo(function AgentMessage({
     stopPacketSeen,
     stopReason,
     generatedImages,
+    publishedFiles,
     isComplete,
     onRenderComplete,
     finalAnswerComing,
@@ -238,6 +244,7 @@ const AgentMessage = React.memo(function AgentMessage({
         toolGroups: [],
         displayGroups: [],
         images: [],
+        publishedFiles: [],
         authErrors: [],
         toolRequests: [],
       },
@@ -252,6 +259,7 @@ const AgentMessage = React.memo(function AgentMessage({
           toolGroups: [],
           displayGroups: [],
           images: [],
+          publishedFiles: [],
           authErrors: [],
           toolRequests: [],
         };
@@ -289,6 +297,7 @@ const AgentMessage = React.memo(function AgentMessage({
           (group) => group.turn_index > record.turnIndex
         ),
         images: [],
+        publishedFiles: [],
         authErrors: [],
         toolRequests: [],
       });
@@ -313,6 +322,11 @@ const AgentMessage = React.memo(function AgentMessage({
         .findLast((section) => section.turnIndex < image.turnIndex)!
         .images.push(image);
     }
+    for (const file of publishedFiles) {
+      sections
+        .findLast((section) => section.turnIndex < file.turnIndex)!
+        .publishedFiles.push(file);
+    }
     for (const error of authErrors) {
       sections
         .findLast((section) => section.turnIndex < error.turnIndex)!
@@ -328,6 +342,7 @@ const AgentMessage = React.memo(function AgentMessage({
     pacedDisplayGroups,
     pacedTurnGroups,
     generatedImages,
+    publishedFiles,
     authErrors,
     toolRequests.records,
   ]);
@@ -609,6 +624,12 @@ const AgentMessage = React.memo(function AgentMessage({
                       </RendererComponent>
                     );
                   })}
+                </div>
+              )}
+              {/* Files from every publish_files call follow the answer */}
+              {section.publishedFiles.length > 0 && (
+                <div className="mt-3">
+                  <PublishedFileCards files={section.publishedFiles} />
                 </div>
               )}
               {/* Show stopped message when user cancelled and no display content */}
