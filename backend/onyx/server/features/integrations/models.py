@@ -268,6 +268,12 @@ class MemberPluginState(BaseModel):
     installation_policy: PluginInstallationPolicy
 
 
+class PluginPublishResponse(BaseModel):
+    plugin_id: UUID
+    # The name in the Organization library, which can differ from the old name.
+    name: str
+
+
 class PluginInstallationPolicyUpdate(BaseModel):
     installation_policy: PluginInstallationPolicy
 

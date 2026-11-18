@@ -65,9 +65,15 @@ beforeEach(() => {
     {
       pluginId: LINEAR_PLUGIN_ID,
       name: "Linear",
+      required: false,
       integrations: [linear, shared],
     },
-    { pluginId: REPORTS_PLUGIN_ID, name: "Reports", integrations: [reports] },
+    {
+      pluginId: REPORTS_PLUGIN_ID,
+      name: "Reports",
+      required: false,
+      integrations: [reports],
+    },
   ];
 });
 afterEach(() => {
@@ -120,6 +126,7 @@ test("shows nothing when every integration is connected", () => {
     {
       pluginId: LINEAR_PLUGIN_ID,
       name: "Linear",
+      required: false,
       integrations: [
         makeMemberIntegration({
           status: {

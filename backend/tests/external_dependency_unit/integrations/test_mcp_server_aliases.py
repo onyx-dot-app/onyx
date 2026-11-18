@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import MASK_CREDENTIAL_SHORT
 from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
@@ -304,6 +305,20 @@ def test_a_shared_token_is_write_only_and_rotates(
         api_token_changed=True,
         existing_server_id=server_id,
     )
+    assert stored_token() == "token-two"
+
+    with pytest.raises(OnyxError) as error:
+        _upsert(
+            db_session,
+            admin,
+            created,
+            auth_type=MCPAuthenticationType.API_TOKEN,
+            api_token=MASK_CREDENTIAL_SHORT,
+            api_token_changed=True,
+            existing_server_id=server_id,
+        )
+    assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+    db_session.rollback()
     assert stored_token() == "token-two"
 
 

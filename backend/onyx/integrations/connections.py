@@ -91,9 +91,11 @@ from onyx.server.features.mcp.oauth import (
     make_integration_oauth_provider,
     oauth_error_from_response,
     oauth_token_from_response,
+    oauth_token_from_secret,
 )
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_url
+from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
 
@@ -194,6 +196,7 @@ def resolve_connection(
     db_session: Session,
     *,
     refresh: bool = True,
+    connections: Mapping[tuple[int, UUID | None], IntegrationConnection] | None = None,
 ) -> ResolvedConnection | ConnectionProblem:
     """The credential for one call by ``acting_user``, or why there is none.
     The caller always gives the acting user: the chat user, the sandbox
@@ -205,9 +208,15 @@ def resolve_connection(
         return ResolvedConnection(
             integration_id=integration.id, connection_id=None, secret=None
         )
-    organization, user_row = get_connection_with_organization(
-        db_session, integration.id, user.id if user is not None else None
-    )
+    if connections is None:
+        organization, user_row = get_connection_with_organization(
+            db_session, integration.id, user.id if user is not None else None
+        )
+    else:
+        organization = connections.get((integration.id, None))
+        user_row = (
+            connections.get((integration.id, user.id)) if user is not None else None
+        )
     resolved = _resolve_by_mode(
         integration, user, organization, user_row, db_session, refresh
     )
@@ -279,6 +288,15 @@ def _with_legacy_defaults(
             and integration.header_template
             and _fills_template(integration, defaults, signed_in_user)
         ):
+            organization_record = read_connection(organization)
+            if (
+                organization_record.status
+                is IntegrationConnectionStatus.NEEDS_RECONNECT
+            ):
+                return ConnectionProblem(
+                    code=ConnectionState.NEEDS_RECONNECT,
+                    reason=_needs_reconnect_reason(integration, organization_record),
+                )
             return ResolvedConnection(
                 integration_id=integration.id,
                 connection_id=organization.id,
@@ -626,7 +644,7 @@ def _refresh_connection(
         return
 
     try:
-        grant = _request_refreshed_grant(integration, connection, secret, db_session)
+        grant = _request_refreshed_grant(integration, connection, record, db_session)
     except _RefreshTemporaryError as error:
         logger.warning(
             "integration_connection.refresh.temporary connection_id=%s error=%s",
@@ -671,14 +689,17 @@ def _refresh_connection(
 def _request_refreshed_grant(
     integration: Integration,
     connection: IntegrationConnection,
-    secret: ConnectionSecret,
+    record: ConnectionRecord,
     db_session: Session,
 ) -> RefreshedGrant:
+    secret = record.secret
     oauth_client = get_oauth_client(db_session, integration.id)
     if oauth_client is None:
         raise _RefreshTemporaryError("the integration has no OAuth client")
     if integration.kind is IntegrationKind.MCP:
-        return _refresh_with_mcp_sdk(integration, connection, oauth_client, db_session)
+        return _refresh_with_mcp_sdk(
+            integration, connection, record, oauth_client, db_session
+        )
     if oauth_client.provider_mode is IntegrationOAuthProviderMode.PRESET:
         return _refresh_with_preset(integration, secret, oauth_client, db_session)
     return _refresh_with_token_url(secret, oauth_client)
@@ -901,6 +922,7 @@ def _refresh_with_preset(
 def _refresh_with_mcp_sdk(
     integration: Integration,
     connection: IntegrationConnection,
+    record: ConnectionRecord,
     oauth_client: IntegrationOAuthClient,
     db_session: Session,
 ) -> RefreshedGrant:
@@ -915,7 +937,11 @@ def _refresh_with_mcp_sdk(
         storage,
     )
     try:
-        request = run_async_sync_no_cancel(provider.build_refresh_request())
+        request = run_async_sync_no_cancel(
+            provider.build_refresh_request(
+                oauth_token_from_secret(record.secret, record.granted_scopes)
+            )
+        )
     except Exception as error:
         raise _RefreshTemporaryError(f"could not build refresh: {error}") from error
     if request is None:
@@ -1086,6 +1112,10 @@ def connect_with_fields__no_commit(
     missing = [key for key in keys if not fields.get(key, "").strip()]
     if missing:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Fill in: " + ", ".join(missing))
+    try:
+        reject_masked_credentials(dict(fields))
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
     upsert_connection__no_commit(
         db_session,
         integration_id=integration.id,

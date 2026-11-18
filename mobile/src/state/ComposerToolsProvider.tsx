@@ -73,6 +73,8 @@ export interface ComposerTools {
   // False while a saved switch-off needs the plugin list to build the allow-list. A send then
   // waits, because an allow-list without the plugins would turn every plugin off.
   toolOptionsReady: boolean;
+  toolOptionsFailed: boolean;
+  retryToolOptions: () => void;
   // Read at send time, never during render.
   resolveToolOptions: () => ChatToolOptions;
 }
@@ -126,6 +128,8 @@ export function useComposerToolsState({
 
   const {
     isLoaded: preferencesLoaded,
+    loadFailed: preferencesFailed,
+    reload: reloadPreferences,
     disabledToolIdsFor,
     disabledPluginIdsFor,
     setToolDisabled,
@@ -499,6 +503,8 @@ export function useComposerToolsState({
         preferencesLoaded &&
         (availableToolsLoaded ||
           (disabledToolIds.length === 0 && disabledPluginIds.length === 0)),
+      toolOptionsFailed: preferencesFailed,
+      retryToolOptions: reloadPreferences,
       // Gated on `showDeepResearch` so a control the admin has since hidden can't send true.
       resolveToolOptions: () => {
         /*
@@ -570,6 +576,8 @@ export function useComposerToolsState({
       notePendingSend,
       availableToolsLoaded,
       preferencesLoaded,
+      preferencesFailed,
+      reloadPreferences,
     ],
   );
 }

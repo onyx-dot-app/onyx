@@ -35,6 +35,8 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.utils import UnsetType, is_set
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_oauth_client
 from onyx.integrations.models import IntegrationActionSpec, IntegrationPluginRow
 
@@ -191,6 +193,41 @@ def get_openapi_tool_with_integration(
     return (row[0], row[1], row[2]) if row is not None else None
 
 
+def _mcp_tools_with_integration() -> Select[
+    tuple[Tool, Integration, IntegrationConnection]
+]:
+    return (
+        select(Tool, Integration, IntegrationConnection)
+        .join(Integration, Integration.mcp_server_id == Tool.mcp_server_id)
+        .outerjoin(
+            IntegrationConnection,
+            (IntegrationConnection.integration_id == Integration.id)
+            & IntegrationConnection.user_id.is_(None),
+        )
+    )
+
+
+def list_mcp_tools_with_integration(
+    db_session: Session,
+) -> list[tuple[Tool, Integration, IntegrationConnection | None]]:
+    """Each MCP tool row with its integration and organization connection."""
+    return [
+        (tool, integration, organization)
+        for tool, integration, organization in db_session.execute(
+            _mcp_tools_with_integration().order_by(Tool.id)
+        ).tuples()
+    ]
+
+
+def get_mcp_tool_with_integration(
+    tool_id: int, db_session: Session
+) -> tuple[Tool, Integration, IntegrationConnection | None] | None:
+    row = db_session.execute(
+        _mcp_tools_with_integration().where(Tool.id == tool_id)
+    ).one_or_none()
+    return (row[0], row[1], row[2]) if row is not None else None
+
+
 def list_integration_actions(
     integration_id: int, db_session: Session
 ) -> list[IntegrationAction]:
@@ -216,6 +253,39 @@ def count_integration_actions(
     ).tuples():
         counts[integration_id] = count
     return counts
+
+
+def list_integration_actions_by_id(
+    integration_ids: Collection[int], db_session: Session
+) -> dict[int, list[IntegrationAction]]:
+    actions: dict[int, list[IntegrationAction]] = {key: [] for key in integration_ids}
+    if not integration_ids:
+        return actions
+    for action in db_session.scalars(
+        select(IntegrationAction)
+        .where(IntegrationAction.integration_id.in_(integration_ids))
+        .order_by(IntegrationAction.id)
+    ):
+        actions[action.integration_id].append(action)
+    return actions
+
+
+def list_openapi_tools_by_integration(
+    integration_ids: Collection[int], db_session: Session
+) -> dict[int, Tool]:
+    if not integration_ids:
+        return {}
+    return dict(
+        db_session.execute(
+            select(Integration.id, Tool)
+            .join(Tool, Tool.id == Integration.tool_id)
+            .where(
+                Integration.id.in_(integration_ids), Tool.openapi_schema.is_not(None)
+            )
+        )
+        .tuples()
+        .all()
+    )
 
 
 def list_action_summaries(
@@ -295,12 +365,15 @@ def _apply_spec(action: IntegrationAction, spec: IntegrationActionSpec) -> None:
 
 def lock_integration__no_commit(integration_id: int, db_session: Session) -> None:
     """Locks the integration row, then expires the session, so the reads that
-    follow see what other transactions committed before the lock."""
+    follow see what other transactions committed before the lock. Raises
+    NOT_FOUND when another transaction deleted the row."""
     db_session.flush()
-    db_session.execute(
+    locked = db_session.scalar(
         select(Integration.id).where(Integration.id == integration_id).with_for_update()
     )
     db_session.expire_all()
+    if locked is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration not found.")
 
 
 def replace_integration_actions__no_commit(

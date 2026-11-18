@@ -204,6 +204,13 @@ def test_error_hint_for_loopback_points_at_disabled() -> None:
     assert "never permitted" not in detail
 
 
+def test_a_malformed_url_is_a_field_error() -> None:
+    with pytest.raises(OnyxError) as exc_info:
+        mcp_ssrf.validate_mcp_url("http://[::1", "server_url", require_https=False)
+    assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert "server_url" in exc_info.value.detail
+
+
 def test_store_time_allows_loopback_when_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

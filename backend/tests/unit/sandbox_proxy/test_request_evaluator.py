@@ -24,7 +24,10 @@ from onyx.sandbox_proxy.resolvers.mcp_matching import (
     may_match,
     parse_target,
 )
-from onyx.sandbox_proxy.usable_integrations import openapi_match_target
+from onyx.sandbox_proxy.usable_integrations import (
+    load_match_targets,
+    openapi_match_target,
+)
 
 
 def _regexes(
@@ -197,3 +200,30 @@ def test_an_openapi_spec_that_does_not_parse_gives_a_load_error() -> None:
     parsed = openapi_match_target(1, {"servers": [{"url": "https://a.example.com/v1"}]})
     assert parsed is not None and parsed.endpoint is not None
     assert parsed.endpoint.path_prefix == "/v1"
+
+
+def test_a_malformed_url_gives_a_load_error_and_keeps_the_valid_targets() -> None:
+    module = "onyx.sandbox_proxy.usable_integrations"
+    with (
+        patch(
+            f"{module}.list_enabled_mcp_server_urls",
+            return_value=[(1, "https://x:invalid/mcp"), (2, "https://ok.example/mcp")],
+        ),
+        patch(
+            f"{module}.list_enabled_openapi_schemas",
+            return_value=[
+                (3, {"servers": [{"url": "https://y:invalid/v1"}]}),
+                (4, {"servers": [{"url": "https://api.example/v1"}]}),
+            ],
+        ),
+        patch(f"{module}.list_enabled_external_apps", return_value=[]),
+    ):
+        targets = {t.integration_id: t for t in load_match_targets(MagicMock())}
+
+    assert set(targets) == {1, 2, 3, 4}
+    assert targets[1].kind is IntegrationKind.MCP
+    assert targets[1].load_error is not None
+    assert targets[3].kind is IntegrationKind.API
+    assert targets[3].load_error is not None
+    for valid in (targets[2], targets[4]):
+        assert valid.load_error is None and valid.endpoint is not None

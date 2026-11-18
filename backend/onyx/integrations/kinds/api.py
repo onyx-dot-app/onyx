@@ -1,5 +1,6 @@
 import re
 from collections.abc import Sequence
+from urllib.parse import unquote
 
 from mitmproxy import http
 from sqlalchemy.orm import Session
@@ -16,6 +17,7 @@ from onyx.db.integration import (
     list_integration_actions,
 )
 from onyx.db.models import ExternalApp, Integration, IntegrationAction
+from onyx.db.models import Tool as ToolModel
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
@@ -84,16 +86,17 @@ _PATH_PARAMETER = re.compile(r"\{[^{}/]+\}")
 
 
 def _literal_length(template: str) -> int:
-    return len(_PATH_PARAMETER.sub("", template.rstrip("/")))
+    return len(unquote(_PATH_PARAMETER.sub("", template.rstrip("/"))))
 
 
 def _segment_matches(template: str, segment: str) -> bool:
     """Each parameter takes one or more characters. Each literal goes at its
     first place after the previous one, so the time is linear, with no
-    backtracking."""
-    literals = _PATH_PARAMETER.split(template)
+    backtracking. The literals are decoded as the request path is, after
+    the split, so an encoded brace stays literal text."""
+    literals = [unquote(literal) for literal in _PATH_PARAMETER.split(template)]
     if len(literals) == 1:
-        return template == segment
+        return literals[0] == segment
     first, *middle, last = literals
     if not segment.startswith(first) or not segment.endswith(last):
         return False
@@ -142,7 +145,11 @@ class ApiKindHandler(IntegrationKindHandler):
         if integration.tool_id is None:
             return None
         tool = get_openapi_tool_for_integration(integration.id, db_session)
-        if tool is None or tool.openapi_schema is None:
+        return self.openapi_config_from_tool(tool) if tool is not None else None
+
+    @staticmethod
+    def openapi_config_from_tool(tool: ToolModel) -> ApiConfig | None:
+        if tool.openapi_schema is None:
             return None
         try:
             base_url: str | None = openapi_to_url(tool.openapi_schema)
@@ -233,7 +240,11 @@ class ApiKindHandler(IntegrationKindHandler):
         only Craft uses it."""
         if not actions:
             return []
-        config = self.load_config(integration, db_session)
+        config = (
+            ctx.config
+            if isinstance(ctx.config, ApiConfig)
+            else self.load_config(integration, db_session)
+        )
         if (
             config.shape is not ApiShape.OPENAPI
             or config.tool_id is None

@@ -56,6 +56,7 @@ export default function IntegrationDetailPage({
       <SettingsLayouts.Header
         title={data?.name ?? t("title")}
         description={data ? labels.shape(data) : undefined}
+        stackActionsOnMobile
         actions={[
           <Button
             key="back"

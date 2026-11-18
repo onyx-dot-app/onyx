@@ -44,7 +44,12 @@ from onyx.db.chat import (
     delete_chat_session,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import IncognitoRecordMode, SandboxStatus
+from onyx.db.enums import (
+    ApprovalDecision,
+    IncognitoRecordMode,
+    PluginInstallationPolicy,
+    SandboxStatus,
+)
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
@@ -135,6 +140,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     WriteTool,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
+from tests.external_dependency_unit.chat.test_chat_tool_approvals import ACTION
 from tests.external_dependency_unit.chat.test_parked_agent_handoff import _gated
 from tests.external_dependency_unit.chat.test_wait_agents import (
     ScriptedLLM as WaitAgentsLLM,
@@ -153,6 +159,7 @@ from tests.external_dependency_unit.db.test_chat_tool_options import (
 )
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
+    hold_in_plugin,
     make_mcp_integration,
 )
 from tests.external_dependency_unit.microvm.conftest import (
@@ -523,6 +530,10 @@ def gated_integration(db_session: Session) -> Generator[int, None, None]:
         db_session,
         server_url="https://example.com/mcp",
         name=f"sandbox_gate_{uuid4().hex[:8]}",
+        tools=[ACTION],
+    )
+    hold_in_plugin(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
     )
     integration_id = integration.id
     yield integration_id
@@ -539,7 +550,8 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     gated_integration: int,
 ) -> None:
     ended = _ended_turns(monkeypatch, sandbox)
-    gated = _gated(gated_integration, [])
+    sent: list[str] = []
+    gated = _gated(gated_integration, sent)
     real_construct_tools = construct_tools
 
     def with_gated_tool(**kwargs: Any) -> list[Tool]:
@@ -588,6 +600,9 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
 
     _wait_until(completed)
     assert chat_turn_work.wait_idle(timeout=30)
+    db_session.refresh(approval)
+    assert approval.decision is ApprovalDecision.APPROVED
+    assert sent == ["team"]
     assert len(llm.requests) == 4
     assert ended == [ref, ref]
 

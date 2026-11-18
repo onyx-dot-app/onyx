@@ -10520,14 +10520,17 @@
           "name": {
             "title": "Nombre del encabezado",
             "placeholder": "Agrega un nombre de encabezado",
-            "error": "Agrega un nombre de encabezado."
+            "error": "Agrega un nombre de encabezado.",
+            "duplicate": "Usa cada nombre de encabezado una sola vez."
           },
           "value": {
             "title": "Valor del encabezado",
             "description": "Pon cada credencial entre llaves, por ejemplo {example}. Cada marcador se convierte en un campo de credencial.",
             "placeholder": "Por ejemplo: {example}",
             "error": "Agrega al menos un marcador, por ejemplo {example}."
-          }
+          },
+          "add": "Agregar encabezado",
+          "remove": "Quitar el encabezado {name}"
         },
         "oauth": {
           "providerMode": {
@@ -10663,6 +10666,7 @@
           "useDefaults": "Usar predeterminados",
           "readOnly": "Acciones de solo lectura ({count})",
           "write": "Acciones de escritura ({count})",
+          "other": "Otras acciones ({count})",
           "empty": "Esta integración no tiene acciones.",
           "connectFirst": {
             "title": "Conecta primero el servidor",
@@ -10797,7 +10801,7 @@
         "ariaLabel": "Página del editor de agentes"
       },
       "plugins": {
-        "askHint": "Para ejecutarla sin preguntar, un administrador la configura como Permitir en la integración, o cada usuario elige Permitir siempre.",
+        "askHint": "Para ejecutarla sin preguntar, cambia la configuración del agente, un administrador la configura como Permitir en la integración, o cada usuario elige Permitir siempre.",
         "askHintAdminOnly": "Para ejecutarla sin preguntar, un administrador la configura como Permitir en la integración.",
         "askHintAgent": "Para ejecutar esto sin confirmación, cambia la configuración del agente, o cada usuario elige Permitir siempre.",
         "askHintAgentOnly": "Para ejecutar esto sin confirmación, cambia la configuración del agente.",

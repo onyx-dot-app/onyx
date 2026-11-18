@@ -10520,14 +10520,17 @@
           "name": {
             "title": "请求头名称",
             "placeholder": "添加请求头名称",
-            "error": "请添加请求头名称。"
+            "error": "请添加请求头名称。",
+            "duplicate": "每个请求头名称只能使用一次。"
           },
           "value": {
             "title": "请求头值",
             "description": "将每个凭据放在花括号中，例如 {example}。每个占位符都会成为一个凭据字段。",
             "placeholder": "例如：{example}",
             "error": "请至少添加一个占位符，例如 {example}。"
-          }
+          },
+          "add": "添加请求头",
+          "remove": "删除请求头 {name}"
         },
         "oauth": {
           "providerMode": {
@@ -10663,6 +10666,7 @@
           "useDefaults": "使用默认值",
           "readOnly": "只读操作 ({count})",
           "write": "写入操作 ({count})",
+          "other": "其他操作 ({count})",
           "empty": "此集成没有操作。",
           "connectFirst": {
             "title": "请先连接服务器",
@@ -10797,7 +10801,7 @@
         "ariaLabel": "智能体编辑器页面"
       },
       "plugins": {
-        "askHint": "要在不询问的情况下运行，管理员需在集成中将其设为允许，或每位用户选择始终允许。",
+        "askHint": "要在不询问的情况下运行，请更改智能体设置，或由管理员在集成中将其设为允许，或每位用户选择始终允许。",
         "askHintAdminOnly": "要在不询问的情况下运行，管理员需在集成中将其设为允许。",
         "askHintAgent": "要在无需确认的情况下运行，请更改智能体设置，或由每个用户选择始终允许。",
         "askHintAgentOnly": "要在无需确认的情况下运行，请更改智能体设置。",

@@ -20,13 +20,16 @@ from onyx.db.enums import (
     PluginInstallationPolicy,
 )
 from onyx.db.integration import (
+    get_mcp_tool_with_integration,
     get_openapi_tool_for_integration,
     get_openapi_tool_with_integration,
     list_integration_plugin_rows,
+    list_mcp_tools_with_integration,
     list_openapi_tools_with_integration,
 )
 from onyx.db.integration_connection import (
     get_connection,
+    list_connections,
     upsert_connection__no_commit,
 )
 from onyx.db.models import Integration, IntegrationConnection, Tool, User
@@ -40,7 +43,11 @@ from onyx.integrations.connection_models import (
     literal_header_value,
     read_connection_secret,
 )
-from onyx.integrations.connections import literal_headers
+from onyx.integrations.connections import (
+    MissingHeaderValueError,
+    literal_headers,
+    render_headers,
+)
 from onyx.integrations.models import IntegrationPluginRow
 from onyx.integrations.service import (
     create_integration__no_commit,
@@ -175,17 +182,16 @@ def _stored_headers(
     """The headers a call sends, with the organization values filled in. A
     migrated tool keeps its headers on the organization connection."""
     secret = _organization_secret(organization)
-    fields = secret.fields
     headers = literal_headers(secret.headers)
     for name, template in (integration.header_template or {}).items():
         if template == _BEARER_TEMPLATE and name.lower() == "authorization":
             continue
-        if template.startswith("{") and template.endswith("}"):
-            value = fields.get(template[1:-1])
-            if value is not None:
-                headers[name] = value
+        try:
+            headers.update(
+                render_headers({name: template}, ConnectionSecret(fields=secret.fields))
+            )
+        except MissingHeaderValueError:
             continue
-        headers[name] = template
     return headers
 
 
@@ -234,7 +240,7 @@ def _alias_snapshot(
             for name, value in _stored_headers(integration, organization).items()
         ],
         passthrough_auth=integration.auth_method is IntegrationAuthMethod.ONYX_LOGIN,
-        mcp_server_id=None,
+        mcp_server_id=tool.mcp_server_id,
         user_id=(
             str(integration.created_by_user_id)
             if integration.created_by_user_id is not None
@@ -264,10 +270,24 @@ def _openapi_tool_or_404(
 def openapi_tool_snapshot(
     tool: Tool, integration: Integration, db_session: Session
 ) -> ToolSnapshot:
-    plugins = list_integration_plugin_rows([integration.id], db_session)[integration.id]
-    return _alias_snapshot(
-        tool, integration, get_connection(db_session, integration.id, None), plugins
-    )
+    return openapi_tool_snapshots([(tool, integration)], db_session)[0]
+
+
+def openapi_tool_snapshots(
+    tools: Sequence[tuple[Tool, Integration]], db_session: Session
+) -> list[ToolSnapshot]:
+    integration_ids = [integration.id for _, integration in tools]
+    plugins = list_integration_plugin_rows(integration_ids, db_session)
+    connections = list_connections(db_session, integration_ids, None)
+    return [
+        _alias_snapshot(
+            tool,
+            integration,
+            connections.get((integration.id, None)),
+            plugins[integration.id],
+        )
+        for tool, integration in tools
+    ]
 
 
 @admin_router.post("/custom", tags=PUBLIC_API_TAGS)
@@ -424,20 +444,25 @@ def _openapi_snapshots(
             continue
         if not include_managed and not integration.enabled:
             continue
-        snapshots.append(
-            _alias_snapshot(
+        if tool.mcp_server_id is not None:
+            snapshot = ToolSnapshot.from_model(tool)
+            snapshot.plugin_ids = [plugin.plugin_id for plugin in plugins]
+        else:
+            snapshot = _alias_snapshot(
                 tool,
                 integration,
                 organization,
                 plugins,
-                user_enabled=any(states[p.plugin_id].enabled for p in visible)
-                if visible
-                else True,
-                permissions=(
-                    tool_permissions(can_manage=can_manage) if include_managed else None
-                ),
             )
+        snapshot.user_enabled_in_chat = (
+            any(states[p.plugin_id].enabled for p in visible) if visible else True
         )
+        snapshot.default_chat_enabled = any(
+            plugin.installation_policy in _DEFAULT_CHAT_POLICIES for plugin in plugins
+        )
+        if include_managed:
+            snapshot.permissions = tool_permissions(can_manage=can_manage)
+        snapshots.append(snapshot)
     return snapshots
 
 
@@ -463,9 +488,14 @@ def get_custom_tool(
     tools = get_tools_by_ids([tool_id], db_session)
     if tools and tools[0].in_code_tool_id is not None:
         return ToolSnapshot.from_model(tools[0])
+    row = get_openapi_tool_with_integration(
+        tool_id, db_session
+    ) or get_mcp_tool_with_integration(tool_id, db_session)
+    if row is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, f"Tool with ID {tool_id} not found")
     snapshots = _openapi_snapshots(
         user,
-        [_openapi_tool_or_404(tool_id, db_session)],
+        [row],
         db_session,
         include_managed=True,
     )
@@ -486,6 +516,14 @@ def update_tool_user_preferences(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> ToolUserPreferences:
     """Turn the plugins that hold the custom tool on or off for the user."""
+    tools = get_tools_by_ids([tool_id], db_session)
+    if tools and (
+        tools[0].in_code_tool_id is not None or tools[0].mcp_server_id is not None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Only OpenAPI plugins support these preferences",
+        )
     _, integration, _ = _openapi_tool_or_404(tool_id, db_session)
     visible = get_visible_plugin_ids(user.id, db_session)
     plugin_ids = [
@@ -525,7 +563,8 @@ def list_tools(
         built_in.append(ToolSnapshot.from_model(tool))
     return built_in + _openapi_snapshots(
         user,
-        list_openapi_tools_with_integration(db_session),
+        list_openapi_tools_with_integration(db_session)
+        + list_mcp_tools_with_integration(db_session),
         db_session,
         include_managed=False,
     )

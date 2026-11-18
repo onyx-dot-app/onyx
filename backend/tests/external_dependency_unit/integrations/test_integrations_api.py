@@ -43,6 +43,7 @@ from onyx.db.models import (
     IntegrationOAuthClient,
     Marketplace,
     MCPServer,
+    Persona,
     Plugin,
     Plugin__Integration,
     Tool,
@@ -74,6 +75,7 @@ from onyx.server.features.integrations import admin_api, api
 from onyx.server.features.integrations.models import (
     ActionGrantsUpdate,
     ConnectionFieldsRequest,
+    CredentialField,
     CustomConfigInput,
     IntegrationActionsUpdate,
     IntegrationCreate,
@@ -90,6 +92,7 @@ from onyx.server.features.tool.models import (
     CustomToolUpdate,
     Header,
 )
+from onyx.utils.encryption import mask_string
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
@@ -214,6 +217,52 @@ def test_create_openapi_makes_integration_tool_plugin_and_actions(
     }
     assert set(actions) == {"get_forecast", "set_alert"}
     assert detail.action_count == 2
+
+
+def test_a_personal_integration_starts_on_for_its_creator(
+    db_session: Session, scoped: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(
+        _openapi_create(for_organization=False), scoped, db_session
+    )
+    created.add(detail.id)
+
+    view = api.get_integration_for_member(detail.id, scoped, db_session)
+    assert [(ref.scope, ref.enabled) for ref in view.plugins] == [("personal", True)]
+
+
+def test_a_header_change_keeps_the_stored_credential_fields(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            credential_fields=[
+                CredentialField(key="api_key", label="Weather key", secret=False)
+            ]
+        ),
+        admin,
+        db_session,
+    )
+
+    updated = admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            header_template={
+                "X-Api-Key": "{api_key}",
+                "X-Region": "{region}",
+                "X-Team": "blue",
+            }
+        ),
+        admin,
+        db_session,
+    )
+
+    assert [
+        (field.key, field.label, field.secret) for field in updated.credential_fields
+    ] == [("api_key", "Weather key", False), ("region", "region", True)]
 
 
 def test_a_spec_with_no_server_url_does_not_break_the_admin_list(
@@ -704,6 +753,116 @@ def test_client_id_change_resets_connections_and_secret_change_does_not(
     assert stored.client_secret.get_value(apply_mask=False) == "secret-2"
 
 
+def test_a_new_header_field_resets_connections_and_a_literal_change_does_not(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    request = _openapi_create()
+    request.auth_mode = IntegrationAuthMode.INDIVIDUAL
+    detail = admin_api.create_integration(request, admin, db_session)
+    created.add(detail.id)
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None
+    connect_with_fields__no_commit(integration, member, {"api_key": "k"}, db_session)
+    db_session.commit()
+
+    def status() -> IntegrationConnectionStatus:
+        db_session.expire_all()
+        connection = get_connection(db_session, detail.id, member.id)
+        assert connection is not None
+        return connection.status
+
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(header_template={"X-Api-Key": "{api_key}", "X-Team": "a"}),
+        admin,
+        db_session,
+    )
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            credential_fields=[
+                CredentialField(key="api_key", label="Weather key", secret=True)
+            ]
+        ),
+        admin,
+        db_session,
+    )
+    assert status() is IntegrationConnectionStatus.CONNECTED
+
+    # The explicit fields leave out the new placeholder.
+    updated = admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            header_template={"X-Api-Key": "{api_key}", "X-Tenant": "{tenant}"},
+            credential_fields=[
+                CredentialField(key="api_key", label="Weather key", secret=True)
+            ],
+        ),
+        admin,
+        db_session,
+    )
+    assert [field.key for field in updated.credential_fields] == ["api_key", "tenant"]
+    assert status() is IntegrationConnectionStatus.NEEDS_RECONNECT
+
+
+def test_an_oauth_template_cannot_use_a_placeholder_that_oauth_does_not_fill(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+
+    with pytest.raises(OnyxError) as error:
+        admin_api.update_integration(
+            detail.id,
+            IntegrationUpdate(
+                auth_method=IntegrationAuthMethod.OAUTH2,
+                oauth_client=_oauth_create().oauth_client,
+                header_template={"X-Api-Key": "{api_key}"},
+            ),
+            admin,
+            db_session,
+        )
+    assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+    db_session.rollback()
+
+    updated = admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            auth_method=IntegrationAuthMethod.OAUTH2,
+            oauth_client=_oauth_create().oauth_client,
+            header_template={"Authorization": "Bearer {access_token}"},
+        ),
+        admin,
+        db_session,
+    )
+    assert updated.header_template == {"Authorization": "Bearer {access_token}"}
+
+
+def test_a_switch_to_oauth_drops_the_api_key_template_and_fields(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    oauth_client = _oauth_create().oauth_client
+
+    updated = admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            auth_method=IntegrationAuthMethod.OAUTH2, oauth_client=oauth_client
+        ),
+        admin,
+        db_session,
+    )
+
+    assert updated.header_template is None
+    assert updated.credential_fields == []
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None
+    db_session.refresh(integration)
+    assert integration.header_template is None
+    assert integration.credential_fields is None
+
+
 def test_scoped_owner_starts_the_organization_sign_in_of_its_integration(
     db_session: Session, scoped: User, member: User, created: Created
 ) -> None:
@@ -772,6 +931,59 @@ def test_organization_connection_put_and_delete(
     assert view.organization_status is not None
     assert view.organization_status.reason == "Connect the account of the organization."
     assert view.setup_reason == view.organization_status.reason
+
+
+def test_admin_view_tells_the_admin_to_reconnect_after_a_sign_in_change(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    admin_api.save_organization_connection(
+        detail.id, ConnectionFieldsRequest(fields={"api_key": "k"}), admin, db_session
+    )
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            header_template={"X-Api-Key": "{api_key}", "X-Tenant": "{tenant}"}
+        ),
+        admin,
+        db_session,
+    )
+
+    view = admin_api.get_integration_admin(detail.id, admin, db_session)
+    assert view.organization_status is not None
+    assert view.organization_status.state.value == "needs_reconnect"
+    assert view.organization_status.reason == (
+        "The sign-in settings changed. Connect the account of the organization again."
+    )
+    member_view = api.get_integration_for_member(detail.id, member, db_session)
+    assert member_view.status.reason == "Your admin changed the sign-in settings"
+
+
+def test_a_masked_connection_value_is_refused(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    secret = "real-organization-key-123"
+    admin_api.save_organization_connection(
+        detail.id,
+        ConnectionFieldsRequest(fields={"api_key": secret}),
+        admin,
+        db_session,
+    )
+    with pytest.raises(OnyxError) as error:
+        admin_api.save_organization_connection(
+            detail.id,
+            ConnectionFieldsRequest(fields={"api_key": mask_string(secret)}),
+            admin,
+            db_session,
+        )
+    assert error.value.status_code == 400
+    db_session.rollback()
+    connection = get_connection(db_session, detail.id, None)
+    assert connection is not None
+    assert read_connection_secret(connection).fields == {"api_key": secret}
 
 
 def test_connection_save_holds_the_integration_row_lock(
@@ -844,6 +1056,25 @@ def test_admin_actions_get_put_and_refresh(
             db_session,
         )
 
+    # A save from a stale page names only what it changed, so it keeps the
+    # newer settings of the other rows, the default row too.
+    admin_api.set_integration_actions(
+        detail.id,
+        IntegrationActionsUpdate(actions={"set_alert": EffectivePolicy.ALLOW}),
+        admin,
+        db_session,
+    )
+    stale = admin_api.set_integration_actions(
+        detail.id,
+        IntegrationActionsUpdate(actions={"get_forecast": EffectivePolicy.BLOCKED}),
+        admin,
+        db_session,
+    )
+    by_key = {action.key: action for action in stale.actions}
+    assert stale.default_policy is EffectivePolicy.BLOCKED
+    assert by_key["get_forecast"].admin_policy is EffectivePolicy.BLOCKED
+    assert by_key["set_alert"].admin_policy is EffectivePolicy.ALLOW
+
 
 def test_refresh_of_an_mcp_server_stores_discovered_tools(
     db_session: Session, admin: User, created: Created
@@ -913,6 +1144,50 @@ def test_refresh_refuses_actions_of_a_server_url_that_changed_meanwhile(
     db_session.rollback()
     assert [
         action.key for action in list_integration_actions(integration.id, db_session)
+    ] == ["old"]
+
+
+def test_refresh_refuses_actions_of_a_header_template_that_changed_meanwhile(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    integration, _ = make_mcp_integration(
+        db_session,
+        name=f"mcp-{uuid4().hex[:8]}",
+        tools=("old",),
+        header_template={"X-Team": "blue"},
+    )
+    integration_id = created.add(integration.id)
+    hold_in_plugin(db_session, [integration])
+    spec = IntegrationActionSpec(
+        key="new",
+        source=IntegrationActionSource.MCP,
+        display_name="New",
+        description=None,
+        read_only=None,
+        default_policy=IntegrationActionPolicyValue.ALLOW,
+    )
+
+    def discover_while_the_headers_change(*_: object) -> list[IntegrationActionSpec]:
+        with get_session_with_current_tenant() as other_session:
+            other = other_session.get(Integration, integration_id)
+            assert other is not None
+            other.header_template = {"X-Team": "red"}
+            other_session.commit()
+        return [spec]
+
+    with (
+        patch(
+            "onyx.integrations.service.fetch_mcp_actions",
+            side_effect=discover_while_the_headers_change,
+        ),
+        pytest.raises(OnyxError) as raised,
+    ):
+        admin_api.refresh_integration_actions(integration_id, admin, db_session)
+
+    assert raised.value.error_code is OnyxErrorCode.CONFLICT
+    db_session.rollback()
+    assert [
+        action.key for action in list_integration_actions(integration_id, db_session)
     ] == ["old"]
 
 
@@ -993,6 +1268,61 @@ def test_refresh_of_an_individual_mcp_server_uses_the_admin_connection(
         discover.assert_not_called()
 
 
+def test_member_connect_refuses_a_key_that_the_mcp_server_rejects(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    with patch(
+        "onyx.integrations.kinds.mcp_server.discover_mcp_tools", return_value=[]
+    ):
+        integration = admin_api.create_integration(
+            IntegrationCreate(
+                for_organization=True,
+                name=f"mcp-{uuid4().hex[:8]}",
+                auth_mode=IntegrationAuthMode.INDIVIDUAL,
+                auth_method=IntegrationAuthMethod.API_KEY,
+                header_template={
+                    "Authorization": "Bearer {api_key}",
+                    "X-User": "{user_email}",
+                },
+                config=McpServerConfigInput(server_url="https://mcp.example.com/mcp"),
+            ),
+            admin,
+            db_session,
+        )
+    created.add(integration.id)
+
+    with (
+        patch(
+            "onyx.integrations.kinds.mcp_server.discover_mcp_tools",
+            side_effect=_unauthorized(401),
+        ) as discover,
+        pytest.raises(OnyxError) as error,
+    ):
+        api.save_member_connection(
+            integration.id,
+            ConnectionFieldsRequest(fields={"api_key": "wrong-key"}),
+            member,
+            db_session,
+        )
+    assert error.value.error_code is OnyxErrorCode.CREDENTIAL_INVALID
+    assert discover.call_args.args[1] == {
+        "Authorization": "Bearer wrong-key",
+        "X-User": member.email,
+    }
+    db_session.rollback()
+
+    with patch(
+        "onyx.integrations.kinds.mcp_server.discover_mcp_tools", return_value=[]
+    ):
+        status = api.save_member_connection(
+            integration.id,
+            ConnectionFieldsRequest(fields={"api_key": "right-key"}),
+            member,
+            db_session,
+        )
+    assert status.state is ConnectionState.CONNECTED
+
+
 # Member
 
 
@@ -1020,6 +1350,29 @@ def test_member_cannot_save_always_allow_over_an_admin_block_or_allow(
             )
         assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
         assert key in error.value.detail
+    assert all(
+        action.user_policy is None
+        for action in api.get_action_grants(detail.id, member, db_session).actions
+    )
+
+
+@pytest.mark.usefixtures("craft_available")
+def test_member_cannot_save_always_allow_for_an_action_that_always_asks(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    request = _custom_create()
+    request.for_organization = True
+    detail = admin_api.create_integration(request, admin, db_session)
+    created.add(detail.id)
+
+    with pytest.raises(OnyxError) as error:
+        api.save_action_grants(
+            detail.id,
+            ActionGrantsUpdate(actions={WHOLE_DOMAIN_ACTION_TYPE: "allow"}),
+            member,
+            db_session,
+        )
+    assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
     assert all(
         action.user_policy is None
         for action in api.get_action_grants(detail.id, member, db_session).actions
@@ -1172,6 +1525,143 @@ def test_persona_plugins_and_legacy_tool_ids(
     # Old tool ids with no MCP tool remove the link of the old MCP tool.
     _persona(db_session, admin, tool_ids=[], plugin_links=None, persona_id=persona_id)
     assert list_persona_plugin_links(db_session, persona_id) == []
+
+
+def _old_mcp_tool(db_session: Session, server_id: int, name: str) -> Tool:
+    tool = Tool(
+        name=name,
+        description="",
+        mcp_server_id=server_id,
+        enabled=True,
+        passthrough_auth=False,
+    )
+    db_session.add(tool)
+    db_session.commit()
+    return tool
+
+
+def test_legacy_tool_ids_of_two_servers_in_one_plugin_allow_both_tools(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    first, first_server = make_mcp_integration(
+        db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("alpha", "gamma")
+    )
+    second, second_server = make_mcp_integration(
+        db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("beta",)
+    )
+    created.add(first.id)
+    created.add(second.id)
+    plugin = hold_in_plugin(db_session, [first, second])
+    alpha = _old_mcp_tool(db_session, first_server.id, "alpha")
+    beta = _old_mcp_tool(db_session, second_server.id, "beta")
+
+    persona_id = _persona(
+        db_session, admin, tool_ids=[alpha.id, beta.id], plugin_links=None
+    )
+
+    links = {
+        link.plugin_id: link.action_settings
+        for link in list_persona_plugin_links(db_session, persona_id)
+    }
+    assert links[plugin.id] == {
+        "default": "blocked",
+        "actions": {"alpha": "inherit", "beta": "inherit"},
+    }
+
+
+def test_legacy_tool_ids_do_not_allow_a_shared_name_that_another_server_left_out(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    first, first_server = make_mcp_integration(
+        db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("alpha", "beta")
+    )
+    second, second_server = make_mcp_integration(
+        db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("beta",)
+    )
+    created.add(first.id)
+    created.add(second.id)
+    plugin = hold_in_plugin(db_session, [first, second])
+    alpha = _old_mcp_tool(db_session, first_server.id, "alpha")
+    beta = _old_mcp_tool(db_session, second_server.id, "beta")
+
+    persona_id = _persona(
+        db_session, admin, tool_ids=[alpha.id, beta.id], plugin_links=None
+    )
+
+    links = {
+        link.plugin_id: link.action_settings
+        for link in list_persona_plugin_links(db_session, persona_id)
+    }
+    assert links[plugin.id] == {"default": "blocked", "actions": {"alpha": "inherit"}}
+
+
+def test_legacy_tool_ids_do_not_bring_back_a_plugin_that_the_request_replaces(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    mcp, server = make_mcp_integration(
+        db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("hello",)
+    )
+    created.add(mcp.id)
+    old, new = (hold_in_plugin(db_session, [mcp]) for _ in range(2))
+    hello = _old_mcp_tool(db_session, server.id, "hello")
+    persona_id = _persona(
+        db_session,
+        admin,
+        tool_ids=None,
+        plugin_links=[PersonaPluginLink(plugin_id=old.id)],
+    )
+
+    _persona(
+        db_session,
+        admin,
+        tool_ids=[hello.id],
+        plugin_links=[PersonaPluginLink(plugin_id=new.id)],
+        persona_id=persona_id,
+    )
+
+    assert [
+        link.plugin_id for link in list_persona_plugin_links(db_session, persona_id)
+    ] == [new.id]
+
+
+def test_legacy_tool_ids_keep_the_plugin_that_the_agent_holds(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    mcp, server = make_mcp_integration(
+        db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("hello",)
+    )
+    created.add(mcp.id)
+    plugins = sorted(
+        (
+            hold_in_plugin(db_session, [mcp], published=False, author_user_id=admin.id)
+            for _ in range(2)
+        ),
+        key=lambda plugin: plugin.id,
+    )
+    held = plugins[1]
+    hello = _old_mcp_tool(db_session, server.id, "hello")
+    persona_id = _persona(
+        db_session,
+        admin,
+        tool_ids=None,
+        plugin_links=[PersonaPluginLink(plugin_id=held.id)],
+    )
+    persona = db_session.get(Persona, persona_id)
+    assert persona is not None
+    persona.user_id = member.id
+    db_session.commit()
+
+    _persona(
+        db_session,
+        member,
+        tool_ids=[hello.id],
+        plugin_links=None,
+        persona_id=persona_id,
+    )
+
+    assert [
+        link.plugin_id for link in list_persona_plugin_links(db_session, persona_id)
+    ] == [held.id]
 
 
 # Review fixes
@@ -1580,6 +2070,43 @@ def test_custom_tool_alias_reads_and_keeps_migrated_headers(
     connection = get_connection(db_session, integration.id, None)
     assert connection is not None
     assert read_connection_secret(connection).fields == {"X-Api-Key": "abc{1}-secret"}
+
+
+def test_custom_tool_alias_keeps_a_passthrough_header_with_braces(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    snapshot = tool_api.create_custom_tool(
+        CustomToolCreate(
+            name=f"passthrough-{uuid4().hex[:8]}",
+            description="Passthrough",
+            definition=OPENAPI_SPEC,
+            custom_headers=[Header(key="X-Meta", value='{"team":"blue"}')],
+            passthrough_auth=True,
+        ),
+        db_session,
+        admin,
+    )
+    integration = get_integration_by_kind_row(
+        Integration.tool_id, snapshot.id, db_session
+    )
+    assert integration is not None
+    created.add(integration.id)
+
+    fetched = tool_api.get_custom_tool(snapshot.id, db_session, admin)
+    assert fetched.custom_headers is not None
+    assert [header["key"] for header in fetched.custom_headers] == ["X-Meta"]
+    tool_api.update_custom_tool(
+        snapshot.id,
+        CustomToolUpdate(
+            custom_headers=[Header(**header) for header in fetched.custom_headers],
+            passthrough_auth=True,
+        ),
+        db_session,
+        admin,
+    )
+    db_session.expire_all()
+    assert integration.header_template is not None
+    assert integration.header_template["X-Meta"] == '{{"team":"blue"}}'
 
 
 def test_custom_tool_alias_save_keeps_oauth_sign_in(

@@ -10520,14 +10520,17 @@
           "name": {
             "title": "Header Name",
             "placeholder": "Add a header name",
-            "error": "Add a header name."
+            "error": "Add a header name.",
+            "duplicate": "Use each header name once."
           },
           "value": {
             "title": "Header Value",
             "description": "Put each credential in braces, for example {example}. Each placeholder becomes a credential field.",
             "placeholder": "For example: {example}",
             "error": "Add at least one placeholder, for example {example}."
-          }
+          },
+          "add": "Add Header",
+          "remove": "Remove header {name}"
         },
         "oauth": {
           "providerMode": {
@@ -10663,6 +10666,7 @@
           "useDefaults": "Use defaults",
           "readOnly": "Read-Only Actions ({count})",
           "write": "Write Actions ({count})",
+          "other": "Other Actions ({count})",
           "empty": "This integration has no actions.",
           "connectFirst": {
             "title": "Connect the server first",
@@ -10797,7 +10801,7 @@
         "ariaLabel": "Agents Editor Page"
       },
       "plugins": {
-        "askHint": "To run this with no prompt, an admin sets it to Allow on the integration, or each user picks Always allow.",
+        "askHint": "To run this with no prompt, change the agent setting, an admin sets it to Allow on the integration, or each user picks Always allow.",
         "askHintAdminOnly": "To run this with no prompt, an admin sets it to Allow on the integration.",
         "askHintAgent": "To run this with no prompt, change the agent setting, or each user picks Always allow.",
         "askHintAgentOnly": "To run this with no prompt, change the agent setting.",

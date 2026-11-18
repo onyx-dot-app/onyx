@@ -10520,14 +10520,17 @@
           "name": {
             "title": "Nome do cabeçalho",
             "placeholder": "Adicione um nome de cabeçalho",
-            "error": "Adicione um nome de cabeçalho."
+            "error": "Adicione um nome de cabeçalho.",
+            "duplicate": "Use cada nome de cabeçalho só uma vez."
           },
           "value": {
             "title": "Valor do cabeçalho",
             "description": "Coloque cada credencial entre chaves, por exemplo {example}. Cada marcador vira um campo de credencial.",
             "placeholder": "Por exemplo: {example}",
             "error": "Adicione pelo menos um marcador, por exemplo {example}."
-          }
+          },
+          "add": "Adicionar cabeçalho",
+          "remove": "Remover o cabeçalho {name}"
         },
         "oauth": {
           "providerMode": {
@@ -10663,6 +10666,7 @@
           "useDefaults": "Usar padrões",
           "readOnly": "Ações somente leitura ({count})",
           "write": "Ações de gravação ({count})",
+          "other": "Outras ações ({count})",
           "empty": "Esta integração não tem ações.",
           "connectFirst": {
             "title": "Conecte o servidor primeiro",
@@ -10797,7 +10801,7 @@
         "ariaLabel": "Página do editor de agentes"
       },
       "plugins": {
-        "askHint": "Para executar sem perguntar, um administrador define como Permitir na integração, ou cada usuário escolhe Sempre permitir.",
+        "askHint": "Para executar sem perguntar, altere a configuração do agente, um administrador define como Permitir na integração, ou cada usuário escolhe Sempre permitir.",
         "askHintAdminOnly": "Para executar sem perguntar, um administrador define como Permitir na integração.",
         "askHintAgent": "Para executar isto sem confirmação, altere a configuração do agente, ou cada usuário escolhe Sempre permitir.",
         "askHintAgentOnly": "Para executar isto sem confirmação, altere a configuração do agente.",

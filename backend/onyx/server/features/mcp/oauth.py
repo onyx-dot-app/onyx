@@ -491,10 +491,12 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
             await storage.set_tokens(tokens)
         return tokens
 
-    async def build_refresh_request(self) -> httpx.Request | None:
-        """Load the stored grant and build the SDK refresh request, or None
-        when the grant cannot refresh."""
+    async def build_refresh_request(
+        self, tokens: OAuthToken | None = None
+    ) -> httpx.Request | None:
         await self._initialize()
+        if tokens is not None:
+            self.context.current_tokens = tokens
         if not self.context.can_refresh_token():
             return None
         return await self._refresh_token()
@@ -654,7 +656,7 @@ def make_oauth_provider_with_storage(
     return provider
 
 
-def _oauth_token_from_secret(
+def oauth_token_from_secret(
     secret: ConnectionSecret, granted_scopes: list[str] | None
 ) -> OAuthToken | None:
     if not secret.access_token:
@@ -747,7 +749,7 @@ class IntegrationTokenStorage(TokenStorage):
                 or record.status is IntegrationConnectionStatus.NEEDS_RECONNECT
             ):
                 return None
-            return _oauth_token_from_secret(record.secret, record.granted_scopes)
+            return oauth_token_from_secret(record.secret, record.granted_scopes)
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
         await self._persist_tokens(tokens, keep_refresh=True)
@@ -838,7 +840,11 @@ class IntegrationTokenStorage(TokenStorage):
             granted_scopes=(
                 tokens.scope.split()
                 if tokens.scope
-                else (record.granted_scopes if record is not None else None)
+                else (
+                    record.granted_scopes
+                    if keep_refresh and record is not None
+                    else None
+                )
             ),
         )
         if metadata_client is not None:
@@ -935,6 +941,8 @@ class IntegrationTokenStorage(TokenStorage):
         self, info: OAuthClientInformationFull
     ) -> None:
         with get_session_with_current_tenant() as db_session:
+            if self.check_settings_unchanged is not None:
+                self.check_settings_unchanged(db_session)
             oauth_client = get_oauth_client(
                 db_session, self.integration_id, for_update=True
             )

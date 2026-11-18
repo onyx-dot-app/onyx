@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 import { useTranslations } from "next-intl";
@@ -23,6 +23,7 @@ import type {
   AdminIntegrationDetail,
   IntegrationAction,
   IntegrationActionsResponse,
+  IntegrationActionsUpdate,
   PolicyValue,
 } from "@/lib/integrations/types";
 
@@ -40,19 +41,43 @@ function savedDraft(data: IntegrationActionsResponse): Draft {
   };
 }
 
-function isDirty(
-  draft: Draft | null,
-  data: IntegrationActionsResponse
-): boolean {
-  if (draft === null) return false;
-  const saved = savedDraft(data);
+/** The saved values with the admin's edits on top. A revalidation of `data`
+ * shows the newer values of the rows the admin did not edit. */
+function withEdits(saved: Draft, edits: IntegrationActionsUpdate): Draft {
+  return {
+    defaultPolicy:
+      edits.default_policy === undefined
+        ? saved.defaultPolicy
+        : edits.default_policy,
+    actions: { ...saved.actions, ...edits.actions },
+  };
+}
+
+/** The edits that differ from the saved values. A save sends only these, so a
+ * save from a stale page keeps the newer settings of the other rows. */
+function changes(
+  edits: IntegrationActionsUpdate,
+  saved: Draft
+): IntegrationActionsUpdate {
+  const update: IntegrationActionsUpdate = {
+    actions: Object.fromEntries(
+      Object.entries(edits.actions).filter(
+        ([key, value]) => key in saved.actions && value !== saved.actions[key]
+      )
+    ),
+  };
+  if (
+    edits.default_policy !== undefined &&
+    edits.default_policy !== saved.defaultPolicy
+  )
+    update.default_policy = edits.default_policy;
+  return update;
+}
+
+function hasChanges(update: IntegrationActionsUpdate): boolean {
   return (
-    draft.defaultPolicy !== saved.defaultPolicy ||
-    data.actions.some(
-      (action) =>
-        (draft.actions[action.key] ?? null) !==
-        (saved.actions[action.key] ?? null)
-    )
+    update.default_policy !== undefined ||
+    Object.keys(update.actions).length > 0
   );
 }
 
@@ -69,13 +94,20 @@ export default function IntegrationActionsTab({
   const { data, error, isLoading, mutate } = useAdminIntegrationActions(
     integration.id
   );
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [edits, setEdits] = useState<IntegrationActionsUpdate>({
+    actions: {},
+  });
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
+  // An edit that newer saved values already match is dropped, so a later
+  // change of that row is not covered by it.
+  useEffect(() => {
+    if (data) setEdits((previous) => changes(previous, savedDraft(data)));
+  }, [data]);
   const navigation = useNavigation();
   const readOnly = !integration.can_manage;
   const isMcp = integration.shape === "mcp_server";
-  const dirty = data ? isDirty(draft, data) : false;
+  const dirty = data ? hasChanges(changes(edits, savedDraft(data))) : false;
   const unsavedChanges = useUnsavedChangesGuard({ isDirty: dirty });
 
   if (isLoading) return <IconLoader />;
@@ -89,7 +121,19 @@ export default function IntegrationActionsTab({
       </Section>
     );
 
-  const current = draft ?? savedDraft(data);
+  const saved = savedDraft(data);
+  const current = withEdits(saved, edits);
+
+  // An edit back to the saved value is dropped, so a later revalidation
+  // shows the newer value of that row and a save leaves it as it is.
+  function setDraft(next: Draft) {
+    setEdits(
+      changes(
+        { default_policy: next.defaultPolicy, actions: next.actions },
+        saved
+      )
+    );
+  }
 
   // Craft asks for an action that always asks, even when it is set to Allow.
   function applied(action: IntegrationAction, value: PolicyValue): PolicyValue {
@@ -107,7 +151,8 @@ export default function IntegrationActionsTab({
       .includes(search)
   );
   const readActions = shown.filter((action) => action.read_only === true);
-  const writeActions = shown.filter((action) => action.read_only !== true);
+  const writeActions = shown.filter((action) => action.read_only === false);
+  const otherActions = shown.filter((action) => action.read_only === null);
 
   function items(actions: IntegrationAction[]): PolicyEditorItem[] {
     return actions.map((action) => ({
@@ -161,17 +206,12 @@ export default function IntegrationActionsTab({
   async function save() {
     setBusy(true);
     try {
-      const next = await updateIntegrationActions(integration.id, {
-        default_policy: current.defaultPolicy,
-        actions: Object.fromEntries(
-          data?.actions.map((action) => [
-            action.key,
-            current.actions[action.key] ?? null,
-          ]) ?? []
-        ),
-      });
+      const next = await updateIntegrationActions(
+        integration.id,
+        changes(edits, saved)
+      );
       await mutate(next, { revalidate: false });
-      setDraft(null);
+      setEdits({ actions: {} });
       toast.success(t("saved"));
     } catch (saveError) {
       toast.error(
@@ -328,6 +368,11 @@ export default function IntegrationActionsTab({
               id: "write",
               title: t("write", { count: writeActions.length }),
               actions: writeActions,
+            },
+            {
+              id: "other",
+              title: t("other", { count: otherActions.length }),
+              actions: otherActions,
             },
           ].map((group) =>
             group.actions.length === 0 ? null : (

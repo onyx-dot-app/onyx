@@ -7,19 +7,38 @@ with no user sees the plugins of the Organization library and uses only an
 integration with no sign-in or shared sign-in.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import IntegrationAuthMode, IntegrationKind
-from onyx.db.integration import list_integration_actions
-from onyx.db.models import Integration, User
+from onyx.db.enums import (
+    IntegrationAuthMode,
+    IntegrationKind,
+    PluginInstallationPolicy,
+)
+from onyx.db.integration import (
+    list_integration_actions_by_id,
+    list_mcp_servers_by_integration,
+    list_openapi_tools_by_integration,
+)
+from onyx.db.integration_connection import list_connections
+from onyx.db.integration_policy import list_policy_rows, list_session_granted_actions
+from onyx.db.models import Integration, IntegrationAction, IntegrationConnection, User
+from onyx.db.plugin_access import load_user_plugin_states
 from onyx.integrations.call_credentials import resolve_call_credentials
 from onyx.integrations.connections import ConnectionProblem
+from onyx.integrations.kinds.api import ApiKindHandler
+from onyx.integrations.kinds.mcp_server import McpServerKindHandler
 from onyx.integrations.kinds.models import ChatToolContext
-from onyx.integrations.models import ActionSettings, EffectivePolicy
+from onyx.integrations.models import (
+    ActionSettings,
+    EffectivePolicy,
+    IntegrationConfig,
+    PolicyRows,
+)
 from onyx.integrations.policy import (
+    AgentIntegrationLinks,
     agent_link_settings_by_integration,
     resolve_action_policies,
 )
@@ -38,18 +57,25 @@ def _integration_tools(
     plugin_ids: frozenset[UUID],
     user: User,
     request: IntegrationChatRequest,
+    *,
+    actions: Sequence[IntegrationAction],
+    connections: Mapping[tuple[int, UUID | None], IntegrationConnection] | None = None,
+    policy_rows: PolicyRows | None = None,
+    granted_actions: set[str] | None = None,
+    config: IntegrationConfig | None = None,
 ) -> list[Tool]:
     """``link_settings``: every agent link that holds the integration.
     ``plugin_ids``: the plugins of those that the tool options allow."""
     kept_actions = _kept_actions(request, plugin_ids)
     acting_user = None if user.is_anonymous else user
-    credentials = resolve_call_credentials(integration, acting_user, db_session)
+    credentials = resolve_call_credentials(
+        integration, acting_user, db_session, connections=connections
+    )
     if isinstance(credentials, ConnectionProblem):
         logger.debug(
             "Skipping integration %s: %s", integration.id, credentials.code.value
         )
         return []
-    actions = list_integration_actions(integration.id, db_session)
     actions = [
         action
         for action in actions
@@ -64,6 +90,8 @@ def _integration_tools(
         link_settings=link_settings,
         approval_mode=request.approval_mode,
         chat_session_id=request.chat_session_id,
+        policy_rows=policy_rows,
+        granted_actions=granted_actions,
     )
     offered = [
         action
@@ -85,6 +113,7 @@ def _integration_tools(
         chat_session_id=request.chat_session_id,
         message_id=request.message_id,
         credentials=credentials,
+        config=config,
         additional_headers=request.additional_headers,
         mcp_headers=request.mcp_headers,
         approval_for=approval_for,
@@ -109,6 +138,42 @@ def _kept_actions(
     return kept
 
 
+def _keep_required_plugins(
+    db_session: Session,
+    user: User,
+    request: IntegrationChatRequest,
+    held: Mapping[int, AgentIntegrationLinks],
+) -> IntegrationChatRequest:
+    """Add each plugin that the admin made Required for the user to the tool
+    options, with all its actions. A member cannot turn a Required plugin off,
+    so tool options that leave it out cannot drop it."""
+    if request.allowed_plugins is None or user.is_anonymous:
+        return request
+    left_out = {
+        plugin_id
+        for links in held.values()
+        for plugin_id in links.plugin_ids
+        if plugin_id not in request.allowed_plugins
+    }
+    if not left_out:
+        return request
+    required = {
+        state.plugin_id
+        for state in load_user_plugin_states([user.id], db_session, left_out)
+        if state.installation_policy == PluginInstallationPolicy.REQUIRED
+    }
+    if not required:
+        return request
+    return request.model_copy(
+        update={
+            "allowed_plugins": {
+                **request.allowed_plugins,
+                **dict.fromkeys(required),
+            }
+        }
+    )
+
+
 def build_integration_chat_tools(
     db_session: Session, user: User, request: IntegrationChatRequest
 ) -> list[Tool]:
@@ -123,9 +188,11 @@ def build_integration_chat_tools(
         {link.plugin_id: link.action_settings for link in request.plugin_links},
         published_only=user.is_anonymous,
     )
+    request = _keep_required_plugins(db_session, user, request, held)
     # The tool options pick the integrations and actions. The settings of
     # every agent link still apply, so a request cannot drop a Blocked one.
     tools: list[Tool] = []
+    selected = {}
     for integration_id, links in held.items():
         integration = links.integration
         allowed = frozenset(
@@ -143,9 +210,40 @@ def build_integration_chat_tools(
             or (integration.kind is IntegrationKind.API and integration.tool_id is None)
         ):
             continue
+        selected[integration_id] = (links, allowed)
+    user_id = None if user.is_anonymous else user.id
+    actions = list_integration_actions_by_id(list(selected), db_session)
+    connections = list_connections(db_session, list(selected), user_id)
+    policies = list_policy_rows(db_session, list(selected), user_id)
+    grants = list_session_granted_actions(
+        db_session, request.chat_session_id, list(selected)
+    )
+    api_tools = list_openapi_tools_by_integration(list(selected), db_session)
+    servers = list_mcp_servers_by_integration(list(selected), db_session)
+    for integration_id, (links, allowed) in selected.items():
+        integration = links.integration
         try:
+            config: IntegrationConfig | None = None
+            if integration_id in api_tools:
+                config = ApiKindHandler.openapi_config_from_tool(
+                    api_tools[integration_id]
+                )
+            elif integration_id in servers:
+                config = McpServerKindHandler.config_from_server(
+                    servers[integration_id]
+                )
             tools += _integration_tools(
-                db_session, integration, links.settings, allowed, user, request
+                db_session,
+                integration,
+                links.settings,
+                allowed,
+                user,
+                request,
+                actions=actions[integration_id],
+                connections=connections,
+                policy_rows=policies[integration_id],
+                granted_actions=grants[integration_id],
+                config=config,
             )
         except Exception:
             # One broken integration does not stop the turn.

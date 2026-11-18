@@ -5,6 +5,7 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecidedVia, IntegrationActionPolicyValue
+from onyx.db.integration import list_integration_actions_by_id
 from onyx.db.models import (
     ApprovalRequest,
     ChatSession,
@@ -30,20 +31,7 @@ def get_policy_rows(
     db_session: Session, integration_id: int, user_id: UUID | None
 ) -> PolicyRows:
     """The admin rows, and the rows of ``user_id`` when given."""
-    owner = IntegrationActionPolicy.user_id.is_(None)
-    if user_id is not None:
-        owner = or_(owner, IntegrationActionPolicy.user_id == user_id)
-    admin: dict[str, IntegrationActionPolicyValue] = {}
-    user: dict[str, IntegrationActionPolicyValue] = {}
-    for row_user_id, action, policy in db_session.execute(
-        select(
-            IntegrationActionPolicy.user_id,
-            IntegrationActionPolicy.action,
-            IntegrationActionPolicy.policy,
-        ).where(IntegrationActionPolicy.integration_id == integration_id, owner)
-    ).tuples():
-        (admin if row_user_id is None else user)[action] = policy
-    return PolicyRows(admin=admin, user=user)
+    return list_policy_rows(db_session, [integration_id], user_id)[integration_id]
 
 
 def list_admin_policy_rows(
@@ -69,20 +57,54 @@ def list_admin_policy_rows(
     return rows
 
 
+def list_policy_rows(
+    db_session: Session, integration_ids: Collection[int], user_id: UUID | None
+) -> dict[int, PolicyRows]:
+    rows = {key: PolicyRows(admin={}, user={}) for key in integration_ids}
+    if not integration_ids:
+        return rows
+    owner = IntegrationActionPolicy.user_id.is_(None)
+    if user_id is not None:
+        owner = or_(owner, IntegrationActionPolicy.user_id == user_id)
+    for integration_id, row_user_id, action, policy in db_session.execute(
+        select(
+            IntegrationActionPolicy.integration_id,
+            IntegrationActionPolicy.user_id,
+            IntegrationActionPolicy.action,
+            IntegrationActionPolicy.policy,
+        ).where(IntegrationActionPolicy.integration_id.in_(integration_ids), owner)
+    ).tuples():
+        row = rows[integration_id]
+        (row.admin if row_user_id is None else row.user)[action] = policy
+    return rows
+
+
+def list_session_granted_actions(
+    db_session: Session, chat_session_id: UUID | None, integration_ids: Collection[int]
+) -> dict[int, set[str]]:
+    granted: dict[int, set[str]] = {key: set() for key in integration_ids}
+    if chat_session_id is None or not integration_ids:
+        return granted
+    for integration_id, action in db_session.execute(
+        select(ApprovalRequest.integration_id, ApprovalRequest.action_id).where(
+            ApprovalRequest.chat_session_id == chat_session_id,
+            ApprovalRequest.integration_id.in_(integration_ids),
+            ApprovalRequest.decided_via == ApprovalDecidedVia.SESSION_GRANT,
+        )
+    ).tuples():
+        if integration_id is not None:
+            granted[integration_id].add(action)
+    return granted
+
+
 def get_session_granted_actions(
     db_session: Session, chat_session_id: UUID, integration_id: int
 ) -> set[str]:
     """The actions of the integration that "Approve for this chat" approved
     in the chat."""
-    return set(
-        db_session.scalars(
-            select(ApprovalRequest.action_id).where(
-                ApprovalRequest.chat_session_id == chat_session_id,
-                ApprovalRequest.integration_id == integration_id,
-                ApprovalRequest.decided_via == ApprovalDecidedVia.SESSION_GRANT,
-            )
-        ).all()
-    )
+    return list_session_granted_actions(db_session, chat_session_id, [integration_id])[
+        integration_id
+    ]
 
 
 def list_persona_plugin_links(
@@ -169,10 +191,11 @@ def get_plugin_names(
 
 
 def plugin_ids_for_integrations(
-    integration_ids: Collection[int], user_id: UUID | None, db_session: Session
+    integration_ids: Collection[int],
+    user_id: UUID | None,
+    db_session: Session,
+    attached: Collection[UUID] = (),
 ) -> dict[int, UUID]:
-    """One plugin for each integration: the first one the user can see, else
-    the first one, by plugin id."""
     if not integration_ids:
         return {}
     visible = (
@@ -180,6 +203,12 @@ def plugin_ids_for_integrations(
         if user_id is not None
         else set()
     )
+
+    def rank(plugin_id: UUID) -> int:
+        if plugin_id in attached:
+            return 0
+        return 1 if plugin_id in visible else 2
+
     chosen: dict[int, UUID] = {}
     for integration_id, plugin_id in db_session.execute(
         select(Plugin__Integration.integration_id, Plugin__Integration.plugin_id)
@@ -187,18 +216,22 @@ def plugin_ids_for_integrations(
         .order_by(Plugin__Integration.integration_id, Plugin__Integration.plugin_id)
     ).tuples():
         current = chosen.get(integration_id)
-        if current is None or (plugin_id in visible and current not in visible):
+        if current is None or rank(plugin_id) < rank(current):
             chosen[integration_id] = plugin_id
     return chosen
 
 
 def legacy_tool_plugin_links(
-    tools: Sequence[Tool], user_id: UUID | None, db_session: Session
+    tools: Sequence[Tool],
+    user_id: UUID | None,
+    db_session: Session,
+    attached: Collection[UUID] = (),
 ) -> list[PersonaPluginLink]:
     """The plugin links for old tool ids of an agent request. A custom tool
     gives the plugin of its integration with no settings. MCP tools give the
     plugin of their server, with each other action blocked, as the migration
-    does. A tool with no integration gives nothing."""
+    does. A tool with no integration gives nothing. A plugin in ``attached``
+    wins for an integration that more than one plugin holds."""
     mcp_tool_names: dict[int, list[str]] = {}
     for tool in tools:
         if tool.mcp_server_id is not None:
@@ -225,12 +258,15 @@ def legacy_tool_plugin_links(
         custom_integration_ids | set(server_integrations.values()),
         user_id,
         db_session,
+        attached,
     )
     links: dict[UUID, PersonaPluginLink] = {}
     for integration_id in sorted(custom_integration_ids):
         plugin_id = plugins.get(integration_id)
         if plugin_id is not None:
             links.setdefault(plugin_id, PersonaPluginLink(plugin_id=plugin_id))
+    mcp_names: dict[UUID, set[str]] = {}
+    selected: dict[int, set[str]] = {}
     for server_id, names in sorted(mcp_tool_names.items()):
         server_integration_id = server_integrations.get(server_id)
         if server_integration_id is None:
@@ -238,6 +274,25 @@ def legacy_tool_plugin_links(
         plugin_id = plugins.get(server_integration_id)
         if plugin_id is None or plugin_id in links:
             continue
+        mcp_names.setdefault(plugin_id, set()).update(names)
+        selected[server_integration_id] = set(names)
+    # The settings of a plugin name actions, not servers: a name that another
+    # server of the plugin has but was not selected on stays blocked.
+    held = [
+        (plugin_id, integration.id)
+        for plugin_id, integration in list_plugin_integrations(
+            db_session, list(mcp_names)
+        )
+        if integration.mcp_server_id is not None
+    ]
+    actions = list_integration_actions_by_id(
+        [integration_id for _, integration_id in held], db_session
+    )
+    for plugin_id, integration_id in held:
+        mcp_names[plugin_id] -= {
+            action.key for action in actions[integration_id]
+        } - selected.get(integration_id, set())
+    for plugin_id, names in mcp_names.items():
         links[plugin_id] = PersonaPluginLink(
             plugin_id=plugin_id,
             action_settings=ActionSettings(
