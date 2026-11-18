@@ -1127,15 +1127,22 @@ class LitellmLLM(LLM):
         ):
             tool_choice = ToolChoiceOptions.AUTO
 
-        # These native adapters drop NONE. Omit schemas but retain history;
-        # Onyx or LiteLLM serializes prior calls and results for each provider.
-        if tool_choice == ToolChoiceOptions.NONE and self._model_provider in {
-            LlmProviderNames.BEDROCK,
-            LlmProviderNames.BEDROCK_CONVERSE,
-            LlmProviderNames.OLLAMA,
-            LlmProviderNames.OLLAMA_CHAT,
-        }:
-            tools = None
+        # Tool definitions stay in the request so the cached prefix and the
+        # history's tool calls stay valid. Bedrock Converse and Ollama cannot
+        # express NONE, and Qwen/GLM deployments can reject it, so these send
+        # AUTO; the prompt says no tools can run and the agent runtime rejects
+        # any call on a NONE step.
+        if tool_choice == ToolChoiceOptions.NONE and (
+            self._model_provider
+            in {
+                LlmProviderNames.BEDROCK,
+                LlmProviderNames.BEDROCK_CONVERSE,
+                LlmProviderNames.OLLAMA,
+                LlmProviderNames.OLLAMA_CHAT,
+            }
+            or model_requires_auto_tool_choice(model_identity_names)
+        ):
+            tool_choice = ToolChoiceOptions.AUTO
 
         # If no tools are provided, tool_choice should be None
         if not tools:
@@ -2150,10 +2157,6 @@ class LitellmLLM(LLM):
             if model_prefers_auto_tool_choice(model_names):
                 tools = [tool for tool in tools if tool.name == choice.name]
                 choice = ToolChoiceOptions.AUTO
-        if choice == ToolChoiceOptions.NONE and model_requires_auto_tool_choice(
-            model_names
-        ):
-            tools = []
         return tools, choice
 
     def _prepare_request(

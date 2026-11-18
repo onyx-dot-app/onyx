@@ -398,7 +398,11 @@ class ToolBatch:
                 and call.name != options.tool_choice.name
             )
         ):
-            content = f"Tool {call.name} is unavailable for this step."
+            content = (
+                "No more tools can run in this response."
+                if options.tool_choice == ToolChoiceOptions.NONE
+                else f"Tool {call.name} is unavailable for this step."
+            )
             # A call of a tool that runs only inside an offered tool's calls,
             # such as a code mode function, says how to call it there.
             if tool is None and options.tool_choice != ToolChoiceOptions.NONE:

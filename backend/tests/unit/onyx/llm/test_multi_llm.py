@@ -2639,10 +2639,12 @@ def test_strip_tool_content_merges_consecutive_tool_results() -> None:
     ],
 )
 @pytest.mark.parametrize("choice", [ToolChoiceOptions.NONE, ToolChoiceOptions.AUTO])
-def test_native_final_request_preserves_evidence_without_tool_definitions(
+def test_native_final_request_keeps_tool_definitions_and_evidence(
     provider: str,
     choice: ToolChoiceOptions,
 ) -> None:
+    """Bedrock Converse and Ollama cannot express NONE: the request keeps the
+    tools and sends AUTO, and prior tool exchanges stay native."""
     llm = LitellmLLM(
         api_key=None,
         model_provider=provider,
@@ -2674,42 +2676,90 @@ def test_native_final_request_preserves_evidence_without_tool_definitions(
             )
         )
     sent = completion.call_args.kwargs
-    if choice == ToolChoiceOptions.NONE:
-        assert not sent.get("tools")
-        assert "tool_choice" not in sent
-        if provider in {LlmProviderNames.BEDROCK, LlmProviderNames.BEDROCK_CONVERSE}:
-            assert all(
-                message["role"] != "tool" and not message.get("tool_calls")
-                for message in sent["messages"]
-            )
-        assert "get_weather" in str(sent["messages"])
-        assert "Paris" in str(sent["messages"])
-        assert "Sunny, 20C" in str(sent["messages"])
-    else:
-        assert sent["tools"]
-        assert sent["tool_choice"] == ToolChoiceOptions.AUTO
-        calls = [
-            message["tool_calls"]
-            for message in sent["messages"]
-            if message.get("tool_calls")
+    assert sent["tools"] == _TOOL_CHOICE_DOWNGRADE_TOOLS
+    assert sent["tool_choice"] == ToolChoiceOptions.AUTO
+    calls = [
+        message["tool_calls"]
+        for message in sent["messages"]
+        if message.get("tool_calls")
+    ]
+    assert calls == [
+        [
+            {
+                "id": "weather-call",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"location":"Paris"}',
+                },
+            }
         ]
-        assert calls == [
-            [
-                {
-                    "id": "weather-call",
-                    "type": "function",
-                    "function": {
-                        "name": "get_weather",
-                        "arguments": '{"location":"Paris"}',
-                    },
-                }
-            ]
-        ]
-        results = [message for message in sent["messages"] if message["role"] == "tool"]
-        assert results == [
-            {"role": "tool", "tool_call_id": "weather-call", "content": "Sunny, 20C"}
-        ]
+    ]
+    results = [message for message in sent["messages"] if message["role"] == "tool"]
+    assert results == [
+        {"role": "tool", "tool_call_id": "weather-call", "content": "Sunny, 20C"}
+    ]
     assert [message.model_dump() for message in messages] == original
+
+
+@pytest.mark.parametrize(
+    "model_provider, model_name, expected_choice",
+    [
+        (LlmProviderNames.OPENAI, "gpt-4.1", ToolChoiceOptions.NONE),
+        (LlmProviderNames.ANTHROPIC, "claude-sonnet-4-5", ToolChoiceOptions.NONE),
+        (LlmProviderNames.VERTEX_AI, "gemini-2.5-pro", ToolChoiceOptions.NONE),
+        (
+            LlmProviderNames.BEDROCK,
+            "anthropic.claude-sonnet-4-20250514-v1:0",
+            ToolChoiceOptions.AUTO,
+        ),
+        (LlmProviderNames.OLLAMA_CHAT, "llama3.2", ToolChoiceOptions.AUTO),
+        (LlmProviderNames.OPENROUTER, "z-ai/glm-5.3", ToolChoiceOptions.AUTO),
+        (LlmProviderNames.OPENROUTER, "qwen/qwen3.7-plus", ToolChoiceOptions.AUTO),
+    ],
+)
+def test_final_step_request_keeps_tool_definitions(
+    model_provider: str, model_name: str, expected_choice: ToolChoiceOptions
+) -> None:
+    """A step with no allowed tools sends the same definitions as other steps."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=200000,
+    )
+    tools = [
+        onyx.llm.models.ToolDefinition(
+            name="get_weather",
+            description="Get the current weather for a location",
+            parameters={
+                "type": "object",
+                "properties": {"location": {"type": "string"}},
+                "required": ["location"],
+            },
+        )
+    ]
+    sent: list[Mapping[str, Any]] = []
+    for allowed, choice in (
+        (None, ToolChoiceOptions.AUTO),
+        (frozenset[str](), ToolChoiceOptions.NONE),
+    ):
+        with patch("litellm.completion", return_value=[]) as completion:
+            list(
+                llm.stream(
+                    GenerationRequest(
+                        messages=[AppUserMessage(content="Weather in Paris?")],
+                        tools=tools,
+                        allowed_tool_names=allowed,
+                        options=onyx.llm.models.GenerationOptions(tool_choice=choice),
+                    )
+                )
+            )
+        sent.append(completion.call_args.kwargs)
+    middle, final = sent
+    assert final["tools"] == middle["tools"]
+    assert [tool["function"]["name"] for tool in final["tools"]] == ["get_weather"]
+    assert final["tool_choice"] == expected_choice
 
 
 def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> None:

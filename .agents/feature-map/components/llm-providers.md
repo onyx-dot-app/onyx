@@ -137,9 +137,14 @@ reasoning, temperature, or explicit-cache kwarg, `_completion` retries without i
 (`_retry_attempts`). A cache fallback also removes the breakpoint markers. It
 never drops tools, tool choice or messages during that retry; the one message
 edit is the removal of rejected `reasoning_items`
-([[#openai-reasoning-items-replay]]). Separately, final-answer
-requests omit tool definitions for native Bedrock and Ollama adapters that cannot
-enforce `NONE`. Prior tool evidence stays in the messages. `_track_llm_cost` counts
+([[#openai-reasoning-items-replay]]). A `NONE` tool choice never removes tool
+definitions, so the cached prefix and the history's tool calls stay valid.
+Bedrock Converse and Ollama cannot express `NONE`, and Qwen and GLM deployments
+can reject it, so `_completion` sends `AUTO` for them. On the agent path the
+prompt says that no tools can run, and the runtime rejects any call. The gateway
+uses the same raw layer: a client's `none` choice to these providers reaches the
+model as `auto` with the client's tools, and the client decides what runs.
+`_track_llm_cost` counts
 cost only when usage limits are on and the key is Onyx-managed. Per-user usage comes from
 spans, not from this call.
 

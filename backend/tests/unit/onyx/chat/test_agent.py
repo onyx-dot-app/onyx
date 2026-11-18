@@ -116,13 +116,13 @@ def chat_agent(
     "render, observer_fails", [(True, False), (False, False), (True, True)]
 )
 @pytest.mark.parametrize(
-    ("model_name", "deployment_name", "last_has_tools"),
+    ("model_name", "deployment_name"),
     [
-        ("test-model", None, True),
-        ("claude-haiku-4-5", None, True),
-        ("qwen3.7-plus", None, False),
-        ("z-ai/glm-5.3", None, False),
-        ("alias", "glm-5.3", False),
+        ("test-model", None),
+        ("claude-haiku-4-5", None),
+        ("qwen3.7-plus", None),
+        ("z-ai/glm-5.3", None),
+        ("alias", "glm-5.3"),
     ],
 )
 def test_chat_preserves_parallel_tool_history_preference_and_packets(
@@ -131,7 +131,6 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
     monkeypatch: pytest.MonkeyPatch,
     model_name: str,
     deployment_name: str | None,
-    last_has_tools: bool,
     multiple_operations: bool,
 ) -> None:
     class SecondOperation(EchoTool):
@@ -250,12 +249,7 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
         assert "The user selected these operations for this request: " in str(
             request["prompt"]
         )
-    if last_has_tools:
-        assert [tool["function"]["name"] for tool in llm.requests[1]["tools"]] == [
-            tool.name for tool in agent.application_tools
-        ]
-    else:
-        assert llm.requests[1]["tools"] is None
+    assert llm.requests[1]["tools"] == llm.requests[0]["tools"]
     assert llm.requests[1]["tool_choice"] == ToolChoiceOptions.NONE
     assert [message.role for message in agent.state.messages] == [
         "user",
@@ -300,6 +294,46 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
     packets = [output.get_nowait() for _ in range(output.qsize())]
     assert isinstance(packets[-1], Packet)
     assert isinstance(packets[-1].obj, OverallStop)
+
+
+def test_tool_call_on_the_last_step_does_not_run_and_keeps_the_text() -> None:
+    runs: list[Run] = []
+    llm = ScriptedLLM(
+        [
+            Delta(
+                content="Answer so far",
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        id="late-call",
+                        index=0,
+                        function=ResponseFunctionCall(
+                            name="echo", arguments='{"value":"hello"}'
+                        ),
+                    )
+                ],
+            )
+        ]
+    )
+    agent = chat_agent(llm, [EchoTool()])
+    result = run_agent(
+        agent,
+        runs=runs,
+        messages=[UserMessage(content="Hello")],
+        max_steps=1,
+    )
+    (request,) = llm.requests
+    assert [tool["function"]["name"] for tool in request["tools"]] == [
+        tool.name for tool in agent.application_tools
+    ]
+    assert request["tool_choice"] == ToolChoiceOptions.NONE
+    assert result.stop_reason == RunStatus.LIMIT
+    rejected = agent.state.messages[-1]
+    assert isinstance(rejected, ToolResultMessage)
+    assert rejected.tool_call_id == "late-call" and rejected.is_error
+    assert rejected.text == "No more tools can run in this response."
+    assert project_response(runs[-1].snapshot(), tool_ids={}).answer == (
+        "Answer so far"
+    )
 
 
 class _PythonTool(EchoTool):

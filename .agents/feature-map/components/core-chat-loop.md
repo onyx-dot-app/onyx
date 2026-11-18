@@ -419,8 +419,12 @@ termination grace period is much shorter, so it ends running turns first
     authentication (see Known issues).
 16. `stopping-tools` **The step cap disables tool execution.**
     `chat/agent.py:ChatAgent._prepare_step` uses `NONE` at the step cap.
-    Definitions remain where providers support this choice. Qwen, GLM, and
-    Bedrock omit definitions; Bedrock converts prior tool exchanges to text.
+    Every provider receives the same tool definitions as on earlier steps.
+    Bedrock, Ollama, Qwen, and GLM receive `AUTO` because they cannot take
+    `NONE`. The runtime does not run a call on that step: it records the error
+    result "No more tools can run in this response.", and the run ends with
+    `LIMIT` and the step's text as the answer. A reply with only tool calls
+    fails the turn.
     Image generation does not remove tools, even when the image call fails.
     The default cap is six cycles, including the final answer cycle; code mode
     uses `CODE_MODE_MAX_LLM_CYCLES` instead.

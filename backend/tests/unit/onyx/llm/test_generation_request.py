@@ -133,8 +133,8 @@ class RecordingProvider(LitellmLLM):
         ("ordinary", None, None, "required", ["lookup", "other"], "required"),
         ("ordinary", None, frozenset(), "none", ["lookup", "other"], "none"),
         ("claude-sonnet-4-5", None, frozenset(), "none", ["lookup", "other"], "none"),
-        ("qwen3", None, frozenset(), "none", [], "none"),
-        ("alias", "glm-5", frozenset(), "none", [], "none"),
+        ("qwen3", None, frozenset(), "none", ["lookup", "other"], "none"),
+        ("alias", "glm-5", frozenset(), "none", ["lookup", "other"], "none"),
         ("ordinary", None, frozenset({"other"}), "auto", ["lookup", "other"], "auto"),
     ],
 )
