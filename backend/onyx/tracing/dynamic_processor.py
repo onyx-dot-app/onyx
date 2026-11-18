@@ -170,15 +170,21 @@ class DynamicTracingProcessor(TracingProcessor):
         self._retiring = [s for s in self._retiring if id(s) in referenced]
         return drained
 
+    def has_external_exporters(self) -> bool:
+        """Use the same cached configuration as trace dispatch."""
+        try:
+            self.reconcile()
+        except Exception as e:
+            logger.error("Failed to refresh tracing config: %s", e)
+        with self._lock:
+            return bool(self._delegates)
+
     def on_trace_start(self, trace: Trace) -> None:
         # Tracing must never disrupt the traced operation: a config-refresh
         # failure (e.g. DB unreachable) is logged and we keep the existing
         # delegates. Delegate callbacks themselves are guarded in `_forward`, so
         # a provider connection dropping mid-trace is caught and logged too.
-        try:
-            self.reconcile()
-        except Exception as e:
-            logger.error("Failed to refresh tracing config at trace start: %s", e)
+        self.has_external_exporters()
         with self._lock:
             delegates = self._delegates
             self._trace_delegates[trace.trace_id] = delegates

@@ -1,16 +1,18 @@
 """Share a Craft turn's trace identity across gateway replicas."""
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from uuid import UUID, uuid4
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
+from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.timeouts import (
     SCHEDULED_RUN_HARD_CAP_SECONDS,
     TURN_RECLAIM_SLACK_SECONDS,
 )
 from onyx.tracing.framework.create import trace
+from onyx.tracing.setup import has_external_exporters
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -19,6 +21,21 @@ TRACE_CACHE_TIMEOUT_SECONDS = 0.25
 
 def _trace_key(session_id: UUID) -> str:
     return f"craft:turn_trace:{session_id}"
+
+
+@contextmanager
+def traced_prompt_slot(
+    session_id: UUID, prompt_slot: AbstractContextManager[PromptSlot]
+) -> Iterator[PromptSlot]:
+    """The turn owns tracing; the sandbox owns prompt serialization."""
+    tracing_enabled = has_external_exporters()
+    with prompt_slot as slot:
+        if not slot.has_lease or not tracing_enabled:
+            yield slot
+            return
+        with craft_turn_trace(session_id):
+            slot.extend()
+            yield PromptSlot(acquired=False) if slot.lost else slot
 
 
 @contextmanager
@@ -58,6 +75,8 @@ def craft_turn_trace(session_id: UUID) -> Iterator[None]:
 
 
 def get_craft_turn_trace_id(session_id: UUID) -> str | None:
+    if not has_external_exporters():
+        return None
     try:
         value = get_cache_backend(operation_timeout_s=TRACE_CACHE_TIMEOUT_SECONDS).get(
             _trace_key(session_id)

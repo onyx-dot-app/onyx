@@ -7,11 +7,10 @@ from uuid import uuid4
 import pytest
 from fastapi import Request
 
-from onyx.server.gateway import craft_session
+from onyx.server.gateway import craft_session, tracing
 from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
 from onyx.server.gateway.craft_session import (
     CRAFT_SESSION_ID_CONTEXTVAR,
-    CRAFT_TURN_TRACE_ID_CONTEXTVAR,
     craft_session_binder,
     resolve_craft_session_id,
 )
@@ -68,7 +67,6 @@ def test_binder_sets_and_resets_the_context_variable() -> None:
         with (
             patch.object(craft_session, "get_session_with_current_tenant"),
             patch.object(craft_session, "get_build_session", return_value=object()),
-            patch.object(craft_session, "get_craft_turn_trace_id", return_value=None),
         ):
             dependency = bind(_request(session_id), MagicMock())
             await dependency.__anext__()
@@ -83,13 +81,14 @@ def test_binder_sets_and_resets_the_context_variable() -> None:
 
 
 def test_trace_carries_bound_session() -> None:
-    token = CRAFT_SESSION_ID_CONTEXTVAR.set("sess-1")
+    session_id = str(uuid4())
+    token = CRAFT_SESSION_ID_CONTEXTVAR.set(session_id)
     try:
         with llm_gateway_trace(LLMFlow.CRAFT_LLM_GENERATION, "m") as active:
             assert (active.export() or {})["metadata"] == {
                 "flow": LLMFlow.CRAFT_LLM_GENERATION.value,
                 "model": "m",
-                "craft_session_id": "sess-1",
+                "craft_session_id": session_id,
             }
     finally:
         CRAFT_SESSION_ID_CONTEXTVAR.reset(token)
@@ -110,11 +109,12 @@ def test_unowned_session_cannot_bind_a_turn_trace() -> None:
         with (
             patch.object(craft_session, "get_session_with_current_tenant"),
             patch.object(craft_session, "get_build_session", return_value=None),
-            patch.object(craft_session, "get_craft_turn_trace_id") as lookup,
+            patch.object(tracing, "get_craft_turn_trace_id") as lookup,
         ):
             dependency = bind(_request(str(uuid4())), MagicMock())
             await dependency.__anext__()
-            assert CRAFT_TURN_TRACE_ID_CONTEXTVAR.get() is None
+            with llm_gateway_trace(LLMFlow.CRAFT_LLM_GENERATION, "m"):
+                pass
             with pytest.raises(StopAsyncIteration):
                 await dependency.__anext__()
             lookup.assert_not_called()
@@ -140,13 +140,31 @@ def test_ownership_connection_is_released_before_cache_lookup() -> None:
             ),
             patch.object(craft_session, "get_build_session", return_value=object()),
             patch.object(
-                craft_session, "get_craft_turn_trace_id", side_effect=read_turn_trace
+                tracing, "get_craft_turn_trace_id", side_effect=read_turn_trace
             ),
         ):
             dependency = bind(_request(str(uuid4())), MagicMock())
             await dependency.__anext__()
-            assert CRAFT_TURN_TRACE_ID_CONTEXTVAR.get() == "a" * 32
+            with llm_gateway_trace(LLMFlow.CRAFT_LLM_GENERATION, "m") as active:
+                assert (active.export() or {})["metadata"][
+                    "distributed_trace_id"
+                ] == "a" * 32
             with pytest.raises(StopAsyncIteration):
                 await dependency.__anext__()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("header", [None, "not-a-uuid"])
+def test_binder_skips_database_for_invalid_claims(header: str | None) -> None:
+    bind = craft_session_binder(lambda: MagicMock())
+
+    async def scenario() -> None:
+        with patch.object(craft_session, "get_session_with_current_tenant") as database:
+            dependency = bind(_request(header), MagicMock())
+            await dependency.__anext__()
+            with pytest.raises(StopAsyncIteration):
+                await dependency.__anext__()
+            database.assert_not_called()
 
     asyncio.run(scenario())

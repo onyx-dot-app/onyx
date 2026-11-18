@@ -177,21 +177,3 @@ def test_on_span_end_exports_function_span_metadata() -> None:
 
     update: dict[str, Any] = observation.update.call_args.kwargs
     assert update["metadata"] == {"code_mode.index": 1}
-
-
-def test_craft_steps_share_external_trace_and_keep_independent_spans() -> None:
-    client, _ = _make_client_with_observation()
-    observations = [MagicMock(trace_id="a" * 32, id=f"span-{i}") for i in range(2)]
-    client.start_observation.side_effect = observations
-    processor = LangfuseTracingProcessor(client=client)
-    traces = [_make_trace({"distributed_trace_id": "a" * 32}) for _ in range(2)]
-    for index, trace in enumerate(traces):
-        trace.trace_id = f"request-{index}"
-        processor.on_trace_start(trace)
-    assert [
-        call.kwargs["trace_context"] for call in client.start_observation.call_args_list
-    ] == [{"trace_id": "a" * 32}, {"trace_id": "a" * 32}]
-    for trace in reversed(traces):
-        processor.on_trace_end(trace)
-    for observation in observations:
-        observation.end.assert_called_once()

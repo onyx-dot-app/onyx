@@ -36,10 +36,11 @@ from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     DockerSandboxManager,
 )
 from onyx.server.features.build.sandbox.models import CraftLLMProviderConfig
+from onyx.server.features.build.session import manager as session_manager
 from onyx.server.gateway import craft_session
 from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
 from onyx.server.gateway.craft_session import (
-    CRAFT_TURN_TRACE_ID_CONTEXTVAR,
+    CRAFT_SESSION_ID_CONTEXTVAR,
     craft_session_binder,
 )
 from onyx.server.gateway.models import GatewayModelDescriptor
@@ -605,7 +606,7 @@ def test_gateway_steps_share_turn_identity_without_sharing_request_state() -> No
         finally:
             with pytest.raises(StopAsyncIteration):
                 await dependency.__anext__()
-            assert CRAFT_TURN_TRACE_ID_CONTEXTVAR.get() is None
+            assert CRAFT_SESSION_ID_CONTEXTVAR.get() is None
 
     async def concurrent_steps() -> tuple[tuple[str, str], tuple[str, str]]:
         return await asyncio.gather(request_trace(), request_trace())
@@ -613,6 +614,7 @@ def test_gateway_steps_share_turn_identity_without_sharing_request_state() -> No
     with (
         patch.object(craft_session, "get_session_with_current_tenant"),
         patch.object(craft_session, "get_build_session", return_value=object()),
+        patch.object(turn_tracing, "has_external_exporters", return_value=True),
         patch.object(turn_tracing, "get_cache_backend", return_value=cache),
         patch.object(serve_transport, "get_cache_backend", return_value=cache),
         patch.object(turn_tracing, "trace", wraps=turn_tracing.trace) as roots,
@@ -620,7 +622,9 @@ def test_gateway_steps_share_turn_identity_without_sharing_request_state() -> No
         manager = _bare_manager()
         with manager.prompt_slot(sandbox_id, session_id):
             roots.assert_not_called()
-        with manager.prompt_slot(sandbox_id, session_id, trace_turn=True) as slot:
+        with patch.object(session_manager, "get_sandbox_manager", return_value=manager):
+            turns = session_manager.SessionManager(MagicMock())
+        with turns.prompt_slot(sandbox_id, session_id) as slot:
             assert slot.acquired
             first, second = asyncio.run(concurrent_steps())
             assert first[0] != second[0]
@@ -628,13 +632,11 @@ def test_gateway_steps_share_turn_identity_without_sharing_request_state() -> No
             assert (
                 roots.call_args.kwargs["metadata"]["distributed_trace_id"] == first[1]
             )
-            with manager.prompt_slot(
-                sandbox_id, session_id, trace_turn=True
-            ) as refused:
+            with turns.prompt_slot(sandbox_id, session_id) as refused:
                 assert not refused.acquired
             assert turn_tracing.get_craft_turn_trace_id(session_id) == first[1]
         assert turn_tracing.get_craft_turn_trace_id(session_id) is None
-        with manager.prompt_slot(sandbox_id, session_id, trace_turn=True):
+        with turns.prompt_slot(sandbox_id, session_id):
             third = asyncio.run(request_trace())
             assert third[1] != first[1]
         assert roots.call_count == 2
@@ -658,11 +660,29 @@ def test_trace_setup_cannot_yield_a_lost_prompt_slot(
 
     root.start.side_effect = lose_lease
     with (
+        patch.object(turn_tracing, "has_external_exporters", return_value=True),
         patch.object(turn_tracing, "get_cache_backend", return_value=cache),
         patch.object(serve_transport, "get_cache_backend", return_value=cache),
         patch.object(turn_tracing, "trace", return_value=root),
     ):
-        with _bare_manager().prompt_slot(_SBX, session_id, trace_turn=True) as slot:
+        with turn_tracing.traced_prompt_slot(
+            session_id, _bare_manager().prompt_slot(_SBX, session_id)
+        ) as slot:
             assert not slot.acquired
         assert turn_tracing.get_craft_turn_trace_id(session_id) == successor_id
     root.finish.assert_called_once()
+
+
+def test_turn_without_external_exporters_does_not_use_trace_cache() -> None:
+    with (
+        patch.object(turn_tracing, "has_external_exporters", return_value=False),
+        patch.object(turn_tracing, "get_cache_backend") as trace_cache,
+        patch.object(serve_transport, "get_cache_backend", return_value=FakeCache()),
+    ):
+        session_id = uuid4()
+        with turn_tracing.traced_prompt_slot(
+            session_id, _bare_manager().prompt_slot(_SBX, session_id)
+        ) as slot:
+            assert slot.acquired
+            assert turn_tracing.get_craft_turn_trace_id(session_id) is None
+        trace_cache.assert_not_called()

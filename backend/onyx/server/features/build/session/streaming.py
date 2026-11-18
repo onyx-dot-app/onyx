@@ -74,6 +74,7 @@ from onyx.server.features.build.timeouts import (
     INTERACTIVE_TURN_SOFT_BUDGET_SECONDS,
     PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
 )
+from onyx.server.features.build.turn_tracing import traced_prompt_slot
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -868,8 +869,8 @@ def stream_subagent_turn(
         # Serialize against concurrent turns on the same build session
         # (the parent turn and a subagent follow-up share the same pod
         # directory + event bus).
-        candidate_cm = sandbox_manager.prompt_slot(
-            sandbox_id, session_id, trace_turn=True
+        candidate_cm = traced_prompt_slot(
+            session_id, sandbox_manager.prompt_slot(sandbox_id, session_id)
         )
         slot = candidate_cm.__enter__()
         if not slot.acquired:

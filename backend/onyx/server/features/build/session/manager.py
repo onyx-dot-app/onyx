@@ -125,6 +125,7 @@ from onyx.server.features.build.timeouts import (
     PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
     PROVISION_WAIT_SECONDS,
 )
+from onyx.server.features.build.turn_tracing import traced_prompt_slot
 from onyx.server.features.build.utils import get_opencode_disabled_tools
 from onyx.server.metrics.craft_sandbox import SandboxReadyOutcome
 from onyx.utils.logger import setup_logger
@@ -1248,8 +1249,11 @@ class SessionManager:
         session_id: UUID,
         acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
     ) -> AbstractContextManager[PromptSlot]:
-        return self._sandbox_manager.prompt_slot(
-            sandbox_id, session_id, acquire_timeout=acquire_timeout, trace_turn=True
+        return traced_prompt_slot(
+            session_id,
+            self._sandbox_manager.prompt_slot(
+                sandbox_id, session_id, acquire_timeout=acquire_timeout
+            ),
         )
 
     def yield_sandbox_events(

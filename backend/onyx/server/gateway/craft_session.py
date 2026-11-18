@@ -20,7 +20,6 @@ from sqlalchemy.orm import Session
 from onyx.db.build_session import get_build_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
-from onyx.server.features.build.turn_tracing import get_craft_turn_trace_id
 from onyx.server.gateway.configs import CRAFT_SESSION_HEADER
 from onyx.utils.logger import setup_logger
 
@@ -28,10 +27,6 @@ logger = setup_logger()
 
 CRAFT_SESSION_ID_CONTEXTVAR: ContextVar[str | None] = ContextVar(
     "craft_session_id", default=None
-)
-
-CRAFT_TURN_TRACE_ID_CONTEXTVAR: ContextVar[str | None] = ContextVar(
-    "craft_turn_trace_id", default=None
 )
 
 
@@ -44,14 +39,8 @@ def resolve_craft_session_id(
     malformed or foreign id is dropped, never trusted: the sandbox can edit its
     own config, so the header is an attribution hint, not an identity claim.
     """
-    # The Craft session is the build session row the header names.
-    claimed = http_request.headers.get(CRAFT_SESSION_HEADER)
-    if not claimed:
-        return None
-    try:
-        craft_session_id = UUID(claimed)
-    except ValueError:
-        logger.warning("Ignoring malformed %s header", CRAFT_SESSION_HEADER)
+    craft_session_id = _claimed_session_id(http_request)
+    if craft_session_id is None:
         return None
     # Ownership check only: the row is looked up, not created or changed.
     owned = get_build_session(craft_session_id, user.id, db_session) is not None
@@ -64,16 +53,23 @@ def resolve_craft_session_id(
     return str(craft_session_id)
 
 
-def _resolve_craft_trace_context(
-    http_request: Request, user: User
-) -> tuple[str | None, str | None]:
-    # Release the ownership connection before the PostgreSQL cache checks out one.
+def _claimed_session_id(http_request: Request) -> UUID | None:
+    claimed = http_request.headers.get(CRAFT_SESSION_HEADER)
+    if not claimed:
+        return None
+    try:
+        return UUID(claimed)
+    except ValueError:
+        logger.warning("Ignoring malformed %s header", CRAFT_SESSION_HEADER)
+        return None
+
+
+def _resolve_owned_session(http_request: Request, user: User) -> str | None:
+    # Headerless requests must not check out an extra database connection.
+    if _claimed_session_id(http_request) is None:
+        return None
     with get_session_with_current_tenant() as db_session:
-        session_id = resolve_craft_session_id(http_request, user, db_session)
-    turn_trace_id = (
-        get_craft_turn_trace_id(UUID(session_id)) if session_id is not None else None
-    )
-    return session_id, turn_trace_id
+        return resolve_craft_session_id(http_request, user, db_session)
 
 
 def craft_session_binder(
@@ -90,15 +86,13 @@ def craft_session_binder(
         http_request: Request,
         user: User = Depends(user_dependency),
     ) -> AsyncIterator[None]:
-        craft_session_id, turn_trace_id = await run_in_threadpool(
-            _resolve_craft_trace_context, http_request, user
+        craft_session_id = await run_in_threadpool(
+            _resolve_owned_session, http_request, user
         )
         token = CRAFT_SESSION_ID_CONTEXTVAR.set(craft_session_id)
-        turn_token = CRAFT_TURN_TRACE_ID_CONTEXTVAR.set(turn_trace_id)
         try:
             yield
         finally:
-            CRAFT_TURN_TRACE_ID_CONTEXTVAR.reset(turn_token)
             CRAFT_SESSION_ID_CONTEXTVAR.reset(token)
 
     return bind_craft_session

@@ -47,6 +47,12 @@ def setup_tracing() -> list[str]:
     return initialized_providers
 
 
+def has_external_exporters() -> bool:
+    return (
+        _dynamic_processor is not None and _dynamic_processor.has_external_exporters()
+    )
+
+
 def _setup_user_usage_tracking() -> None:
     """Register the per-user usage recording processor."""
     global _user_usage_processor

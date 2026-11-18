@@ -97,6 +97,9 @@ class BraintrustTracingProcessor(TracingProcessor):
             if distributed_trace_id and parent_span_id
             else None
         )
+        span_logger = self._logger
+        if distributed_trace_id and span_logger is None:
+            span_logger = braintrust.current_logger()
         current_context = braintrust.current_span()
         if current_context != NOOP_SPAN and not metadata.get("distributed_trace_id"):
             self._spans[trace.trace_id] = current_context.start_span(
@@ -104,11 +107,12 @@ class BraintrustTracingProcessor(TracingProcessor):
                 span_attributes={"type": "task", "name": trace.name},
                 metadata=metadata,
             )
-        elif self._logger is not None:
-            self._spans[trace.trace_id] = self._logger.start_span(
+        elif span_logger is not None:
+            self._spans[trace.trace_id] = span_logger.start_span(
                 span_attributes={"type": "task", "name": trace.name},
                 span_id=metadata.get("distributed_root_span_id", trace.trace_id),
                 parent=parent,
+                lookup_span_parent=not bool(distributed_trace_id),
                 root_span_id=metadata.get("distributed_trace_id", trace.trace_id),
                 metadata=metadata,
             )
@@ -117,6 +121,7 @@ class BraintrustTracingProcessor(TracingProcessor):
                 id=trace.trace_id,
                 span_id=metadata.get("distributed_root_span_id", trace.trace_id),
                 parent=parent,
+                lookup_span_parent=not bool(distributed_trace_id),
                 root_span_id=metadata.get("distributed_trace_id", trace.trace_id),
                 span_attributes={"type": "task", "name": trace.name},
                 metadata=metadata,

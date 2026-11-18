@@ -554,7 +554,6 @@ class StubSandboxManager(SandboxManager):
         acquire_timeout: float = 10.0,
         *,
         fail_open: bool = True,
-        trace_turn: bool = False,  # noqa: ARG002 -- tracing is outside this stub
     ) -> Generator[PromptSlot, None, None]:
         self.prompt_slot_count += 1
         self.last_prompt_slot_payload = {

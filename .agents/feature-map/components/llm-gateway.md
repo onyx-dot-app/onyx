@@ -128,8 +128,8 @@ when the caller owns that build session, and
 header is a hint, not an identity claim, because the sandbox can edit its own
 configuration. For a prompt execution, while the prompt slot is held,
 `server/features/build/turn_tracing.py:craft_turn_trace` publishes a turn trace
-id in the tenant cache and opens a turn root. The binder reads the id only
-after the ownership check.
+id in the tenant cache and opens a turn root when an external exporter is active.
+The gateway reads the id at generation start, after the binder checks ownership.
 Gateway calls keep separate local traces, but Braintrust and Langfuse use this
 shared external trace id. Braintrust request spans name the turn root as their
 parent. This groups interactive, scheduled, and subagent

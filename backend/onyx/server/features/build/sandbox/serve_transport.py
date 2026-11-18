@@ -53,7 +53,6 @@ from onyx.server.features.build.timeouts import (
     PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
     PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
 )
-from onyx.server.features.build.turn_tracing import craft_turn_trace
 from onyx.server.metrics.craft_sandbox import (
     SandboxProvisionPhase,
     time_provision_phase,
@@ -99,6 +98,11 @@ class PromptSlot:
         self.acquired = acquired
         self.lost = False
         self._lock = lock
+
+    @property
+    def has_lease(self) -> bool:
+        """Distinguish held locks from fail-open execution."""
+        return self.acquired and self._lock is not None and not self.lost
 
     def extend(self) -> None:
         if self._lock is None or self.lost:
@@ -224,7 +228,6 @@ class _ServeMixin:
         acquire_timeout: float = PROMPT_SLOT_FAST_FAIL_ACQUIRE_SECONDS,
         *,
         fail_open: bool = True,
-        trace_turn: bool = False,
     ) -> Generator[PromptSlot, None, None]:
         """Serialize turns for a build session across replicas via the cache.
 
@@ -264,16 +267,7 @@ class _ServeMixin:
                 )
                 yield PromptSlot(acquired=False)
             else:
-                trace_context = (
-                    craft_turn_trace(build_session_id)
-                    if trace_turn
-                    else contextlib.nullcontext()
-                )
-                with trace_context:
-                    slot = PromptSlot(acquired=True, lock=lock)
-                    if trace_turn:
-                        slot.extend()
-                    yield PromptSlot(acquired=False) if slot.lost else slot
+                yield PromptSlot(acquired=True, lock=lock)
         finally:
             if acquired:
                 try:
