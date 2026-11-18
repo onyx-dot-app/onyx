@@ -302,7 +302,7 @@ function appendNotification(
     case "_onyx/compaction":
       return [
         ...settled,
-        noticeEntry(`compaction-${entries.length}`, {
+        noticeEntry(unusedId(entries, `compaction-${entries.length}`), {
           type: "compaction",
           summary: notification.params.summary,
         }),
@@ -310,11 +310,17 @@ function appendNotification(
     case "_onyx/connect_app_request": {
       // A request is shown once, even when the stream repeats it. A repeat
       // changes nothing, so open text goes on.
-      const id = `connect:${notification.params.requestId}`;
-      if (entries.some((entry) => entry.id === id)) return entries;
+      const { requestId } = notification.params;
+      const repeated = entries.some(
+        (entry) =>
+          entry.payload.kind === "notice" &&
+          entry.payload.notice.type === "connect_app_request" &&
+          entry.payload.notice.requestId === requestId
+      );
+      if (repeated) return entries;
       return [
         ...settled,
-        noticeEntry(id, {
+        noticeEntry(unusedId(entries, `connect:${requestId}`), {
           type: "connect_app_request",
           ...notification.params,
         }),
@@ -340,7 +346,7 @@ export function reduceTimeline(
       ...state,
       entries: [
         ...settleChunks(state.entries),
-        noticeEntry(`error-${state.entries.length}`, {
+        noticeEntry(unusedId(state.entries, `error-${state.entries.length}`), {
           type: "error",
           message: event.message,
         }),
