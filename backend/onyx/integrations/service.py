@@ -79,6 +79,7 @@ from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.integrations.connection_models import (
+    SIGN_IN_SETTINGS_CHANGED_REASON,
     ConnectionState,
     read_connection_secret,
     read_oauth_client,
@@ -1067,12 +1068,22 @@ def _setup_reason(
     return "Connect the account of the organization."
 
 
+_SIGN_IN_CHANGED_ADMIN_REASON = (
+    "The sign-in settings changed. Connect the account of the organization again."
+)
+
+
 def _organization_statuses(
     integrations: Collection[Integration], db_session: Session
 ) -> dict[int, IntegrationStatus]:
     """The status of each organization connection, with a reason that tells
     the admin what to do."""
     statuses = integration_statuses(integrations, None, db_session)
+    for integration_id, status in statuses.items():
+        if status.reason == SIGN_IN_SETTINGS_CHANGED_REASON:
+            statuses[integration_id] = status.model_copy(
+                update={"reason": _SIGN_IN_CHANGED_ADMIN_REASON}
+            )
     not_set_up = [
         integration
         for integration in integrations

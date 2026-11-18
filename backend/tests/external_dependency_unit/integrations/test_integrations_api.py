@@ -851,6 +851,33 @@ def test_organization_connection_put_and_delete(
     assert view.setup_reason == view.organization_status.reason
 
 
+def test_admin_view_tells_the_admin_to_reconnect_after_a_sign_in_change(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    admin_api.save_organization_connection(
+        detail.id, ConnectionFieldsRequest(fields={"api_key": "k"}), admin, db_session
+    )
+    admin_api.update_integration(
+        detail.id,
+        IntegrationUpdate(
+            header_template={"X-Api-Key": "{api_key}", "X-Tenant": "{tenant}"}
+        ),
+        admin,
+        db_session,
+    )
+
+    view = admin_api.get_integration_admin(detail.id, admin, db_session)
+    assert view.organization_status is not None
+    assert view.organization_status.state.value == "needs_reconnect"
+    assert view.organization_status.reason == (
+        "The sign-in settings changed. Connect the account of the organization again."
+    )
+    member_view = api.get_integration_for_member(detail.id, member, db_session)
+    assert member_view.status.reason == "Your admin changed the sign-in settings"
+
+
 def test_connection_save_holds_the_integration_row_lock(
     db_session: Session, admin: User, created: Created
 ) -> None:
