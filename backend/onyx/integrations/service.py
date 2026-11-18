@@ -539,9 +539,13 @@ def _host_values(org_credentials: Mapping[str, str]) -> dict[str, str]:
 
 def _mcp_target(
     integration_id: int, db_session: Session
-) -> tuple[str, MCPTransport | None] | None:
+) -> tuple[str, MCPTransport | None, dict[str, str] | None] | None:
+    """The server settings that discovery uses."""
     server = get_mcp_server_for_integration(integration_id, db_session)
-    return None if server is None else (server.server_url, server.transport)
+    integration = get_integration_by_id(integration_id, db_session)
+    if server is None or integration is None:
+        return None
+    return server.server_url, server.transport, integration.header_template
 
 
 @contextmanager
