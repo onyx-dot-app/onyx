@@ -656,7 +656,7 @@ class TestDocumentIndex:
 
     def test_leading_chunks_retrieval_reads_each_documents_start_in_one_query(
         self,
-        document_index: DocumentIndex,
+        opensearch_document_index: OpenSearchDocumentIndex,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
@@ -675,7 +675,9 @@ class TestDocumentIndex:
             old_counts=[0, 0, 0],
             new_counts=[20, 1, 1],
         )
-        document_index.index(chunks=chunks, indexing_metadata=metadata)
+        opensearch_document_index.index(chunks=chunks, indexing_metadata=metadata)
+        # Make the new chunks searchable now instead of waiting for the refresh.
+        opensearch_document_index._client.refresh_index()
         filters = IndexFilters(
             access_control_list=None,
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
@@ -683,15 +685,9 @@ class TestDocumentIndex:
         )
 
         # Under test.
-        deadline = time.time() + 10.0
-        retrieved: list[InferenceChunk] = []
-        while time.time() < deadline:
-            retrieved = document_index.leading_chunks_retrieval(
-                filters=filters, max_chunk_index=2
-            )
-            if len(retrieved) == 4:
-                break
-            time.sleep(0.25)
+        retrieved = opensearch_document_index.leading_chunks_retrieval(
+            filters=filters, max_chunk_index=2
+        )
 
         # Postcondition.
         assert sorted((chunk.document_id, chunk.chunk_id) for chunk in retrieved) == [
