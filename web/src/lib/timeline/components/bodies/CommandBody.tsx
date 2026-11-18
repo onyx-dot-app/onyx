@@ -2,6 +2,7 @@
 
 import { CodePanel } from "@opal/components";
 import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
+import type { RichStr } from "@opal/types";
 
 interface CommandBodyProps {
   /** The command or code that ran. */
@@ -18,7 +19,7 @@ interface CommandBodyProps {
   /** Shown when there is no command, output or error. */
   emptyLabel: string;
   /** A closing line under the output, such as "Exit code 2". */
-  footer?: string;
+  footer?: string | RichStr;
 }
 
 /**
