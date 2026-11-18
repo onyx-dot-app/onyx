@@ -1528,6 +1528,27 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
         "plugin__user_group",
         "user_plugin_preference",
     )
+    with engine.connect() as conn:
+        # The foreign keys that a delete of an integration or a user follows.
+        assert set(
+            conn.execute(
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    "WHERE schemaname = current_schema() AND indexname = ANY(:names)"
+                ),
+                {
+                    "names": [
+                        "ix_integration_connection_integration_id",
+                        "ix_integration_action_policy_integration_id",
+                        "ix_integration_created_by_user_id",
+                    ]
+                },
+            ).scalars()
+        ) == {
+            "ix_integration_connection_integration_id",
+            "ix_integration_action_policy_integration_id",
+            "ix_integration_created_by_user_id",
+        }
     first = _fingerprint(engine, new_tables)
     old = _fingerprint(engine, OLD_TABLES)
     # An approval of an integration made after the upgrade has no gated_app.
@@ -1543,6 +1564,34 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
                 "WHERE gated_app_id = :g"
             ),
             {"id": no_gated_app, "g": seeded.gated["mcp_public"]},
+        )
+        # A plugin that the app made for an integration after the upgrade.
+        app_plugin = uuid4()
+        conn.execute(
+            text(
+                "INSERT INTO plugin (id, name, description, marketplace_id, "
+                "current_version_id, published_version_id) VALUES "
+                "(:id, :name, '', :m, :id, :id)"
+            ),
+            {
+                "id": app_plugin,
+                "name": f"u1-app-{app_plugin}",
+                "m": ORGANIZATION_LIBRARY_ID,
+            },
+        )
+        conn.execute(
+            text(
+                "INSERT INTO plugin_version (id, plugin_id, version_number) "
+                "VALUES (:id, :id, 1)"
+            ),
+            {"id": app_plugin},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO plugin__integration (plugin_id, integration_id) "
+                "VALUES (:p, :i)"
+            ),
+            {"p": app_plugin, "i": seeded.gated["mcp_orphan"]},
         )
 
     _migrate("downgrade", PREVIOUS_REVISION)
@@ -1577,6 +1626,13 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
                         f"integration_plugin:{seeded.gated['mcp_public']}".encode()
                     ).hexdigest()
                 },
+            ).scalar_one()
+            == 0
+        )
+        # A plugin with no integration left to hold goes, whoever made it.
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM plugin WHERE id = :id"), {"id": app_plugin}
             ).scalar_one()
             == 0
         )
