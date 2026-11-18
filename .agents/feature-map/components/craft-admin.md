@@ -23,16 +23,18 @@ the viewer's ([[#preview-routes-skip-access-gate]]). When the admin turns access
 task, the next fire records a skipped run instead of running
 ([[craft-scheduled-tasks]]).
 
-**Plugins.** The admin sees built-in apps, custom apps and MCP servers on one
-Plugins page. For each one the admin can turn it on or off for Craft, set
-credentials, and set a policy per action: Auto-approve
-(`ALWAYS`), Ask (`ASK`) or Disabled (`DENY`). A switch decides whether users
-may override the workspace policy with their own choices. When the agent later
-tries a Disabled action, the call fails with a policy error. When it tries an
-Ask action, the user gets an approval card in the session. On Onyx Cloud, the
-admin cannot see or edit credentials or URL patterns of Onyx-managed built-ins,
-and cannot create or delete them. The admin can only enable them and set
-policy.
+**Integrations.** The admin sets up built-in apps (from a preset), custom apps
+and MCP servers as integrations on the Integrations page
+(`/admin/integrations`, [[plugins]]). For each one the admin can turn it on or
+off, set the sign-in and the organization connection, and set a policy per
+action: Allow, Ask or Blocked. A switch decides whether users may save Always
+allow over Ask. When the agent later tries a Blocked action, the call fails
+with a policy error. When it tries an Ask action, the user gets an approval
+card in the session. The Plugins page (`/admin/plugins`) lists the plugins
+that hold integrations and changes their install setting. On Onyx Cloud, the
+admin cannot see or edit the sign-in of an Onyx-managed built-in app, and
+cannot add a second one or delete it. The admin can change its name,
+description, switch, Always allow setting and action policies.
 
 **Preferences.** The admin writes organization instructions and picks a Craft
 default model. Instructions appear in each new session's `AGENTS.md` under an
@@ -56,18 +58,17 @@ workspace" ([[craft-sandboxes]]).
 This component owns:
 - the access decision for each user and its enforcement on every Craft user
   route;
-- the Craft admin router and its routes: external-app configuration, the
-  read-only workspace policy views, and the base-instructions preview;
-- the Craft admin pages (Access, Preferences) and the external-app admin
-  editor.
+- the Craft admin router and its routes, such as the base-instructions
+  preview;
+- the Craft admin pages (Access, Preferences).
 
 Neighbours own the rest:
 - [[craft-external-apps]]: what a policy means at request time, the precedence
   of workspace, personal and task choices, the action catalogs, and OAuth.
 - [[mcp-and-custom-tools]]: the MCP server admin routes. They write the same
   policy tables ([[#two-gates-one-policy-table]]).
-- [[plugins]]: the Plugins page shell, which hosts the external-app editor,
-  and the MCP and OpenAPI editors.
+- [[plugins]]: the admin Integrations and Plugins pages, which edit apps, MCP
+  servers and OpenAPI tools as integrations.
 - [[chat-preferences]]: the workspace `Settings` store, which holds the Craft
   default and the organization instructions. The admin writes them through
   `PATCH /admin/settings`, like any other workspace setting.
@@ -152,9 +153,8 @@ then the chat default.
 4. `two-gates-one-policy-table` **Two permission gates write the same policy
    tables.** External-app policies need `FULL_ADMIN_PANEL_ACCESS`. MCP policies
    need `MANAGE_ACTIONS`, and a group-scoped action manager may write them for
-   its servers. `web/src/lib/plugins/hooks.ts:useInstalledPlugins` must not
-   fetch the external-app admin list (organization credentials) for a user
-   without full admin access.
+   its servers. The admin pages read apps only through
+   `GET /admin/integrations`, which returns no organization credentials.
 5. `save-paths-refresh-differently` **The save paths refresh sandboxes
    differently.** The external-app PATCH commits, then calls
    `skills/push.py:push_skills_for_users` so the skill file lists DENY actions as
@@ -223,8 +223,8 @@ then the chat default.
   have no callers in this repository. On multi-tenant the admin API refuses to
   create a managed built-in. The code that seeds managed app rows on Cloud is
   not in this tree, so how Cloud tenants get them is unverified.
-- `web/src/app/admin/craft/apps/page.tsx` only redirects old app links to the
-  Plugins page. It is a false lead for app admin work.
+- `/admin/craft/apps` has no page. `web/next.config.js` redirects it to the
+  integration list. It is a false lead for app admin work.
 
 ---
 

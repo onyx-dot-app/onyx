@@ -8,94 +8,21 @@ from onyx.cache.factory import get_cache_backend
 from onyx.db.build_session import get_build_session
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
-    IntegrationAuthMethod,
-    IntegrationAuthMode,
-    IntegrationKind,
     Permission,
     SandboxStatus,
 )
-from onyx.db.integration import get_external_app_for_integration
-from onyx.db.integration_connection import get_connection
-from onyx.db.models import ExternalApp, Integration, User
+from onyx.db.models import User
 from onyx.db.sandbox import get_sandbox_by_user_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.providers.base import OAuthExternalAppProvider
-from onyx.external_apps.providers.registry import (
-    get_provider_for_app,
-)
-from onyx.integrations.connection_models import (
-    ConnectionState,
-    read_connection_secret,
-)
-from onyx.integrations.connections import credential_field_keys, integration_status
-from onyx.integrations.craft import craft_service_urls, list_runnable_integrations
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.external_apps.models import (
     ConnectAppDecisionRequest,
-    ExternalAppUserResponse,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
-from onyx.utils.encryption import mask_string
 from shared_configs.contextvars import get_current_tenant_id
 
 router = APIRouter()
-
-
-def _to_user_response(
-    app: ExternalApp, integration: Integration, user: User, db_session: Session
-) -> ExternalAppUserResponse:
-    """User-facing view of an app. ``credential_keys`` = the fields the user
-    fills for an API key sign-in for each user; ``credential_values`` = the
-    user's masked saved values for those keys.
-    """
-    required_keys = (
-        credential_field_keys(integration)
-        if integration.auth_method is IntegrationAuthMethod.API_KEY
-        and integration.auth_mode is IntegrationAuthMode.INDIVIDUAL
-        else []
-    )
-    connection = (
-        get_connection(db_session, integration.id, user.id) if required_keys else None
-    )
-    stored = read_connection_secret(connection).fields if connection else {}
-    credential_values = {
-        key: mask_string(stored[key]) for key in required_keys if key in stored
-    }
-    authenticated = (
-        integration_status(integration, user, db_session).state
-        is ConnectionState.CONNECTED
-    )
-
-    return ExternalAppUserResponse(
-        id=app.id,
-        integration_id=integration.id,
-        name=integration.name,
-        app_type=app.app_type,
-        credential_keys=required_keys,
-        credential_values=credential_values,
-        authenticated=authenticated,
-        supports_oauth=isinstance(get_provider_for_app(app), OAuthExternalAppProvider),
-        service_urls=craft_service_urls(app),
-    )
-
-
-@router.get("/apps")
-def list_external_apps(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> list[ExternalAppUserResponse]:
-    """The external apps of the integrations the user runs, with the user's
-    connection state: the keys the user must supply, the values already
-    saved, and an ``authenticated`` flag."""
-    responses: list[ExternalAppUserResponse] = []
-    for integration in list_runnable_integrations(db_session, user.id):
-        if integration.kind is not IntegrationKind.API:
-            continue
-        app = get_external_app_for_integration(integration.id, db_session)
-        if app is not None:
-            responses.append(_to_user_response(app, integration, user, db_session))
-    return responses
 
 
 @router.post("/apps/connect/{request_id}/decision")

@@ -14,6 +14,7 @@ import {
 } from "react";
 
 import { useWorkspaceSettings } from "@/api/settings";
+import { useAgentPluginIds } from "@/api/plugins";
 import { useAvailableTools } from "@/api/tools";
 import { useLlmProviders } from "@/api/chat/llm";
 import type { ChatToolOptions } from "@/api/chat/stream";
@@ -138,7 +139,7 @@ export function useComposerToolsState({
       ),
     [globallyAvailableTools],
   );
-  const knownPluginIds = useMemo(
+  const toolPluginIds = useMemo(
     () => [...new Set([...pluginIdsByTool.values()].flat())],
     [pluginIdsByTool],
   );
@@ -174,6 +175,9 @@ export function useComposerToolsState({
   const effectiveAgent =
     agent ?? (held.sessionId === chatSessionId ? held.agent : null);
   const effectiveAgentId = effectiveAgent?.id;
+  // Every plugin of the agent; the tool list stands in until it loads.
+  const knownPluginIds =
+    useAgentPluginIds(effectiveAgentId ?? null) ?? toolPluginIds;
 
   // With no agent resolved yet, don't withdraw a control the user just used.
   const canSearch = effectiveAgent

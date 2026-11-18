@@ -21,7 +21,7 @@ When an action is set to Ask, the agent's call waits. An approval card appears
 in the session. The user can approve once, approve that action for the rest of
 the session, or reject. With no decision within the wait window (180 seconds
 by default), the request expires and the agent gets an error. When an action
-is Disabled, the call fails at once with a `policy_denied` error that the agent
+is Blocked, the call fails at once with a `policy_denied` error that the agent
 can read. When the app is not connected, the call fails with a message that
 asks the user to connect it. A proxy restart or deploy expires every open
 approval card, and the agent gets an error.
@@ -32,7 +32,7 @@ already has credentials. It shows Connected only after the decision succeeds,
 and stays retryable after a failure. When the user declines, the agent gets a
 rejection and can choose another way.
 
-The user can set personal Auto-approve, Ask or Disabled choices per action when
+The user can set personal Allow, Ask or Blocked choices per action when
 the admin allows it. A scheduled task has its own choices
 ([[craft-scheduled-tasks]]).
 
@@ -186,8 +186,9 @@ permission on the sandbox: allow for connected, reject for declined.
 writes the MCP integrations whose `integration_status` is connected (or that
 have no sign-in) into the opencode config, with each Blocked action as a
 disabled tool. A session of a scheduled run gets only the task plugins,
-also one that the owner turned off ([[craft-scheduled-tasks]]). `GET /mcp/servers/craft`
-lists the same servers, and
+also one that the owner turned off ([[craft-scheduled-tasks]]). The web reads
+the Craft apps and MCP servers from the member list (`GET /integrations`,
+`web/src/lib/integrations/craft.ts`), and
 `integrations/craft.py:list_connectable_apps` lists the external apps the user
 can still connect. No code reads `mcp_server.available_in_craft`. An
 integration change reloads running Craft sessions through
@@ -279,12 +280,14 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    upstream's 413. A streamed body (`raw_content is None`) counts as oversize,
    so a future stream opt-in cannot skip the cap. Turning on request streaming
    anywhere in the chain blocks requests with `body_too_large`.
-7. `unspecified-never-auto` **`unspecified` is never Auto-approve and never
+7. `unspecified-never-auto` **`unspecified` is never Allow and never
    session-granted on an external app.** Personal or task choices cannot make
    an off-catalog request run unattended.
    `sandbox_proxy/addons/gate.py:GateAddon._session_grant` returns false for
    it, and `backend/onyx/server/features/build/approvals/api.py:ApprovalView.can_approve_for_session` refuses
    "approve for session" for any whole-domain action on an external app.
+   The admin Actions tab (`web/src/sections/integrations/IntegrationActionsTab.tsx`)
+   reads `always_asks` on each action and does not offer Allow for it.
 8. `approval-single-writer` **Approval decisions have one writer.** Only
    `backend/onyx/db/action_approval.py:try_record_decision` writes the decision of a
    pending row. It arbitrates between the user, a session grant and proxy
@@ -398,10 +401,9 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
   rows ([[#url-patterns-on-app-row]]). Update the app's built-in skill files
   in `backend/onyx/skills/builtin/`; the agent learns the host and helpers
   only from them, and [[skills]] owns how they reach running sandboxes. Escape
-  every dot in the host: an unescaped dot matches any character, and the member
-  app view
-  (`backend/onyx/server/features/build/external_apps/api.py:_to_user_response`)
-  leaves that pattern out of the app's service URLs, with no error.
+  every dot in the host: an unescaped dot matches any character, and
+  `backend/onyx/integrations/craft.py:craft_service_urls` leaves that pattern
+  out of the app's service URLs, with no error.
 - `credential-resolver` **A credential resolver.** Copy `OnyxPatResolver`; list the resolvers with
   `git ls-files backend/onyx/sandbox_proxy/resolvers/`. Register it in
   `build_resolvers`. Claim requests by a disjoint host set. Raise
@@ -413,13 +415,13 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
   approval row, so the session grant in `submit_decision` can cover it.
 - `investigate-app-call-failed` **Investigate "the agent's call to an app failed".** Read the
   response the agent got first: a proxy 403 carries the error code from
-  `backend/onyx/sandbox_proxy/errors.py`. A Disabled action returns
+  `backend/onyx/sandbox_proxy/errors.py`. A Blocked action returns
   `policy_denied` and writes no log line (`sandbox_proxy/addons/gate.py:GateAddon._resolve_and_match`).
   Then find the request in the `sandbox-proxy` log. An `egress_block` line
   carries the `reason`, and an `egress_allow` line carries the credential
   outcome. No response from the proxy and no log line means the request did not
   reach the proxy; check the lockdown in [[craft-sandboxes]].
-- `setup-policy-test` **Set up a policy test.** Set one action to Disabled and one to Ask. The
+- `setup-policy-test` **Set up a policy test.** Set one action to Blocked and one to Ask. The
   first returns 403 `policy_denied` with no proxy log line. The second shows an
   approval card, and after approval the proxy logs the decision as `APPROVED`.
 

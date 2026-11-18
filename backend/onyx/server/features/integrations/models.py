@@ -175,6 +175,8 @@ class AdminIntegrationDetail(AdminIntegration):
     header_template: dict[str, str] | None
     users_can_save_always_allow: bool
     oauth_client: OAuthClientView | None
+    # False when the user cannot manage it, or when Onyx provides the app.
+    can_delete: bool
 
 
 class PresetView(BaseModel):

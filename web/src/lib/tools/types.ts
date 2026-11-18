@@ -53,65 +53,15 @@ export interface ToolSnapshot {
   chat_selectable: boolean;
   agent_creation_selectable: boolean;
   default_enabled: boolean;
-  default_chat_enabled?: boolean | null;
-  user_enabled_in_chat?: boolean;
   default_action_policy?: ActionPolicy | null;
 
   // Server-stamped affordance map; fail-closed (absent = denied).
   permissions?: PermissionsOf<"Action">;
 }
 
-export interface ToolUserPreferencesRequest {
-  enabled_in_chat: boolean;
-}
-
-export type ToolUserPreferencesResponse = ToolUserPreferencesRequest;
-
 export interface ApiResponse<T> {
   data: T | null;
   error: string | null;
-}
-
-export interface OAuthConfig {
-  id: number;
-  name: string;
-  authorization_url: string;
-  token_url: string;
-  scopes: string[] | null;
-  supports_pkce: boolean;
-  has_client_credentials: boolean;
-  tool_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface OAuthConfigCreate {
-  name: string;
-  authorization_url: string;
-  token_url: string;
-  client_id: string;
-  client_secret: string;
-  scopes?: string[];
-  additional_params?: Record<string, any>;
-  supports_pkce?: boolean;
-}
-
-export interface OAuthConfigUpdate {
-  name?: string;
-  authorization_url?: string;
-  token_url?: string;
-  client_id?: string;
-  client_secret?: string;
-  scopes?: string[];
-  additional_params?: Record<string, any>;
-  supports_pkce?: boolean;
-}
-
-export interface OAuthTokenStatus {
-  oauth_config_id: number;
-  expires_at: number | null;
-  is_expired: boolean;
-  can_refresh?: boolean;
 }
 
 /**
@@ -151,6 +101,9 @@ export type ToolOptionsEntry =
 export type ToolPreference =
   | { type: "capability"; tool_id: number }
   | { type: "action"; plugin_id: string; action: string };
+
+/** A preferred plugin action. The web keeps it but has no control for it. */
+export type ActionPreference = Extract<ToolPreference, { type: "action" }>;
 
 /**
  * The tools, plugins and search filters of a chat. A send carries them, and

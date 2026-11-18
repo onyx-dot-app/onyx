@@ -99,9 +99,9 @@ export default function AdminSidebar() {
   const sectionLabels = useMemo<Record<AdminNavSectionId, string>>(
     () => ({
       craft: t("adminNav.sections.craft.label"),
-      agentsAndActions: t("adminNav.sections.agentsAndActions.label"),
+      agentsAndPlugins: t("adminNav.sections.agentsAndPlugins.label"),
       documentsAndKnowledge: t("adminNav.sections.documentsAndKnowledge.label"),
-      integrations: t("adminNav.sections.integrations.label"),
+      channels: t("adminNav.sections.channels.label"),
       permissions: t("adminNav.sections.permissions.label"),
       organization: t("adminNav.sections.organization.label"),
       usage: t("adminNav.sections.usage.label"),

@@ -1361,6 +1361,7 @@ def test_cloud_protects_onyx_managed_presets(
 ) -> None:
     detail = admin_api.create_integration(_linear_create(), admin, db_session)
     created.add(detail.id)
+    assert detail.can_delete is True
 
     linear = _linear_create().config
     assert isinstance(linear, PresetConfigInput)
@@ -1378,6 +1379,7 @@ def test_cloud_protects_onyx_managed_presets(
 
         view = admin_api.get_integration_admin(detail.id, admin, db_session)
         assert view.oauth_client is None
+        assert view.can_delete is False
 
         with pytest.raises(OnyxError) as error:
             admin_api.update_integration(

@@ -21,8 +21,8 @@ The Onyx Discord bot lets you use Onyx chat directly in a Discord server.
 
 ## How it works
 
-Your admin connects a server in **Admin Panel > Integrations > Discord Integration**.
-Onyx gives your admin a registration key. Run `!register <key>` in your Discord server to link it to Onyx.
+Your admin connects a server in **Admin Panel > Channels > Discord Bot**. Onyx gives your admin a registration key.
+Run `!register <key>` in your Discord server to link it to Onyx.
 Run `!sync-channels` to make your channels visible in Onyx.
 
 Channels are turned off until your admin enables them in Onyx. The bot answers as a shared Onyx service identity.
@@ -31,7 +31,7 @@ The documents it can use depend on the Agent set for the server or channel, not 
 <Warning>
   The Discord bot can use the MCP Actions that its agent has,
   without asking for [approval](/admins/plugins/mcp#approvals-in-chat).
-  It cannot use Actions with the **Disabled** policy.
+  It cannot use Actions with the **Blocked** policy.
 </Warning>
 
 <Note>

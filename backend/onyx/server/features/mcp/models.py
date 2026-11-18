@@ -70,12 +70,6 @@ class MCPOAuthKeys(str, Enum):
     TOKEN_EXPIRES_AT = "token_expires_at"
 
 
-class MCPConnectionStatus(str, Enum):
-    NOT_CONNECTED = "not_connected"
-    CONNECTED = "connected"
-    REAUTH_REQUIRED = "reauth_required"
-
-
 class MCPConnectionData(TypedDict):
     """TypedDict to allow use as a type hint for a JSONB column
     in Postgres"""
@@ -187,28 +181,6 @@ class MCPOAuthClientMetadataDocument(BaseModel):
     grant_types: list[Literal["authorization_code", "refresh_token"]]
     response_types: list[Literal["code"]]
     token_endpoint_auth_method: Literal["none"]
-
-
-class MCPServer(BaseModel):
-    """An MCP server of a plugin the user runs in Craft."""
-
-    id: int
-    name: str
-    description: str | None
-    server_url: str
-    owner: str
-    transport: MCPTransport | None
-    connection_status: MCPConnectionStatus
-    status: MCPServerStatus
-    available_in_craft: bool
-    # The plugins that hold the server's integration.
-    plugin_ids: list[UUID]
-    # Whether Craft can authenticate this user against the server.
-    craft_connected: bool
-
-
-class MCPServersResponse(BaseModel):
-    mcp_servers: list[MCPServer]
 
 
 # The admin MCP server routes of the public API (the Terraform provider uses

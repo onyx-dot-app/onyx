@@ -39,7 +39,7 @@ When a user sends a message, the LLM decides whether to answer directly or to fe
 
 To fetch context, the agent can run an internal search over your indexed documents, use a built-in tool (code execution,
 web search, image generation),
-or call a custom action that your admins configured under **Admin Panel > Plugins** (OpenAPI Actions and MCP Actions).
+or call a custom action that your admins configured under **Admin Panel > Integrations** (OpenAPI apps and MCP servers).
 
 Internal search applies the user's document permissions before any result reaches the LLM. By default,
 Onyx sends data only to the LLM provider that your admins configured.
@@ -58,7 +58,7 @@ or Vertex AI image model.
 The code runs in a separate container inside your deployment. Admins can turn it off for the whole deployment.
 
 **Plugins**: OpenAPI Actions and MCP Actions call the external APIs that your admins configure.
-Each action has a policy of **Auto-approve**, **Ask**, or **Disabled**.
+Each action has a policy of **Allow**, **Ask**, or **Blocked**.
 
 **Craft**: runs agent-generated code in a per-user sandbox.
 All sandbox traffic passes through a proxy that injects credentials and enforces app policies.
