@@ -146,8 +146,9 @@ function bashStepHeader(call: BashStepView, t: TimelineTranslate): string {
   return t("codingAgent.bashExit.header", { exitCode: call.exit_code ?? 0 });
 }
 
-function bashStepIcon(call: BashStepView) {
-  if (!call.isComplete) return STEP_ICONS.running;
+/** A command that never finished before the stream stopped shows as stopped. */
+function bashStepIcon(call: BashStepView, stopped: boolean) {
+  if (!call.isComplete) return stopped ? STEP_ICONS.failed : STEP_ICONS.running;
   const failed =
     call.error !== null || (call.exit_code !== null && call.exit_code !== 0);
   return failed || call.timed_out ? STEP_ICONS.failed : STEP_ICONS.execute;
@@ -211,14 +212,20 @@ interface BashCallStepProps {
   call: BashStepView;
   isLastStep: boolean;
   isHover: boolean;
+  stopped: boolean;
 }
 
-function BashCallStep({ call, isLastStep, isHover }: BashCallStepProps) {
+function BashCallStep({
+  call,
+  isLastStep,
+  isHover,
+  stopped,
+}: BashCallStepProps) {
   const t = useTranslations("chat.messages.timeline");
 
   return (
     <StepContainer
-      stepIcon={bashStepIcon(call)}
+      stepIcon={bashStepIcon(call, stopped)}
       header={bashStepHeader(call, t)}
       isLastStep={isLastStep}
       isHover={isHover}
@@ -235,7 +242,8 @@ function renderAgentStep(
   step: AgentStep,
   key: Key,
   isLastStep: boolean,
-  isHover: boolean
+  isHover: boolean,
+  stopped: boolean
 ): JSX.Element {
   return step.kind === "thinking" ? (
     <ThinkingStep
@@ -250,6 +258,7 @@ function renderAgentStep(
       call={step}
       isLastStep={isLastStep}
       isHover={isHover}
+      stopped={stopped}
     />
   );
 }
@@ -416,7 +425,13 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
     }
     if (latestStep) {
       return wrap(
-        renderAgentStep(latestStep, "latest", lastStepIsActive, isHover)
+        renderAgentStep(
+          latestStep,
+          "latest",
+          lastStepIsActive,
+          isHover,
+          stopPacketSeen
+        )
       );
     }
     if (startPacket) {
@@ -445,7 +460,8 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
           step,
           idx,
           lastStepIsActive && idx === steps.length - 1 && !finalPacket,
-          isHover
+          isHover,
+          stopPacketSeen
         )
       )}
       {finalPacket && (
