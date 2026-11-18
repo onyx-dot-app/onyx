@@ -235,6 +235,12 @@ def publish_plugin_for_user__no_commit(
     _owned_private_plugin(
         user, plugin_id, db_session, token_may_manage=token_may_manage
     )
+    if not token_may_manage:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only an organization-wide action manager can publish a plugin "
+            "that holds an integration.",
+        )
     plugin = lock_plugin(plugin_id, db_session)
     if plugin is None:
         raise _not_found()

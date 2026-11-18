@@ -453,6 +453,16 @@ def test_a_basic_token_reaches_only_the_plugins_of_its_user(
     )
     assert [share.user_id for share in access.user_shares] == [member.id]
 
+    own_plugin_id = _create(admin, db_session, created, for_organization=False)
+    assert (
+        _status(
+            lambda: plugins_api.publish_plugin(
+                _http_request(basic), own_plugin_id, admin, db_session
+            )
+        )
+        == 403
+    )
+
 
 def test_sharing_setting_off_stops_a_new_share(
     db_session: Session, scoped: User, member: User, created: list[int]
