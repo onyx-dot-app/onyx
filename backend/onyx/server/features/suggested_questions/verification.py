@@ -46,7 +46,7 @@ logger = setup_logger()
 
 
 def run_search_test(
-    drafts: list[DraftQuestion], user: User | None
+    drafts: list[DraftQuestion], user: User | None, timeout_s: float | None = None
 ) -> list[PoolQuestion]:
     """Search each question and keep it when its document is among the first
     SQ_TOP_K_DOCS distinct documents. The searches run in parallel.
@@ -79,6 +79,9 @@ def run_search_test(
         ],
         # Each search calls the model server, shared with indexing and chat.
         max_workers=SQ_SEARCH_WORKERS,
+        # A search still running when the run's time is up counts as failed.
+        timeout=timeout_s,
+        timeout_callback=lambda *_args: None,
     )
     now = datetime.now(timezone.utc)
     passed = [

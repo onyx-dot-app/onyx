@@ -125,5 +125,8 @@ SQ_RUN_BUDGET_S = 60.0
 # Retries of a failed run, and the wait before each.
 SQ_RUN_RETRIES = 2
 SQ_RUN_RETRY_DELAY_S = 30
+# A run does not save the pool when less than this many seconds of the lock's
+# lease are left: the lease could expire before the save finishes.
+SQ_SAVE_MARGIN_S = 30.0
 # A top-up that finds a run holding the pool tries again after this long.
 SQ_LOCK_BUSY_RETRY_S = 60
