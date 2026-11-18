@@ -1634,6 +1634,16 @@ def upsert_persona(
             [tool for tool in requested if tool.in_code_tool_id is None],
             user.id if user is not None else None,
             db_session,
+            attached=(
+                {
+                    row.plugin_id
+                    for row in list_persona_plugin_links(
+                        db_session, existing_persona.id
+                    )
+                }
+                if existing_persona is not None
+                else set()
+            ),
         )
         tools = [tool for tool in requested if tool.in_code_tool_id is not None]
         if existing_persona is not None:

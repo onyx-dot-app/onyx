@@ -43,6 +43,7 @@ from onyx.db.models import (
     IntegrationOAuthClient,
     Marketplace,
     MCPServer,
+    Persona,
     Plugin,
     Plugin__Integration,
     Tool,
@@ -1214,6 +1215,46 @@ def test_legacy_tool_ids_of_two_servers_in_one_plugin_allow_both_tools(
         "default": "blocked",
         "actions": {"alpha": "inherit", "beta": "inherit"},
     }
+
+
+def test_legacy_tool_ids_keep_the_plugin_that_the_agent_holds(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    mcp, server = make_mcp_integration(
+        db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("hello",)
+    )
+    created.add(mcp.id)
+    plugins = sorted(
+        (
+            hold_in_plugin(db_session, [mcp], published=False, author_user_id=admin.id)
+            for _ in range(2)
+        ),
+        key=lambda plugin: plugin.id,
+    )
+    held = plugins[1]
+    hello = _old_mcp_tool(db_session, server.id, "hello")
+    persona_id = _persona(
+        db_session,
+        admin,
+        tool_ids=None,
+        plugin_links=[PersonaPluginLink(plugin_id=held.id)],
+    )
+    persona = db_session.get(Persona, persona_id)
+    assert persona is not None
+    persona.user_id = member.id
+    db_session.commit()
+
+    _persona(
+        db_session,
+        member,
+        tool_ids=[hello.id],
+        plugin_links=None,
+        persona_id=persona_id,
+    )
+
+    assert [
+        link.plugin_id for link in list_persona_plugin_links(db_session, persona_id)
+    ] == [held.id]
 
 
 # Review fixes

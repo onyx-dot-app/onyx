@@ -169,10 +169,14 @@ def get_plugin_names(
 
 
 def plugin_ids_for_integrations(
-    integration_ids: Collection[int], user_id: UUID | None, db_session: Session
+    integration_ids: Collection[int],
+    user_id: UUID | None,
+    db_session: Session,
+    attached: Collection[UUID] = (),
 ) -> dict[int, UUID]:
-    """One plugin for each integration: the first one the user can see, else
-    the first one, by plugin id."""
+    """One plugin for each integration: the first one in ``attached`` (the
+    plugins the agent holds), else the first one the user can see, else the
+    first one, by plugin id."""
     if not integration_ids:
         return {}
     visible = (
@@ -180,6 +184,12 @@ def plugin_ids_for_integrations(
         if user_id is not None
         else set()
     )
+
+    def rank(plugin_id: UUID) -> int:
+        if plugin_id in attached:
+            return 0
+        return 1 if plugin_id in visible else 2
+
     chosen: dict[int, UUID] = {}
     for integration_id, plugin_id in db_session.execute(
         select(Plugin__Integration.integration_id, Plugin__Integration.plugin_id)
@@ -187,18 +197,22 @@ def plugin_ids_for_integrations(
         .order_by(Plugin__Integration.integration_id, Plugin__Integration.plugin_id)
     ).tuples():
         current = chosen.get(integration_id)
-        if current is None or (plugin_id in visible and current not in visible):
+        if current is None or rank(plugin_id) < rank(current):
             chosen[integration_id] = plugin_id
     return chosen
 
 
 def legacy_tool_plugin_links(
-    tools: Sequence[Tool], user_id: UUID | None, db_session: Session
+    tools: Sequence[Tool],
+    user_id: UUID | None,
+    db_session: Session,
+    attached: Collection[UUID] = (),
 ) -> list[PersonaPluginLink]:
     """The plugin links for old tool ids of an agent request. A custom tool
     gives the plugin of its integration with no settings. MCP tools give the
     plugin of their server, with each other action blocked, as the migration
-    does. A tool with no integration gives nothing."""
+    does. A tool with no integration gives nothing. A plugin in ``attached``
+    wins for an integration that more than one plugin holds."""
     mcp_tool_names: dict[int, list[str]] = {}
     for tool in tools:
         if tool.mcp_server_id is not None:
@@ -225,6 +239,7 @@ def legacy_tool_plugin_links(
         custom_integration_ids | set(server_integrations.values()),
         user_id,
         db_session,
+        attached,
     )
     links: dict[UUID, PersonaPluginLink] = {}
     for integration_id in sorted(custom_integration_ids):
