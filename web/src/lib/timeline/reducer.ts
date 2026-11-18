@@ -312,7 +312,9 @@ function appendNotification(
     case "_onyx/timed_out":
       return [
         ...settled,
-        noticeEntry(`timed-out-${entries.length}`, { type: "timed_out" }),
+        noticeEntry(unusedId(entries, `timed-out-${entries.length}`), {
+          type: "timed_out",
+        }),
       ];
     case "_onyx/connect_app_request": {
       // A request is shown once, even when the stream repeats it. A repeat
