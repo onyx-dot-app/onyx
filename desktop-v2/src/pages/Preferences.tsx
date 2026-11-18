@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Button, Card, InputTypeIn, Text } from "@opal/components";
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Button, Card, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { mount } from "@/lib/mount";
 import { ErrorText, Field, WindowFrame } from "@/lib/WindowFrame";
@@ -30,17 +30,117 @@ function PrefSection({ title, children }: PrefSectionProps) {
   );
 }
 
+// Keys the global shortcut can use, by KeyboardEvent.code. Letters, digits and
+// F-keys are mapped by pattern below.
+const NAMED_KEYS: Record<string, string> = {
+  Space: "Space",
+  ArrowUp: "Up",
+  ArrowDown: "Down",
+  ArrowLeft: "Left",
+  ArrowRight: "Right",
+  Minus: "Minus",
+  Equal: "Equal",
+  Comma: "Comma",
+  Period: "Period",
+  Slash: "Slash",
+  Semicolon: "Semicolon",
+  Quote: "Quote",
+  BracketLeft: "BracketLeft",
+  BracketRight: "BracketRight",
+  Backslash: "Backslash",
+  Backquote: "Backquote",
+};
+
+// The accelerator for a key press, or null for a press that cannot be a
+// shortcut: only modifiers, or no Command, Control or Option.
+function acceleratorFor(event: KeyboardEvent): string | null {
+  const code = event.code;
+  const key =
+    NAMED_KEYS[code] ??
+    (/^Key[A-Z]$/.test(code) ? code.slice(3) : null) ??
+    (/^Digit[0-9]$/.test(code) ? code.slice(5) : null) ??
+    (/^F([1-9]|1[0-9]|2[0-4])$/.test(code) ? code : null);
+  if (!key || !(event.metaKey || event.ctrlKey || event.altKey)) return null;
+  const parts: string[] = [];
+  if (event.metaKey) parts.push("CommandOrControl");
+  if (event.ctrlKey) parts.push("Control");
+  if (event.altKey) parts.push("Alt");
+  if (event.shiftKey) parts.push("Shift");
+  parts.push(key);
+  return parts.join("+");
+}
+
+const SYMBOLS: Record<string, string> = {
+  CommandOrControl: "⌘",
+  CmdOrCtrl: "⌘",
+  Command: "⌘",
+  Cmd: "⌘",
+  Super: "⌘",
+  Control: "⌃",
+  Ctrl: "⌃",
+  Alt: "⌥",
+  Option: "⌥",
+  Shift: "⇧",
+  Up: "↑",
+  Down: "↓",
+  Left: "←",
+  Right: "→",
+};
+
+// "CommandOrControl+Shift+Space" as macOS shows it: "⌘⇧Space".
+function displayShortcut(accelerator: string): string {
+  return accelerator
+    .split("+")
+    .map((part) => SYMBOLS[part] ?? part)
+    .join("");
+}
+
+interface ShortcutRecorderProps {
+  value: string | null;
+  onRecord: (accelerator: string) => void;
+}
+
+// Like Claude Desktop's shortcut setting: click, then press the new keys.
+function ShortcutRecorder({ value, onRecord }: ShortcutRecorderProps) {
+  const [recording, setRecording] = useState(false);
+
+  function onKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    if (!recording) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Escape") {
+      setRecording(false);
+      return;
+    }
+    const accelerator = acceleratorFor(event);
+    if (accelerator) {
+      setRecording(false);
+      onRecord(accelerator);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      id="hotkey"
+      aria-label="Launcher shortcut"
+      className="h-9 rounded-08 border border-border-02 bg-background-neutral-00 px-3 text-start font-main-ui-body text-text-04 focus:border-border-05 focus:outline-none"
+      onClick={() => setRecording(true)}
+      onBlur={() => setRecording(false)}
+      onKeyDown={onKeyDown}
+    >
+      {recording ? "Press the new shortcut… (Esc cancels)" : value ? displayShortcut(value) : ""}
+    </button>
+  );
+}
+
 function Preferences() {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
-  const [hotkey, setHotkeyDraft] = useState("");
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void getPrefs().then((p) => {
-      setPrefs(p);
-      setHotkeyDraft(p.hotkey);
-    });
+    void getPrefs().then(setPrefs);
   }, []);
 
   async function run(action: () => Promise<void>) {
@@ -55,12 +155,12 @@ function Preferences() {
     }
   }
 
-  async function onSaveHotkey() {
-    const draft = hotkey.trim();
+  async function onRecordHotkey(accelerator: string) {
     setSaved(false);
+    if (accelerator === prefs?.hotkey) return;
     await run(async () => {
-      await setHotkey(draft);
-      setPrefs((p) => (p ? { ...p, hotkey: draft } : p));
+      await setHotkey(accelerator);
+      setPrefs((p) => (p ? { ...p, hotkey: accelerator } : p));
       setSaved(true);
     });
   }
@@ -79,31 +179,14 @@ function Preferences() {
           </Section>
         </PrefSection>
         <PrefSection title="Launcher Shortcut">
-          <Field label="Global shortcut, for example CommandOrControl+Shift+Space" inputId="hotkey">
-            <InputTypeIn
-              id="hotkey"
-              value={hotkey}
-              spellCheck={false}
-              onChange={(e) => {
-                setHotkeyDraft(e.target.value);
-                setSaved(false);
-              }}
-            />
+          <Field label="Shows the launcher from any app" inputId="hotkey">
+            <ShortcutRecorder value={prefs?.hotkey ?? null} onRecord={(a) => void onRecordHotkey(a)} />
           </Field>
-          <Section flexDirection="row" gap={3} justifyContent="start" height="fit">
-            <Button
-              prominence="secondary"
-              disabled={!prefs || hotkey.trim() === "" || hotkey.trim() === prefs.hotkey}
-              onClick={() => void onSaveHotkey()}
-            >
-              Save shortcut
-            </Button>
-            {saved && hotkey.trim() === prefs?.hotkey ? (
-              <Text font="secondary-body" color="text-03">
-                Saved
-              </Text>
-            ) : null}
-          </Section>
+          {saved ? (
+            <Text font="secondary-body" color="text-03">
+              Saved
+            </Text>
+          ) : null}
         </PrefSection>
         <PrefSection title="Account">
           <Text font="main-ui-body" color="text-04">
