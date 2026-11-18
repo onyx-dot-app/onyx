@@ -397,6 +397,30 @@ test("a send before the tool options load waits for them and then sends", async 
   );
 });
 
+test("a held send is dropped when the chat changes before the tool options load", async () => {
+  const user = setupUser();
+  const inputProps = props("input");
+  const notLoaded = {
+    ...inputProps,
+    toolConfiguration: {
+      optionsLoaded: false,
+    } as AppInputBarProps["toolConfiguration"],
+  };
+  const { rerender } = render(<ChatInput {...notLoaded} />);
+  await user.click(screen.getByRole("textbox", { name: "Message input" }));
+  await user.keyboard("{Enter}");
+  expect(inputProps.onSubmit).not.toHaveBeenCalled();
+
+  mockChatId = "other";
+  const otherChat = props("input");
+  rerender(<ChatInput {...otherChat} />);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(otherChat.onSubmit).not.toHaveBeenCalled();
+  expect(inputProps.onSubmit).not.toHaveBeenCalled();
+});
+
 test("unconfirmed completion offers a retry and never submits the draft or queue", async () => {
   const user = setupUser();
   const inputProps = props("unconfirmed");

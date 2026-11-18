@@ -335,7 +335,7 @@ const AppInputBar = React.memo(
     // Snapshot of the input, read non-reactively in the restore effect so
     // seeding doesn't re-run on every keystroke, and after awaits.
     const composedRef = useRef(composed);
-    const [sendHeld, setSendHeld] = useState(false);
+    const [heldSendKey, setHeldSendKey] = useState<string | null>(null);
     // One typed answer at a time.
     const answeringRef = useRef(false);
     const isRecordingRef = useRef(isRecording);
@@ -358,7 +358,7 @@ const AppInputBar = React.memo(
       // this one.
       if (prevDraftKeyRef.current !== chatDraftStorageKey) {
         prevDraftKeyRef.current = chatDraftStorageKey;
-        setSendHeld(false);
+        setHeldSendKey(null);
         clearMessage();
       }
     }, [chatDraftStorageKey, clearMessage]);
@@ -407,12 +407,6 @@ const AppInputBar = React.memo(
     const questionRefusesFiles =
       questionWaits && currentMessageFiles.length > 0;
 
-    useEffect(() => {
-      if (!sendHeld || !toolConfiguration.optionsLoaded) return;
-      setSendHeld(false);
-      submitMessage(composedRef.current);
-    }, [sendHeld, toolConfiguration.optionsLoaded]);
-
     function submitMessage(submitted: ComposedMessage) {
       if (!submitted.message.trim()) return;
       if (questionWaits) {
@@ -421,7 +415,7 @@ const AppInputBar = React.memo(
       }
       if (chatState !== "input") return;
       if (!toolConfiguration.optionsLoaded) {
-        setSendHeld(true);
+        setHeldSendKey(chatDraftStorageKey);
         return;
       }
       // Stop TTS first to prevent overlapping voices.
@@ -490,6 +484,17 @@ const AppInputBar = React.memo(
     // The composer sends a normal message; tests read this as idle.
     const acceptsSend =
       chatState === "input" && !disabled && !isClassifying && !hasPendingFiles;
+
+    useEffect(() => {
+      if (heldSendKey === null) return;
+      if (heldSendKey !== chatDraftStorageKey) {
+        setHeldSendKey(null);
+        return;
+      }
+      if (!toolConfiguration.optionsLoaded) return;
+      setHeldSendKey(null);
+      submitMessage(composedRef.current);
+    }, [heldSendKey, chatDraftStorageKey, toolConfiguration.optionsLoaded]);
 
     // Text typed while Onyx responds becomes pending input, unless it
     // answers the agent's questions.
