@@ -1,11 +1,23 @@
 """The corpus count of a Drive listing is partial when the listing missed
-files: a shared drive listed only in part, or a requested target that no user
-could reach."""
+files: a shared drive listed only in part, a requested target that no user
+could reach, or a user listing that Drive denied."""
+
+from collections.abc import Iterator
+from typing import Any, cast
+from unittest.mock import MagicMock
 
 import pytest
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import DriveListingState
+from onyx.connectors.google_drive.source_operations import GoogleDriveHttpError
+from tests.unit.onyx.connectors.google_drive.fake_drive import (
+    DOMAIN,
+    FakeTenant,
+    drive_file,
+    make_service_account_connector,
+    run_to_completion,
+)
 
 
 @pytest.mark.parametrize(
@@ -52,3 +64,37 @@ def test_a_user_whose_my_drive_was_not_listed_makes_the_count_partial(
 
     assert counts is not None
     assert counts.partial is partial
+
+
+def test_a_denied_my_drive_listing_makes_the_count_partial() -> None:
+    """Drive denies the listing of one user's My Drive. The run goes on, and
+    the corpus count must say that it missed that user's files."""
+    admin, alice = f"admin@{DOMAIN}", f"alice@{DOMAIN}"
+    tenant = FakeTenant(
+        users=[admin, alice],
+        my_drive={
+            admin: [drive_file("admin-file", owner=admin)],
+            alice: [drive_file("alice-file", owner=alice)],
+        },
+    )
+    list_files = tenant.list_files
+
+    def deny_alice(**kwargs: Any) -> Iterator[dict[str, Any] | str]:
+        if kwargs.get("user_email") == alice:
+            raise GoogleDriveHttpError(
+                status_code=403,
+                reasons=("insufficientFilePermissions",),
+                access_denied=True,
+                message="denied",
+            )
+        return list_files(**kwargs)
+
+    connector = make_service_account_connector(include_my_drives=True)
+    with tenant.patch(connector):
+        cast(MagicMock, connector._ops).list_files.side_effect = deny_alice
+        result = run_to_completion(connector)
+
+    assert result.errors
+    counts = connector.listing_counts(result.checkpoints[-1])
+    assert counts is not None
+    assert counts.partial is True
