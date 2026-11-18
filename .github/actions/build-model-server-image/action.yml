@@ -96,6 +96,7 @@ runs:
           BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           ${{ env.DHI_PYTHON_BUILD_ARGS }}
           platforms=${{ inputs.platforms }}
+        extra-paths: .github/actions/build-model-server-image/action.yml
         image-repo: ${{ inputs.runs-on-ecr-cache }}
         persist-pr-digest: ${{ inputs.persist-pr-digest }}
 

@@ -337,6 +337,7 @@ jobs:
           build-config: |
             target=integration-tests
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          extra-paths: .github/workflows/pr-integration-tests.yml
           image-repo: ${{ env.RUNS_ON_ECR_CACHE }}
           persist-pr-digest: "true"
 
@@ -520,7 +521,7 @@ jobs:
             # TCP api_server; run one inside the test container and make every
             # missing prerequisite a hard failure instead of a skip.
             GATEWAY_CLIENTS_STRICT=""
-            RUN_CMD="uv run --no-sync pytest -v --durations=5 --tb=short -rs tests/integration/${{ matrix.test-dir.path }} ${{ matrix.test-dir.splits && format('--splits {0} --group {1} --durations-path tests/integration/.test_durations', matrix.test-dir.splits, matrix.test-dir.group) || '--stepwise -o cache_dir=/pytest-retry-cache' }}"
+            RUN_CMD="uv run --no-sync pytest -v --durations=5 --tb=short -rs tests/integration/${{ matrix.test-dir.path }} ${{ matrix.test-dir.splits && format('--splits {0} --group {1} --durations-path tests/integration/.test_durations', matrix.test-dir.splits, matrix.test-dir.group) || '' }}"
             if [ "${{ matrix.test-dir.path }}" = "tests/gateway_clients" ]; then
               GATEWAY_CLIENTS_STRICT="true"
               RUN_CMD="bash tests/integration/tests/gateway_clients/run_with_server.sh"
@@ -535,7 +536,6 @@ jobs:
 
             docker run --rm --network onyx_default \
               --name test-runner \
-              -v "$RUNNER_TEMP/pytest-retry-cache:/pytest-retry-cache" \
               --env-file deployment/docker_compose/.env \
               -e CELERY_BEAT_SCHEDULER="${{ startsWith(matrix.test-dir.path, 'connector_job_tests/') && 'tests.integration.common_utils.beat_scheduler:ConnectorTestScheduler' || '' }}" \
               -v ${{ github.workspace }}:/workspace \

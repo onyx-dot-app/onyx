@@ -19,6 +19,10 @@ inputs:
     description: "Everything else that changes the image: build args, platforms"
     required: false
     default: ""
+  extra-paths:
+    description: "The files that set the build options, such as target and build args. Not used when saving."
+    required: false
+    default: ""
   image-repo:
     description: "Repository that holds the image, from runs-on/action. Not used when saving."
     required: false
@@ -53,10 +57,13 @@ runs:
         CONTEXT: ${{ inputs.context }}
         DOCKERFILE: ${{ inputs.dockerfile }}
         BUILD_CONFIG: ${{ inputs.build-config }}
+        EXTRA_PATHS: ${{ inputs.extra-paths }}
         RUN_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
       run: |
         set -euo pipefail
         paths=("$DOCKERFILE" "$CONTEXT/.dockerignore")
+        read -r -a extras <<< "$EXTRA_PATHS"
+        paths+=("${extras[@]}")
         if grep -Eiq -- '--mount=type=bind|^[[:space:]]*(COPY|ADD)[[:space:]].*\[' "$DOCKERFILE"; then
           paths+=("$CONTEXT")
         else
