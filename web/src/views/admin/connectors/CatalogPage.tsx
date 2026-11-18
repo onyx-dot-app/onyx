@@ -135,7 +135,7 @@ export default function ConnectorsPage() {
       {} as Record<SourceCategory, SourceMetadata[]>
     );
     // The extra-connectors setting hides the AI & Observability section.
-    if (settings?.show_extra_connectors === false) {
+    if (settings.show_extra_connectors === false) {
       const filteredCategories = Object.entries(categories).filter(
         ([category]) => category !== SourceCategory.AiObservability
       );
@@ -145,7 +145,7 @@ export default function ConnectorsPage() {
       >;
     }
     return categories;
-  }, [sources, filterSources, searchTerm, settings?.show_extra_connectors]);
+  }, [sources, filterSources, searchTerm, settings.show_extra_connectors]);
 
   // When searching, dedupe Popular against whatever is already in results
   const resultIds = useMemo(() => {

@@ -89,9 +89,11 @@ function InputChip({
       role="button"
       tabIndex={0}
       aria-label={label}
-      onKeyDown={clickOnKeyDown(() => {
-        if (chipRef.current) onClick(chipRef.current);
-      })}
+      onKeyDown={(event) =>
+        clickOnKeyDown(() => {
+          if (chipRef.current) onClick(chipRef.current);
+        })(event)
+      }
       onClick={() => {
         if (chipRef.current) onClick(chipRef.current);
       }}

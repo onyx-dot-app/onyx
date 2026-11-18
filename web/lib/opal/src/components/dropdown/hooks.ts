@@ -513,7 +513,6 @@ export function useDropdownOverlay({
     }
   }, [isOpen, disabled]);
 
-  const widthRef = useRef(width);
   const { refs, floatingStyles, isPositioned, placement, update } =
     useFloating<ReferenceType>({
       open: isOpen,
@@ -536,40 +535,42 @@ export function useDropdownOverlay({
         }),
         flip(),
         shift({ padding: 8 }),
-        size({
-          padding: 8,
-          apply({ rects, elements, availableWidth, availableHeight }) {
-            // Read through a ref: floating-ui compares middleware by source
-            // text, so a closure over `width` would never be seen to change.
-            // Inline, so a fixed width also beats the stylesheet's floor.
-            // A fixed width never exceeds the space beside the anchor, so a
-            // wide step still fits a narrow window.
-            const fixed =
-              widthRef.current === undefined
-                ? undefined
-                : `min(${contextualMenuWidthToCss(widthRef.current)}, ${availableWidth}px)`;
-            elements.floating.style.setProperty(
-              "--opal-dropdown-available-height",
-              `${Math.max(0, availableHeight)}px`
-            );
-            Object.assign(
-              elements.floating.style,
-              fixed !== undefined
-                ? { width: fixed, minWidth: fixed }
-                : {
-                    width: `${rects.reference.width + 2 * PUNCH_OUT_PX}px`,
-                    // Back from a fixed width: the stylesheet's floor again.
-                    minWidth: "",
-                  }
-            );
+        size(
+          {
+            padding: 8,
+            apply({ rects, elements, availableWidth, availableHeight }) {
+              // floating-ui compares middleware by source text, so `width` is
+              // in the deps below for a change to be seen.
+              // Inline, so a fixed width also beats the stylesheet's floor.
+              // A fixed width never exceeds the space beside the anchor, so a
+              // wide step still fits a narrow window.
+              const fixed =
+                width === undefined
+                  ? undefined
+                  : `min(${contextualMenuWidthToCss(width)}, ${availableWidth}px)`;
+              elements.floating.style.setProperty(
+                "--opal-dropdown-available-height",
+                `${Math.max(0, availableHeight)}px`
+              );
+              Object.assign(
+                elements.floating.style,
+                fixed !== undefined
+                  ? { width: fixed, minWidth: fixed }
+                  : {
+                      width: `${rects.reference.width + 2 * PUNCH_OUT_PX}px`,
+                      // Back from a fixed width: the stylesheet's floor again.
+                      minWidth: "",
+                    }
+              );
+            },
           },
-        }),
+          [width]
+        ),
       ],
       whileElementsMounted: autoUpdate,
     });
   // A view can change the width while the list is open: measure again.
   useLayoutEffect(() => {
-    widthRef.current = width;
     update();
   }, [width, update]);
 

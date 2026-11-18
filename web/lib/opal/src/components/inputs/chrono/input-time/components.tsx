@@ -220,20 +220,24 @@ function InputTime({
                 placeholder={SEGMENT_PLACEHOLDERS[part]}
                 maxLength={2}
                 value={segments[part]}
-                onChange={handleSegmentChange(
-                  part,
-                  2,
-                  i < segmentParts.length - 1
-                    ? segmentRefs[segmentParts[i + 1]!]
-                    : null
-                )}
-                onKeyDown={handleSegmentKeyDown(
-                  part,
-                  i > 0 ? segmentRefs[segmentParts[i - 1]!] : null,
-                  i < segmentParts.length - 1
-                    ? segmentRefs[segmentParts[i + 1]!]
-                    : null
-                )}
+                onChange={(e) =>
+                  handleSegmentChange(
+                    part,
+                    2,
+                    i < segmentParts.length - 1
+                      ? segmentRefs[segmentParts[i + 1]!]
+                      : null
+                  )(e)
+                }
+                onKeyDown={(e) =>
+                  handleSegmentKeyDown(
+                    part,
+                    i > 0 ? segmentRefs[segmentParts[i - 1]!] : null,
+                    i < segmentParts.length - 1
+                      ? segmentRefs[segmentParts[i + 1]!]
+                      : null
+                  )(e)
+                }
               />
             </React.Fragment>
           ))}

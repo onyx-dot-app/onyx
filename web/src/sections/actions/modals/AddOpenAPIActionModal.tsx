@@ -72,6 +72,7 @@ function FormContent({ onBusyChange, handleClose, title }: FormContentProps) {
     useFormikContext<OpenAPIActionFormValues>();
 
   const validationRequest = useRef(0);
+  const pendingValidation = useRef<{ cancel: () => void } | null>(null);
   const [definitionError, setDefinitionError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   useEffect(() => {
@@ -148,12 +149,9 @@ function FormContent({ onBusyChange, handleClose, title }: FormContentProps) {
     [t]
   );
 
-  const debouncedValidateDefinition = useMemo(
-    () => debounce(validateDefinition, 300),
-    [validateDefinition]
-  );
-
   useEffect(() => {
+    const debouncedValidateDefinition = debounce(validateDefinition, 300);
+    pendingValidation.current = debouncedValidateDefinition;
     setDefinitionError(null);
     if (values.definition.trim()) {
       debouncedValidateDefinition(values.definition);
@@ -163,7 +161,7 @@ function FormContent({ onBusyChange, handleClose, title }: FormContentProps) {
       debouncedValidateDefinition.cancel();
       validationRequest.current += 1;
     };
-  }, [values.definition, debouncedValidateDefinition]);
+  }, [values.definition, validateDefinition]);
 
   return (
     <Form className="contents">
@@ -306,7 +304,7 @@ function FormContent({ onBusyChange, handleClose, title }: FormContentProps) {
             disabled={!values.definition.trim() || checking}
             onClick={async () => {
               setChecking(true);
-              debouncedValidateDefinition.cancel();
+              pendingValidation.current?.cancel();
               const validation = validateDefinition(values.definition);
               const request = validationRequest.current;
               try {

@@ -105,17 +105,16 @@ export default function ModelSelector({
   // Resolve the currently selected option from the ID
   const currentOption = useMemo(() => {
     if (value == null || !llmProviders) return null;
-    for (const provider of llmProviders) {
-      const mc = provider.model_configurations.find((m) => m.id === value);
-      if (mc) {
-        return {
-          provider: provider.provider,
-          modelName: mc.name,
-          displayName: mc.effectiveDisplayName,
-        };
-      }
-    }
-    return null;
+    const provider = llmProviders.find((p) =>
+      p.model_configurations.some((m) => m.id === value)
+    );
+    const mc = provider?.model_configurations.find((m) => m.id === value);
+    if (!provider || !mc) return null;
+    return {
+      provider: provider.provider,
+      modelName: mc.name,
+      displayName: mc.effectiveDisplayName,
+    };
   }, [value, llmProviders]);
 
   // When no model is explicitly selected, fall back to showing the global default.

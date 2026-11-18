@@ -49,26 +49,28 @@ function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
     latestRef.current = children;
   });
 
-  const changed = textOf(children) !== textOf(shown);
-  // The same text switching between plain and markdown changes at once.
-  const sameTextNewKind = !changed && typeof children !== typeof shown;
-  if (changed && (phase === "idle" || phase === "in")) {
-    // The DOM still shows the old text. No layout (hidden, or tests) or
-    // reduced motion changes the text at once.
-    const width = ref.current?.getBoundingClientRect().width ?? 0;
-    if (width > 0 && !prefersReducedMotion()) {
-      setFromWidth(width);
-      setPhase("out");
-    } else {
+  useLayoutEffect(() => {
+    const changed = textOf(children) !== textOf(shown);
+    // The same text switching between plain and markdown changes at once.
+    const sameTextNewKind = !changed && typeof children !== typeof shown;
+    if (changed && (phase === "idle" || phase === "in")) {
+      // The DOM still shows the old text. No layout (hidden, or tests) or
+      // reduced motion changes the text at once.
+      const width = ref.current?.getBoundingClientRect().width ?? 0;
+      if (width > 0 && !prefersReducedMotion()) {
+        setFromWidth(width);
+        setPhase("out");
+      } else {
+        setShown(children);
+      }
+    } else if (changed && phase === "resize") {
+      // A newer label mid-resize: resize to it from the width on screen.
+      setFromWidth(ref.current?.getBoundingClientRect().width ?? fromWidth);
+      setShown(children);
+    } else if (sameTextNewKind && phase !== "out") {
       setShown(children);
     }
-  } else if (changed && phase === "resize") {
-    // A newer label mid-resize: resize to it from the width on screen.
-    setFromWidth(ref.current?.getBoundingClientRect().width ?? fromWidth);
-    setShown(children);
-  } else if (sameTextNewKind && phase !== "out") {
-    setShown(children);
-  }
+  });
 
   // While the label is stale (fading out, or hidden during the resize), the
   // button must not run an action its label does not show yet. A capture

@@ -862,6 +862,12 @@ export function useConnectorChecksProgress(
   const neutral = ring?.neutral;
   const rest = ring?.rest;
   const showRing: boolean = ring !== null;
+  const suffix =
+    counted === 0
+      ? undefined
+      : complete === counted
+        ? t("titleTotal", { total: counted })
+        : t("titleCount", { complete, total: counted });
   const icon = useMemo<IconFunctionComponent>(
     () =>
       showRing
@@ -880,12 +886,7 @@ export function useConnectorChecksProgress(
   );
   return {
     icon: end === null ? icon : END_ICONS[end],
-    suffix:
-      counted === 0
-        ? undefined
-        : complete === counted
-          ? t("titleTotal", { total: counted })
-          : t("titleCount", { complete, total: counted }),
+    suffix,
   };
 }
 

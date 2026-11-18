@@ -97,7 +97,7 @@ function ShadowDiv({
   const bottomVariant = typeof variant === "string" ? variant : variant.bottom;
 
   const checkScroll = useCallback(() => {
-    const container = containerRef.current;
+    const container = (scrollContainerRef || internalRef).current;
     if (!container) return;
 
     // Show top shadow if scrolled down
@@ -112,7 +112,7 @@ function ShadowDiv({
         1;
       setShowBottomShadow(hasMoreBelow);
     }
-  }, [containerRef, showTop, showBottom]);
+  }, [scrollContainerRef, showTop, showBottom]);
 
   useEffect(() => {
     const container = containerRef.current;

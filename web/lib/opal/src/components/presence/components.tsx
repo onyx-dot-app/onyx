@@ -274,7 +274,7 @@ function PresenceSwap({
 
   const contentRef = useRef<HTMLDivElement>(null);
   // The last children shown for `shownKey`: what leaves when the key changes.
-  const shownChildrenRef = useRef<React.ReactNode>(children);
+  const [shownChildren, setShownChildren] = useState<React.ReactNode>(children);
 
   if (swapKey !== shownKey) {
     setShownKey(swapKey);
@@ -282,7 +282,7 @@ function PresenceSwap({
     if (prefersReducedMotion()) {
       setPhase("idle");
     } else if (phase === "idle") {
-      setOutgoing(shownChildrenRef.current);
+      setOutgoing(shownChildren);
       setPhase("exiting");
     }
     // Mid-exit or mid-resize, the swap goes on and lands on the newest key.
@@ -290,9 +290,9 @@ function PresenceSwap({
 
   // Keep the leaving snapshot current whenever `children` is on screen (every
   // phase but the exit, which shows `outgoing`).
-  useLayoutEffect(() => {
-    if (phase !== "exiting") shownChildrenRef.current = children;
-  });
+  if (phase !== "exiting" && !Object.is(children, shownChildren)) {
+    setShownChildren(children);
+  }
 
   // Track the content's size on `axis`, so the box animates to every new size.
   useLayoutEffect(() => {

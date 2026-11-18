@@ -178,9 +178,10 @@ function Tag(props: TagProps) {
       ? resolveTriggerInteraction(undefined, rest)
       : "rest";
     const pressed = rest["aria-pressed"];
+    const { ref: buttonRef, onClick } = props;
     const button = (
       <button
-        ref={props.ref}
+        ref={buttonRef}
         type="button"
         {...rest}
         className="opal-tag"
@@ -198,7 +199,7 @@ function Tag(props: TagProps) {
           state={pressed === true || pressed === "true" ? "selected" : "empty"}
           interaction={interaction}
           type="button"
-          onClick={props.onClick}
+          onClick={onClick}
         >
           {button}
         </Interactive.Stateful>
@@ -208,12 +209,13 @@ function Tag(props: TagProps) {
           prominence="secondary"
           interaction={interaction}
           type="button"
-          onClick={props.onClick}
+          onClick={onClick}
         >
           {button}
         </Interactive.Stateless>
       );
   } else {
+    const { ref: divRef } = props;
     chip = (
       <Interactive.Stateless
         variant="default"
@@ -222,7 +224,7 @@ function Tag(props: TagProps) {
         passive={!removable}
       >
         <div
-          ref={props.ref}
+          ref={divRef}
           {...rest}
           className="opal-tag"
           style={iconColorStyle}

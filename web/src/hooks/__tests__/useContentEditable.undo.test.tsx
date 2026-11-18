@@ -21,16 +21,18 @@ interface HarnessProps {
 function Harness({ pasteTilesEnabled = false }: HarnessProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   api = useContentEditable({ wrapperRef, pasteTilesEnabled });
+  const { ref, handleInput, handleCompositionStart, handleCompositionEnd } =
+    api;
   return (
     <div ref={wrapperRef}>
       <div
-        ref={api.ref}
+        ref={ref}
         contentEditable
         suppressContentEditableWarning
         data-testid="editable"
-        onInput={api.handleInput}
-        onCompositionStart={api.handleCompositionStart}
-        onCompositionEnd={api.handleCompositionEnd}
+        onInput={handleInput}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
       />
     </div>
   );

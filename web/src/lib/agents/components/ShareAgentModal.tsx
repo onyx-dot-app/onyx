@@ -253,7 +253,7 @@ export function ShareAgentModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isRemovingSelf, setIsRemovingSelf] = useState(false);
   const wasOpenRef = useRef(false);
-  const hydratedFromAgentRef = useRef(false);
+  const [hydratedFromAgent, setHydratedFromAgent] = useState(false);
   const [isRefreshingAgent, setIsRefreshingAgent] = useState(false);
 
   useEffect(() => {
@@ -263,12 +263,12 @@ export function ShareAgentModal({
       setStagedUsers([]);
       setStagedGroups([]);
       setQuery("");
-      hydratedFromAgentRef.current = false;
+      setHydratedFromAgent(false);
 
       if (!agentId) {
         setDraftState(initialValues);
         setModalInitialState(initialValues);
-        hydratedFromAgentRef.current = true;
+        setHydratedFromAgent(true);
       } else {
         // useAgent turns off SWR revalidation, so owner and share state changed
         // elsewhere would be stale here. Refetch on open before hydrating. The
@@ -286,21 +286,22 @@ export function ShareAgentModal({
       agentId &&
       agent &&
       !isRefreshingAgent &&
-      !hydratedFromAgentRef.current
+      !hydratedFromAgent
     ) {
       setDraftState(initialValues);
       setModalInitialState(initialValues);
-      hydratedFromAgentRef.current = true;
+      setHydratedFromAgent(true);
     }
 
     if (!shareAgentModal.isOpen) {
-      hydratedFromAgentRef.current = false;
+      setHydratedFromAgent(false);
     }
 
     wasOpenRef.current = shareAgentModal.isOpen;
   }, [
     agent,
     agentId,
+    hydratedFromAgent,
     initialValues,
     isRefreshingAgent,
     refreshAgent,
@@ -929,7 +930,7 @@ export function ShareAgentModal({
                 users={transferableUsers}
               />
             </InputPadder>
-          ) : agentId && !hydratedFromAgentRef.current ? (
+          ) : agentId && shareAgentModal.isOpen && !hydratedFromAgent ? (
             <InputPadder>
               <Section height="auto" padding={6}>
                 <Text color="text-03" font="secondary-body">

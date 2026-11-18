@@ -122,22 +122,6 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
     }
   }, [isComplete, onComplete]);
 
-  const status = useMemo(() => {
-    if (isStreaming) {
-      return t("python.writingCode.status");
-    }
-    if (isExecuting) {
-      return t("python.executing.status");
-    }
-    if (hasError) {
-      return t("python.failed.status");
-    }
-    if (isComplete) {
-      return t("python.completed.status");
-    }
-    return t("python.default.status");
-  }, [isStreaming, isComplete, isExecuting, hasError, t]);
-
   // Shared content for all states - used by both FULL and compact modes
   const content = (
     <div className="flex flex-col mb-1 space-y-2">
@@ -212,6 +196,22 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       )}
     </div>
   );
+
+  const status = useMemo(() => {
+    if (isStreaming) {
+      return t("python.writingCode.status");
+    }
+    if (isExecuting) {
+      return t("python.executing.status");
+    }
+    if (hasError) {
+      return t("python.failed.status");
+    }
+    if (isComplete) {
+      return t("python.completed.status");
+    }
+    return t("python.default.status");
+  }, [isStreaming, isComplete, isExecuting, hasError, t]);
 
   // FULL mode: render content directly
   if (renderType === RenderType.FULL) {

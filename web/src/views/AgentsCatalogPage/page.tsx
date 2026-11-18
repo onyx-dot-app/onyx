@@ -130,6 +130,7 @@ export default function AgentsCatalogPage() {
     setQuery: setSearchQuery,
     itemSelector: "[data-agent-card]",
   });
+  const { gridRef } = search;
 
   return (
     <SettingsLayouts.Root
@@ -210,7 +211,7 @@ export default function AgentsCatalogPage() {
           />
         ) : (
           // `contents`: a box for the grid navigation that adds no layout.
-          <div ref={search.gridRef} className="contents">
+          <div ref={gridRef} className="contents">
             <AgentsSection
               title={t("navigation.sections.featured.title")}
               description={t("navigation.sections.featured.description")}
