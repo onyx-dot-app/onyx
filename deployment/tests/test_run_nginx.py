@@ -49,7 +49,7 @@ def start_nginx(tmp_path: Path, files: tuple[str, ...], mcp_enabled: str) -> str
                 "127.0.0.1::80",
                 "--volume",
                 f"{tmp_path}:/nginx-templates:ro",
-                os.environ.get("MCP_PROXY_NGINX_IMAGE", "nginx:1.25.5-alpine"),
+                os.environ.get("MCP_PROXY_NGINX_IMAGE", "nginx:1.30.7-alpine"),
                 "/bin/sh",
                 "-c",
                 command,

@@ -30,7 +30,7 @@ Set up a supported ingress controller before you [turn off the bundled
 controller](/deployment/production/external_services#per-service-notes).
 
 Until you replace the bundled controller, keep HTTP/2 disabled to mitigate CVE-2026-123007 and CVE-2026-123633.
-Chart version 0.9.53 disables HTTP/2 by default. Set the value explicitly if you reuse your previous Helm values:
+Chart version 0.9.54 disables HTTP/2 by default. Set the value explicitly if you reuse your previous Helm values:
 
 ```yaml values.yaml
 nginx:
