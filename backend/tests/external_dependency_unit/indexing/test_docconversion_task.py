@@ -5,6 +5,7 @@ same number, sends it to docprocessing, and sends the next stub batches. A
 stopped attempt converts nothing. The connector is a stand-in: the Drive
 conversion has its own tests."""
 
+import contextlib
 from collections.abc import Generator
 from datetime import datetime, timezone
 from typing import Any
@@ -331,6 +332,26 @@ def test_an_empty_batch_whose_delete_fails_counts_once(
     assert run.attempt().completed_batches == 1
 
 
+def test_an_empty_batch_stays_stored_until_it_is_counted(run: _Run) -> None:
+    """A stop before the count commits must leave the batch stored, so it
+    can be sent again. Its completion is then not lost."""
+    run.store_stub_batch(0, ["nothing"])
+    run.dispatch()
+    run.convert(0)
+
+    with (
+        patch.object(
+            IndexingCoordination,
+            "update_batch_completion_and_docs",
+            side_effect=RuntimeError("worker stopped"),
+        ),
+        contextlib.suppress(Exception),
+    ):
+        _process(run, 0)
+
+    assert run.docs.get_batch(0) == []
+
+
 def test_a_retry_with_no_documents_drops_the_dead_run_batch(run: _Run) -> None:
     """A worker died after it stored the document batch. The next run gives no
     document. The old batch must not be sent too: it would count the batch
@@ -476,9 +497,12 @@ def test_a_batch_that_raises_records_its_documents_as_failures(run: _Run) -> Non
     assert len(run.sends(OnyxCeleryTask.DOCPROCESSING_TASK)) == 1
 
 
-def test_many_failed_batches_fail_the_conversion(run: _Run) -> None:
+def test_many_failed_batches_fail_the_conversion(
+    run: _Run, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """When the source fails for many batches, the conversion raises, and the
     task fails the attempt."""
+    monkeypatch.setattr(run_docconversion, "PERSISTENT_INDEXING", False)
     for batch_num in range(4):
         run.store_stub_batch(batch_num, ["raise"])
     run.dispatch()
@@ -489,10 +513,13 @@ def test_many_failed_batches_fail_the_conversion(run: _Run) -> None:
         run.convert(3)
 
 
-def test_batches_whose_documents_fail_fail_the_conversion(run: _Run) -> None:
+def test_batches_whose_documents_fail_fail_the_conversion(
+    run: _Run, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The source reports a failure for each document and raises nothing.
     A batch with more than a tenth of its documents failed counts as a
     failed batch, so the threshold still ends the attempt."""
+    monkeypatch.setattr(run_docconversion, "PERSISTENT_INDEXING", False)
     run.store_stub_batch(0, ["failure"] + ["document"] * 10)
     for batch_num in range(1, 5):
         run.store_stub_batch(batch_num, ["failure"] * 4)
