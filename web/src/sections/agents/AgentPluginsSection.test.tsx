@@ -8,10 +8,7 @@ import type {
   AgentPluginOption,
 } from "@/lib/integrations/types";
 import messages from "@/i18n/messages/en.json";
-import {
-  makeAction,
-  mockFetch,
-} from "@/sections/integrations/__tests__/integrationFixtures";
+import { makeAction, mockFetch } from "@tests/setup/integrationTestUtils";
 
 let mockManage = false;
 jest.mock("@/lib/permissions/hooks", () => ({
