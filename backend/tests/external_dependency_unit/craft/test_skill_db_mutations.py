@@ -817,6 +817,50 @@ def test_same_name_switch_locks_plugins_in_id_order(db_session: Session) -> None
     assert not errors
 
 
+def test_toggle_rechecks_a_setting_committed_while_it_waited(
+    db_session: Session,
+) -> None:
+    user = make_user(db_session)
+    skill = make_skill(db_session, is_public=True)
+    db_session.commit()
+
+    # An admin holds the plugin and makes it REQUIRED, then commits after the
+    # toggle read the old setting and started to wait.
+    plugin = lock_plugin(skill.id, db_session)
+    assert plugin is not None
+    plugin.installation_policy = PluginInstallationPolicy.REQUIRED
+    db_session.flush()
+    holder_pid = db_session.scalar(text("SELECT pg_backend_pid()"))
+    errors: list[Exception] = []
+
+    def toggle_off() -> None:
+        with Session(bind=db_session.get_bind()) as toggle_session:
+            try:
+                toggle_session.execute(text("SET LOCAL lock_timeout = '10s'"))
+                set_skill_enabled_for_user(
+                    skill_id=skill.id,
+                    enabled=False,
+                    user=user,
+                    db_session=toggle_session,
+                )
+                toggle_session.commit()
+            except Exception as error:
+                errors.append(error)
+
+    toggler = threading.Thread(target=toggle_off)
+    toggler.start()
+    try:
+        _wait_until_blocked_by(db_session, holder_pid, "The toggle did not wait.")
+        db_session.commit()
+    finally:
+        toggler.join(timeout=15)
+    assert not toggler.is_alive(), "The toggle did not finish."
+    assert len(errors) == 1
+    assert isinstance(errors[0], OnyxError)
+    assert errors[0].error_code == OnyxErrorCode.INVALID_INPUT
+    assert db_session.get(UserPluginPreference, (user.id, skill.id)) is None
+
+
 def _wait_until_blocked_by(holder: Session, pid: int, message: str) -> None:
     with Session(bind=holder.get_bind()) as probe:
         deadline = time.monotonic() + 10

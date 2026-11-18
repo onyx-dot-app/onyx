@@ -635,16 +635,17 @@ def set_skill_enabled_for_user(
             "Skill is not visible.",
         )
 
-    selection = _user_skill_selection(user, db_session)
-    state = skill_user_states(user, [skill.id], db_session, selection)[skill.id]
-    if not state.can_toggle:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "This skill cannot be enabled or disabled.",
-        )
-
-    conflicts: list[UUID] = []
-    if enabled:
+    def checked_conflicts() -> list[UUID]:
+        """Refuse the switch, or return the skills it turns off."""
+        selection = _user_skill_selection(user, db_session)
+        state = skill_user_states(user, [skill.id], db_session, selection)[skill.id]
+        if not state.can_toggle:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "This skill cannot be enabled or disabled.",
+            )
+        if not enabled:
+            return []
         target = selection.states.get(skill.id)
         names = target.skill_names if target and target.skill_names else (skill.name,)
         # Only skills the user can see conflict. A hidden plugin's kept choice
@@ -664,6 +665,9 @@ def set_skill_enabled_for_user(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
                 f"Another skill named '{names[0]}' is already enabled.",
             )
+        return conflicts
+
+    conflicts = checked_conflicts()
     # One id order for the target and its conflicts, so two users who switch
     # between the same skills cannot deadlock on the plugin rows.
     locked_plugin_ids = list(
@@ -674,6 +678,12 @@ def set_skill_enabled_for_user(
             .with_for_update(of=Plugin)
         )
     )
+    # An admin change committed while this waited for the locks can refuse
+    # the switch, such as a new REQUIRED setting.
+    if checked_conflicts() != conflicts:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, "This skill changed. Reload and try again."
+        )
     with check_skill_limit(db_session, locked_plugin_ids, user.id):
         set_plugin_preferences__no_commit(
             user.id,
