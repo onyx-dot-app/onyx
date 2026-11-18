@@ -13,7 +13,42 @@ use crate::state::AppState;
 
 pub const LABEL: &str = "main";
 static POPUP_COUNTER: AtomicUsize = AtomicUsize::new(0);
+const DESKTOP_CHROME_JS: &str = include_str!("desktop_chrome.js");
 const LINK_SHIM_JS: &str = include_str!("link_shim.js");
+
+/// Tells the page script the current zoom and full-screen state, so the
+/// traffic-light row keeps its size in screen points (see desktop_chrome.js).
+pub fn sync_chrome(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(LABEL) else {
+        return;
+    };
+    let zoom = app.state::<AppState>().config.get().zoom();
+    let fullscreen = window.is_fullscreen().unwrap_or_else(|e| {
+        log::warn!("could not read the full-screen state: {e}");
+        false
+    });
+    if let Err(e) = window.eval(format!(
+        "window.__onyxDesktop && window.__onyxDesktop.sync({zoom}, {fullscreen});"
+    )) {
+        log::warn!("could not update the window chrome: {e}");
+    }
+}
+
+/// The overlay title bar has no native drag area, so the page's drag strip uses
+/// Tauri's built-in drag handler. Only window dragging and title-bar zoom are
+/// granted, only to the main window, only on the configured server's origin;
+/// every app command stays out of reach.
+fn allow_window_dragging(app: &AppHandle, origin: &str) {
+    let capability = tauri::ipc::CapabilityBuilder::new(format!("main-window-drag-{origin}"))
+        .window(LABEL)
+        .local(false)
+        .remote(format!("{origin}/*"))
+        .permission("core:window:allow-start-dragging")
+        .permission("core:window:allow-internal-toggle-maximize");
+    if let Err(e) = app.add_capability(capability) {
+        log::debug!("drag capability already present: {e}");
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum LinkAction {
@@ -219,6 +254,8 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
     let popup_app = app.clone();
     let popup_origin = origin.clone();
 
+    allow_window_dragging(app, &origin);
+
     let blank = WebviewUrl::External("about:blank".parse().map_err(|_| "bad url")?);
     let builder = WebviewWindowBuilder::new(app, LABEL, blank)
         .title("Onyx")
@@ -226,6 +263,12 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
         .min_inner_size(800.0, 600.0)
         .center()
         .initialization_script(LINK_SHIM_JS)
+        .initialization_script(DESKTOP_CHROME_JS)
+        .on_page_load(|window, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                sync_chrome(window.app_handle());
+            }
+        })
         // Let the web page receive dropped files (chat attachments).
         .disable_drag_drop_handler()
         .on_navigation(move |url| match classify(url, &nav_origin) {
@@ -241,7 +284,20 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
         })
         .on_download(|_webview, event| handle_download(event));
 
+    // Overlay title bar: the traffic lights float over the web UI's sidebar.
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true);
+
     let window = builder.build().map_err(|e| e.to_string())?;
+    // Entering or leaving full screen resizes the window.
+    let resize_app = app.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::Resized(_) = event {
+            sync_chrome(&resize_app);
+        }
+    });
 
     #[cfg(target_os = "macos")]
     crate::macos_dialogs::install(&window);
@@ -258,6 +314,9 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
             return Err("The session ended while Onyx was opening.".to_string());
         }
         hand_over_session(&window, &server_url, &cookie_name, token)?;
+        if let Err(e) = window.set_zoom(app.state::<AppState>().config.get().zoom()) {
+            log::warn!("could not apply the saved zoom: {e}");
+        }
         window.navigate(target).map_err(|e| e.to_string())
     }
     .await;

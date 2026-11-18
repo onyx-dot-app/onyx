@@ -24,7 +24,13 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             windows::show_primary(app);
         }))
-        .plugin(tauri_plugin_opener::init());
+        .plugin(tauri_plugin_opener::init())
+        // Remember the main window's size and position; small windows stay centred.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_denylist(&["onboarding", "login", "preferences"])
+                .build(),
+        );
     let app = builder
         .setup(|app| {
             let config_path = app.path().app_config_dir()?.join("config.json");

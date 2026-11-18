@@ -8,9 +8,14 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     pub server_url: Option<String>,
+    pub zoom: Option<f64>,
 }
 
-impl Config {}
+impl Config {
+    pub fn zoom(&self) -> f64 {
+        self.zoom.unwrap_or(1.0)
+    }
+}
 
 pub struct ConfigStore {
     path: PathBuf,

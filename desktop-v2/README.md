@@ -22,6 +22,11 @@ shipping unchanged and stays the default desktop app. v2 has its own bundle ID
   native save panel. `alert()`, `confirm()` and `prompt()` show native dialogs.
 - Tray icon, standard macOS menus (with Edit), and a Preferences window (`Cmd+,`) for the
   server and sign-out.
+- Main window chrome like Claude Desktop: overlay title bar, the sidebar runs to the top with
+  the traffic lights inside it, the collapse button sits on that row, and collapsing slides the
+  sidebar fully away. In full screen the button moves to the left edge. The sidebar's top row
+  and the chat area's top bar drag the window. Zoom (`Cmd+=`/`Cmd+-`) keeps the title-bar row
+  at its native size. Window size and position are remembered.
 
 Closing the main window keeps the app running in the menu bar; the Dock icon, the tray's
 **Open Onyx** or a second launch brings it back.
@@ -33,6 +38,8 @@ Closing the main window keeps the app running in the menu bar; the Dock icon, th
 | `Cmd+N` | New chat |
 | `Cmd+,` | Preferences |
 | `Cmd+R` | Reload |
+| `Cmd+[` / `Cmd+]` | Back / forward |
+| `Cmd+0` / `Cmd+=` / `Cmd+-` | Actual size / zoom in / zoom out (remembered) |
 | `Ctrl+Cmd+F` | Full screen |
 | `Cmd+M`, `Cmd+H`, `Cmd+W`, `Cmd+Q` | Minimize, hide, close window, quit |
 
@@ -42,6 +49,8 @@ Closing the main window keeps the app running in the menu bar; the Dock icon, th
   can call app commands. Every app command needs an explicit permission (`build.rs` app
   manifest), and the capability in `src-tauri/capabilities/local.json` grants them to those
   windows only. The remote main window gets no app command.
+- The main window gets just two built-in window permissions, on the configured server's origin
+  only: start dragging and title-bar zoom (for its drag regions).
 - Local windows have a strict CSP (`script-src 'self'`, `connect-src` limited to IPC). The
   Vite plugin adds it as a `<meta>` tag, so it also applies in `bun run dev`; production
   builds also send it as a header (`tauri.conf.json`).
