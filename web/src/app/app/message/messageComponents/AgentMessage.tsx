@@ -741,11 +741,11 @@ function packetTurn(group: TurnGroup): number {
 }
 
 /**
- * Lays out one response section the way Craft lays out a turn: steps, text
- * and approval and question cards in arrival (turn) order. Consecutive steps form one run.
- * Text between steps shows once every earlier step of the section is revealed,
- * so it never appears ahead of the steps before it; an earlier section's steps
- * never gate it. A section that does not start with a
+ * Lays out one response section the way Craft lays out a turn: steps, text,
+ * and approval and question cards in arrival (turn) order. Consecutive steps
+ * form one run. Text between steps shows once every earlier step of the
+ * section is revealed, so it never appears ahead of the steps before it; an
+ * earlier section's steps never gate it. A section that does not start with a
  * run starts with an empty one, which shows only the avatar, as Craft starts
  * with its logo row. The last run holds the live header.
  */
