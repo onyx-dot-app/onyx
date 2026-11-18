@@ -1,11 +1,11 @@
 name: Stack CI Handoff
 
-# The integration and Playwright suites run only at the tip of a stack of PRs.
-# When a PR gains or loses a child PR, this workflow restarts the parent's runs
-# so they skip or test it. See .github/scripts/stack-ci-handoff.sh.
+# The slow PR suites run only at the tip of a stack of PRs. When a PR gains or
+# loses a ready child PR, this workflow restarts the parent's runs so they skip
+# or test it. See .github/scripts/stack-ci-handoff.sh.
 on:
   pull_request:
-    types: [opened, reopened, closed, edited]
+    types: [opened, reopened, closed, edited, ready_for_review, converted_to_draft]
 
 concurrency:
   group: Stack-CI-Handoff-${{ github.event.pull_request.base.ref }}
@@ -26,7 +26,6 @@ jobs:
       actions: write
       contents: read
       pull-requests: read
-      statuses: read
     steps:
       - name: Checkout handoff script
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
