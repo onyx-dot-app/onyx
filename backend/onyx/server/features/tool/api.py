@@ -224,9 +224,6 @@ def _alias_snapshot(
     integration: Integration,
     organization: IntegrationConnection | None,
     plugins: list[IntegrationPluginRow],
-    *,
-    user_enabled: bool = True,
-    permissions: dict[str, bool] | None = None,
 ) -> ToolSnapshot:
     return ToolSnapshot(
         id=tool.id,
@@ -249,11 +246,9 @@ def _alias_snapshot(
         oauth_config_id=None,
         oauth_config_name=None,
         enabled=integration.enabled,
-        user_enabled_in_chat=user_enabled,
         default_chat_enabled=any(
             plugin.installation_policy in _DEFAULT_CHAT_POLICIES for plugin in plugins
         ),
-        permissions=permissions or {},
         plugin_ids=[plugin.plugin_id for plugin in plugins],
     )
 
