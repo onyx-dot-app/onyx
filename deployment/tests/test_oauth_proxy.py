@@ -110,7 +110,7 @@ def oauth_proxy(request: pytest.FixtureRequest, tmp_path: Path) -> Generator[str
                 "127.0.0.1::1024",
                 "--volume",
                 f"{config}:/etc/nginx/nginx.conf:ro",
-                os.environ.get("MCP_PROXY_NGINX_IMAGE", "nginx:1.25.5-alpine"),
+                os.environ.get("MCP_PROXY_NGINX_IMAGE", "nginx:1.30.7-alpine"),
             ],
             check=True,
             capture_output=True,
