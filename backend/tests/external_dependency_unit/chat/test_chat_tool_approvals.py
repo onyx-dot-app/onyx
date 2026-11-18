@@ -772,7 +772,6 @@ def test_a_typed_answer_waits_for_the_responses_approval_requests(
         chat_session_id=chat.chat_session_id,
         chat_message_id=chat.response_id,
         integration_id=chat.integration_id,
-        gated_app_id=None,
         action_id=ACTION,
         tool_call_id="send",
         tool_name=ACTION,

@@ -19,7 +19,7 @@ from onyx.db.models import ApprovalRequest, Persona, User
 from onyx.llm.model_response import Delta
 from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.server.query_and_chat.streaming_models import (
-    AWAITING_APPROVAL,
+    AWAITING_USER,
     OverallStop,
     Packet,
 )
@@ -153,7 +153,7 @@ def test_a_chat_calls_an_mcp_action(
     first = (
         code_step(
             "call",
-            f"r = await {integration_agent.hello}(name='alpha')\nprint(r['result'])\n",
+            f"r = await tools.{integration_agent.hello}(name='alpha')\nprint(r['result'])\n",
         )
         if code_mode
         else tool_step(integration_agent.hello, "call", {"name": "alpha"})
@@ -175,7 +175,7 @@ def test_a_chat_calls_an_openapi_action(
     first = (
         code_step(
             "call",
-            f"r = await {integration_agent.list_orders}()\nprint(r)\n",
+            f"r = await tools.{integration_agent.list_orders}()\nprint(r)\n",
         )
         if code_mode
         else tool_step(integration_agent.list_orders, "call", {})
@@ -203,7 +203,7 @@ def test_an_ask_action_in_a_program_opens_one_request(
         [
             code_step(
                 "call",
-                f"r = await {integration_agent.hello}(name='alpha')\nprint(r)\n",
+                f"r = await tools.{integration_agent.hello}(name='alpha')\nprint(r)\n",
             )
         ]
     )
@@ -215,7 +215,7 @@ def test_an_ask_action_in_a_program_opens_one_request(
         for part in parts
         if isinstance(part, Packet) and isinstance(part.obj, OverallStop)
     ]
-    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
+    assert [stop.stop_reason for stop in stops] == [AWAITING_USER]
     db_session.expire_all()
     rows = list(
         db_session.scalars(
