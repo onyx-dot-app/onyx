@@ -73,14 +73,21 @@ OPEN_PRS="$(gh pr list --repo "${REPO}" --state open --limit 2000 \
 MAX_CHAIN_DEPTH=500
 
 # True when a chain of open same-repo PRs leads from head branch $1 to TARGET.
+# A branch can have open PRs against more than one base, so try every route.
 reaches_target() {
-  local ref="$1" depth=0
-  while ((depth < MAX_CHAIN_DEPTH)); do
+  local queue=("$1") seen=" " ref next steps=0
+  while ((${#queue[@]} > 0 && steps < MAX_CHAIN_DEPTH)); do
+    ref="${queue[0]}"
+    queue=("${queue[@]:1}")
     [[ "${ref}" == "${TARGET}" ]] && return 0
-    ref="$(jq -r --arg ref "${ref}" '[.[] | select(.headRefName == $ref) | .baseRefName] | first // empty' <<<"${OPEN_PRS}")"
-    [[ -z "${ref}" ]] && return 1
-    echo "open PR chain: -> ${ref}"
-    depth=$((depth + 1))
+    [[ "${seen}" == *" ${ref} "* ]] && continue
+    seen+="${ref} "
+    steps=$((steps + 1))
+    while IFS= read -r next; do
+      [[ -z "${next}" ]] && continue
+      echo "open PR chain: ${ref} -> ${next}"
+      queue+=("${next}")
+    done < <(jq -r --arg ref "${ref}" '.[] | select(.headRefName == $ref) | .baseRefName' <<<"${OPEN_PRS}")
   done
   return 1
 }

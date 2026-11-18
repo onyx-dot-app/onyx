@@ -7,10 +7,9 @@ on:
   pull_request:
     types: [opened, reopened, closed, edited]
 
-concurrency:
-  group: Stack-CI-Handoff-${{ github.event.pull_request.base.ref }}
-  cancel-in-progress: false
-
+# No concurrency group: GitHub keeps only one pending run in a group, so a
+# group would drop events. Each run reads live state, and a restart that
+# another run already made counts as done.
 permissions:
   contents: read
 
