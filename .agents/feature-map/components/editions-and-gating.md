@@ -88,8 +88,8 @@ later, at a call site
 Two processes built from different images can disagree. No env var selects the
 edition: `is_ee_available` reads the build, not the environment.
 The MIT-only `onyx-foss` mirror is built by `backend/scripts/make_foss_repo.sh`,
-which removes `backend/ee` and leaves an empty package. It is the only build that
-runs the CE implementations.
+which replaces `backend/ee` with an empty package and removes the EE-inclusive
+OpenAPI snapshot ([[onyx-api]]). It is the only build that runs the CE implementations.
 
 **Three dispatch helpers.** Pick one on purpose.
 
