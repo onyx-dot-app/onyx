@@ -88,6 +88,7 @@ from onyx.server.features.tool.models import (
     CustomToolUpdate,
     Header,
 )
+from onyx.utils.encryption import mask_string
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
@@ -777,6 +778,32 @@ def test_organization_connection_put_and_delete(
     assert view.organization_status is not None
     assert view.organization_status.reason == "Connect the account of the organization."
     assert view.setup_reason == view.organization_status.reason
+
+
+def test_a_masked_connection_value_is_refused(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(_openapi_create(), admin, db_session)
+    created.add(detail.id)
+    secret = "real-organization-key-123"
+    admin_api.save_organization_connection(
+        detail.id,
+        ConnectionFieldsRequest(fields={"api_key": secret}),
+        admin,
+        db_session,
+    )
+    with pytest.raises(OnyxError) as error:
+        admin_api.save_organization_connection(
+            detail.id,
+            ConnectionFieldsRequest(fields={"api_key": mask_string(secret)}),
+            admin,
+            db_session,
+        )
+    assert error.value.status_code == 400
+    db_session.rollback()
+    connection = get_connection(db_session, detail.id, None)
+    assert connection is not None
+    assert read_connection_secret(connection).fields == {"api_key": secret}
 
 
 def test_connection_save_holds_the_integration_row_lock(
