@@ -371,8 +371,8 @@ class Agent:
         """Start a worker, or execute here until suspension or completion with background=False.
 
         At `deadline_at` the run is cancelled and records a `DEADLINE` failure.
-        `max_steps` bounds the steps, except that a step that allows no tool
-        and returns calls gets one extra step for the answer, once per run.
+        `max_steps` bounds the steps, with one exception; see "Preparing and
+        completing steps" in the agents README.
         """
         AgentStep(index=0, limit=max_steps)
         with self._lock:
@@ -1678,7 +1678,8 @@ def _advance_loop(
     run: Run, llm: LLM
 ) -> Literal[RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.SUSPENDED]:
     cancellation_signal = run.cancellation_signal
-    # The limit can grow by one step; see _complete_step.
+    # _complete_step can raise or lower the limit so that an extra step is the
+    # run's last step.
     while run._progress.step_index < run._progress.step_limit:
         cancellation_signal.check()
         progress = run._progress
@@ -2193,9 +2194,8 @@ def _complete_step(run: Run) -> None:
         else bool(calls)
     ) and not terminated
     step_limit = progress.step_limit
-    # The runtime ends a step that declares tools but lets none run. Its calls
-    # got denial results that ask for the answer, so the run takes one more
-    # step, at most once per run; otherwise the step's text is the answer.
+    # A step that declares tools but lets none run; the rule is in "Preparing
+    # and completing steps" in the agents README.
     if (
         progress.tools
         and progress.options is not None

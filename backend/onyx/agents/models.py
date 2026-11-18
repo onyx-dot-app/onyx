@@ -362,8 +362,8 @@ class RunProgress(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     step_index: int = 0
-    # Grows by one when a step that allows no tool returns calls; see
-    # runtime._complete_step.
+    # Can be raised or lowered so that one extra step is the run's last step;
+    # see "Preparing and completing steps" in the agents README.
     step_limit: int = Field(gt=0)
     # Absolute UTC deadline includes time spent suspended or between execution owners.
     deadline_at: datetime | None = None

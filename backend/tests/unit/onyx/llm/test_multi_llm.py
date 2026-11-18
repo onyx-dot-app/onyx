@@ -2632,6 +2632,79 @@ def test_strip_tool_content_merges_consecutive_tool_results() -> None:
 _BEDROCK_CLAUDE = "anthropic.claude-sonnet-4-20250514-v1:0"
 
 
+def _weather_history() -> list[ChatCompletionMessage]:
+    return [
+        UserMessage(content="Weather?"),
+        AssistantMessage(
+            content="Checking",
+            tool_calls=[
+                ToolCall(
+                    id="weather-call",
+                    function=RequestFunctionCall(
+                        name="get_weather", arguments='{"location":"Paris"}'
+                    ),
+                )
+            ],
+        ),
+        ToolMessage(tool_call_id="weather-call", content="Sunny, 20C"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "model_provider, model_name",
+    [
+        (LlmProviderNames.BEDROCK, _BEDROCK_CLAUDE),
+        (LlmProviderNames.BEDROCK_CONVERSE, _BEDROCK_CLAUDE),
+        (LlmProviderNames.OLLAMA, "llama3.2"),
+        (LlmProviderNames.OLLAMA_CHAT, "llama3.2"),
+    ],
+)
+def test_raw_auto_request_keeps_native_tool_history(
+    model_provider: str, model_name: str
+) -> None:
+    llm = LitellmLLM(
+        api_key=None,
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=200000,
+    )
+    messages = _weather_history()
+    original = [message.model_dump() for message in messages]
+    with patch("litellm.completion", return_value=[]) as completion:
+        list(
+            llm.stream_raw(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=ToolChoiceOptions.AUTO,
+            )
+        )
+    sent = completion.call_args.kwargs
+    assert sent["tools"]
+    assert sent["tool_choice"] == ToolChoiceOptions.AUTO
+    calls = [
+        message["tool_calls"]
+        for message in sent["messages"]
+        if message.get("tool_calls")
+    ]
+    assert calls == [
+        [
+            {
+                "id": "weather-call",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"location":"Paris"}',
+                },
+            }
+        ]
+    ]
+    results = [message for message in sent["messages"] if message["role"] == "tool"]
+    assert results == [
+        {"role": "tool", "tool_call_id": "weather-call", "content": "Sunny, 20C"}
+    ]
+    assert [message.model_dump() for message in messages] == original
+
+
 @pytest.mark.parametrize(
     "model_provider, model_name, keeps_tools",
     [
@@ -2654,21 +2727,8 @@ def test_raw_none_request_omits_schemas_where_the_adapter_cannot_forbid_calls(
         model_name=model_name,
         max_input_tokens=200000,
     )
-    messages: list[ChatCompletionMessage] = [
-        UserMessage(content="Weather?"),
-        AssistantMessage(
-            content="Checking",
-            tool_calls=[
-                ToolCall(
-                    id="weather-call",
-                    function=RequestFunctionCall(
-                        name="get_weather", arguments='{"location":"Paris"}'
-                    ),
-                )
-            ],
-        ),
-        ToolMessage(tool_call_id="weather-call", content="Sunny, 20C"),
-    ]
+    messages = _weather_history()
+    original = [message.model_dump() for message in messages]
     with patch("litellm.completion", return_value=[]) as completion:
         list(
             llm.stream_raw(
@@ -2678,6 +2738,7 @@ def test_raw_none_request_omits_schemas_where_the_adapter_cannot_forbid_calls(
             )
         )
     sent = completion.call_args.kwargs
+    assert [message.model_dump() for message in messages] == original
     if keeps_tools:
         assert sent["tools"] == _TOOL_CHOICE_DOWNGRADE_TOOLS
         assert sent["tool_choice"] == ToolChoiceOptions.NONE

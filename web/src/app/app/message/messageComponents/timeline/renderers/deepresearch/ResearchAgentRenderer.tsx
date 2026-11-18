@@ -91,8 +91,14 @@ export const ResearchAgentRenderer: MessageRenderer<
   // Determine if report is actively streaming
   const isReportStreaming = !isComplete && !stopPacketSeen;
 
-  // Build report content from parent packets
+  // Build report content from parent packets. Each report start begins the
+  // report again: the step that writes the report can follow a step whose
+  // text led into tool calls that could not run.
+  const reportStart = packets.findLastIndex(
+    (packet) => packet.obj.type === PacketType.INTERMEDIATE_REPORT_START
+  );
   const fullReportContent = packets
+    .slice(reportStart + 1)
     .map((packet) => {
       if (packet.obj.type === PacketType.INTERMEDIATE_REPORT_DELTA) {
         return (packet.obj as IntermediateReportDelta).content;

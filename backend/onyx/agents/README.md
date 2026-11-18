@@ -179,9 +179,11 @@ Return `True` to continue or `False` to finish. Without this callback, the agent
 unless all results request termination. It stops after a final answer.
 A continuation request at the step limit produces `LIMIT`; it does not prepare or execute another step.
 The runtime decides the outcome of a step that declares tools and allows none; `after_step` still runs for it.
-A call on that step gets the error result `NO_TOOL_CAN_RUN_RESULT`, which asks for the final answer.
-If the step has calls, the run takes one extra step, as its last step, even past the step limit. This happens at most once per run.
-Otherwise the step's text is the answer. A step with no call and no non-blank text fails the run.
+A call on that step does not run. It gets the error result `NO_TOOL_CAN_RUN_RESULT`, which asks for the final answer, and shows as a tool error.
+If the step has calls, with or without text, the run takes one extra step with the same tools and choice.
+The runtime resets the step limit so that the extra step is the run's last step.
+This can go past `max_steps`, or lower the limit when the step came before it. A run takes at most one extra step.
+A step without calls ends the run `COMPLETE` with its text as the answer. A step without calls or non-blank text fails the run.
 Raise from `after_step` when output validation fails. The run retains the completed output and records the failure.
 
 Both callbacks run on the execution thread. Request assembly and compaction use that thread too.

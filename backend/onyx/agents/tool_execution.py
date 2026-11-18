@@ -46,8 +46,8 @@ if TYPE_CHECKING:
 
 logger = setup_logger()
 
-# The result of a call on a step where no tool can run; the runtime then takes
-# one more step for the answer.
+# The result of a call on a step where no tool can run. It asks the model for
+# its final answer.
 NO_TOOL_CAN_RUN_RESULT = (
     "No more tools can run in this response. Write your final answer now."
 )

@@ -295,8 +295,9 @@ build their own clients.
     Anthropic `thinking_blocks` rule is separate: a block type needs the route
     that can read it.
 17. `none-tool-choice-keeps-tools` **A typed `NONE` request keeps its tools.**
-    `LitellmLLM._prepare_tools` sends the request's tool definitions with every
-    tool choice. `llm/model_capabilities.py:model_supports_none_tool_choice`
+    `LitellmLLM._prepare_tools` sends the request's tool definitions with a
+    `NONE` choice. (A named choice on Claude, Qwen or GLM sends only the named
+    tool.) `llm/model_capabilities.py:model_supports_none_tool_choice`
     says whether the provider and model can take `NONE`: Bedrock, Bedrock
     Converse, Ollama and Ollama Chat cannot (`PROVIDERS_WITHOUT_NONE_TOOL_CHOICE`),
     and Qwen and GLM deployments can reject it. Those requests send `AUTO`. The
