@@ -345,19 +345,19 @@ def _fetch_versions() -> AllVersions:
             onyx=latest_stable_version,
             relational_db="postgres:15.2-alpine",
             index=DOCUMENT_INDEX_IMAGE,
-            nginx="nginx:1.25.5-alpine",
+            nginx="nginx:1.30.7-alpine",
         ),
         dev=ContainerVersions(
             onyx=latest_dev_version,
             relational_db="postgres:15.2-alpine",
             index=DOCUMENT_INDEX_IMAGE,
-            nginx="nginx:1.25.5-alpine",
+            nginx="nginx:1.30.7-alpine",
         ),
         migration=ContainerVersions(
             onyx="airgapped-intfloat-nomic-migration",
             relational_db="postgres:15.2-alpine",
             index=DOCUMENT_INDEX_IMAGE,
-            nginx="nginx:1.25.5-alpine",
+            nginx="nginx:1.30.7-alpine",
         ),
     )
 

@@ -62,7 +62,7 @@ _CLI_TIMEOUT_SECONDS = 120
 _STRICT_ENV = "MCP_NATIVE_CLIENTS_REQUIRED"
 _URL_PATTERN = re.compile(r"https?://[^\s'\"<>\x00-\x1f]+")
 _REPO_ROOT = Path(__file__).resolve().parents[4]
-_NGINX_IMAGE = os.environ.get("MCP_PROXY_NGINX_IMAGE", "nginx:1.25.5-alpine")
+_NGINX_IMAGE = os.environ.get("MCP_PROXY_NGINX_IMAGE", "nginx:1.30.7-alpine")
 _MCP_NGINX_TEMPLATE = _REPO_ROOT / "deployment/data/nginx/mcp.conf.inc.template"
 
 

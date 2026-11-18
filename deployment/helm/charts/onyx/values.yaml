@@ -471,6 +471,9 @@ nginx:
       # http-snippet files: ingress-nginx already emits the directive in the
       # http{} block, and a duplicate fails `nginx -t` (config reload/startup).
       server-tokens: "false"
+      # HTTP/2 off: the bundled controller's nginx has the HTTP/2 RCEs
+      # CVE-2026-123007 and CVE-2026-123633. Re-enable only on a patched nginx.
+      use-http2: "false"
       # Expose DOMAIN to the nginx config and pull in our custom snippets
       main-snippet: |
         env DOMAIN;

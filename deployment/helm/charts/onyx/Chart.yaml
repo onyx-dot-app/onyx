@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.53
+version: 0.9.54
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,14 +20,10 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: craft.hostAgent.startingMemDivisor (default 2) divides the
-        memory that a starting Craft Firecracker microVM counts in the host
-        agent memory admission. microVMs have 8 GiB of memory, and a starting
-        microVM counts as 4 GiB. Set 1 to count the full size.
-    - kind: added
-      description: The CraftFcVMOOMKills alert fires when the kernel
-        OOM-kills a Craft Firecracker microVM.
+    - kind: security
+      description: The bundled ingress-nginx controller now turns off HTTP/2
+        (nginx.controller.config.use-http2 "false"). Its nginx 1.27.1 has the
+        HTTP/2 remote code execution flaws CVE-2026-123007 and CVE-2026-123633.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
