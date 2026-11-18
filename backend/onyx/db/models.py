@@ -6033,7 +6033,6 @@ class Integration(Base):
         PGUUID(as_uuid=True),
         ForeignKey("user.id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
     )
     enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
@@ -6326,7 +6325,6 @@ class IntegrationConnection(Base):
             "status IN ('connected', 'needs_reconnect')",
             name="ck_integration_connection_status",
         ),
-        Index("ix_integration_connection_integration_id", "integration_id"),
         Index(
             "uq_integration_connection_organization",
             "integration_id",
@@ -6383,7 +6381,6 @@ class IntegrationActionPolicy(Base):
             "policy IN ('allow', 'auto', 'ask', 'blocked')",
             name="ck_integration_action_policy_policy",
         ),
-        Index("ix_integration_action_policy_integration_id", "integration_id"),
         Index(
             "uq_integration_action_policy_admin",
             "integration_id",

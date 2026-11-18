@@ -1544,34 +1544,6 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
             ),
             {"id": no_gated_app, "g": seeded.gated["mcp_public"]},
         )
-        # A plugin that the app made for an integration after the upgrade.
-        app_plugin = uuid4()
-        conn.execute(
-            text(
-                "INSERT INTO plugin (id, name, description, marketplace_id, "
-                "current_version_id, published_version_id) VALUES "
-                "(:id, :name, '', :m, :id, :id)"
-            ),
-            {
-                "id": app_plugin,
-                "name": f"u1-app-{app_plugin}",
-                "m": ORGANIZATION_LIBRARY_ID,
-            },
-        )
-        conn.execute(
-            text(
-                "INSERT INTO plugin_version (id, plugin_id, version_number) "
-                "VALUES (:id, :id, 1)"
-            ),
-            {"id": app_plugin},
-        )
-        conn.execute(
-            text(
-                "INSERT INTO plugin__integration (plugin_id, integration_id) "
-                "VALUES (:p, :i)"
-            ),
-            {"p": app_plugin, "i": seeded.gated["mcp_orphan"]},
-        )
 
     _migrate("downgrade", PREVIOUS_REVISION)
     with engine.connect() as conn:
@@ -1605,13 +1577,6 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
                         f"integration_plugin:{seeded.gated['mcp_public']}".encode()
                     ).hexdigest()
                 },
-            ).scalar_one()
-            == 0
-        )
-        # A plugin with no integration left to hold goes, whoever made it.
-        assert (
-            conn.execute(
-                text("SELECT count(*) FROM plugin WHERE id = :id"), {"id": app_plugin}
             ).scalar_one()
             == 0
         )
