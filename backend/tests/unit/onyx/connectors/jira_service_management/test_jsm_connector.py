@@ -470,6 +470,45 @@ def test_explicit_service_desk_validates_credentials_and_project_match(
     with pytest.raises(ConnectorValidationError):
         connector.validate_connector_settings()
 
+    def fake_missing_key_unresolved(
+        url: str, *_args: Any, **_kwargs: Any
+    ) -> MagicMock:
+        if url.endswith("/rest/servicedeskapi/servicedesk/2"):
+            return _fake_response(200, {"id": "2"})
+        if url.endswith("/rest/servicedeskapi/servicedesk"):
+            return _fake_response(200, {"isLastPage": True, "values": []})
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(
+        "onyx.connectors.jira_service_management.connector._rate_limited_jsm_get",
+        fake_missing_key_unresolved,
+    )
+    with pytest.raises(ConnectorValidationError):
+        connector.validate_connector_settings()
+
+    def fake_missing_key_resolved_by_project_id(
+        url: str, *_args: Any, **_kwargs: Any
+    ) -> MagicMock:
+        if url.endswith("/rest/servicedeskapi/servicedesk/2"):
+            return _fake_response(200, {"id": "2", "projectId": "10002"})
+        if url.endswith("/rest/api/2/project/10002"):
+            return _fake_response(200, {"id": "10002", "key": "ITSM"})
+        raise AssertionError(f"Unexpected URL: {url}")
+
+    monkeypatch.setattr(
+        "onyx.connectors.jira_service_management.connector._rate_limited_jsm_get",
+        fake_missing_key_resolved_by_project_id,
+    )
+    connector.validate_connector_settings()
+
+    monkeypatch.setattr(
+        "onyx.connectors.jira_service_management.connector._rate_limited_jsm_get",
+        lambda *_args, **_kwargs: _fake_response(
+            200, {"id": "2", "projectKey": "itsm"}
+        ),
+    )
+    connector.validate_connector_settings()
+
     monkeypatch.setattr(
         "onyx.connectors.jira_service_management.connector._rate_limited_jsm_get",
         lambda *_args, **_kwargs: _fake_response(401, {}),

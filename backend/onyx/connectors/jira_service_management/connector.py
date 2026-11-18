@@ -376,7 +376,18 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
         """Return list of (service_desk_id, project_key) pairs in scope."""
         if self.service_desk_id:
             desk = self._get_json(f"/rest/servicedeskapi/servicedesk/{self.service_desk_id}")
+            desk_id = str(desk.get("id") or self.service_desk_id)
             desk_project_key = desk.get("projectKey")
+            if not desk_project_key:
+                project_id = desk.get("projectId")
+                if project_id is not None:
+                    project = self._get_json(f"/rest/api/2/project/{project_id}")
+                    desk_project_key = project.get("key")
+                if not desk_project_key:
+                    for candidate in self._paginate("/rest/servicedeskapi/servicedesk"):
+                        if str(candidate.get("id")) == desk_id and candidate.get("projectKey"):
+                            desk_project_key = candidate.get("projectKey")
+                            break
             if (
                 self.project_key
                 and (
@@ -388,7 +399,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector):
                     f"Service desk '{self.service_desk_id}' belongs to project "
                     f"'{desk_project_key}', not '{self.project_key}'"
                 )
-            return [(str(desk.get("id") or self.service_desk_id), desk_project_key or self.project_key)]
+            return [(desk_id, desk_project_key or self.project_key)]
 
         desks = list(self._paginate("/rest/servicedeskapi/servicedesk"))
         if self.project_key:
