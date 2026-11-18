@@ -2,13 +2,12 @@
 
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 import httpx
 from fastmcp.server.auth.auth import AccessToken
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
 from onyx.configs.app_configs import (
     MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS,
@@ -152,8 +151,9 @@ class _FilterError(Exception):
     """
 
 
-@dataclass
-class _ResolvedFilters:
+class _ResolvedFilters(BaseModel):
+    model_config = ConfigDict(strict=True)
+
     persona_id: int | None
     source_types: list[DocumentSource] | None
 

@@ -1483,7 +1483,7 @@ def search_chats(
     )
 
     # Group chat sessions by time period
-    today = datetime.datetime.now().date()
+    today = datetime.datetime.now(datetime.UTC).date()
     yesterday = today - timedelta(days=1)
     this_week = today - timedelta(days=7)
     this_month = today - timedelta(days=30)
@@ -1495,7 +1495,7 @@ def search_chats(
     older_chats: list[ChatSessionSummary] = []
 
     for session in chat_sessions:
-        session_date = session.time_created.date()
+        session_date = session.time_created.astimezone(datetime.UTC).date()
 
         chat_summary = ChatSessionSummary(
             id=session.id,

@@ -13,7 +13,6 @@ start values), blockquotes, fenced code blocks, GFM tables, hyperlinks
 dropped rather than shown as literal markup.
 """
 
-from dataclasses import dataclass, replace
 from html import unescape
 from io import BytesIO
 from typing import Any, cast
@@ -33,6 +32,7 @@ from docx.shared import Inches, Pt, RGBColor, Twips
 from docx.styles.style import ParagraphStyle
 from docx.table import _Cell
 from docx.text.paragraph import Paragraph
+from pydantic import BaseModel, ConfigDict
 
 _MONOSPACE_FONT = "Courier New"
 _CODE_FONT_SIZE = Pt(9)
@@ -119,9 +119,10 @@ def _strip_invalid_xml_chars(text: str) -> str:
     return text.translate(_XML_INVALID_TRANSLATION)
 
 
-@dataclass(frozen=True)
-class _Fmt:
+class _Fmt(BaseModel):
     """Inline formatting flags carried down through nested inline nodes."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     bold: bool = False
     italic: bool = False
@@ -730,24 +731,31 @@ def _add_runs(
             _styled_run(paragraph, unescape(str(node.get("raw", ""))), fmt)
         elif node_type == "strong":
             _add_runs(
-                paragraph, node.get("children", []), replace(fmt, bold=True), footnotes
+                paragraph,
+                node.get("children", []),
+                fmt.model_copy(update={"bold": True}),
+                footnotes,
             )
         elif node_type == "emphasis":
             _add_runs(
                 paragraph,
                 node.get("children", []),
-                replace(fmt, italic=True),
+                fmt.model_copy(update={"italic": True}),
                 footnotes,
             )
         elif node_type == "strikethrough":
             _add_runs(
                 paragraph,
                 node.get("children", []),
-                replace(fmt, strike=True),
+                fmt.model_copy(update={"strike": True}),
                 footnotes,
             )
         elif node_type == "codespan":
-            _styled_run(paragraph, str(node.get("raw", "")), replace(fmt, code=True))
+            _styled_run(
+                paragraph,
+                str(node.get("raw", "")),
+                fmt.model_copy(update={"code": True}),
+            )
         elif node_type == "link":
             _add_hyperlink(paragraph, node, fmt, footnotes)
         elif node_type == "image":

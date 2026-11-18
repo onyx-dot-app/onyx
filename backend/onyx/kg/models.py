@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, date, datetime
 from enum import Enum
 from typing import Any
 
@@ -15,14 +15,14 @@ class KGConfigSettings(BaseModel):
     KG_VENDOR: str | None = None
     KG_VENDOR_DOMAINS: list[str] = []
     KG_IGNORE_EMAIL_DOMAINS: list[str] = []
-    KG_COVERAGE_START: str = datetime(1970, 1, 1).strftime("%Y-%m-%d")
+    KG_COVERAGE_START: str = date(1970, 1, 1).isoformat()
     KG_MAX_COVERAGE_DAYS: int = 10000
     KG_MAX_PARENT_RECURSION_DEPTH: int = KG_DEFAULT_MAX_PARENT_RECURSION_DEPTH
     KG_BETA_PERSONA_ID: int | None = None
 
     @property
     def KG_COVERAGE_START_DATE(self) -> datetime:
-        return datetime.strptime(self.KG_COVERAGE_START, "%Y-%m-%d")
+        return datetime.strptime(self.KG_COVERAGE_START, "%Y-%m-%d").replace(tzinfo=UTC)
 
 
 class KGGroundingType(str, Enum):

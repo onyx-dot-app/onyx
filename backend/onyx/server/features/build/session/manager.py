@@ -236,7 +236,7 @@ class SessionManager:
             fetch_default_model(self._db_session, LLMModelFlowType.CHAT),
         ]
         configured_defaults = [
-            GatewaySelection(model.llm_provider_id, model.name)
+            GatewaySelection(provider_id=model.llm_provider_id, model_name=model.name)
             for model in configured_default_models
             if model is not None
         ]

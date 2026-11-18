@@ -23,11 +23,11 @@ external I/O:
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from uuid import UUID
 
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.interface import CacheLock
@@ -123,11 +123,12 @@ _REPROVISIONABLE_STATUSES: frozenset[SandboxStatus] = frozenset(
 )
 
 
-@dataclass(frozen=True)
-class SandboxReservation:
+class SandboxReservation(BaseModel):
     """Committed identity of a sandbox provisioning attempt. Carries plain
     values only — never a live SQLAlchemy model or session — so external
     reconciliation cannot touch the reservation transaction."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     sandbox_id: UUID
     tenant_id: str
@@ -144,10 +145,11 @@ class SandboxReservation:
     terminate_before_provision: bool
 
 
-@dataclass(frozen=True)
-class ManagedContentPayload:
+class ManagedContentPayload(BaseModel):
     """Sandbox-level managed content, prebuilt from database state so the
     external push runs without an open transaction."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     connectable_apps_section: str
     skills_files: FileSet

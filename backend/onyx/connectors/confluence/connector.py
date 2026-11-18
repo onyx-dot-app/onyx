@@ -1,4 +1,5 @@
 import copy
+import time
 from collections.abc import Generator, Iterable
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -1522,7 +1523,7 @@ if __name__ == "__main__":
     confluence_connector.set_credentials_provider(credentials_provider)
 
     start = 0.0
-    end = datetime.now().timestamp()
+    end = time.time()
 
     # Fetch all `SlimDocuments`.
     for slim_doc in confluence_connector.retrieve_all_slim_docs_perm_sync():

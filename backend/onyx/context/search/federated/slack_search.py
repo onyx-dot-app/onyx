@@ -1,7 +1,7 @@
 import json
 import re
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -495,9 +495,11 @@ def _fetch_thread_from_url(
         parent_text[:50].rstrip() + "..." if len(parent_text) > 50 else parent_text
     ).replace("\n", " ")
 
-    doc_time = datetime.fromtimestamp(float(message_ts))
+    doc_time = datetime.fromtimestamp(float(message_ts), tz=UTC)
     decay_factor = DOC_TIME_DECAY
-    doc_age_years = (datetime.now() - doc_time).total_seconds() / (365 * 24 * 60 * 60)
+    doc_age_years = (datetime.now(UTC) - doc_time).total_seconds() / (
+        365 * 24 * 60 * 60
+    )
     recency_bias = max(1 / (1 + decay_factor * doc_age_years), 0.75)
 
     permalink = (
@@ -645,8 +647,8 @@ def query_slack(
         document_id = f"{channel_id}_{message_id}"
 
         decay_factor = DOC_TIME_DECAY
-        doc_time = datetime.fromtimestamp(float(message_id))
-        doc_age_years = (datetime.now() - doc_time).total_seconds() / (
+        doc_time = datetime.fromtimestamp(float(message_id), tz=UTC)
+        doc_age_years = (datetime.now(UTC) - doc_time).total_seconds() / (
             365 * 24 * 60 * 60
         )
         recency_bias = max(1 / (1 + decay_factor * doc_age_years), 0.75)

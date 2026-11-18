@@ -2,13 +2,12 @@ import gc
 import os
 import time
 import traceback
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from celery import Celery, Task, current_app, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
@@ -798,9 +797,10 @@ def active_indexing_attempt(
     return active_indexing_attempt
 
 
-@dataclass
-class _KickoffResult:
+class _KickoffResult(BaseModel):
     """Tracks diagnostic counts from a _kickoff_indexing_tasks run."""
+
+    model_config = ConfigDict(strict=True)
 
     created: int = 0
     skipped_active: int = 0

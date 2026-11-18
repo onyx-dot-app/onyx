@@ -15,7 +15,8 @@ that runs from the API server process.  Two responsibilities:
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.utils.logger import setup_logger
 
@@ -34,13 +35,14 @@ PERIODIC_TASK_KV_PREFIX = "periodic_poller:last_claimed:"
 _NEVER_RAN: float = -1e18
 
 
-@dataclass
-class _PeriodicTaskDef:
+class _PeriodicTaskDef(BaseModel):
+    model_config = ConfigDict(strict=True)
+
     name: str
     interval_seconds: float
     lock_id: int
     run_fn: Callable[[], None]
-    last_run_at: float = field(default=_NEVER_RAN)
+    last_run_at: float = _NEVER_RAN
 
 
 def _run_auto_llm_update() -> None:

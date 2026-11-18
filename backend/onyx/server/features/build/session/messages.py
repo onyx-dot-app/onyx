@@ -133,7 +133,7 @@ def send_message(
         turn_index = count_user_messages(session_id, db_session)
         if request.provider_id is not None and request.model:
             session.agent_provider, session.agent_model = GatewaySelection(
-                request.provider_id, request.model
+                provider_id=request.provider_id, model_name=request.model
             ).to_columns()
         elif request.provider and request.model:
             session.agent_provider = request.provider

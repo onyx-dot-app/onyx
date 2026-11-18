@@ -64,7 +64,7 @@ class AsanaAPI:
             workspace_gid=self.workspace_gid,
             opt_fields="gid,name,archived,modified_at",
         )
-        start_seconds = int(time.mktime(datetime.now().timetuple()))
+        start_seconds = time.monotonic()
         projects_list = []
         project_count = 0
         for project_info in projects:
@@ -102,7 +102,7 @@ class AsanaAPI:
         self,
         project_gid: str,
         start_date: str,
-        start_seconds: int,
+        start_seconds: float,
         seen_task_gids: set[str],
         project_gids: list[str] | None,
     ) -> Iterator[AsanaTask]:
@@ -152,7 +152,7 @@ class AsanaAPI:
 
             self.task_count += 1
             if self.task_count % 10 == 0:
-                end_seconds = time.mktime(datetime.now().timetuple())
+                end_seconds = time.monotonic()
                 runtime_seconds = end_seconds - start_seconds
                 if runtime_seconds > 0:
                     logger.info(

@@ -14,6 +14,7 @@ from onyx.configs.app_configs import (
     DEV_MODE,
     OAUTH_SLACK_CLIENT_ID,
     OAUTH_SLACK_CLIENT_SECRET,
+    REQUEST_TIMEOUT_SECONDS,
     WEB_DOMAIN,
 )
 from onyx.configs.constants import DocumentSource
@@ -166,6 +167,7 @@ def handle_slack_oauth_callback(
                 "code": code,
                 "redirect_uri": redirect_uri,
             },
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
         response_data = response.json()

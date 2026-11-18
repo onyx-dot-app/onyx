@@ -349,7 +349,15 @@ def _add_document_link(
 ) -> None:
     upsert_documents(
         db_session,
-        [DocumentMetadata(connector_id, credential_id, doc_id, "Test document", "")],
+        [
+            DocumentMetadata(
+                connector_id=connector_id,
+                credential_id=credential_id,
+                document_id=doc_id,
+                semantic_identifier="Test document",
+                first_link="",
+            )
+        ],
     )
     upsert_document_by_connector_credential_pair(
         db_session, connector_id, credential_id, [doc_id]

@@ -2,7 +2,6 @@ import asyncio
 import json
 import threading
 import time
-from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, cast
 
@@ -18,6 +17,7 @@ from jwt import (
 )
 from jwt import decode as jwt_decode
 from jwt.algorithms import RSAAlgorithm  # ty: ignore[possibly-missing-import]
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
 from onyx.server.security.models import OutboundSSRFParams, outbound_ssrf_params
@@ -52,9 +52,10 @@ _KeyPayload = tuple[str | dict[str, Any], PublicKeyFormat]
 _KeyCacheKey = tuple[str, bool, bool, bool, bool]
 
 
-@dataclass
-class _KeyCacheEntry:
-    lock: threading.Lock = field(default_factory=threading.Lock)
+class _KeyCacheEntry(BaseModel):
+    model_config = ConfigDict(strict=True, arbitrary_types_allowed=True)
+
+    lock: threading.Lock = Field(default_factory=threading.Lock)
     fetched: bool = False
     payload: _KeyPayload | None = None
     next_fetch_allowed: float = float("-inf")

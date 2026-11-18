@@ -1344,10 +1344,8 @@ CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE = cast(
 
 
 def get_current_tz_offset() -> int:
-    # datetime now() gets local time, datetime.now(timezone.utc) gets UTC time.
-    # remove tzinfo to compare non-timezone-aware objects.
-    time_diff = datetime.now() - datetime.now(timezone.utc).replace(tzinfo=None)
-    return round(time_diff.total_seconds() / 3600)
+    offset = datetime.now(timezone.utc).astimezone().utcoffset()
+    return round(offset.total_seconds() / 3600) if offset is not None else 0
 
 
 # enter as a floating point offset from UTC in hours (-24 < val < 24)
