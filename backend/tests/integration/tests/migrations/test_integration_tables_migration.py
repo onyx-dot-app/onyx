@@ -844,13 +844,8 @@ class Copied:
     users_can_save_always_allow: bool
 
 
-# The plugin that the copy gave an integration: the plugin that the copy
-# made, or the plugin of the one custom skill of an app.
-FIRST_PLUGIN = (
-    "coalesce((SELECT id FROM plugin WHERE id = "
-    "md5('integration_plugin:' || i.id::text)::uuid), "
-    "(SELECT plugin_id FROM plugin__integration WHERE integration_id = i.id))"
-)
+# The plugin that the copy made for an integration.
+FIRST_PLUGIN = "md5('integration_plugin:' || i.id::text)::uuid"
 
 
 def _copied(conn: Connection, where: str, **params: Any) -> Copied:
@@ -1324,11 +1319,10 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
                 {"ids": [c.id for c in custom.values()]},
             )
         } == {(c.id, "", None, "allow") for c in custom.values()}
-        # An app with one custom skill gets no plugin of its own: the plugin
-        # of that skill holds the skill and the integration.
-        assert user_key.plugin_id == seeded.only_skill
-        # An app with two skills gets a plugin of its own, and the plugin of
-        # each skill holds the integration too.
+        # Each app gets a plugin of its own, and the plugin of each of its
+        # skills holds the integration too. A skill can be deleted, so the
+        # plugin of a skill is never the only plugin of an integration.
+        assert user_key.plugin_id != seeded.only_skill
         assert org_key.plugin_id not in seeded.shared_skills
         assert {
             (row.plugin_id, row.integration_id)
@@ -1341,6 +1335,7 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             )
         } == {
             (seeded.only_skill, user_key.id),
+            (user_key.plugin_id, user_key.id),
             (org_key.plugin_id, org_key.id),
             *((skill_id, org_key.id) for skill_id in seeded.shared_skills),
             (slack.plugin_id, slack.id),
