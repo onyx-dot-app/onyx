@@ -52,6 +52,7 @@ from onyx.server.features.suggested_questions.scheduling import (
     worth_running,
 )
 from onyx.server.features.suggested_questions.selection import (
+    NothingSearchableYet,
     best_chunks_per_document,
     choose_documents,
     fetch_chunks,
@@ -79,10 +80,6 @@ class RunOutOfTime(Exception):
     """The run used its time budget before its next model call."""
 
 
-class NothingSearchableYet(Exception):
-    """The chosen documents have no chunks in the search index yet."""
-
-
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.GENERATE_SUGGESTED_QUESTIONS_POOL,
     bind=True,
@@ -92,7 +89,7 @@ class NothingSearchableYet(Exception):
 def generate_suggested_questions_pool(
     self: Task, *, tenant_id: str, reason: str
 ) -> None:
-    if not _start(lambda: release_pool_flag(tenant_id)):
+    if not _start(self, lambda: release_pool_flag(tenant_id)):
         return
     try:
         with pool_lock(0):
@@ -131,7 +128,7 @@ def generate_suggested_questions_for_user(
     """`recorded` is set on a retry whose attempt already counts against the
     person's top-up limits, so the retry finishes it instead of being refused
     by the gap it just recorded."""
-    if not _start(lambda: release_topup_flag(tenant_id, UUID(user_id))):
+    if not _start(self, lambda: release_topup_flag(tenant_id, UUID(user_id))):
         return
     attempt = {"recorded": recorded}
     try:
@@ -171,12 +168,14 @@ def _retry_later(task: Task, countdown: int, kwargs: dict[str, Any], why: str) -
     raise task.retry(countdown=countdown, kwargs=kwargs)
 
 
-def _start(release_flag: Callable[[], None]) -> bool:
+def _start(task: Task, release_flag: Callable[[], None]) -> bool:
     """Free the task's queued flag, then say whether runs are on. Neither step
     may fail the task: a flag that stays set only delays the next request, and
-    an unknown trial status means no run."""
+    an unknown trial status means no run. A retry leaves the flag alone: the
+    first delivery freed it, so a flag set now belongs to a newer request."""
     try:
-        release_flag()
+        if not task.request.retries:
+            release_flag()
     except Exception:
         task_logger.warning(
             "Suggested questions: could not free the queued flag", exc_info=True
@@ -277,10 +276,6 @@ def _write_and_test(
     run passes no user; a top-up passes the person."""
     with get_session_with_current_tenant() as db_session:
         chunks = fetch_chunks(db_session, candidates, tenant_id)
-    if not chunks:
-        # Chunks become searchable at the index's next refresh, about a
-        # second after indexing. A run started sooner reads nothing.
-        raise NothingSearchableYet(f"No chunks for {len(candidates)} documents")
     passages = best_chunks_per_document(triage_chunks(chunks, build_triage_clients()))
     # Keep the candidates' order (a top-up's private documents first), so the
     # writing call's passage limit drops the least wanted ones.
