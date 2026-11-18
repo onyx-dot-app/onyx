@@ -133,6 +133,7 @@ export const FileReaderToolRenderer: MessageRenderer<
                     tRead("moreLines.label", { count })
                   }
                   showAllLabel={tRead("showAll.button")}
+                  excerpt
                 />
               )}
             </>

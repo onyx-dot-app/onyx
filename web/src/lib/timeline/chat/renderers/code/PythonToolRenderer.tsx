@@ -144,7 +144,9 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
           isComplete && !stdout && !stderr ? t("python.noOutput.text") : stdout
         }
         error={stderr}
-        emptyLabel={t("python.noOutput.text")}
+        // A finished run already carries its no-output text; before then,
+        // empty means the code is still being written.
+        emptyLabel=""
       />
 
       {/* File count */}

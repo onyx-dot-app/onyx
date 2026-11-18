@@ -19,6 +19,11 @@ interface FileBodyProps {
   emptyLabel: string;
   moreLinesLabel: (count: number) => string;
   showAllLabel: string;
+  /**
+   * The content is excerpts of a file, not the file: it shows whole, without
+   * line numbers, since its lines are not the file's.
+   */
+  excerpt?: boolean;
 }
 
 /**
@@ -32,6 +37,7 @@ export function FileBody({
   emptyLabel,
   moreLinesLabel,
   showAllLabel,
+  excerpt = false,
 }: FileBodyProps) {
   const [expanded, setExpanded] = useState(false);
   const language = useMemo(() => getLanguageFromPath(path), [path]);
@@ -51,9 +57,8 @@ export function FileBody({
 
   const allLines = content.split("\n");
   const totalLines = allLines.length;
-  const visibleLines = expanded
-    ? allLines
-    : allLines.slice(0, PREVIEW_LINE_COUNT);
+  const visibleLines =
+    expanded || excerpt ? allLines : allLines.slice(0, PREVIEW_LINE_COUNT);
   const hiddenCount = totalLines - visibleLines.length;
 
   return (
@@ -65,11 +70,13 @@ export function FileBody({
               const html = highlight ? highlight(line, language) : null;
               return (
                 <tr key={idx} className="align-baseline">
-                  <td className="select-none ps-1 pe-1 py-0 text-end align-baseline w-6 border-e-[0.5px] border-border-01 bg-background-tint-01">
-                    <Text font="secondary-mono" color="text-02">
-                      {String(idx + 1)}
-                    </Text>
-                  </td>
+                  {!excerpt && (
+                    <td className="select-none ps-1 pe-1 py-0 text-end align-baseline w-6 border-e-[0.5px] border-border-01 bg-background-tint-01">
+                      <Text font="secondary-mono" color="text-02">
+                        {String(idx + 1)}
+                      </Text>
+                    </td>
+                  )}
                   <td
                     className="ps-2 pe-2 py-0 whitespace-pre-wrap wrap-break-word"
                     style={MONO_STYLE}

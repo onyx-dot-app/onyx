@@ -45,6 +45,8 @@ function parseResults(rawOutput: string): SearchResult[] {
     const urls = block.match(URL_RE_G);
     if (!urls || urls.length === 0) continue;
     const url = urls[0]!;
+    // Overlapping queries can return the same page; it shows once.
+    if (results.some((result) => result.url === url)) continue;
 
     // Heuristics: first non-URL line is the title; subsequent non-URL lines are snippet
     const nonUrlLines = lines.filter((l) => !URL_RE.test(l));
