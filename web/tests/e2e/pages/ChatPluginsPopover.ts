@@ -1,12 +1,11 @@
 import { type Locator, type Page, expect } from "@playwright/test";
-import { MemberPluginConnectionDialog } from "@tests/e2e/pages/MemberPluginConnectionDialog";
 import { ToolsPopover } from "@tests/e2e/pages/ToolsPopover";
 
+/** The Plugins menu of the chat tools popover: the agent's plugins. */
 export class ChatPluginsPopover {
   readonly page: Page;
   readonly toggle: Locator;
   readonly popover: Locator;
-  readonly connectionDialog: MemberPluginConnectionDialog;
   readonly actions: ToolsPopover;
 
   constructor(page: Page) {
@@ -16,7 +15,6 @@ export class ChatPluginsPopover {
     this.popover = page.getByRole("dialog").filter({
       has: page.getByRole("searchbox", { name: "Search plugins", exact: true }),
     });
-    this.connectionDialog = new MemberPluginConnectionDialog(page);
   }
 
   async open(): Promise<void> {
@@ -36,7 +34,7 @@ export class ChatPluginsPopover {
 
   pluginSwitch(name: string): Locator {
     return this.popover.getByRole("switch", {
-      name: `Use ${name} in this chat`,
+      name: `Use ${name} with this agent`,
       exact: true,
     });
   }
@@ -68,21 +66,6 @@ export class ChatPluginsPopover {
       await toggle.click();
     }
     await this.expectPluginEnabled(name, enabled);
-  }
-
-  async connectPlugin(name: string): Promise<void> {
-    await this.expectPluginVisible(name);
-    await this.pluginRow(name)
-      .getByRole("button", { name: "Connect", exact: true })
-      .click();
-    await this.connectionDialog.expectOpen(name);
-  }
-
-  async needsConnection(name: string): Promise<boolean> {
-    await this.expectPluginVisible(name);
-    return this.pluginRow(name)
-      .getByRole("button", { name: "Connect", exact: true })
-      .isVisible();
   }
 
   async expectConnected(name: string): Promise<void> {

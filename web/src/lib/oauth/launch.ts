@@ -1,5 +1,4 @@
 import * as yup from "yup";
-import { loadPage } from "@opal/navigation";
 import { DESKTOP_STATE_SUFFIX } from "@/lib/oauth/desktopCallback";
 
 export type OAuthLaunchFailure =
@@ -375,30 +374,6 @@ export function reportOAuthCallback(
   const attemptState = stripDesktopOAuthState(state);
   notifyOAuthComplete(attemptState, ok, redirectPath, error);
   return closeOAuthCallbackWindow(attemptState, ok);
-}
-
-/**
- * Opens an authorization URL that is already known. Falls back to the
- * current-tab redirect when the browser blocks the new tab.
- */
-export function openOAuthAuthorization(
-  authorizationUrl: string,
-  options: OAuthLaunchOptions = {}
-): Promise<OAuthCompletion> {
-  return launchOAuth(async () => authorizationUrl, options).catch(
-    (error: unknown) => {
-      if (
-        error instanceof OAuthLaunchError &&
-        error.reason === "popup_blocked"
-      ) {
-        const url = parseAuthorizationUrl(authorizationUrl);
-        if (!url) throw new OAuthLaunchError("request_failed");
-        loadPage(url.href);
-        return new Promise<OAuthCompletion>(() => {});
-      }
-      throw error;
-    }
-  );
 }
 
 /** True for outcomes the user chose, which need no error message. */

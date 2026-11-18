@@ -46,7 +46,6 @@ from onyx.db.enums import (
     SandboxStatus,
     SessionOrigin,
 )
-from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.llm import (
     fetch_all_accessible_llm_providers,
     fetch_default_model,
@@ -57,10 +56,12 @@ from onyx.db.sandbox import (
     get_snapshots_for_session,
     update_sandbox_heartbeat,
 )
+from onyx.db.scheduled_task import get_scheduled_task_id_for_session
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.integrations.craft import list_connectable_apps
 from onyx.server.features.build.configs import (
     MAX_TOTAL_UPLOAD_SIZE_BYTES,
     MAX_UPLOAD_FILES_PER_SESSION,
@@ -314,7 +315,11 @@ class SessionManager:
         user: User,
     ) -> None:
         llm_config = self.session_llm_config(session, user)
-        mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
+        mcp_servers = resolve_craft_mcp_servers(
+            self._db_session,
+            user,
+            get_scheduled_task_id_for_session(self._db_session, session.id),
+        )
         expected = json.dumps(
             build_provider_opencode_config(
                 llm_config,
@@ -377,7 +382,7 @@ class SessionManager:
             agent_model=llm_config.model_name,
             nextjs_port=session.nextjs_port,
             connectable_apps_section=build_connectable_apps_list(
-                get_connectable_apps_for_user(self._db_session, user)
+                list_connectable_apps(self._db_session, user)
             ),
             user_name=user.personal_name,
             llm_config=llm_config,
@@ -492,7 +497,11 @@ class SessionManager:
             if sandbox.status == SandboxStatus.RUNNING:
                 try:
                     llm_config = self.session_llm_config(session, user)
-                    mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
+                    mcp_servers = resolve_craft_mcp_servers(
+                        self._db_session,
+                        user,
+                        get_scheduled_task_id_for_session(self._db_session, session.id),
+                    )
                     # Rewrite the per-session opencode.json (provider catalog +
                     # current MCP set) and AGENTS.md BEFORE disposing so the
                     # fresh instance re-reads the current config.
@@ -503,7 +512,7 @@ class SessionManager:
                         agent_model=session.agent_model,
                         nextjs_port=session.nextjs_port,
                         connectable_apps_section=build_connectable_apps_list(
-                            get_connectable_apps_for_user(self._db_session, user)
+                            list_connectable_apps(self._db_session, user)
                         ),
                         user_name=user.personal_name,
                         llm_config=llm_config,
@@ -592,6 +601,7 @@ class SessionManager:
         user_id: UUID,
         name: str | None = None,
         origin: SessionOrigin = SessionOrigin.INTERACTIVE,
+        task_id: UUID | None = None,
     ) -> BuildSession:
         """Create a new build session with a ready sandbox.
 
@@ -607,6 +617,8 @@ class SessionManager:
             origin: Provenance of the session. INTERACTIVE (default) sessions
                 appear in the Craft sidebar; SCHEDULED (scheduled-tasks
                 executor) and SLACK (Slack bot) sessions are excluded.
+            task_id: The task of a scheduled run. The run row names the
+                session only after creation, so the executor passes it.
 
         Raises:
             ValueError: If the user is missing
@@ -649,7 +661,7 @@ class SessionManager:
             build_session.nextjs_port,
         )
 
-        self._reconcile_session(sandbox, build_session, user, llm_config)
+        self._reconcile_session(sandbox, build_session, user, llm_config, task_id)
         return build_session
 
     def get_or_create_empty_session(
@@ -764,6 +776,7 @@ class SessionManager:
         session: BuildSession,
         user: User,
         llm_config: CraftLLMProviderConfig,
+        task_id: UUID | None = None,
     ) -> None:
         """Build the workspace and OpenCode session for a committed
         ``INITIALIZING`` session, then mark it ``ACTIVE`` (a no-op if the
@@ -777,9 +790,14 @@ class SessionManager:
         session_id = session.id
         try:
             connectable_apps_section = build_connectable_apps_list(
-                get_connectable_apps_for_user(self._db_session, user)
+                list_connectable_apps(self._db_session, user)
             )
-            mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
+            mcp_servers = resolve_craft_mcp_servers(
+                self._db_session,
+                user,
+                task_id
+                or get_scheduled_task_id_for_session(self._db_session, session_id),
+            )
             nextjs_port = session.nextjs_port
             opencode_session_id = session.opencode_session_id
             user_name = user.personal_name

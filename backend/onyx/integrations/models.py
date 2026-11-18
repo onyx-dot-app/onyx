@@ -11,6 +11,7 @@ from onyx.db.enums import (
     IntegrationActionSource,
     IntegrationAuthMethod,
     MCPTransport,
+    PluginInstallationPolicy,
 )
 from onyx.external_apps.providers.base import ExternalAppProvider
 
@@ -44,6 +45,18 @@ class MatchedIntegrationAction(BaseModel):
     display_name: str
     description: str
     default_policy: IntegrationActionPolicyValue
+
+
+class RequestMatch(BaseModel):
+    """What a kind finds in a proxied request for its integration. An empty
+    ``actions`` is an MCP protocol request that calls no action."""
+
+    model_config = ConfigDict(frozen=True)
+
+    actions: list[MatchedIntegrationAction]
+    # The length of the URL path prefix that matched. When two MCP servers
+    # share a host, the longest prefix wins.
+    path_prefix_length: int = 0
 
 
 class McpServerConfig(BaseModel):
@@ -163,3 +176,42 @@ class CallCredentials(BaseModel):
     secret_fingerprint: str | None = None
     # When the bearer token of a token method expires; None when unknown.
     expires_at: datetime | None = None
+
+
+class UsableIntegrationIds(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # Of the plugins that the user turned on.
+    turned_on: frozenset[int]
+    # Of each plugin that the user can see, on or off.
+    by_visible_plugin: dict[UUID, frozenset[int]]
+
+    @property
+    def visible(self) -> frozenset[int]:
+        return frozenset().union(*self.by_visible_plugin.values())
+
+
+class PersonaPluginLink(BaseModel):
+    """A plugin on an agent (``persona__plugin``)."""
+
+    plugin_id: UUID
+    action_settings: ActionSettings = ActionSettings()
+
+
+class PersonaPluginSnapshot(PersonaPluginLink):
+    plugin_name: str
+
+
+class IntegrationPluginRow(BaseModel):
+    """One plugin that holds an integration, with where it lives."""
+
+    model_config = ConfigDict(frozen=True)
+
+    integration_id: int
+    plugin_id: UUID
+    plugin_name: str
+    plugin_description: str
+    in_organization_library: bool
+    author_user_id: UUID | None
+    owner_email: str | None
+    installation_policy: PluginInstallationPolicy | None

@@ -10,6 +10,7 @@ from onyx.db.enums import (
     IntegrationOAuthProviderMode,
 )
 from onyx.db.integration_connection import (
+    delete_connection__no_commit,
     get_connection,
     get_oauth_client,
     mark_connection_needs_reconnect__no_commit,
@@ -22,7 +23,6 @@ from onyx.integrations.connection_models import (
     ConnectionState,
 )
 from onyx.integrations.connections import (
-    disconnect,
     integration_status,
     mark_sign_in_settings_changed,
     sign_in_settings_for,
@@ -179,10 +179,10 @@ def test_disconnect_deletes_only_the_user_row(
         db_session, integration, other.id, ConnectionSecret(fields={"a": "2"})
     )
 
-    assert disconnect(integration, user, db_session) is True
+    assert delete_connection__no_commit(db_session, integration.id, user.id) is True
     assert get_connection(db_session, integration.id, user.id) is None
     assert get_connection(db_session, integration.id, other.id) is not None
-    assert disconnect(integration, user, db_session) is False
+    assert delete_connection__no_commit(db_session, integration.id, user.id) is False
 
 
 def test_deactivation_deletes_connections(

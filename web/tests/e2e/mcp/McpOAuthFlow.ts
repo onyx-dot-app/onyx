@@ -1,6 +1,6 @@
-import { type Page, expect } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { logPageState } from "@tests/e2e/utils/pageStateLogger";
-import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
+import type { IntegrationConnectPrompt } from "@tests/e2e/pages/IntegrationConnectPrompt";
 
 const REQUIRED_ENV_VARS = [
   "MCP_OAUTH_CLIENT_ID",
@@ -539,33 +539,17 @@ export class McpOAuthFlow {
     if (!tab.isClosed()) await tab.waitForEvent("close", { timeout: 60_000 });
   }
 
-  async connectFromChat(
-    plugins: ChatPluginsPopover,
-    serverName: string
+  /** Connects an integration from the chat connect prompt in a new tab. */
+  async connectFromPrompt(
+    prompt: IntegrationConnectPrompt,
+    integrationName: string
   ): Promise<void> {
-    const startingUrl = this.page.url();
-    if (await plugins.needsConnection(serverName)) {
-      await plugins.connectPlugin(serverName);
-      const popup =
-        await plugins.connectionDialog.continueWithOAuth(serverName);
-      try {
-        await popup.waitForURL(
-          (url) => url.protocol === "https:" || url.protocol === "http:",
-          {
-            timeout: 10_000,
-          }
-        );
-        if (!popup.isClosed() && !this.isOnAppHost(popup.url())) {
-          await new McpOAuthFlow(popup, this.config).performIdpLogin();
-        }
-      } catch (error) {
-        if (!popup.isClosed()) throw error;
-      }
-      await plugins.connectionDialog.expectClosed();
-    }
-    await expect(this.page).toHaveURL(startingUrl);
-    await plugins.expectConnected(serverName);
-    await plugins.expectPluginEnabled(serverName, true);
-    await plugins.close();
+    await prompt.open();
+    await this.completeFlowInNewTab(() =>
+      prompt.dialog.startConnect(integrationName)
+    );
+    await prompt.dialog.expectConnected(integrationName);
+    await prompt.dialog.close();
+    await prompt.expectHidden();
   }
 }

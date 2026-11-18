@@ -676,6 +676,10 @@ def visible_plugin_ids(user_id: UUID) -> Select[tuple[UUID]]:
     return select(pairs.c.plugin_id)
 
 
+def get_visible_plugin_ids(user_id: UUID, db_session: Session) -> set[UUID]:
+    return set(db_session.scalars(visible_plugin_ids(user_id)).all())
+
+
 _NO_SKILL_DISK_ACCOUNTS = (
     AccountType.BOT,
     AccountType.EXT_PERM_USER,

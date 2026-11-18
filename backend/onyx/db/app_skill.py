@@ -1,5 +1,4 @@
 from collections.abc import Iterable
-from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -36,15 +35,3 @@ def built_in_app_skills(
         EXTERNAL_APP_BUILT_IN_SKILL_IDS[app_type]: external_app_id
         for external_app_id, app_type in rows
     }
-
-
-def plugin_ids_holding_external_app(
-    db_session: Session, external_app_id: int
-) -> list[UUID]:
-    return list(
-        db_session.scalars(
-            select(Plugin__Integration.plugin_id)
-            .join(Integration, Integration.id == Plugin__Integration.integration_id)
-            .where(Integration.external_app_id == external_app_id)
-        )
-    )

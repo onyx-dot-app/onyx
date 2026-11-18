@@ -1,0 +1,149 @@
+"use client";
+
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { Button, Text } from "@opal/components";
+import { ContentAction, toast } from "@opal/layouts";
+import { IconLoader } from "@opal/loaders";
+import { SvgCheckCircle, SvgKey, SvgPlug } from "@opal/icons";
+import { useSWRConfig } from "swr";
+import {
+  connectAction,
+  connectWithOAuth,
+  needsAdmin,
+} from "@/lib/integrations/connect";
+import { deleteUserConnection, startUserOAuth } from "@/lib/integrations/svc";
+import type { MemberIntegration } from "@/lib/integrations/types";
+import { isSilentOAuthOutcome, oauthFailureDetail } from "@/lib/oauth/launch";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import IntegrationCredentialsModal from "@/sections/plugins/IntegrationCredentialsModal";
+
+interface IntegrationConnectionRowProps {
+  integration: MemberIntegration;
+  /** Where the OAuth callback returns when no waiting tab closes it. */
+  returnPath: string;
+  allowDisconnect?: boolean;
+}
+
+export default function IntegrationConnectionRow({
+  integration,
+  returnPath,
+  allowDisconnect = false,
+}: IntegrationConnectionRowProps) {
+  const t = useTranslations("plugins.member.connection");
+  const stateCopy = useTranslations("integrations");
+  const { mutate } = useSWRConfig();
+  const [busy, setBusy] = useState(false);
+  const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const { state, reason } = integration.status;
+  const action = connectAction(integration);
+  const name = integration.name;
+
+  async function refresh() {
+    await mutate(SWR_KEYS.integrations);
+  }
+
+  async function connected() {
+    toast.success(t("connected", { name }));
+    await refresh();
+  }
+
+  async function connect() {
+    if (integration.auth_method === "api_key") {
+      setCredentialsOpen(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await connectWithOAuth(
+        (path) => startUserOAuth(integration.id, path),
+        returnPath
+      );
+      if (result === "connected") await connected();
+    } catch (error) {
+      if (!isSilentOAuthOutcome(error))
+        toast.error(
+          oauthFailureDetail(error)?.description ??
+            (error instanceof Error && error.message
+              ? error.message
+              : t("failed"))
+        );
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disconnect() {
+    setBusy(true);
+    try {
+      await deleteUserConnection(integration.id);
+      toast.success(t("disconnected", { name }));
+      await refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("disconnectFailed")
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const description =
+    state === "needs_reconnect" && reason
+      ? reason
+      : stateCopy("connectionState", { state });
+
+  return (
+    <>
+      <ContentAction
+        icon={state === "connected" ? SvgCheckCircle : SvgPlug}
+        color={state === "connected" ? "success" : "default"}
+        title={name}
+        description={description}
+        padding={2}
+        rightChildren={
+          action ? (
+            <Button
+              key="connect"
+              size="md"
+              icon={busy ? IconLoader : SvgKey}
+              disabled={busy}
+              aria-label={t(`${action}.ariaLabel`, { name })}
+              onClick={() => void connect()}
+            >
+              {t(`${action}.label`)}
+            </Button>
+          ) : needsAdmin(integration) ? (
+            <Text font="secondary-body" color="text-03">
+              {t("askAdmin")}
+            </Text>
+          ) : state === "connected" &&
+            allowDisconnect &&
+            integration.auth_mode === "individual" ? (
+            <Button
+              key="disconnect"
+              size="md"
+              prominence="secondary"
+              disabled={busy}
+              aria-label={t("disconnect.ariaLabel", { name })}
+              onClick={() => void disconnect()}
+            >
+              {t("disconnect.label")}
+            </Button>
+          ) : undefined
+        }
+      />
+      {credentialsOpen && (
+        <IntegrationCredentialsModal
+          integration={integration}
+          onClose={() => setCredentialsOpen(false)}
+          onConnected={() => {
+            setCredentialsOpen(false);
+            void connected();
+          }}
+        />
+      )}
+    </>
+  );
+}

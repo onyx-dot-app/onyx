@@ -1,73 +1,103 @@
 import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
-import { loginAs } from "@tests/e2e/utils/auth";
+import { apiLogin } from "@tests/e2e/utils/auth";
+import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
-import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
+import { MemberPluginsPage } from "@tests/e2e/pages/MemberPluginsPage";
+import type { IntegrationCreate } from "@/lib/integrations/types";
 
 /**
- * Group/public access control for MCP servers (CE surface).
- *
- * Group read/filter behaviour is covered by external-dependency unit tests that
- * seed access rows directly. The create/edit selector is EE/business-tier only.
+ * Access to an MCP server comes from the plugin that holds it: a plugin in
+ * the Organization library reaches each member, and a plugin in "My uploads"
+ * reaches only its owner until the owner shares it.
  */
-test.describe("MCP server group access control", () => {
+test.describe("MCP server access through plugins", () => {
   test.describe.configure({ mode: "serial" });
 
-  const createdServerIds: number[] = [];
   const suffix = Date.now().toString();
+  const organizationName = `PW Org MCP ${suffix}`;
+  const personalName = `PW Personal MCP ${suffix}`;
+  const createdIds: number[] = [];
+  let member: { email: string; password: string } | null = null;
 
-  test("server with no access fields defaults to public", async ({ page }) => {
-    await loginAs(page, "admin");
-    const res = await page.request.post("/api/admin/mcp/server", {
-      data: {
-        name: `Public MCP ${suffix}`,
-        description: "public default",
+  function server(name: string, forOrganization: boolean): IntegrationCreate {
+    return {
+      for_organization: forOrganization,
+      name,
+      description: "access test",
+      auth_mode: "individual",
+      auth_method: "api_key",
+      credential_fields: [{ key: "api_key", label: "API Key", secret: true }],
+      header_template: { Authorization: "Bearer {api_key}" },
+      oauth_client: null,
+      config: {
+        shape: "mcp_server",
         server_url: "https://example.com/mcp",
-        is_public: true,
-        groups: [],
+        transport: "STREAMABLE_HTTP",
       },
-    });
-    expect(res.ok()).toBeTruthy();
-    const body = await res.json();
-    createdServerIds.push(body.id);
-    expect(body.is_public).toBe(true);
-    expect(body.groups).toEqual([]);
-  });
+    };
+  }
 
-  test("CE rejects private server creation", async ({ page, eeEnabled }) => {
-    test.skip(eeEnabled, "CE-only: EE persists private + group grants");
-    await loginAs(page, "admin");
-    const res = await page.request.post("/api/admin/mcp/server", {
-      data: {
-        name: `Restricted MCP ${suffix}`,
-        description: "private server on CE",
-        server_url: "https://example.com/mcp",
-        is_public: false,
-        groups: [999999],
-      },
+  test.beforeAll(async ({ browser }) => {
+    const adminContext = await browser.newContext({
+      storageState: "admin_auth.json",
     });
-    expect(res.status()).toBe(403);
-    const body = await res.json();
-    expect(body.error_code).toBe("EE_REQUIRED");
-  });
-
-  test("Add-Server modal exposes the access (public/groups) selector", async ({
-    page,
-    eeEnabled,
-  }) => {
-    test.skip(!eeEnabled, "IsPublicGroupSelector requires business/EE tier");
-    await loginAs(page, "admin");
-    const mcpPage = new AdminMcpServersPage(page);
-    await mcpPage.goto();
-    await mcpPage.openAddServerModal();
-    await mcpPage.expectAccessControlVisible();
+    const adminClient = new OnyxApiClient(adminContext.request);
+    for (const [name, forOrganization] of [
+      [organizationName, true],
+      [personalName, false],
+    ] as const) {
+      createdIds.push(
+        (await adminClient.createIntegration(server(name, forOrganization))).id
+      );
+    }
+    member = {
+      email: `pw-access-${suffix}@example.com`,
+      password: "TestPassword123!",
+    };
+    await adminClient.registerUser(member.email, member.password);
+    await adminContext.close();
   });
 
   test.afterAll(async ({ browser }) => {
-    const page = await browser.newPage();
-    await loginAs(page, "admin");
-    const client = new OnyxApiClient(page.request);
-    for (const id of createdServerIds) {
-      await client.deleteMcpServer(id);
-    }
+    const adminContext = await browser.newContext({
+      storageState: "admin_auth.json",
+    });
+    const adminClient = new OnyxApiClient(adminContext.request);
+    for (const id of createdIds) await adminClient.deleteIntegration(id);
+    await adminContext.close();
+  });
+
+  test("a member sees the Organization library server and not a personal one", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await apiLogin(page, member!.email, member!.password);
+    await page.goto("/app");
+    await ensureOnboardingComplete(page);
+
+    const response = await page.request.get("/api/integrations");
+    expect(response.ok()).toBeTruthy();
+    const names = ((await response.json()) as { name: string }[]).map(
+      (integration) => integration.name
+    );
+    expect(names).toContain(organizationName);
+    expect(names).not.toContain(personalName);
+
+    const plugins = new MemberPluginsPage(page);
+    await plugins.goto();
+    await plugins.search(suffix);
+    await plugins.expectPluginVisible(organizationName);
+    await plugins.expectPluginAbsent(personalName);
+  });
+
+  test("a member without manage:actions cannot add an integration", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await apiLogin(page, member!.email, member!.password);
+    const response = await page.request.post("/api/admin/integrations", {
+      data: server(`PW Denied MCP ${suffix}`, false),
+    });
+    expect(response.status()).toBe(403);
   });
 });

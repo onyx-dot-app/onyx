@@ -17,7 +17,7 @@ from sqlalchemy import pool
 from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.engine.base import Connection
-from sqlalchemy.schema import SchemaItem
+from sqlalchemy.schema import Column, Constraint, Index, SchemaItem, Table
 import os
 from itertools import chain
 import asyncio
@@ -64,22 +64,37 @@ target_metadata = [Base.metadata, ResultModelBase.metadata]
 
 # Tables that stay in the database for rollback after their model was deleted.
 # Without this filter, autogenerate proposes to drop them.
-_TABLES_KEPT_WITHOUT_MODEL = frozenset({"external_app__skill"})
+_TABLES_KEPT_WITHOUT_MODEL = frozenset(
+    {
+        "external_app__skill",
+        "external_app_user_credential",
+        "mcp_server__user",
+        "mcp_server_user_preference",
+        "oauth_user_token",
+        "scheduled_task_action_policy",
+        "scheduled_task_enabled_app",
+        "tool_user_preference",
+        "user_action_policy",
+        "workspace_action_policy",
+    }
+)
 
 
 def include_object(
-    _object: SchemaItem,
-    name: str | None,
-    type_: str,
+    object_: SchemaItem,
+    _name: str | None,
+    _type: str,
     reflected: bool,
     compare_to: SchemaItem | None,
 ) -> bool:
-    return not (
-        type_ == "table"
-        and reflected
-        and compare_to is None
-        and name in _TABLES_KEPT_WITHOUT_MODEL
-    )
+    if not reflected or compare_to is not None:
+        return True
+    if isinstance(object_, Table):
+        return object_.name not in _TABLES_KEPT_WITHOUT_MODEL
+    if isinstance(object_, (Column, Constraint, Index)):
+        table = object_.table
+        return table is None or table.name not in _TABLES_KEPT_WITHOUT_MODEL
+    return True
 
 
 logger = logging.getLogger(__name__)

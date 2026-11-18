@@ -600,8 +600,6 @@ op.alter_column('oauth_account', 'refresh_token',
            existing_type=sa.TEXT(),
            nullable=False)
 
-op.drop_index(op.f('ix_oauth_user_token_user_id'), table_name='oauth_user_token')
-
 op.alter_column('persona', 'is_featured',
            existing_type=sa.BOOLEAN(),
            server_default=None,
