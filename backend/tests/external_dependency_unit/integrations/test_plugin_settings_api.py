@@ -22,7 +22,10 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.models import Marketplace, Persona, Plugin, PluginSkill, Skill, User
+from onyx.db.plugin_access import load_user_plugin_states
 from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.models import ActionSettings
+from onyx.integrations.policy import agent_plugin_settings
 from onyx.server.features.integrations import admin_api, api, plugins_api
 from onyx.server.features.integrations.models import (
     IntegrationCreate,
@@ -179,6 +182,53 @@ def _persona(
 
 
 # Plugins an agent runs
+
+
+@pytest.mark.parametrize("default_agent", [False, True])
+@pytest.mark.parametrize("published_only", [False, True])
+def test_agent_state_filter_preserves_settings(
+    db_session: Session,
+    admin: User,
+    scoped: User,
+    created: list[int],
+    default_agent: bool,
+    published_only: bool,
+) -> None:
+    visible_id = _create(admin, db_session, created, for_organization=True)
+    private_id = _create(scoped, db_session, created, for_organization=False)
+    _create(admin, db_session, created, for_organization=True)
+    states = load_user_plugin_states([scoped.id], db_session)
+    if published_only:
+        states = [state for state in states if state.published]
+    persona_id = DEFAULT_PERSONA_ID if default_agent else 7
+    for links in (
+        {
+            visible_id: ActionSettings(),
+            private_id: ActionSettings(),
+            uuid4(): ActionSettings(),
+        },
+        {},
+    ):
+        if default_agent:
+            expected = {
+                state.plugin_id: links.get(state.plugin_id)
+                for state in states
+                if state.enabled
+            }
+        else:
+            visible = {state.plugin_id for state in states}
+            expected = {key: value for key, value in links.items() if key in visible}
+        with patch(
+            "onyx.integrations.policy.load_user_plugin_states",
+            wraps=load_user_plugin_states,
+        ) as load:
+            actual = agent_plugin_settings(
+                db_session, scoped.id, persona_id, links, published_only=published_only
+            )
+        assert actual == expected
+        assert load.call_args is not None
+        requested = load.call_args.kwargs.get("plugin_ids")
+        assert requested == (None if default_agent else list(links))
 
 
 def test_default_agent_runs_the_plugins_the_user_turned_on(

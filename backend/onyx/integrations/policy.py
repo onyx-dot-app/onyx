@@ -232,7 +232,11 @@ def agent_plugin_settings(
     settings of the agent for each. The default agent uses each plugin the
     user runs; another agent uses each linked plugin the user can see.
     ``published_only`` keeps only the Organization library."""
-    states = load_user_plugin_states([user_id], db_session)
+    states = load_user_plugin_states(
+        [user_id],
+        db_session,
+        plugin_ids=None if persona_id == DEFAULT_PERSONA_ID else list(links),
+    )
     if published_only:
         states = [state for state in states if state.published]
     if persona_id == DEFAULT_PERSONA_ID:
