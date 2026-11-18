@@ -71,7 +71,7 @@ func isAgentCommand(name string) bool {
 // LastActivity is the latest sign of work on a stack: its start or last
 // `stack up`, `restart` or `stop` (which rewrite the state), a Git
 // operation in its checkout (commit, checkout, add, rebase), or a change to a
-// modified or untracked file. A coding agent that runs in the checkout counts
+// modified, deleted or untracked file. A coding agent that runs in the checkout counts
 // as activity at now. Ignored files such as logs do not count, because a
 // running stack writes them while nobody works.
 func LastActivity(row StackRow, agentDirs []string, now time.Time) time.Time {
@@ -112,7 +112,13 @@ func LastActivity(row StackRow, agentDirs []string, now time.Time) time.Time {
 			if name == "" {
 				continue
 			}
-			if info, err := os.Lstat(filepath.Join(row.Root, name)); err == nil {
+			path := filepath.Join(row.Root, name)
+			info, err := os.Lstat(path)
+			if errors.Is(err, os.ErrNotExist) {
+				// A deleted tracked file changes the mtime of its directory.
+				info, err = os.Stat(filepath.Dir(path))
+			}
+			if err == nil {
 				later(info.ModTime())
 			}
 		}

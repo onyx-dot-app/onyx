@@ -1,8 +1,6 @@
 package devstack
 
 import (
-	"context"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -80,6 +78,23 @@ func TestLastActivityCountsGitAndUntrackedEditsButNotIgnoredFiles(t *testing.T) 
 	}
 	if got := LastActivity(row, nil, time.Now()); !got.After(started) {
 		t.Fatalf("a git operation did not count: %s", got)
+	}
+
+	tracked := filepath.Join(root, "docs", "tracked.md")
+	writeFile(t, tracked, "x")
+	for _, args := range [][]string{{"add", "docs"}, {"-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "docs"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	age(t, root, old)
+	if err := os.Remove(tracked); err != nil {
+		t.Fatal(err)
+	}
+	if got := LastActivity(row, nil, time.Now()); !got.After(started) {
+		t.Fatalf("a deleted tracked file did not count: %s", got)
 	}
 
 	if got := LastActivity(StackRow{Root: "/nonexistent", Since: started}, nil, time.Now()); !got.Equal(started) {
@@ -183,23 +198,5 @@ func TestAgentDirsFindsARunningAgent(t *testing.T) {
 	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
 	if dirs, err := AgentDirs(); err != nil || !slices.Contains(dirs, work) {
 		t.Fatalf("AgentDirs() = %v, want it to contain %s", dirs, work)
-	}
-}
-
-func TestCleanupRowSkipsAnIdleStackRestartedAfterItWasListed(t *testing.T) {
-	stack, _ := isolatedLinkedStack(t, "restarted-later")
-	st, err := stack.ReadState()
-	if err != nil || st == nil {
-		t.Fatalf("state %v, %v", st, err)
-	}
-	row := StackRow{Project: stack.Project, Mode: Isolated, StateDir: stack.StateDir, Root: stack.Root, RootExists: true,
-		Worktree: true, Status: StatusInfraOnly, Since: time.Now().Add(-48 * time.Hour)}
-	compose := &fakeCompose{}
-	opts := ProjectOptions{LockWait: time.Second, Force: true, IdleCutoff: time.Now().Add(-6 * time.Hour)}
-	if _, err := CleanupRow(context.Background(), stack.Registry, row, compose.down, opts); !errors.Is(err, ErrNotIdle) {
-		t.Fatalf("err = %v, want ErrNotIdle", err)
-	}
-	if len(compose.projects) != 0 {
-		t.Fatalf("a restarted stack was stopped: %v", compose.projects)
 	}
 }

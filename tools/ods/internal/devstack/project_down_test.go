@@ -269,3 +269,21 @@ func TestCleanupRowRefusesWhenTheOwnerRecordIsUnreadable(t *testing.T) {
 		t.Fatalf("err = %v, compose = %v", err, compose.projects)
 	}
 }
+
+func TestCleanupRowSkipsAnIdleStackRestartedAfterItWasListed(t *testing.T) {
+	stack, _ := isolatedLinkedStack(t, "restarted-later")
+	st, err := stack.ReadState()
+	if err != nil || st == nil {
+		t.Fatalf("state %v, %v", st, err)
+	}
+	row := StackRow{Project: stack.Project, Mode: Isolated, StateDir: stack.StateDir, Root: stack.Root, RootExists: true,
+		Worktree: true, Status: StatusInfraOnly, Since: time.Now().Add(-48 * time.Hour)}
+	compose := &fakeCompose{}
+	opts := ProjectOptions{LockWait: time.Second, Force: true, IdleCutoff: time.Now().Add(-6 * time.Hour)}
+	if _, err := CleanupRow(context.Background(), stack.Registry, row, compose.down, opts); !errors.Is(err, ErrNotIdle) {
+		t.Fatalf("err = %v, want ErrNotIdle", err)
+	}
+	if len(compose.projects) != 0 {
+		t.Fatalf("a restarted stack was stopped: %v", compose.projects)
+	}
+}

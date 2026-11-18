@@ -479,7 +479,7 @@ every owner record.
 `ods stack prune --idle 6h` also stops each isolated stack whose worktree had no
 activity for 6 hours. Activity is the stack start, a Git operation in the
 worktree (commit, checkout, add, rebase), a change to a modified or untracked
-file, or a running coding agent (`claude`, `codex`, `opencode`, `cursor-agent`)
+file, a deleted tracked file, or a running coding agent (`claude`, `codex`, `opencode`, `cursor-agent`)
 whose working directory is in the worktree. Ignored files, such as service
 logs, do not count. ods finds agents through `/proc` on Linux and `lsof` on
 macOS. If ods cannot find the agents, `prune --idle` fails and stops nothing.
