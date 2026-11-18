@@ -42,6 +42,8 @@ interface InputBarProps {
   // A waiting question card takes the sent message as its answer.
   answersQuestions?: boolean;
   toolsReady: boolean;
+  toolsFailed?: boolean;
+  onRetryTools?: () => void;
 }
 
 export function InputBar({
@@ -53,6 +55,8 @@ export function InputBar({
   attachments,
   answersQuestions = false,
   toolsReady,
+  toolsFailed = false,
+  onRetryTools,
 }: InputBarProps) {
   const insets = useSafeAreaInsets();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -127,6 +131,21 @@ export function InputBar({
           >
             Remove the failed attachment to send.
           </Text>
+        ) : null}
+
+        {toolsFailed ? (
+          <View className="flex-row items-center justify-between gap-8 px-12 pb-4">
+            <Text
+              font="secondary-body"
+              color="status-error-05"
+              className="shrink"
+            >
+              Your action settings did not load.
+            </Text>
+            <Button prominence="tertiary" size="sm" onPress={onRetryTools}>
+              Retry
+            </Button>
+          </View>
         ) : null}
 
         <View className="min-h-40 flex-row items-center justify-between p-4">

@@ -164,6 +164,8 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
         attachments={draft}
         answersQuestions={answersQuestions}
         toolsReady={composerTools.toolOptionsReady}
+        toolsFailed={composerTools.toolOptionsFailed}
+        onRetryTools={composerTools.retryToolOptions}
       />
     </Animated.View>
   );

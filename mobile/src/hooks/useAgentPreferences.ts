@@ -30,6 +30,8 @@ export interface UseAgentPreferences {
   preferences: AgentPreferences;
   // An empty record reads as "nothing disabled", so a caller reconciling against it must wait.
   isLoaded: boolean;
+  loadFailed: boolean;
+  reload: () => void;
   disabledToolIdsFor: (agentId: number) => number[];
   disabledPluginIdsFor: (agentId: number) => string[];
   /*
@@ -57,6 +59,10 @@ export function useAgentPreferences(): UseAgentPreferences {
   });
 
   const preferences = query.data ?? EMPTY_PREFERENCES;
+  const { refetch } = query;
+  const reload = useCallback(() => {
+    void refetch();
+  }, [refetch]);
 
   const disabledToolIdsFor = useCallback(
     (agentId: number) => preferences[String(agentId)]?.disabled_tool_ids ?? [],
@@ -148,6 +154,8 @@ export function useAgentPreferences(): UseAgentPreferences {
   return {
     preferences,
     isLoaded: query.isSuccess,
+    loadFailed: query.isError,
+    reload,
     disabledToolIdsFor,
     disabledPluginIdsFor,
     setToolDisabled,
