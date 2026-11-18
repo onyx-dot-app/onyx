@@ -2118,7 +2118,6 @@ def _docprocessing_task(
             index_to_secondary=index_to_secondary,
             tenant_id=tenant_id,
             document_batch=documents,
-            request_id=index_attempt_metadata.request_id,
             adapter=adapter,
             from_beginning=from_beginning,
             skip_spreadsheet_content=SKIP_SPREADSHEET_CONTENT,

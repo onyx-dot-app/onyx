@@ -31,6 +31,7 @@ from onyx.indexing.models import (
     DocAwareChunk,
     DocMetadataAwareIndexChunk,
     IndexChunk,
+    IndexingBatchAdapter,
     UpdatableChunkData,
 )
 from onyx.llm.factory import get_default_llm
@@ -71,7 +72,8 @@ def _acquire_user_file_locks(db_session: Session, user_file_ids: list[str]) -> b
     return True
 
 
-class UserFileIndexingAdapter:
+class UserFileIndexingAdapter(IndexingBatchAdapter):
+    index_attempt_metadata = None
     connector_id: int | None = None
     credential_id: int | None = None
 
