@@ -11,14 +11,16 @@ Errors: a daemon error is a `SandboxDaemonError` (domain
 running, the daemon is unreachable) is a `HostAgentError`.
 """
 
-import hashlib
+import os
 import secrets
 import threading
 from collections.abc import Callable, Generator, Iterator
 from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Protocol, TypeVar
+from functools import partial
+from io import BytesIO
+from typing import IO, Protocol, TypeVar
 
 import grpc
 from pydantic import SecretStr
@@ -283,9 +285,15 @@ def _file_entry(msg: sandboxd_pb2.FileInfo) -> FileEntry:
     )
 
 
-def _chunks(data: bytes) -> Iterator[bytes]:
-    for start in range(0, len(data), _WRITE_CHUNK_BYTES):
-        yield data[start : start + _WRITE_CHUNK_BYTES]
+def _write_content(data: bytes | IO[bytes]) -> tuple[int, Iterator[bytes]]:
+    """The size and data chunks of a write: the whole file from its start,
+    read one chunk at a time. The daemon checks the size."""
+    source = BytesIO(data) if isinstance(data, bytes) else data
+    if not source.seekable():
+        raise ValueError("a sandbox write needs bytes or a seekable file")
+    size = source.seek(0, os.SEEK_END)
+    source.seek(0)
+    return size, iter(partial(source.read, _WRITE_CHUNK_BYTES), b"")
 
 
 _Msg_co = TypeVar("_Msg_co", covariant=True)
@@ -596,18 +604,20 @@ class SandboxDaemonClient:
         *,
         session_id: str,
         path: str,
-        data: bytes,
+        data: bytes | IO[bytes],
         mode: int = 0,
         overwrite: bool = True,
         make_parents: bool = True,
     ) -> WrittenFile:
-        """Atomic write: the daemon renames the file into place only when the
-        size and SHA-256 match. Without overwrite, FILE_EXISTS raises."""
+        """Atomic write: the daemon renames the file into place only when all
+        bytes arrived. `data` is bytes, or a seekable binary file that is
+        streamed whole, from its start, in chunks, so it is never whole in
+        memory. Without overwrite, FILE_EXISTS raises."""
+        size, chunks = _write_content(data)
         header = sandboxd_pb2.WriteFileHeader(
             session_id=session_id,
             path=path,
-            size=len(data),
-            sha256=hashlib.sha256(data).hexdigest(),
+            size=size,
             mode=mode,
             overwrite=overwrite,
             make_parents=make_parents,
@@ -615,7 +625,7 @@ class SandboxDaemonClient:
 
         def requests() -> Iterator[sandboxd_pb2.WriteFileRequest]:
             yield sandboxd_pb2.WriteFileRequest(header=header)
-            for chunk in _chunks(data):
+            for chunk in chunks:
                 yield sandboxd_pb2.WriteFileRequest(data=chunk)
 
         try:
@@ -627,21 +637,27 @@ class SandboxDaemonClient:
         return WrittenFile(info=_file_entry(r.info), sha256=r.sha256)
 
     def upload_file(
-        self, *, session_id: str, file_name: str, data: bytes, directory: str = ""
+        self,
+        *,
+        session_id: str,
+        file_name: str,
+        data: bytes | IO[bytes],
+        directory: str = "",
     ) -> WrittenFile:
         """Store an upload under a free name in `directory` (default
-        attachments). `info.path` is the stored path."""
+        attachments). `info.path` is the stored path. `data` as for
+        write_file."""
+        size, chunks = _write_content(data)
         header = sandboxd_pb2.UploadFileHeader(
             session_id=session_id,
             file_name=file_name,
-            size=len(data),
-            sha256=hashlib.sha256(data).hexdigest(),
+            size=size,
             directory=directory,
         )
 
         def requests() -> Iterator[sandboxd_pb2.UploadFileRequest]:
             yield sandboxd_pb2.UploadFileRequest(header=header)
-            for chunk in _chunks(data):
+            for chunk in chunks:
                 yield sandboxd_pb2.UploadFileRequest(data=chunk)
 
         try:

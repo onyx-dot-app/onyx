@@ -272,8 +272,11 @@ the stored token on each request, so a new token takes effect at once.
   the agent pass-through: Health, Init, exec (run, start, stream by offsets,
   interact, cancel with an optional SIGINT/SIGTERM, inspect, list; at most 64
   tracked executions per VM) and files (read, write, upload, list, delete,
-  zip; session-relative, or absolute VM paths with no session). Every call but
-  Health sends `x-sandboxd-key`.
+  zip; session-relative, or absolute VM paths with no session; the daemon
+  confines no-session paths in `/tmp/onyx` like session paths). Write and
+  upload take bytes or a seekable binary file, streamed whole from its start
+  in 1 MiB messages; the daemon checks the size. Every call but Health sends
+  `x-sandboxd-key`.
 - `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
   free memory (a node at its `max_vms` cap is skipped),
   `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. New `VmRequest`s default to
@@ -323,7 +326,12 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   x 4 bytes). A cancel of the current signal ends the wait and
   kills the command however the wait ends (also when the consumer drops the
   stream); a call cancelled before its command starts or its input is
-  written does neither. `read_file` / `write_file` (exact bytes, a mode),
+  written does neither. `read_file` / `write_file` (exact bytes, a mode;
+  a write also takes a seekable file, for example a file store
+  `read_file(use_tempfile=True)`, and streams it whole from its start),
+  `write_onyx_file` (an
+  absolute path under `ONYX_VM_FILES_ROOT`, `/tmp/onyx`: wakes the VM but
+  restores no session; session saves never include it),
   `stat_files` (the guest daemon's typed `StatFiles` RPC over `os.Root`:
   each path's own entry and link target, and its target through the links
   inside the session with a device and inode identity, or why there is none:

@@ -296,7 +296,9 @@ At boot, init:
    `dmesg_restrict=1`, `sysrq=0`, `kexec_load_disabled=1` and
    `modules_disabled=1`. Guest root cannot set the last two back before a
    reboot. The guest has no kernel modules and no program in it needs
-   io_uring.
+   io_uring. It also sets `fs.protected_hardlinks=1` and
+   `fs.protected_symlinks=1`, so links that the sandbox user makes in `/tmp`
+   do not redirect root.
 2. Sets the host name to `sandbox` and starts the loopback interface.
 3. Stops here, without services, if `/craft-fc` is on a writable mount. Only
    then does it read `init.conf`.

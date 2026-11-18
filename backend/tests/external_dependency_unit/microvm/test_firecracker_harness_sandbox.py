@@ -2,6 +2,8 @@
 the Codex exec contract with durable exec sessions, files, artifacts and the
 busy signals."""
 
+import io
+import os
 import threading
 import time
 from collections.abc import Callable, Generator, Iterator
@@ -13,6 +15,7 @@ import grpc
 import pytest
 
 from onyx.cache.interface import CacheBackend
+from onyx.configs.constants import FileOrigin
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
@@ -50,6 +53,7 @@ from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
 from onyx.server.features.build.sandbox.firecracker.models import ExecSessionTable
 from onyx.server.features.build.sandbox.harness_base import (
     EXEC_DEFAULT_ENV,
+    ONYX_VM_FILES_ROOT,
     ExecCapReachedError,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
@@ -893,6 +897,84 @@ def test_publish_artifact_saves_under_the_sandbox_tenant(
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
     assert seen == [TENANT_ID]
+
+
+@pytest.mark.usefixtures("db_session", "initialize_file_store")
+def test_file_store_files_stream_into_the_vm_and_its_sessions(
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+    data = os.urandom((5 << 20) // 2)
+    store = get_default_file_store()
+    file_id = store.save_file(
+        content=io.BytesIO(data),
+        display_name="big.bin",
+        file_origin=FileOrigin.OTHER,
+        file_type="application/octet-stream",
+    )
+    vm_path = f"{ONYX_VM_FILES_ROOT}/search-files/{file_id}/big.bin"
+    try:
+        with store.read_file(file_id, use_tempfile=True) as content:
+            sandbox.write_onyx_file(ref, vm_path, content)
+        with store.read_file(file_id, use_tempfile=True) as content:
+            sandbox.write_file(ref, "attachments/big.bin", content)
+    finally:
+        store.delete_file(file_id)
+
+    sandbox_id = str(ref.sandbox_id)
+    assert node.agent.files[(sandbox_id, "", vm_path)] == data
+    session_file = (sandbox_id, str(ref.session_id), "attachments/big.bin")
+    assert node.agent.files[session_file] == data
+    # Both writes streamed in data messages of at most 1 MiB.
+    chunked = [1 << 20, 1 << 20, len(data) - (2 << 20)]
+    assert node.agent.write_chunk_sizes[-2:] == [chunked, chunked]
+
+
+def test_write_onyx_file_sets_up_no_session(
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+    tenant_cache: CacheBackend,
+) -> None:
+    ref = new_ref()
+    path = f"{ONYX_VM_FILES_ROOT}/tool-results/call-1.txt"
+    sandbox.write_onyx_file(ref, path, b"first")
+    # Idempotent: a second write replaces the file.
+    sandbox.write_onyx_file(ref, f"{ONYX_VM_FILES_ROOT}/./tool-results/call-1.txt", b"x")
+
+    assert node.agent.files[(str(ref.sandbox_id), "", path)] == b"x"
+    placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
+    assert placement is not None
+    assert (
+        harness_state.sessions_on_instance(
+            tenant_cache, ref.sandbox_id, (placement.attempt, placement.generation)
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ONYX_VM_FILES_ROOT,
+        f"{ONYX_VM_FILES_ROOT}x/a.txt",
+        f"{ONYX_VM_FILES_ROOT}/../etc/passwd",
+        "tmp/onyx/a.txt",
+        "/home/onyx/workspaces/s1/a.txt",
+    ],
+)
+def test_write_onyx_file_refuses_paths_outside_the_onyx_root(
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+    path: str,
+) -> None:
+    with pytest.raises(SandboxPathError):
+        sandbox.write_onyx_file(new_ref(), path, b"x")
+    # Refused before the sandbox starts.
+    assert node.agent.create_calls == 0
 
 
 # Activity
