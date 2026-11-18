@@ -218,6 +218,18 @@ def test_create_openapi_makes_integration_tool_plugin_and_actions(
     assert detail.action_count == 2
 
 
+def test_a_personal_integration_starts_on_for_its_creator(
+    db_session: Session, scoped: User, created: Created
+) -> None:
+    detail = admin_api.create_integration(
+        _openapi_create(for_organization=False), scoped, db_session
+    )
+    created.add(detail.id)
+
+    view = api.get_integration_for_member(detail.id, scoped, db_session)
+    assert [(ref.scope, ref.enabled) for ref in view.plugins] == [("personal", True)]
+
+
 def test_a_header_change_keeps_the_stored_credential_fields(
     db_session: Session, admin: User, created: Created
 ) -> None:

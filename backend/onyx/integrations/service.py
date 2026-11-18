@@ -63,7 +63,10 @@ from onyx.db.models import (
     IntegrationOAuthClient,
     User,
 )
-from onyx.db.plugin import create_integration_plugin__no_commit
+from onyx.db.plugin import (
+    create_integration_plugin__no_commit,
+    set_plugin_preferences__no_commit,
+)
 from onyx.db.plugin_access import (
     UserPluginState,
     affected_user_ids_for_plugins,
@@ -763,7 +766,7 @@ def create_integration__no_commit(
             db_session=db_session,
         )
 
-    create_integration_plugin__no_commit(
+    plugin = create_integration_plugin__no_commit(
         integration_id=integration.id,
         name=name,
         description=request.description or "",
@@ -771,6 +774,8 @@ def create_integration__no_commit(
         for_organization=request.for_organization,
         db_session=db_session,
     )
+    if not request.for_organization:
+        set_plugin_preferences__no_commit(user.id, [plugin.id], True, db_session)
 
     if mcp_actions is not None:
         replace_integration_actions__no_commit(
