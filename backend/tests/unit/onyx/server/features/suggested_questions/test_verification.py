@@ -126,3 +126,24 @@ def test_searches_run_on_a_capped_number_of_threads(
     )
 
     assert run.call_args.kwargs["max_workers"] == verification.SQ_SEARCH_WORKERS
+
+
+def test_a_failed_search_only_fails_its_own_question(
+    searches: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    searches["results"] = {"works?": ["a"]}
+
+    def search_everything(query: str, *_args: Any) -> list[InferenceChunk]:
+        if query == "breaks?":
+            raise TimeoutError("opensearch timed out")
+        return [_chunk(document_id) for document_id in searches["results"][query]]
+
+    monkeypatch.setattr(verification, "_search_everything", search_everything)
+    drafts = [
+        DraftQuestion(text="breaks?", chunk=_chunk("b"), best_for=None),
+        DraftQuestion(text="works?", chunk=_chunk("a"), best_for=None),
+    ]
+
+    passed = verification.run_search_test(drafts, user=None)
+
+    assert [q.text for q in passed] == ["works?"]
