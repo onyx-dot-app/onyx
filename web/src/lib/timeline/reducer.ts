@@ -308,9 +308,10 @@ function appendNotification(
         }),
       ];
     case "_onyx/connect_app_request": {
-      // A request is shown once, even when the stream repeats it.
+      // A request is shown once, even when the stream repeats it. A repeat
+      // changes nothing, so open text goes on.
       const id = `connect:${notification.params.requestId}`;
-      if (entries.some((entry) => entry.id === id)) return settled;
+      if (entries.some((entry) => entry.id === id)) return entries;
       return [
         ...settled,
         noticeEntry(id, {
