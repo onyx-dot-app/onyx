@@ -36,15 +36,27 @@ wait_until_completed() {
   return 1
 }
 
+# GitHub can answer a rerun with a 5xx error just after a cancel, so retry it.
 restart_run() {
-  local run_id="$1" status="$2"
+  local run_id="$1" status="$2" attempt
   if [[ "${status}" != "completed" ]]; then
     gh run cancel "${run_id}" --repo "${REPO}" || true
-    wait_until_completed "${run_id}"
+    wait_until_completed "${run_id}" || return 1
   fi
-  gh run rerun "${run_id}" --repo "${REPO}"
-  echo "Started run ${run_id} again."
+  for attempt in $(seq 1 5); do
+    if gh run rerun "${run_id}" --repo "${REPO}"; then
+      echo "Started run ${run_id} again."
+      return 0
+    fi
+    echo "Rerun of run ${run_id} failed (${attempt}/5)."
+    sleep 10
+  done
+  echo "::error::Could not start run ${run_id} again."
+  return 1
 }
+
+# A failed restart does not stop the other workflows. The job fails at the end.
+FAILED=0
 
 # $1: branch whose PR gained or lost a child. $2: child-added or child-removed.
 hand_off() {
@@ -88,7 +100,7 @@ hand_off() {
       fi
       echo "PR #${parent} is the stack tip now. ${workflow} run ${run_id} starts again and tests it."
     fi
-    restart_run "${run_id}" "${status}"
+    restart_run "${run_id}" "${status}" || FAILED=1
   done
 }
 
@@ -109,3 +121,4 @@ case "${ACTION}" in
     echo "Nothing to do for ${ACTION}."
     ;;
 esac
+exit "${FAILED}"
