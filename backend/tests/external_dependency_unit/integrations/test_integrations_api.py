@@ -1148,6 +1148,29 @@ def test_member_cannot_save_always_allow_over_an_admin_block_or_allow(
 
 
 @pytest.mark.usefixtures("craft_available")
+def test_member_cannot_save_always_allow_for_an_action_that_always_asks(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    request = _custom_create()
+    request.for_organization = True
+    detail = admin_api.create_integration(request, admin, db_session)
+    created.add(detail.id)
+
+    with pytest.raises(OnyxError) as error:
+        api.save_action_grants(
+            detail.id,
+            ActionGrantsUpdate(actions={WHOLE_DOMAIN_ACTION_TYPE: "allow"}),
+            member,
+            db_session,
+        )
+    assert error.value.error_code is OnyxErrorCode.INVALID_INPUT
+    assert all(
+        action.user_policy is None
+        for action in api.get_action_grants(detail.id, member, db_session).actions
+    )
+
+
+@pytest.mark.usefixtures("craft_available")
 def test_member_list_carries_the_craft_fields(
     db_session: Session, admin: User, member: User, created: Created
 ) -> None:

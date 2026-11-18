@@ -1547,6 +1547,12 @@ def set_action_grants__no_commit(
                 OnyxErrorCode.INVALID_INPUT,
                 f"Your admin blocks {key}. You cannot save Always allow for it.",
             )
+        if always_asks(integration.kind, key):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Craft asks for approval for each {key} request. "
+                "You cannot save Always allow for it.",
+            )
         if admin_policies[key] is EffectivePolicy.ALLOW:
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
