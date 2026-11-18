@@ -311,7 +311,11 @@ def test_write_streams_a_whole_file_in_chunks(guest: Guest) -> None:
     assert b"".join(chunks) == data
     # Never one read of the whole file.
     assert set(source.sizes) == {1 << 20}
-    assert guest.agent.write_chunk_sizes[-1] == [1 << 20, 1 << 20, len(data) - (2 << 20)]
+    assert guest.agent.write_chunk_sizes[-1] == [
+        1 << 20,
+        1 << 20,
+        len(data) - (2 << 20),
+    ]
 
 
 def test_write_refuses_a_file_that_cannot_seek(guest: Guest) -> None:

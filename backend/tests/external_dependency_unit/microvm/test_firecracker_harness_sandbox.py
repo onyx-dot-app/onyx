@@ -942,7 +942,9 @@ def test_write_onyx_file_sets_up_no_session(
     path = f"{ONYX_VM_FILES_ROOT}/tool-results/call-1.txt"
     sandbox.write_onyx_file(ref, path, b"first")
     # Idempotent: a second write replaces the file.
-    sandbox.write_onyx_file(ref, f"{ONYX_VM_FILES_ROOT}/./tool-results/call-1.txt", b"x")
+    sandbox.write_onyx_file(
+        ref, f"{ONYX_VM_FILES_ROOT}/./tool-results/call-1.txt", b"x"
+    )
 
     assert node.agent.files[(str(ref.sandbox_id), "", path)] == b"x"
     placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
