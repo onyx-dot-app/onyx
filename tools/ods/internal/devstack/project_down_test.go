@@ -200,11 +200,17 @@ func TestOwnerWithoutStateKeepsItsVolumesUntilTheyAreDeleted(t *testing.T) {
 	// Compose exits 0 and keeps a volume that a container still uses.
 	opts.Volumes = true
 	result, err := CleanupRow(context.Background(), registry, row, compose.down, opts)
-	if err != nil {
-		t.Fatal(err)
+	if err == nil || !strings.Contains(err.Error(), "still uses") {
+		t.Fatalf("an in-use volume did not fail the cleanup: %v", err)
 	}
 	if result.RemovedVolumes || result.RemovedOwner {
 		t.Fatalf("an in-use volume counted as removed: %+v", result)
+	}
+
+	opts.Discover.ListVolumes = func() (map[string]int, error) { return nil, errors.New("docker volume ls failed") }
+	result, err = CleanupRow(context.Background(), registry, row, compose.down, opts)
+	if err == nil || result.RemovedOwner {
+		t.Fatalf("a failed volume check was hidden: err %v, result %+v", err, result)
 	}
 
 	opts.Discover = discoverWithVolumes(nil, map[string]int{"unrelated": 2})
@@ -212,7 +218,7 @@ func TestOwnerWithoutStateKeepsItsVolumesUntilTheyAreDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(compose.projects) != 3 || compose.projects[2] != "removed-1" || !compose.volumes[2] || !result.RemovedVolumes || !result.RemovedOwner {
+	if len(compose.projects) != 4 || compose.projects[3] != "removed-1" || !compose.volumes[3] || !result.RemovedVolumes || !result.RemovedOwner {
 		t.Fatalf("volumes were not deleted: calls %v %v, result %+v", compose.projects, compose.volumes, result)
 	}
 }

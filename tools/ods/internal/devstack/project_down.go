@@ -185,6 +185,7 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 	if compose == nil {
 		return result, nil
 	}
+	var volumeErr error
 	elsewhere := false
 	if infra {
 		var err error
@@ -204,11 +205,18 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 				listVolumes = docker.ListComposeVolumes
 			}
 			left, err := listVolumes()
-			result.RemovedVolumes = err == nil && left[row.Project] == 0
+			switch {
+			case err != nil:
+				volumeErr = fmt.Errorf("project %s: cannot check that its volumes were deleted: %w", row.Project, err)
+			case left[row.Project] > 0:
+				volumeErr = fmt.Errorf("project %s: Docker kept %d volume(s) that a container still uses; stop that container and run 'ods stack prune --volumes' again", row.Project, left[row.Project])
+			default:
+				result.RemovedVolumes = true
+			}
 		}
 	}
 	if registry == nil {
-		return result, nil
+		return result, volumeErr
 	}
 	if row.LeaseRoot != "" {
 		if err := registry.Release(row.LeaseRoot); err != nil {
@@ -225,7 +233,7 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 		}
 		result.RemovedOwner = removed
 	}
-	return result, nil
+	return result, volumeErr
 }
 
 // liveInWorktree reports whether st has a live service under a checkout
