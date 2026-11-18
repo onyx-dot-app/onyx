@@ -314,7 +314,8 @@ def save_chat_turn(
     # Preserve referenced generated files for subsequent turns; unreferenced
     # ones remain intermediate artifacts. Published files are files of the
     # message; the chat delete finds them by their ID prefix
-    # (CHAT_ARTIFACT_FILE_PREFIX) either way. A response saves once.
+    # (CHAT_ARTIFACT_FILE_PREFIX) either way. A terminal save can repeat, so
+    # a file already listed is not added again.
     attached = [
         *(
             _extract_referenced_file_descriptors(tool_calls, sanitized_message_text)
@@ -331,8 +332,13 @@ def save_chat_turn(
             for file in tool_call_info.published_files or []
         ),
     ]
-    if attached:
-        assistant_message.files = (assistant_message.files or []) + attached
+    existing_files = assistant_message.files or []
+    listed = {file["id"] for file in existing_files}
+    new_files = list(
+        {file["id"]: file for file in attached if file["id"] not in listed}.values()
+    )
+    if new_files:
+        assistant_message.files = existing_files + new_files
 
     db_session.commit()
 
