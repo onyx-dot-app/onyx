@@ -119,22 +119,28 @@ export default function IntegrationActionsTab({
   const saved = savedDraft(data);
   const current = withEdits(saved, edits);
 
+  // An edit back to the saved value is dropped, so a later revalidation
+  // shows the newer value of that row and a save leaves it as it is.
   function setDraft(next: Draft) {
-    setEdits({
-      ...(next.defaultPolicy !== current.defaultPolicy
-        ? { default_policy: next.defaultPolicy }
-        : edits.default_policy !== undefined
-          ? { default_policy: edits.default_policy }
-          : {}),
-      actions: {
-        ...edits.actions,
-        ...Object.fromEntries(
-          Object.entries(next.actions).filter(
-            ([key, value]) => value !== (current.actions[key] ?? null)
-          )
-        ),
-      },
-    });
+    setEdits(
+      changes(
+        {
+          default_policy:
+            next.defaultPolicy !== current.defaultPolicy
+              ? next.defaultPolicy
+              : edits.default_policy,
+          actions: {
+            ...edits.actions,
+            ...Object.fromEntries(
+              Object.entries(next.actions).filter(
+                ([key, value]) => value !== (current.actions[key] ?? null)
+              )
+            ),
+          },
+        },
+        saved
+      )
+    );
   }
 
   // Craft asks for an action that always asks, even when it is set to Allow.

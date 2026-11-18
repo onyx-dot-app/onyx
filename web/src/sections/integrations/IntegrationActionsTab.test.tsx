@@ -217,6 +217,62 @@ test("a save after a revalidation keeps the newer value of a row it did not edit
   );
 });
 
+test("an edit back to the saved value does not overwrite a newer save", async () => {
+  const newer = actions.map((action) =>
+    action.key === "create_issue"
+      ? {
+          ...action,
+          admin_policy: "allow" as const,
+          effective_admin_policy: "allow" as const,
+        }
+      : action
+  );
+  let loads = 0;
+  const fetchMock = mockFetch({
+    [URL_ACTIONS]: () => {
+      loads += 1;
+      return { default_policy: null, actions: loads === 1 ? actions : newer };
+    },
+    [`PUT ${URL_ACTIONS}`]: { default_policy: "ask", actions: newer },
+  });
+  const u = user();
+  render(
+    <>
+      <IntegrationActionsTab
+        integration={makeDetail()}
+        onOpenConfiguration={jest.fn()}
+      />
+      <ActionsRevalidator />
+    </>
+  );
+  await screen.findByText(copy.default.title);
+  const createIssue = () => within(rowOf("Create issue"));
+  await u.click(createIssue().getByRole("button", { name: labels.ask.label }));
+  await u.click(createIssue().getByRole("button", { name: labels.deny.label }));
+  expect(screen.getByRole("button", { name: copy.save })).toBeDisabled();
+  const defaultRow = screen.getByRole("group", { name: copy.default.title });
+  await u.click(
+    within(defaultRow).getByRole("button", { name: labels.ask.label })
+  );
+
+  await act(async () => {
+    await revalidateActions();
+  });
+  await waitFor(() =>
+    expect(
+      createIssue().getByRole("button", { name: labels.always.label })
+    ).toHaveAttribute("aria-pressed", "true")
+  );
+
+  await u.click(screen.getByRole("button", { name: copy.save }));
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "PUT", URL_ACTIONS)).toEqual({
+      default_policy: "ask",
+      actions: {},
+    })
+  );
+});
+
 test("Use defaults clears the admin values of a group", async () => {
   const fetchMock = mockFetch({
     [URL_ACTIONS]: { default_policy: "allow", actions },
