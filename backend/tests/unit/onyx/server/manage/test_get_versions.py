@@ -14,7 +14,7 @@ import requests
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage import get_state
-from onyx.server.manage.get_state import DOCUMENT_INDEX_IMAGE, get_versions
+from onyx.server.manage.get_state import DOCUMENT_INDEX_IMAGE, NGINX_IMAGE, get_versions
 
 _COMPOSE_TEMPLATE = (
     Path(__file__).resolve().parents[6]
@@ -51,7 +51,7 @@ def _dockerhub_page(_url: str, timeout: int) -> MagicMock:  # noqa: ARG001
     return response
 
 
-def test_versions_report_the_opensearch_index_image() -> None:
+def test_versions_report_the_deployment_images() -> None:
     with patch(
         "onyx.server.manage.get_state.requests.get", side_effect=_dockerhub_page
     ):
@@ -62,12 +62,14 @@ def test_versions_report_the_opensearch_index_image() -> None:
     for container_versions in (versions.stable, versions.dev, versions.migration):
         assert container_versions.index == DOCUMENT_INDEX_IMAGE
         assert "vespa" not in container_versions.index
+        assert container_versions.nginx == NGINX_IMAGE
 
 
-def test_index_image_matches_the_docker_compose_deployment() -> None:
-    """The /versions index image must be the one docker compose deploys."""
+def test_versions_images_match_the_docker_compose_deployment() -> None:
+    """The /versions images must match those Docker Compose deploys."""
     template = _COMPOSE_TEMPLATE.read_text()
     assert f"/{DOCUMENT_INDEX_IMAGE}\n" in template
+    assert f"/library/{NGINX_IMAGE}\n" in template
 
 
 def test_versions_are_cached_across_calls() -> None:
