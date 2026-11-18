@@ -10520,14 +10520,17 @@
           "name": {
             "title": "헤더 이름",
             "placeholder": "헤더 이름 입력",
-            "error": "헤더 이름을 입력하세요."
+            "error": "헤더 이름을 입력하세요.",
+            "duplicate": "각 헤더 이름은 한 번만 사용하세요."
           },
           "value": {
             "title": "헤더 값",
             "description": "각 자격 증명을 중괄호로 감싸세요. 예: {example}. 각 자리 표시자는 자격 증명 입력란이 됩니다.",
             "placeholder": "예: {example}",
             "error": "자리 표시자를 하나 이상 추가하세요. 예: {example}"
-          }
+          },
+          "add": "헤더 추가",
+          "remove": "헤더 {name} 삭제"
         },
         "oauth": {
           "providerMode": {

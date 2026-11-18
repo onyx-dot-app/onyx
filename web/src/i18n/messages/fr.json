@@ -10520,14 +10520,17 @@
           "name": {
             "title": "Nom de l’en-tête",
             "placeholder": "Saisir un nom d’en-tête",
-            "error": "Saisissez un nom d’en-tête."
+            "error": "Saisissez un nom d’en-tête.",
+            "duplicate": "Utilisez chaque nom d’en-tête une seule fois."
           },
           "value": {
             "title": "Valeur de l’en-tête",
             "description": "Placez chaque identifiant entre accolades, par exemple {example}. Chaque espace réservé devient un champ d’identifiant.",
             "placeholder": "Par exemple : {example}",
             "error": "Ajoutez au moins un espace réservé, par exemple {example}."
-          }
+          },
+          "add": "Ajouter un en-tête",
+          "remove": "Supprimer l’en-tête {name}"
         },
         "oauth": {
           "providerMode": {

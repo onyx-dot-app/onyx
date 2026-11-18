@@ -10520,14 +10520,17 @@
           "name": {
             "title": "Nome do cabeçalho",
             "placeholder": "Adicione um nome de cabeçalho",
-            "error": "Adicione um nome de cabeçalho."
+            "error": "Adicione um nome de cabeçalho.",
+            "duplicate": "Use cada nome de cabeçalho só uma vez."
           },
           "value": {
             "title": "Valor do cabeçalho",
             "description": "Coloque cada credencial entre chaves, por exemplo {example}. Cada marcador vira um campo de credencial.",
             "placeholder": "Por exemplo: {example}",
             "error": "Adicione pelo menos um marcador, por exemplo {example}."
-          }
+          },
+          "add": "Adicionar cabeçalho",
+          "remove": "Remover o cabeçalho {name}"
         },
         "oauth": {
           "providerMode": {

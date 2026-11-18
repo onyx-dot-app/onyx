@@ -10520,14 +10520,17 @@
           "name": {
             "title": "ヘッダー名",
             "placeholder": "ヘッダー名を入力",
-            "error": "ヘッダー名を入力してください。"
+            "error": "ヘッダー名を入力してください。",
+            "duplicate": "各ヘッダー名は 1 回だけ使用してください。"
           },
           "value": {
             "title": "ヘッダー値",
             "description": "各認証情報を波かっこで囲みます（例: {example}）。各プレースホルダーが認証情報の入力欄になります。",
             "placeholder": "例: {example}",
             "error": "プレースホルダーを 1 つ以上追加してください（例: {example}）。"
-          }
+          },
+          "add": "ヘッダーを追加",
+          "remove": "ヘッダー {name} を削除"
         },
         "oauth": {
           "providerMode": {
