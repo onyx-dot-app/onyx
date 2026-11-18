@@ -389,7 +389,7 @@ forgets a service. `down` also stops the Compose containers; volumes are kept.
 | Profile | Services |
 |---------|----------|
 | `minimal` | Web Server, API Server |
-| `default` | `minimal` plus the primary, light, beat, docfetching, docprocessing and user_file_processing Celery workers |
+| `default` | `minimal` plus the primary, light, beat, docfetching, docconversion, docprocessing and user_file_processing Celery workers |
 | `full` | Every service in the `Run All Onyx Services` compound |
 
 The model server comes from Compose and runs the `edge` image, which is built

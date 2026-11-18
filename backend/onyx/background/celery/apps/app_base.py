@@ -728,6 +728,7 @@ _VECTOR_DB_TASK_MODULES: set[str] = {
     "onyx.background.celery.tasks.connector_deletion",
     "onyx.background.celery.tasks.docprocessing",
     "onyx.background.celery.tasks.docfetching",
+    "onyx.background.celery.tasks.docconversion",
     "onyx.background.celery.tasks.pruning",
     "onyx.background.celery.tasks.vespa",
     "onyx.background.celery.tasks.cc_pair_ids_backfill",
