@@ -491,10 +491,15 @@ const AppInputBar = React.memo(
         setHeldSendKey(null);
         return;
       }
-      if (!toolConfiguration.optionsLoaded) return;
+      if (!toolConfiguration.optionsLoaded || hasPendingFiles) return;
       setHeldSendKey(null);
       submitMessage(composedRef.current);
-    }, [heldSendKey, chatDraftStorageKey, toolConfiguration.optionsLoaded]);
+    }, [
+      heldSendKey,
+      chatDraftStorageKey,
+      toolConfiguration.optionsLoaded,
+      hasPendingFiles,
+    ]);
 
     // Text typed while Onyx responds becomes pending input, unless it
     // answers the agent's questions.
