@@ -198,7 +198,14 @@ def is_craft_enabled_for_user(
         return False
     if override is None:
         if workspace_default is None:
-            workspace_default = load_settings().craft_default_enabled
+            # The default Settings() grants Craft, so a failed read must deny it.
+            try:
+                workspace_default = load_settings(
+                    raise_on_error=True
+                ).craft_default_enabled
+            except Exception:
+                logger.exception("Cannot read the workspace Craft default")
+                return False
         if not workspace_default:
             return False
 

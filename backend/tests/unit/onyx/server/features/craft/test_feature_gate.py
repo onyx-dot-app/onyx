@@ -115,14 +115,14 @@ def test_no_override_follows_workspace_default(
     monkeypatch.setattr(
         build_utils,
         "load_settings",
-        lambda: Settings(craft_default_enabled=True),
+        lambda **_kwargs: Settings(craft_default_enabled=True),
     )
     assert is_craft_enabled_for_user(user) is True
 
     monkeypatch.setattr(
         build_utils,
         "load_settings",
-        lambda: Settings(craft_default_enabled=False),
+        lambda **_kwargs: Settings(craft_default_enabled=False),
     )
     assert is_craft_enabled_for_user(user) is False
 
@@ -141,7 +141,9 @@ def test_override_beats_workspace_default(
     monkeypatch.setattr(
         build_utils,
         "load_settings",
-        lambda: pytest.fail("settings should not be read for overridden users"),
+        lambda **_kwargs: pytest.fail(
+            "settings should not be read for overridden users"
+        ),
     )
 
     user = _make_user()
@@ -296,3 +298,26 @@ def test_craft_not_locked_when_flag_off(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(build_utils, "get_current_tier", lambda: Tier.COMMUNITY)
 
     assert build_utils.is_craft_locked_by_tier(_make_user()) is False
+
+
+def test_unreadable_workspace_default_denies_craft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed settings read must not fall back to the default Settings(),
+    which grants Craft."""
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", True)
+    monkeypatch.setattr(
+        build_utils,
+        "get_default_feature_flag_provider",
+        lambda: NoOpFeatureFlagProvider(),
+    )
+
+    def unreadable(raise_on_error: bool = False) -> Settings:
+        if raise_on_error:
+            raise RuntimeError("settings store down")
+        return Settings()
+
+    monkeypatch.setattr(build_utils, "load_settings", unreadable)
+    user = _make_user()
+    user.craft_enabled = None
+    assert is_craft_enabled_for_user(user) is False

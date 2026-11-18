@@ -124,7 +124,7 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
-from onyx.server.settings.models import Tier
+from onyx.server.settings.models import Settings, Tier
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext, ToolOptions
@@ -955,6 +955,17 @@ def test_a_user_without_craft_access_gets_no_sandbox(
     # Craft is off for the deployment, and the user has no override.
     _set_user(db_session, chat.user, craft_enabled=None)
     monkeypatch.setattr(build_utils, "ENABLE_CRAFT", False)
+    assert not _offers_sandbox(monkeypatch, chat)
+
+    # The workspace default cannot be read: deny, and the chat still works.
+    monkeypatch.setattr(build_utils, "ENABLE_CRAFT", True)
+
+    def unreadable_settings(raise_on_error: bool = False) -> Settings:
+        if raise_on_error:
+            raise RuntimeError("settings store down")
+        return Settings()
+
+    monkeypatch.setattr(build_utils, "load_settings", unreadable_settings)
     assert not _offers_sandbox(monkeypatch, chat)
 
 
