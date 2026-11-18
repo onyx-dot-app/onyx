@@ -1,5 +1,6 @@
 import type { ESTree } from "@oxlint/plugins";
 
+import { isPlaywrightImport } from "./playwright-imports.ts";
 import { callPath, option, staticName, staticText } from "./test-syntax.ts";
 
 export const testHooks = new Set([
@@ -24,36 +25,59 @@ export function testBindings(filename: string) {
   );
   const jest = new Set(playwright ? [] : ["jest"]);
 
+  const imports = new Map<string, { source: string; imported: string }>();
+  const testName = (local: string) => {
+    const known = tests.get(local);
+    if (known) return known;
+    const binding = imports.get(local);
+    if (!binding) return undefined;
+    imports.delete(local);
+    if (isPlaywrightImport(filename, binding.source, binding.imported)) {
+      tests.set(local, "test");
+      return "test";
+    }
+    return undefined;
+  };
+
   return {
     playwright,
-    tests,
+    testName,
     jest,
     ImportDeclaration(node: ESTree.ImportDeclaration) {
+      if (node.importKind === "type") return;
       const source = node.source.value;
-      const fixture =
-        source.startsWith("@tests/e2e/") ||
-        /^\.\.?\/(?:.*\/)?fixtures(?:\/[^/]+)?$/u.test(source);
       for (const specifier of node.specifiers) {
-        if (specifier.type !== "ImportSpecifier") continue;
-        const name = staticName(specifier.imported, false);
-        if (name === undefined) continue;
         const local = specifier.local.name;
+        if (specifier.type === "ImportNamespaceSpecifier") continue;
+        if (
+          specifier.type === "ImportSpecifier" &&
+          specifier.importKind === "type"
+        )
+          continue;
+        const name =
+          specifier.type === "ImportDefaultSpecifier"
+            ? "default"
+            : staticName(specifier.imported, false);
+        if (name === undefined) continue;
+
         if (source === "@jest/globals") {
           if (name === "jest") jest.add(local);
           if (jestNames.has(name)) tests.set(local, name);
         }
         if (
-          (source === "@playwright/test" && name === "test") ||
-          (fixture && (name === "test" || name.endsWith("Test")))
+          playwright &&
+          (source === "@playwright/test" ||
+            source.startsWith(".") ||
+            source.startsWith("@tests/"))
         ) {
-          tests.set(local, "test");
+          imports.set(local, { source, imported: name });
         }
       }
     },
     VariableDeclarator(node: ESTree.VariableDeclarator) {
       if (!playwright || node.id.type !== "Identifier") return;
       const [root, member] = callPath(node.init ?? undefined);
-      if (root && tests.has(root) && member === "extend") {
+      if (root && member === "extend" && testName(root)) {
         tests.set(node.id.name, "test");
       }
     },
@@ -67,8 +91,7 @@ function timerToggle(
   jest: ReadonlySet<string>,
   api: string
 ): boolean | undefined {
-  if (node.type !== "ExpressionStatement") return undefined;
-  let expression: ESTree.Node = node.expression;
+  let expression = node.type === "ExpressionStatement" ? node.expression : node;
   while (expression.type === "CallExpression") {
     const [root, method] = callPath(expression.callee);
     if (root && jest.has(root)) {
@@ -106,6 +129,9 @@ export function usesFakeTimers(
   if (bindings.playwright) return false;
   let child = node;
   let inTest = false;
+  let beforeEachToggle: boolean | undefined;
+  let beforeAllToggle: boolean | undefined;
+  let suiteToggle: boolean | undefined;
 
   const lastToggle = (statements: readonly ESTree.Node[]) => {
     for (const statement of statements.toReversed()) {
@@ -125,11 +151,12 @@ export function usesFakeTimers(
       parent.arguments.some((arg) => arg === child)
     ) {
       const [root] = callPath(parent.callee);
-      const name = root ? bindings.tests.get(root) : undefined;
+      const name = root ? bindings.testName(root) : undefined;
       if (name === "test" || name === "it") inTest = true;
     }
     if (parent.type !== "BlockStatement" && parent.type !== "Program") continue;
     if (inTest) {
+      suiteToggle ??= lastToggle(parent.body);
       for (const statement of parent.body.toReversed()) {
         if (
           statement.type !== "ExpressionStatement" ||
@@ -137,18 +164,23 @@ export function usesFakeTimers(
         )
           continue;
         const [root] = callPath(statement.expression.callee);
-        const hook = root ? bindings.tests.get(root) : undefined;
+        const hook = root ? bindings.testName(root) : undefined;
         if (hook !== "beforeAll" && hook !== "beforeEach") continue;
         const callback = statement.expression.arguments[0];
         if (
           (callback?.type !== "ArrowFunctionExpression" &&
             callback?.type !== "FunctionExpression") ||
-          callback.body?.type !== "BlockStatement"
+          !callback.body
         )
           continue;
-        const toggle = lastToggle(callback.body.body);
-        if (toggle !== undefined) return toggle;
+        const toggle =
+          callback.body.type === "BlockStatement"
+            ? lastToggle(callback.body.body)
+            : timerToggle(callback.body, bindings.jest, api);
+        if (hook === "beforeEach") beforeEachToggle ??= toggle;
+        else beforeAllToggle ??= toggle;
       }
+      continue;
     }
     const previous = lastToggle(
       parent.body.slice(
@@ -158,7 +190,7 @@ export function usesFakeTimers(
     );
     if (previous !== undefined) return previous;
   }
-  return false;
+  return beforeEachToggle ?? beforeAllToggle ?? suiteToggle ?? false;
 }
 
 export function inJestMock(

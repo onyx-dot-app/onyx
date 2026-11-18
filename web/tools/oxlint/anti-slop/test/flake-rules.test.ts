@@ -15,7 +15,11 @@ const rules = [
   "require-suppression-reason",
 ];
 
-function lint(filename: string, source: string): string[] {
+function lint(
+  filename: string,
+  source: string,
+  fixtures: Readonly<Record<string, string>> = {}
+): string[] {
   const cwd = mkdtempSync(join(tmpdir(), "onyx-oxlint-test-"));
   try {
     const config = {
@@ -35,8 +39,13 @@ function lint(filename: string, source: string): string[] {
       ],
     };
     writeFileSync(join(cwd, ".oxlintrc.json"), JSON.stringify(config));
-    mkdirSync(join(cwd, dirname(filename)), { recursive: true });
-    writeFileSync(join(cwd, filename), source);
+    for (const [path, content] of Object.entries({
+      ...fixtures,
+      [filename]: source,
+    })) {
+      mkdirSync(join(cwd, dirname(path)), { recursive: true });
+      writeFileSync(join(cwd, path), content);
+    }
 
     const result = spawnSync(
       join(webDir, "node_modules/.bin/oxlint"),
@@ -176,4 +185,79 @@ test("uses the existing reason check for lint suppressions", () => {
 
 test("leaves production code outside the test overrides", () => {
   expect(lint("src/example.ts", "export const now = Date.now();")).toEqual([]);
+});
+
+test("follows aliased Playwright fixtures through local exports", () => {
+  expect(
+    lint(
+      "tests/e2e/example.spec.ts",
+      `
+        import { runner as world, unrelated } from "./support";
+        world.skip("needs a reason", () => {});
+        world.setTimeout(60000);
+        unrelated.skip();
+      `,
+      {
+        "tests/e2e/support.ts": `export { scenario as runner, unrelated } from "./case";`,
+        "tests/e2e/case.ts": `
+          import { test as base } from "@playwright/test";
+          export const scenario = base.extend({}).extend({});
+          export const unrelated = { skip() {} };
+        `,
+      }
+    )
+  ).toEqual([
+    "anti-slop(no-test-timeout-override)",
+    "anti-slop(require-test-skip-reason)",
+  ]);
+});
+
+test("recognizes concise timer setup callbacks", () => {
+  expect(
+    lint(
+      "src/example.test.ts",
+      `
+        describe("each", () => {
+          beforeEach(() => jest.useFakeTimers());
+          it("uses a fake clock", () => { Date.now(); });
+        });
+        describe("all", () => {
+          beforeAll(() => jest.useFakeTimers());
+          it("uses a fake clock", () => { Date.now(); });
+        });
+      `
+    )
+  ).toEqual([]);
+});
+
+test("applies per-test timer setup after one-time hooks in enclosing suites", () => {
+  expect(
+    lint(
+      "src/example.test.ts",
+      `
+        describe("real timers", () => {
+          beforeEach(() => { jest.useFakeTimers(); });
+          beforeEach(() => { jest.useRealTimers(); });
+          beforeAll(() => { jest.useFakeTimers(); });
+          describe("nested", () => {
+            beforeAll(() => { jest.useFakeTimers(); });
+            test("uses real timers", () => { Date.now(); });
+          });
+        });
+      `
+    )
+  ).toEqual(["anti-slop(no-wall-clock-in-tests)"]);
+
+  expect(
+    lint(
+      "src/example.test.ts",
+      `
+        describe("fake timers", () => {
+          beforeEach(() => { jest.useFakeTimers(); });
+          beforeAll(() => { jest.useRealTimers(); });
+          test("uses fake timers", () => { Date.now(); });
+        });
+      `
+    )
+  ).toEqual([]);
 });

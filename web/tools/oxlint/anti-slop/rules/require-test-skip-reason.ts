@@ -33,7 +33,13 @@ export const requireTestSkipReasonRule = defineRule({
         const parts = callPath(node.callee);
         const [root] = parts;
         const method = parts.at(-1);
-        const test = root ? bindings.tests.get(root) : undefined;
+        if (
+          bindings.playwright &&
+          !parts.includes("skip") &&
+          !parts.includes("fixme")
+        )
+          return;
+        const test = root ? bindings.testName(root) : undefined;
         if (
           !test ||
           (!disabledTests.has(test) &&

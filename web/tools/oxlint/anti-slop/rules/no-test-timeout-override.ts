@@ -23,8 +23,14 @@ export const noTestTimeoutOverrideRule = defineRule({
         const parts = callPath(node.callee);
         const [root, firstMember] = parts;
         if (!root) return;
-        const name = bindings.tests.get(root);
         const method = parts.at(-1);
+        if (
+          bindings.playwright &&
+          method !== "setTimeout" &&
+          method !== "configure"
+        )
+          return;
+        const name = bindings.testName(root);
 
         const timeoutSetter =
           method === "setTimeout" &&
