@@ -140,7 +140,10 @@ def _ssrf_error_hint(url: str, error: Exception) -> str:
     the address-specific branches."""
     if "scheme" in str(error).lower():
         return ""
-    host = (urlparse(url).hostname or "").lower()
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return ""
     if host in BLOCKED_HOSTNAMES:
         return _SSRF_HINT_NEVER_ALLOWED
     try:
