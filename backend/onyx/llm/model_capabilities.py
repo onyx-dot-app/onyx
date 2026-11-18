@@ -82,6 +82,24 @@ def model_requires_auto_tool_choice(model_names: Sequence[str]) -> bool:
     )
 
 
+# Bedrock Converse has no "none" tool choice, and Ollama has no tool choice.
+PROVIDERS_WITHOUT_NONE_TOOL_CHOICE = frozenset(
+    {
+        LlmProviderNames.BEDROCK,
+        LlmProviderNames.BEDROCK_CONVERSE,
+        LlmProviderNames.OLLAMA,
+        LlmProviderNames.OLLAMA_CHAT,
+    }
+)
+
+
+def model_supports_none_tool_choice(provider: str, model_names: Sequence[str]) -> bool:
+    """Whether a request can keep its tools and forbid calls with tool choice NONE."""
+    return provider not in PROVIDERS_WITHOUT_NONE_TOOL_CHOICE and not (
+        model_requires_auto_tool_choice(model_names)
+    )
+
+
 def is_claude_model(model_names: Sequence[str]) -> bool:
     """True when any name of the model (model_identity_names) names Claude,
     whatever the provider or gateway (Bedrock, Vertex, a custom alias)."""

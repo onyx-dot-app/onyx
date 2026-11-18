@@ -766,7 +766,11 @@ class Run:
             return self._execution_request == ExecutionRequest.SUSPEND
 
     def start_tool_calls(
-        self, calls: Sequence[ToolCall], display_name: str | None
+        self,
+        calls: Sequence[ToolCall],
+        display_name: str | None,
+        *,
+        publish: bool = True,
     ) -> None:
         with self.execution_lock:
             self.cancellation_signal.check()
@@ -780,6 +784,8 @@ class Run:
                 record.tools[call.id] = ToolExecutionRecord(
                     status=ExecutionStatus.RUNNING, display_name=display_name
                 )
+                if not publish:
+                    continue
                 self.publish_event(
                     ToolStartEvent(
                         **self.event_context,
@@ -1676,8 +1682,8 @@ def _advance_loop(
     run: Run, llm: LLM
 ) -> Literal[RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.SUSPENDED]:
     cancellation_signal = run.cancellation_signal
-    max_steps = run._progress.step_limit
-    while run._progress.step_index < max_steps:
+    # The limit can grow by one step; see _complete_step.
+    while run._progress.step_index < run._progress.step_limit:
         cancellation_signal.check()
         progress = run._progress
         if progress.action == RunAction.FINISH:
@@ -1702,7 +1708,7 @@ def _advance_loop(
         if progress.action == RunAction.PREPARE:
             if not run.begin_work_cycle():
                 return RunStatus.SUSPENDED
-            step = AgentStep(index=progress.step_index, limit=max_steps)
+            step = AgentStep(index=progress.step_index, limit=progress.step_limit)
             prepare = run._prepare_step
             prepared = run._defaults
             ownership = (
@@ -2181,15 +2187,43 @@ def _complete_step(run: Run) -> None:
     ]
     # A step whose tool results all set `terminate` ends the run.
     terminated = bool(results) and all(result.terminate for result in results)
-    should_continue = (
-        after_step(
-            _step_result(run, progress.options, progress.step_index).model_copy(
-                deep=True
-            )
+    # On a step that declares tools but lets none run, text is the answer.
+    no_tool_can_run = (
+        bool(progress.tools)
+        and progress.options is not None
+        and progress.options.tool_choice == ToolChoiceOptions.NONE
+    )
+    previous = (
+        run._state.steps[progress.step_index - 1] if progress.step_index else None
+    )
+    # Calls there get rejection results. Only calls and no text get one more
+    # step, as the last step, to answer from that history; a second such step
+    # goes to after_step, which can fail it.
+    retry = (
+        no_tool_can_run
+        and bool(calls)
+        and not step.message.text
+        and not (
+            previous is not None
+            and progress.previous_options is not None
+            and progress.previous_options.tool_choice == ToolChoiceOptions.NONE
+            and bool(previous.message.tool_calls)
+            and not previous.message.text
         )
-        if after_step is not None
-        else bool(calls)
-    ) and not terminated
+    )
+    should_continue = retry or (
+        (
+            after_step(
+                _step_result(run, progress.options, progress.step_index).model_copy(
+                    deep=True
+                )
+            )
+            if after_step is not None
+            else bool(calls)
+        )
+        and not terminated
+        and not (no_tool_can_run and bool(step.message.text))
+    )
     cancellation_signal.check()
     has_delegated_work = run.coordination is not None and bool(
         run.coordination.delegated_runs()
@@ -2202,6 +2236,8 @@ def _complete_step(run: Run) -> None:
     ownership = run.coordination.coordinator.ownership if run.coordination else None
     with run.execution_lock:
         progress.previous_options = progress.options
+        if retry:
+            progress.step_limit = progress.step_index + 2
         can_continue = progress.step_index + 1 < progress.step_limit
         if (
             not should_continue

@@ -56,6 +56,7 @@ from onyx.llm.interfaces import (
 )
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
+    PROVIDERS_WITHOUT_NONE_TOOL_CHOICE,
     ReasoningParamStyle,
     anthropic_identity_is_always_thinking,
     anthropic_identity_turns_thinking_off_between_tools,
@@ -69,7 +70,7 @@ from onyx.llm.model_capabilities import (
     is_true_openai_model,
     model_is_reasoning_model,
     model_prefers_auto_tool_choice,
-    model_requires_auto_tool_choice,
+    model_supports_none_tool_choice,
     openai_chat_tools_require_reasoning_none,
     openai_chat_variant_rejects_reasoning,
     openai_model_rejects_reasoning_effort,
@@ -1127,22 +1128,14 @@ class LitellmLLM(LLM):
         ):
             tool_choice = ToolChoiceOptions.AUTO
 
-        # Tool definitions stay in the request so the cached prefix and the
-        # history's tool calls stay valid. Bedrock Converse and Ollama cannot
-        # express NONE, and Qwen/GLM deployments can reject it, so these send
-        # AUTO; the prompt says no tools can run and the agent runtime rejects
-        # any call on a NONE step.
-        if tool_choice == ToolChoiceOptions.NONE and (
-            self._model_provider
-            in {
-                LlmProviderNames.BEDROCK,
-                LlmProviderNames.BEDROCK_CONVERSE,
-                LlmProviderNames.OLLAMA,
-                LlmProviderNames.OLLAMA_CHAT,
-            }
-            or model_requires_auto_tool_choice(model_identity_names)
+        # A raw NONE request to these adapters omits the schemas, because they
+        # cannot forbid calls; the history keeps prior calls and results.
+        # Shared requests send AUTO with their tools instead (_prepare_tools).
+        if (
+            tool_choice == ToolChoiceOptions.NONE
+            and self._model_provider in PROVIDERS_WITHOUT_NONE_TOOL_CHOICE
         ):
-            tool_choice = ToolChoiceOptions.AUTO
+            tools = None
 
         # If no tools are provided, tool_choice should be None
         if not tools:
@@ -2132,13 +2125,17 @@ class LitellmLLM(LLM):
 
     def _prepare_tools(
         self, request: GenerationRequest
-    ) -> tuple[list[ToolDefinition], ToolChoice]:
-        """Apply provider constraints without changing the run's declared tools or policy."""
+    ) -> tuple[list[ToolDefinition], ToolChoice, GenerationRequest]:
+        """Apply provider constraints without changing the run's declared tools or policy.
+
+        Also return the request that response decoding uses: its tool policy
+        matches the choice the provider receives."""
         tools = request.tools
         choice = request.options.tool_choice
         allowed = request.allowed_tool_names
+        config = self.config
         model_names = resolve_model_identity_names(
-            self.config.model_name, self.config.deployment_name
+            config.model_name, config.deployment_name
         )
         if allowed is not None:
             if unknown := allowed - {tool.name for tool in tools}:
@@ -2157,7 +2154,22 @@ class LitellmLLM(LLM):
             if model_prefers_auto_tool_choice(model_names):
                 tools = [tool for tool in tools if tool.name == choice.name]
                 choice = ToolChoiceOptions.AUTO
-        return tools, choice
+        # Tools stay declared so the cached prefix and the history's calls stay
+        # valid. Where NONE cannot be sent, the agent runtime rejects any call,
+        # including a call that the model writes as text.
+        if choice == ToolChoiceOptions.NONE and not model_supports_none_tool_choice(
+            config.model_provider, model_names
+        ):
+            choice = ToolChoiceOptions.AUTO
+            request = request.model_copy(
+                update={
+                    "allowed_tool_names": None,
+                    "options": request.options.model_copy(
+                        update={"tool_choice": choice}
+                    ),
+                }
+            )
+        return tools, choice, request
 
     def _prepare_request(
         self, request: GenerationRequest
@@ -2187,7 +2199,7 @@ class LitellmLLM(LLM):
     ) -> AssistantMessage:
         context = context or GenerationContext()
         messages, cache_stats = self._prepare_request(request)
-        definitions, tool_choice = self._prepare_tools(request)
+        definitions, tool_choice, decoding_request = self._prepare_tools(request)
         tools = serialize_tools(definitions) or None
         with (
             _provider_scope(context, self) as signal,
@@ -2220,7 +2232,7 @@ class LitellmLLM(LLM):
                 # A completed response survives its deadline, but explicit Stop wins.
                 if signal.cancelled:
                     raise AgentCancelled()
-                return to_assistant_message(response, request)
+                return to_assistant_message(response, decoding_request)
             except (Exception, AgentCancelled) as error:
                 span.set_error(
                     {
@@ -2240,7 +2252,7 @@ class LitellmLLM(LLM):
         operation = ProviderOperation()
         accumulator = MessageAccumulator(request.tools)
         messages, cache_stats = self._prepare_request(request)
-        definitions, tool_choice = self._prepare_tools(request)
+        definitions, tool_choice, decoding_request = self._prepare_tools(request)
         tools = serialize_tools(definitions) or None
         with (
             _provider_scope(context, self) as signal,
@@ -2279,7 +2291,7 @@ class LitellmLLM(LLM):
                             structured_response_format=request.options.structured_response_format,
                         )
                     ),
-                    request,
+                    decoding_request,
                 )
                 for event in events:
                     signal.check()

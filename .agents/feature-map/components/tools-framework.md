@@ -280,7 +280,9 @@ ends ([[#child-wait-cleanup]]). A step count bounds the coding agent, not time:
 `CodingAgentTool` gives it `MAX_CODING_AGENT_CYCLES + 1` steps.
 `coding_agent/agent.py:CodingAgent._prepare_step` forces a final answer step
 with tool execution disabled on the last step, after a `generate_answer` call, or after a step
-with no tool calls. Definitions remain advertised on that step for cache reuse.
+with no tool calls. Definitions remain advertised on that step
+([[llm-providers#none-tool-choice-keeps-tools]]), and the runtime handles any call
+([[core-chat-loop#stopping-tools]]).
 Their control functions, such as `think_tool`, `generate_report` and
 `generate_answer`, are plain `AgentTool` objects with no `Tool` row, and
 `chat/renderer.py:HIDDEN_TOOLS` keeps them out of the stream.

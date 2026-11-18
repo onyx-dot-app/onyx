@@ -198,8 +198,9 @@ Each model call receives a separate context copy. Compaction applies its own tra
 `PreparedStep.stall_timeout_s` overrides the stream's idle timeout; `None` uses the agent's setting.
 Generation options remain part of `PreparedStep`, since tool choice and token limits can change between steps.
 The executor enforces step permissions, `NONE`, and `NamedToolChoice` before tool approval or execution.
-Other tool definitions remain in the request for cache reuse. A provider that cannot express `NONE` receives `AUTO`.
-A call on a `NONE` step gets the error result "No more tools can run in this response."
+Other tool definitions remain in the request for cache reuse; the LLM adapter sends `AUTO` where a provider cannot take `NONE`.
+On a step that declares tools and allows none, a call gets the error result `NO_TOOL_CAN_RUN_RESULT` and no tool events.
+Text on that step is the answer, and the run ends `COMPLETE`. A step with only calls gets one more step, as the last step; the second such step goes to `after_step`.
 Explicit calls recovered from model text follow the same permission checks as native calls.
 A forbidden call returns a tool error so the model can retry; generation alone does not authorize execution.
 

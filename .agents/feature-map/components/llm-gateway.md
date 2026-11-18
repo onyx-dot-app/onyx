@@ -111,10 +111,6 @@ configuration
 server tools, hosted tools, thinking signatures and encrypted reasoning.
 `ANTHROPIC_GATEWAY_PASSTHROUGH_ENABLED` and `OPENAI_GATEWAY_PASSTHROUGH_ENABLED`
 (`onyx/server/gateway/configs.py`) send traffic back to translation.
-Translation keeps the client's tools for every tool choice. Bedrock, Ollama,
-Qwen and GLM cannot take `none`, so `LitellmLLM._completion` sends `auto` with
-those tools. The model can then return a tool call, and the client decides
-whether to run it.
 
 **Streaming.** Starlette resumes a sync generator on different threadpool
 threads, and a span's ContextVar token cannot reset across contexts.
