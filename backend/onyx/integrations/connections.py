@@ -936,6 +936,18 @@ def oauth_client_configured(
     return client_id is not None
 
 
+def header_template_missing(integration: Integration) -> bool:
+    """A per-user API key MCP server whose template the migration could not
+    read: new users have no fields to fill. Users with an old connection keep
+    its stored headers, so only the admin list treats it as not set up."""
+    return (
+        integration.kind is IntegrationKind.MCP
+        and integration.auth_mode is IntegrationAuthMode.INDIVIDUAL
+        and integration.auth_method is IntegrationAuthMethod.API_KEY
+        and not integration.header_template
+    )
+
+
 def integration_status(
     integration: Integration, user: User | None, db_session: Session
 ) -> IntegrationStatus:

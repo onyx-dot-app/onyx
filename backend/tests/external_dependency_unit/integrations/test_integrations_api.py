@@ -58,9 +58,13 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
 from onyx.integrations.connection_models import (
     ConnectionSecret,
+    ConnectionState,
     read_connection_secret,
 )
-from onyx.integrations.connections import connect_with_fields__no_commit
+from onyx.integrations.connections import (
+    connect_with_fields__no_commit,
+    integration_status,
+)
 from onyx.integrations.models import (
     IntegrationActionSpec,
     PersonaPluginLink,
@@ -719,6 +723,33 @@ def test_scoped_owner_starts_the_organization_sign_in_of_its_integration(
     with pytest.raises(OnyxError) as error:
         start_integration_oauth(integration, member, db_session)
     assert error.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+
+def test_per_user_key_mcp_without_a_template_needs_setup(
+    db_session: Session, admin: User, member: User, created: Created
+) -> None:
+    """A migrated per-user API key MCP server whose template did not read has
+    no fields for new users to fill, so the admin list shows it as not ready.
+    The status of a user does not change."""
+    integration, _ = make_mcp_integration(
+        db_session,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+    )
+    created.add(integration.id)
+
+    view = admin_api.get_integration_admin(integration.id, admin, db_session)
+    assert view.needs_setup is True
+    assert view.setup_reason == "Add the header template."
+    assert (
+        integration_status(integration, member, db_session).state
+        is not ConnectionState.NOT_SET_UP
+    )
+
+    integration.header_template = {"X-Api-Key": "{api_key}"}
+    db_session.commit()
+    view = admin_api.get_integration_admin(integration.id, admin, db_session)
+    assert view.needs_setup is False
 
 
 def test_organization_connection_put_and_delete(

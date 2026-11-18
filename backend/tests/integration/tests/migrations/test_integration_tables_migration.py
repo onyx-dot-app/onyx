@@ -23,6 +23,7 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.providers.registry import get_endpoint_catalog
+from onyx.utils.encryption import encrypt_string_to_bytes
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
 PREVIOUS_REVISION = "ff11c4042c42"
@@ -104,6 +105,7 @@ class Seeded:
     task: UUID
     mcp_public: int
     mcp_private: int
+    mcp_user_key: int
     mcp_orphan: int
     app_slack: int
     app_custom: int
@@ -211,11 +213,13 @@ def _seed(conn: Connection) -> Seeded:
         "shared": f"u1-tracker-{s}",
         "private": f"u1-private-{s}",
         "orphan": f"u1-orphan-{s}",
+        "user_key": f"u1-per-user-mcp-{s}",
     }
     owner_email = f"u1-owner-{s}@example.com"
     mcp_public = mcp(names["shared"], owner_email, True, "OAUTH", "PER_USER")
     mcp_private = mcp(names["private"], owner_email, False, "API_TOKEN", "ADMIN")
     mcp_orphan = mcp(names["orphan"], f"gone-{s}@example.com", False, "NONE", "ADMIN")
+    mcp_user_key = mcp(names["user_key"], owner_email, False, "API_TOKEN", "PER_USER")
     # Only the public server is available in Craft.
     conn.execute(
         text(
@@ -308,9 +312,25 @@ def _seed(conn: Connection) -> Seeded:
             day=day,
         )
 
+    # A per-user API key server keeps its template in the admin config.
+    user_key_template = encrypt_string_to_bytes(
+        json.dumps(
+            {
+                "headers": {},
+                "header_template": {
+                    "X-Api-Key": "{api_key}",
+                    "X-Team": "{team_id}",
+                    "X-User": "{user_email}",
+                    "Host": "{api_key}.internal",
+                },
+                "required_fields": ["api_key", "team_id"],
+            }
+        )
+    )
     for server, secret in (
         (mcp_public, b"public-admin"),
         (mcp_private, b"private-admin"),
+        (mcp_user_key, user_key_template),
     ):
         conn.execute(
             text("UPDATE mcp_server SET admin_connection_config_id = :c WHERE id = :s"),
@@ -322,12 +342,14 @@ def _seed(conn: Connection) -> Seeded:
     mcp_config(mcp_public, other_email, b"other-new", 2)
     # No active user has this email.
     mcp_config(mcp_public, f"u1-gone-{s}@example.com", b"gone", 3)
+    mcp_config(mcp_user_key, other_email, b"other-key", 1)
 
     gated: dict[str, int] = {}
     for key, column, target in (
         ("mcp_public", "mcp_server_id", mcp_public),
         ("mcp_private", "mcp_server_id", mcp_private),
         ("mcp_orphan", "mcp_server_id", mcp_orphan),
+        ("mcp_user_key", "mcp_server_id", mcp_user_key),
         ("app_custom", "external_app_id", app_custom),
     ):
         gated[key] = _insert(
@@ -639,6 +661,7 @@ def _seed(conn: Connection) -> Seeded:
         mcp_public=mcp_public,
         mcp_private=mcp_private,
         mcp_orphan=mcp_orphan,
+        mcp_user_key=mcp_user_key,
         app_slack=app_slack,
         app_custom=app_custom,
         app_org_key=app_org_key,
@@ -717,7 +740,12 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
         text("DELETE FROM tool WHERE id = ANY(:ids)"),
         {"ids": [*custom_tools, seeded.built_in_tool]},
     )
-    servers = [seeded.mcp_public, seeded.mcp_private, seeded.mcp_orphan]
+    servers = [
+        seeded.mcp_public,
+        seeded.mcp_private,
+        seeded.mcp_orphan,
+        seeded.mcp_user_key,
+    ]
     conn.execute(
         text(
             "UPDATE mcp_server SET admin_connection_config_id = NULL "
@@ -735,7 +763,7 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
     )
     conn.execute(
         text("DELETE FROM mcp_server WHERE id = ANY(:ids)"),
-        {"ids": [seeded.mcp_public, seeded.mcp_private, seeded.mcp_orphan]},
+        {"ids": servers},
     )
     conn.execute(
         text("DELETE FROM external_app WHERE id = ANY(:ids)"),
@@ -812,6 +840,7 @@ class Copied:
     auth_mode: str
     auth_method: str | None
     header_template: dict[str, str] | None
+    credential_fields: list[dict[str, Any]] | None
     users_can_save_always_allow: bool
 
 
@@ -831,7 +860,7 @@ def _copied(conn: Connection, where: str, **params: Any) -> Copied:
             "p.marketplace_id, m.kind AS marketplace_kind, p.author_user_id, "
             "p.published_version_id IS NOT NULL AS published, "
             "p.installation_policy, i.auth_mode, "
-            "i.auth_method, i.header_template, "
+            "i.auth_method, i.header_template, i.credential_fields, "
             "i.users_can_save_always_allow "
             f"FROM integration i JOIN plugin p ON p.id = {FIRST_PLUGIN} "
             f"JOIN plugin_marketplace m ON m.id = p.marketplace_id WHERE {where}"
@@ -929,6 +958,7 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         public = _copied(conn, "i.id = :id", id=seeded.gated["mcp_public"])
         private = _copied(conn, "i.id = :id", id=seeded.gated["mcp_private"])
         orphan = _copied(conn, "i.id = :id", id=seeded.gated["mcp_orphan"])
+        per_user_mcp = _copied(conn, "i.id = :id", id=seeded.gated["mcp_user_key"])
         slack = _copied(conn, "i.id = :id", id=seeded.gated["app_slack"])
         app_custom = _copied(conn, "i.id = :id", id=seeded.gated["app_custom"])
         tool_ids = {
@@ -1170,6 +1200,34 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         }
         assert _connections(conn, private.id) == {
             None: (b"private-admin", "mcp_config", None),
+        }
+
+        # A per-user API key server: the template of its admin config, with
+        # no denylisted header, and a field for each placeholder that a user
+        # fills.
+        assert (per_user_mcp.auth_mode, per_user_mcp.auth_method) == (
+            "individual",
+            "api_key",
+        )
+        assert per_user_mcp.header_template == {
+            "X-Api-Key": "{api_key}",
+            "X-Team": "{team_id}",
+            "X-User": "{user_email}",
+        }
+        assert per_user_mcp.credential_fields == [
+            {"key": "api_key", "label": "api key", "secret": True},
+            {"key": "team_id", "label": "team id", "secret": True},
+        ]
+        user_key_admin = conn.execute(
+            text(
+                "SELECT c.config FROM mcp_connection_config c JOIN mcp_server m "
+                "ON m.admin_connection_config_id = c.id WHERE m.id = :id"
+            ),
+            {"id": seeded.mcp_user_key},
+        ).scalar_one()
+        assert _connections(conn, per_user_mcp.id) == {
+            None: (bytes(user_key_admin), "mcp_config", None),
+            seeded.other: (b"other-key", "mcp_config", None),
         }
         assert _connections(conn, org_key.id) == {
             None: (b"\x00", "external_app_org", None),

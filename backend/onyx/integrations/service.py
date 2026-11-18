@@ -89,6 +89,7 @@ from onyx.integrations.connections import (
     credential_field_keys,
     has_placeholder,
     header_field_keys,
+    header_template_missing,
     integration_statuses,
     mark_sign_in_settings_changed,
     oauth_client_configured,
@@ -1032,6 +1033,8 @@ def action_views(
 def _setup_reason(
     integration: Integration, oauth_client: IntegrationOAuthClient | None
 ) -> str:
+    if header_template_missing(integration):
+        return "Add the header template."
     if not oauth_client_configured(integration, oauth_client):
         return "Add the OAuth client ID."
     return "Connect the account of the organization."
@@ -1042,7 +1045,23 @@ def _organization_statuses(
 ) -> dict[int, IntegrationStatus]:
     """The status of each organization connection, with a reason that tells
     the admin what to do."""
-    statuses = integration_statuses(integrations, None, db_session)
+    # The old organization row of an integration with no template may not
+    # read, so its status is not resolved.
+    statuses = integration_statuses(
+        [
+            integration
+            for integration in integrations
+            if not header_template_missing(integration)
+        ],
+        None,
+        db_session,
+    )
+    for integration in integrations:
+        if header_template_missing(integration):
+            statuses[integration.id] = IntegrationStatus(
+                state=ConnectionState.NOT_SET_UP,
+                reason=None,
+            )
     not_set_up = [
         integration
         for integration in integrations
