@@ -346,7 +346,9 @@ def test_a_failed_upgrade_restores_the_earlier_flag(
 
     scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
 
-    # The queued growth run still holds the slot, so it is not sent twice.
+    # The upgrade was attempted, failed, and the growth run keeps its slot.
+    assert client.send_task.call_count == 2
+    assert client.send_task.call_args.kwargs["kwargs"]["reason"] == "first_run"
     assert cache.values[_KEY] == growth_flag
 
 
