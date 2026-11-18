@@ -264,17 +264,33 @@ function emptyTurn(prompt = ""): SubagentTurn {
 }
 
 /**
- * Sets a subagent turn's final response. It replaces the text of the turn's
- * last message, or adds a message when the turn has none.
+ * Sets a subagent turn's final response. The response joins the text of every
+ * message in the turn, so only the last message takes the part after the
+ * earlier messages; a turn whose messages already hold the response is left
+ * as is, and a turn with no message gets one.
  */
 function withResponseEvent(
   turn: SubagentTurn,
   response: string | null | undefined
 ): SubagentTurn {
   if (!response) return turn;
-  const lastMessage = reduceTimelineEvents(turn.timelineEvents)
-    .entries.filter((entry) => entry.payload.kind === "message")
-    .at(-1);
+  const messages = reduceTimelineEvents(turn.timelineEvents).entries.filter(
+    (entry) => entry.payload.kind === "message"
+  );
+  const texts = messages.map((entry) =>
+    entry.payload.kind === "message"
+      ? entry.payload.content
+          .map((block) => (block.type === "text" ? block.text : ""))
+          .join("")
+      : ""
+  );
+  if (texts.join("") === response) return turn;
+  const earlier = texts.slice(0, -1).join("");
+  // The child rows own the transcript; a response that does not extend it
+  // cannot be placed.
+  if (!response.startsWith(earlier)) return turn;
+  const text = response.slice(earlier.length);
+  const lastMessage = messages.at(-1);
   const partId = lastMessage?.id.startsWith("part:")
     ? lastMessage.id.slice("part:".length)
     : undefined;
@@ -282,9 +298,9 @@ function withResponseEvent(
     type: "update",
     update: {
       sessionUpdate: "agent_message_chunk",
-      content: { type: "text", text: response },
+      content: { type: "text", text },
       ...(lastMessage && {
-        _meta: { onyx: { snapshotText: response, partId } },
+        _meta: { onyx: { snapshotText: text, partId } },
       }),
     },
   };
