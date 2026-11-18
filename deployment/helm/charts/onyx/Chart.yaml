@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.54
+version: 0.9.55
 appVersion: latest
 annotations:
   category: Productivity
@@ -21,8 +21,10 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: security
-      description: Disable HTTP/2 by default in the bundled Ingress NGINX
-        controller to mitigate CVE-2026-123007 and CVE-2026-123633.
+      description: The default opensearch.opensearchJavaOpts adds
+        -XX:-UseBASE64Intrinsics, a stopgap for Java4Shell
+        (CVE-2026-114938) in the JDK of the OpenSearch image. If you set
+        your own opensearchJavaOpts, add the flag to it.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
