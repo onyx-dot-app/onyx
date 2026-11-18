@@ -72,12 +72,20 @@ type StackRow struct {
 	LeaseRoot    string         `json:"lease_root,omitempty"`
 	Leases       map[string]int `json:"leases,omitempty"`
 	OrphanReason string         `json:"orphan_reason,omitempty"`
+	// Volumes is the number of Docker volumes of Project. `down` keeps them.
+	Volumes int `json:"volumes"`
 	// Next is the command that stops the stack, or "" when nothing runs.
 	Next   string   `json:"next,omitempty"`
 	Errors []string `json:"errors"`
 
 	state      *State
 	containers int
+}
+
+// OnlyVolumes reports whether nothing of the stack is left but its Docker
+// volumes: no process, container or port lease.
+func (r StackRow) OnlyVolumes() bool {
+	return r.Volumes > 0 && !r.Running() && r.containers == 0 && len(r.Leases) == 0
 }
 
 // Running reports whether the row has a live application process or a
@@ -117,6 +125,8 @@ type checkoutInfo struct {
 type inventoryInput struct {
 	Containers []docker.ComposeContainer
 	DockerErr  error
+	Volumes    map[string]int
+	VolumesErr error
 	Owners     []ownerRecord
 	OwnersErr  error
 	States     []stateRecord
@@ -131,6 +141,8 @@ type inventoryInput struct {
 type DiscoverOptions struct {
 	// ListContainers lists the Compose containers; nil uses Docker.
 	ListContainers func() ([]docker.ComposeContainer, error)
+	// ListVolumes counts the Compose volumes of each project; nil uses Docker.
+	ListVolumes func() (map[string]int, error)
 	// Dirs are extra directories, such as the working directory, whose
 	// repositories are searched for stack state.
 	Dirs []string
@@ -150,6 +162,11 @@ func readInventoryInput(registry *Registry, opts DiscoverOptions) inventoryInput
 		list = docker.ListComposeContainers
 	}
 	in.Containers, in.DockerErr = list()
+	listVolumes := opts.ListVolumes
+	if listVolumes == nil {
+		listVolumes = docker.ListComposeVolumes
+	}
+	in.Volumes, in.VolumesErr = listVolumes()
 	in.Owners, in.OwnersErr = readOwners(registry)
 	in.Leases, in.LeasesErr = registry.Leases()
 
@@ -331,6 +348,9 @@ func buildInventory(in inventoryInput) Inventory {
 	if in.DockerErr != nil {
 		inv.Warnings = append(inv.Warnings, fmt.Sprintf("Docker is unavailable, so containers are not shown: %v", in.DockerErr))
 	}
+	if in.VolumesErr != nil && in.DockerErr == nil {
+		inv.Warnings = append(inv.Warnings, fmt.Sprintf("cannot list Docker volumes: %v", in.VolumesErr))
+	}
 	if in.OwnersErr != nil {
 		inv.Warnings = append(inv.Warnings, fmt.Sprintf("cannot read project owner records: %v", in.OwnersErr))
 	}
@@ -424,10 +444,21 @@ func buildInventory(in inventoryInput) Inventory {
 	for _, row := range rows {
 		attached[row.OwnerRecord] = true
 	}
+	// An owner record keys its project by ProjectName(project), so the
+	// project of an owner without state is found through its volumes.
+	volumeProjects := map[string]string{}
+	for project := range in.Volumes {
+		volumeProjects[ProjectName(project)] = project
+	}
 	for _, owner := range in.Owners {
 		if owner.Err == nil && !attached[owner.Path] {
-			rows = append(rows, &StackRow{OwnerRecord: owner.Path, StateDir: owner.StateDir, Mode: modeOfStateDir(owner.StateDir),
+			rows = append(rows, &StackRow{Project: volumeProjects[owner.Key], OwnerRecord: owner.Path, StateDir: owner.StateDir, Mode: modeOfStateDir(owner.StateDir),
 				Status: StatusOrphaned, OrphanReason: "the owner record points to missing state", Errors: []string{}})
+		}
+	}
+	for _, row := range rows {
+		if row.Project != "" && row.Mode != Frontend {
+			row.Volumes = in.Volumes[row.Project]
 		}
 	}
 	for _, row := range rows {
@@ -589,6 +620,9 @@ func nextCommand(row *StackRow) string {
 	}
 	switch row.Status {
 	case StatusOrphaned:
+		if row.OnlyVolumes() {
+			return "ods stack prune --volumes"
+		}
 		if row.Mode == Frontend || row.Project == "" {
 			return "ods stack prune"
 		}

@@ -201,6 +201,36 @@ func TestStackPruneReportsComposeFailure(t *testing.T) {
 	}
 }
 
+func TestStackPruneLeavesVolumeOnlyOrphansForPruneVolumes(t *testing.T) {
+	calls := stackLsEnv(t, `case "$1" in
+volume) echo removed-1; echo removed-1 ;;
+esac
+exit 0
+`)
+	owner := filepath.Join(runtimeRegistry().Dir, "projects", devstack.ProjectName("removed-1"), "owner.json")
+	if err := os.MkdirAll(filepath.Dir(owner), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, owner, `{"state_dir":"/missing/ods-stack"}`)
+
+	code, out := runStackCLI(t, "stack", "ls", "--orphaned")
+	if code != 3 || !strings.Contains(out, "removed-1") || !strings.Contains(out, "ods stack prune --volumes") {
+		t.Fatalf("ls exit %d:\n%s", code, out)
+	}
+	code, out = runStackCLI(t, "stack", "prune", "--yes")
+	if code != 0 || !strings.Contains(out, "1 removed stack(s) left only Docker volumes") || !strings.Contains(out, "No orphaned stacks") {
+		t.Fatalf("prune exit %d:\n%s", code, out)
+	}
+	for _, call := range devtoolCalls(t, calls) {
+		if call.Args[0] == "compose" {
+			t.Fatalf("prune without --volumes ran %v", call.Args)
+		}
+	}
+	if _, err := os.Stat(owner); err != nil {
+		t.Fatalf("prune removed the owner record of a project with volumes: %v", err)
+	}
+}
+
 func TestPrintStackRowsShowsEachRowState(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {

@@ -30,6 +30,7 @@ type ProjectResult struct {
 	Row             StackRow
 	StoppedServices int
 	ComposeDown     bool
+	RemovedVolumes  bool
 	ReleasedLeases  int
 	RemovedOwner    bool
 }
@@ -167,6 +168,7 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 			return result, err
 		}
 		result.ComposeDown = true
+		result.RemovedVolumes = opts.Volumes
 	}
 	if registry == nil {
 		return result, nil
@@ -177,7 +179,9 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 		}
 		result.ReleasedLeases = len(row.Leases)
 	}
-	if row.Status == StatusOrphaned && (row.Project != "" || row.OwnerRecord != "") {
+	// The owner record is the only link from a removed worktree to its
+	// volumes, so it stays until the volumes are deleted.
+	if row.Status == StatusOrphaned && (row.Project != "" || row.OwnerRecord != "") && (opts.Volumes || row.Volumes == 0) {
 		removed, err := removeOrphanOwner(registry, row)
 		if err != nil {
 			return result, err

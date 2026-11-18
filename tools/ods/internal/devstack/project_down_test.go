@@ -15,15 +15,24 @@ import (
 
 type fakeCompose struct {
 	projects []string
+	volumes  []bool
 }
 
-func (c *fakeCompose) down(_ context.Context, project string, _ bool) error {
+func (c *fakeCompose) down(_ context.Context, project string, volumes bool) error {
 	c.projects = append(c.projects, project)
+	c.volumes = append(c.volumes, volumes)
 	return nil
 }
 
 func discoverWith(containers []docker.ComposeContainer) DiscoverOptions {
-	return DiscoverOptions{ListContainers: func() ([]docker.ComposeContainer, error) { return containers, nil }}
+	return discoverWithVolumes(containers, nil)
+}
+
+func discoverWithVolumes(containers []docker.ComposeContainer, volumes map[string]int) DiscoverOptions {
+	return DiscoverOptions{
+		ListContainers: func() ([]docker.ComposeContainer, error) { return containers, nil },
+		ListVolumes:    func() (map[string]int, error) { return volumes, nil },
+	}
 }
 
 // isolatedLinkedStack starts an isolated stack in a linked worktree.
@@ -160,6 +169,40 @@ func TestDownProjectRemovesOwnerRecordWithoutState(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("owner record remains: %v", err)
+	}
+}
+
+func TestOwnerWithoutStateKeepsItsVolumesUntilTheyAreDeleted(t *testing.T) {
+	registry := &Registry{Dir: t.TempDir()}
+	path := ownerPath(registry, "removed-1")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"state_dir":"/missing/ods-stack"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	discover := discoverWithVolumes(nil, map[string]int{"removed-1": 7, "unrelated": 2})
+	row := rowFor(t, Discover(registry, discover), "removed-1")
+	if row.Status != StatusOrphaned || row.Volumes != 7 || !row.OnlyVolumes() || row.Next != "ods stack prune --volumes" {
+		t.Fatalf("owner without state: %+v", row)
+	}
+
+	compose := &fakeCompose{}
+	opts := ProjectOptions{LockWait: time.Second, Discover: discover}
+	if _, err := CleanupRow(context.Background(), registry, row, compose.down, opts); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("the owner record was removed while its volumes remain: %v", err)
+	}
+
+	opts.Volumes = true
+	result, err := CleanupRow(context.Background(), registry, row, compose.down, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(compose.projects) != 2 || compose.projects[1] != "removed-1" || !compose.volumes[1] || !result.RemovedVolumes || !result.RemovedOwner {
+		t.Fatalf("volumes were not deleted: calls %v %v, result %+v", compose.projects, compose.volumes, result)
 	}
 }
 
