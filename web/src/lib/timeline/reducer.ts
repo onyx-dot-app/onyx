@@ -74,12 +74,13 @@ function settleChunks(
 }
 
 function toolEntryStatus(toolCall: AcpToolCall): TimelineEntryStatus {
+  // A call that completes after a Stop request completed; the request may
+  // have failed while the turn went on.
+  if (toolCall.status === "completed") return "done";
   if (toolCall._meta?.onyx?.cancelled) return "stopped";
   switch (toolCall.status) {
     case "failed":
       return "error";
-    case "completed":
-      return "done";
     case "pending":
     case "in_progress":
       return "streaming";
@@ -141,6 +142,18 @@ function newToolCall(toolCallId: string): AcpToolCall {
 }
 
 /**
+ * `id`, or a variant of it that no entry has yet. A tool call's id and a
+ * generated message or thinking id can be equal; entry ids must stay unique.
+ */
+function unusedId(entries: AcpTimelineEntry[], id: string): string {
+  let candidate = id;
+  for (let n = 1; entries.some((entry) => entry.id === candidate); n++) {
+    candidate = `${id}~${n}`;
+  }
+  return candidate;
+}
+
+/**
  * Starts or updates a tool call. An update for an unknown id adds the call,
  * because a client can attach to a stream after the call started.
  */
@@ -148,15 +161,22 @@ function upsertToolCall(
   entries: AcpTimelineEntry[],
   update: AcpToolCallStart | AcpToolCallProgress
 ): AcpTimelineEntry[] {
-  const index = entries.findIndex((entry) => entry.id === update.toolCallId);
+  const index = entries.findIndex(
+    (entry) =>
+      entry.payload.kind === "tool" &&
+      entry.payload.toolCall.toolCallId === update.toolCallId
+  );
   const existing = entries[index];
   if (!existing || existing.payload.kind !== "tool") {
-    return [
-      ...entries,
-      toolEntry(applyToolUpdate(newToolCall(update.toolCallId), update)),
-    ];
+    const created = toolEntry(
+      applyToolUpdate(newToolCall(update.toolCallId), update)
+    );
+    return [...entries, { ...created, id: unusedId(entries, created.id) }];
   }
-  const next = toolEntry(applyToolUpdate(existing.payload.toolCall, update));
+  const next = {
+    ...toolEntry(applyToolUpdate(existing.payload.toolCall, update)),
+    id: existing.id,
+  };
   return entries.map((entry, i) => (i === index ? next : entry));
 }
 
@@ -224,7 +244,9 @@ function appendChunk(
   if (!continues) {
     const content: AcpContentBlock[] =
       snapshot !== undefined ? [{ type: "text", text: snapshot }] : [block];
-    const id = partId ? `part:${partId}` : `${kind}-${entries.length}`;
+    const id = partId
+      ? `part:${partId}`
+      : unusedId(entries, `${kind}-${entries.length}`);
     return [
       ...settleChunks(entries),
       {
