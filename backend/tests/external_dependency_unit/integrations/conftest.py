@@ -1,5 +1,4 @@
 import threading
-import time
 from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -138,7 +137,9 @@ class FakeTokenEndpoint:
             "token_type": "Bearer",
             "expires_in": 3600,
         }
-        self.delay_s = 0.0
+        # When set, each request waits for this event before it responds.
+        self.release: threading.Event | None = None
+        self.entered = threading.Event()
         # Send the body form-encoded, as some MCP servers do.
         self.form_encoded = False
         self.requests: list[httpx.Request] = []
@@ -147,8 +148,9 @@ class FakeTokenEndpoint:
     def send(self, request: httpx.Request, *, mcp: bool) -> httpx.Response:  # noqa: ARG002
         with self._lock:
             self.requests.append(request)
-        if self.delay_s:
-            time.sleep(self.delay_s)
+        self.entered.set()
+        if self.release is not None and not self.release.wait(timeout=30):
+            raise TimeoutError("the test did not release the token request")
         if self.form_encoded:
             return httpx.Response(
                 self.status_code,

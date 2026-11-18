@@ -6,6 +6,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from logging import Logger, LoggerAdapter
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import parse_qs
 from uuid import uuid4
@@ -96,7 +97,22 @@ def test_two_concurrent_refreshes_make_one_call(
     connection = add_connection(
         db_session, integration, user.id, _stale_secret(), expires_at=expired()
     )
-    token_endpoint.delay_s = 0.5
+    token_endpoint.release = threading.Event()
+    lock_attempts = threading.Semaphore(0)
+
+    @contextmanager
+    def counted_lock(
+        lock_name: str,
+        max_time_lock_held_s: float,
+        wait_for_lock_s: float,
+        logger: Logger | LoggerAdapter,
+    ) -> Iterator[None]:
+        lock_attempts.release()
+        with cache_shared_lock(
+            lock_name, max_time_lock_held_s, wait_for_lock_s, logger
+        ):
+            yield
+
     tenant_id = CURRENT_TENANT_ID_CONTEXTVAR.get()
     results: list[str | None] = []
     errors: list[BaseException] = []
@@ -123,10 +139,17 @@ def test_two_concurrent_refreshes_make_one_call(
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
     threads = [threading.Thread(target=refresh) for _ in range(2)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=60)
+    with patch("onyx.integrations.connections.cache_shared_lock", counted_lock):
+        for thread in threads:
+            thread.start()
+        # Both callers saw the stale token and asked for the lock while the
+        # first one still waits for its token response.
+        assert token_endpoint.entered.wait(timeout=30)
+        assert lock_attempts.acquire(timeout=30)
+        assert lock_attempts.acquire(timeout=30)
+        token_endpoint.release.set()
+        for thread in threads:
+            thread.join(timeout=60)
 
     assert not errors
     assert len(token_endpoint.requests) == 1
