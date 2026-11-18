@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
+import { Section } from "@opal/layouts";
 import { CHAT_COLUMN_ROW, CHAT_GUTTER } from "@/lib/chat/layout";
 import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
@@ -343,9 +344,12 @@ export default function BuildMessageList({
       savedRender && !savedRender.isEmpty ? savedRender : null;
 
     return (
-      <div
+      <Section
         key={message.id}
-        className="flex flex-col gap-3 py-4"
+        gap={3}
+        alignItems="stretch"
+        height="fit"
+        className="my-4"
         data-testid="craft-assistant-message"
         aria-busy={finalizing}
       >
@@ -403,7 +407,12 @@ export default function BuildMessageList({
           />
         </Hoverable.Root>
         <div>
-          <div className="flex min-w-0 flex-col gap-2">
+          <Section
+            gap={2}
+            alignItems="stretch"
+            height="fit"
+            className="min-w-0"
+          >
             {outputs &&
               onOutputOpen &&
               onTurnOutputsOpen &&
@@ -415,9 +424,9 @@ export default function BuildMessageList({
                 />
               )}
             {trailing}
-          </div>
+          </Section>
         </div>
-      </div>
+      </Section>
     );
   };
 
@@ -438,97 +447,107 @@ export default function BuildMessageList({
 
   return (
     // The same frame as chat: its gutter, and its column width.
-    <div className={cn("flex flex-col items-center pb-4", CHAT_GUTTER)}>
-      <div className={CHAT_COLUMN_ROW}>
-        {messages.map((message, idx) => {
-          if (message.type === "user") {
-            const turnIndex = message.turn_index;
-            const outputs =
-              turnIndex !== undefined &&
-              !(showStreamingArea && idx === messages.length - 1) &&
-              !lastAssistantByTurn.has(turnIndex)
-                ? outputsByTurn.get(turnIndex)
-                : undefined;
-            return (
-              <div key={message.id}>
-                <div className="py-4">
-                  {sessionId && message.attachments && (
-                    <CraftMessageAttachments
-                      sessionId={sessionId}
-                      attachments={message.attachments}
-                      refreshKey={attachmentRefreshKey}
-                      onFileOpen={onFileOpen}
-                    />
-                  )}
-                  <HumanMessage content={message.content} nodeId={idx} />
-                </div>
-                {outputs &&
-                  onOutputOpen &&
-                  onTurnOutputsOpen &&
-                  turnIndex !== undefined && (
-                    <div className="py-4">
-                      <div>
-                        <TurnOutputCards
-                          outputs={outputs}
-                          onOpen={onOutputOpen}
-                          onShowAll={() => onTurnOutputsOpen(turnIndex)}
-                        />
+    <div className={cn("pb-4", CHAT_GUTTER)}>
+      <Section gap={0} height="fit">
+        <div className={CHAT_COLUMN_ROW}>
+          {messages.map((message, idx) => {
+            if (message.type === "user") {
+              const turnIndex = message.turn_index;
+              const outputs =
+                turnIndex !== undefined &&
+                !(showStreamingArea && idx === messages.length - 1) &&
+                !lastAssistantByTurn.has(turnIndex)
+                  ? outputsByTurn.get(turnIndex)
+                  : undefined;
+              return (
+                <div key={message.id}>
+                  <div className="py-4">
+                    {sessionId && message.attachments && (
+                      <CraftMessageAttachments
+                        sessionId={sessionId}
+                        attachments={message.attachments}
+                        refreshKey={attachmentRefreshKey}
+                        onFileOpen={onFileOpen}
+                      />
+                    )}
+                    <HumanMessage content={message.content} nodeId={idx} />
+                  </div>
+                  {outputs &&
+                    onOutputOpen &&
+                    onTurnOutputsOpen &&
+                    turnIndex !== undefined && (
+                      <div className="py-4">
+                        <div>
+                          <TurnOutputCards
+                            outputs={outputs}
+                            onOpen={onOutputOpen}
+                            onShowAll={() => onTurnOutputsOpen(turnIndex)}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  )}
-              </div>
-            );
-          }
-          if (message.type === "assistant") {
-            // Anchor the trailing slot (e.g. approval cards) under the
-            // last saved assistant message — but only when there's no
-            // live streaming area, since that case has its own anchor
-            // below.
-            const trailing =
-              !showStreamingArea && idx === lastAssistantIndex
-                ? trailingAssistantSlot
-                : null;
-            return renderAgentMessage(message, trailing);
-          }
-          return null;
-        })}
+                    )}
+                </div>
+              );
+            }
+            if (message.type === "assistant") {
+              // Anchor the trailing slot (e.g. approval cards) under the
+              // last saved assistant message — but only when there's no
+              // live streaming area, since that case has its own anchor
+              // below.
+              const trailing =
+                !showStreamingArea && idx === lastAssistantIndex
+                  ? trailingAssistantSlot
+                  : null;
+              return renderAgentMessage(message, trailing);
+            }
+            return null;
+          })}
 
-        {showStreamingArea && (
-          <div
-            className="flex flex-col gap-3 py-4"
-            data-testid="craft-assistant-message"
-            aria-busy={isStreaming}
-          >
-            <Response
-              items={[
-                ...(streamRender?.items ?? []),
-                ...(showStreamCursor
-                  ? [
-                      {
-                        kind: "text" as const,
-                        key: "cursor",
-                        node: (
-                          <div className="h-9 flex items-center">
-                            <BlinkingBar />
-                          </div>
-                        ),
-                      },
-                    ]
-                  : []),
-                ...(trailingAssistantSlot
-                  ? [
-                      {
-                        kind: "card" as const,
-                        key: "trailing",
-                        node: trailingAssistantSlot,
-                      },
-                    ]
-                  : []),
-              ]}
-            />
-          </div>
-        )}
-      </div>
+          {showStreamingArea && (
+            <Section
+              gap={3}
+              alignItems="stretch"
+              height="fit"
+              className="my-4"
+              data-testid="craft-assistant-message"
+              aria-busy={isStreaming}
+            >
+              <Response
+                items={[
+                  ...(streamRender?.items ?? []),
+                  ...(showStreamCursor
+                    ? [
+                        {
+                          kind: "text" as const,
+                          key: "cursor",
+                          node: (
+                            <Section
+                              flexDirection="row"
+                              justifyContent="start"
+                              height={2.25}
+                              gap={0}
+                            >
+                              <BlinkingBar />
+                            </Section>
+                          ),
+                        },
+                      ]
+                    : []),
+                  ...(trailingAssistantSlot
+                    ? [
+                        {
+                          kind: "card" as const,
+                          key: "trailing",
+                          node: trailingAssistantSlot,
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            </Section>
+          )}
+        </div>
+      </Section>
     </div>
   );
 }
