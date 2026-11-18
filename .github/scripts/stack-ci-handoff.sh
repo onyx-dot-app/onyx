@@ -49,10 +49,12 @@ restart_run() {
       return 0
     fi
     # A parallel handoff can restart the run first.
-    if [[ "$(gh run view "${run_id}" --repo "${REPO}" --json status --jq .status)" != "completed" ]]; then
-      echo "Run ${run_id} is already running again."
-      return 0
-    fi
+    case "$(gh run view "${run_id}" --repo "${REPO}" --json status --jq .status 2>/dev/null || true)" in
+      queued | in_progress | waiting | pending | requested)
+        echo "Run ${run_id} is already running again."
+        return 0
+        ;;
+    esac
     echo "Rerun of run ${run_id} failed (${attempt}/5)."
     sleep 10
   done
