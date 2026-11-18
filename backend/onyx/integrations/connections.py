@@ -95,6 +95,7 @@ from onyx.server.features.mcp.oauth import (
 )
 from onyx.server.features.mcp.ssrf import mcp_ssrf_httpx_client_factory
 from onyx.tools.tool_implementations.custom.openapi_parsing import openapi_to_url
+from onyx.utils.encryption import reject_masked_credentials
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_async_sync_no_cancel
 
@@ -1104,6 +1105,10 @@ def connect_with_fields__no_commit(
     missing = [key for key in keys if not fields.get(key, "").strip()]
     if missing:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Fill in: " + ", ".join(missing))
+    try:
+        reject_masked_credentials(dict(fields))
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
     upsert_connection__no_commit(
         db_session,
         integration_id=integration.id,
