@@ -248,10 +248,9 @@ def get_version() -> VersionResponse:
     return VersionResponse(backend_version=__version__)
 
 
-# The document index image the docker compose deployment runs. Keep in sync
-# with the `opensearch` service in
-# deployment/docker_compose/docker-compose.template.yml.
+# Keep these images in sync with deployment/docker_compose/docker-compose.template.yml.
 DOCUMENT_INDEX_IMAGE = "opensearchproject/opensearch:3.6.0"
+NGINX_IMAGE = "nginx:1.30.7-alpine"
 
 
 _DOCKERHUB_REPOS = (
@@ -340,19 +339,19 @@ def _fetch_versions() -> AllVersions:
             onyx=latest_stable_version,
             relational_db="postgres:15.2-alpine",
             index=DOCUMENT_INDEX_IMAGE,
-            nginx="nginx:1.25.5-alpine",
+            nginx=NGINX_IMAGE,
         ),
         dev=ContainerVersions(
             onyx=latest_dev_version,
             relational_db="postgres:15.2-alpine",
             index=DOCUMENT_INDEX_IMAGE,
-            nginx="nginx:1.25.5-alpine",
+            nginx=NGINX_IMAGE,
         ),
         migration=ContainerVersions(
             onyx="airgapped-intfloat-nomic-migration",
             relational_db="postgres:15.2-alpine",
             index=DOCUMENT_INDEX_IMAGE,
-            nginx="nginx:1.25.5-alpine",
+            nginx=NGINX_IMAGE,
         ),
     )
 
