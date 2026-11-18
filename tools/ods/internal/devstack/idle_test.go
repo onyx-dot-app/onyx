@@ -52,23 +52,42 @@ func writeFile(t *testing.T, path, body string) {
 	}
 }
 
+func lastActivity(t *testing.T, row StackRow, agents []string, now time.Time) time.Time {
+	t.Helper()
+	got, err := LastActivity(row, agents, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+func TestLastActivityFailsWhenGitCannotReadTheCheckout(t *testing.T) {
+	root := gitRepo(t)
+	if err := os.WriteFile(filepath.Join(root, ".git", "index"), []byte("corrupt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LastActivity(StackRow{Root: root, RootExists: true}, nil, time.Now()); err == nil {
+		t.Fatal("an unreadable index counted as no activity")
+	}
+}
+
 func TestLastActivityCountsGitAndUntrackedEditsButNotIgnoredFiles(t *testing.T) {
 	root := gitRepo(t)
 	old := time.Now().Add(-48 * time.Hour)
 	started := time.Now().Add(-24 * time.Hour)
 	row := StackRow{Root: root, RootExists: true, Since: started}
 	age(t, root, old)
-	if got := LastActivity(row, nil, time.Now()); !got.Equal(started) {
+	if got := lastActivity(t, row, nil, time.Now()); !got.Equal(started) {
 		t.Fatalf("quiet checkout: activity %s, want the stack start %s", got, started)
 	}
 
 	writeFile(t, filepath.Join(root, "log", "api.log"), "line")
-	if got := LastActivity(row, nil, time.Now()); !got.Equal(started) {
+	if got := lastActivity(t, row, nil, time.Now()); !got.Equal(started) {
 		t.Fatalf("an ignored log write counted as activity: %s", got)
 	}
 
 	writeFile(t, filepath.Join(root, "new.go"), "package x")
-	if got := LastActivity(row, nil, time.Now()); !got.After(started) {
+	if got := lastActivity(t, row, nil, time.Now()); !got.After(started) {
 		t.Fatalf("an untracked edit did not count: %s", got)
 	}
 
@@ -76,7 +95,7 @@ func TestLastActivityCountsGitAndUntrackedEditsButNotIgnoredFiles(t *testing.T) 
 	if err := os.Chtimes(filepath.Join(root, ".git", "HEAD"), time.Now(), time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if got := LastActivity(row, nil, time.Now()); !got.After(started) {
+	if got := lastActivity(t, row, nil, time.Now()); !got.After(started) {
 		t.Fatalf("a git operation did not count: %s", got)
 	}
 
@@ -93,7 +112,7 @@ func TestLastActivityCountsGitAndUntrackedEditsButNotIgnoredFiles(t *testing.T) 
 	if err := os.Remove(tracked); err != nil {
 		t.Fatal(err)
 	}
-	if got := LastActivity(row, nil, time.Now()); !got.After(started) {
+	if got := lastActivity(t, row, nil, time.Now()); !got.After(started) {
 		t.Fatalf("a deleted tracked file did not count: %s", got)
 	}
 
@@ -110,11 +129,11 @@ func TestLastActivityCountsGitAndUntrackedEditsButNotIgnoredFiles(t *testing.T) 
 	if err := os.RemoveAll(filepath.Join(root, "pkg")); err != nil {
 		t.Fatal(err)
 	}
-	if got := LastActivity(row, nil, time.Now()); !got.After(started) {
+	if got := lastActivity(t, row, nil, time.Now()); !got.After(started) {
 		t.Fatalf("a deleted tracked directory did not count: %s", got)
 	}
 
-	if got := LastActivity(StackRow{Root: "/nonexistent", Since: started}, nil, time.Now()); !got.Equal(started) {
+	if got := lastActivity(t, StackRow{Root: "/nonexistent", Since: started}, nil, time.Now()); !got.Equal(started) {
 		t.Fatalf("missing checkout: activity %s, want %s", got, started)
 	}
 }
@@ -159,7 +178,7 @@ func TestRestartingAStackWithRunningContainersCountsAsActivity(t *testing.T) {
 	state.State.UpdatedAt = time.Now().Add(-10 * time.Minute)
 	m.states = []stateRecord{state}
 	row := rowFor(t, buildInventory(m.input()), "restarted-1")
-	activity := func(r StackRow) time.Time { return LastActivity(r, nil, time.Now()) }
+	activity := func(r StackRow) time.Time { return lastActivity(t, r, nil, time.Now()) }
 	if Idle(row, time.Now().Add(-6*time.Hour), activity) {
 		t.Fatalf("a stack restarted 10 minutes ago counted as idle: since %s", row.Since)
 	}
@@ -170,10 +189,10 @@ func TestLastActivityIsNowWhileAnAgentRunsInTheCheckout(t *testing.T) {
 	age(t, root, time.Now().Add(-48*time.Hour))
 	row := StackRow{Root: root, RootExists: true, Since: time.Now().Add(-24 * time.Hour)}
 	now := time.Now()
-	if got := LastActivity(row, []string{filepath.Join(root, "backend")}, now); !got.Equal(now) {
+	if got := lastActivity(t, row, []string{filepath.Join(root, "backend")}, now); !got.Equal(now) {
 		t.Fatalf("an agent in a subdirectory did not count: %s", got)
 	}
-	if got := LastActivity(row, []string{root + "-other"}, now); got.Equal(now) {
+	if got := lastActivity(t, row, []string{root + "-other"}, now); got.Equal(now) {
 		t.Fatal("an agent in a sibling directory with the same prefix counted")
 	}
 	link := filepath.Join(t.TempDir(), "link")
@@ -185,7 +204,7 @@ func TestLastActivityIsNowWhileAnAgentRunsInTheCheckout(t *testing.T) {
 		t.Fatal(err)
 	}
 	linked := StackRow{Root: link, RootExists: true, Since: row.Since}
-	if got := LastActivity(linked, []string{resolved}, now); !got.Equal(now) {
+	if got := lastActivity(t, linked, []string{resolved}, now); !got.Equal(now) {
 		t.Fatalf("an agent in the resolved path of a symlinked checkout did not count: %s", got)
 	}
 }

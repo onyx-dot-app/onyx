@@ -151,7 +151,11 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 			}
 			fresh := row
 			fresh.state = st
-			if !LastActivity(fresh, agents, time.Now()).Before(opts.IdleCutoff) {
+			last, err := LastActivity(fresh, agents, time.Now())
+			if err != nil {
+				return nil, err
+			}
+			if !last.Before(opts.IdleCutoff) {
 				return nil, ErrNotIdle
 			}
 		}
@@ -193,7 +197,15 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 			return result, err
 		}
 		result.ComposeDown = true
-		result.RemovedVolumes = opts.Volumes
+		if opts.Volumes {
+			// Compose exits 0 when Docker keeps a volume that a container uses.
+			listVolumes := opts.Discover.ListVolumes
+			if listVolumes == nil {
+				listVolumes = docker.ListComposeVolumes
+			}
+			left, err := listVolumes()
+			result.RemovedVolumes = err == nil && left[row.Project] == 0
+		}
 	}
 	if registry == nil {
 		return result, nil

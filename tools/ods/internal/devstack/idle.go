@@ -83,14 +83,15 @@ func isAgentCommand(name string) bool {
 // operation in its checkout (commit, checkout, add, rebase), or a change to a
 // modified, deleted or untracked file. A coding agent that runs in the checkout counts
 // as activity at now. Ignored files such as logs do not count, because a
-// running stack writes them while nobody works.
-func LastActivity(row StackRow, agentDirs []string, now time.Time) time.Time {
+// running stack writes them while nobody works. It fails when Git cannot read
+// the checkout, because missed edits would make the stack look idle.
+func LastActivity(row StackRow, agentDirs []string, now time.Time) (time.Time, error) {
 	latest := row.Since
 	if row.state != nil && row.state.UpdatedAt.After(latest) {
 		latest = row.state.UpdatedAt
 	}
 	if row.Root == "" || !row.RootExists {
-		return latest
+		return latest, nil
 	}
 	roots := []string{row.Root}
 	if resolved, err := filepath.EvalSymlinks(row.Root); err == nil && resolved != row.Root {
@@ -99,7 +100,7 @@ func LastActivity(row StackRow, agentDirs []string, now time.Time) time.Time {
 	for _, dir := range agentDirs {
 		for _, root := range roots {
 			if dir == root || strings.HasPrefix(dir, root+string(filepath.Separator)) {
-				return now
+				return now, nil
 			}
 		}
 	}
@@ -108,32 +109,36 @@ func LastActivity(row StackRow, agentDirs []string, now time.Time) time.Time {
 			latest = t
 		}
 	}
-	if gitDir, err := gitOutput(row.Root, "rev-parse", "--absolute-git-dir"); err == nil {
-		for _, name := range []string{"HEAD", "index", filepath.Join("logs", "HEAD")} {
-			if info, err := os.Stat(filepath.Join(gitDir, name)); err == nil {
-				later(info.ModTime())
-			}
+	gitDir, err := gitOutput(row.Root, "rev-parse", "--absolute-git-dir")
+	if err != nil {
+		return latest, fmt.Errorf("cannot read the Git directory of %s: %w", row.Root, err)
+	}
+	for _, name := range []string{"HEAD", "index", filepath.Join("logs", "HEAD")} {
+		if info, err := os.Stat(filepath.Join(gitDir, name)); err == nil {
+			later(info.ModTime())
 		}
 	}
 	cmd := exec.Command("git", "ls-files", "-z", "--modified", "--others", "--exclude-standard")
 	cmd.Dir = row.Root
-	if out, err := cmd.Output(); err == nil {
-		for _, name := range strings.Split(string(out), "\x00") {
-			if name == "" {
-				continue
-			}
-			path := filepath.Join(row.Root, name)
-			info, err := os.Lstat(path)
-			// A deletion changes the mtime of the nearest directory that is left.
-			for dir := filepath.Dir(path); errors.Is(err, os.ErrNotExist) && strings.HasPrefix(dir, row.Root); dir = filepath.Dir(dir) {
-				info, err = os.Stat(dir)
-			}
-			if err == nil {
-				later(info.ModTime())
-			}
+	out, err := cmd.Output()
+	if err != nil {
+		return latest, fmt.Errorf("cannot list the changed files of %s: %w", row.Root, err)
+	}
+	for _, name := range strings.Split(string(out), "\x00") {
+		if name == "" {
+			continue
+		}
+		path := filepath.Join(row.Root, name)
+		info, err := os.Lstat(path)
+		// A deletion changes the mtime of the nearest directory that is left.
+		for dir := filepath.Dir(path); errors.Is(err, os.ErrNotExist) && strings.HasPrefix(dir, row.Root); dir = filepath.Dir(dir) {
+			info, err = os.Stat(dir)
+		}
+		if err == nil {
+			later(info.ModTime())
 		}
 	}
-	return latest
+	return latest, nil
 }
 
 // Idle reports whether row is a running isolated stack in an existing

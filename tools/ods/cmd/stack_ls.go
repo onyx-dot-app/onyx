@@ -126,7 +126,12 @@ pruned stack again.`,
 				}
 			}
 			rows := pruneRows(inv.Rows, idle, volumes, now, func(row devstack.StackRow) time.Time {
-				return devstack.LastActivity(row, agents, now)
+				last, err := devstack.LastActivity(row, agents, now)
+				if err != nil {
+					log.Warnf("%s: not stopped as idle: %v", stackRowName(row), err)
+					return now
+				}
+				return last
 			})
 			if !volumes {
 				left := 0

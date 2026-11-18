@@ -474,7 +474,8 @@ leaves only its volumes. `ls` shows it as orphaned, plain `prune` leaves it,
 and `prune --volumes` deletes the volumes. Plain `prune` keeps the owner record
 of a project with volumes, because that record is the only link from the
 removed worktree to them. When Docker cannot list the volumes, `prune` keeps
-every owner record.
+every owner record. Docker keeps a volume that a container still uses, so
+`prune --volumes` lists the volumes again and keeps the owner record if any is left.
 
 `ods stack prune --idle 6h` also stops each isolated stack whose worktree had no
 activity for 6 hours. Activity is the stack start, a Git operation in the
@@ -483,6 +484,7 @@ file, a deleted tracked file or directory, or a running coding agent (`claude`, 
 whose working directory is in the worktree. Ignored files, such as service
 logs, do not count. ods finds agents through `/proc` on Linux and `lsof` on
 macOS. If ods cannot find the agents, `prune --idle` fails and stops nothing.
+If Git cannot read a worktree, prune warns and does not stop its stack.
 After the confirmation and the stack lock, prune checks the activity again and
 skips a stack that had activity since the listing. Shared stacks serve several
 worktrees, so prune never stops them as idle. Idle stacks keep their volumes, also with `--volumes`, so `ods stack up`

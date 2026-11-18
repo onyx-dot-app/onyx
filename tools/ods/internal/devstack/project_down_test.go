@@ -197,12 +197,22 @@ func TestOwnerWithoutStateKeepsItsVolumesUntilTheyAreDeleted(t *testing.T) {
 		t.Fatalf("the owner record was removed while its volumes remain: %v", err)
 	}
 
+	// Compose exits 0 and keeps a volume that a container still uses.
 	opts.Volumes = true
 	result, err := CleanupRow(context.Background(), registry, row, compose.down, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(compose.projects) != 2 || compose.projects[1] != "removed-1" || !compose.volumes[1] || !result.RemovedVolumes || !result.RemovedOwner {
+	if result.RemovedVolumes || result.RemovedOwner {
+		t.Fatalf("an in-use volume counted as removed: %+v", result)
+	}
+
+	opts.Discover = discoverWithVolumes(nil, map[string]int{"unrelated": 2})
+	result, err = CleanupRow(context.Background(), registry, row, compose.down, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(compose.projects) != 3 || compose.projects[2] != "removed-1" || !compose.volumes[2] || !result.RemovedVolumes || !result.RemovedOwner {
 		t.Fatalf("volumes were not deleted: calls %v %v, result %+v", compose.projects, compose.volumes, result)
 	}
 }
