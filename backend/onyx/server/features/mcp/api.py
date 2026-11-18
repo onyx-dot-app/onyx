@@ -84,7 +84,7 @@ from onyx.server.features.mcp.models import (
 )
 from onyx.server.features.mcp.oauth_discovery import discover_oauth_capabilities
 from onyx.server.features.mcp.setup_probe import stream_mcp_probe
-from onyx.utils.encryption import is_masked_credential
+from onyx.utils.encryption import is_masked_credential, reject_masked_credentials
 
 router = APIRouter(prefix="/mcp")
 router.include_router(client_metadata_router)
@@ -225,13 +225,10 @@ def _save_credentials(
         db_session, integration.id, owner.id if owner is not None else None
     )
     stored = read_connection_secret(connection).fields if connection else {}
-    values = {
-        **stored,
-        **{
-            key: value
-            for key, value in (request.admin_credentials or {}).items()
-            if request.admin_credentials_changed.get(key) or key not in stored
-        },
+    written = {
+        key: value
+        for key, value in (request.admin_credentials or {}).items()
+        if request.admin_credentials_changed.get(key) or key not in stored
     }
     token = request.api_token
     if (
@@ -239,7 +236,12 @@ def _save_credentials(
         and token
         and (request.api_token_changed or not is_masked_credential(token))
     ):
-        values["api_key"] = token
+        written["api_key"] = token
+    try:
+        reject_masked_credentials(written)
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+    values = {**stored, **written}
     fields = {
         key: values[key]
         for key in header_field_keys(integration.header_template or {})
