@@ -376,9 +376,8 @@ repos:
         always_run: true
         stages: [pre-commit]
       - id: test-flakes
-        name: ratchet sleeps and unexplained skips in tests
+        name: ratchet sleeps and unexplained skips in Python tests
         language: python
-        additional_dependencies: [tree-sitter==0.25.2, tree-sitter-typescript==0.23.2]
         entry: python -m backend.lint.check_test_flakes
         pass_filenames: false
         always_run: true
@@ -523,10 +522,10 @@ repos:
 
       - id: oxlint
         name: oxlint
-        entry: bash -c 'cd web && bun run oxlint'
+        entry: bash -c 'cd web && bun run lint'
         language: system
         pass_filenames: false
-        types_or: [javascript, ts, tsx]
+        files: ^web/(?:.*\.(?:[cm]?[jt]s|[jt]sx)|\.oxlintrc\.json)$
 
       # Type checks with the native TypeScript compiler (~10x faster than classic
       # tsc). web/ is checked by the `typescript-check` uv-run hook above. web/lib/shared
