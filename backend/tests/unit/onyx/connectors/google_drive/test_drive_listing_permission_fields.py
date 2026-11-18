@@ -170,7 +170,10 @@ def test_the_stub_listing_gives_folder_nodes_their_permissions() -> None:
     assert stub_contexts == [None]
 
 
-def test_a_folder_whose_permissions_cannot_be_read_is_not_public() -> None:
+def test_a_folder_whose_permissions_cannot_be_read_keeps_its_stored_access() -> None:
+    """The read of the folder's permission ids fails. The node has no access
+    value, so the stored access stays: an unread access is never written as
+    no access or as public."""
     connector = _connector()
     ops = MagicMock(spec=GoogleDriveSourceOperations)
     ops.get_file.return_value = None
@@ -180,9 +183,8 @@ def test_a_folder_whose_permissions_cannot_be_read_is_not_public() -> None:
         connector, dict(_FOLDER), dict(_FILE)
     )
 
-    assert nodes[0].external_access is not None
-    assert not nodes[0].external_access.is_public
-    assert "permissionIds" not in folder_access_inputs[0]
+    assert nodes[0].external_access is None
+    assert folder_access_inputs == []
 
 
 def test_a_folder_listed_without_permission_sync_keeps_its_stored_access() -> None:

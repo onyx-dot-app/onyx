@@ -340,7 +340,8 @@ class DriveListingState(BaseModel):
     # or a read after the listing, yields the folder again with it.
     parentless_folder_emails: dict[str, str] = {}
     # Folder id -> (name, parent id), for the folders the listing yielded.
-    # A stub's folder path comes from it. Its size follows the folders.
+    # A stub's folder path comes from it. The connector caps its size at
+    # MAX_LISTED_FOLDER_NAMES.
     folder_names: dict[str, tuple[str, str | None]] = {}
     # Shared drive id -> name, and user -> My Drive root id: the roots of a
     # folder path. Read once for each drive and user. A drive's name is kept
