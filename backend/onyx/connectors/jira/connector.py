@@ -2,8 +2,9 @@ import copy
 import json
 import os
 import re
+import time
 from collections.abc import Callable, Generator, Iterable, Iterator
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from more_itertools import chunked
@@ -1013,7 +1014,7 @@ class JiraConnector(
 
         start = start or 0
         end = (
-            end or datetime.now().timestamp() + one_day
+            end or time.time() + one_day
         )  # we add one day to account for any potential timezone issues
 
         jql = self._get_jql_query(start, end)
@@ -1215,8 +1216,8 @@ def make_checkpoint_callback(
 if __name__ == "__main__":
     import os
 
+    from onyx.connectors.load_all import load_all_from_connector
     from onyx.utils.variable_functionality import global_version
-    from tests.daily.connectors.utils import load_all_from_connector
 
     # For connector permission testing, set EE to true.
     global_version.set_ee()
@@ -1235,7 +1236,7 @@ if __name__ == "__main__":
     )
 
     start = 0
-    end = datetime.now().timestamp()
+    end = time.time()
 
     for slim_doc in connector.retrieve_all_slim_docs_perm_sync(
         start=start,

@@ -11,9 +11,9 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from onyx.db.artifact import mark_outputs_viewed
 from onyx.db.models import Artifact, BuildSession, User
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.artifact import mark_outputs_viewed
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     OutputsManifestEntry,

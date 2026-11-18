@@ -101,7 +101,6 @@ def cancellation_failure(reason: CancelReason) -> RunFailure | None:
 class AgentCompletion(BaseModel):
     """A background agent's saved terminal result, ready for its parent to receive."""
 
-    agent_id: str
     agent_path: str
     run_id: str
     status: RunStatus

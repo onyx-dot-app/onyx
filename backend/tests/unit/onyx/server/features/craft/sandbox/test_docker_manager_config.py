@@ -282,7 +282,9 @@ def test_container_kwargs_has_required_security_options(
 def test_sandbox_exec_wrapper_pairs_uid_with_user_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    mock_run = MagicMock(return_value=dsm.ExecResult(0, b"", b""))
+    mock_run = MagicMock(
+        return_value=dsm.ExecResult(exit_code=0, stdout=b"", stderr=b"")
+    )
     monkeypatch.setattr(dsm, "run_in_container", mock_run)
     container = MagicMock()
 
@@ -317,7 +319,9 @@ def test_outputs_manifest_uses_trusted_cli(
     manager, _ = _bare_manager_with_image("onyxdotapp/sandbox:test")
     container = MagicMock()
     monkeypatch.setattr(manager, "_require_container", lambda _: container)
-    run = MagicMock(return_value=dsm.ExecResult(0, b'{"entries":[]}', b""))
+    run = MagicMock(
+        return_value=dsm.ExecResult(exit_code=0, stdout=b'{"entries":[]}', stderr=b"")
+    )
     monkeypatch.setattr(dsm, "_run_in_container_as_sandbox_user", run)
 
     result = manager.get_outputs_manifest(SANDBOX_ID, USER_ID, include_web=include_web)
@@ -341,7 +345,9 @@ def test_outputs_manifest_uses_trusted_cli(
 def test_sandbox_stream_exec_wrappers_pair_uid_with_user_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    mock_stdin = MagicMock(return_value=dsm.ExecResult(0, b"", b""))
+    mock_stdin = MagicMock(
+        return_value=dsm.ExecResult(exit_code=0, stdout=b"", stderr=b"")
+    )
     stream = _empty_byte_stream()
     mock_stdout = MagicMock(return_value=stream)
     monkeypatch.setattr(dsm, "stream_stdin_to_container", mock_stdin)

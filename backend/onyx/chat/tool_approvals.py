@@ -11,7 +11,7 @@ the decision API, which saves the decision; once no request of the response
 waits, dispatch resumes the run on any pod (`ChatRunStore.resume`), which
 answers each waiting call from its saved decision. The user's Stop of a live
 turn saves a rejection of the requests that the turn's runs wait on and
-gives it to those runs (`ChatRunStore.reject_waiting_approvals`). The store
+gives it to those runs (`ChatRunStore.reject_waiting_inputs`). The store
 closes the requests of a run that ends when it releases the run. A saved
 request gives the same answer to its call, and to its record in the saved
 response.

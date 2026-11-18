@@ -47,7 +47,7 @@ from onyx.server.query_and_chat.models import (
 )
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
-    AWAITING_APPROVAL,
+    AWAITING_USER,
     OverallStop,
     Packet,
     PacketObj,
@@ -244,7 +244,7 @@ def _converse(
         ) as response:
             streams.append(list(_packets(response)))
         ended_streams: set[int] = set()
-        while _stop_reason(streams[-1]) == AWAITING_APPROVAL:
+        while _stop_reason(streams[-1]) == AWAITING_USER:
             continuation: dict[str, object] | None = None
             for packet, waiting in _waiting(streams[-1]):
                 decision = on_request(packet, waiting)
@@ -397,7 +397,7 @@ def test_a_waiting_turn_stops_and_its_response_continues_after_the_decision(
     assert request.display_name
     # Not processing, suspended with its checkpoint, and no server owns it.
     assert waiting == [(False, RunStatus.SUSPENDED, True, True)]
-    assert first[-1].obj == OverallStop(stop_reason=AWAITING_APPROVAL)
+    assert first[-1].obj == OverallStop(stop_reason=AWAITING_USER)
 
     # The continuation replays the card, then shows the decision and result.
     card = [
@@ -526,7 +526,7 @@ def test_a_reload_while_the_turn_waits_shows_the_request_and_the_stop(
 
     [(request_packet, request)] = _waiting(first)
     assert reloaded == [[(request_packet.placement, request)]]
-    assert stops == [[AWAITING_APPROVAL]]
+    assert stops == [[AWAITING_USER]]
     before, loaded, polled, decided = versions
     assert loaded == polled
     assert len({before, polled, decided}) == 3
@@ -999,8 +999,8 @@ def test_a_program_that_waits_for_approval_pauses_and_continues(
     )
     code = (
         "print('started')\n"
-        f"ticket, greeting = await asyncio.gather({ticket_function}(ticket_id=7), "
-        f"{hello_function}(name='team'))\n"
+        f"ticket, greeting = await asyncio.gather(tools.{ticket_function}(ticket_id=7), "
+        f"tools.{hello_function}(name='team'))\n"
         "print('ticket', ticket)\nprint('greeting', greeting)\n"
     )
     program = ToolCall(id="program", name="execute_code", arguments={"code": code})
@@ -1741,7 +1741,7 @@ def test_a_program_in_an_agent_parks_and_continues(
     hello_function = function_name(connected_mcp_server.callable_name("hello"))
     code = (
         "print('started')\n"
-        f"greeting = await {hello_function}(name='team')\n"
+        f"greeting = await tools.{hello_function}(name='team')\n"
         "print('greeting', greeting)\n"
     )
     mock_llm.conversation(
@@ -1923,7 +1923,7 @@ def test_a_decision_during_the_live_wait_names_no_continuation_and_the_chat_stay
     [decision] = decisions
     decision.raise_for_status()
     assert decision.json()["continuation"] is None
-    assert live[-1].obj == OverallStop(stop_reason=AWAITING_APPROVAL)
+    assert live[-1].obj == OverallStop(stop_reason=AWAITING_USER)
     assert after_stop["is_processing"] is True
     assert stream.stream_id != response_id
     assert continued[-1].obj == OverallStop(stop_reason="finished")
@@ -1995,7 +1995,7 @@ def test_both_models_of_a_turn_continue_on_their_own_models_after_their_decision
     assert sorted(
         (packet.placement.model_index, packet.obj.model_dump()["stop_reason"])
         for packet in stops
-    ) == [(0, AWAITING_APPROVAL), (1, AWAITING_APPROVAL)]
+    ) == [(0, AWAITING_USER), (1, AWAITING_USER)]
     requests = {
         packet.placement.model_index: request for packet, request in _waiting(packets)
     }

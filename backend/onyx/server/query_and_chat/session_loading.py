@@ -559,8 +559,8 @@ def translate_assistant_message_to_packets(
     The final answer and citations are also a "step".
 
     `tools_by_id` holds the tools of the message's tool calls (see
-    `load_session_tools`), and `chat_approvals` the approval requests of the
-    page's responses (see `load_chat_approvals`), so a session replay does not query them per
+    `load_session_tools`), and `chat_approvals` the approval requests and
+    questions of the page's responses (see `load_chat_approvals`), so a session replay does not query them per
     message.
     """
     execution = read_chat_execution(chat_message)
@@ -573,6 +573,7 @@ def translate_assistant_message_to_packets(
             replay.documents,
             approvals=replay.approvals,
             agent_approvals=replay.agent_approvals,
+            questions=replay.questions,
         )
     packet_list: list[Packet] = []
 

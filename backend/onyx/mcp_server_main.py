@@ -8,6 +8,7 @@ from onyx.configs.app_configs import (
     MCP_SERVER_PORT,
 )
 from onyx.tracing.setup import setup_tracing
+from onyx.utils.encryption import validate_encryption_configuration
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import set_is_ee_if_available
 
@@ -21,6 +22,7 @@ def main() -> None:
         return
 
     set_is_ee_if_available()
+    validate_encryption_configuration()
     setup_tracing()
     logger.info("Starting MCP server on %s:%s", MCP_SERVER_HOST, MCP_SERVER_PORT)
 

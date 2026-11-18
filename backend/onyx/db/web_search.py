@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.db.models import InternetContentProvider, InternetSearchProvider
@@ -348,3 +349,55 @@ def delete_web_content_provider(provider_id: int, db_session: Session) -> None:
     db_session.flush()
 
     db_session.commit()
+
+
+def upsert_web_content_provider_api_key__no_commit(
+    name: str,
+    provider_type: str,
+    api_key: str,
+    config: WebContentProviderConfig | None,
+    db_session: Session,
+) -> None:
+    """Set the API key of the content provider with this name. Insert the
+    provider, inactive, when it does not exist."""
+    db_session.execute(
+        insert(InternetContentProvider)
+        .values(
+            name=name,
+            provider_type=provider_type,
+            api_key=api_key,
+            is_active=False,
+            config=config,
+        )
+        .on_conflict_do_update(
+            index_elements=["name"],
+            set_={"api_key": api_key},
+        )
+    )
+    db_session.flush()
+
+
+def upsert_web_search_provider_api_key__no_commit(
+    name: str,
+    provider_type: str,
+    api_key: str,
+    config: dict[str, str] | None,
+    db_session: Session,
+) -> None:
+    """Set the API key of the search provider with this name. Insert the
+    provider, inactive, when it does not exist."""
+    db_session.execute(
+        insert(InternetSearchProvider)
+        .values(
+            name=name,
+            provider_type=provider_type,
+            api_key=api_key,
+            is_active=False,
+            config=config,
+        )
+        .on_conflict_do_update(
+            index_elements=["name"],
+            set_={"api_key": api_key},
+        )
+    )
+    db_session.flush()

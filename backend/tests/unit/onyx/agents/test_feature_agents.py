@@ -508,7 +508,6 @@ def test_research_receives_background_evidence_with_distinct_citations(
         for name in ("earlier", "child")
     ]
     completion = AgentCompletion(
-        agent_id="child",
         agent_path="/root/child",
         run_id="child-run",
         status=RunStatus.COMPLETE,

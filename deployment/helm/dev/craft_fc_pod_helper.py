@@ -61,8 +61,8 @@ class Target:
     def __init__(self, email: str, tenant_id: str | None) -> None:
         from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
         from onyx.db.engine.sql_engine import get_session_with_tenant
+        from onyx.db.sandbox import get_sandbox_by_user_id
         from onyx.db.users import get_user_by_email
-        from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 
         self.email = email
         self.tenant_id = _tenant_for(email, tenant_id)

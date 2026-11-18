@@ -68,7 +68,7 @@ def test_program_runs_nested_search_and_keeps_its_store_across_messages(
         "chat",
         _program(
             _SEARCH_PROGRAM_ID,
-            'found = await internal_search(queries=["alpha"])\n'
+            'found = await tools.internal_search(queries=["alpha"])\n'
             'store("note", "kept")\n'
             'print("searched")',
         ),
@@ -105,7 +105,7 @@ def test_program_runs_nested_search_and_keeps_its_store_across_messages(
     # The nested search streams as a search step of its own.
     assert [tool.tool_name for tool in first.used_tools] == [ToolName.INTERNAL_SEARCH]
     program_request, answer_request = mock_llm.requests_in("chat")
-    assert "internal_search (a function in `execute_code` programs)" in str(
+    assert "tools.internal_search (a function in `execute_code` programs)" in str(
         program_request.body["messages"]
     )
     assert "searched" in (answer_request.tool_result(_SEARCH_PROGRAM_ID) or "")

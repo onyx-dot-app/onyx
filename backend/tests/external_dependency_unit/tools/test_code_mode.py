@@ -349,7 +349,7 @@ def test_code_mode_program_calls_mcp_tool_in_parallel(
     )
     program = (
         "import asyncio\n"
-        f"a, b = await asyncio.gather({namespace}__hello(name='alpha'), {namespace}__hello(name='beta'))\n"
+        f"a, b = await asyncio.gather(tools.{namespace}__hello(name='alpha'), tools.{namespace}__hello(name='beta'))\n"
         "print(a['result'] + ' | ' + b['result'])\n"
     )
     llm = ChatLLM([code_step("code", program), Delta(content="Both greetings worked.")])
@@ -428,7 +428,7 @@ def test_stored_values_reach_a_program_in_a_later_turn(
             [
                 code_step(
                     "store",
-                    f"greeting = await {namespace}__hello(name='alpha')\n"
+                    f"greeting = await tools.{namespace}__hello(name='alpha')\n"
                     "store('greeting', {'text': greeting['result']})\n"
                     "store('unused', None)\n"
                     "raise ValueError('after storing')\n",
@@ -498,7 +498,7 @@ def test_stop_keeps_the_calls_a_program_made(
         [
             code_step(
                 "code",
-                f"a = await {namespace}__hello(name='alpha')\nb = await {namespace}__slow(name='beta')\nprint(b)\n",
+                f"a = await tools.{namespace}__hello(name='alpha')\nb = await tools.{namespace}__slow(name='beta')\nprint(b)\n",
             )
         ]
     )
@@ -566,7 +566,7 @@ def test_stop_during_computation_saves_the_cancelled_program(
         [
             code_step(
                 "busy",
-                f"await {namespace}__hello(name='alpha')\nprint('looping')\nwhile True:\n    pass\n",
+                f"await tools.{namespace}__hello(name='alpha')\nprint('looping')\nwhile True:\n    pass\n",
             )
         ]
     )
@@ -664,7 +664,7 @@ def test_a_program_generates_an_image(
         [
             code_step(
                 "draw",
-                "images = await generate_image(prompt='A dog on a rocketship')\n"
+                "images = await tools.generate_image(prompt='A dog on a rocketship')\n"
                 "print(images[0]['file_id'])\n",
             ),
             Delta(content="Here is the dog."),
@@ -719,7 +719,7 @@ def test_wait_code_collects_the_result_of_a_yielded_cell(
             code_step(
                 "start",
                 "print('started')\nyield_control()\n"
-                f"greeting = await {namespace}__hello(name='alpha')\nprint(greeting['result'])\n"
+                f"greeting = await tools.{namespace}__hello(name='alpha')\nprint(greeting['result'])\n"
                 "store('greeting', greeting)\n",
             ),
             wait_step("wait", 1),
@@ -802,8 +802,8 @@ def test_a_cell_running_at_the_answer_gets_a_closing_record(
             code_step(
                 "start",
                 "yield_control()\n"
-                f"greeting = await {namespace}__hello(name='alpha')\nprint(greeting['result'])\n"
-                f"await {namespace}__slow(name='beta')\n",
+                f"greeting = await tools.{namespace}__hello(name='alpha')\nprint(greeting['result'])\n"
+                f"await tools.{namespace}__slow(name='beta')\n",
             ),
             Delta(content="Answered early."),
         ],
@@ -870,7 +870,7 @@ def test_stop_during_wait_code_stops_the_cell(
         [
             code_step(
                 "start",
-                f"import asyncio\nawait {namespace}__hello(name='alpha')\nprint('a')\n"
+                f"import asyncio\nawait tools.{namespace}__hello(name='alpha')\nprint('a')\n"
                 "yield_control()\nprint('b')\nawait asyncio.sleep(60)\n",
             ),
             wait_step("wait", 1),
@@ -954,7 +954,7 @@ def test_an_unobserved_commit_after_a_later_one_keeps_the_live_store(
         [
             code_step(
                 "first",
-                f"yield_control()\nawait {namespace}__slow(name='a')\nstore('k', 'a')\n",
+                f"yield_control()\nawait tools.{namespace}__slow(name='a')\nstore('k', 'a')\n",
             ),
             code_step("second", "store('k', 'b')\n"),
             code_step("live", "print(load('k'))\n"),
@@ -1010,7 +1010,7 @@ def test_a_server_reported_tool_error_reaches_the_program_and_the_model(
             code_step(
                 "code",
                 "try:\n"
-                f"    await {namespace}__deny(name='onyx')\n"
+                f"    await tools.{namespace}__deny(name='onyx')\n"
                 "except Exception as error:\n"
                 "    print('caught', error)\n",
             ),
@@ -1093,7 +1093,7 @@ def test_mcp_media_results_reach_the_model_as_their_text(
     )
     program = ChatLLM(
         [
-            code_step("code", f"print(await {namespace}__chart(name='q2'))\n"),
+            code_step("code", f"print(await tools.{namespace}__chart(name='q2'))\n"),
             Delta(content="Charted."),
         ]
     )
@@ -1148,7 +1148,7 @@ def test_a_program_finds_a_deferred_mcp_function_with_tool_search(
                 "[match] = await tool_search('say hi', limit=1)\n"
                 "print(match['name'])\n"
                 "print(match['stub'])\n"
-                f"greeting = await {namespace}__hello(name='alpha')\n"
+                f"greeting = await tools.{namespace}__hello(name='alpha')\n"
                 "print(greeting['result'])\n",
             ),
             Delta(content="Found it."),
@@ -1191,7 +1191,7 @@ def test_a_program_receives_the_structured_result_of_an_mcp_tool(
         db_session=db_session,
     )
     program = (
-        f"forecast = await {namespace}__forecast(name='Oslo')\n"
+        f"forecast = await tools.{namespace}__forecast(name='Oslo')\n"
         "print(type(forecast).__name__, forecast['city'], forecast['high'] + 1)\n"
     )
     llm = ChatLLM([code_step("code", program), Delta(content="Forecasted.")])
@@ -1227,7 +1227,7 @@ def test_input_sent_during_a_tool_step_is_read_at_the_next_step(
             code_step(
                 "start",
                 "yield_control()\n"
-                f"reply = await {namespace}__slow(name='alpha')\n"
+                f"reply = await tools.{namespace}__slow(name='alpha')\n"
                 "print(reply['result'])\n",
             ),
             wait_step("waited", 1),

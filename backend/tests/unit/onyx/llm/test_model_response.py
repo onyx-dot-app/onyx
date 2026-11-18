@@ -550,6 +550,29 @@ def test_stream_failure_preserves_unresolved_text_without_executing_it() -> None
                 {"type": "redacted_thinking", "data": ""},
             ],
         ),
+        (
+            {
+                "reasoning_items": [
+                    "malformed",
+                    {"type": "reasoning", "summary": []},
+                    {"type": "reasoning", "id": "rs_stored", "summary": None},
+                    {
+                        "type": "reasoning",
+                        "id": "rs_1",
+                        "encrypted_content": "blob",
+                        "summary": [{"type": "summary_text", "text": "Plan."}, {}],
+                    },
+                ]
+            },
+            [
+                {
+                    "type": "reasoning_item",
+                    "id": "rs_1",
+                    "summary": ["Plan."],
+                    "encrypted_content": "blob",
+                }
+            ],
+        ),
     ],
 )
 def test_provider_payload_tolerance(

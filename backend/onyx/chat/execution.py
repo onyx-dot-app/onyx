@@ -66,6 +66,7 @@ from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import CancellationSignal, cancellation_scope
 from onyx.llm.factory import get_llm_token_counter, get_search_selection_llm
 from onyx.llm.interfaces import LLM
+from onyx.llm.model_capabilities import is_claude_model, model_identity_names
 from onyx.server.query_and_chat.models import (
     ModelResponseSlot,
     response_id_info,
@@ -77,9 +78,14 @@ from onyx.server.query_and_chat.streaming_models import (
     ReplayEnd,
     StreamingError,
     ToolApprovalResolved,
+    ToolQuestionResolved,
 )
 from onyx.server.settings.store import load_settings
-from onyx.tools.constants import CODING_AGENT_TOOL_ID
+from onyx.tools.constants import (
+    ASK_USER_QUESTION_TOOL_NAME,
+    CODING_AGENT_TOOL_ID,
+    REQUEST_USER_INPUT_TOOL_NAME,
+)
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatToolSelection
 from onyx.tools.tool_constructor import (
@@ -88,6 +94,11 @@ from onyx.tools.tool_constructor import (
     SearchToolConfig,
     construct_tools,
 )
+from onyx.tools.tool_implementations.question.question_tool import QuestionTool
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    sandbox_tools_for_model,
+)
+from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.skills.skill_tools import (
     SkillsListTool,
     SkillsReadTool,
@@ -306,10 +317,10 @@ class ChatTurnExecution:
             clear_status_then_finish()
 
     def _publish(self, packet: Packet) -> None:
-        # A resolution reports a saved decision, such as the rejection of a
-        # Stop, so the request's card shows it after the turn stops.
+        # A resolution reports a saved outcome, such as the rejection or
+        # cancellation of a Stop, so the card shows it after the turn stops.
         if not self.cancellation.cancelled or isinstance(
-            packet.obj, ToolApprovalResolved
+            packet.obj, (ToolApprovalResolved, ToolQuestionResolved)
         ):
             self.delivery.publish(packet)
             if isinstance(packet.obj, OverallStop):
@@ -482,8 +493,8 @@ class ChatTurnExecution:
 
     def _root_parked(self, persistence: ChatResponsePersistence, run: Run) -> None:
         """End a response whose run handed off to wait for people: the turn
-        stops it with `awaiting_approval`, and the decisions resume it on any
-        pod."""
+        stops it with `awaiting_user`, and the decisions and answers resume it
+        on any pod."""
         persistence.report_suspended(run)
         # The stream keeps naming it, so `model_index` still indexes the
         # stream's responses; its decisions continue it in a new stream.
@@ -608,6 +619,7 @@ class ChatTurnExecution:
                     follow_up_steps=chat_agent.max_steps,
                     root_response=persistence,
                     on_child_released=self._dispatch_after_release,
+                    on_root_drained=chat_agent.on_drained,
                     on_root_parked=partial(self._root_parked, persistence),
                 )
                 with self._lock:
@@ -763,9 +775,10 @@ class ChatTurnExecution:
                     stream_id=self.setup.stream_id,
                 ):
                     self._stopped_by_user = True
-                    # Before the runs stop, so their requests end rejected.
+                    # Before the runs stop, so their requests end rejected
+                    # and their questions cancelled.
                     for store in stores:
-                        store.reject_waiting_approvals()
+                        store.reject_waiting_inputs()
                     self.cancellation.cancel()
             except Exception:
                 logger.exception("Failed to read chat Stop request; will retry")
@@ -793,14 +806,18 @@ def bind_run_store(
     follow_up_steps: int,
     root_response: RunStore | None,
     on_child_released: Callable[[], None] | None,
+    on_root_drained: Callable[[], None] | None,
     on_root_parked: Callable[[Run], None] | None = None,
 ) -> tuple[ChatRunStore, AgentCoordinator]:
-    """Bind the run store of a response's branch and register the visible agents."""
+    """Bind the run store of a response's branch and register the visible
+    agents. A restored root gets `on_root_drained` as its on_drained hook, and
+    the question tool when its saved step declared it."""
+    tenant_id = get_current_tenant_id()
     branch = load_chat_branch(response_id)
     if branch.chat_session_id != setup.chat_session_id:
         raise ValueError("Response belongs to another chat session")
     store = ChatRunStore(
-        tenant_id=get_current_tenant_id(),
+        tenant_id=tenant_id,
         chat_session_id=setup.chat_session_id,
         response_id=response_id,
         visible_response_ids=branch.message_ids,
@@ -835,6 +852,13 @@ def bind_run_store(
             llm=llm,
             tools=tools,
             user_identity=setup.user_identity,
+            on_root_drained=on_root_drained,
+            question_tool=lambda name, restored_id: QuestionTool(
+                name,
+                tenant_id=tenant_id,
+                chat_session_id=setup.chat_session_id,
+                response_id=restored_id,
+            ),
             subagent_factory=lambda depth: chat_subagent_factory(
                 setup=setup,
                 llm=llm,
@@ -892,6 +916,7 @@ def host_agent_work(
                 follow_up_steps=chat_agent.max_steps,
                 root_response=None,
                 on_child_released=dispatch_pending_messages,
+                on_root_drained=chat_agent.on_drained,
             )
             store.poll_control()
         except BaseException:
@@ -985,7 +1010,6 @@ def create_chat_agent(
         # the other configured tools.
         if setup.has_chat_skills:
             tools += [SkillsListTool(user), SkillsReadTool(user)]
-
         preferred_tool_id = setup.preferred_tool_id
         if preferred_tool_id is not None and preferred_tool_id not in {
             tool.id for tool in tools
@@ -1029,6 +1053,26 @@ def create_chat_agent(
                 checkpoint=setup.checkpoint,
                 previous_run_id=setup.previous_run_id,
             )
+        # The chat agent and its subagents get the sandbox tools when the turn
+        # offers them. They share one sandbox turn, which the root's runs end.
+        turn = (
+            SandboxTurn(
+                tenant_id=get_current_tenant_id(),
+                user_id=user.id,
+                chat_session_id=setup.chat_session_id,
+            )
+            if setup.sandbox_tools
+            else None
+        )
+        if turn is not None:
+            tools += [
+                tool(turn)
+                for tool in sandbox_tools_for_model(
+                    model_identity_names(
+                        llm.config.model_name, llm.config.deployment_name
+                    )
+                )
+            ]
         return build_chat_agent(
             AgentState(messages=list(setup.messages), checkpoint=setup.checkpoint),
             agent_id,
@@ -1036,8 +1080,23 @@ def create_chat_agent(
             setup=setup,
             llm=llm,
             tools=tools,
+            on_drained=turn.end if turn is not None else None,
             inject_memories=user.use_memories,
             with_subagents=with_subagents,
             additional_context=setup.additional_context,
             preferred_tool_id=preferred_tool_id,
+            question_tool=QuestionTool(
+                ASK_USER_QUESTION_TOOL_NAME
+                if is_claude_model(
+                    model_identity_names(
+                        llm.config.model_name, llm.config.deployment_name
+                    )
+                )
+                else REQUEST_USER_INPUT_TOOL_NAME,
+                tenant_id=get_current_tenant_id(),
+                chat_session_id=setup.chat_session_id,
+                response_id=setup.responses[response_index].message_id,
+            )
+            if setup.question_tool
+            else None,
         )

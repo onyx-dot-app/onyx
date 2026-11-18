@@ -1767,7 +1767,6 @@
           "title": "Falha ao carregar os relatórios de uso."
         },
         "pendingRow": {
-          "description": "{range} · geralmente pronto em menos de um minuto",
           "slowDescription": "Ainda em processamento. Você pode sair desta página; o relatório vai aparecer aqui.",
           "title": "Preparando relatório…"
         },
@@ -1805,8 +1804,11 @@
         "toasts": {
           "ready": "Relatório de uso pronto.",
           "startFailed": "Falha ao iniciar a geração do relatório: {message}",
-          "timedOut": "A geração do relatório está demorando muito. Tente novamente ou volte mais tarde.",
           "unknownError": "erro desconhecido"
+        },
+        "failedRow": {
+          "title": "Falha ao gerar o relatório",
+          "description": "Solicitado em {time}. Gere um novo relatório para tentar novamente."
         }
       },
       "slackChannelChart": {
@@ -2261,10 +2263,6 @@
       "advanced": {
         "title": "Opções avançadas"
       },
-      "anonymousUsers": {
-        "description": "Permite que qualquer pessoa inicie chats **sem fazer login**. Ela não vê outros chats e não pode criar agentes nem alterar configurações.",
-        "title": "Permitir usuários anônimos"
-      },
       "autoDetectFilters": {
         "description": "Aplica automaticamente filtros de fonte e de tempo inferidos da consulta de pesquisa.",
         "title": "Detectar filtros de pesquisa automaticamente"
@@ -2335,48 +2333,6 @@
       "multiModel": {
         "description": "Permita que vários modelos gerem respostas em paralelo no chat.",
         "title": "Geração multimodelo"
-      },
-      "queryHistory": {
-        "anonymized": {
-          "description": "As consultas ficam visíveis para os administradores sem a identidade do usuário",
-          "label": "Anonimizado"
-        },
-        "description": "Controle como o histórico completo de chats da sua organização aparece no painel de administração.",
-        "disabled": {
-          "description": "O relatório de histórico de consultas está desativado.",
-          "label": "Oculto"
-        },
-        "normal": {
-          "description": "Todas as consultas ficam visíveis para os administradores e vinculadas a usuários individuais.",
-          "label": "Mostrar com dados do usuário"
-        },
-        "title": "Visibilidade do histórico de consultas"
-      },
-      "retention": {
-        "custom": {
-          "invalidError": "Insira um número inteiro de dias entre 1 e {max}.",
-          "label": "Retenção personalizada",
-          "moreTooltip": "Mais",
-          "placeholder": "Em dias",
-          "restoreTooltip": "Restaurar padrão"
-        },
-        "description": "Especifique por quanto tempo o {appName} deve reter os chats na sua organização.",
-        "forever": {
-          "label": "Para sempre"
-        },
-        "presets": {
-          "days30": "30 dias",
-          "days60": "60 dias",
-          "days7": "7 dias",
-          "days90": "90 dias",
-          "year1": "1 ano"
-        },
-        "reduceModal": {
-          "confirmLabel": "Reduzir retenção",
-          "message": "Os chats sem atividade por mais de {days, plural, one {# dia} other {# dias}} serão excluídos permanentemente. Esta ação não pode ser desfeita.",
-          "title": "Reduzir a retenção de chats?"
-        },
-        "title": "Manter o histórico de chats"
       },
       "searchMode": {
         "description": "Modo de interface para pesquisa rápida de documentos em toda a sua organização.",
@@ -8651,6 +8607,48 @@
         "section": {
           "title": "Controles de administrador"
         },
+        "queryHistory": {
+          "anonymized": {
+            "description": "As consultas ficam visíveis para os administradores sem a identidade do usuário",
+            "label": "Anonimizado"
+          },
+          "description": "Controle como o histórico completo de chats da sua organização aparece no painel de administração.",
+          "disabled": {
+            "description": "O relatório de histórico de consultas está desativado.",
+            "label": "Oculto"
+          },
+          "normal": {
+            "description": "Todas as consultas ficam visíveis para os administradores e vinculadas a usuários individuais.",
+            "label": "Mostrar com dados do usuário"
+          },
+          "title": "Visibilidade do histórico de consultas"
+        },
+        "retention": {
+          "custom": {
+            "invalidError": "Insira um número inteiro de dias entre 1 e {max}.",
+            "label": "Retenção personalizada",
+            "moreTooltip": "Mais",
+            "placeholder": "Em dias",
+            "restoreTooltip": "Restaurar padrão"
+          },
+          "description": "Especifique por quanto tempo o {appName} deve reter os chats na sua organização.",
+          "forever": {
+            "label": "Para sempre"
+          },
+          "presets": {
+            "days30": "30 dias",
+            "days60": "60 dias",
+            "days7": "7 dias",
+            "days90": "90 dias",
+            "year1": "1 ano"
+          },
+          "reduceModal": {
+            "confirmLabel": "Reduzir retenção",
+            "message": "Os chats sem atividade por mais de {days, plural, one {# dia} other {# dias}} serão excluídos permanentemente. Esta ação não pode ser desfeita.",
+            "title": "Reduzir a retenção de chats?"
+          },
+          "title": "Manter o histórico de chats"
+        },
         "userDirectory": {
           "adminsOnly": {
             "description": "Somente administradores podem ver a lista completa de usuários.",
@@ -8669,6 +8667,10 @@
           "placeholder": "Adicione um domínio (ex.: onyx.app)",
           "subDescription": "Novos usuários só podem registrar contas com e-mails desta lista de domínios.",
           "title": "Domínios de e-mail permitidos"
+        },
+        "anonymousUsers": {
+          "description": "Permite que qualquer pessoa inicie chats **sem fazer login**. Ela não vê outros chats e não pode criar agentes nem alterar configurações.",
+          "title": "Permitir usuários anônimos"
         },
         "emailDomains": {
           "description": "Limite os registros de novos usuários a domínios de e-mail específicos.",
@@ -11802,9 +11804,17 @@
         "loginBadCredentials": "Esta conta não pode entrar. Ela pode estar desativada. Contate o administrador do seu espaço de trabalho.",
         "loginRequired": "Você precisa primeiro entrar com seu provedor de identidade.",
         "oauthUserAlreadyExists": "Já existe uma conta com este e-mail usando outro método de login. Entre da forma que usou pela primeira vez, ou peça ao seu administrador para vincular este provedor.",
+        "playgroundActiveTenant": "Uma equipe da sua empresa já está testando o Onyx. Entrar na sua equipe ou criar uma nova equipe?",
+        "playgroundAskAdmin": "Peça ao seu administrador para convidá-lo.",
+        "playgroundCheckFailed": "Não foi possível verificar seu cadastro. Tente novamente mais tarde.",
+        "playgroundEmailUsed": "Você já usou seu acesso ao playground.",
+        "playgroundLimitReached": "Sua empresa já usou seu acesso ao playground.",
         "serverError": "Seu provedor de identidade encontrou um erro. Tente novamente.",
         "staleSignIn": "Este link de acesso expirou ou não é mais válido. Entre novamente.",
         "temporarilyUnavailable": "Seu provedor de identidade está temporariamente indisponível. Tente novamente mais tarde."
+      },
+      "contactSalesButton": {
+        "label": "Falar com vendas"
       },
       "credentialsIssue": {
         "description": "Credenciais de login incorretas ou expiradas"
@@ -11812,6 +11822,12 @@
       "heading": {
         "description": "Houve um problema com sua tentativa de login.",
         "title": "Erro de autenticação"
+      },
+      "joinTeamButton": {
+        "label": "Entrar na minha equipe"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "Possíveis causas:"
@@ -11821,6 +11837,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "Se o problema continuar, entre em contato com o administrador do sistema para obter ajuda."
+      },
+      "startNewTeamButton": {
+        "label": "Criar uma nova equipe"
       },
       "systemDisruptionIssue": {
         "description": "Interrupção temporária do sistema de autenticação"
@@ -12521,7 +12540,8 @@
         },
         "stopSubagentsButton": {
           "label": "Parar subagentes"
-        }
+        },
+        "questionAttachmentsHint": "As respostas às perguntas do agente não podem incluir arquivos. Remova os arquivos para responder."
       },
       "baseInputBar": {
         "input": {
@@ -12669,6 +12689,12 @@
       },
       "pendingToolApproval": {
         "toast": "Primeiro aprove ou rejeite as chamadas de ferramenta pendentes."
+      },
+      "pendingToolQuestion": {
+        "toast": "Responda primeiro às perguntas do agente."
+      },
+      "pendingUserInput": {
+        "toast": "Responda primeiro às solicitações de aprovação ou perguntas pendentes."
       }
     },
     "mcpApiKey": {
@@ -13119,6 +13145,15 @@
           },
           "waitingForApproval": {
             "label": "Aguardando sua aprovação"
+          },
+          "waitingForAnswer": {
+            "label": "Aguardando sua resposta"
+          },
+          "runningCommand": {
+            "label": "Executando comando"
+          },
+          "editingFiles": {
+            "label": "Editando arquivos"
           }
         },
         "internalSearch": {
@@ -13248,16 +13283,83 @@
           "researchAgent": "Agente de pesquisa",
           "thinking": "Pensando",
           "tool": "Ferramenta",
-          "webSearch": "Pesquisa na web"
+          "webSearch": "Pesquisa na web",
+          "terminal": "Terminal",
+          "applyPatch": "Aplicar patch",
+          "editFile": "Editar arquivo",
+          "writeFile": "Gravar arquivo"
         },
         "webSearch": {
           "searching": {
             "status": "Pesquisando na web"
           }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {Executando comando} started {Comando iniciado} failed {O comando falhou} canceled {Cancelado} done {Comando executado} other {Comando executado}}",
+            "workdir": {
+              "label": "Em {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {Enviando entrada para a sessão {sessionId}} failed {Não foi possível enviar a entrada para a sessão {sessionId}} canceled {Cancelado} done {Entrada enviada para a sessão {sessionId}} other {Entrada enviada para a sessão {sessionId}}}} check {{phase, select, running {Verificando a sessão {sessionId}} failed {Não foi possível verificar a sessão {sessionId}} canceled {Cancelado} done {Sessão {sessionId} verificada} other {Sessão {sessionId} verificada}}} other {Sessão {sessionId}}}"
+          },
+          "output": {
+            "title": "Saída"
+          },
+          "exitCode": {
+            "label": "Código de saída {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {Interrompido por um sinal} canceled {Cancelado} deadline_exceeded {Interrompido no limite de tempo} other {Encerrado}}"
+          },
+          "stillRunning": {
+            "label": "Ainda em execução (sessão {sessionId})"
+          },
+          "truncated": {
+            "label": "Saída truncada"
+          },
+          "noOutput": {
+            "text": "Sem saída"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {# arquivo editado} other {# arquivos editados}}"
+            },
+            "failed": {
+              "status": "A edição falhou"
+            },
+            "title": "Patch"
+          },
+          "stopped": {
+            "status": "Interrompido"
+          }
         }
       },
       "toolApproval": {
         "agentRequest": "{agent} quer executar {tool}"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {O agente tem uma pergunta} other {O agente tem # perguntas}}",
+        "other": {
+          "placeholder": "Outra: digite sua própria resposta",
+          "ariaLabel": "Outra resposta para {header}"
+        },
+        "submit": "Enviar",
+        "page": {
+          "progress": "Pergunta {current} de {total}",
+          "next": "Próxima",
+          "unanswered": "{count, plural, one {Responda à pergunta {numbers} para enviar.} other {Responda às perguntas {numbers} para enviar.}}"
+        },
+        "submitError": "Não foi possível enviar suas respostas. Tente novamente.",
+        "record": {
+          "answered": "Respondida",
+          "answeredInChat": "Respondida no chat",
+          "cancelled": "Não respondida",
+          "closed": "Não está mais aguardando",
+          "answer": "{header}: {answer}",
+          "optionAndNote": "{option} ({note})"
+        }
       },
       "toolbar": {
         "dislikeButton": {

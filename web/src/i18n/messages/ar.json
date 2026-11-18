@@ -1767,7 +1767,6 @@
           "title": "فشل تحميل تقارير الاستخدام."
         },
         "pendingRow": {
-          "description": "{range} · يجهز عادةً في أقل من دقيقة",
           "slowDescription": "لا يزال العمل جاريًا. يمكنك مغادرة هذه الصفحة، وسيظهر التقرير هنا.",
           "title": "جارٍ تجهيز التقرير…"
         },
@@ -1805,8 +1804,11 @@
         "toasts": {
           "ready": "تقرير الاستخدام جاهز.",
           "startFailed": "فشل بدء إنشاء التقرير: {message}",
-          "timedOut": "إنشاء التقرير يستغرق وقتًا طويلًا. حاول مرة أخرى أو عد لاحقًا.",
           "unknownError": "خطأ غير معروف"
+        },
+        "failedRow": {
+          "title": "فشل إنشاء التقرير",
+          "description": "طُلب في {time}. أنشئ تقريرًا جديدًا للمحاولة مرة أخرى."
         }
       },
       "slackChannelChart": {
@@ -2261,10 +2263,6 @@
       "advanced": {
         "title": "خيارات متقدمة"
       },
-      "anonymousUsers": {
-        "description": "السماح لأي شخص ببدء محادثات **دون تسجيل الدخول**. لا يرون أي محادثات أخرى ولا يمكنهم إنشاء وكلاء أو تحديث الإعدادات.",
-        "title": "السماح بالمستخدمين المجهولين"
-      },
       "autoDetectFilters": {
         "description": "تطبيق مرشحات المصدر والوقت المستنتجة من استعلام البحث تلقائيًا.",
         "title": "الكشف التلقائي عن مرشحات البحث"
@@ -2335,48 +2333,6 @@
       "multiModel": {
         "description": "السماح لعدة نماذج بتوليد إجابات بالتوازي في المحادثة.",
         "title": "التوليد متعدد النماذج"
-      },
-      "queryHistory": {
-        "anonymized": {
-          "description": "الاستعلامات مرئية للمسؤولين مع إزالة هوية المستخدم",
-          "label": "مجهول الهوية"
-        },
-        "description": "تحكم في كيفية ظهور سجل المحادثات الكامل لمؤسستك في لوحة الإدارة.",
-        "disabled": {
-          "description": "تقارير سجل الاستعلامات معطّلة.",
-          "label": "مخفي"
-        },
-        "normal": {
-          "description": "جميع الاستعلامات مرئية للمسؤولين ومرتبطة بمستخدمين أفراد.",
-          "label": "عرض مع معلومات المستخدم"
-        },
-        "title": "ظهور سجل الاستعلامات"
-      },
-      "retention": {
-        "custom": {
-          "invalidError": "أدخل عددًا صحيحًا من الأيام بين 1 و{max}.",
-          "label": "احتفاظ مخصص",
-          "moreTooltip": "المزيد",
-          "placeholder": "بالأيام",
-          "restoreTooltip": "استعادة الافتراضي"
-        },
-        "description": "حدد مدة احتفاظ {appName} بالمحادثات في مؤسستك.",
-        "forever": {
-          "label": "إلى الأبد"
-        },
-        "presets": {
-          "days30": "30 يومًا",
-          "days60": "60 يومًا",
-          "days7": "7 أيام",
-          "days90": "90 يومًا",
-          "year1": "سنة واحدة"
-        },
-        "reduceModal": {
-          "confirmLabel": "تقليل مدة الاحتفاظ",
-          "message": "ستُحذف نهائيًا المحادثات التي لا نشاط فيها لأكثر من {days, plural, one {يوم واحد} other {# أيام}}. لا يمكن التراجع عن هذا.",
-          "title": "تقليل مدة الاحتفاظ بالمحادثات؟"
-        },
-        "title": "الاحتفاظ بسجل المحادثات"
       },
       "searchMode": {
         "description": "وضع واجهة للبحث السريع في المستندات عبر مؤسستك.",
@@ -8651,6 +8607,48 @@
         "section": {
           "title": "ضوابط المسؤول"
         },
+        "queryHistory": {
+          "anonymized": {
+            "description": "الاستعلامات مرئية للمسؤولين مع إزالة هوية المستخدم",
+            "label": "مجهول الهوية"
+          },
+          "description": "تحكم في كيفية ظهور سجل المحادثات الكامل لمؤسستك في لوحة الإدارة.",
+          "disabled": {
+            "description": "تقارير سجل الاستعلامات معطّلة.",
+            "label": "مخفي"
+          },
+          "normal": {
+            "description": "جميع الاستعلامات مرئية للمسؤولين ومرتبطة بمستخدمين أفراد.",
+            "label": "عرض مع معلومات المستخدم"
+          },
+          "title": "ظهور سجل الاستعلامات"
+        },
+        "retention": {
+          "custom": {
+            "invalidError": "أدخل عددًا صحيحًا من الأيام بين 1 و{max}.",
+            "label": "احتفاظ مخصص",
+            "moreTooltip": "المزيد",
+            "placeholder": "بالأيام",
+            "restoreTooltip": "استعادة الافتراضي"
+          },
+          "description": "حدد مدة احتفاظ {appName} بالمحادثات في مؤسستك.",
+          "forever": {
+            "label": "إلى الأبد"
+          },
+          "presets": {
+            "days30": "30 يومًا",
+            "days60": "60 يومًا",
+            "days7": "7 أيام",
+            "days90": "90 يومًا",
+            "year1": "سنة واحدة"
+          },
+          "reduceModal": {
+            "confirmLabel": "تقليل مدة الاحتفاظ",
+            "message": "ستُحذف نهائيًا المحادثات التي لا نشاط فيها لأكثر من {days, plural, one {يوم واحد} other {# أيام}}. لا يمكن التراجع عن هذا.",
+            "title": "تقليل مدة الاحتفاظ بالمحادثات؟"
+          },
+          "title": "الاحتفاظ بسجل المحادثات"
+        },
         "userDirectory": {
           "adminsOnly": {
             "description": "يمكن للمسؤولين فقط رؤية قائمة المستخدمين الكاملة.",
@@ -8669,6 +8667,10 @@
           "placeholder": "أضف نطاقًا (مثل onyx.app)",
           "subDescription": "لا يمكن للمستخدمين الجدد تسجيل حسابات جديدة إلا ببريد ضمن قائمة النطاقات هذه.",
           "title": "نطاقات البريد الإلكتروني المسموح بها"
+        },
+        "anonymousUsers": {
+          "description": "السماح لأي شخص ببدء محادثات **دون تسجيل الدخول**. لا يرون أي محادثات أخرى ولا يمكنهم إنشاء وكلاء أو تحديث الإعدادات.",
+          "title": "السماح بالمستخدمين المجهولين"
         },
         "emailDomains": {
           "description": "قصر تسجيلات المستخدمين الجدد على نطاقات بريد محددة.",
@@ -11802,9 +11804,17 @@
         "loginBadCredentials": "لا يمكن لهذا الحساب تسجيل الدخول. قد يكون معطّلًا. تواصل مع مسؤول مساحة العمل.",
         "loginRequired": "يجب تسجيل الدخول عبر موفر الهوية أولًا.",
         "oauthUserAlreadyExists": "يوجد حساب بهذا البريد الإلكتروني بطريقة تسجيل دخول مختلفة. سجّل الدخول بالطريقة التي استخدمتها أول مرة، أو اطلب من المسؤول ربط هذا الموفر.",
+        "playgroundActiveTenant": "فريق من شركتك يجرّب Onyx بالفعل. هل تريد الانضمام إلى فريقك أم بدء فريق جديد؟",
+        "playgroundAskAdmin": "اطلب من مسؤولك دعوتك.",
+        "playgroundCheckFailed": "لم نتمكن من التحقق من تسجيلك. حاول مرة أخرى لاحقًا.",
+        "playgroundEmailUsed": "لقد استخدمت وصولك إلى الـ playground.",
+        "playgroundLimitReached": "لقد استخدمت شركتك وصولها إلى الـ playground.",
         "serverError": "واجه موفر الهوية خطأً. يرجى المحاولة مرة أخرى.",
         "staleSignIn": "انتهت صلاحية رابط تسجيل الدخول هذا أو لم يعد صالحًا. يرجى تسجيل الدخول مرة أخرى.",
         "temporarilyUnavailable": "موفر الهوية غير متاح مؤقتًا. يرجى المحاولة لاحقًا."
+      },
+      "contactSalesButton": {
+        "label": "تواصل مع المبيعات"
       },
       "credentialsIssue": {
         "description": "بيانات تسجيل دخول غير صحيحة أو منتهية الصلاحية"
@@ -11812,6 +11822,12 @@
       "heading": {
         "description": "حدثت مشكلة أثناء محاولة تسجيل الدخول.",
         "title": "خطأ في المصادقة"
+      },
+      "joinTeamButton": {
+        "label": "الانضمام إلى فريقي"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "المشكلات المحتملة:"
@@ -11821,6 +11837,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "إذا استمرت المشكلة، يرجى التواصل مع مسؤول النظام للمساعدة."
+      },
+      "startNewTeamButton": {
+        "label": "بدء فريق جديد"
       },
       "systemDisruptionIssue": {
         "description": "انقطاع مؤقت في نظام المصادقة"
@@ -12521,7 +12540,8 @@
         },
         "stopSubagentsButton": {
           "label": "إيقاف الوكلاء الفرعيين"
-        }
+        },
+        "questionAttachmentsHint": "لا يمكن أن تتضمن الإجابات عن أسئلة الوكيل ملفات. أزل الملفات للإجابة."
       },
       "baseInputBar": {
         "input": {
@@ -12669,6 +12689,12 @@
       },
       "pendingToolApproval": {
         "toast": "وافق على استدعاءات الأدوات المعلقة أو ارفضها أولاً."
+      },
+      "pendingToolQuestion": {
+        "toast": "أجب عن أسئلة الوكيل أولًا."
+      },
+      "pendingUserInput": {
+        "toast": "تعامل مع طلبات الموافقة أو الأسئلة المعلقة أولًا."
       }
     },
     "mcpApiKey": {
@@ -13119,6 +13145,15 @@
           },
           "waitingForApproval": {
             "label": "في انتظار موافقتك"
+          },
+          "waitingForAnswer": {
+            "label": "في انتظار إجابتك"
+          },
+          "runningCommand": {
+            "label": "جارٍ تشغيل الأمر"
+          },
+          "editingFiles": {
+            "label": "جارٍ تعديل الملفات"
           }
         },
         "internalSearch": {
@@ -13248,16 +13283,83 @@
           "researchAgent": "وكيل البحث",
           "thinking": "التفكير",
           "tool": "أداة",
-          "webSearch": "البحث في الويب"
+          "webSearch": "البحث في الويب",
+          "terminal": "الطرفية",
+          "applyPatch": "تطبيق التصحيح",
+          "editFile": "تعديل ملف",
+          "writeFile": "كتابة ملف"
         },
         "webSearch": {
           "searching": {
             "status": "جارٍ البحث في الويب"
           }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {جارٍ تشغيل الأمر} started {تم بدء الأمر} failed {فشل الأمر} canceled {أُلغي} done {تم تشغيل الأمر} other {تم تشغيل الأمر}}",
+            "workdir": {
+              "label": "في {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة {sessionId}} failed {تعذر إرسال إدخال إلى الجلسة {sessionId}} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة {sessionId}} other {تم إرسال إدخال إلى الجلسة {sessionId}}}} check {{phase, select, running {جارٍ فحص الجلسة {sessionId}} failed {تعذر فحص الجلسة {sessionId}} canceled {أُلغي} done {تم فحص الجلسة {sessionId}} other {تم فحص الجلسة {sessionId}}}} other {الجلسة {sessionId}}}"
+          },
+          "output": {
+            "title": "المخرجات"
+          },
+          "exitCode": {
+            "label": "رمز الخروج {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {أُوقف بإشارة} canceled {أُلغي} deadline_exceeded {أُوقف عند حده الزمني} other {انتهى}}"
+          },
+          "stillRunning": {
+            "label": "لا يزال قيد التشغيل (الجلسة {sessionId})"
+          },
+          "truncated": {
+            "label": "تم اقتطاع المخرجات"
+          },
+          "noOutput": {
+            "text": "لا توجد مخرجات"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, zero {لم يتم تعديل أي ملف} one {تم تعديل ملف واحد} two {تم تعديل ملفين} few {تم تعديل # ملفات} many {تم تعديل # ملفًا} other {تم تعديل # ملف}}"
+            },
+            "failed": {
+              "status": "فشل التعديل"
+            },
+            "title": "التصحيح"
+          },
+          "stopped": {
+            "status": "تم الإيقاف"
+          }
         }
       },
       "toolApproval": {
         "agentRequest": "يريد {agent} تشغيل {tool}"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {لدى الوكيل سؤال} other {لدى الوكيل # أسئلة}}",
+        "other": {
+          "placeholder": "أخرى: اكتب إجابتك الخاصة",
+          "ariaLabel": "إجابة أخرى عن {header}"
+        },
+        "submit": "إرسال",
+        "page": {
+          "progress": "السؤال {current} من {total}",
+          "next": "التالي",
+          "unanswered": "{count, plural, one {أجب عن السؤال {numbers} للإرسال.} other {أجب عن الأسئلة {numbers} للإرسال.}}"
+        },
+        "submitError": "تعذر إرسال إجاباتك. حاول مرة أخرى.",
+        "record": {
+          "answered": "تمت الإجابة",
+          "answeredInChat": "تمت الإجابة في الدردشة",
+          "cancelled": "لم تتم الإجابة",
+          "closed": "لم يعد في الانتظار",
+          "answer": "{header}: {answer}",
+          "optionAndNote": "{option} ({note})"
+        }
       },
       "toolbar": {
         "dislikeButton": {

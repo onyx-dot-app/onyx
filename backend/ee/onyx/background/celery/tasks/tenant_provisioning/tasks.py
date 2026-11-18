@@ -9,6 +9,12 @@ import uuid
 from celery import Task, shared_task
 from redis.lock import Lock as RedisLock
 
+from ee.onyx.db.tenant_provisioning import (
+    count_available_tenants,
+    create_available_tenant__no_commit,
+    get_available_tenant_by_id,
+    get_available_tenants,
+)
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.app_configs import TARGET_AVAILABLE_TENANTS
 from onyx.configs.constants import (
@@ -19,7 +25,6 @@ from onyx.configs.constants import (
 )
 from onyx.db.engine.shard_routing import get_shard_for_new_tenant
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
-from onyx.db.models import AvailableTenant
 from onyx.db.tenant_shard import record_tenant_placement
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import MULTI_TENANT, TENANT_ID_PREFIX
@@ -71,7 +76,7 @@ def check_available_tenants(self: Task) -> None:  # noqa: ARG001
     try:
         # Get the current count of available tenants
         with get_session_with_shared_schema() as db_session:
-            num_available_tenants = db_session.query(AvailableTenant).count()
+            num_available_tenants = count_available_tenants(db_session)
 
         # Get the target number of available tenants
         num_minimum_available_tenants = TARGET_AVAILABLE_TENANTS
@@ -135,7 +140,7 @@ def _migrate_stale_pool_tenants() -> None:
     )
 
     with get_session_with_shared_schema() as db_session:
-        pool_tenants = db_session.query(AvailableTenant).all()
+        pool_tenants = get_available_tenants(db_session)
         tenant_ids = [t.tenant_id for t in pool_tenants]
 
     if not tenant_ids:
@@ -150,11 +155,7 @@ def _migrate_stale_pool_tenants() -> None:
             run_alembic_migrations(tenant_id)
             new_version = get_current_alembic_version(tenant_id)
             with get_session_with_shared_schema() as db_session:
-                tenant = (
-                    db_session.query(AvailableTenant)
-                    .filter_by(tenant_id=tenant_id)
-                    .first()
-                )
+                tenant = get_available_tenant_by_id(db_session, tenant_id)
                 if tenant and tenant.alembic_version != new_version:
                     task_logger.info(
                         f"Migrated pool tenant {tenant_id}: {tenant.alembic_version} -> {new_version}"
@@ -232,13 +233,13 @@ def pre_provision_tenant() -> bool:
             # Use a transaction to ensure atomicity
             db_session.begin()
             try:
-                new_tenant = AvailableTenant(
+                create_available_tenant__no_commit(
+                    db_session,
                     tenant_id=tenant_id,
                     alembic_version=alembic_version,
                     date_created=datetime.datetime.now(),
                     shard_name=shard_name,
                 )
-                db_session.add(new_tenant)
                 db_session.commit()
                 task_logger.info(f"Successfully pre-provisioned tenant: {tenant_id}")
                 return True

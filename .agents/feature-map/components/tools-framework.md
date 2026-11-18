@@ -151,6 +151,9 @@ receives); see [[code-execution]]. A tool that must not run twice sets
 that a lost execution owner left running (`agents/tools.py:AgentTool`).
 `inner_tools` lists the tools that run inside a tool's calls, such as the
 functions of `execute_code`; `chat/prompt_utils.py:callable_tools` reads it.
+`inner_call_hint` answers a call of such a tool as a tool of its own: the
+result says how to call it through the offered tool
+(`agents/tool_execution.py`).
 
 When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error
@@ -174,6 +177,17 @@ both in its research phase, its research agents bind both, and each gets the
 skills catalog. The two tools have no
 tool catalog rows, are `DIRECT` in code mode, and render as generic tool cards with
 a short JSON summary, not the SKILL.md text.
+
+**Chat sandbox tools.** `chat/execution.py:create_chat_agent` also adds
+`exec_command`, `write_stdin` and the file tools (`apply_patch`, or `edit` and
+`write` when the turn's model is Claude) ([[code-execution]]) when
+`ChatTurnSetup.sandbox_tools` is set. `chat/process_message.py:prepare_chat_turn`
+sets it in one expression: harness sandboxes run
+(`microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the user is not anonymous, the
+chat is not incognito, the turn has one response, and no Slack or Discord bot
+sent it (`SendMessageRequest.origin`). The agent's tools and
+`allowed_tool_ids` do not remove them. They have no tool catalog rows, so no
+admin switch, picker entry or forced-tool request reaches them.
 
 **Argument models.** A tool declares its arguments as one Pydantic
 `*Arguments` model. `parse_tool_arguments` validates calls with it, and
@@ -236,8 +250,24 @@ The root can finish its response while background children continue.
 An idle agent starts a follow-up response for unread child results.
 Only the root gets `wait_agents` and the `ROOT_AGENT_INSTRUCTIONS` prompt block; the wait rule is in [[chat-persistence]]. These results
 stay in model history; only the parent's response appears as a chat message.
-Tool replies use concise text. The `agent_id` from spawn/list is the control
-handle; paths are display labels and need not be unique.
+Tool replies use concise text, and models see agent paths, never IDs. `send_message` and
+`interrupt_agent` take a `target`, and `wait_agents` takes `targets`: a path from spawn/list, or
+`..` for the caller's parent (`tools/tool_implementations/subagents/subagent_tools.py:_find_agent`, over `discover_agents`). A path names one agent on the branch: `spawn_agent` refuses a name whose
+path any visible agent holds, finished agents included (`agents/agent_coordination.py:register_child`).
+
+**Question tool.** `tools/tool_implementations/question/question_tool.py:QuestionTool`
+asks the user 1-3 multiple-choice questions and waits for the answers. Only the
+root `ChatAgent` gets it (`question_tool`), after code mode wraps the configured
+tools, so it stays direct and subagents never get it. Its name is
+`ask_user_question` for Claude models and `request_user_input` for others
+(`tools/constants.py:QUESTION_TOOL_NAMES`); a restored root gets it under the
+name its saved step declared (`chat/restoration.py:restore_chat_agent`). Which
+turns offer it, and how its call parks and resumes, is
+[[mcp-and-custom-tools#chat-approval-needs-waiting-client]]. Its arguments are not
+strict: the nested question models are `$defs` references. The model reads a card
+answer as `{"answers": {"<id>": {"answers": ["<label>", "user_note: <text>"]}}}`,
+or the text that the user typed, after the query hook and with nothing added
+(`chat/tool_questions.py:question_answer`).
 
 **Sub-agents.** `DeepResearchAgent`, `ResearchAgent` and `CodingAgent` are
 runtime agents. `DeepResearchAgent` and `CodingAgentTool` spawn a child run and
@@ -320,7 +350,9 @@ Their control functions, such as `think_tool`, `generate_report` and
    deltas go only to `run_python` and `execute_code`
    (`chat/renderer.py:MessageRenderer.consume`). Code mode calls render with
    `chat/renderer.py:CodeModeRenderer`, a `ToolRenderer` that
-   `tool_renderer` picks by tool name. A result that a run release hook sets
+   `tool_renderer` picks by tool name; question calls render only their card
+   (`chat/renderer.py:QuestionToolRenderer`: `tool_question_request` and
+   `tool_question_resolved`, then a section end). A result that a run release hook sets
    streams through `ToolRenderer.amend`. Only a code mode card renders what
    the amendment added (the cell's closing record), after the call's section
    end, live and on replay. The generic display adds nothing live; replay
@@ -361,7 +393,8 @@ Their control functions, such as `think_tool`, `generate_report` and
    `finish_tool`, the saved result is the raw result and no `ToolEndEvent` is
    sent. A tool whose calls must not overlap
    returns `ToolExecutionMode.SEQUENTIAL` from `execution_mode`, as
-   `MemoryTool` does. This orders only calls with the same name: each starts
+   `MemoryTool` does. This orders only calls with the same name, or with the
+   same `sequence_group` (the sandbox file tools share one): each starts
    after the previous one is finalized, and a call that waits for a child run
    or input blocks the calls after it.
 10. `tool-name-is-lookup-key` **`Tool.name` is a lookup key and must be a valid

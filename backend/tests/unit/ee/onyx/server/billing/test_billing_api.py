@@ -613,3 +613,20 @@ class TestCheckoutSessionWithSeats:
 
         call_kwargs = mock_service.call_args[1]
         assert call_kwargs["seats"] is None
+
+
+class TestGetLicenseData:
+    @patch("ee.onyx.server.billing.api.MULTI_TENANT", False)
+    @patch("ee.onyx.server.billing.api.get_license")
+    def test_releases_the_connection_before_the_handler_uses_the_cache(
+        self, mock_get_license: MagicMock
+    ) -> None:
+        """With the PostgreSQL cache, a held session would make each cache call
+        wait for a second pooled connection."""
+        from ee.onyx.server.billing.api import _get_license_data
+
+        mock_get_license.return_value.license_data = "license-blob"
+        db_session = MagicMock()
+
+        assert _get_license_data(db_session) == "license-blob"
+        db_session.close.assert_called_once()

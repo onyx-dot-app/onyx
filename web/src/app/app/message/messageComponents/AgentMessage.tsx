@@ -15,6 +15,7 @@ import {
 } from "@/app/app/services/streamingModels";
 import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
 import ToolApprovalCard from "@/app/app/message/messageComponents/ToolApprovalCard";
+import ToolQuestionCard from "@/app/app/message/messageComponents/ToolQuestionCard";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
 import { FeedbackType } from "@/app/app/types";
 import { Section } from "@opal/layouts";
@@ -26,10 +27,10 @@ import {
   type AuthError,
   useAuthErrors,
 } from "@/app/app/message/messageComponents/hooks/useAuthErrors";
-import { useToolApprovals } from "@/lib/chat/hooks";
+import { useToolRequests } from "@/lib/chat/hooks";
 import {
-  orderApprovalsByTurn,
-  type ToolApproval,
+  orderRecordsByTurn,
+  type ToolRequestRecord,
 } from "@/lib/chat/toolApprovals";
 import { getMessageSwitching } from "@/app/app/message/messageComponents/messageSwitching";
 import { RendererComponent } from "@/app/app/message/messageComponents/renderMessageComponent";
@@ -85,7 +86,7 @@ interface ResponseSection {
   displayGroups: GroupedPacket[];
   images: GeneratedImage[];
   authErrors: AuthError[];
-  toolApprovals: ToolApproval[];
+  toolRequests: ToolRequestRecord[];
 }
 
 // TODO: Consider more robust comparisons:
@@ -227,7 +228,7 @@ const AgentMessage = React.memo(function AgentMessage({
     );
 
   const authErrors = useAuthErrors(rawPackets);
-  const toolApprovals = useToolApprovals(rawPackets);
+  const toolRequests = useToolRequests(rawPackets);
 
   const sections = useMemo(() => {
     const sections: ResponseSection[] = [
@@ -238,7 +239,7 @@ const AgentMessage = React.memo(function AgentMessage({
         displayGroups: [],
         images: [],
         authErrors: [],
-        toolApprovals: [],
+        toolRequests: [],
       },
     ];
     let current = sections[0]!;
@@ -252,12 +253,48 @@ const AgentMessage = React.memo(function AgentMessage({
           displayGroups: [],
           images: [],
           authErrors: [],
-          toolApprovals: [],
+          toolRequests: [],
         };
         sections.push(current);
       } else {
         current.displayGroups.push(group);
       }
+    }
+    // A message that the user typed to answer questions shows as the user's
+    // message after the questions' records; later output follows it. One
+    // message answers every question that waits, and those were asked in
+    // one turn.
+    for (const record of toolRequests.records) {
+      if (
+        record.kind !== "question" ||
+        record.status.kind !== "answered" ||
+        record.status.message === null ||
+        sections.some((section) => section.turnIndex === record.turnIndex)
+      )
+        continue;
+      const position = sections.findLastIndex(
+        (section) => section.turnIndex < record.turnIndex
+      );
+      const before = sections[position]!;
+      sections.splice(position + 1, 0, {
+        userMessage: {
+          type: PacketType.USER_MESSAGE,
+          id: `question:${record.request.question_request_id}`,
+          message: record.status.message,
+          mentions: [],
+        },
+        turnIndex: record.turnIndex,
+        toolGroups: [],
+        displayGroups: before.displayGroups.filter(
+          (group) => group.turn_index > record.turnIndex
+        ),
+        images: [],
+        authErrors: [],
+        toolRequests: [],
+      });
+      before.displayGroups = before.displayGroups.filter(
+        (group) => group.turn_index <= record.turnIndex
+      );
     }
     let index = 0;
     for (const group of pacedTurnGroups) {
@@ -281,10 +318,10 @@ const AgentMessage = React.memo(function AgentMessage({
         .findLast((section) => section.turnIndex < error.turnIndex)!
         .authErrors.push(error);
     }
-    for (const approval of toolApprovals.records) {
+    for (const record of toolRequests.records) {
       sections
-        .findLast((section) => section.turnIndex < approval.turnIndex)!
-        .toolApprovals.push(approval);
+        .findLast((section) => section.turnIndex < record.turnIndex)!
+        .toolRequests.push(record);
     }
     return sections;
   }, [
@@ -292,7 +329,7 @@ const AgentMessage = React.memo(function AgentMessage({
     pacedTurnGroups,
     generatedImages,
     authErrors,
-    toolApprovals.records,
+    toolRequests.records,
   ]);
   const lastAnswerGroup = sections.at(-1)!.displayGroups.at(-1);
 
@@ -481,7 +518,7 @@ const AgentMessage = React.memo(function AgentMessage({
               finalAnswerComing={!isLastSection || pacedFinalAnswerComing}
               toolProcessingDuration={toolProcessingDuration}
               codeModeWorking={isLastSection && codeModeWorking}
-              awaitingApproval={isLastSection && toolApprovals.awaitingApproval}
+              awaitingUser={isLastSection ? toolRequests.awaiting : null}
             />
 
             {/* Row 2: Display content + MessageToolbar */}
@@ -502,7 +539,7 @@ const AgentMessage = React.memo(function AgentMessage({
               )}
               {(section.displayGroups.length > 0 ||
                 section.authErrors.length > 0 ||
-                section.toolApprovals.length > 0) && (
+                section.toolRequests.length > 0) && (
                 <div
                   ref={(element) => {
                     answerRefs.current[sectionIndex] = element;
@@ -518,15 +555,20 @@ const AgentMessage = React.memo(function AgentMessage({
                       agentId={effectiveChatState.agent.id}
                     />
                   ))}
-                  {orderApprovalsByTurn(
+                  {orderRecordsByTurn(
                     section.displayGroups,
-                    section.toolApprovals
+                    section.toolRequests
                   ).map((entry) => {
-                    if (entry.kind === "approval") {
-                      return (
+                    if (entry.kind === "record") {
+                      return entry.record.kind === "approval" ? (
                         <ToolApprovalCard
-                          key={entry.approval.request.approval_id}
-                          approval={entry.approval}
+                          key={entry.record.request.approval_id}
+                          approval={entry.record}
+                        />
+                      ) : (
+                        <ToolQuestionCard
+                          key={entry.record.request.question_request_id}
+                          question={entry.record}
                         />
                       );
                     }

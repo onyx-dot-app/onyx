@@ -2,15 +2,13 @@ import gc
 import os
 import time
 import traceback
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from celery import Celery, Task, current_app, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from redis.lock import Lock as RedisLock
-from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
@@ -55,7 +53,9 @@ from onyx.configs.app_configs import (
     SKIP_SPREADSHEET_CONTENT,
 )
 from onyx.configs.constants import (
+    CELERY_CHECKPOINT_CLEANUP_TASK_EXPIRES,
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_INDEX_ATTEMPT_CLEANUP_TASK_EXPIRES,
     DocumentSource,
     MilestoneRecordType,
     NotificationType,
@@ -99,13 +99,18 @@ from onyx.db.enums import (
     IndexingStatus,
     SwitchoverType,
 )
+from onyx.db.hierarchy import remove_unfilled_stub_hierarchy_nodes_for_cc_pair
 from onyx.db.index_attempt import (
     cc_pair_has_dispatched_index_attempts,
     create_index_attempt_error,
+    get_active_index_attempts,
     get_active_index_attempts_without_task,
+    get_in_progress_index_attempts_with_task,
     get_index_attempt,
     get_stale_not_started_index_attempts,
     get_waiting_index_attempt,
+    has_active_index_attempt,
+    index_attempt_has_errors_without_document,
     mark_attempt_canceled,
     mark_attempt_failed,
     mark_attempt_partially_succeeded,
@@ -134,6 +139,7 @@ from onyx.file_store.document_batch_storage import (
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import RedisDocprocessing
+from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import (
     SCAN_ITER_COUNT_DEFAULT,
     get_redis_client,
@@ -208,20 +214,7 @@ def validate_active_indexing_attempts(
 
     with get_session_with_current_tenant() as db_session:
         # Find all active indexing attempts
-        active_attempts = (
-            db_session.execute(
-                select(IndexAttempt).where(
-                    IndexAttempt.status.in_([IndexingStatus.IN_PROGRESS]),
-                    IndexAttempt.celery_task_id.isnot(None),
-                    # Synthetic attempts spawned by the targeted-reindex flow
-                    # have their own lifecycle owner and do not increment
-                    # the docprocessing heartbeat counter.
-                    IndexAttempt.targeted_reindex_job_id.is_(None),
-                )
-            )
-            .scalars()
-            .all()
-        )
+        active_attempts = get_in_progress_index_attempts_with_task(db_session)
 
         for attempt in active_attempts:
             lock_beat.reacquire()
@@ -527,6 +520,62 @@ def monitor_indexing_attempt_progress(
             logger.exception("Failed to cleanup storage after monitoring failure")
 
 
+def _remove_unfilled_stub_nodes(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """After an attempt whose listing completed, a STUB parent that is still
+    not filled will not be filled: its folder is not in the source, or the
+    connector cannot see it. Move what is under it to the source root and
+    remove it, so nothing stays hidden from the tree. A failed or canceled
+    attempt, or one with a listing failure, keeps its STUBs, because the
+    next attempt can still fill them. A STUB that a failed cleanup keeps is
+    removed by the next attempt that completes its listing. So is a STUB that
+    the cleanup keeps because another attempt of the pair is not finished."""
+    source = cc_pair.connector.source
+    # The attempt is complete. A cleanup error must not undo that.
+    try:
+        removed = remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+            db_session, source, cc_pair.connector_id, cc_pair.credential_id
+        )
+        failed = False
+    except Exception:
+        db_session.rollback()
+        logger.exception(
+            "Could not remove the unfilled STUB hierarchy nodes of cc_pair %s",
+            cc_pair.id,
+        )
+        removed = []
+        failed = True
+    if removed:
+        logger.info(
+            "Removed %s unfilled STUB hierarchy nodes of cc_pair %s",
+            len(removed),
+            cc_pair.id,
+        )
+    if not removed and not failed:
+        return
+    try:
+        # Cached parent chains can go through a removed STUB. Batches commit
+        # one at a time, so a failed cleanup can also have removed some.
+        invalidate_hierarchy_cache_for_source(get_redis_client(), source)
+    except Exception:
+        logger.exception(
+            "Could not invalidate the hierarchy cache of source %s", source
+        )
+
+
+def _attempt_listed_every_parent(db_session: Session, attempt: IndexAttempt) -> bool:
+    """Whether the attempt's listing completed, so a STUB that is still not
+    filled will not be filled. Failures of single documents do not change
+    that. A failure that names no document (a listing, a partition or a
+    batch) can mean a parent was not seen."""
+    if attempt.status == IndexingStatus.SUCCESS:
+        return True
+    if attempt.status != IndexingStatus.COMPLETED_WITH_ERRORS:
+        return False
+    return not index_attempt_has_errors_without_document(attempt.id, db_session)
+
+
 def check_indexing_completion(
     index_attempt_id: int,
     coordination_status: CoordinationStatus,
@@ -591,6 +640,13 @@ def check_indexing_completion(
             raise RuntimeError(
                 f"CC pair {attempt.connector_credential_pair_id} not found in database"
             )
+
+        # A backfill can run with a partial config, so it does not list
+        # every parent.
+        if not attempt.is_backfill and _attempt_listed_every_parent(
+            db_session, attempt
+        ):
+            _remove_unfilled_stub_nodes(db_session, cc_pair)
 
         source = cc_pair.connector.source.value
         connector_name = cc_pair.connector.name or f"cc_pair_{cc_pair.id}"
@@ -726,20 +782,11 @@ def active_indexing_attempt(
 
     Returns True if there's an active indexing attempt, False otherwise.
     """
-    active_indexing_attempt = db_session.execute(
-        select(
-            exists().where(
-                IndexAttempt.connector_credential_pair_id == cc_pair_id,
-                IndexAttempt.search_settings_id == search_settings_id,
-                IndexAttempt.status.in_(
-                    [
-                        IndexingStatus.NOT_STARTED,
-                        IndexingStatus.IN_PROGRESS,
-                    ]
-                ),
-            )
-        )
-    ).scalar()
+    active_indexing_attempt = has_active_index_attempt(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+        search_settings_id=search_settings_id,
+    )
 
     if active_indexing_attempt:
         task_logger.debug(
@@ -747,12 +794,13 @@ def active_indexing_attempt(
             f"cc_pair={cc_pair_id} search_settings={search_settings_id}"
         )
 
-    return bool(active_indexing_attempt)
+    return active_indexing_attempt
 
 
-@dataclass
-class _KickoffResult:
+class _KickoffResult(BaseModel):
     """Tracks diagnostic counts from a _kickoff_indexing_tasks run."""
+
+    model_config = ConfigDict(strict=True)
 
     created: int = 0
     skipped_active: int = 0
@@ -1425,18 +1473,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         with get_session_with_current_tenant() as db_session:
             # Monitor all active indexing attempts directly from the database
             # This replaces the Redis fence-based monitoring
-            active_attempts = (
-                db_session.execute(
-                    select(IndexAttempt).where(
-                        IndexAttempt.status.in_(
-                            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-                        ),
-                        IndexAttempt.targeted_reindex_job_id.is_(None),
-                    )
-                )
-                .scalars()
-                .all()
-            )
+            active_attempts = get_active_index_attempts(db_session)
 
             for attempt in active_attempts:
                 try:
@@ -1522,6 +1559,7 @@ def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
                     },
                     queue=OnyxCeleryQueues.CHECKPOINT_CLEANUP,
                     priority=OnyxCeleryPriority.MEDIUM,
+                    expires=CELERY_CHECKPOINT_CLEANUP_TASK_EXPIRES,
                 )
     except Exception:
         task_logger.exception("Unexpected exception during checkpoint cleanup")
@@ -1611,6 +1649,7 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
                     },
                     queue=OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
                     priority=OnyxCeleryPriority.MEDIUM,
+                    expires=CELERY_INDEX_ATTEMPT_CLEANUP_TASK_EXPIRES,
                 )
     except Exception:
         task_logger.exception("Unexpected exception during index attempt cleanup check")

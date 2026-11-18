@@ -241,7 +241,7 @@ read. `seed_pinned_personas_from_featured` runs once, at account creation.
   leaves agent file chunks with the old audience. The web form always sends
   both lists. Not reproduced.
 - **Group sharees cannot open agent files directly.**
-  `backend/onyx/access/access.py:_user_can_access_persona_attached_file`
+  `backend/onyx/db/access.py:user_can_access_persona_attached_file`
   admits public agents, owners and direct user shares, but not group shares or
   owner groups. Search still finds the file chunks through the index ACL.
 

@@ -1767,7 +1767,6 @@
           "title": "利用状況レポートの読み込みに失敗しました。"
         },
         "pendingRow": {
-          "description": "{range} · 通常は 1 分以内に完了します",
           "slowDescription": "処理中です。このページを離れても、レポートはここに表示されます。",
           "title": "レポートを準備中…"
         },
@@ -1805,8 +1804,11 @@
         "toasts": {
           "ready": "利用状況レポートが完成しました。",
           "startFailed": "レポート作成の開始に失敗しました: {message}",
-          "timedOut": "レポートの作成に時間がかかっています。もう一度実行するか、後で確認してください。",
           "unknownError": "不明なエラー"
+        },
+        "failedRow": {
+          "title": "レポートの生成に失敗しました",
+          "description": "リクエスト日時: {time}。再試行するには、新しいレポートを生成してください。"
         }
       },
       "slackChannelChart": {
@@ -2261,10 +2263,6 @@
       "advanced": {
         "title": "詳細オプション"
       },
-      "anonymousUsers": {
-        "description": "**ログインせずに**誰でもチャットを開始できるようにします。他のチャットは表示されず、エージェントの作成や設定の変更もできません。",
-        "title": "匿名ユーザーを許可"
-      },
       "autoDetectFilters": {
         "description": "検索クエリから推定したソースフィルターと期間フィルターを自動的に適用します。",
         "title": "検索フィルターの自動検出"
@@ -2335,48 +2333,6 @@
       "multiModel": {
         "description": "チャットで複数のモデルが並行して応答を生成できるようにします。",
         "title": "マルチモデル生成"
-      },
-      "queryHistory": {
-        "anonymized": {
-          "description": "クエリは管理者に表示されますが、ユーザーの識別情報は削除されます",
-          "label": "匿名化"
-        },
-        "description": "組織のチャット履歴全体を管理パネルにどのように表示するかを制御します。",
-        "disabled": {
-          "description": "クエリ履歴のレポートは無効です。",
-          "label": "非表示"
-        },
-        "normal": {
-          "description": "すべてのクエリが管理者に表示され、個々のユーザーに紐づけられます。",
-          "label": "ユーザー情報付きで表示"
-        },
-        "title": "クエリ履歴の表示設定"
-      },
-      "retention": {
-        "custom": {
-          "invalidError": "1 から {max} までの整数の日数を入力してください。",
-          "label": "カスタム保持期間",
-          "moreTooltip": "その他",
-          "placeholder": "日数",
-          "restoreTooltip": "既定値に戻す"
-        },
-        "description": "組織のチャットを {appName} が保持する期間を指定します。",
-        "forever": {
-          "label": "無期限"
-        },
-        "presets": {
-          "days30": "30 日",
-          "days60": "60 日",
-          "days7": "7 日",
-          "days90": "90 日",
-          "year1": "1 年"
-        },
-        "reduceModal": {
-          "confirmLabel": "保持期間を短縮",
-          "message": "{days, plural, one {# 日} other {# 日}} を超えて操作がないチャットは完全に削除されます。この操作は元に戻せません。",
-          "title": "チャットの保持期間を短縮しますか？"
-        },
-        "title": "チャット履歴の保持"
       },
       "searchMode": {
         "description": "組織全体のドキュメントをすばやく検索するための UI モードです。",
@@ -8651,6 +8607,48 @@
         "section": {
           "title": "管理者コントロール"
         },
+        "queryHistory": {
+          "anonymized": {
+            "description": "クエリは管理者に表示されますが、ユーザーの識別情報は削除されます",
+            "label": "匿名化"
+          },
+          "description": "組織のチャット履歴全体を管理パネルにどのように表示するかを制御します。",
+          "disabled": {
+            "description": "クエリ履歴のレポートは無効です。",
+            "label": "非表示"
+          },
+          "normal": {
+            "description": "すべてのクエリが管理者に表示され、個々のユーザーに紐づけられます。",
+            "label": "ユーザー情報付きで表示"
+          },
+          "title": "クエリ履歴の表示設定"
+        },
+        "retention": {
+          "custom": {
+            "invalidError": "1 から {max} までの整数の日数を入力してください。",
+            "label": "カスタム保持期間",
+            "moreTooltip": "その他",
+            "placeholder": "日数",
+            "restoreTooltip": "既定値に戻す"
+          },
+          "description": "組織のチャットを {appName} が保持する期間を指定します。",
+          "forever": {
+            "label": "無期限"
+          },
+          "presets": {
+            "days30": "30 日",
+            "days60": "60 日",
+            "days7": "7 日",
+            "days90": "90 日",
+            "year1": "1 年"
+          },
+          "reduceModal": {
+            "confirmLabel": "保持期間を短縮",
+            "message": "{days, plural, one {# 日} other {# 日}} を超えて操作がないチャットは完全に削除されます。この操作は元に戻せません。",
+            "title": "チャットの保持期間を短縮しますか？"
+          },
+          "title": "チャット履歴の保持"
+        },
         "userDirectory": {
           "adminsOnly": {
             "description": "管理者のみが全ユーザー一覧を表示できます。",
@@ -8669,6 +8667,10 @@
           "placeholder": "ドメインを追加（例：onyx.app）",
           "subDescription": "新規ユーザーは、このドメイン一覧に含まれるメールアドレスでのみアカウントを登録できます。",
           "title": "許可するメールドメイン"
+        },
+        "anonymousUsers": {
+          "description": "**ログインせずに**誰でもチャットを開始できるようにします。他のチャットは表示されず、エージェントの作成や設定の変更もできません。",
+          "title": "匿名ユーザーを許可"
         },
         "emailDomains": {
           "description": "新規ユーザーの登録を特定のメールドメインに制限します。",
@@ -11802,9 +11804,17 @@
         "loginBadCredentials": "このアカウントはサインインできません。無効化されている可能性があります。ワークスペースの管理者にお問い合わせください。",
         "loginRequired": "先に ID プロバイダーでログインする必要があります。",
         "oauthUserAlreadyExists": "このメールアドレスのアカウントは、別のサインイン方法で既に存在します。最初に使用した方法でサインインするか、管理者にこのプロバイダーの連携を依頼してください。",
+        "playgroundActiveTenant": "あなたの会社のチームがすでに Onyx を試用しています。チームに参加しますか、それとも新しいチームを始めますか？",
+        "playgroundAskAdmin": "管理者に招待を依頼してください。",
+        "playgroundCheckFailed": "サインアップを確認できませんでした。しばらくしてからもう一度お試しください。",
+        "playgroundEmailUsed": "プレイグラウンドへのアクセスはすでに使用済みです。",
+        "playgroundLimitReached": "貴社はプレイグラウンドへのアクセスをすでに使用済みです。",
         "serverError": "ID プロバイダーでエラーが発生しました。もう一度お試しください。",
         "staleSignIn": "このログインリンクは期限切れか、無効になっています。もう一度ログインしてください。",
         "temporarilyUnavailable": "ID プロバイダーは一時的に利用できません。しばらくしてからもう一度お試しください。"
+      },
+      "contactSalesButton": {
+        "label": "営業に問い合わせる"
       },
       "credentialsIssue": {
         "description": "ログイン認証情報の誤りまたは期限切れ"
@@ -11812,6 +11822,12 @@
       "heading": {
         "description": "ログインの試行中に問題が発生しました。",
         "title": "認証エラー"
+      },
+      "joinTeamButton": {
+        "label": "チームに参加"
+      },
+      "playgroundHeading": {
+        "title": "Onyx プレイグラウンド"
       },
       "possibleIssues": {
         "title": "考えられる原因："
@@ -11821,6 +11837,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "問題が解決しない場合は、システム管理者にお問い合わせください。"
+      },
+      "startNewTeamButton": {
+        "label": "新しいチームを始める"
       },
       "systemDisruptionIssue": {
         "description": "認証システムの一時的な障害"
@@ -12521,7 +12540,8 @@
         },
         "stopSubagentsButton": {
           "label": "サブエージェントを停止"
-        }
+        },
+        "questionAttachmentsHint": "エージェントの質問への回答にはファイルを含められません。回答するにはファイルを削除してください。"
       },
       "baseInputBar": {
         "input": {
@@ -12669,6 +12689,12 @@
       },
       "pendingToolApproval": {
         "toast": "先に保留中のツール呼び出しを承認または拒否してください。"
+      },
+      "pendingToolQuestion": {
+        "toast": "先にエージェントの質問に回答してください。"
+      },
+      "pendingUserInput": {
+        "toast": "先に保留中の承認リクエストまたは質問に対応してください。"
       }
     },
     "mcpApiKey": {
@@ -13119,6 +13145,15 @@
           },
           "waitingForApproval": {
             "label": "承認を待っています"
+          },
+          "waitingForAnswer": {
+            "label": "回答を待っています"
+          },
+          "runningCommand": {
+            "label": "コマンドを実行中"
+          },
+          "editingFiles": {
+            "label": "ファイルを編集中"
           }
         },
         "internalSearch": {
@@ -13248,16 +13283,83 @@
           "researchAgent": "リサーチエージェント",
           "thinking": "思考",
           "tool": "ツール",
-          "webSearch": "ウェブ検索"
+          "webSearch": "ウェブ検索",
+          "terminal": "ターミナル",
+          "applyPatch": "パッチを適用",
+          "editFile": "ファイルを編集",
+          "writeFile": "ファイルを書き込む"
         },
         "webSearch": {
           "searching": {
             "status": "ウェブを検索中"
           }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {コマンドを実行中} started {コマンドを開始しました} failed {コマンドが失敗しました} canceled {キャンセルされました} done {コマンドを実行しました} other {コマンドを実行しました}}",
+            "workdir": {
+              "label": "場所: {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {セッション {sessionId} に入力を送信中} failed {セッション {sessionId} に入力を送信できませんでした} canceled {キャンセルされました} done {セッション {sessionId} に入力を送信しました} other {セッション {sessionId} に入力を送信しました}}} check {{phase, select, running {セッション {sessionId} を確認中} failed {セッション {sessionId} を確認できませんでした} canceled {キャンセルされました} done {セッション {sessionId} を確認しました} other {セッション {sessionId} を確認しました}}} other {セッション {sessionId}}}"
+          },
+          "output": {
+            "title": "出力"
+          },
+          "exitCode": {
+            "label": "終了コード {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {シグナルで停止しました} canceled {キャンセルされました} deadline_exceeded {制限時間で停止しました} other {終了しました}}"
+          },
+          "stillRunning": {
+            "label": "実行中 (セッション {sessionId})"
+          },
+          "truncated": {
+            "label": "出力は切り詰められました"
+          },
+          "noOutput": {
+            "text": "出力なし"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {# 個のファイルを編集しました} other {# 個のファイルを編集しました}}"
+            },
+            "failed": {
+              "status": "編集に失敗しました"
+            },
+            "title": "パッチ"
+          },
+          "stopped": {
+            "status": "停止しました"
+          }
         }
       },
       "toolApproval": {
         "agentRequest": "{agent} が {tool} を実行しようとしています"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {エージェントから質問があります} other {エージェントから # 件の質問があります}}",
+        "other": {
+          "placeholder": "その他: 独自の回答を入力",
+          "ariaLabel": "{header} へのその他の回答"
+        },
+        "submit": "送信",
+        "page": {
+          "progress": "質問 {current} / {total}",
+          "next": "次へ",
+          "unanswered": "{count, plural, one {送信するには質問 {numbers} に回答してください。} other {送信するには質問 {numbers} に回答してください。}}"
+        },
+        "submitError": "回答を送信できませんでした。もう一度お試しください。",
+        "record": {
+          "answered": "回答済み",
+          "answeredInChat": "チャットで回答済み",
+          "cancelled": "未回答",
+          "closed": "待機は終了しました",
+          "answer": "{header}: {answer}",
+          "optionAndNote": "{option}（{note}）"
+        }
       },
       "toolbar": {
         "dislikeButton": {

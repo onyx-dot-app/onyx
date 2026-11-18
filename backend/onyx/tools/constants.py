@@ -28,6 +28,12 @@ WAIT_AGENTS_TOOL_NAME = "wait_agents"
 SKILLS_LIST_TOOL_NAME = "skills_list"
 SKILLS_READ_TOOL_NAME = "skills_read"
 SKILL_TOOL_NAMES = frozenset({SKILLS_LIST_TOOL_NAME, SKILLS_READ_TOOL_NAME})
+# The question tool's name: the first for Claude models, the second for others.
+ASK_USER_QUESTION_TOOL_NAME = "ask_user_question"
+REQUEST_USER_INPUT_TOOL_NAME = "request_user_input"
+QUESTION_TOOL_NAMES = frozenset(
+    {ASK_USER_QUESTION_TOOL_NAME, REQUEST_USER_INPUT_TOOL_NAME}
+)
 
 INTERNAL_SEARCH_TOOL_NAME = "internal_search"
 WEB_SEARCH_TOOL_NAME = "web_search"

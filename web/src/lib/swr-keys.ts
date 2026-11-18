@@ -326,6 +326,7 @@ export const SWR_KEYS = {
 
   // ── Usage Reports ─────────────────────────────────────────────────────────
   usageReport: "/api/admin/usage-report",
+  usageReportJobs: "/api/admin/usage-report-jobs",
 
   // ── Web Search ────────────────────────────────────────────────────────────
   webSearchContentProviders: "/api/admin/web-search/content-providers",

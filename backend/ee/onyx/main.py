@@ -37,7 +37,6 @@ from ee.onyx.server.seeding import seed_db
 from ee.onyx.server.spending_limits.api import router as spending_limits_router
 from ee.onyx.server.tenants.api import router as tenants_router
 from ee.onyx.server.user_group.api import router as user_group_router
-from ee.onyx.utils.encryption import test_encryption
 from onyx.auth.users import auth_backend, create_onyx_oauth_router
 from onyx.configs.app_configs import (
     GOOGLE_LOGIN_BASE_SCOPES,
@@ -80,8 +79,6 @@ def get_application() -> FastAPI:
     # Anything that happens at import time is not guaranteed to be running ee-version
     # Anything after the server startup will be running ee version
     global_version.set_ee()
-
-    test_encryption()
 
     application = get_application_base(lifespan_override=lifespan)
 

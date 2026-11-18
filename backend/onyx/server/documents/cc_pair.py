@@ -4,15 +4,16 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.auth.scoped_permissions import assert_within_scope
 from onyx.background.celery.tasks.pruning.tasks import (
-    reset_prune_and_cancel_sync_record,
     try_creating_prune_generator_task,
+)
+from onyx.background.celery.tasks.shared.prune_records import (
+    reset_prune_and_cancel_sync_record,
 )
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
@@ -90,6 +91,7 @@ from onyx.db.index_attempt import (
     get_open_error_counts_for_index_attempts,
     get_paginated_index_attempts_for_cc_pair_id,
     get_queue_positions,
+    get_unfinished_index_attempts_for_cc_pair,
     get_waiting_index_attempt,
     has_queued_index_attempt,
 )
@@ -112,6 +114,8 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
+
+# no-direct-redis: allow client for a Celery task helper
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.documents.cc_pair_runs_feed import (
@@ -885,17 +889,8 @@ def update_cc_pair_status(
         redis_connector.stop.set_fence(True)
 
         # Request cancellation for any active indexing attempts for this cc_pair
-        active_attempts = (
-            db_session.execute(
-                select(IndexAttempt).where(
-                    IndexAttempt.connector_credential_pair_id == cc_pair_id,
-                    IndexAttempt.status.in_(
-                        [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-                    ),
-                )
-            )
-            .scalars()
-            .all()
+        active_attempts = get_unfinished_index_attempts_for_cc_pair(
+            db_session, cc_pair_id
         )
 
         for attempt in active_attempts:
@@ -958,6 +953,7 @@ def update_cc_pair_status(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
         kwargs={"tenant_id": tenant_id},
         priority=OnyxCeleryPriority.HIGH,
+        expires=CHECK_FOR_INDEXING_EXPIRES_SECONDS,
     )
 
     return JSONResponse(
@@ -1164,6 +1160,7 @@ def prune_cc_pair(
             "The connector is paused. Resume it to prune.",
         )
 
+    # no-direct-redis: allow client for a Celery task helper
     r = get_redis_client()
 
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
@@ -1462,6 +1459,7 @@ def associate_credential_to_connector(
             OnyxCeleryTask.CHECK_FOR_INDEXING,
             priority=OnyxCeleryPriority.HIGH,
             kwargs={"tenant_id": tenant_id},
+            expires=CHECK_FOR_INDEXING_EXPIRES_SECONDS,
         )
 
         logger.info(

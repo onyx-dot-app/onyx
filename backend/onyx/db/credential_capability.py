@@ -179,10 +179,11 @@ def _completed_values(
     # A connector-scoped report always ran against a config, a credential-time
     # one never did; enforcing the pairing keeps an omitted hash from silently
     # erasing the staleness signal. ``connector_id`` is taken only for this.
-    assert (connector_id is None) == (connector_config_hash is None), (
-        "Connector-scoped reports must carry a config hash; credential-scoped "
-        "reports must not."
-    )
+    if (connector_id is None) != (connector_config_hash is None):
+        raise ValueError(
+            "Connector-scoped reports must carry a config hash; credential-scoped "
+            "reports must not."
+        )
     return {
         "source": source,
         "trigger": trigger,

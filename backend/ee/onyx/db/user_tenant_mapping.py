@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from fastapi_users import exceptions
 from sqlalchemy import delete, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.invited_users import (
@@ -626,11 +627,15 @@ def remove_users_from_tenant(emails: list[str], tenant_id: str) -> None:
             db_session.rollback()
 
 
+def delete_user_tenant_mappings__no_commit(db_session: Session, tenant_id: str) -> None:
+    db_session.query(UserTenantMapping).filter(
+        UserTenantMapping.tenant_id == tenant_id
+    ).delete()
+
+
 def remove_all_users_from_tenant(tenant_id: str) -> None:
     with get_catalog_session() as db_session:
-        db_session.query(UserTenantMapping).filter(
-            UserTenantMapping.tenant_id == tenant_id
-        ).delete()
+        delete_user_tenant_mappings__no_commit(db_session, tenant_id)
         db_session.commit()
 
 

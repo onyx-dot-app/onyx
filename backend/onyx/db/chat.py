@@ -473,7 +473,8 @@ def update_chat_session(
 
 def delete_all_chat_sessions_for_user(
     user: User, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
-) -> None:
+) -> list[UUID]:
+    """Returns the ids of the chat sessions that were not deleted before."""
     user_id = user.id
 
     chat_sessions = (
@@ -485,29 +486,28 @@ def delete_all_chat_sessions_for_user(
         )
         .all()
     )
+    chat_session_ids = [chat_session.id for chat_session in chat_sessions]
+    newly_deleted_ids = [
+        chat_session.id for chat_session in chat_sessions if not chat_session.deleted
+    ]
 
+    # Only the sessions read above: one that a concurrent request creates now
+    # stays, instead of going without its cleanup.
     if hard_delete:
-        for chat_session in chat_sessions:
-            delete_messages_and_files_from_chat_session(chat_session.id, db_session)
+        for chat_session_id in chat_session_ids:
+            delete_messages_and_files_from_chat_session(chat_session_id, db_session)
         db_session.execute(
-            delete(ChatSession).where(
-                ChatSession.user_id == user_id,
-                ChatSession.onyxbot_flow.is_(False),
-                ChatSession.spawned_by_message_id.is_(None),
-            )
+            delete(ChatSession).where(ChatSession.id.in_(chat_session_ids))
         )
     else:
         db_session.execute(
             update(ChatSession)
-            .where(
-                ChatSession.user_id == user_id,
-                ChatSession.onyxbot_flow.is_(False),
-                ChatSession.spawned_by_message_id.is_(None),
-            )
+            .where(ChatSession.id.in_(chat_session_ids))
             .values(deleted=True)
         )
 
     db_session.commit()
+    return newly_deleted_ids
 
 
 def delete_chat_session(
@@ -2092,3 +2092,7 @@ def parent_session_id(db_session: Session, session: ChatSession) -> UUID | None:
     if parent_id is None:
         raise ValueError("Agent creation message is unavailable")
     return parent_id
+
+
+def add_chat_session__no_commit(db_session: Session, row: ChatSession) -> None:
+    db_session.add(row)

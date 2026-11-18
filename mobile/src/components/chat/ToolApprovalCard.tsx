@@ -19,10 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
-import {
-  recoverChatSession,
-  watchBackgroundAgents,
-} from "@/hooks/useChatSessionController";
+import { followUserAnswer } from "@/hooks/followUserAnswer";
+import { watchBackgroundAgents } from "@/hooks/useChatSessionController";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import SvgCheckSquare from "@/icons/check-square";
 import SvgChevronDown from "@/icons/chevron-down";
@@ -76,12 +74,9 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
     announced.current = message;
   }, [message, record]);
 
-  // The decided status shows at once; the resolution packet then confirms it. The server names a
-  // continuation only for a suspended response that resumes at once; a live response goes on in
-  // the stream a reader already follows. Otherwise, as when another turn holds the chat or the
-  // request no longer waits, recovery follows the session's streams while it processes and then
-  // reloads the saved outcome. A background agent's decision has no stream, so status reads reload
-  // the session while the agent runs or waits to resume.
+  // The decided status shows at once; the resolution packet then confirms it. A background agent's
+  // decision has no stream, so status reads reload the session while the agent runs or waits to
+  // resume.
   async function decide(decision: ApprovalDecision) {
     const { recordStatus } = useToolApprovalUi.getState();
     // The card's chat; the user can open another one while the decision is in flight.
@@ -110,27 +105,15 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
     } finally {
       setSubmitting(false);
     }
-    const store = useChatSessionStore.getState();
-    // Reopening the chat recovers it.
-    if (!sessionId || store.currentSessionId !== sessionId) return;
-    // A reader that owns the chat can be past its last status read; it follows the continuation,
-    // or reads status again, before it releases the chat.
-    if (store.sessions.get(sessionId)?.abortController) {
-      store.queueFollow(sessionId, continuation);
-      return;
-    }
     // A background agent's later requests and outcomes show only in the saved session.
-    if (continuation === null && !gone && request.agent_name) {
-      void watchBackgroundAgents(sessionId, serverUrl, queryClient);
-      return;
-    }
-    if (continuation === null) store.updateChatState(sessionId, "settling");
-    void recoverChatSession(
+    followUserAnswer(
       sessionId,
       continuation,
       serverUrl,
       queryClient,
-      new AbortController(),
+      !gone && request.agent_name
+        ? (id) => void watchBackgroundAgents(id, serverUrl, queryClient)
+        : undefined,
     );
   }
 

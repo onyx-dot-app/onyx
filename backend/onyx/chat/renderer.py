@@ -1,6 +1,7 @@
 """Translate shared messages and tool results into chat browser packets."""
 
 from collections.abc import Mapping
+from typing import Literal
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 from typing_extensions import override
@@ -29,6 +30,7 @@ from onyx.coding_agent.tool_definitions import (
 )
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.db.enums import QuestionAnsweredVia, QuestionOutcome
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_NAME,
@@ -48,12 +50,17 @@ from onyx.llm.models import (
     ToolCallStartEvent,
     ToolResult,
 )
+from onyx.server.features.build.sandbox.models import (
+    ExecOutputDelta as SandboxOutputDelta,
+)
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import (
     CODE_MODE_TOOL_NAME,
+    QUESTION_TOOL_NAMES,
     WAIT_CODE_TOOL_NAME,
 )
+from onyx.tools.interface import parse_tool_arguments
 from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
@@ -62,6 +69,7 @@ from onyx.tools.models import (
     LlmPythonExecutionResult,
     MemoryUpdated,
     PythonExecutionDelta,
+    ToolCallException,
     ToolExecutionError,
     ToolExecutionException,
 )
@@ -83,6 +91,23 @@ from onyx.tools.tool_implementations.images.models import FinalImageGenerationRe
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.question.models import (
+    QuestionArguments,
+    QuestionToolDetails,
+)
+from onyx.tools.tool_implementations.sandbox.models import (
+    ApplyPatchResult,
+    SandboxExecResult,
+    WriteStdinArguments,
+)
+from onyx.tools.tool_implementations.sandbox.patch import display_patch
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    ApplyPatchTool,
+    EditTool,
+    ExecCommandTool,
+    WriteStdinTool,
+    WriteTool,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.logger import setup_logger
@@ -101,8 +126,13 @@ HIDDEN_TOOLS = frozenset(
 CODE_ARGUMENT_TOOLS = frozenset({PythonTool.NAME, CODE_MODE_TOOL_NAME})
 # Tools whose calls observe a code mode cell; each call renders as one code mode card.
 CODE_MODE_TOOL_NAMES = frozenset({CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME})
+# Tools whose calls end with exec_end.
+EXEC_TOOL_NAMES = frozenset({ExecCommandTool.NAME, WriteStdinTool.NAME})
+# Tools whose calls render as a patch card and end with apply_patch_end.
+PATCH_TOOL_NAMES = frozenset({ApplyPatchTool.NAME, EditTool.NAME, WriteTool.NAME})
 
 _STRING = TypeAdapter(str)
+_OPTIONAL_STRING = TypeAdapter(str | None)
 _INT = TypeAdapter(int)
 _STRINGS = TypeAdapter(list[str])
 logger = setup_logger()
@@ -488,6 +518,35 @@ def approval_outcome(answer: HumanToolAnswer | None) -> packets.ToolApprovalOutc
     return denial.outcome if isinstance(denial, ToolApprovalDenial) else "rejected"
 
 
+_ANSWERED_VIA: dict[QuestionAnsweredVia, Literal["card", "message"]] = {
+    QuestionAnsweredVia.CARD: "card",
+    QuestionAnsweredVia.MESSAGE: "message",
+}
+
+
+def question_resolved(
+    request_id: str, answer: HumanToolAnswer | None
+) -> packets.ToolQuestionResolved:
+    """How a question ended, from the result its answer gave the call; a
+    question without an answer stopped waiting."""
+    details = answer.result.details if answer and answer.result else None
+    if (
+        not isinstance(details, QuestionToolDetails)
+        or details.outcome != QuestionOutcome.ANSWERED
+        or details.answered_via is None
+    ):
+        return packets.ToolQuestionResolved(
+            question_request_id=request_id, outcome="cancelled"
+        )
+    return packets.ToolQuestionResolved(
+        question_request_id=request_id,
+        outcome="answered",
+        answered_via=_ANSWERED_VIA[details.answered_via],
+        answers=details.answers,
+        message=details.message,
+    )
+
+
 class ToolRenderer:
     """Project tool progress and final results without sending private tool state."""
 
@@ -558,7 +617,7 @@ class ToolRenderer:
         objects: list[packets.PacketObj]
         try:
             objects = self._start_objects(args)
-        except ValidationError:
+        except (ValidationError, ToolCallException):
             objects = []
             logger.debug(
                 "Tool arguments cannot use the specialized display", exc_info=True
@@ -593,7 +652,8 @@ class ToolRenderer:
     def _start_objects(self, args: dict[str, JsonValue]) -> list[packets.PacketObj]:
         """The tool's own start packets; empty for the generic tool display.
 
-        Raises ValidationError when the arguments do not fit the tool's display.
+        Raises ValidationError or ToolCallException when the arguments do not
+        fit the tool's display.
         """
         name = self.call.name
         objects: list[packets.PacketObj] = []
@@ -620,6 +680,53 @@ class ToolRenderer:
         elif name == BASH_TOOL_NAME:
             objects = [
                 packets.BashToolStart(cmd=_STRING.validate_python(args.get("cmd", "")))
+            ]
+        elif name == ExecCommandTool.NAME:
+            objects = [
+                packets.ExecCommandStart(
+                    cmd=_STRING.validate_python(args.get("cmd", "")),
+                    workdir=_OPTIONAL_STRING.validate_python(args.get("workdir")),
+                )
+            ]
+        elif name == WriteStdinTool.NAME:
+            # Interrupted arguments can lack the session ID.
+            write = parse_tool_arguments(
+                WriteStdinArguments, {"session_id": "", **args}
+            )
+            objects = [
+                packets.WriteStdinStart(session_id=write.session_id, chars=write.chars)
+            ]
+        elif name == ApplyPatchTool.NAME:
+            objects = [
+                packets.ApplyPatchStart(
+                    patch=_STRING.validate_python(args.get("input", "")),
+                    tool_name=ApplyPatchTool.NAME,
+                )
+            ]
+        elif name == EditTool.NAME:
+            # An empty old_string creates the file.
+            old = _STRING.validate_python(args.get("old_string", ""))
+            objects = [
+                packets.ApplyPatchStart(
+                    patch=display_patch(
+                        _STRING.validate_python(args.get("file_path", "")),
+                        old or None,
+                        _STRING.validate_python(args.get("new_string", "")),
+                    ),
+                    tool_name=EditTool.NAME,
+                )
+            ]
+        elif name == WriteTool.NAME:
+            # The end packet tells an added file from an updated one.
+            objects = [
+                packets.ApplyPatchStart(
+                    patch=display_patch(
+                        _STRING.validate_python(args.get("file_path", "")),
+                        None,
+                        _STRING.validate_python(args.get("content", "")),
+                    ),
+                    tool_name=WriteTool.NAME,
+                )
             ]
         elif name == FileReaderTool.NAME:
             objects = [packets.FileReaderStart()]
@@ -655,6 +762,10 @@ class ToolRenderer:
     ) -> list[packets.Packet]:
         """Render result details; content already rendered is skipped."""
         objects: list[packets.PacketObj] = []
+        if isinstance(
+            details, (SandboxOutputDelta, SandboxExecResult, ApplyPatchResult)
+        ):
+            return self._sandbox_packets(details)
         if isinstance(details, PythonExecutionDelta):
             self._has_python_output = True
             return [
@@ -818,6 +929,29 @@ class ToolRenderer:
         self._last_details = details
         return [packets.Packet(placement=self.placement, obj=obj) for obj in objects]
 
+    def _sandbox_packets(
+        self, details: SandboxOutputDelta | SandboxExecResult | ApplyPatchResult
+    ) -> list[packets.Packet]:
+        """Every output delta renders; a result renders once."""
+        if isinstance(details, SandboxOutputDelta):
+            obj: packets.PacketObj = packets.ExecOutputDelta(text=details.text)
+        elif details == self._last_details:
+            return []
+        elif isinstance(details, ApplyPatchResult):
+            self._last_details = details
+            obj = packets.ApplyPatchEnd(files=details.files)
+        else:
+            self._last_details = details
+            obj = packets.ExecEnd(
+                output=details.output,
+                exit_code=details.exit_code,
+                completion=details.completion,
+                session_id=details.session_id,
+                wall_time_seconds=details.wall_time_seconds,
+                truncated=details.truncated,
+            )
+        return [packets.Packet(placement=self.placement, obj=obj)]
+
     def complete(self, result: ToolResult | None) -> list[packets.Packet]:
         """Render the result and end the call's section.
 
@@ -854,6 +988,26 @@ class ToolRenderer:
                     obj=packets.CodingAgentFinal(answer=result.details.answer),
                 )
             ]
+        if (
+            result is not None
+            and result.is_error
+            and not isinstance(result.details, (SandboxExecResult, ApplyPatchResult))
+        ):
+            # A failed sandbox call has no process result or file changes.
+            if self.call.name in EXEC_TOOL_NAMES:
+                return [
+                    packets.Packet(
+                        placement=self.placement,
+                        obj=packets.ExecEnd(error=result.text),
+                    )
+                ]
+            if self.call.name in PATCH_TOOL_NAMES:
+                return [
+                    packets.Packet(
+                        placement=self.placement,
+                        obj=packets.ApplyPatchEnd(error=result.text),
+                    )
+                ]
         if result is not None:
             return self._detail_packets(
                 result.details, "" if result.is_error else result.text
@@ -877,6 +1031,54 @@ class ToolRenderer:
         replaces, so it adds nothing; the saved result shows on replay.
         """
         return []
+
+
+class QuestionToolRenderer(ToolRenderer):
+    """A question call shows only its card: its questions, then how they
+    ended."""
+
+    @override
+    def consume(
+        self,
+        event: ToolStartEvent
+        | ToolUpdateEvent
+        | ToolEndEvent
+        | InputRequiredEvent
+        | InputEndedEvent,
+    ) -> list[packets.Packet]:
+        obj: packets.ToolQuestionRequest | packets.ToolQuestionResolved
+        if isinstance(event, InputRequiredEvent):
+            # The tool opened the request after it validated the arguments.
+            obj = packets.ToolQuestionRequest(
+                question_request_id=event.request.request_id,
+                tool_call_id=self.call.id,
+                questions=parse_tool_arguments(
+                    QuestionArguments, tool_arguments_for_display(self.call)
+                ).questions,
+            )
+        elif isinstance(event, InputEndedEvent):
+            obj = question_resolved(event.request.request_id, event.answer)
+        else:
+            return super().consume(event)
+        return [packets.Packet(placement=self.placement, obj=obj)]
+
+    @override
+    def start(self) -> list[packets.Packet]:
+        self._started = True
+        return []
+
+    @override
+    def update(
+        self, details: BaseModel | None, content: str = ""
+    ) -> list[packets.Packet]:
+        return []
+
+    @override
+    def complete(self, result: ToolResult | None) -> list[packets.Packet]:
+        if self._finished:
+            return []
+        self._finished = True
+        return [packets.Packet(placement=self.placement, obj=packets.SectionEnd())]
 
 
 def _stored_keys(window: CellWindow) -> list[str] | None:
@@ -963,6 +1165,10 @@ class CodeModeRenderer(ToolRenderer):
         return child
 
     def _complete_child(self, call: CodeModeCall) -> list[packets.Packet]:
+        if call.state == "unfinished":
+            # Stopped with its cell: no end packet, as a stopped top-level
+            # call has none.
+            return self._child(call).complete(None)
         return self._child(call).complete(call.as_result())
 
     def _complete_open_children(self) -> list[packets.Packet]:
@@ -1075,6 +1281,13 @@ def tool_renderer(
     tool_id: int | None = None,
     display_name: str | None = None,
 ) -> ToolRenderer:
-    """The renderer of a tool call: a code mode card, or the generic tool display."""
-    renderer = CodeModeRenderer if call.name in CODE_MODE_TOOL_NAMES else ToolRenderer
+    """The renderer of a tool call: a code mode card, a question card, or the
+    generic tool display."""
+    renderer = (
+        CodeModeRenderer
+        if call.name in CODE_MODE_TOOL_NAMES
+        else QuestionToolRenderer
+        if call.name in QUESTION_TOOL_NAMES
+        else ToolRenderer
+    )
     return renderer(call, placement, tool_id, display_name)

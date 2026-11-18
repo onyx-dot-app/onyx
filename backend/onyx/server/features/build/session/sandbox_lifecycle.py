@@ -23,27 +23,23 @@ external I/O:
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from uuid import UUID
 
-from redis.lock import Lock as RedisLock
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.interface import CacheLock
-from onyx.db.enums import SandboxStatus
-from onyx.db.models import Sandbox, User
-from onyx.db.users import fetch_user_by_id
-from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
-from onyx.server.features.build.db.build_session import (
+from onyx.db.build_session import (
     clear_nextjs_ports_for_user,
     get_orphan_build_session_ids,
     get_webapp_session_ids,
     mark_user_sessions_idle__no_commit,
 )
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.enums import SandboxStatus
+from onyx.db.models import Sandbox, User
+from onyx.db.sandbox import (
     begin_provisioning_attempt__no_commit,
     begin_recovery_attempt__no_commit,
     create_sandbox__no_commit,
@@ -61,6 +57,9 @@ from onyx.server.features.build.db.sandbox import (
     set_sandbox_skills_states__no_commit,
     sleep_running_sandbox__no_commit,
 )
+from onyx.db.users import fetch_user_by_id
+from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
 from onyx.server.features.build.preview_activity import latest_preview_activity
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.locks import sandbox_provision_lock
@@ -124,11 +123,12 @@ _REPROVISIONABLE_STATUSES: frozenset[SandboxStatus] = frozenset(
 )
 
 
-@dataclass(frozen=True)
-class SandboxReservation:
+class SandboxReservation(BaseModel):
     """Committed identity of a sandbox provisioning attempt. Carries plain
     values only — never a live SQLAlchemy model or session — so external
     reconciliation cannot touch the reservation transaction."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     sandbox_id: UUID
     tenant_id: str
@@ -145,10 +145,11 @@ class SandboxReservation:
     terminate_before_provision: bool
 
 
-@dataclass(frozen=True)
-class ManagedContentPayload:
+class ManagedContentPayload(BaseModel):
     """Sandbox-level managed content, prebuilt from database state so the
     external push runs without an open transaction."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     connectable_apps_section: str
     skills_files: FileSet
@@ -802,7 +803,7 @@ def list_snapshotable_session_workspaces(
     db_session: DBSession,
     sandbox_manager: SandboxManager,
     sandbox: Sandbox,
-    session_creation_lock: RedisLock,
+    session_creation_lock: CacheLock,
 ) -> list[UUID]:
     """List snapshotable workspaces while session creation is excluded."""
     if not session_creation_lock.owned():
@@ -862,7 +863,7 @@ def _require_owned_storage_inventory(
 
 
 def _require_cleanup_ownership(
-    claim: CacheLock, session_creation_lock: RedisLock
+    claim: CacheLock, session_creation_lock: CacheLock
 ) -> None:
     if not claim.owned() or not session_creation_lock.owned():
         raise RuntimeError("Sandbox cleanup ownership lost")
@@ -908,7 +909,7 @@ def sleep_sandbox(
     sandbox_manager: SandboxManager,
     sandbox: Sandbox,
     tenant_id: str,
-    session_creation_lock: RedisLock,
+    session_creation_lock: CacheLock,
     check_cleanup_ownership: Callable[[], None] | None = None,
     cleanup_deadline: float | None = None,
 ) -> None:

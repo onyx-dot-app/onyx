@@ -215,6 +215,15 @@ A hook that fails otherwise or stops for cancellation is logged; the run keeps i
 An amended result inside the compaction checkpoint drops the checkpoint, so the next request summarizes the new result.
 `on_suspend(results)` has the same contract; it runs when the run suspends, before the run captures its state.
 Chat code mode uses these hooks to stop open cells and save what they did, also for a call that Stop interrupted.
+`on_drained()` runs after each finish or suspension, once the run's work has drained:
+its tool threads, including calls that ignored a Stop, and the work of its foreground children.
+Background children do not hold it back.
+A suspension calls the hook only when no foreground child waits or works; otherwise the run's later end calls it.
+A run that hands off in that state calls no hook: an early call could end state that a child still uses. The owner that restores the run calls the hook at the run's end.
+It runs on the thread that ended that work, so it must be short. It returns nothing and cannot change results.
+Errors, including `AgentCancelled`, are logged; the run still becomes idle and reusable.
+Chat's root agent gets it from `create_chat_agent` to end per-run tool state; subagents share the root's tools and install no `on_drained` hook.
+The sandbox tools end their sandbox turn there, which starts the session save.
 
 Two optional tool callbacks cover interception and enrichment:
 
@@ -248,7 +257,7 @@ The runtime logs a `withdraw_approval` that raises, so the waiting call still en
 The requests of a run that ends are the application's to close; the run store does it when it releases the run.
 Answers live in `RunProgress.human_tool_answers`. A request ends with the answer recorded there, or none, and the run reports it in `input_ended`.
 To stop a run with answers, such as the user's rejection on Stop, submit them and cancel while holding `Run.execution_lock`; the run applies them only after it sees the cancellation.
-A direct call that an answer denies keeps the denial as its result, so the model sees it in later runs.
+A direct call whose answer denies it or supplies its result keeps that result, so the model sees it in later runs.
 The runtime sets `PendingToolInput.approval` on the requests that `ToolApprovals` opens. That owner answers and withdraws only those requests; hook and question-tool requests do not have it.
 `PendingToolInput.display_name` carries the application's name for the action to the card that shows the request.
 Without `ToolApprovals`, such a call returns an error result.
@@ -271,9 +280,13 @@ The `ToolInvocation` argument provides everything the tool needs:
 - `update(ToolProgress(...))` — the current partial output and typed result details.
   The details type defines snapshot or delta semantics. Return the complete value in `ToolResult`.
 - `agents` — the subagent coordinator (next section).
+- `run_work` — the run's work. A tool that starts work which outlives the call, such as a code mode
+  program's driver and tool call threads, adds it with `run_work.track_operation(future)`. The run
+  drains, calls `on_drained` and becomes idle only after that work.
 
 Tool calls run in parallel by default. `SEQUENTIAL` orders calls to the same registered tool name
-within one step. The next call waits for the previous call and its completion hook to finish.
+within one step. Sequential tools with the same `sequence_group`, such as the sandbox file tools,
+share one order. The next call waits for the previous call and its completion hook to finish.
 A call waiting for input or children also holds that place in order. Other tool names can run concurrently.
 This setting does not coordinate separate runs or API requests.
 Results are accepted in whatever order tools finish, but model history keeps the original call order.
@@ -350,7 +363,9 @@ and stops every active background agent on the selected branch. The root turn an
 A parent's Stop blocks its later spawns. A stopped run records `RunFailureKind.STOPPED_BY_USER`:
 `list_agents` shows "stopped by the user", and its result wakes no agent; the root reads it as a notice at its next step.
 Return `ChildRunWait` to wait for results without holding a tool thread.
-Paths are readable labels and may repeat.
+An agent's path is its parent's path plus its name, and it names one agent on the branch:
+`register_child` refuses a name whose path a visible agent holds, finished agents included.
+Chat's agent tools address agents by that path, or by `..` for the caller's parent; models never see agent IDs.
 
 Foreground children are the default. The parent waits for their terminal results and cancels them on failure or cancellation.
 Failed child cancellation records an error without skipping sibling cancellation or releasing locally owned work before it drains.
@@ -676,7 +691,7 @@ streamed. Instructions that cannot fit after compaction fail the run. Public wai
 
 The SDK owns synchronous execution, typed events, safe suspension, and resumption.
 Tools return a result or a pending request. They do not manage checkpoint storage or ownership.
-Chat applies the MCP action policy through `approval_required` and `ChatRunStore.request_approval` (`onyx/chat/tool_approvals.py`); question forms are future product work.
+Chat applies the MCP action policy through `approval_required` and `ChatRunStore.request_approval` (`onyx/chat/tool_approvals.py`). The root chat agent's question tool returns a `RESULT` request that parks the run the same way (`onyx/chat/tool_questions.py`).
 The SDK accepts new user messages between model steps through `RunOwnership.receive_inputs`; the feature decides how each step uses them.
 
 A chat request follows this path:
@@ -805,10 +820,10 @@ Coding's temporary sandbox has no cross-process reconstruction factory.
 ### Delivery and failure boundaries
 
 There is no durable generic control ledger. Human messages sent to a running response are stored in `chat_input`, as described above.
-Tool approval decisions are saved in `approval_request` before the decision API returns, which then dispatches.
-A run that waits for them has handed off, so the resumed run reads the saved decisions; requests have no deadline.
+Tool approval decisions are saved in `approval_request`, and answers to questions in `question_request`, before their API returns, which then dispatches.
+A run that waits for them has handed off, so the resumed run reads the saved decisions and answers; requests have no deadline.
 When a run ends, the run store closes its open requests as it releases the run; a program's call that stops waiting while its run goes on ends its request through `withdraw_approval`.
-The user's Stop first saves the user's rejection of the requests that the root run and its foreground descendants wait on, then gives each of those runs its answers through `Run.submit` and cancels it, under the run's execution lock, so the requests end rejected, as with Reject.
+The user's Stop first saves the user's rejection of the requests that the root run and its foreground descendants wait on, and the cancellation of the root's questions, then gives each of those runs its answers through `Run.submit` and cancels it, under the run's execution lock, so the requests end rejected, as with Reject, and each question call has a result.
 The existing chat Stop route keeps its cache signal; child Stop requests also use tenant-scoped cache state.
 An expired owner is reported as interrupted when its response is inspected. Uncertain external work is never automatically replayed.
 

@@ -22,9 +22,9 @@ import json
 import threading
 import urllib.parse
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any, Generic, TypeVar
 
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import event
 from sqlalchemy.engine import Engine, create_engine
 
@@ -57,20 +57,21 @@ class ShardConfigurationError(RuntimeError):
     """Raised when ONYX_DB_SHARDS is malformed or references an unknown shard."""
 
 
-@dataclass(frozen=True, repr=False)
-class ShardSpec:
+class ShardSpec(BaseModel):
     """Connection coordinates for one physical database.
 
     repr/str omit the password so it can't leak via a log line or traceback; the
     dataclass-generated repr would have included it.
     """
 
+    model_config = ConfigDict(strict=True, frozen=True)
+
     name: str
     host: str
     port: str
     db: str
     user: str
-    password: str
+    password: str = Field(repr=False)
 
     def __repr__(self) -> str:
         return f"{self.name}({self.user}@{self.host}:{self.port}/{self.db})"

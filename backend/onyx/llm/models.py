@@ -160,7 +160,20 @@ class RedactedThinkingBlock(BaseModel):
     data: str
 
 
-AnyThinkingBlock = ThinkingBlock | RedactedThinkingBlock
+# An OpenAI Responses API reasoning item. The provider mints the id and the
+# encrypted content; both are replayed unmodified. Only the provider that
+# issued the encrypted content can read it.
+class ReasoningItemBlock(BaseModel):
+    type: Literal["reasoning_item"] = "reasoning_item"
+    id: str
+    summary: list[str] = Field(default_factory=list)
+    encrypted_content: str
+
+
+AnyThinkingBlock = Annotated[
+    ThinkingBlock | RedactedThinkingBlock | ReasoningItemBlock,
+    Field(discriminator="type"),
+]
 
 
 class Usage(BaseModel):

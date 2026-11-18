@@ -1,0 +1,13 @@
+op.drop_index(op.f('ix_oauth_provider_client_last_used_at'), table_name='oauth_provider_client')
+
+op.create_index(op.f('ix_public_oauth_provider_client_last_used_at'), 'oauth_provider_client', ['last_used_at'], unique=False, schema='public')
+
+op.drop_index(op.f('ix_tenant_shard_shard_name'), table_name='tenant_shard')
+
+op.drop_index(op.f('uq_user_active_email_idx'), table_name='user_tenant_mapping', postgresql_where='(active = true)')
+
+op.drop_constraint(op.f('uq_user_tenant'), 'user_tenant_mapping', type_='unique')
+
+op.drop_constraint(op.f('user_tenant_mapping_oauth_account_email_tenant_id_fkey'), 'user_tenant_mapping_oauth_account', type_='foreignkey')
+
+op.create_foreign_key(None, 'user_tenant_mapping_oauth_account', 'user_tenant_mapping', ['email', 'tenant_id'], ['email', 'tenant_id'], source_schema='public', referent_schema='public', onupdate='CASCADE', ondelete='CASCADE')

@@ -1767,7 +1767,6 @@
           "title": "사용량 보고서를 불러오지 못했습니다."
         },
         "pendingRow": {
-          "description": "{range} · 보통 1분 이내에 준비됩니다",
           "slowDescription": "아직 작업 중입니다. 이 페이지를 벗어나도 되며, 보고서는 여기에 표시됩니다.",
           "title": "보고서를 준비하는 중…"
         },
@@ -1805,8 +1804,11 @@
         "toasts": {
           "ready": "사용량 보고서가 준비되었습니다.",
           "startFailed": "보고서 생성을 시작하지 못했습니다: {message}",
-          "timedOut": "보고서 생성에 시간이 너무 오래 걸립니다. 다시 시도하거나 나중에 확인하세요.",
           "unknownError": "알 수 없는 오류"
+        },
+        "failedRow": {
+          "title": "보고서 생성 실패",
+          "description": "요청 시간: {time}. 다시 시도하려면 새 보고서를 생성하세요."
         }
       },
       "slackChannelChart": {
@@ -2261,10 +2263,6 @@
       "advanced": {
         "title": "고급 옵션"
       },
-      "anonymousUsers": {
-        "description": "누구나 **로그인 없이** 채팅을 시작할 수 있습니다. 다른 채팅은 볼 수 없으며 에이전트를 만들거나 설정을 변경할 수 없습니다.",
-        "title": "익명 사용자 허용"
-      },
       "autoDetectFilters": {
         "description": "검색어에서 추론한 소스 및 기간 필터를 자동으로 적용합니다.",
         "title": "검색 필터 자동 감지"
@@ -2335,48 +2333,6 @@
       "multiModel": {
         "description": "채팅에서 여러 모델이 동시에 응답을 생성할 수 있게 합니다.",
         "title": "다중 모델 생성"
-      },
-      "queryHistory": {
-        "anonymized": {
-          "description": "관리자가 질의를 볼 수 있지만 사용자 정보는 표시되지 않습니다",
-          "label": "익명 처리"
-        },
-        "description": "조직의 전체 채팅 기록이 관리자 패널에 표시되는 방식을 제어합니다.",
-        "disabled": {
-          "description": "질의 기록 보고가 비활성화되어 있습니다.",
-          "label": "숨김"
-        },
-        "normal": {
-          "description": "모든 질의를 관리자가 볼 수 있으며 개별 사용자와 연결됩니다.",
-          "label": "사용자 정보와 함께 표시"
-        },
-        "title": "질의 기록 공개 범위"
-      },
-      "retention": {
-        "custom": {
-          "invalidError": "1에서 {max} 사이의 정수 일수를 입력하세요.",
-          "label": "맞춤 보관 기간",
-          "moreTooltip": "더 보기",
-          "placeholder": "일 단위",
-          "restoreTooltip": "기본값 복원"
-        },
-        "description": "{appName}가 조직의 채팅을 보관할 기간을 지정하세요.",
-        "forever": {
-          "label": "무기한"
-        },
-        "presets": {
-          "days30": "30일",
-          "days60": "60일",
-          "days7": "7일",
-          "days90": "90일",
-          "year1": "1년"
-        },
-        "reduceModal": {
-          "confirmLabel": "보관 기간 단축",
-          "message": "{days, plural, one {#일} other {#일}} 넘게 활동이 없는 채팅은 영구 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
-          "title": "채팅 보관 기간을 단축할까요?"
-        },
-        "title": "채팅 기록 보관"
       },
       "searchMode": {
         "description": "조직 전체 문서를 빠르게 검색하는 UI 모드입니다.",
@@ -8651,6 +8607,48 @@
         "section": {
           "title": "관리자 제어"
         },
+        "queryHistory": {
+          "anonymized": {
+            "description": "관리자가 질의를 볼 수 있지만 사용자 정보는 표시되지 않습니다",
+            "label": "익명 처리"
+          },
+          "description": "조직의 전체 채팅 기록이 관리자 패널에 표시되는 방식을 제어합니다.",
+          "disabled": {
+            "description": "질의 기록 보고가 비활성화되어 있습니다.",
+            "label": "숨김"
+          },
+          "normal": {
+            "description": "모든 질의를 관리자가 볼 수 있으며 개별 사용자와 연결됩니다.",
+            "label": "사용자 정보와 함께 표시"
+          },
+          "title": "질의 기록 공개 범위"
+        },
+        "retention": {
+          "custom": {
+            "invalidError": "1에서 {max} 사이의 정수 일수를 입력하세요.",
+            "label": "맞춤 보관 기간",
+            "moreTooltip": "더 보기",
+            "placeholder": "일 단위",
+            "restoreTooltip": "기본값 복원"
+          },
+          "description": "{appName}가 조직의 채팅을 보관할 기간을 지정하세요.",
+          "forever": {
+            "label": "무기한"
+          },
+          "presets": {
+            "days30": "30일",
+            "days60": "60일",
+            "days7": "7일",
+            "days90": "90일",
+            "year1": "1년"
+          },
+          "reduceModal": {
+            "confirmLabel": "보관 기간 단축",
+            "message": "{days, plural, one {#일} other {#일}} 넘게 활동이 없는 채팅은 영구 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
+            "title": "채팅 보관 기간을 단축할까요?"
+          },
+          "title": "채팅 기록 보관"
+        },
         "userDirectory": {
           "adminsOnly": {
             "description": "관리자만 전체 사용자 목록을 볼 수 있습니다.",
@@ -8669,6 +8667,10 @@
           "placeholder": "도메인 추가(예: onyx.app)",
           "subDescription": "신규 사용자는 이 도메인 목록에 있는 이메일로만 계정을 등록할 수 있습니다.",
           "title": "허용된 이메일 도메인"
+        },
+        "anonymousUsers": {
+          "description": "누구나 **로그인 없이** 채팅을 시작할 수 있습니다. 다른 채팅은 볼 수 없으며 에이전트를 만들거나 설정을 변경할 수 없습니다.",
+          "title": "익명 사용자 허용"
         },
         "emailDomains": {
           "description": "신규 사용자 등록을 특정 이메일 도메인으로 제한합니다.",
@@ -11802,9 +11804,17 @@
         "loginBadCredentials": "이 계정으로는 로그인할 수 없습니다. 비활성화되었을 수 있습니다. 워크스페이스 관리자에게 문의하세요.",
         "loginRequired": "먼저 ID 공급자로 로그인해야 합니다.",
         "oauthUserAlreadyExists": "이 이메일로 다른 로그인 방식의 계정이 이미 있습니다. 처음 사용한 방식으로 로그인하거나, 관리자에게 이 공급자의 연결을 요청하세요.",
+        "playgroundActiveTenant": "회사의 팀이 이미 Onyx를 사용해 보고 있습니다. 팀에 참여하시겠습니까, 새 팀을 시작하시겠습니까?",
+        "playgroundAskAdmin": "관리자에게 초대를 요청하세요.",
+        "playgroundCheckFailed": "가입을 확인할 수 없습니다. 나중에 다시 시도하세요.",
+        "playgroundEmailUsed": "플레이그라운드 액세스를 이미 사용했습니다.",
+        "playgroundLimitReached": "귀사는 플레이그라운드 액세스를 이미 사용했습니다.",
         "serverError": "ID 공급자에서 오류가 발생했습니다. 다시 시도하세요.",
         "staleSignIn": "이 로그인 링크가 만료되었거나 더 이상 유효하지 않습니다. 다시 로그인하세요.",
         "temporarilyUnavailable": "ID 공급자를 일시적으로 사용할 수 없습니다. 나중에 다시 시도하세요."
+      },
+      "contactSalesButton": {
+        "label": "영업팀에 문의"
       },
       "credentialsIssue": {
         "description": "잘못되었거나 만료된 로그인 자격 증명"
@@ -11812,6 +11822,12 @@
       "heading": {
         "description": "로그인 시도 중 문제가 발생했습니다.",
         "title": "인증 오류"
+      },
+      "joinTeamButton": {
+        "label": "팀에 참여"
+      },
+      "playgroundHeading": {
+        "title": "Onyx 플레이그라운드"
       },
       "possibleIssues": {
         "title": "가능한 원인:"
@@ -11821,6 +11837,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "문제가 계속되면 시스템 관리자에게 도움을 요청하세요."
+      },
+      "startNewTeamButton": {
+        "label": "새 팀 시작"
       },
       "systemDisruptionIssue": {
         "description": "일시적인 인증 시스템 장애"
@@ -12521,7 +12540,8 @@
         },
         "stopSubagentsButton": {
           "label": "하위 에이전트 중지"
-        }
+        },
+        "questionAttachmentsHint": "에이전트의 질문에 대한 답변에는 파일을 포함할 수 없습니다. 답변하려면 파일을 제거하세요."
       },
       "baseInputBar": {
         "input": {
@@ -12669,6 +12689,12 @@
       },
       "pendingToolApproval": {
         "toast": "먼저 대기 중인 도구 호출을 승인하거나 거부하세요."
+      },
+      "pendingToolQuestion": {
+        "toast": "먼저 에이전트의 질문에 답하세요."
+      },
+      "pendingUserInput": {
+        "toast": "먼저 대기 중인 승인 요청이나 질문을 처리하세요."
       }
     },
     "mcpApiKey": {
@@ -13119,6 +13145,15 @@
           },
           "waitingForApproval": {
             "label": "승인을 기다리는 중"
+          },
+          "waitingForAnswer": {
+            "label": "답변을 기다리는 중"
+          },
+          "runningCommand": {
+            "label": "명령 실행 중"
+          },
+          "editingFiles": {
+            "label": "파일 편집 중"
           }
         },
         "internalSearch": {
@@ -13248,16 +13283,83 @@
           "researchAgent": "리서치 에이전트",
           "thinking": "생각 중",
           "tool": "도구",
-          "webSearch": "웹 검색"
+          "webSearch": "웹 검색",
+          "terminal": "터미널",
+          "applyPatch": "패치 적용",
+          "editFile": "파일 편집",
+          "writeFile": "파일 쓰기"
         },
         "webSearch": {
           "searching": {
             "status": "웹 검색 중"
           }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {명령 실행 중} started {명령 시작됨} failed {명령 실패} canceled {취소됨} done {명령 실행됨} other {명령 실행됨}}",
+            "workdir": {
+              "label": "위치: {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {세션 {sessionId}에 입력을 보내는 중} failed {세션 {sessionId}에 입력을 보내지 못함} canceled {취소됨} done {세션 {sessionId}에 입력을 보냄} other {세션 {sessionId}에 입력을 보냄}}} check {{phase, select, running {세션 {sessionId} 확인 중} failed {세션 {sessionId}을(를) 확인하지 못함} canceled {취소됨} done {세션 {sessionId} 확인함} other {세션 {sessionId} 확인함}}} other {세션 {sessionId}}}"
+          },
+          "output": {
+            "title": "출력"
+          },
+          "exitCode": {
+            "label": "종료 코드 {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {신호로 중지됨} canceled {취소됨} deadline_exceeded {시간 제한으로 중지됨} other {종료됨}}"
+          },
+          "stillRunning": {
+            "label": "계속 실행 중 (세션 {sessionId})"
+          },
+          "truncated": {
+            "label": "출력이 잘림"
+          },
+          "noOutput": {
+            "text": "출력 없음"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {파일 #개 편집함} other {파일 #개 편집함}}"
+            },
+            "failed": {
+              "status": "편집 실패"
+            },
+            "title": "패치"
+          },
+          "stopped": {
+            "status": "중지됨"
+          }
         }
       },
       "toolApproval": {
         "agentRequest": "{agent}이(가) {tool}을(를) 실행하려고 합니다"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {에이전트의 질문이 있습니다} other {에이전트의 질문이 #개 있습니다}}",
+        "other": {
+          "placeholder": "기타: 직접 답변 입력",
+          "ariaLabel": "{header}에 대한 기타 답변"
+        },
+        "submit": "보내기",
+        "page": {
+          "progress": "질문 {current}/{total}",
+          "next": "다음",
+          "unanswered": "{count, plural, one {보내려면 질문 {numbers}에 답하세요.} other {보내려면 질문 {numbers}에 답하세요.}}"
+        },
+        "submitError": "답변을 보내지 못했습니다. 다시 시도하세요.",
+        "record": {
+          "answered": "답변함",
+          "answeredInChat": "채팅에서 답변함",
+          "cancelled": "답변하지 않음",
+          "closed": "더 이상 대기하지 않음",
+          "answer": "{header}: {answer}",
+          "optionAndNote": "{option} ({note})"
+        }
       },
       "toolbar": {
         "dislikeButton": {

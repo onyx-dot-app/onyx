@@ -1,7 +1,7 @@
 """Lazy, single-flighted OAuth token refresh, called by the egress gate.
 
 The caller passes a tenant-scoped session *factory* (not a session) and ids;
-everything else — staleness, the Redis lock, the token POST, persistence — lives
+everything else — staleness, the cache lock, the token POST, persistence — lives
 behind :func:`ensure_fresh_credentials`. Each step takes its own short session, so
 no connection is held across the lock wait or the POST.
 """
@@ -10,10 +10,10 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from redis.exceptions import RedisError
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheLockAcquisitionError
+from onyx.cache.locks import cache_shared_lock
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.external_app import (
     disconnect_external_app_for_user,
@@ -29,7 +29,6 @@ from onyx.external_apps.providers.base import (
 )
 from onyx.external_apps.providers.registry import get_provider_for_app
 from onyx.external_apps.token_utils import needs_refresh, stamp_expires_at
-from onyx.redis.lock_context import RedisSharedLockAcquisitionError, redis_shared_lock
 from onyx.skills.push import push_skills_and_commit
 from onyx.utils.logger import setup_logger
 
@@ -67,21 +66,21 @@ def ensure_fresh_credentials(
         if stored is None or not needs_refresh(stored, datetime.now(timezone.utc)):
             return
 
-        with redis_shared_lock(
+        with cache_shared_lock(
             lock_name,
             max_time_lock_held_s=_LOCK_HELD_S,
             wait_for_lock_s=_LOCK_WAIT_S,
             logger=logger,
         ):
             _refresh_under_lock(tenant_id, external_app_id, user_id)
-    except RedisSharedLockAcquisitionError:
+    except CacheLockAcquisitionError:
         # Lock winner is refreshing; proceed with the current token.
         logger.info(
             "ea_token_refresh.lock_contended external_app_id=%s user_id=%s",
             external_app_id,
             user_id,
         )
-    except (RedisError, SQLAlchemyError) as exc:
+    except CACHE_TRANSIENT_ERRORS as exc:
         # Transient infra failure — Keep existing tokens and let requests through
         logger.warning(
             "ea_token_refresh.infra_unavailable external_app_id=%s user_id=%s error=%s",

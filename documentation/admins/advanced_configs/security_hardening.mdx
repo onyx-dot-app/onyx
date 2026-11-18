@@ -12,8 +12,9 @@ It collects the security settings you can change at runtime without editing envi
 Every control saves as soon as you change it. The JWT text fields save when you leave the field.
 Each setting starts at the value of its environment variable, and a value you set here overrides that default.
 Clearing a JWT field or a password length box returns it to the environment default.
-Changes are written to the audit log with the acting admin and the old and new values.
-Restrict Open Sign-Up is a workspace setting and is not audited.
+Changes are written to the audit log with the acting admin and the old and new values. Allow Anonymous Users,
+Restrict Open Sign-Up, Query History Visibility, and Keep Chat History are workspace settings. They are not audited.
+Only Query History Visibility has an environment default.
 
 <Note>
   Settings are cached per API server for up to 10 seconds. On deployments with several API servers,
@@ -75,6 +76,12 @@ A deactivated account is never relinked.
 Lets a user whose email was renamed sign in through another provider to the account that holds their current email,
 when that account has no provider link left. Turn it on only while you move users off a deleted SSO provider,
 and turn it off when they are through. It is off by default and has no environment variable.
+
+### Allow Anonymous Users
+
+When on, visitors can start chats **without signing in**. Anonymous users see only their own chats.
+They cannot create Agents or change settings. Their chats use your models and count toward usage and cost.
+Off by default.
 
 ### Restrict Open Sign-Up
 
@@ -162,6 +169,26 @@ so changing this affects new chats only. There is no environment variable.
   the chat does not appear in query history.
 - **Full History**: recorded like any other chat, including query history, usage, and tracing. Hidden only from
   the owner's own history.
+
+### Query History Visibility
+
+Sets what admins see on the [Query History](/admins/analytics/query_history) page.
+
+- **Show with User Info** (default): every query is linked to the user who sent it.
+- **Anonymized**: queries show without the user's identity.
+- **Hidden**: query history reporting is off.
+
+Environment default: `ONYX_QUERY_HISTORY_TYPE` (`normal`, `anonymized`, or `disabled`).
+
+### Keep Chat History
+
+Sets how long Onyx keeps chats for your organization. Choose **Forever** (default), a preset period, or **Custom**.
+This setting needs an Enterprise plan, on Onyx Cloud and on self-hosted deployments.
+
+<Warning>
+  If you **shorten** retention, Onyx permanently deletes chats with no activity for longer than the new period.
+  Onyx asks you to confirm before it saves a shorter period.
+</Warning>
 
 ### Mask Stored Credentials
 

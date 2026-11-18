@@ -692,16 +692,18 @@ def run_capability_checks(
     seen_capability_ids: set[tuple[str, CredentialCapability]] = set()
     for check in checks:
         capability_id = (check.check_id, check.capability)
-        assert capability_id not in seen_capability_ids, (
-            f"Duplicate check_id {check.check_id!r} within capability "
-            f"{check.capability.value}."
-        )
+        if capability_id in seen_capability_ids:
+            raise RuntimeError(
+                f"Duplicate check_id {check.check_id!r} within capability "
+                f"{check.capability.value}."
+            )
         seen_capability_ids.add(capability_id)
         check_class = check_class_by_id.setdefault(check.check_id, type(check))
-        assert check_class is type(check), (
-            f"check_id {check.check_id!r} is shared by {check_class.__name__} "
-            f"and {type(check).__name__}; mirrored checks must be one class."
-        )
+        if check_class is not type(check):
+            raise RuntimeError(
+                f"check_id {check.check_id!r} is shared by {check_class.__name__} "
+                f"and {type(check).__name__}; mirrored checks must be one class."
+            )
     return _CheckRun(
         checks,
         context,

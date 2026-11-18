@@ -1,6 +1,6 @@
 """Unit tests for the per-IP signup rate limiter."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import Request
@@ -31,16 +31,11 @@ def _make_request(
     return Request(scope)
 
 
-def _fake_pipeline_redis(incr_return: int) -> MagicMock:
-    """Build a Redis mock whose pipeline().execute() yields [incr_return, ok]."""
-    pipeline = MagicMock()
-    pipeline.incr = MagicMock()
-    pipeline.expire = MagicMock()
-    pipeline.execute = AsyncMock(return_value=[incr_return, 1])
-    redis = MagicMock()
-    redis.pipeline = MagicMock(return_value=pipeline)
-    redis._pipeline = pipeline
-    return redis
+def _fake_cache(incr_return: int) -> MagicMock:
+    """A cache mock whose incr() returns incr_return."""
+    cache = MagicMock()
+    cache.incr = MagicMock(return_value=incr_return)
+    return cache
 
 
 def test_client_ip_walks_xff_right_to_left() -> None:
@@ -94,11 +89,11 @@ async def test_disabled_when_not_multitenant() -> None:
         patch.object(rl, "MULTI_TENANT", False),
         patch.object(rl, "SIGNUP_RATE_LIMIT_ENABLED", True),
         patch.object(
-            rl, "get_async_redis_connection", AsyncMock(return_value=fake_redis)
+            rl, "get_shared_cache_backend", MagicMock(return_value=fake_redis)
         ) as conn,
     ):
         await enforce_signup_rate_limit(req)
-    conn.assert_not_awaited()
+    conn.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -109,23 +104,23 @@ async def test_disabled_when_enable_flag_off() -> None:
         patch.object(rl, "MULTI_TENANT", True),
         patch.object(rl, "SIGNUP_RATE_LIMIT_ENABLED", False),
         patch.object(
-            rl, "get_async_redis_connection", AsyncMock(return_value=fake_redis)
+            rl, "get_shared_cache_backend", MagicMock(return_value=fake_redis)
         ) as conn,
     ):
         await enforce_signup_rate_limit(req)
-    conn.assert_not_awaited()
+    conn.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_allows_when_under_limit() -> None:
     """Counts at or below the hourly cap do not raise."""
     req = _make_request(xff="1.2.3.4, 10.0.0.1")
-    fake_redis = _fake_pipeline_redis(incr_return=_PER_IP_PER_HOUR)
+    fake_redis = _fake_cache(incr_return=_PER_IP_PER_HOUR)
     with (
         patch.object(rl, "MULTI_TENANT", True),
         patch.object(rl, "SIGNUP_RATE_LIMIT_ENABLED", True),
         patch.object(
-            rl, "get_async_redis_connection", AsyncMock(return_value=fake_redis)
+            rl, "get_shared_cache_backend", MagicMock(return_value=fake_redis)
         ),
     ):
         await enforce_signup_rate_limit(req)
@@ -135,12 +130,12 @@ async def test_allows_when_under_limit() -> None:
 async def test_rejects_when_over_limit() -> None:
     """Strictly above the cap → OnyxError.RATE_LIMITED (HTTP 429)."""
     req = _make_request(xff="1.2.3.4, 10.0.0.1")
-    fake_redis = _fake_pipeline_redis(incr_return=_PER_IP_PER_HOUR + 1)
+    fake_redis = _fake_cache(incr_return=_PER_IP_PER_HOUR + 1)
     with (
         patch.object(rl, "MULTI_TENANT", True),
         patch.object(rl, "SIGNUP_RATE_LIMIT_ENABLED", True),
         patch.object(
-            rl, "get_async_redis_connection", AsyncMock(return_value=fake_redis)
+            rl, "get_shared_cache_backend", MagicMock(return_value=fake_redis)
         ),
     ):
         with pytest.raises(OnyxError) as exc_info:
@@ -149,19 +144,21 @@ async def test_rejects_when_over_limit() -> None:
 
 
 @pytest.mark.asyncio
-async def test_pipeline_expire_runs_on_every_hit() -> None:
-    """INCR and EXPIRE run in a single pipeline for atomicity."""
+async def test_ttl_is_set_on_every_hit() -> None:
+    """The increment carries the bucket TTL, so the counter always expires."""
     req = _make_request(xff="1.2.3.4, 10.0.0.1")
-    fake_redis = _fake_pipeline_redis(incr_return=3)
+    fake_redis = _fake_cache(incr_return=3)
     with (
         patch.object(rl, "MULTI_TENANT", True),
         patch.object(rl, "SIGNUP_RATE_LIMIT_ENABLED", True),
         patch.object(
-            rl, "get_async_redis_connection", AsyncMock(return_value=fake_redis)
+            rl, "get_shared_cache_backend", MagicMock(return_value=fake_redis)
         ),
     ):
         await enforce_signup_rate_limit(req)
-    fake_redis._pipeline.expire.assert_called_once()
+    key, ttl = fake_redis.incr.call_args.args
+    assert key.startswith("signup_rate:1.2.3.4:")
+    assert ttl == rl._BUCKET_SECONDS
 
 
 @pytest.mark.asyncio
@@ -173,8 +170,8 @@ async def test_fails_open_on_redis_error() -> None:
         patch.object(rl, "SIGNUP_RATE_LIMIT_ENABLED", True),
         patch.object(
             rl,
-            "get_async_redis_connection",
-            AsyncMock(side_effect=RuntimeError("redis down")),
+            "get_shared_cache_backend",
+            MagicMock(side_effect=RuntimeError("redis down")),
         ),
     ):
         await enforce_signup_rate_limit(req)

@@ -21,6 +21,9 @@ import logging
 import time
 from typing import Any
 
+from onyx.configs.app_configs import CACHE_BACKEND
+from onyx.configs.constants import CacheBackendType
+
 # Dedicated audit logger. We intentionally use a plain ``logging.getLogger``
 # rather than ``setup_logger`` so the record message is exactly one clean JSON
 # object (the Onyx standard formatter prepends a human-readable prefix, which
@@ -77,23 +80,26 @@ def _should_emit(
     row_id: int | None,
     actor: str,
 ) -> bool:
-    """Best-effort Redis SETNX-with-EX dedup.
+    """Best-effort set-if-absent dedup with a TTL.
 
-    Returns True if this event should be emitted. If Redis is unavailable for
+    Returns True if this event should be emitted. If the cache is unavailable for
     any reason we fall back to always emitting (never raise, never silently
     drop an audit event due to infra issues).
     """
+    # The PostgreSQL cache takes a pooled connection for the claim. A credential
+    # reader already holds one, so under load the claim can exhaust the pool.
+    # Without Redis every event is emitted.
+    if CACHE_BACKEND != CacheBackendType.REDIS:
+        return True
     try:
-        from onyx.redis.redis_pool import get_redis_client
+        from onyx.cache.factory import get_cache_backend
 
-        client = get_redis_client(tenant_id=tenant_id)
+        cache = get_cache_backend(tenant_id=tenant_id)
         dedup_key = f"audit:cred_access:{tenant_id}:{credential_type}:{row_id}:{actor}"
-        # set(..., nx=True) returns True only when the key did not already
-        # exist; None means a prior event already claimed this window.
-        result = client.set(dedup_key, "1", ex=_DEDUP_TTL_SECONDS, nx=True)
-        return bool(result)
+        # False means a prior event already claimed this window.
+        return cache.set_if_absent(dedup_key, "1", ex=_DEDUP_TTL_SECONDS)
     except Exception:
-        # Redis down / misconfigured / no tenant context — degrade to emit.
+        # Cache down / misconfigured / no tenant context — degrade to emit.
         return True
 
 

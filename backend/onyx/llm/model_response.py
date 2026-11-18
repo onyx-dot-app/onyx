@@ -184,7 +184,14 @@ class _ProviderChoice(BaseModel):
         if not isinstance(value, dict):
             return value
         thinking_blocks = value.get("thinking_blocks")
-        if not isinstance(thinking_blocks, list) or not thinking_blocks:
+        # LiteLLM's responses bridge carries OpenAI reasoning items apart from
+        # Anthropic thinking blocks; both are replayable thinking state here.
+        reasoning_items = value.get("reasoning_items")
+        if not isinstance(thinking_blocks, list):
+            thinking_blocks = []
+        if not isinstance(reasoning_items, list):
+            reasoning_items = []
+        if not thinking_blocks and not reasoning_items:
             return value
         # Providers can return incomplete thinking blocks.
         blocks: list[dict[str, object]] = []
@@ -206,6 +213,30 @@ class _ProviderChoice(BaseModel):
                         "signature": block.get("signature"),
                     }
                 )
+        for item in reasoning_items:
+            if not isinstance(item, dict):
+                continue
+            item_id = item.get("id")
+            encrypted = item.get("encrypted_content")
+            if not isinstance(item_id, str) or not isinstance(encrypted, str):
+                # Without the encrypted content, replay would rely on server-side
+                # storage of the item, which not every deployment has.
+                logger.debug("Dropping a reasoning item without encrypted content")
+                continue
+            summary = item.get("summary")
+            texts = [
+                part.get("text")
+                for part in (summary if isinstance(summary, list) else [])
+                if isinstance(part, dict)
+            ]
+            blocks.append(
+                {
+                    "type": "reasoning_item",
+                    "id": item_id,
+                    "summary": [text for text in texts if isinstance(text, str)],
+                    "encrypted_content": encrypted,
+                }
+            )
         return {**value, "thinking_blocks": blocks or None}
 
 
@@ -516,13 +547,37 @@ class MessageAccumulator:
         delta = chunk.choice.delta
         events: list[GenerationEvent] = []
         if delta.reasoning_content or delta.thinking_blocks:
-            events.extend(
-                self._add_text(
-                    ThinkingContent(
-                        text=delta.reasoning_content or "", blocks=delta.thinking_blocks
+            thinking_index = next(
+                (
+                    index
+                    for index in reversed(range(len(self.message.content)))
+                    if isinstance(self.message.content[index], ThinkingContent)
+                ),
+                None,
+            )
+            if not delta.reasoning_content and thinking_index is not None:
+                # Replay state for thinking that already streamed. OpenAI's
+                # bridge sends reasoning items on the final chunk, after the
+                # text and tool calls that followed the thinking.
+                event = ThinkingDeltaEvent(
+                    content_index=thinking_index,
+                    text="",
+                    blocks=[
+                        block.model_copy(deep=True)
+                        for block in delta.thinking_blocks or []
+                    ],
+                )
+                apply_generation_event(self.message, event)
+                events.append(event)
+            else:
+                events.extend(
+                    self._add_text(
+                        ThinkingContent(
+                            text=delta.reasoning_content or "",
+                            blocks=delta.thinking_blocks,
+                        )
                     )
                 )
-            )
         if delta.content:
             events.extend(self._add_text(TextContent(text=delta.content)))
         for call in delta.tool_calls:

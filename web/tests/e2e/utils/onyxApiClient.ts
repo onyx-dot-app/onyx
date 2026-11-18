@@ -84,7 +84,7 @@ export interface CreateAgentOptions {
  * **Connectors:**
  * - `createFileConnector(name)` - Creates a file connector with mock credentials
  * - `findCCPairByName(source, name)` - Looks up a connector-credential pair ID by source + name
- * - `deleteCCPair(ccPairId)` - Deletes a connector-credential pair (with polling until complete)
+ * - `deleteCCPair(ccPairId)` - Starts deletion of a connector-credential pair
  * - `createCredential(source, name, credentialJson)` - Creates an admin-public credential for a source
  * - `deleteCredential(credentialId)` - Deletes an unlinked credential
  *
@@ -518,23 +518,17 @@ export class OnyxApiClient {
     this.log(`Document set ${documentSetId} deletion confirmed`);
   }
 
-  /**
-   * Initiates deletion of a connector-credential pair.
-   *
-   * Fetches the CC pair details to get connector/credential IDs, then fires
-   * the deletion-attempt endpoint. Deletion runs asynchronously on a Celery
-   * worker; this method does NOT wait for it to finish, so the pair may
-   * still appear briefly after this resolves. Intended for test-teardown
-   * fire-and-forget cleanup — use `waitForDeletion` directly if a caller
-   * needs to observe the deleted state.
-   *
-   * @param ccPairId - The connector-credential pair ID to delete
-   */
-  async deleteCCPair(ccPairId: number): Promise<void> {
-    // Get CC pair details to extract connector_id and credential_id
+  /** Start deletion of a CC pair. A file connector can wait for its row to be removed. */
+  async deleteCCPair(
+    ccPairId: number,
+    {
+      waitForConnectorDeletion = false,
+    }: { waitForConnectorDeletion?: boolean } = {}
+  ): Promise<void> {
     const getResponse = await this.get(`/manage/admin/cc-pair/${ccPairId}`);
-
-    if (
+    if (waitForConnectorDeletion) {
+      await expect(getResponse).toBeOK();
+    } else if (
       !(await this.handleResponseSoft(
         getResponse,
         `Failed to get CC pair ${ccPairId} details`
@@ -555,7 +549,14 @@ export class OnyxApiClient {
       credential_id: credentialId,
     });
 
-    if (
+    if (waitForConnectorDeletion) {
+      await expect(deleteResponse).toBeOK();
+      await this.waitForDeletion(
+        `/manage/connector/${connectorId}`,
+        "Connector",
+        connectorId
+      );
+    } else if (
       !(await this.handleResponseSoft(
         deleteResponse,
         `Failed to delete CC pair ${ccPairId}`

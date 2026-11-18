@@ -3,7 +3,6 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import Select, delete, func, not_, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, aliased, selectinload
@@ -52,6 +51,8 @@ from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.persona.models import (
     FullPersonaSnapshot,
     MinimalPersonaSnapshot,
@@ -190,9 +191,9 @@ def fetch_persona_by_id_for_user(
     stmt = _add_user_filters(stmt=stmt, user=user, get_editable=get_editable)
     persona = db_session.scalars(stmt).one_or_none()
     if not persona:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Persona with ID {persona_id} does not exist or user is not authorized to access it",
+        raise OnyxError(
+            OnyxErrorCode.UNAUTHORIZED,
+            f"Persona with ID {persona_id} does not exist or user is not authorized to access it",
         )
     return persona
 
@@ -696,7 +697,7 @@ def create_update_persona(
 
     except ValueError as e:
         logger.exception("Failed to create persona")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
     # Eager-load the share relations the snapshot reads so from_model doesn't
     # lazy-load each one separately after the commit expires the instance.

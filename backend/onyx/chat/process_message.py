@@ -119,12 +119,15 @@ from onyx.llm.factory import (
     get_llm_token_counter,
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
+from onyx.llm.model_capabilities import model_identity_names
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride
+from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.server.query_and_chat.models import (
+    MessageOrigin,
     MessageResponseIDInfo,
     ModelResponseSlot,
     MultiModelMessageResponseIDInfo,
@@ -132,12 +135,14 @@ from onyx.server.query_and_chat.models import (
     response_id_info,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    AWAITING_APPROVAL,
+    AWAITING_USER,
     OverallStop,
     Packet,
     StreamingError,
     ToolApprovalRequest,
     ToolApprovalResolved,
+    ToolQuestionRequest,
+    ToolQuestionResolved,
 )
 from onyx.server.query_and_chat.token_limit import (
     check_model_spend_limits,
@@ -151,6 +156,9 @@ from onyx.tools.constants import (
     SEARCH_TOOL_ID,
 )
 from onyx.tools.models import SearchToolUsage
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    sandbox_tools_for_model,
+)
 from onyx.tracing.framework.scope import Scope
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
@@ -161,6 +169,11 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
+# A send while the selected response waits for the user's approval decisions
+# or answers.
+USER_INPUT_PENDING = (
+    "Answer the pending requests or questions before you send a message"
+)
 # Delays before each retry of a resume whose start failed for a moment.
 RESUME_RETRY_DELAYS_S = (1.0, 2.0, 4.0, 8.0, 16.0)
 
@@ -402,10 +415,7 @@ def prepare_chat_turn(
             ):
                 # The route checked before the response parked and released
                 # admission; a send does not attach under a parked response.
-                raise OnyxError(
-                    OnyxErrorCode.APPROVAL_PENDING,
-                    "Approve or reject the pending requests before you send a message",
-                )
+                raise OnyxError(OnyxErrorCode.APPROVAL_PENDING, USER_INPUT_PENDING)
             stream_id: int | None = None
             if resumed_response_id is not None:
                 if parent_message.id != resumed_response_id or len(chat_history) < 2:
@@ -534,6 +544,31 @@ def prepare_chat_turn(
                     OnyxErrorCode.BAD_REQUEST,
                     "The Coding Agent is not available in incognito. Start a normal chat to use it.",
                 )
+            # One sandbox serves one user, and anonymous visitors share one
+            # user. Incognito cleanup does not reach the sandbox's files. Two
+            # models must not change one session directory at once. Bots
+            # get no sandbox until they have service-account sandboxes.
+            sandbox_tools = (
+                HARNESS_SANDBOX_ENABLED
+                and not user.is_anonymous
+                and new_msg_req.origin
+                not in (MessageOrigin.SLACKBOT, MessageOrigin.DISCORDBOT)
+                and chat_session.incognito_record_mode is None
+                and len(selected_models) == 1
+            )
+            # The root agent can ask the user questions where approval
+            # requests can wait: a signed-in user's saved, single-model turn
+            # that is not deep research. Its run parks while it waits. An
+            # agent host runs no root; a resumed root gets the tool when its
+            # saved step declared it (restoration.py:restore_chat_agent).
+            question_tool = (
+                ask_for_approval
+                and not agent_host
+                and not user.is_anonymous
+                and record_mode_persists_content(chat_session.incognito_record_mode)
+                and len(selected_models) == 1
+                and not new_msg_req.deep_research
+            )
             # One read serves the catalog's context reservation and the skills
             # that an accepted question picked.
             chat_skills = list_chat_skills(db_session, user)
@@ -697,6 +732,14 @@ def prepare_chat_turn(
                     memory.user_info.placeholder_values,
                 ),
                 token_counter=token_counter,
+                sandbox_tools=sandbox_tools_for_model(
+                    model_identity_names(
+                        selected_models[0][0].config.model_name,
+                        selected_models[0][0].config.deployment_name,
+                    )
+                )
+                if sandbox_tools
+                else (),
                 files=new_msg_req.file_descriptors,
                 user_memory_context=memory
                 if user.use_memories
@@ -877,6 +920,8 @@ def prepare_chat_turn(
             persona=persona_prompt,
             base_system_prompt=base_system_prompt,
             tool_configuration=tool_configuration,
+            sandbox_tools=sandbox_tools,
+            question_tool=question_tool,
             research_tool_id=research_tool_id,
             checkpoint=checkpoint,
             user_message_id=user_message_id,
@@ -1474,16 +1519,18 @@ def gather_stream_full(
 ) -> ChatFullResponse:
     """Read delivery metadata and project accepted execution content.
 
-    A response that stops because tool calls wait for the user's approval
-    returns the requests that still wait in `pending_tool_approvals`.
+    A response that stops because tool calls wait for the user returns the
+    approval requests that still wait in `pending_tool_approvals`, and the
+    questions in `pending_tool_questions`.
     """
     error: StreamingError | None = None
     message_id: int | None = None
     chat_session_id: UUID | None = None
     incognito = False
-    # Requests read from the stream, by approval ID; resolved ones are removed.
+    # Requests read from the stream, by ID; resolved ones are removed.
     waiting: dict[str, ToolApprovalRequest] = {}
-    awaiting_approval = False
+    asking: dict[str, ToolQuestionRequest] = {}
+    awaiting_user = False
 
     for packet in packets:
         if isinstance(packet, StreamingError):
@@ -1498,8 +1545,12 @@ def gather_stream_full(
                 waiting[packet.obj.approval_id] = packet.obj
             elif isinstance(packet.obj, ToolApprovalResolved):
                 waiting.pop(packet.obj.approval_id, None)
+            elif isinstance(packet.obj, ToolQuestionRequest):
+                asking[packet.obj.question_request_id] = packet.obj
+            elif isinstance(packet.obj, ToolQuestionResolved):
+                asking.pop(packet.obj.question_request_id, None)
             elif isinstance(packet.obj, OverallStop):
-                awaiting_approval = packet.obj.stop_reason == AWAITING_APPROVAL
+                awaiting_user = packet.obj.stop_reason == AWAITING_USER
 
     if message_id is None:
         if error is not None:
@@ -1537,7 +1588,8 @@ def gather_stream_full(
         chat_session_id=chat_session_id,
         incognito=incognito,
         error_msg=outcome.error or (error.error if error else None),
-        pending_tool_approvals=list(waiting.values()) if awaiting_approval else [],
+        pending_tool_approvals=list(waiting.values()) if awaiting_user else [],
+        pending_tool_questions=list(asking.values()) if awaiting_user else [],
     )
 
 
@@ -1552,7 +1604,7 @@ def run_chat_turn(
     ask_for_approval: bool = True,
 ) -> ChatFullResponse:
     """Run one chat turn for in-process, non-streaming callers, to completion
-    or until tool calls wait for the user's approval.
+    or until tool calls wait for the user.
 
     These callers read one response, so the turn offers no agent tools.
     """

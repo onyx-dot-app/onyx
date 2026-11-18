@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db.document import get_documents_by_source
+from onyx.db.sandbox import get_sandbox_user_map
 from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.db.sandbox import get_sandbox_user_map
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.utils.logger import setup_logger

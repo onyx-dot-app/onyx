@@ -207,14 +207,16 @@ def get_human_input_session(
     return chat_session
 
 
-def _pending_content(message: str) -> str:
-    """Validate and sanitize the text of a new pending message."""
-    if len(message.encode()) > MAX_PENDING_MESSAGE_BYTES:
+def chat_message_content(message: str) -> str:
+    """Sanitize and size-check text that the user sends into a running or
+    waiting response: a pending message, or an answer to a question."""
+    content = sanitize_string(message)
+    if len(content.encode()) > MAX_PENDING_MESSAGE_BYTES:
         raise OnyxError(
             OnyxErrorCode.PAYLOAD_TOO_LARGE,
-            f"A pending message can have at most {MAX_PENDING_MESSAGE_BYTES} bytes",
+            f"A message can have at most {MAX_PENDING_MESSAGE_BYTES} bytes",
         )
-    return sanitize_string(message)
+    return content
 
 
 def _pending_human_inputs(chat_session_id: UUID) -> Select[tuple[ChatInput]]:
@@ -327,7 +329,7 @@ def submit_human_message__no_commit(
         if delivery == MessageDelivery.SEND and target is not None
         else None,
         delivery=delivery,
-        content=_pending_content(message),
+        content=chat_message_content(message),
         deep_research=deep_research,
         llm_override=llm_override,
         mentions=mentions,
@@ -853,14 +855,13 @@ def enqueue_message(
             raise ValueError(
                 "This agent cannot start another run after its resources are released"
             )
-    content = _pending_content(request.message.content)
+    content = chat_message_content(request.message.content)
     if parent_session_id(session, recipient) != UUID(request.parent_id):
         sender = session.get(ChatSession, UUID(request.parent_id))
         if sender is None:
             raise ValueError("Message sender is unavailable")
         content = (
-            f"Message from agent {agent_session_path(session, sender)} "
-            f"(agent_id: {sender.id}):\n{content}"
+            f"Message from agent {agent_session_path(session, sender)}:\n{content}"
         )
     row = ChatInput(
         recipient_session_id=UUID(request.agent_id),

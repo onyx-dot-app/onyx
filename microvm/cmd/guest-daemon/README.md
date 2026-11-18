@@ -97,6 +97,7 @@ agent, every call also carries `x-sandbox-id`.
 | `Inspect`, `List` | Execution records (state, PID, times, byte counts, result), `List` filtered by labels. |
 | `ReadFile`, `WriteFile`, `ListFiles`, `DeleteFile`, `ZipFiles` | Session files, or any VM path with no session ID (see Files). |
 | `UploadFile` | A free name in a session directory (`attachments/` by default). Always needs a session ID. |
+| `StatFiles` | Up to 1,000 session paths (1 MiB of path bytes) in one call, through `os.Root`: each path's own entry (exists, type, mode, link target) and its target through the links inside the session (type, mode, device and inode), or why there is none (missing, escapes the session, loop, other). `os.Root` follows at most 8 links per path. Reads no content. Always needs a session ID. |
 | `CaptureSession`, `RestoreSession` | Session saves as tar + zstd (see Session saves). |
 | `BrowserStart`, `BrowserStop` | Reserved for the browser. `UNIMPLEMENTED`. |
 | `ManagedStatus(mount)` | The slot on the mount point (by the mount's device number) and, per slot, the device, size, ext4 UUID (read with `O_DIRECT`) and whether it is in use (an exclusive open fails with `EBUSY` while a mount holds it, also a detached one with open files). The node agent calls it. |

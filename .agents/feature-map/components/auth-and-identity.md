@@ -291,7 +291,13 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
 - `new-security-setting` **Add a security setting.** Copy `allow_renamed_account_claim` through
   `server/security/models.py` and `server/security/store.py`; list the current
   settings in `SecuritySettings`. Read it with `allow_fallback=False` when it
-  decides access ([[#security-settings-strict-read]]).
+  decides access ([[#security-settings-strict-read]]). The Security & Hardening
+  page also edits workspace `Settings` fields (`invite_only_enabled`,
+  `anonymous_user_enabled`, `query_history_type`,
+  `maximum_chat_retention_days`) through `saveWorkspaceSettings`. Those are not
+  `SecuritySettings`: they have no audit event, and only `query_history_type`
+  has an env default (`ONYX_QUERY_HISTORY_TYPE`, read in
+  `server/settings/store.py:load_settings` when no value is stored).
 - `investigate-unexpected-signout` **Investigate "signed out unexpectedly".** Check `AUTH_BACKEND` first,
   because Postgres and JWT sessions keep no reason. With Redis, read the
   `detail` of the 403 that the browser received:

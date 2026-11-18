@@ -42,6 +42,8 @@ Rules for the Create parameters:
 
 - `vcpus` and `mem_mib` must equal the template's. A snapshot restore keeps the template's shape
   (`TEMPLATE_SHAPE_MISMATCH`).
+- Onyx requests a 32 GiB scratch disk by default and keeps larger template disks. The template stays
+  small (1 GiB by default); per-VM growth is sparse. Existing VMs keep their size until recreated.
 - `scratch_gib` must be at least the template's scratch size, and at most `--max-scratch-gib`. The scratch
   disk can only grow. The agent extends the disk and tells Firecracker the new size. The guest daemon must
   then grow the file system in `Init` with the `EXT4_IOC_RESIZE_FS` ioctl on the mount point (the online

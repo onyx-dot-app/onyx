@@ -226,16 +226,17 @@ class ToolBatch:
                     completed_call_ids = self._completed_call_ids()
                     if len(self.progress.finalized_tool_call_ids) == len(self.calls):
                         return True
-                    blocked_tool_names: set[str] = set()
+                    blocked_sequences: set[str] = set()
                     for index, call in enumerate(self.calls):
                         if call.id in self.progress.finalized_tool_call_ids:
                             continue
                         tool = self.tools.get(call.name)
                         if tool and tool.execution_mode == ToolExecutionMode.SEQUENTIAL:
-                            if call.name in blocked_tool_names:
+                            sequence = tool.sequence_group or call.name
+                            if sequence in blocked_sequences:
                                 continue
                             # Pending input and child waits retain their place in order.
-                            blocked_tool_names.add(call.name)
+                            blocked_sequences.add(sequence)
                         if call.id in completed_call_ids or call.id in self.futures:
                             continue
                         with self.run.execution_lock:
@@ -397,10 +398,20 @@ class ToolBatch:
                 and call.name != options.tool_choice.name
             )
         ):
-            return ToolResult(
-                content=f"Tool {call.name} is unavailable for this step.",
-                is_error=True,
-            )
+            content = f"Tool {call.name} is unavailable for this step."
+            # A call of a tool that runs only inside an offered tool's calls,
+            # such as a code mode function, says how to call it there.
+            if tool is None and options.tool_choice != ToolChoiceOptions.NONE:
+                for offered in self.tools.values():
+                    hint = (
+                        offered.inner_call_hint(call.name)
+                        if offered.inner_call_hint is not None
+                        else None
+                    )
+                    if hint is not None:
+                        content = hint
+                        break
+            return ToolResult(content=content, is_error=True)
         if (
             call.argument_error
             or not call.arguments_complete
@@ -451,6 +462,7 @@ class ToolBatch:
             nested_calls=_NestedCallGate(self, call)
             if self.run.before_tool_call is not None or self.run.approval_required
             else None,
+            run_work=self.run.work,
         )
         try:
             if children is not None:

@@ -13,13 +13,13 @@ from scripts import craft_fc_smoke as smoke
 from sqlalchemy.orm import Session
 
 from onyx.cache.interface import CacheBackend
+from onyx.db.sandbox import create_sandbox__no_commit
 from onyx.db.users import (
     batch_add_ext_perm_user_if_not_exists,
     fetch_user_by_id,
     get_all_users,
 )
 from onyx.microvm.registry import get_sandbox_placement
-from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.sandbox.firecracker import harness_state
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     FirecrackerHarnessSandbox,
@@ -59,7 +59,7 @@ class FakeProbe:
 def _result(output: str, exit_code: int = 0) -> ExecCommandResult:
     return ExecCommandResult(
         output=output,
-        exec_session_id=None,
+        session_id=None,
         exit_code=exit_code,
         completion="exited",
         wall_time_seconds=0.0,

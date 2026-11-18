@@ -77,25 +77,7 @@ export function CancelInviteModal({
 }: CancelInviteModalProps) {
   const t = useTranslations("admin.users");
   const { appName } = useSettings();
-  const navigation = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  function showPrivateSkillsToast(err: unknown): boolean {
-    if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
-      return false;
-    }
-    toast.error(t("deleteModal.toasts.blockedBySkills"), {
-      id: PRIVATE_SKILLS_TOAST_ID,
-      description: err.message,
-      duration: Infinity,
-      action: {
-        icon: SvgArrowUpRight,
-        label: t("deleteModal.toasts.openSkills"),
-        onClick: () => navigation.go("/admin/skills"),
-      },
-    });
-    return true;
-  }
 
   return (
     <ConfirmationModalLayout
@@ -155,25 +137,7 @@ export function DeactivateUserModal({
 }: DeactivateUserModalProps) {
   const t = useTranslations("admin.users");
   const { appName } = useSettings();
-  const navigation = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  function showPrivateSkillsToast(err: unknown): boolean {
-    if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
-      return false;
-    }
-    toast.error(t("deleteModal.toasts.blockedBySkills"), {
-      id: PRIVATE_SKILLS_TOAST_ID,
-      description: err.message,
-      duration: Infinity,
-      action: {
-        icon: SvgArrowUpRight,
-        label: t("deleteModal.toasts.openSkills"),
-        onClick: () => navigation.go("/admin/skills"),
-      },
-    });
-    return true;
-  }
 
   return (
     <ConfirmationModalLayout

@@ -9,11 +9,11 @@ import { resumeChatMessage, type StreamEvent } from "@/api/chat/stream";
 import { BackendChatSession } from "@/chat/interfaces";
 import { getMessageByMessageId } from "@/chat/messageTree";
 import { Packet, PacketType, StopReason } from "@/chat/streamingModels";
-import { useToolApprovalUi } from "@/chat/toolApprovals";
+import { APPROVAL_CARDS, useToolApprovalUi } from "@/chat/toolApprovals";
 import { ToolApprovalCard } from "@/components/chat/ToolApprovalCard";
 import { useChatController } from "@/hooks/useChatController";
 import { useChatSessionController } from "@/hooks/useChatSessionController";
-import { useToolApprovals } from "@/hooks/useToolApprovals";
+import { useToolCards } from "@/hooks/useToolCards";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 
 jest.mock("expo-router", () => ({
@@ -73,7 +73,7 @@ const request: Packet = {
 };
 const pausedStop: Packet = {
   placement: { turn_index: 0 },
-  obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_APPROVAL },
+  obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_USER },
 };
 
 function savedSession(packets: Packet[]): BackendChatSession {
@@ -116,7 +116,10 @@ const NO_PACKETS: Packet[] = [];
 function OpenChat() {
   const { messages } = useChatController("s1");
   useChatSessionController("s1");
-  const approvals = useToolApprovals(messages[1]?.packets ?? NO_PACKETS);
+  const approvals = useToolCards(
+    messages[1]?.packets ?? NO_PACKETS,
+    APPROVAL_CARDS,
+  );
   return approvals.map((approval) => (
     <ToolApprovalCard key={approval.request.approval_id} approval={approval} />
   ));

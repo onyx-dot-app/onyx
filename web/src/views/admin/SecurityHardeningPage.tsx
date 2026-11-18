@@ -29,10 +29,11 @@ import {
 } from "@opal/components";
 import { markdown } from "@opal/utils";
 import { useSettings } from "@/lib/settings/hooks";
-import { useTierAtLeast } from "@/lib/tiers/hooks";
-import { Settings, toSettings } from "@/lib/settings/types";
+import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
+import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
 import { Tier } from "@/lib/tiers/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
+import RetentionField from "@/views/admin/RetentionField";
 import type { RichStr } from "@opal/types";
 import type {
   IncognitoAvailability,
@@ -162,6 +163,8 @@ export default function SecurityHardeningPage() {
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
   // Groups and perm sync are Business+, so the restriction is meaningless below.
   const businessTier = useTierAtLeast(Tier.BUSINESS);
+  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
+  const plans = usePlans();
   const { authTypeMetadata, isLoading: authTypeLoading } =
     useAuthTypeMetadata();
   // Single-tenant at runtime, not just by build flag. The explicit === false
@@ -191,7 +194,9 @@ export default function SecurityHardeningPage() {
         await mutate(
           SWR_KEYS.settings,
           async () => {
-            await updateAdminSettings(newSettings);
+            // Send only the changed fields so a stale copy cannot revert
+            // another admin's change.
+            await updateAdminSettings(updates);
             return newSettings;
           },
           {
@@ -400,6 +405,19 @@ export default function SecurityHardeningPage() {
                 checked={draft.allow_renamed_account_claim}
                 onCheckedChange={(checked) =>
                   void saveSettings({ allow_renamed_account_claim: checked })
+                }
+              />
+
+              <ToggleRow
+                title={t("authentication.anonymousUsers.title")}
+                description={markdown(
+                  t("authentication.anonymousUsers.description")
+                )}
+                checked={workspaceSettings.anonymous_user_enabled ?? false}
+                onCheckedChange={(checked) =>
+                  void saveWorkspaceSettings({
+                    anonymous_user_enabled: checked,
+                  })
                 }
               />
 
@@ -743,6 +761,77 @@ export default function SecurityHardeningPage() {
                         ),
                       },
                     ]}
+                  />
+                </div>
+              </InputHorizontal>
+
+              <InputHorizontal
+                title={t("adminControls.queryHistory.title")}
+                description={t("adminControls.queryHistory.description")}
+                withLabel
+                responsive
+              >
+                <div className="w-full sm:w-60">
+                  <InputSingleSelect
+                    value={
+                      workspaceSettings.query_history_type ??
+                      QueryHistoryType.NORMAL
+                    }
+                    onValueChange={(value) =>
+                      void saveWorkspaceSettings({
+                        // SAFETY: the options only hold QueryHistoryType values.
+                        query_history_type: value as QueryHistoryType,
+                      })
+                    }
+                    defaultOption={QueryHistoryType.NORMAL}
+                    placeholder={tInputSelect("placeholder.fallback")}
+                    options={[
+                      {
+                        value: QueryHistoryType.NORMAL,
+                        title: t("adminControls.queryHistory.normal.label"),
+                        description: t(
+                          "adminControls.queryHistory.normal.description"
+                        ),
+                      },
+                      {
+                        value: QueryHistoryType.ANONYMIZED,
+                        title: t("adminControls.queryHistory.anonymized.label"),
+                        description: t(
+                          "adminControls.queryHistory.anonymized.description"
+                        ),
+                      },
+                      {
+                        value: QueryHistoryType.DISABLED,
+                        title: t("adminControls.queryHistory.disabled.label"),
+                        description: t(
+                          "adminControls.queryHistory.disabled.description"
+                        ),
+                      },
+                    ]}
+                  />
+                </div>
+              </InputHorizontal>
+
+              {/* Below Enterprise only the dropdown is locked. */}
+              <InputHorizontal
+                title={t("adminControls.retention.title")}
+                description={t("adminControls.retention.description", {
+                  appName: workspaceSettings.appName,
+                })}
+                tag={!enterpriseTier ? plans[Tier.ENTERPRISE].tag : undefined}
+                withLabel
+                responsive
+              >
+                <div className="w-full sm:w-60">
+                  <RetentionField
+                    value={
+                      workspaceSettings.maximum_chat_retention_days ?? null
+                    }
+                    onSave={(maximum_chat_retention_days) =>
+                      void saveWorkspaceSettings({
+                        maximum_chat_retention_days,
+                      })
+                    }
                   />
                 </div>
               </InputHorizontal>

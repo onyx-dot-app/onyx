@@ -33,7 +33,6 @@ from onyx.background.celery.celery_redis import (
     celery_get_unacked_task_ids,
 )
 from onyx.background.celery.tasks.shared.lease_heartbeat import LeaseHeartbeat
-from onyx.background.error_logging import emit_background_error
 from onyx.configs.app_configs import JOB_TIMEOUT, PERMISSION_SYNC_TIMEOUT
 from onyx.configs.constants import (
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
@@ -49,6 +48,7 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
     OnyxRedisLocks,
 )
+from onyx.db.background_error import emit_background_error
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import ConnectorCredentialPair

@@ -130,6 +130,7 @@ onyx-cli ask --json "List all active API integrations"
 | `--prompt`     | str  | Question text (use with piped stdin context)                 |
 | `--max-output` | int  | Max bytes to print before truncating (0 to disable, default 50000 for non-TTY) |
 | `--approve`    | str  | Answer to tool approval requests: `fail` (default), `reject`, `once`, or `session` |
+| `--questions`  | str  | Answer to the agent's questions: `fail` (default) or `skip` |
 
 #### Tool approvals
 
@@ -142,6 +143,15 @@ Some tool calls need the user's approval before they run. Without a terminal, `a
 After the answers, `ask` follows the response as it continues and prints the rest of the answer in the same run.
 
 On exit code 10, show the user the tool name and arguments. Without `--json`, read them from stderr, which shows at most 10 arguments and shortens long values; say so when it does. With `--json`, read them from the `tool_approval_request` event on stdout, which has every argument in full. On a terminal, the user can answer `d` to see every argument in full. A new run gives a new response, which can request different tool calls. Consent to the tool call that the user saw is not consent to `--approve=once` or `--approve=session`, because these approve every tool call in the new run without showing it. Use them only if the user agrees to approve all tool calls in the run. Otherwise, ask the user to run the command on a terminal, where `ask` shows each request and waits for an answer.
+
+#### Questions from the agent
+
+The agent can ask the user 1 to 3 multiple-choice questions. Without a terminal, `ask` never waits for input. It uses `--questions`, and both values tell the agent that no one can answer, so it continues with its own judgment:
+
+- `fail` (default): prints the rest of the answer and exits with code 12. Without `--json`, it prints the questions and their numbered choices to stderr. With `--json`, the questions are the `tool_question_request` event on stdout.
+- `skip`: prints the rest of the answer and exits normally.
+
+On exit code 12, show the user the questions and choices. To answer them, run `ask` again with the answers in the question text, or ask the user to run the command on a terminal, where `ask` prompts for each question. A new run gives a new response, which can ask different questions.
 
 ### List available agents
 
@@ -191,7 +201,8 @@ Checks config exists, PAT is present, server is reachable, and credentials are v
 | 8    | ServerError    | Server returned 5xx              |
 | 9    | NotAvailable   | Feature/endpoint does not exist  |
 | 10   | ApprovalRequired | A tool call needed approval; `--approve=fail` rejected it |
-| 11   | ApprovalPending  | `ask` was interrupted at an approval prompt; the request still waits for a decision |
+| 11   | ApprovalPending  | `ask` was interrupted at an approval or question prompt; the request still waits for the user |
+| 12   | QuestionUnanswered | The agent asked questions; `--questions=fail` answered that no one can answer |
 
 ## Statelessness
 

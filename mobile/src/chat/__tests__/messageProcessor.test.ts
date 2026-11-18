@@ -70,12 +70,68 @@ describe("messageProcessor", () => {
         placement: { turn_index: 0 },
         obj: {
           type: PacketType.STOP,
-          stop_reason: StopReason.AWAITING_APPROVAL,
+          stop_reason: StopReason.AWAITING_USER,
         },
       },
     ]);
     expect(state.isComplete).toBe(false);
     expect(state.stopPacketSeen).toBe(false);
+  });
+
+  it("keeps a question call out of the steps and the response open while it waits", () => {
+    const question: Packet = {
+      placement: { turn_index: 0 },
+      obj: {
+        type: PacketType.TOOL_QUESTION_REQUEST,
+        question_request_id: "q1",
+        tool_call_id: "c1",
+        questions: [
+          {
+            id: "scope",
+            header: "Scope",
+            question: "Which scope?",
+            options: [
+              { label: "Small", description: "One file." },
+              { label: "Large", description: "The whole app." },
+            ],
+          },
+        ],
+      },
+    };
+    const waiting = processPackets(createInitialState(1), [
+      question,
+      {
+        placement: { turn_index: 0 },
+        obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_USER },
+      },
+    ]);
+    expect(waiting.toolGroups).toEqual([]);
+    expect(waiting.potentialDisplayGroups).toEqual([]);
+    expect(waiting.stopPacketSeen).toBe(false);
+
+    // The continuation replays the question, resolves it, and answers.
+    const answered = processPackets(createInitialState(1), [
+      question,
+      {
+        placement: { turn_index: 0 },
+        obj: {
+          type: PacketType.TOOL_QUESTION_RESOLVED,
+          question_request_id: "q1",
+          outcome: "answered",
+          answered_via: "message",
+          message: "Small",
+        },
+      },
+      makePacket({ type: PacketType.SECTION_END }, 0),
+      makePacket({ type: PacketType.MESSAGE_START, id: "m", content: "" }, 1),
+      makePacket({ type: PacketType.STOP }, 1),
+    ]);
+    expect(answered.toolGroups).toEqual([]);
+    expect(
+      answered.potentialDisplayGroups.map((group) => group.turn_index),
+    ).toEqual([1]);
+    expect(answered.isComplete).toBe(true);
+    expect(answered.finalAnswerComing).toBe(true);
   });
 
   it("shows text whose step also called a tool once the response stops", () => {

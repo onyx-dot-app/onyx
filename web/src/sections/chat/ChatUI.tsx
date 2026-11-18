@@ -34,6 +34,7 @@ import WindowedRow from "@/sections/chat/WindowedRow";
 import OlderMessagesLoader from "@/sections/chat/OlderMessagesLoader";
 import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
 import ToolApprovalsRegion from "@/sections/chat/ToolApprovalsRegion";
+import ToolQuestionsRegion from "@/sections/chat/ToolQuestionsRegion";
 import { cn } from "@opal/utils";
 
 /** Width constraint for normal (non-multi-model) messages. */
@@ -410,9 +411,17 @@ const ChatUI = React.memo(
             return null;
           })}
 
-          {/* Approval cards that wait for a decision follow the last message. */}
+          {/* Approval and question cards that wait for the user follow the
+              last message. */}
           <ToolApprovalsRegion
             modelProviderLookup={modelProviderLookup}
+            className={cn(
+              "w-full self-center",
+              msgWidth,
+              !fullWidthChat && "px-3"
+            )}
+          />
+          <ToolQuestionsRegion
             className={cn(
               "w-full self-center",
               msgWidth,

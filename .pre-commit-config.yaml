@@ -339,6 +339,91 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
         files: ^backend/alembic/versions/.*\.py$
+      - id: migration-design
+        name: new migrations follow safe DDL patterns
+        language: system
+        entry: python3 backend/lint/check_migration_design.py
+        pass_filenames: false
+        # Pre-commit removes deleted files before applying the path filter.
+        always_run: true
+        stages: [pre-commit]
+        files: ^backend/alembic(_tenants)?/versions/.*\.py$
+      - id: celery-task-expires
+        name: celery tasks are enqueued with an expiration
+        description: "Fail a task send or beat schedule entry that has no expires"
+        language: system
+        entry: python3 backend/lint/check_celery_task_expires.py
+        pass_filenames: true
+        stages: [pre-commit]
+        files: ^backend/(onyx|ee|scripts)/.*\.py$
+      - id: celery-task-allowlist
+        name: celery tasks and beat entries are on the approved list
+        description: "Fail a Celery task or beat entry that is not on backend/lint/celery_task_allowlist.txt"
+        language: system
+        entry: python3 backend/lint/check_celery_task_allowlist.py
+        pass_filenames: false
+        # Deleted task files must also trigger the check.
+        always_run: true
+        stages: [pre-commit]
+      # Lower the baseline with `check_no_http_exception.py --write-baseline`.
+      - id: no-http-exception
+        name: OnyxError, not HTTPException
+        description: "Fail when a backend file gains an HTTPException or a fastapi/starlette status constant"
+        language: system
+        entry: python3 backend/lint/check_no_http_exception.py
+        pass_filenames: false
+        # A commit that only deletes a baselined file must run the check too.
+        always_run: true
+        stages: [pre-commit]
+      - id: test-flakes
+        name: ratchet sleeps and unexplained skips in tests
+        language: python
+        additional_dependencies: [tree-sitter==0.25.2, tree-sitter-typescript==0.23.2]
+        entry: python -m backend.lint.check_test_flakes
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+      # Runs on every commit so a deleted file with a baseline entry fails in
+      # the same commit. Regenerate the baseline with
+      # `check_no_response_model.py --write-baseline`.
+      - id: no-response-model
+        name: no response_model on FastAPI routes
+        description: "Fail a FastAPI route that sets response_model= instead of a return annotation"
+        language: system
+        entry: python3 backend/lint/check_no_response_model.py
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+      # Lower the baseline with `check_no_direct_redis.py --write-baseline`.
+      # Runs on every commit so the deletion of a baseline file fails in the same PR.
+      - id: no-direct-redis
+        name: no direct Redis
+        description: "Fail on a new direct use of Redis in application code; use CacheBackend"
+        language: system
+        entry: python3 backend/lint/check_no_direct_redis.py
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+      - id: db-ops-outside-db
+        name: db operations stay in the db directories
+        description: "Fail when a file outside backend/onyx/db and backend/ee/onyx/db gains a database operation"
+        language: system
+        entry: python3 backend/lint/check_db_ops_outside_db.py
+        pass_filenames: false
+        # A commit that only deletes a baselined file must run the check too.
+        always_run: true
+        stages: [pre-commit]
+      # Contracts and exceptions: backend/lint/import_boundaries.toml.
+      - id: import-boundaries
+        name: backend import boundaries
+        description: "Fail on an import that crosses a boundary in backend/lint/import_boundaries.toml"
+        language: system
+        entry: python3 backend/lint/check_import_boundaries.py --changed
+        pass_filenames: true
+        # Deleted files must also trigger the contract validation.
+        always_run: true
+        stages: [pre-commit]
+        files: ^backend/(.*\.py|lint/import_boundaries\.toml)$
       # Runs on every commit so a rename or deletion of a file the map cites
       # fails in the same PR.
       - id: feature-map-integrity
@@ -484,6 +569,22 @@ repos:
         language: system
         pass_filenames: false
         files: ^desktop/src-tauri/(src/.*\.rs|Cargo\.(toml|lock))$
+
+      # desktop-v2/ (preview app beside desktop/). Same toolchain needs and the
+      # same CI split: desktop-v2.yml is the gate.
+      - id: desktop-v2-rust-fmt
+        name: desktop-v2 cargo fmt
+        entry: bash -c 'cd desktop-v2/src-tauri && cargo fmt --check'
+        language: system
+        pass_filenames: false
+        files: ^desktop-v2/src-tauri/src/.*\.rs$
+
+      - id: desktop-v2-rust-clippy
+        name: desktop-v2 cargo clippy
+        entry: bash -c 'mkdir -p desktop-v2/dist && cd desktop-v2/src-tauri && cargo clippy --all-targets -- -D warnings'
+        language: system
+        pass_filenames: false
+        files: ^desktop-v2/src-tauri/(src/.*\.rs|Cargo\.(toml|lock))$
 
       # mobile/ is a standalone Expo (SDK 56) app with its own bun.lock — it is NOT
       # part of the root bun workspace, so it gets its own install + lockfile-check

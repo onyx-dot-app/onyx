@@ -162,8 +162,12 @@ def _docfetching_task(
     # the entrypoint, we init Sentry here.
     if SENTRY_DSN:
         from onyx.configs.sentry import init_sentry
+        from onyx.utils.telemetry import get_or_generate_uuid
 
-        init_sentry(traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE)
+        init_sentry(
+            traces_sample_rate=SENTRY_CELERY_TRACES_SAMPLE_RATE,
+            instance_id_resolver=get_or_generate_uuid,
+        )
     else:
         logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 

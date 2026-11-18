@@ -1767,7 +1767,6 @@
           "title": "加载使用报告失败。"
         },
         "pendingRow": {
-          "description": "{range} · 通常在一分钟内完成",
           "slowDescription": "仍在处理。您可以离开此页面，报告完成后会显示在这里。",
           "title": "正在准备报告…"
         },
@@ -1805,8 +1804,11 @@
         "toasts": {
           "ready": "使用报告已就绪。",
           "startFailed": "启动报告生成失败：{message}",
-          "timedOut": "报告生成用时过长。请重试，或稍后再来查看。",
           "unknownError": "未知错误"
+        },
+        "failedRow": {
+          "title": "报告生成失败",
+          "description": "请求时间：{time}。请生成新报告以重试。"
         }
       },
       "slackChannelChart": {
@@ -2261,10 +2263,6 @@
       "advanced": {
         "title": "高级选项"
       },
-      "anonymousUsers": {
-        "description": "允许任何人**无需登录**即可开始聊天。他们看不到其他聊天，也无法创建智能体或更改设置。",
-        "title": "允许匿名用户"
-      },
       "autoDetectFilters": {
         "description": "自动应用从搜索查询中推断出的来源和时间过滤条件。",
         "title": "自动识别搜索过滤条件"
@@ -2335,48 +2333,6 @@
       "multiModel": {
         "description": "允许多个模型在对话中并行生成回复。",
         "title": "多模型生成"
-      },
-      "queryHistory": {
-        "anonymized": {
-          "description": "查询对管理员可见，但已移除用户身份信息",
-          "label": "匿名化"
-        },
-        "description": "控制组织的完整对话历史在管理面板中的显示方式。",
-        "disabled": {
-          "description": "查询历史报告已禁用。",
-          "label": "隐藏"
-        },
-        "normal": {
-          "description": "所有查询对管理员可见，并关联到具体用户。",
-          "label": "显示并附带用户信息"
-        },
-        "title": "查询历史可见性"
-      },
-      "retention": {
-        "custom": {
-          "invalidError": "请输入 1 到 {max} 之间的整数天数。",
-          "label": "自定义保留期",
-          "moreTooltip": "更多",
-          "placeholder": "以天为单位",
-          "restoreTooltip": "恢复默认"
-        },
-        "description": "指定 {appName} 在您的组织中保留对话的时长。",
-        "forever": {
-          "label": "永久"
-        },
-        "presets": {
-          "days30": "30 天",
-          "days60": "60 天",
-          "days7": "7 天",
-          "days90": "90 天",
-          "year1": "1 年"
-        },
-        "reduceModal": {
-          "confirmLabel": "缩短保留期",
-          "message": "超过 {days, plural, one {# 天} other {# 天}} 没有活动的对话将被永久删除。此操作无法撤销。",
-          "title": "缩短对话保留期？"
-        },
-        "title": "保留对话历史"
       },
       "searchMode": {
         "description": "用于在组织内快速搜索文档的界面模式。",
@@ -8651,6 +8607,48 @@
         "section": {
           "title": "管理员控制"
         },
+        "queryHistory": {
+          "anonymized": {
+            "description": "查询对管理员可见，但已移除用户身份信息",
+            "label": "匿名化"
+          },
+          "description": "控制组织的完整对话历史在管理面板中的显示方式。",
+          "disabled": {
+            "description": "查询历史报告已禁用。",
+            "label": "隐藏"
+          },
+          "normal": {
+            "description": "所有查询对管理员可见，并关联到具体用户。",
+            "label": "显示并附带用户信息"
+          },
+          "title": "查询历史可见性"
+        },
+        "retention": {
+          "custom": {
+            "invalidError": "请输入 1 到 {max} 之间的整数天数。",
+            "label": "自定义保留期",
+            "moreTooltip": "更多",
+            "placeholder": "以天为单位",
+            "restoreTooltip": "恢复默认"
+          },
+          "description": "指定 {appName} 在您的组织中保留对话的时长。",
+          "forever": {
+            "label": "永久"
+          },
+          "presets": {
+            "days30": "30 天",
+            "days60": "60 天",
+            "days7": "7 天",
+            "days90": "90 天",
+            "year1": "1 年"
+          },
+          "reduceModal": {
+            "confirmLabel": "缩短保留期",
+            "message": "超过 {days, plural, one {# 天} other {# 天}} 没有活动的对话将被永久删除。此操作无法撤销。",
+            "title": "缩短对话保留期？"
+          },
+          "title": "保留对话历史"
+        },
         "userDirectory": {
           "adminsOnly": {
             "description": "仅管理员可以查看完整用户列表。",
@@ -8669,6 +8667,10 @@
           "placeholder": "添加域名（例如 onyx.app）",
           "subDescription": "新用户只能使用此域名列表中的邮箱注册新账户。",
           "title": "允许的邮箱域名"
+        },
+        "anonymousUsers": {
+          "description": "允许任何人**无需登录**即可开始聊天。他们看不到其他聊天，也无法创建智能体或更改设置。",
+          "title": "允许匿名用户"
         },
         "emailDomains": {
           "description": "将新用户注册限制为特定的邮箱域名。",
@@ -11802,9 +11804,17 @@
         "loginBadCredentials": "此账户无法登录，可能已被停用。请联系您的工作区管理员。",
         "loginRequired": "您需要先通过身份提供方登录。",
         "oauthUserAlreadyExists": "使用此邮箱的账户已通过其他登录方式存在。请使用您首次使用的方式登录，或请管理员关联此提供方。",
+        "playgroundActiveTenant": "您公司的团队已经在试用 Onyx。加入您的团队，还是创建新团队？",
+        "playgroundAskAdmin": "请让您的管理员邀请您。",
+        "playgroundCheckFailed": "我们无法核验您的注册。请稍后重试。",
+        "playgroundEmailUsed": "您已使用过 playground 访问权限。",
+        "playgroundLimitReached": "贵公司已使用过 playground 访问权限。",
         "serverError": "您的身份提供方遇到错误。请重试。",
         "staleSignIn": "此登录链接已过期或已失效。请重新登录。",
         "temporarilyUnavailable": "您的身份提供方暂时不可用。请稍后重试。"
+      },
+      "contactSalesButton": {
+        "label": "联系销售"
       },
       "credentialsIssue": {
         "description": "登录凭据不正确或已过期"
@@ -11812,6 +11822,12 @@
       "heading": {
         "description": "您的登录尝试出现问题。",
         "title": "身份验证错误"
+      },
+      "joinTeamButton": {
+        "label": "加入我的团队"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "可能的原因："
@@ -11821,6 +11837,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "如果问题持续存在，请联系您的系统管理员寻求帮助。"
+      },
+      "startNewTeamButton": {
+        "label": "创建新团队"
       },
       "systemDisruptionIssue": {
         "description": "身份验证系统临时中断"
@@ -12521,7 +12540,8 @@
         },
         "stopSubagentsButton": {
           "label": "停止子代理"
-        }
+        },
+        "questionAttachmentsHint": "回答智能体的问题时不能包含文件。请移除文件后再回答。"
       },
       "baseInputBar": {
         "input": {
@@ -12669,6 +12689,12 @@
       },
       "pendingToolApproval": {
         "toast": "请先批准或拒绝待处理的工具调用。"
+      },
+      "pendingToolQuestion": {
+        "toast": "请先回答智能体的问题。"
+      },
+      "pendingUserInput": {
+        "toast": "请先处理待处理的批准请求或问题。"
       }
     },
     "mcpApiKey": {
@@ -13119,6 +13145,15 @@
           },
           "waitingForApproval": {
             "label": "正在等待你的批准"
+          },
+          "waitingForAnswer": {
+            "label": "正在等待你的回答"
+          },
+          "runningCommand": {
+            "label": "正在运行命令"
+          },
+          "editingFiles": {
+            "label": "正在编辑文件"
           }
         },
         "internalSearch": {
@@ -13248,16 +13283,83 @@
           "researchAgent": "研究智能体",
           "thinking": "思考",
           "tool": "工具",
-          "webSearch": "网页搜索"
+          "webSearch": "网页搜索",
+          "terminal": "终端",
+          "applyPatch": "应用补丁",
+          "editFile": "编辑文件",
+          "writeFile": "写入文件"
         },
         "webSearch": {
           "searching": {
             "status": "正在搜索网页"
           }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {正在运行命令} started {已启动命令} failed {命令失败} canceled {已取消} done {已运行命令} other {已运行命令}}",
+            "workdir": {
+              "label": "位于 {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {正在向会话 {sessionId} 发送输入} failed {无法向会话 {sessionId} 发送输入} canceled {已取消} done {已向会话 {sessionId} 发送输入} other {已向会话 {sessionId} 发送输入}}} check {{phase, select, running {正在检查会话 {sessionId}} failed {无法检查会话 {sessionId}} canceled {已取消} done {已检查会话 {sessionId}} other {已检查会话 {sessionId}}}} other {会话 {sessionId}}}"
+          },
+          "output": {
+            "title": "输出"
+          },
+          "exitCode": {
+            "label": "退出代码 {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {已被信号停止} canceled {已取消} deadline_exceeded {已达到时间限制而停止} other {已结束}}"
+          },
+          "stillRunning": {
+            "label": "仍在运行（会话 {sessionId}）"
+          },
+          "truncated": {
+            "label": "输出已截断"
+          },
+          "noOutput": {
+            "text": "无输出"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {已编辑 # 个文件} other {已编辑 # 个文件}}"
+            },
+            "failed": {
+              "status": "编辑失败"
+            },
+            "title": "补丁"
+          },
+          "stopped": {
+            "status": "已停止"
+          }
         }
       },
       "toolApproval": {
         "agentRequest": "{agent} 想要运行 {tool}"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {智能体有一个问题} other {智能体有 # 个问题}}",
+        "other": {
+          "placeholder": "其他：输入您自己的答案",
+          "ariaLabel": "{header} 的其他答案"
+        },
+        "submit": "提交",
+        "page": {
+          "progress": "第 {current} 个问题，共 {total} 个",
+          "next": "下一步",
+          "unanswered": "{count, plural, one {请回答问题 {numbers} 后提交。} other {请回答问题 {numbers} 后提交。}}"
+        },
+        "submitError": "无法发送你的答案。请重试。",
+        "record": {
+          "answered": "已回答",
+          "answeredInChat": "已在聊天中回答",
+          "cancelled": "未回答",
+          "closed": "不再等待",
+          "answer": "{header}：{answer}",
+          "optionAndNote": "{option}（{note}）"
+        }
       },
       "toolbar": {
         "dislikeButton": {

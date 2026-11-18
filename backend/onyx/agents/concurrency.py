@@ -105,10 +105,10 @@ class ExecutionWork:
         future.add_done_callback(lambda _future: self.tracker.finished())
         return future
 
-    def track_operation(self, future: Future[None]) -> None:
+    def track_operation[T](self, future: Future[T]) -> None:
         self.tracker.started()
 
-        def finished(_future: Future[None]) -> None:
+        def finished(_future: Future[T]) -> None:
             self.tracker.finished()
 
         future.add_done_callback(finished)

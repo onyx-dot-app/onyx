@@ -74,6 +74,15 @@ export enum PacketType {
   BASH_TOOL_START = "bash_tool_start",
   BASH_TOOL_DELTA = "bash_tool_delta",
 
+  // Sandbox tool packets: exec_command and write_stdin share the output and
+  // end packets
+  EXEC_COMMAND_START = "exec_command_start",
+  WRITE_STDIN_START = "write_stdin_start",
+  EXEC_OUTPUT_DELTA = "exec_output_delta",
+  EXEC_END = "exec_end",
+  APPLY_PATCH_START = "apply_patch_start",
+  APPLY_PATCH_END = "apply_patch_end",
+
   // Code mode packets: one program that calls other tools. The nested calls
   // stream their own tool packets at the same placement with sub_turn_index.
   CODE_MODE_START = "code_mode_start",
@@ -82,6 +91,10 @@ export enum PacketType {
   // Tool call approvals: the run waits for the user's decision on a request
   TOOL_APPROVAL_REQUEST = "tool_approval_request",
   TOOL_APPROVAL_RESOLVED = "tool_approval_resolved",
+
+  // Questions: the run waits for the user's answers to a question call
+  TOOL_QUESTION_REQUEST = "tool_question_request",
+  TOOL_QUESTION_RESOLVED = "tool_question_resolved",
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
@@ -129,9 +142,10 @@ export enum StopReason {
   USER_CANCELLED = "user_cancelled",
   /** The turn reached its execution deadline. */
   TIMED_OUT = "timed_out",
-  /** The stream ended while tool calls wait for the user's approval. The
-   * response continues in a new stream after the decisions. */
-  AWAITING_APPROVAL = "awaiting_approval",
+  /** The stream ended while tool calls wait for the user: approval decisions
+   * or answers to questions. The response continues in a new stream after
+   * them. */
+  AWAITING_USER = "awaiting_user",
 }
 
 export interface Stop extends BaseObj {
@@ -380,6 +394,70 @@ export interface BashToolDelta extends BaseObj {
   timed_out: boolean;
 }
 
+// Sandbox Tool Packets
+export interface ExecCommandStart extends BaseObj {
+  type: "exec_command_start";
+  cmd: string;
+  workdir: string | null;
+}
+
+export interface WriteStdinStart extends BaseObj {
+  type: "write_stdin_start";
+  session_id: string;
+  // Empty when the call only polls the session for output
+  chars: string;
+}
+
+// Live stdout and stderr in arrival order: a preview that exec_end's output
+// replaces. A replay sends no deltas.
+export interface ExecOutputDelta extends BaseObj {
+  type: "exec_output_delta";
+  text: string;
+}
+
+export type ExecCompletion =
+  | "exited"
+  | "signaled"
+  | "canceled"
+  | "deadline_exceeded";
+
+export interface ExecEnd extends BaseObj {
+  type: "exec_end";
+  exit_code: number | null;
+  completion: ExecCompletion | null;
+  // Set while the process keeps running after the call returned
+  session_id: string | null;
+  wall_time_seconds: number | null;
+  truncated: boolean;
+  // The saved output the model saw (head and tail when cut by tokens); null
+  // only with error
+  output: string | null;
+  // Set when the call failed and has no process result
+  error: string | null;
+}
+
+// The names of the backend's file tools (sandbox_tools.py)
+export type FileToolName = "apply_patch" | "edit" | "write";
+
+export interface ApplyPatchStart extends BaseObj {
+  type: "apply_patch_start";
+  patch: string;
+  // The file tool that made the change; it names the card
+  tool_name: FileToolName;
+}
+
+export interface ApplyPatchFileChange {
+  path: string;
+  change: "add" | "update" | "delete";
+  move_path: string | null;
+}
+
+export interface ApplyPatchEnd extends BaseObj {
+  type: "apply_patch_end";
+  files: ApplyPatchFileChange[];
+  error: string | null;
+}
+
 // Code Mode Packets
 export type CodeModeStatus =
   | "running"
@@ -482,6 +560,18 @@ export type MemoryToolObj =
   | MemoryToolNoAccess
   | SectionEnd
   | PacketError;
+export type ExecToolObj =
+  | ExecCommandStart
+  | WriteStdinStart
+  | ExecOutputDelta
+  | ExecEnd
+  | SectionEnd
+  | PacketError;
+export type ApplyPatchToolObj =
+  | ApplyPatchStart
+  | ApplyPatchEnd
+  | SectionEnd
+  | PacketError;
 export type NewToolObj =
   | SearchToolObj
   | ImageGenerationToolObj
@@ -489,7 +579,9 @@ export type NewToolObj =
   | FetchToolObj
   | CustomToolObj
   | FileReaderToolObj
-  | MemoryToolObj;
+  | MemoryToolObj
+  | ExecToolObj
+  | ApplyPatchToolObj;
 
 export type ReasoningObj =
   | ReasoningStart
@@ -569,6 +661,52 @@ export interface ToolApprovalResolved extends BaseObj {
 
 export type ToolApprovalObj = ToolApprovalRequest | ToolApprovalResolved;
 
+// Question Packets
+export interface ToolQuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface ToolQuestion {
+  id: string;
+  /** A short label, at most 12 characters. */
+  header: string;
+  question: string;
+  /** In the model's order; a recommended option comes first. */
+  options: ToolQuestionOption[];
+}
+
+/** The user's answer to one question: a listed option, a note, or both. */
+export interface ToolQuestionAnswer {
+  question_id: string;
+  option_label?: string | null;
+  user_note?: string | null;
+}
+
+/** A question call waits for the user's answers; placed at the call. */
+export interface ToolQuestionRequest extends BaseObj {
+  type: "tool_question_request";
+  question_request_id: string;
+  tool_call_id: string;
+  questions: ToolQuestion[];
+}
+
+/**
+ * How a question call ended: answered on its card (`answers`) or by a message
+ * that the user typed in the chat (`message`), or cancelled because its run
+ * stopped first.
+ */
+export interface ToolQuestionResolved extends BaseObj {
+  type: "tool_question_resolved";
+  question_request_id: string;
+  outcome: "answered" | "cancelled";
+  answered_via?: "card" | "message" | null;
+  answers?: ToolQuestionAnswer[] | null;
+  message?: string | null;
+}
+
+export type ToolQuestionObj = ToolQuestionRequest | ToolQuestionResolved;
+
 // Union type for all possible streaming objects
 export type ObjTypes =
   | UserMessage
@@ -586,6 +724,7 @@ export type ObjTypes =
   | CodingAgentObj
   | CodeModeObj
   | ToolApprovalObj
+  | ToolQuestionObj
   | PacketErrorObj
   | CitationObj;
 
@@ -648,6 +787,16 @@ export interface FileReaderToolPacket {
   placement: Placement;
   obj: FileReaderToolObj;
 }
+export interface ExecToolPacket {
+  placement: Placement;
+  obj: ExecToolObj;
+}
+
+export interface ApplyPatchToolPacket {
+  placement: Placement;
+  obj: ApplyPatchToolObj;
+}
+
 export interface MemoryToolPacket {
   placement: Placement;
   obj: MemoryToolObj;

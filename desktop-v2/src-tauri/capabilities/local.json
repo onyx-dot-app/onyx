@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "local-windows",
+  "description": "Bundled local windows only. The main window shows the remote server UI and gets no IPC.",
+  "local": true,
+  "windows": ["onboarding", "login", "launcher", "preferences"],
+  "permissions": [
+    "core:event:default",
+    "core:window:allow-start-dragging",
+    "allow-check-server",
+    "allow-save-server",
+    "allow-login",
+    "allow-get-auth-methods",
+    "allow-sign-in-with-sso",
+    "allow-get-prefs",
+    "allow-set-hotkey",
+    "allow-change-server",
+    "allow-sign-out",
+    "allow-ask",
+    "allow-search",
+    "allow-open-chat-in-main",
+    "allow-open-external",
+    "allow-hide-launcher"
+  ]
+}

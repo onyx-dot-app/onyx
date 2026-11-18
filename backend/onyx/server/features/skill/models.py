@@ -1,7 +1,6 @@
 """Pydantic request and response models for the skills API."""
 
 import datetime
-from dataclasses import replace
 from typing import Any, Literal
 from uuid import UUID
 
@@ -502,12 +501,17 @@ class SkillShareRequest(SkillBulkSharing):
     def to_change(self) -> SkillSharingChange:
         if self.group_settings is None:
             return super().to_change()
-        return replace(
-            super().to_change(),
-            group_settings={
-                setting.group_id: setting.installation_policy
-                for setting in self.group_settings
-            },
+        return (
+            super()
+            .to_change()
+            .model_copy(
+                update={
+                    "group_settings": {
+                        setting.group_id: setting.installation_policy
+                        for setting in self.group_settings
+                    }
+                }
+            )
         )
 
 

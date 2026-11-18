@@ -24,8 +24,9 @@ the parser returns ``None`` and the caller falls back to an unfiltered list.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from enum import Enum
+
+from pydantic import BaseModel, ConfigDict
 
 
 class ScimFilterOperator(str, Enum):
@@ -36,9 +37,10 @@ class ScimFilterOperator(str, Enum):
     STARTS_WITH = "sw"
 
 
-@dataclass(frozen=True, slots=True)
-class ScimFilter:
+class ScimFilter(BaseModel):
     """Parsed SCIM filter expression."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     attribute: str
     operator: ScimFilterOperator

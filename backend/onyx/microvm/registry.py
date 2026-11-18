@@ -621,6 +621,43 @@ def clear_sandbox_daemon_key_if(
     return tenant_cache.delete_if_value(_DAEMON_KEY_PREFIX + str(sandbox_id), held)
 
 
+class StoredDaemonKey(BaseModel):
+    """A daemon key as the cache holds it: the whole record, for compare-and-set,
+    and the ciphertext of the key inside it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    record: bytes
+    ciphertext: bytes
+
+
+def read_sandbox_daemon_key_ciphertext(
+    tenant_cache: CacheBackend, sandbox_id: UUID
+) -> StoredDaemonKey | None:
+    raw = tenant_cache.get(_DAEMON_KEY_PREFIX + str(sandbox_id))
+    if raw is None:
+        return None
+    return StoredDaemonKey(
+        record=raw, ciphertext=base64.b64decode(json.loads(raw)["key"])
+    )
+
+
+def replace_sandbox_daemon_key_ciphertext(
+    tenant_cache: CacheBackend,
+    sandbox_id: UUID,
+    stored: StoredDaemonKey,
+    ciphertext: bytes,
+) -> bool:
+    """Swap the key's ciphertext while the record is still `stored`. Key rotation
+    uses this; the attempt and owner stay as they are. False when the record
+    changed meanwhile."""
+    record = json.loads(stored.record)
+    record["key"] = base64.b64encode(ciphertext).decode()
+    return tenant_cache.replace_if_value(
+        _DAEMON_KEY_PREFIX + str(sandbox_id), stored.record, json.dumps(record)
+    )
+
+
 _NODE_REPORT_LEASE_PREFIX = "sandbox_fc:node_report_lease:"
 _NODE_REPORT_JTI_PREFIX = "sandbox_fc:node_report_jti:"
 

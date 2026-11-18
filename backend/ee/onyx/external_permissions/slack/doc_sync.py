@@ -255,7 +255,8 @@ def slack_doc_sync(
     )
     slack_connector.set_credentials_provider(provider)
     slack_client = slack_connector.slack_client
-    assert slack_client is not None, "set_credentials_provider builds the gateway."
+    if slack_client is None:
+        raise RuntimeError("set_credentials_provider did not build the Slack gateway.")
 
     grid_team_ids: list[str] | None = None
     try:

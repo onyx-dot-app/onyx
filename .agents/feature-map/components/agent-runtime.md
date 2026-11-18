@@ -94,7 +94,8 @@ prompt holds and the compaction prompt text.
 
 ```
 Agent (history, checkpoint, tools, prepare_step / after_step,
-       before_tool_call / after_tool_call / on_finish / on_suspend hooks)
+       before_tool_call / after_tool_call / on_finish / on_suspend /
+       on_drained hooks)
   start() -> Run (one request, step budget, own cancellation signal)
     step: prepare_step -> _compact_context -> model generation
           -> ToolBatch -> after_step: continue or finish
@@ -129,6 +130,19 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   results and the run still suspends. A suspend hook that stops for
   cancellation finishes the run as cancelled. Chat uses both hooks to close
   code mode cells ([[code-execution#code-mode-interrupted-run]]).
+  `Agent.on_drained` runs after each finish or suspension once the run's work
+  drains (`Run._work_drained`, from `_drain_workers` and `_suspend`): its tool
+  threads, work that a tool added through `ToolInvocation.run_work` (a code
+  mode cell's driver and its tool call threads), and its foreground
+  children's work (`Run.track_child_work`), not background children. A suspension calls it only when no foreground child
+  waits or works (`RunCoordination.pending_children`,
+  `AgentCoordinator.children_idle`, read only); otherwise the run's later end does.
+  A run that hands off in that state calls no hook; the restoring owner's
+  run end does. It cannot change results. Errors, `AgentCancelled`
+  included, are logged and the run still becomes idle and reusable. Only the
+  root `chat/agent.py:ChatAgent` installs it, to end per-run tool state
+  (`create_chat_agent` passes it to the root only), such as the sandbox turn
+  ([[code-execution]]); subagents share the root's tools and install none.
   `chat/presentation.py:ResponsePresenter` renders each amendment with
   `chat/renderer.py:ToolRenderer.amend`. A call without an ended card
   completes with the amended result. An ended card renders only what the
@@ -145,8 +159,8 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   provider context-limit error before any output streams compacts and retries
   once.
 - `backend/onyx/agents/tool_execution.py:ToolBatch` runs a step's calls in
-  parallel. `ToolExecutionMode.SEQUENTIAL` serializes calls to one tool name,
-  and `merge_arguments` merges compatible calls into one worker. It records
+  parallel. `ToolExecutionMode.SEQUENTIAL` serializes calls to one tool name, or
+  to the tools of one `sequence_group`, and `merge_arguments` merges compatible calls into one worker. It records
   results as they complete. Each pass of `ToolBatch.execute` then ends the
   completed calls in call order, and model history replays them in call order. A step with more than `MAX_TOOL_CALLS_PER_STEP` (64) calls or a
   repeated call ID fails the whole run.
@@ -171,10 +185,12 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 
 **Live paths.** In-process suspension is live: deep research and the coding
 agent suspend the parent on `ChildRunWait`, and it continues in the same
-process. Checkpoint transfer is live for chat tool approvals only: the runtime
-gates calls of `AgentTool.approval_required` through the coordinator's
-`ToolApprovals` (`chat/run_store.py:ChatRunStore.request_approval`), and any
-run whose waits are all on people hands off in one park pass of
+process. Checkpoint transfer is live for chat tool approvals and the root's
+questions: the runtime gates calls of `AgentTool.approval_required` through
+the coordinator's `ToolApprovals`
+(`chat/run_store.py:ChatRunStore.request_approval`), the question tool returns
+a `RESULT` request (`chat/tool_questions.py:open_tool_question`), and any run
+whose waits are all on people hands off in one park pass of
 `ChatRunStore.poll_control` after `ChatRunStore.may_park`, the root included;
 the root reports its park to its turn through the store's `on_root_parked`
 callback. A parent
@@ -186,8 +202,9 @@ the saved answers), the leaf first
 call waits in a saved `NestedInputWait`
 ([[mcp-and-custom-tools#program-call-waits-in-cell]]). No product code calls
 `Run.suspend`. Only a user Stop calls `Run.submit`:
-`ChatRunStore.reject_waiting_approvals` gives each live run that the Stop
-cancels its saved rejections, then cancels it, under the run's execution lock. `chat/run_store.py:ChatRunStore.restore_agent`
+`ChatRunStore.reject_waiting_inputs` gives each live run that the Stop
+cancels its saved rejections and question cancellations, then cancels it,
+under the run's execution lock. `chat/run_store.py:ChatRunStore.restore_agent`
 loads a saved child for a new run, and `chat/restoration.py:restore_subagent`
 rebuilds it with the current request's tools and settings. Product saves lock
 the response, check the checkpoint owner and delete any row at a terminal
@@ -196,7 +213,8 @@ To check again, run
 `git grep -n "\.handoff(\|\.suspend()\|\.resume(\|\.submit(\|PendingToolInput" -- backend/onyx ':!backend/onyx/agents' ':!backend/onyx/chat/run_store.py'`
 and ignore thread-pool and job `submit` calls and the code mode `resume`
 calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
-(`resume`) and `chat/tool_approvals.py:open_tool_approval`.
+(`resume`), `chat/tool_approvals.py:open_tool_approval` and
+`chat/tool_questions.py:open_tool_question`.
 
 ---
 
@@ -214,8 +232,9 @@ calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
    from a product path as a side effect.** A new tool, hook or `ToolApprovals`
    that returns a `PendingToolInput`, or a caller of `Run.suspend`, `ChatRunStore.handoff` or
    `ChatRunStore.resume`, makes that path live without review of its storage, ownership and display.
-   Chat tool approvals are the one reviewed source of `PendingToolInput`; a
-   new source needs its own saved requests and resume trigger, as
+   Chat tool approvals and the root's question tool are the reviewed sources
+   of `PendingToolInput`; a new source needs its own saved requests and
+   resume trigger, as
    [[mcp-and-custom-tools#chat-approval-durable-wait]] has. Update the
    Live paths paragraph in the same change ([[#wire-module]]).
 3. `restored-tools-must-match` **A restored run needs the same tools and

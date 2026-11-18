@@ -31,7 +31,6 @@ can compute access for many users or many plugins.
 """
 
 from collections.abc import Collection, Iterable
-from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
 from uuid import UUID
@@ -750,15 +749,17 @@ def order_skill_names(
 # --- Access of plugins for responses ----------------------------------------
 
 
-@dataclass(frozen=True)
-class PluginUserShare:
+class PluginUserShare(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True)
+
     user_id: UUID
     email: str
     permission: SkillSharePermission
 
 
-@dataclass(frozen=True)
-class PluginGroupShare:
+class PluginGroupShare(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True)
+
     group_id: int
     group_name: str
     permission: SkillSharePermission
@@ -776,11 +777,12 @@ class PluginGroupRowAccess(BaseModel):
     installation_policy: PluginInstallationPolicy | None
 
 
-@dataclass(frozen=True)
-class PluginAccess:
+class PluginAccess(BaseModel):
     """A plugin's grants and the values one user sees. User shares and
     ``group_shares`` hold only rows with a permission; ``group_rows`` holds
     every group row."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     plugin_id: UUID
     author_user_id: UUID | None

@@ -1,9 +1,10 @@
 # Code Execution
 
 > Runs code for the user: `run_python` and the coding agent's `bash` send code
-> to an external Code Interpreter service, and code mode's `execute_code` runs
+> to an external Code Interpreter service, code mode's `execute_code` runs
 > a Python program that calls the other chat tools in local Monty sandbox
-> workers.
+> workers, and the sandbox tools run commands and edit files in the user's
+> Firecracker VM.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
@@ -44,6 +45,17 @@
   set to an empty value**, the model is not offered `run_python` or the coding
   agent. The user sees no error. When code fails or
   times out, the user sees the error output and the turn continues.
+- **With harness sandboxes** (`SANDBOX_RUNTIME=firecracker` and
+  `SANDBOX_FC_TEMPLATE`), every chat agent gives the model `exec_command`,
+  `write_stdin` and file tools: `edit` and `write` for Claude models (in
+  the shapes of Claude Code's Edit and Write), `apply_patch` for all other
+  models. This applies except in anonymous,
+  incognito and multi-model turns and in Slack and Discord bot turns (bots
+  get service-account sandboxes later). Admins cannot turn them off
+  per agent, and users cannot pick or force them. Commands run in the user's
+  private VM, in the chat's session directory, whose files stay for later
+  turns. The user sees each command and its output as it streams, and the
+  files that each patch, edit or write changed, on the same patch card.
 
 ---
 
@@ -53,7 +65,8 @@ This component owns `PythonTool`, `BashTool`, the Code Interpreter client and
 its version gates, the one-row settings table with its admin API and page, the
 meaning of `BASH_TOOL_SENTINEL_ID`, and code mode: its sandbox driver, tool
 stubs, program store, model-facing text, `CodeModeTool` and its result
-details. Code mode's packets and replay belong to [[streaming-protocol]], and
+details, and the sandbox tools (`exec_command`, `write_stdin`,
+`apply_patch`, `edit`, `write`). Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
 
 It does not own:
@@ -66,7 +79,8 @@ It does not own:
 - Access to generated files. They use the chat-session stamp that
   [[file-store-and-user-files]] defines.
 - The Craft sandboxes ([[craft-sandboxes]]). They are a separate system and do
-  not use the Code Interpreter client.
+  not use the Code Interpreter client. The sandbox tools call their
+  `HarnessSandbox` client, which [[craft-sandboxes]] owns.
 
 ---
 
@@ -113,7 +127,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         execute_code is offered; in both modes
                                         SearchTool._run, not the prompt, caps queries at 3
   stubs.py:build_tool_stubs             function names `<namespace>__<name>` from
-                                        Tool.code_mode_function_name (MCP: server);
+                                        Tool.code_mode_function_name (MCP: server), as
+                                        methods of `class tools` (programs call
+                                        `await tools.<name>(...)`);
                                         `listed_text` (no DEFERRED ones, in the description);
                                         `program_text(code)` types one program: the listed
                                         functions, the DEFERRED ones whose names the code
@@ -127,10 +143,12 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         tool names); the call returns at yield_time_ms, at
                                         yield_control(), or at the end
       execute_program                   sandbox.py: checkout a new Monty worker (the wait
-                                        observes Stop), feed the imports of IMPORTABLE_MODULES,
+                                        observes Stop), feed the imports of IMPORTABLE_MODULES
+                                        and of the `tools` module (_tools_module),
                                         type-check tool and store/load calls against the
                                         program's stubs, feed_start
-        FunctionSnapshot                tool call -> CodeCell._call on a thread, at most
+        FunctionSnapshot                `tools.<name>` call -> CodeCell._call on a thread
+                                        (a bare tool name is a NameError), at most
                                         MAX_CONCURRENT_TOOL_CALLS per cell and
                                         an equal share of MAX_TOOL_CALL_THREADS per process
                                         at once (the rest queue); store()/load()/yield_control() answered at
@@ -172,6 +190,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         result of each observation Stop interrupted, and one
                                         with a CellClosing for each cell whose last saved
                                         observation is running
+  chat/agent.py:_prepare_step (a run's first step) -> CodeCells.reopen
+                                        empty cells for the next run of the same agent (a
+                                        message or results to an idle child) after finish
   chat/agent.py:_suspended_cells (Agent.on_suspend) -> CodeCells.suspend
                                         the same when the run suspends, with
                                         reason="suspended"; later calls can start cells. A
@@ -187,6 +208,93 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         with `parked`)
   chat/renderer.py:CodeModeRenderer one child ToolRenderer per call, sub_turn_index = n;
                                         a closing record follows the card section end
+```
+
+```
+exec_command / write_stdin / apply_patch | edit + write (no tool row; Tool.id is None)
+  prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
+                                        and not for anonymous users (one VM per user), in
+                                        incognito or when the request selects more than
+                                        one model, and not for
+                                        Slack or Discord bot turns (MessageOrigin
+                                        SLACKBOT / DISCORDBOT; the chat route sets
+                                        DISCORDBOT from the bot's service API key)
+  chat/execution.py:create_chat_agent   builds the tools with one SandboxTurn for every
+                                        agent, as it adds the skill tools; a durable resume
+                                        prepares the turn again and builds them the same way.
+                                        sandbox_tools_for_model(model names) owns the set and
+                                        its order: EditTool and WriteTool when any of the turn
+                                        LLM's names (model_identity_names) contains "claude"
+                                        (model_capabilities.is_claude_model, the one rule that
+                                        LLM requests and prompt caching use too), else
+                                        ApplyPatchTool; never both. The reserved-token prompt
+                                        (calculate_reserved_tokens) names the same set
+  prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
+                                        (sandbox_tools.py:sandbox_guidance): one use per
+                                        SandboxTool that the turn offers, in order, named
+                                        as the model calls it (CodeModeTool.called_name in
+                                        code mode); the tool descriptions describe only
+                                        the tools
+  SandboxTurn.start_call                first call: the user's Sandbox row
+                                        (build/db/sandbox.py:get_or_create_sandbox); before
+                                        each call: HarnessSandbox.begin_turn (an error is
+                                        logged, the call still runs)
+  ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin; each
+                                        ExecOutputDelta -> ToolProgress; the result is the
+                                        exec header text (wall time, exit code or ending,
+                                        session ID while it runs, token count, output) and
+                                        SandboxExecResult. A cancel of the current signal (a
+                                        Stop, or the end of the calling cell) ends the wait,
+                                        kills the command (SIGKILL) and raises AgentCancelled;
+                                        the stopped call has no result and renders as stopped
+  ApplyPatchTool (SEQUENTIAL)           sandbox/patch.py parses; paths become session-relative
+                                        (harness_base.session_relative_path); one
+                                        stat_files call gets the facts of every path and its
+                                        directory. A path is an existing file's device
+                                        and inode, or its directory's and its name
+                                        (patch.ensure_unique_targets). Add, Update and Move
+                                        onto a link fail ("<path> is a symbolic link to
+                                        <target>; edit that path instead"); a link out of
+                                        the session or with an absolute target, a link loop,
+                                        or the directory itself fails; every file is read and
+                                        every result computed (at most
+                                        APPLY_PATCH_MAX_STAGED_BYTES of updated files held in
+                                        memory; each search is linear, and the searches of one
+                                        patch read at most MAX_SEEK_LINES source lines and
+                                        stop at a Stop); a Stop before the
+                                        first write changes nothing; then write_file (keeps
+                                        an existing file's mode) and delete_file (a link
+                                        goes, not its target). No lock spans runs: a patch
+                                        whose context changed fails verification, and two
+                                        runs that patch one file at once can lose an edit
+  EditTool / WriteTool (SEQUENTIAL)     sandbox_tools._change_file: one stat_files call; the
+                                        same checks, read (_read_text) and mode-keeping write
+                                        (_write_file) as apply_patch, and the same size caps
+                                        (patch.FILE_TOOL_MAX_INPUT_BYTES / _MAX_FILE_BYTES;
+                                        an edit whose result passes the file cap fails before
+                                        it is built). edit: patch.edit_text, exact text with
+                                        no fuzzy passes; only line breaks may differ. Unchanged
+                                        text keeps its line breaks; new text gets the file's
+                                        first one, as an apply_patch update does. An empty
+                                        old_string creates a file, or fills an empty one;
+                                        on a file with content it fails ("Cannot create new
+                                        file - file already exists."). Errors and results use
+                                        Claude Code's texts. write creates or overwrites
+                                        (parents created); no read-first rule, as reads are
+                                        not tracked. Both save ApplyPatchResult.
+                                        The three file tools share one sequence_group:
+                                        their calls of one step run one at a time
+  Agent.on_drained (root ChatAgent)     SandboxTurn.end: create_chat_agent passes it to the
+                                        root chat agent only (bind_run_store: also to a
+                                        restored root), not to subagents or deep research
+                                        (which gets no sandbox tools). end_turn after each
+                                        finish or suspension of the root run, once its work
+                                        (tool threads, program calls, foreground children)
+                                        drains. A background child that outlives the root
+                                        lets its renewed mark expire (TURN_LEASE_SECONDS). A
+                                        suspension with a waiting or working foreground
+                                        child, and a handoff in that state, end no turn; the
+                                        run's later end or the lease does
 ```
 
 **Availability.** `PythonTool.is_available` needs three things: a non-empty
@@ -422,10 +530,24 @@ health calls are not retried.
     named from `mcp__<server id>__<server>__<tool>`
     (`MCPTool.code_mode_function_name`), converted to a Python identifier
     that stays unique among the turn's functions; the description names the
-    MCP servers with deferred functions in one fixed paragraph. Every function is also an
-    attribute of the importable module `functions`
-    (`tools/tool_implementations/code_mode/sandbox.py:FUNCTIONS_MODULE`), so `from functions import f`
-    works like the global. `CodeModeResultSpec.usage` adds a code-mode-only
+    MCP servers with deferred functions in one fixed paragraph. Programs call
+    every function through the `tools` namespace, `await tools.f(...)`: a
+    module that every program imports
+    (`tools/tool_implementations/code_mode/sandbox.py:TOOLS_NAMESPACE`), which
+    the program's stubs declare as `class tools`, so the type checker checks
+    each call. Bare names stay free for the program's own functions, and a
+    model does not read the functions as tools that it can call directly.
+    `store`, `load`, `yield_control` and `tool_search` stay globals; a
+    function can take one of their names, and only the result types that the
+    stubs declare avoid them. An explicit `import tools` or
+    `from tools import f` stops the program before it runs
+    (`TOOLS_IMPORT_MESSAGE`). The system prompt's tool sections name each
+    tool as the model calls it (`CodeModeTool.called_name`). A
+    direct call of a function name, or of its tool's name, also after
+    `tools.` or `tools_`, as a tool of its own returns how to call it from a
+    program
+    (`Tool.inner_call_hint`, `agents/tool_execution.py`).
+    `CodeModeResultSpec.usage` adds a code-mode-only
     docstring note; `internal_search` uses it to ask for all queries of one
     need in one call, since each call runs its own retrieval pipeline. Image
     generation is nested: a program gets `list[ImageResult]` (`file_id`,
@@ -624,6 +746,18 @@ health calls are not retried.
     Their calls, also the unfinished ones, may have had effects. The final
     `code_mode_delta` has `status="cancelled"` live and on replay. A tool whose
     rerun can repeat effects must set `interrupted_result`.
+19. `sandbox-program-value` **A sandbox call gives a program other data
+    than the model.** `exec_command` and `write_stdin` use
+    `CodeModeResultKind.DETAILS`:
+    `tools/tool_implementations/code_mode/stubs.py:program_value` returns the result
+    details as the spec's model declares them (`ExecCommandOutput`, a base of
+    the saved `SandboxExecResult`, so `type` and `truncated` stay out), while
+    the model reads the exec header text. A tool whose program value is not its
+    content uses this kind; do not special-case a tool name. All sandbox
+    tools set `interrupted_result`, and a patch that fails verification writes
+    nothing; a sandbox error during the writes can leave some files changed,
+    and the error names them and the file that failed. `edit` and `write`
+    change one file, after all checks pass.
 
 ---
 
@@ -643,7 +777,9 @@ health calls are not retried.
   keeps running; the model works on and gets the rest with `wait_code`. A cell
   never outlives its response: `CodeCells.finish` stops it, and a closing
   record saves what it did after its last observation, so the saved history
-  and the next turn see its side effects.
+  and the next turn see its side effects. Its driver and tool call threads join
+  the run's work (`ToolInvocation.run_work`), so the run drains only after a
+  call that outlived the program returns.
 - **Code mode keeps values with `store()`, not interpreter state.** The
   model chooses what persists, so the saved data stays small and JSON. Workers
   stay stateless, so any worker in any process can run the next program. The

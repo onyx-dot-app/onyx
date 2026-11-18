@@ -51,7 +51,18 @@
               "overview/onyx_anywhere/website_widget",
               "overview/onyx_anywhere/slack",
               "overview/onyx_anywhere/discord_bot",
-              "overview/onyx_anywhere/mcp_server",
+              {
+                "group": "MCP Server",
+                "icon": "plug",
+                "expanded": true,
+                "pages": [
+                  "overview/onyx_anywhere/mcp_server",
+                  "overview/onyx_anywhere/mcp_server/claude",
+                  "overview/onyx_anywhere/mcp_server/chatgpt",
+                  "overview/onyx_anywhere/mcp_server/codex",
+                  "overview/onyx_anywhere/mcp_server/claude_code"
+                ]
+              },
               "developers/guides/llm_gateway",
               "overview/onyx_anywhere/cli"
             ]

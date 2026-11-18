@@ -34,6 +34,7 @@ const (
 	Sandboxd_UploadFile_FullMethodName     = "/craft.sandboxd.v1.Sandboxd/UploadFile"
 	Sandboxd_ListFiles_FullMethodName      = "/craft.sandboxd.v1.Sandboxd/ListFiles"
 	Sandboxd_DeleteFile_FullMethodName     = "/craft.sandboxd.v1.Sandboxd/DeleteFile"
+	Sandboxd_StatFiles_FullMethodName      = "/craft.sandboxd.v1.Sandboxd/StatFiles"
 	Sandboxd_ZipFiles_FullMethodName       = "/craft.sandboxd.v1.Sandboxd/ZipFiles"
 	Sandboxd_CaptureSession_FullMethodName = "/craft.sandboxd.v1.Sandboxd/CaptureSession"
 	Sandboxd_RestoreSession_FullMethodName = "/craft.sandboxd.v1.Sandboxd/RestoreSession"
@@ -129,6 +130,15 @@ type SandboxdClient interface {
 	// DeleteFile removes a file or a link (never its target), or a directory
 	// with recursive. A missing path is not an error (deleted is false).
 	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error)
+	// StatFiles reports what the kernel knows about session paths, in one
+	// call, so a caller can check every file of a change before it writes
+	// one. For each path: its own entry (lstat), and its target through the
+	// links inside the session directory (stat), or why there is none. It
+	// needs a session_id, reads no content, and answers per path: only a bad
+	// path, a limit or a cancel fails the call. At most 1,000 paths and
+	// 1 MiB of path bytes per call, so the request fits the daemon's 4 MiB
+	// message limit and the answer the 16 MiB pass-through limit.
+	StatFiles(ctx context.Context, in *StatFilesRequest, opts ...grpc.CallOption) (*StatFilesResponse, error)
 	// ZipFiles streams a deflate zip of the regular files under a directory.
 	// The last message is the summary. A limit error ends the stream with a
 	// status; drop the bytes received so far.
@@ -355,6 +365,16 @@ func (c *sandboxdClient) DeleteFile(ctx context.Context, in *DeleteFileRequest, 
 	return out, nil
 }
 
+func (c *sandboxdClient) StatFiles(ctx context.Context, in *StatFilesRequest, opts ...grpc.CallOption) (*StatFilesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StatFilesResponse)
+	err := c.cc.Invoke(ctx, Sandboxd_StatFiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *sandboxdClient) ZipFiles(ctx context.Context, in *ZipFilesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ZipFilesResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Sandboxd_ServiceDesc.Streams[5], Sandboxd_ZipFiles_FullMethodName, cOpts...)
@@ -532,6 +552,15 @@ type SandboxdServer interface {
 	// DeleteFile removes a file or a link (never its target), or a directory
 	// with recursive. A missing path is not an error (deleted is false).
 	DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error)
+	// StatFiles reports what the kernel knows about session paths, in one
+	// call, so a caller can check every file of a change before it writes
+	// one. For each path: its own entry (lstat), and its target through the
+	// links inside the session directory (stat), or why there is none. It
+	// needs a session_id, reads no content, and answers per path: only a bad
+	// path, a limit or a cancel fails the call. At most 1,000 paths and
+	// 1 MiB of path bytes per call, so the request fits the daemon's 4 MiB
+	// message limit and the answer the 16 MiB pass-through limit.
+	StatFiles(context.Context, *StatFilesRequest) (*StatFilesResponse, error)
 	// ZipFiles streams a deflate zip of the regular files under a directory.
 	// The last message is the summary. A limit error ends the stream with a
 	// status; drop the bytes received so far.
@@ -619,6 +648,9 @@ func (UnimplementedSandboxdServer) ListFiles(context.Context, *ListFilesRequest)
 }
 func (UnimplementedSandboxdServer) DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteFile not implemented")
+}
+func (UnimplementedSandboxdServer) StatFiles(context.Context, *StatFilesRequest) (*StatFilesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StatFiles not implemented")
 }
 func (UnimplementedSandboxdServer) ZipFiles(*ZipFilesRequest, grpc.ServerStreamingServer[ZipFilesResponse]) error {
 	return status.Error(codes.Unimplemented, "method ZipFiles not implemented")
@@ -889,6 +921,24 @@ func _Sandboxd_DeleteFile_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Sandboxd_StatFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StatFilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SandboxdServer).StatFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Sandboxd_StatFiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SandboxdServer).StatFiles(ctx, req.(*StatFilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Sandboxd_ZipFiles_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(ZipFilesRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1036,6 +1086,10 @@ var Sandboxd_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteFile",
 			Handler:    _Sandboxd_DeleteFile_Handler,
+		},
+		{
+			MethodName: "StatFiles",
+			Handler:    _Sandboxd_StatFiles_Handler,
 		},
 		{
 			MethodName: "BrowserStart",

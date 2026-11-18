@@ -14,6 +14,7 @@ from onyx.db.action_policy import (
     replace_workspace_action_policies,
     users_can_manage_policies,
 )
+from onyx.db.build_session import get_build_session
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     ActionPolicy,
@@ -42,6 +43,7 @@ from onyx.db.external_app_readiness import (
 )
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
 from onyx.db.plugin import get_plugin_version_validity
+from onyx.db.sandbox import get_sandbox_by_user_id
 from onyx.db.skill import affected_user_ids_for_skill
 from onyx.db.utils import UNSET, none_as_unset
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -56,8 +58,6 @@ from onyx.external_apps.providers.registry import (
 )
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.server.features.build import connect_app
-from onyx.server.features.build.db.build_session import get_build_session
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.external_apps.models import (
     ConnectAppDecisionRequest,
     CreateBuiltInExternalAppRequest,

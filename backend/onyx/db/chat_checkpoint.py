@@ -4,7 +4,7 @@ from collections.abc import Collection
 from uuid import UUID
 
 from pydantic import JsonValue, TypeAdapter
-from sqlalchemy import any_, exists, select, true
+from sqlalchemy import any_, exists, select, true, union
 from sqlalchemy.orm import Session, aliased
 
 from onyx.agents.models import InputSource, RunFailure, RunFailureKind, RunStatus
@@ -16,14 +16,20 @@ from onyx.db.chat import (
     session_descendants,
 )
 from onyx.db.chat_response import finish_checkpoint__no_commit
-from onyx.db.enums import ApprovalDecision, record_mode_persists_content
+from onyx.db.enums import (
+    ApprovalDecision,
+    QuestionOutcome,
+    record_mode_persists_content,
+)
 from onyx.db.models import (
     ApprovalRequest,
     ChatInput,
     ChatMessage,
     ChatResponseCheckpoint,
     ChatSession,
+    QuestionRequest,
 )
+from onyx.db.question_request import resolve_question_requests__no_commit
 from onyx.llm.override_models import LLMOverride
 from onyx.tools.models import ChatToolSelection
 from onyx.utils.postgres_sanitization import sanitize_json_like
@@ -198,7 +204,7 @@ def interrupt_response__no_commit(
 
     A cancelled response keeps `failure`, the reason its Stop gave, if any; a
     failed one keeps `failure`, or says that its owner stopped. Its approval
-    requests end, since no call waits for them anymore. With `keep_parked`, a
+    requests and questions end, since no call waits for them anymore. With `keep_parked`, a
     parked response, SUSPENDED with a checkpoint, stays as it is. Returns the dumps that its checkpoint
     owned, which the caller deletes after commit; None when the response did
     not end here.
@@ -216,6 +222,9 @@ def interrupt_response__no_commit(
         return None
     close_pending_approval_requests__no_commit(
         session, ApprovalDecision.EXPIRED, None, chat_message_ids=[message_id]
+    )
+    resolve_question_requests__no_commit(
+        session, QuestionOutcome.CANCELLED, chat_message_ids=[message_id]
     )
     response.response_status = RunStatus.CANCELLED if cancelled else RunStatus.ERROR
     response.response_failure = (
@@ -248,7 +257,7 @@ def resumable_parked_runs(session: Session, chat_session_id: UUID) -> list[Parke
     """The parked runs of the chat, on any branch, whose waits all ended.
 
     A run is parked while its response is SUSPENDED with a checkpoint. Its
-    waits are its approval requests, the foreground child runs that its
+    waits are its approval requests and questions, the foreground child runs that its
     checkpoint names and, for a subagent, the runs that it delegated, whose
     result rows it has not read. It resumes once none is undecided or
     unfinished; a request whose row was deleted, with its tool's server, gives
@@ -260,6 +269,10 @@ def resumable_parked_runs(session: Session, chat_session_id: UUID) -> list[Parke
     unfinished = (RunStatus.RUNNING, RunStatus.SUSPENDED)
     requests = select(ApprovalRequest.id).where(
         ApprovalRequest.chat_message_id == ChatMessage.id
+    )
+    questions = select(QuestionRequest.id).where(
+        QuestionRequest.chat_message_id == ChatMessage.id,
+        QuestionRequest.outcome.is_(None),
     )
     children = select(child.id).where(
         child.id == any_(ChatResponseCheckpoint.child_run_ids)
@@ -290,6 +303,7 @@ def resumable_parked_runs(session: Session, chat_session_id: UUID) -> list[Parke
         .where(
             ChatMessage.response_status == RunStatus.SUSPENDED,
             ~requests.where(ApprovalRequest.decision.is_(None)).exists(),
+            ~questions.exists(),
             ~children.where(child.response_status.in_(unfinished)).exists(),
             ~delegations.where(delegated.response_status.in_(unfinished)).exists(),
         )
@@ -347,17 +361,22 @@ def parked_response_ids(
     session: Session, user_id: UUID, chat_session_id: UUID | None = None
 ) -> list[int]:
     """The parked responses of the user's chats, or of one chat. A parked tree
-    always waits on a request somewhere, so only chats with requests are read."""
+    always waits on an approval request or a question somewhere, so only
+    chats with them are read."""
     roots = session.scalars(
-        select(ApprovalRequest.chat_session_id)
-        .join(ChatSession, ChatSession.id == ApprovalRequest.chat_session_id)
-        .where(
-            ChatSession.user_id == user_id,
-            ApprovalRequest.chat_session_id == chat_session_id
-            if chat_session_id is not None
-            else true(),
+        union(
+            *(
+                select(table.chat_session_id)
+                .join(ChatSession, ChatSession.id == table.chat_session_id)
+                .where(
+                    ChatSession.user_id == user_id,
+                    table.chat_session_id == chat_session_id
+                    if chat_session_id is not None
+                    else true(),
+                )
+                for table in (ApprovalRequest, QuestionRequest)
+            )
         )
-        .distinct()
     ).all()
     parked: list[int] = []
     for root in roots:

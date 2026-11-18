@@ -11,9 +11,6 @@ from typing import Any, Dict, cast
 
 import psycopg2.errors
 from prometheus_client import Gauge, start_http_server
-from redis.exceptions import LockNotOwnedError
-from redis.lock import Lock
-from redis.lock import Lock as RedisLock
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.http_retry import (
@@ -26,6 +23,8 @@ from slack_sdk.socket_mode.response import SocketModeResponse
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLock, CacheLockLostError
 from onyx.configs.app_configs import DEV_MODE, POD_NAME, POD_NAMESPACE
 from onyx.configs.constants import MessageType, OnyxRedisLocks
 from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
@@ -91,9 +90,9 @@ from onyx.onyxbot.slack.utils import (
     remove_onyx_bot_tag,
     respond_in_thread_or_channel,
 )
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.models import SlackBotTokens
 from onyx.tracing.setup import setup_tracing
+from onyx.utils.encryption import validate_encryption_configuration
 from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
@@ -151,7 +150,7 @@ class SlackbotHandler:
         self.slack_bot_tokens: Dict[tuple[str, int], SlackBotTokens] = {}
 
         # Store Redis lock objects here so we can release them properly
-        self.redis_locks: Dict[str, Lock] = {}
+        self.redis_locks: Dict[str, CacheLock] = {}
 
         self.running = True
         self.pod_id = os.environ.get("HOSTNAME", "unknown_pod")
@@ -330,14 +329,11 @@ class SlackbotHandler:
                 )
                 break
 
-            redis_client = get_redis_client(tenant_id=tenant_id)
-            # Acquire a Redis lock (non-blocking)
-            # thread_local=False because the shutdown event is handled
-            # on an arbitrary thread
-            rlock: RedisLock = redis_client.lock(
+            # Acquire a cache lock (non-blocking). The shutdown event releases it
+            # on an arbitrary thread, which a cache lock allows.
+            rlock: CacheLock = get_cache_backend(tenant_id=tenant_id).lock(
                 OnyxRedisLocks.SLACK_BOT_LOCK,
                 timeout=TENANT_LOCK_EXPIRATION,
-                thread_local=False,
             )
             lock_acquired = rlock.acquire(blocking=False)
 
@@ -406,6 +402,19 @@ class SlackbotHandler:
                             "No Slack bots for tenant %s; lock released (if held).",
                             tenant_id,
                         )
+            except Exception:
+                # Setup failed before the tenant was registered, so no later pass
+                # releases its lock. A cache lock may never expire: release it now.
+                if tenant_id not in self.tenant_ids:
+                    orphaned = self.redis_locks.pop(tenant_id, None)
+                    if orphaned is not None:
+                        try:
+                            orphaned.release()
+                        except Exception:
+                            logger.warning(
+                                "Error releasing lock for tenant %s", tenant_id
+                            )
+                raise
             finally:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
@@ -420,7 +429,7 @@ class SlackbotHandler:
                 if tenant_id in self.redis_locks and not DEV_MODE:
                     try:
                         self.redis_locks[tenant_id].release()
-                    except LockNotOwnedError:
+                    except CacheLockLostError:
                         # Expected: lock expired or was stolen; nothing to release.
                         pass
                     except Exception as e:
@@ -434,7 +443,6 @@ class SlackbotHandler:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(
                 tenant_id or POSTGRES_DEFAULT_SCHEMA
             )
-            redis_client = get_redis_client(tenant_id=tenant_id)
 
             try:
                 with get_session_with_current_tenant() as db_session:
@@ -470,7 +478,7 @@ class SlackbotHandler:
                             try:
                                 self.redis_locks[tenant_id].release()
                                 logger.info("Released lock for tenant %s", tenant_id)
-                            except LockNotOwnedError:
+                            except CacheLockLostError:
                                 # Expected: lock expired or was stolen.
                                 pass
                             except Exception as e:
@@ -572,9 +580,8 @@ class SlackbotHandler:
         current_time = int(time.time())
         logger.debug("Sending heartbeats for %s active tenants", len(tenant_ids))
         for tenant_id in tenant_ids:
-            redis_client = get_redis_client(tenant_id=tenant_id)
             heartbeat_key = f"{OnyxRedisLocks.SLACK_BOT_HEARTBEAT_PREFIX}:{pod_id}"
-            redis_client.set(
+            get_cache_backend(tenant_id=tenant_id).set(
                 heartbeat_key, current_time, ex=TENANT_HEARTBEAT_EXPIRATION
             )
 
@@ -721,7 +728,7 @@ class SlackbotHandler:
                 try:
                     self.redis_locks[tenant_id].release()
                     logger.info("Released lock for tenant %s", tenant_id)
-                except LockNotOwnedError:
+                except CacheLockLostError:
                     # Expected during shutdown: lock expired or was stolen.
                     pass
                 except Exception as e:
@@ -1395,11 +1402,15 @@ if __name__ == "__main__":
     # Start telemetry before the handler starts message-processing threads.
     start_telemetry("slack")
 
+    # Before the handler: it starts threads that take tenant locks, and a failed
+    # check must not leave those locks held.
+    set_is_ee_if_available()
+    validate_encryption_configuration()
+
     # Initialize the tenant handler which will manage tenant connections
     logger.info("Starting SlackbotHandler")
     tenant_handler = SlackbotHandler()
 
-    set_is_ee_if_available()
     setup_tracing()
 
     try:
