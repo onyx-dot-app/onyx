@@ -35,6 +35,8 @@ from onyx.db.models import (
     User,
 )
 from onyx.db.utils import UnsetType, is_set
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_oauth_client
 from onyx.integrations.models import IntegrationActionSpec, IntegrationPluginRow
 
@@ -295,12 +297,15 @@ def _apply_spec(action: IntegrationAction, spec: IntegrationActionSpec) -> None:
 
 def lock_integration__no_commit(integration_id: int, db_session: Session) -> None:
     """Locks the integration row, then expires the session, so the reads that
-    follow see what other transactions committed before the lock."""
+    follow see what other transactions committed before the lock. Raises
+    NOT_FOUND when another transaction deleted the row."""
     db_session.flush()
-    db_session.execute(
+    locked = db_session.scalar(
         select(Integration.id).where(Integration.id == integration_id).with_for_update()
     )
     db_session.expire_all()
+    if locked is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration not found.")
 
 
 def replace_integration_actions__no_commit(

@@ -1,6 +1,7 @@
 """Two requests that write the same user grant, or the same plugin link of an
 agent, at the same time. The second one must wait for the first, not fail on
-the unique key."""
+the unique key. A write that waited for a delete of the integration gets
+NOT_FOUND."""
 
 from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
@@ -11,10 +12,15 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from onyx.db.integration import list_integration_actions
+from onyx.db.integration import (
+    delete_integration__no_commit,
+    list_integration_actions,
+)
 from onyx.db.integration_policy import list_persona_plugin_links
 from onyx.db.models import Integration, Persona, User
 from onyx.db.persona import upsert_persona
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.models import ActionSettings, LinkValue, PersonaPluginLink
 from onyx.integrations.service import member_actions, set_action_grants__no_commit
 from tests.external_dependency_unit.conftest import MakeTestUser
@@ -144,3 +150,28 @@ def test_concurrent_saves_of_one_agent_plugin_link_both_succeed(
     assert [(row.plugin_id, row.action_settings) for row in links] == [
         (plugin_id, {"default": "ask"})
     ]
+
+
+def test_grant_save_that_waited_for_integration_delete_is_not_found(
+    db_session: Session, integration: Integration, make_test_user: MakeTestUser
+) -> None:
+    user_id = make_test_user("delete_race").id
+    integration_id = integration.id
+    key = list_integration_actions(integration_id, db_session)[0].key
+
+    def remove(session: Session) -> None:
+        delete_integration__no_commit(
+            session.get_one(Integration, integration_id), session
+        )
+
+    def save(session: Session) -> None:
+        set_action_grants__no_commit(
+            session.get_one(User, user_id),
+            session.get_one(Integration, integration_id),
+            {key: "allow"},
+            session,
+        )
+
+    with pytest.raises(OnyxError) as raised:
+        _run_second_while_first_is_open(db_session, remove, save)
+    assert raised.value.error_code is OnyxErrorCode.NOT_FOUND
