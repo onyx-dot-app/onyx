@@ -36,9 +36,9 @@ _TOKEN = re.compile(r"[^\W_]+")
 # BM25 parameters: term frequency saturation and document length normalization.
 _K1 = 1.2
 _B = 0.75
-# Weight of a parameter match against a name, namespace or description match.
-# At 0.5 or less, a match only on the parameters does not outrank a function
-# whose name has the query word.
+# Parameter text counts at this weight against name, namespace and description
+# text. BM25 scores the two apart, so a large schema does not dilute a name or
+# description match.
 PARAMETER_WEIGHT = 0.5
 
 

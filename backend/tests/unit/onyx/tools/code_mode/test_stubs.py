@@ -686,7 +686,7 @@ def test_tool_search_matches_argument_names_and_nested_descriptions() -> None:
     assert index is not None
 
     assert [match.name for match in index.search("swatch", 8)] == ["assign_ticket"]
-    # A name match ranks above a match on an argument name.
+    # Here the name match ranks above the match on an argument name.
     assert [match.name for match in index.search("assignee", 8)] == [
         "get_assignee",
         "assign_ticket",
