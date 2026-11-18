@@ -84,13 +84,19 @@ export default function WebSearchBody({ toolCall }: ToolCardBodyProps) {
     return (
       <RetrievalBody
         queries={search.queries}
-        results={search.results.map((result) => ({
-          id: result.url,
-          title: result.title,
-          sourceType: ValidSources.Web,
-          sourceUrl: result.url,
-          description: result.snippet || undefined,
-        }))}
+        // `/search-lite` does not dedupe across queries; a page shows once.
+        results={search.results
+          .filter(
+            (result, index, all) =>
+              all.findIndex((other) => other.url === result.url) === index
+          )
+          .map((result) => ({
+            id: result.url,
+            title: result.title,
+            sourceType: ValidSources.Web,
+            sourceUrl: result.url,
+            description: result.snippet || undefined,
+          }))}
         isComplete={isComplete}
       />
     );
