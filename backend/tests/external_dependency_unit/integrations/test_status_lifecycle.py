@@ -27,8 +27,12 @@ from onyx.integrations.connections import (
     mark_sign_in_settings_changed,
     sign_in_settings_for,
 )
+from onyx.integrations.service import organization_status
 from tests.external_dependency_unit.conftest import MakeTestUser
-from tests.external_dependency_unit.integration_helpers import make_app_integration
+from tests.external_dependency_unit.integration_helpers import (
+    make_app_integration,
+    make_mcp_integration,
+)
 from tests.external_dependency_unit.integrations.conftest import (
     add_connection,
     new_oauth_client,
@@ -43,6 +47,7 @@ def test_status_four_states(
         db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"X-Key": "{api_key}"},
     )
     shared, _ = make_app_integration(
         db_session,
@@ -107,6 +112,24 @@ def test_oauth_without_client_id_is_not_set_up(
     assert integration_status(discovery, user, db_session).state is (
         ConnectionState.NOT_CONNECTED
     )
+
+
+def test_user_api_key_without_fields_is_not_set_up(
+    db_session: Session,
+    make_test_user: MakeTestUser,
+) -> None:
+    user = make_test_user("no_fields")
+    integration, _ = make_mcp_integration(
+        db_session,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+    )
+    assert integration_status(integration, user, db_session).state is (
+        ConnectionState.NOT_SET_UP
+    )
+    status = organization_status(integration, db_session)
+    assert status.state is ConnectionState.NOT_SET_UP
+    assert status.reason == "Add a header template with a value that each user fills."
 
 
 def test_client_id_change_resets_connections_but_secret_change_does_not(

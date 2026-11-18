@@ -143,10 +143,12 @@ def test_mcp_config_individual_api_key_and_reauth(
     db_session: Session,
     make_test_user: MakeTestUser,
 ) -> None:
+    template = {"Authorization": "Bearer {api_key}", "X-User": "{user_email}"}
     integration, _ = make_mcp_integration(
         db_session,
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.API_KEY,
+        header_template=template,
     )
     # A per-user API key server kept its template in the admin headers.
     _seed(
@@ -154,7 +156,7 @@ def test_mcp_config_individual_api_key_and_reauth(
         integration,
         None,
         IntegrationLegacyFormat.MCP_CONFIG,
-        {"headers": {"Authorization": "Bearer {api_key}", "X-User": "{user_email}"}},
+        {"headers": template},
     )
     user = make_test_user("legacy_mcp_key")
     rejected_user = make_test_user("legacy_mcp_rejected")

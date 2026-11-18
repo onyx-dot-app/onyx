@@ -954,6 +954,25 @@ def oauth_client_configured(
     return client_id is not None
 
 
+def user_key_fields_missing(integration: Integration) -> bool:
+    """A per-user API key with no field for the user to fill."""
+    return (
+        integration.auth_mode is IntegrationAuthMode.INDIVIDUAL
+        and integration.auth_method is IntegrationAuthMethod.API_KEY
+        and not credential_field_keys(integration)
+    )
+
+
+def sign_in_configured(
+    integration: Integration, oauth_client: IntegrationOAuthClient | None
+) -> bool:
+    if integration.auth_mode is IntegrationAuthMode.NONE:
+        return True
+    return oauth_client_configured(
+        integration, oauth_client
+    ) and not user_key_fields_missing(integration)
+
+
 def integration_status(
     integration: Integration, user: User | None, db_session: Session
 ) -> IntegrationStatus:
@@ -994,9 +1013,7 @@ def integration_statuses(
     )
     statuses: dict[int, IntegrationStatus] = {}
     for integration in integrations:
-        if integration.auth_mode is not IntegrationAuthMode.NONE and (
-            not oauth_client_configured(integration, oauth_clients.get(integration.id))
-        ):
+        if not sign_in_configured(integration, oauth_clients.get(integration.id)):
             statuses[integration.id] = IntegrationStatus(
                 state=ConnectionState.NOT_SET_UP,
                 reason=not_set_up_reason(integration),

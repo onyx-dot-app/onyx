@@ -6,8 +6,10 @@ The old tables stay the tables of each kind: each integration points at its
 mcp_server, external_app or OpenAPI tool row, as gated_app does. The old tables
 only get new columns, and approval_request.gated_app_id becomes nullable; a
 rollback undoes both. The data copy is SQL, except the actions of an OpenAPI
-spec and of a built-in app catalog, which only app code can read. It moves no
-secret in clear: each credential is copied as its encrypted bytes.
+spec and of a built-in app catalog, which only app code can read, and the
+header template of a per-user API key MCP server, which is in its encrypted
+admin config. It moves no secret in clear: each credential is copied as its
+encrypted bytes.
 
 Revision ID: 730bce2814a0
 Revises: 2bb0e564ae2d
@@ -17,6 +19,7 @@ Create Date: 2026-11-13 14:42:45.411165
 
 import json
 import logging
+import re
 import time
 from collections.abc import Callable
 from typing import Any
@@ -32,6 +35,7 @@ from onyx.external_apps.providers.registry import get_endpoint_catalog
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
 )
+from onyx.utils.encryption import decrypt_bytes_to_string
 
 logger = logging.getLogger("alembic.runtime.migration")
 
@@ -1449,6 +1453,76 @@ def _seed_api_actions() -> None:
         )
 
 
+# The template that the old code used for a per-user API key MCP server with
+# no template of its own.
+_DEFAULT_MCP_USER_KEY_TEMPLATE = {"Authorization": "Bearer {api_key}"}
+_TEMPLATE_TOKEN_RE = re.compile(r"\{\{|\}\}|\{([^{}]+)\}")
+
+
+def _mcp_user_key_template(config: bytes | None) -> dict[str, str]:
+    if config is None:
+        return _DEFAULT_MCP_USER_KEY_TEMPLATE
+    try:
+        data = json.loads(decrypt_bytes_to_string(config))
+    except Exception as e:
+        logger.warning("An MCP admin config does not decrypt: %s", type(e).__name__)
+        return _DEFAULT_MCP_USER_KEY_TEMPLATE
+    if not isinstance(data, dict):
+        return _DEFAULT_MCP_USER_KEY_TEMPLATE
+    # An older per-user server kept its template in the admin headers.
+    template = data.get("header_template")
+    if template is None:
+        template = data.get("headers")
+    if not isinstance(template, dict):
+        return _DEFAULT_MCP_USER_KEY_TEMPLATE
+    headers = {
+        name: value
+        for name, value in template.items()
+        if isinstance(value, str) and name.lower() != "host"
+    }
+    return headers or _DEFAULT_MCP_USER_KEY_TEMPLATE
+
+
+def _set_mcp_user_key_templates() -> None:
+    """Give each per-user API key MCP server the header template of its
+    admin config, and the fields that each user fills."""
+    bind = op.get_bind()
+    rows = bind.execute(
+        sa.text(
+            "SELECT i.id, c.config FROM integration i "
+            "JOIN mcp_server m ON m.id = i.mcp_server_id "
+            "LEFT JOIN mcp_connection_config c "
+            "ON c.id = m.admin_connection_config_id "
+            "WHERE i.auth_mode = 'individual' AND i.auth_method = 'api_key' "
+            "ORDER BY i.id"
+        )
+    ).all()
+    for row in rows:
+        template = _mcp_user_key_template(
+            bytes(row.config) if row.config is not None else None
+        )
+        keys: list[str] = []
+        for value in template.values():
+            for match in _TEMPLATE_TOKEN_RE.finditer(value):
+                key = match.group(1)
+                if key is not None and key != "user_email" and key not in keys:
+                    keys.append(key)
+        fields = [
+            {"key": key, "label": key.replace("_", " "), "secret": True} for key in keys
+        ]
+        bind.execute(
+            sa.text(
+                "UPDATE integration SET header_template = CAST(:template AS jsonb), "
+                "credential_fields = CAST(:fields AS jsonb) WHERE id = :id"
+            ),
+            {
+                "id": row.id,
+                "template": json.dumps(template),
+                "fields": json.dumps(fields) if fields else None,
+            },
+        )
+
+
 def _copy_integrations() -> None:
     for statement in (
         _CREATE_SOURCES,
@@ -1496,6 +1570,7 @@ def upgrade() -> None:
         # tool against writes while the tables are made.
         _with_bounded_lock_wait(_create_tables)
         _copy_integrations()
+        _set_mcp_user_key_templates()
         _seed_api_actions()
         # The chat tables stay locked from here to the commit, so they are
         # altered last, with only the statement that needs a new column of

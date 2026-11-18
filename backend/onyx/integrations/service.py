@@ -95,6 +95,7 @@ from onyx.integrations.connections import (
     render_headers,
     sign_in_host,
     sign_in_settings_for,
+    user_key_fields_missing,
 )
 from onyx.integrations.craft import always_asks, craft_service_urls
 from onyx.integrations.kinds.mcp_server import fetch_mcp_actions, mcp_action_specs
@@ -1046,6 +1047,8 @@ def _setup_reason(
 ) -> str:
     if not oauth_client_configured(integration, oauth_client):
         return "Add the OAuth client ID."
+    if user_key_fields_missing(integration):
+        return "Add a header template with a value that each user fills."
     return "Connect the account of the organization."
 
 
