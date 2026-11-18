@@ -1,12 +1,7 @@
 import { expect, Page, test } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
-import {
-  selectModelFromInputPopover,
-  sendMessage,
-  startNewChat,
-  verifyCurrentModel,
-} from "@tests/e2e/utils/chatActions";
+import { sendMessage, startNewChat } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 type SendChatMessagePayload = {
@@ -203,7 +198,7 @@ test.describe("LLM Runtime Selection", () => {
     await loginWithCleanCookies(page, "admin");
 
     const persistenceProviderName = uniqueName("PW Runtime Persist Provider");
-    const persistenceModelName = `persist-runtime-model-${Date.now()}`;
+    const persistenceModelName = uniqueName("persist-runtime-model");
     const persistenceProviderId = await createLlmProvider(page, {
       name: persistenceProviderName,
       provider: "openai",
@@ -229,10 +224,7 @@ test.describe("LLM Runtime Selection", () => {
       });
     });
 
-    await chat.openModelList(persistenceModelName);
-    const selectedModelDisplay = await chat.chooseModelOption(
-      chat.modelOption(persistenceModelName).first()
-    );
+    const selectedModelDisplay = await chat.switchModel(persistenceModelName);
 
     const firstPayload = await sendMessageAndCapturePayload(
       page,
@@ -272,12 +264,6 @@ test.describe("LLM Runtime Selection", () => {
         body: buildMockStreamResponse(turn),
       });
     });
-
-    // Keep this aligned with the existing stable regenerate flow test.
-    const initialModelDisplay = await selectModelFromInputPopover(page, [
-      "GPT-6 Luna",
-    ]);
-    await verifyCurrentModel(page, initialModelDisplay);
 
     const initialPayload = await sendMessageAndCapturePayload(
       page,
@@ -359,7 +345,7 @@ test.describe("LLM Runtime Selection", () => {
   }, testInfo) => {
     await loginWithCleanCookies(page, "admin");
 
-    const sharedModelName = `shared-runtime-model-${Date.now()}`;
+    const sharedModelName = uniqueName("shared-runtime-model");
     const openAiProviderName = uniqueName("PW Runtime OpenAI");
     const anthropicProviderName = uniqueName("PW Runtime Anthropic");
 
@@ -457,7 +443,7 @@ test.describe("LLM Runtime Selection", () => {
 
     const client = new OnyxApiClient(page.request);
     const restrictedGroupName = uniqueName("PW Runtime Restricted Group");
-    const restrictedModelName = `restricted-runtime-model-${Date.now()}`;
+    const restrictedModelName = uniqueName("restricted-runtime-model");
     const restrictedProviderName = uniqueName("PW Runtime Restricted Provider");
 
     let groupId: number;

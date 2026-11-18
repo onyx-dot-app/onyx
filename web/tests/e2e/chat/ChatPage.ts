@@ -458,10 +458,10 @@ export class ChatPage {
     return modelName;
   }
 
-  /** Replaces the first pill's model through its switch list. */
-  async switchModel(modelName: string): Promise<void> {
+  /** Replaces the first pill's model through its switch list and returns the pill's display name. */
+  async switchModel(modelName: string): Promise<string> {
     await this.openModelList(modelName);
-    await this.chooseModelOption(this.modelOption(modelName).first());
+    return this.chooseModelOption(this.modelOption(modelName).first());
   }
 
   async maximizeModelTemperature(modelName: string): Promise<void> {
