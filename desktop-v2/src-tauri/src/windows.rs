@@ -168,7 +168,7 @@ pub fn route(app: &AppHandle) {
                 main_window::renew_session(&app, &server, &token).await;
             }
             Ok(false) => {
-                let _ = state.clear_token(&server);
+                let _ = state.clear_rejected_token(&server, &token);
                 // The rejected account's answers must not reach the next one.
                 reset_launcher(&app);
                 let _ = open_login(&app);

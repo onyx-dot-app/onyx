@@ -134,10 +134,33 @@ impl AppState {
         true
     }
 
-    pub fn clear_token(&self, server: &str) -> Result<(), String> {
+    /// Ends the session: takes its token, clears it and starts a new epoch
+    /// under the lock `commit_sign_in` holds, so a sign-in that finishes at the
+    /// same time is either signed out here or stale. Returns the token (for
+    /// the server logout) and the result of clearing the stored one.
+    pub fn end_session(&self, server: &str) -> (Option<String>, Result<(), String>) {
+        let mut cache = self.token.lock().unwrap_or_else(|p| p.into_inner());
+        let token = match cache.take() {
+            Some((cached_server, token)) if cached_server == server => Some(token),
+            _ => session_store::load(server),
+        };
+        let cleared = session_store::clear(server);
+        self.end_epoch();
+        (token, cleared)
+    }
+
+    /// Clears a token the server rejected, unless a new sign-in replaced it.
+    pub fn clear_rejected_token(&self, server: &str, rejected: &str) -> Result<(), String> {
         // Held until the keychain entry is gone, so a concurrent `token()`
         // cannot load the old token back into the cache.
         let mut cache = self.token.lock().unwrap_or_else(|p| p.into_inner());
+        let current = match cache.as_ref() {
+            Some((cached_server, token)) if cached_server == server => Some(token.clone()),
+            _ => session_store::load(server),
+        };
+        if current.as_deref() != Some(rejected) {
+            return Ok(());
+        }
         *cache = None;
         session_store::clear(server)
     }

@@ -121,20 +121,19 @@ pub fn set_hotkey(
 
 async fn end_session(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
-    // The token is cleared before the epoch moves on, and requests read the
-    // epoch before the token: a request either sees no token or goes stale.
-    let server = state.server().ok();
-    let token = server.as_deref().and_then(|s| state.token(s));
-    let cleared = server.as_deref().map(|s| state.clear_token(s));
-    state.end_epoch();
-    crate::sso::cancel(app);
-    let Some(server) = server else {
+    // Requests read the epoch before the token: one that starts during this
+    // either sees no token or goes stale.
+    let Ok(server) = state.server() else {
+        state.end_epoch();
+        crate::sso::cancel(app);
         return Ok(());
     };
+    let (token, cleared) = state.end_session(&server);
+    crate::sso::cancel(app);
     if let Some(token) = token {
         state.api.logout(&server, &token).await;
     }
-    cleared.unwrap_or(Ok(()))?;
+    cleared?;
     main_window::close(app, &server);
     windows::reset_launcher(app);
     Ok(())

@@ -126,11 +126,11 @@ function Launcher() {
     }
   }
 
-  // Citations are buttons; search results are rows with role="button".
+  // Answer links, citation buttons, and search result rows (role="button").
   function results(): HTMLElement[] {
     return Array.from(
       resultsRef.current?.querySelectorAll<HTMLElement>(
-        'button:not(:disabled), [role="button"]:not([aria-disabled="true"])'
+        'a[href], button:not(:disabled), [role="button"]:not([aria-disabled="true"])'
       ) ?? []
     );
   }
@@ -244,10 +244,13 @@ function Launcher() {
   );
 }
 
-// A local window cannot follow links itself; they open through the app.
+// A local window cannot follow links itself; they open through the app, which
+// opens web links and server paths only. Other links show as plain text.
+const OPENABLE_LINK = /^(https?:|\/)/i;
+
 const ANSWER_COMPONENTS: CompactMarkdownProps["components"] = {
   a: ({ children, href }) =>
-    href ? (
+    href && OPENABLE_LINK.test(href) ? (
       <a
         href={href}
         className="text-link hover:text-link-hover underline underline-offset-2"
