@@ -111,7 +111,6 @@
 1 backend/tests/integration/tests/scim/test_scim_tokens.py
 3 backend/tests/integration/tests/skills/test_chat_skills.py
 1 backend/tests/integration/tests/spending_limits/test_spending_limits_api.py
-1 backend/tests/integration/tests/streaming_endpoints/test_chat_question_tool.py
 1 backend/tests/integration/tests/streaming_endpoints/test_chat_stream.py
 1 backend/tests/integration/tests/streaming_endpoints/test_gateway_usage_tracking.py
 1 backend/tests/integration/tests/streaming_endpoints/test_resume_stream.py
@@ -178,11 +177,10 @@
 7 web/tests/e2e/agents/user_file_attachment.spec.ts
 2 web/tests/e2e/auth/password_managements.spec.ts
 1 web/tests/e2e/auth/pat_management.spec.ts
-7 web/tests/e2e/chat/chat-search-command-menu.spec.ts
 3 web/tests/e2e/chat/current_agent.spec.ts
 7 web/tests/e2e/chat/input_bar_behaviors.spec.ts
 4 web/tests/e2e/connectors/federated_slack.spec.ts
-5 web/tests/e2e/connectors/inlineFileManagement.spec.ts
+1 web/tests/e2e/connectors/inlineFileManagement.spec.ts
 2 web/tests/e2e/mcp/McpOAuthFlow.ts
 1 web/tests/e2e/utils/agentUtils.ts
 3 web/tests/e2e/utils/dragUtils.ts

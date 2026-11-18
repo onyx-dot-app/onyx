@@ -1,6 +1,7 @@
 import { test, expect, Page, Locator } from "@playwright/test";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
+import { ChatSearchCommandMenu } from "@tests/e2e/pages/ChatSearchCommandMenu";
 import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
 
 // Test data storage
@@ -17,19 +18,16 @@ const TIMESTAMP_MASK = '[data-testid="command-menu-timestamp"]';
  * Helper to get the command menu dialog locator (using the content wrapper)
  */
 function getCommandMenuContent(page: Page): Locator {
-  return page.locator('[role="dialog"]:has([data-command-menu-list])');
+  return new ChatSearchCommandMenu(page).dialog;
 }
 
 /**
  * Helper to open the command menu and return a scoped locator
  */
 async function openCommandMenu(page: Page): Promise<Locator> {
-  await page.getByRole("button", { name: "Search Chats" }).click();
-  const dialog = getCommandMenuContent(page);
-  await expect(
-    dialog.getByPlaceholder("Search chat sessions, projects...")
-  ).toBeVisible();
-  return dialog;
+  const menu = new ChatSearchCommandMenu(page);
+  await menu.open();
+  return menu.dialog;
 }
 
 test.describe("Chat Search Command Menu", () => {
@@ -141,8 +139,6 @@ test.describe("Chat Search Command Menu", () => {
     const dialog = await openCommandMenu(page);
     await dialog.locator('[data-command-item="recent-sessions"]').click();
 
-    await page.waitForTimeout(500);
-
     for (let i = 1; i <= 5; i++) {
       await expect(
         dialog.locator(`[data-command-item="chat-${chatSessionIds[i - 1]}"]`)
@@ -155,8 +151,6 @@ test.describe("Chat Search Command Menu", () => {
   test('"Projects" filter expands to show all 4 projects', async ({ page }) => {
     const dialog = await openCommandMenu(page);
     await dialog.locator('[data-command-item="projects"]').click();
-
-    await page.waitForTimeout(500);
 
     for (let i = 1; i <= 4; i++) {
       await expect(
@@ -207,12 +201,10 @@ test.describe("Chat Search Command Menu", () => {
   // -- Search --
 
   test("Search finds matching chat session", async ({ page }) => {
-    const dialog = await openCommandMenu(page);
-
-    const input = dialog.getByPlaceholder("Search chat sessions, projects...");
-    await input.fill(`${TEST_PREFIX} Chat 3`);
-    await page.waitForTimeout(500);
-
+    const menu = new ChatSearchCommandMenu(page);
+    await menu.open();
+    await menu.searchChats(`${TEST_PREFIX} Chat 3`);
+    const { dialog } = menu;
     await expect(
       dialog.locator(`[data-command-item="chat-${chatSessionIds[2]}"]`)
     ).toBeVisible();
@@ -228,8 +220,6 @@ test.describe("Chat Search Command Menu", () => {
 
     const input = dialog.getByPlaceholder("Search chat sessions, projects...");
     await input.fill(`${TEST_PREFIX} Project 2`);
-    await page.waitForTimeout(500);
-
     await expect(
       dialog.locator(`[data-command-item="project-${projectIds[1]}"]`)
     ).toBeVisible();
@@ -249,12 +239,10 @@ test.describe("Chat Search Command Menu", () => {
   });
 
   test("Search with no results shows empty state", async ({ page }) => {
-    const dialog = await openCommandMenu(page);
-
-    const input = dialog.getByPlaceholder("Search chat sessions, projects...");
-    await input.fill("xyz123nonexistent9999");
-    await page.waitForTimeout(500);
-
+    const menu = new ChatSearchCommandMenu(page);
+    await menu.open();
+    await menu.searchChats("xyz123nonexistent9999");
+    const { dialog } = menu;
     const noResults = dialog.getByText("No results found");
     const noMore = dialog.getByText("No more results");
     await expect(noResults.or(noMore)).toBeVisible();
@@ -277,12 +265,10 @@ test.describe("Chat Search Command Menu", () => {
   });
 
   test("Clicking a chat session navigates to its URL", async ({ page }) => {
-    const dialog = await openCommandMenu(page);
-
-    const input = dialog.getByPlaceholder("Search chat sessions, projects...");
-    await input.fill(`${TEST_PREFIX} Chat 1`);
-    await page.waitForTimeout(500);
-
+    const menu = new ChatSearchCommandMenu(page);
+    await menu.open();
+    await menu.searchChats(`${TEST_PREFIX} Chat 1`);
+    const { dialog } = menu;
     await dialog
       .locator(`[data-command-item="chat-${chatSessionIds[0]}"]`)
       .click();
@@ -296,8 +282,6 @@ test.describe("Chat Search Command Menu", () => {
 
     const input = dialog.getByPlaceholder("Search chat sessions, projects...");
     await input.fill(`${TEST_PREFIX} Project 1`);
-    await page.waitForTimeout(500);
-
     await dialog
       .locator(`[data-command-item="project-${projectIds[0]}"]`)
       .click();
