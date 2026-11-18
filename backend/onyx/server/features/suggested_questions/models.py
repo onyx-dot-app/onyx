@@ -43,6 +43,16 @@ class TriagedChunk(BaseModel):
     has_fact: float
 
 
+class DraftQuestion(BaseModel):
+    """A question the writing call wrote, before the search test."""
+
+    text: str
+    # The chunk it was written from; its document is the one the search test
+    # must find.
+    chunk: InferenceChunk
+    best_for: UseCase | None
+
+
 class PoolQuestion(BaseModel):
     """A question that passed the search test. It stores the document it came
     from, never who may see it: access is checked when a person opens the chat."""
