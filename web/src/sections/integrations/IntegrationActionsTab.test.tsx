@@ -1,4 +1,7 @@
 import { PointerEventsCheckLevel } from "@testing-library/user-event";
+import { act } from "@testing-library/react";
+import { useSWRConfig } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   render,
   screen,
@@ -49,6 +52,15 @@ function rowOf(name: string): HTMLElement {
 }
 
 afterEach(() => jest.restoreAllMocks());
+
+let revalidateActions: () => Promise<unknown> = async () => undefined;
+
+/** Lets a test revalidate the actions, as a window focus does in the app. */
+function ActionsRevalidator() {
+  const { mutate } = useSWRConfig();
+  revalidateActions = () => mutate(SWR_KEYS.adminIntegrationActions(1));
+  return null;
+}
 
 test("groups actions with an unknown read-only state apart from write actions", async () => {
   mockFetch({
@@ -146,6 +158,61 @@ test("saves only the default row and the actions that changed", async () => {
     expect(requestBody(fetchMock, "PUT", URL_ACTIONS)).toEqual({
       default_policy: "ask",
       actions: { get_issue: "ask" },
+    })
+  );
+});
+
+test("a save after a revalidation keeps the newer value of a row it did not edit", async () => {
+  const newer = actions.map((action) =>
+    action.key === "get_issue"
+      ? {
+          ...action,
+          admin_policy: "blocked" as const,
+          effective_admin_policy: "blocked" as const,
+        }
+      : action
+  );
+  let loads = 0;
+  const fetchMock = mockFetch({
+    [URL_ACTIONS]: () => {
+      loads += 1;
+      return { default_policy: null, actions: loads === 1 ? actions : newer };
+    },
+    [`PUT ${URL_ACTIONS}`]: { default_policy: "ask", actions: newer },
+  });
+  const u = user();
+  render(
+    <>
+      <IntegrationActionsTab
+        integration={makeDetail()}
+        onOpenConfiguration={jest.fn()}
+      />
+      <ActionsRevalidator />
+    </>
+  );
+  await screen.findByText(copy.default.title);
+  const defaultRow = screen.getByRole("group", { name: copy.default.title });
+  await u.click(
+    within(defaultRow).getByRole("button", { name: labels.ask.label })
+  );
+
+  // Another admin blocked Get issue, and the page revalidates.
+  await act(async () => {
+    await revalidateActions();
+  });
+  await waitFor(() =>
+    expect(
+      within(rowOf("Get issue")).getByRole("button", {
+        name: labels.deny.label,
+      })
+    ).toHaveAttribute("aria-pressed", "true")
+  );
+
+  await u.click(screen.getByRole("button", { name: copy.save }));
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "PUT", URL_ACTIONS)).toEqual({
+      default_policy: "ask",
+      actions: {},
     })
   );
 });

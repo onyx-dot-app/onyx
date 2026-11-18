@@ -41,44 +41,44 @@ function savedDraft(data: IntegrationActionsResponse): Draft {
   };
 }
 
-function isDirty(
-  draft: Draft | null,
-  data: IntegrationActionsResponse
-): boolean {
-  if (draft === null) return false;
-  const saved = savedDraft(data);
-  return (
-    draft.defaultPolicy !== saved.defaultPolicy ||
-    data.actions.some(
-      (action) =>
-        (draft.actions[action.key] ?? null) !==
-        (saved.actions[action.key] ?? null)
-    )
-  );
+/** The saved values with the admin's edits on top. A revalidation of `data`
+ * shows the newer values of the rows the admin did not edit. */
+function withEdits(saved: Draft, edits: IntegrationActionsUpdate): Draft {
+  return {
+    defaultPolicy:
+      edits.default_policy === undefined
+        ? saved.defaultPolicy
+        : edits.default_policy,
+    actions: { ...saved.actions, ...edits.actions },
+  };
 }
 
-/** Only the rows the draft changed, so a save from a stale page keeps the
- * newer settings of the other rows. */
+/** The edits that differ from the saved values. A save sends only these, so a
+ * save from a stale page keeps the newer settings of the other rows. */
 function changes(
-  draft: Draft,
-  data: IntegrationActionsResponse | undefined
+  edits: IntegrationActionsUpdate,
+  saved: Draft
 ): IntegrationActionsUpdate {
-  if (data === undefined) return { actions: {} };
-  const saved = savedDraft(data);
   const update: IntegrationActionsUpdate = {
     actions: Object.fromEntries(
-      data.actions
-        .filter(
-          (action) =>
-            (draft.actions[action.key] ?? null) !==
-            (saved.actions[action.key] ?? null)
-        )
-        .map((action) => [action.key, draft.actions[action.key] ?? null])
+      Object.entries(edits.actions).filter(
+        ([key, value]) => key in saved.actions && value !== saved.actions[key]
+      )
     ),
   };
-  if (draft.defaultPolicy !== saved.defaultPolicy)
-    update.default_policy = draft.defaultPolicy;
+  if (
+    edits.default_policy !== undefined &&
+    edits.default_policy !== saved.defaultPolicy
+  )
+    update.default_policy = edits.default_policy;
   return update;
+}
+
+function hasChanges(update: IntegrationActionsUpdate): boolean {
+  return (
+    update.default_policy !== undefined ||
+    Object.keys(update.actions).length > 0
+  );
 }
 
 interface IntegrationActionsTabProps {
@@ -94,13 +94,15 @@ export default function IntegrationActionsTab({
   const { data, error, isLoading, mutate } = useAdminIntegrationActions(
     integration.id
   );
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [edits, setEdits] = useState<IntegrationActionsUpdate>({
+    actions: {},
+  });
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const navigation = useNavigation();
   const readOnly = !integration.can_manage;
   const isMcp = integration.shape === "mcp_server";
-  const dirty = data ? isDirty(draft, data) : false;
+  const dirty = data ? hasChanges(changes(edits, savedDraft(data))) : false;
   const unsavedChanges = useUnsavedChangesGuard({ isDirty: dirty });
 
   if (isLoading) return <IconLoader />;
@@ -114,7 +116,26 @@ export default function IntegrationActionsTab({
       </Section>
     );
 
-  const current = draft ?? savedDraft(data);
+  const saved = savedDraft(data);
+  const current = withEdits(saved, edits);
+
+  function setDraft(next: Draft) {
+    setEdits({
+      ...(next.defaultPolicy !== current.defaultPolicy
+        ? { default_policy: next.defaultPolicy }
+        : edits.default_policy !== undefined
+          ? { default_policy: edits.default_policy }
+          : {}),
+      actions: {
+        ...edits.actions,
+        ...Object.fromEntries(
+          Object.entries(next.actions).filter(
+            ([key, value]) => value !== (current.actions[key] ?? null)
+          )
+        ),
+      },
+    });
+  }
 
   // Craft asks for an action that always asks, even when it is set to Allow.
   function applied(action: IntegrationAction, value: PolicyValue): PolicyValue {
@@ -189,10 +210,10 @@ export default function IntegrationActionsTab({
     try {
       const next = await updateIntegrationActions(
         integration.id,
-        changes(current, data)
+        changes(edits, saved)
       );
       await mutate(next, { revalidate: false });
-      setDraft(null);
+      setEdits({ actions: {} });
       toast.success(t("saved"));
     } catch (saveError) {
       toast.error(
