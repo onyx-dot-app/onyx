@@ -231,6 +231,7 @@ def legacy_tool_plugin_links(
         plugin_id = plugins.get(integration_id)
         if plugin_id is not None:
             links.setdefault(plugin_id, PersonaPluginLink(plugin_id=plugin_id))
+    mcp_names: dict[UUID, set[str]] = {}
     for server_id, names in sorted(mcp_tool_names.items()):
         server_integration_id = server_integrations.get(server_id)
         if server_integration_id is None:
@@ -238,6 +239,8 @@ def legacy_tool_plugin_links(
         plugin_id = plugins.get(server_integration_id)
         if plugin_id is None or plugin_id in links:
             continue
+        mcp_names.setdefault(plugin_id, set()).update(names)
+    for plugin_id, names in mcp_names.items():
         links[plugin_id] = PersonaPluginLink(
             plugin_id=plugin_id,
             action_settings=ActionSettings(
