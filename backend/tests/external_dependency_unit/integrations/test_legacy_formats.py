@@ -357,6 +357,34 @@ def test_mcp_refresh_redeems_the_captured_grant_not_a_newer_one(
     assert (secret.access_token, secret.refresh_token) == ("a2", "r2")
 
 
+def test_mcp_new_authorization_without_scope_keeps_no_old_scopes(
+    db_session: Session,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration = _mcp_oauth_integration(db_session)
+    user = make_test_user("legacy_mcp_new_auth_scopes")
+    _seed(
+        db_session,
+        integration,
+        user.id,
+        IntegrationLegacyFormat.MCP_CONFIG,
+        _mcp_oauth_user_secret(_unix(timedelta(hours=1))),
+    )
+    storage = IntegrationTokenStorage(integration.id, user.id)
+    client = asyncio.run(storage.get_client_info())
+    assert client is not None
+
+    asyncio.run(
+        storage.set_authorization_result(
+            OAuthToken(access_token="a2", refresh_token="r2", expires_in=60), client
+        )
+    )
+    connection = get_connection(db_session, integration.id, user.id)
+    assert connection is not None
+    db_session.refresh(connection)
+    assert connection.granted_scopes is None
+
+
 def test_mcp_config_registration_saves_new_format(
     db_session: Session,
     make_test_user: MakeTestUser,
