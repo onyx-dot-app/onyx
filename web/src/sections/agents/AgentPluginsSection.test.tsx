@@ -350,6 +350,16 @@ test("tells the owner to change an agent Ask that the integration allows", async
   ).toHaveLength(1);
 });
 
+test("names the agent setting in the hint for an integration Ask that the agent can allow", async () => {
+  setup([draft()]);
+  const listIssues = "Setting for List issues";
+  await screen.findByRole("combobox", { name: listIssues });
+  expect(await optionsOf(listIssues)).toContain("Allow");
+  expect(screen.getByText(copy.askHint)).toHaveTextContent(
+    /change the agent setting/
+  );
+});
+
 test("leaves out Always allow from the agent hint when users cannot save it", async () => {
   setup(
     [draft({ actions: { list_issues: "ask" } })],

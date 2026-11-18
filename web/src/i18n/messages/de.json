@@ -10801,7 +10801,7 @@
         "ariaLabel": "Agenten-Editor-Seite"
       },
       "plugins": {
-        "askHint": "Damit dies ohne Rückfrage läuft, setzt ein Administrator es in der Integration auf Erlauben, oder jeder Benutzer wählt Immer erlauben.",
+        "askHint": "Damit dies ohne Rückfrage läuft, ändern Sie die Agent-Einstellung, ein Administrator setzt es in der Integration auf Erlauben, oder jeder Benutzer wählt Immer erlauben.",
         "askHintAdminOnly": "Damit dies ohne Rückfrage läuft, setzt ein Administrator es in der Integration auf Erlauben.",
         "askHintAgent": "Damit dies ohne Rückfrage läuft, ändern Sie die Agent-Einstellung, oder jeder Benutzer wählt Immer erlauben.",
         "askHintAgentOnly": "Damit dies ohne Rückfrage läuft, ändern Sie die Agent-Einstellung.",

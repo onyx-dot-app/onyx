@@ -10801,7 +10801,7 @@
         "ariaLabel": "Página del editor de agentes"
       },
       "plugins": {
-        "askHint": "Para ejecutarla sin preguntar, un administrador la configura como Permitir en la integración, o cada usuario elige Permitir siempre.",
+        "askHint": "Para ejecutarla sin preguntar, cambia la configuración del agente, un administrador la configura como Permitir en la integración, o cada usuario elige Permitir siempre.",
         "askHintAdminOnly": "Para ejecutarla sin preguntar, un administrador la configura como Permitir en la integración.",
         "askHintAgent": "Para ejecutar esto sin confirmación, cambia la configuración del agente, o cada usuario elige Permitir siempre.",
         "askHintAgentOnly": "Para ejecutar esto sin confirmación, cambia la configuración del agente.",
