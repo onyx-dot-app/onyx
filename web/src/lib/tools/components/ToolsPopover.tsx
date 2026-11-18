@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
 import { InputTypeIn, Button, Popover, PopoverMenu } from "@opal/components";
@@ -56,13 +56,6 @@ export default function ToolsPopover({
   const hasNoConnectors = ccPairs.length === 0;
   const close = useCallback(() => setOpen(false), []);
   const openSources = useCallback(() => setShowSources(true), []);
-
-  useEffect(() => {
-    setOpen(false);
-    setShowSources(false);
-    setSearchTerm("");
-    setConnectingPluginId(null);
-  }, [agent.id]);
 
   const connectingPlugin = catalog.plugins.find(
     (plugin) => plugin.pluginId === connectingPluginId
