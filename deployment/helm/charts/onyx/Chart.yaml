@@ -24,7 +24,10 @@ annotations:
       description: The default opensearch.opensearchJavaOpts adds
         -XX:-UseBASE64Intrinsics, a stopgap for Java4Shell
         (CVE-2026-114938) in the JDK of the OpenSearch image. If you set
-        your own opensearchJavaOpts, add the flag to it.
+        your own opensearchJavaOpts, add the flag to it. helm upgrade
+        --reuse-values keeps the old default, so set the flag explicitly with
+        your heap settings. After the upgrade, check that GET _nodes/jvm lists
+        -XX:-UseBASE64Intrinsics.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
