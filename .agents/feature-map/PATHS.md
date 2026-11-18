@@ -408,6 +408,7 @@ the admin routes and check that each has a row above, run
 | `contributing_guides/best_practices.md` | Code standards for contributors across the repository. |
 | `pyproject.toml`, `uv.lock` | Python dependencies and tool config for the repo: uv, ruff and ty. `uv.lock` pins the resolved versions. The ruff per-file ignores hold the C901 ratchet list, which only shrinks. |
 | `backend/.gitignore` | Git ignore rules for local backend files. No product surface reads it. |
+| `web/package.json` | Shared frontend scripts and dependencies. Read the component that uses the changed dependency or script. |
 | `web/bun.lock` | The `web/` dependency lockfile. `bun install` writes it; do not edit it by hand. |
 | `web/.type-coverage-baseline.yaml` | Type-coverage floor of each `web/` directory. The `typescript-check` pre-commit hook fails when a directory falls below its floor (`web/AGENTS.md`, Tests). |
 | `.github/` | CI. Read the workflow. |
