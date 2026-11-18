@@ -26,9 +26,5 @@
 /web/.oxlintrc.json @onyx-dot-app/onyx-core-team
 /web/tools/oxlint/ @onyx-dot-app/onyx-core-team
 /mobile/eslint.config.js @onyx-dot-app/onyx-core-team
-/tools/ods/internal/pycheck/ @onyx-dot-app/onyx-core-team
-/tools/ods/internal/lazyimports/ @onyx-dot-app/onyx-core-team
-/tools/ods/internal/typecoverage/ @onyx-dot-app/onyx-core-team
-/tools/ods/cmd/coverage_gate.go @onyx-dot-app/onyx-core-team
-/tools/ods/internal/coverage/ @onyx-dot-app/onyx-core-team
 /web/tools/type-check/ @onyx-dot-app/onyx-core-team
+/uv.lock @onyx-dot-app/onyx-core-team

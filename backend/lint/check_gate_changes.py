@@ -45,24 +45,39 @@ PROTECTED = {
     ".pre-commit-config.yaml",
     "cubic.yaml",
     "web/.type-coverage-baseline.yaml",
+    "web/lib/opal/scripts/bundle-css.mjs",
     "mobile/eslint.config.js",
-    "tools/ods/cmd/check_getattr.go",
-    "tools/ods/cmd/check_lazy_imports.go",
-    "tools/ods/cmd/type_coverage.go",
-    "tools/ods/cmd/coverage_gate.go",
     "backend/scripts/check_migration_determinism.py",
     "backend/scripts/env_inventory.py",
+    ".agents/feature-map/check_feature_map.py",
+    ".agents/hooks/verification_trailer.py",
+    "backend/onyx/microvm/generated/regenerate.sh",
+    "documentation/scripts/build_connector_grid.py",
+    "documentation/scripts/format_docs.py",
+    "tools/helm/check_release.py",
+    "tools/i18n/check_copy_changes.py",
+    "tools/requirements/check_build_constraints.py",
 }
 PROTECTED_DIRECTORIES = (
     ".greptile/",
     "backend/lint/",
-    "tools/ods/internal/pycheck/",
-    "tools/ods/internal/lazyimports/",
-    "tools/ods/internal/typecoverage/",
-    "tools/ods/internal/coverage/",
     "web/tools/oxlint/",
     "web/tools/type-check/",
 )
+UV_GATE_PACKAGES = {
+    "ods": {"onyx-devtools", "onyx-devtools-audit"},
+    "ruff": {"ruff"},
+    "zizmor": {"zizmor"},
+    "dev": {"ty"},
+}
+UV_GATE_NAMES = set().union(*UV_GATE_PACKAGES.values())
+SYSTEM_PACKAGE_SCRIPTS = {
+    "web/package.json": {"types:check", "oxlint", "oxfmt"},
+    "widget/package.json": {"tsgo"},
+    "examples/widget/package.json": {"tsgo"},
+    "web/lib/shared/package.json": {"typecheck", "build:tokens"},
+    "mobile/package.json": {"typecheck", "lint", "format"},
+}
 IMPORT_BOUNDARIES = "backend/lint/import_boundaries.toml"
 NOQA = re.compile(
     r"#\s*(?:(?:ruff|flake8)\s*:\s*)?noqa\b(?:\s*:\s*([A-Z]+\d+(?:[ ,]+[A-Z]+\d+)*))?",
@@ -150,6 +165,53 @@ def type_checker_changed(before: str, after: str) -> bool:
     old = tomllib.loads(before).get("tool", {})
     new = tomllib.loads(after).get("tool", {})
     return old.get("ty") != new.get("ty")
+
+
+def uv_manifest_policy(source: str) -> tuple[object, ...]:
+    manifest = tomllib.loads(source)
+    groups = manifest.get("dependency-groups", {})
+    uv = manifest.get("tool", {}).get("uv", {})
+    return (
+        {group: groups.get(group) for group in UV_GATE_PACKAGES if group != "dev"},
+        [
+            requirement
+            for requirement in groups.get("dev", [])
+            if isinstance(requirement, str)
+            and re.match(r"(?i)^ty(?![\w.-])", requirement.strip())
+        ],
+        {name: uv.get("sources", {}).get(name) for name in UV_GATE_NAMES},
+        uv.get("default-groups"),
+    )
+
+
+def uv_lock_policy(source: str) -> tuple[object, ...]:
+    packages = tomllib.loads(source).get("package", [])
+    artifacts = [
+        package for package in packages if package.get("name") in UV_GATE_NAMES
+    ]
+    workspace = next(
+        (package for package in packages if package.get("source") == {"virtual": "."}),
+        {},
+    )
+    groups = workspace.get("dev-dependencies", {})
+    requirements = workspace.get("metadata", {}).get("requires-dev", {})
+    return (
+        artifacts,
+        workspace.get("default-groups"),
+        *(
+            {
+                group: entries.get(group)
+                if group != "dev"
+                else [
+                    record
+                    for record in entries.get("dev", [])
+                    if record.get("name") in UV_GATE_PACKAGES["dev"]
+                ]
+                for group in UV_GATE_PACKAGES
+            }
+            for entries in (groups, requirements)
+        ),
+    )
 
 
 def is_gate_definition(path: str) -> bool:
@@ -376,14 +438,21 @@ def check_change(path: str, before: str, after: str) -> str | None:
     elif path == IMPORT_BOUNDARIES:
         if changes_import_boundaries(before, after):
             return "import boundary policy changed"
-    elif path == "web/package.json":
+    elif path == "uv.lock":
+        if uv_lock_policy(before) != uv_lock_policy(after):
+            return "lint tool lock entry changed"
+    elif path in SYSTEM_PACKAGE_SCRIPTS:
         old = json.loads(before or "{}").get("scripts", {})
         new = json.loads(after or "{}").get("scripts", {})
-        if any(old.get(name) != new.get(name) for name in ("types:check", "oxlint")):
-            return "web lint or type check command changed"
+        if any(old.get(name) != new.get(name) for name in SYSTEM_PACKAGE_SCRIPTS[path]):
+            return "lint or type check command changed"
     elif is_gate_definition(path):
         return "gate definition changed"
     elif (name := Path(path).name) in {".ruff.toml", "ruff.toml", "pyproject.toml"}:
+        if path == "pyproject.toml" and uv_manifest_policy(
+            before
+        ) != uv_manifest_policy(after):
+            return "lint tool dependency pin changed"
         if name == "pyproject.toml" and type_checker_changed(before, after):
             return "ty configuration changed"
         if name != "pyproject.toml" or ruff_additions(before, after):
@@ -424,7 +493,8 @@ def violations(base: str, head: str) -> list[tuple[str, str]]:
         if not (
             protected
             or path in SET_BASELINES
-            or path == "web/package.json"
+            or path == "uv.lock"
+            or path in SYSTEM_PACKAGE_SCRIPTS
             or is_playwright_source(path)
             or path.endswith(
                 (".py", ".pyi", ".pyw", "pyproject.toml", "ruff.toml", *JS_SUFFIXES)

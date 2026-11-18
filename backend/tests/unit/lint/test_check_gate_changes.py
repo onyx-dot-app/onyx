@@ -1,6 +1,8 @@
 import ast
 import re
+import shlex
 import subprocess
+import tomllib
 from collections import Counter
 from pathlib import Path
 
@@ -399,12 +401,6 @@ def test_js_lint_range_expansion() -> None:
         "mobile/eslint.config.js",
         ".greptile/rules.md",
         "cubic.yaml",
-        "tools/ods/cmd/check_getattr.go",
-        "tools/ods/internal/lazyimports/checker.go",
-        "tools/ods/internal/typecoverage/measure.go",
-        "tools/ods/cmd/coverage_gate.go",
-        "tools/ods/internal/coverage/kind.go",
-        "tools/ods/internal/coverage/check.go",
         "web/tools/type-check/index.ts",
         "ty.toml",
     ],
@@ -430,15 +426,131 @@ def test_ty_configuration_requires_approval() -> None:
 def test_every_pre_commit_hook_has_an_inventory_entry() -> None:
     root = Path(__file__).resolve().parents[4]
     config = yaml.safe_load((root / ".pre-commit-config.yaml").read_text())
-    hooks = Counter(
-        hook.get("alias", hook["id"]) if hook["id"] != "uv-export" else hook["name"]
-        for repo in config["repos"]
-        for hook in repo["hooks"]
-    )
     inventory = (root / "backend/lint/gate_inventory.md").read_text()
-    entries = Counter(re.findall(r"^\| ([\w][^|]*?) \|", inventory, re.MULTILINE))
-    entries.pop("Hook")
+    entries = Counter(
+        re.findall(
+            r"^\| ([\w][^|]*?) \| (remote|uv-run|system|python) \|",
+            inventory,
+            re.MULTILINE,
+        )
+    )
+    hooks: Counter[tuple[str, str]] = Counter()
+    for repo in config["repos"]:
+        for hook in repo["hooks"]:
+            name = (
+                hook.get("alias", hook["id"])
+                if hook["id"] != "uv-export"
+                else hook["name"]
+            )
+            if hook["id"] == "uv-run":
+                kind = "uv-run"
+                args = hook["args"]
+                group = (
+                    args[args.index("--only-group") + 1]
+                    if "--only-group" in args
+                    else "dev"
+                )
+                package = {
+                    "ods": "onyx-devtools",
+                    "ruff": "ruff",
+                    "zizmor": "zizmor",
+                    "dev": "ty",
+                }[group]
+                command = (
+                    args[args.index("--only-group") + 2]
+                    if "--only-group" in args
+                    else args[0]
+                )
+                assert command == ("ods" if group == "ods" else package)
+                assert package in check_gate_changes.UV_GATE_PACKAGES[group]
+            elif repo["repo"] != "local":
+                kind = "remote"
+                assert repo["rev"]
+                assert check_gate_changes.is_gate_definition(".pre-commit-config.yaml")
+            else:
+                kind = hook["language"]
+                command, *args = shlex.split(hook["entry"])
+                if command in {"python", "python3", "bash"} and args[0] not in {
+                    "-c",
+                    "-m",
+                }:
+                    assert check_gate_changes.is_gate_definition(args[0]), name
+                if command == "python" and args[0] == "-m":
+                    module = args[1].replace(".", "/") + ".py"
+                    assert check_gate_changes.is_gate_definition(module), name
+                if command == "bash" and args[0] == "-c":
+                    workdir = re.search(r"(?:^|&& )cd ([\w/-]+) &&", args[1])
+                    if workdir is not None:
+                        directory = Path(workdir[1])
+                        for cwd, script in re.findall(
+                            r"\bbun run (?:--cwd ([\w/-]+) )?([\w][\w:-]*)", args[1]
+                        ):
+                            manifest = (directory / cwd / "package.json").as_posix()
+                            assert (
+                                script
+                                in check_gate_changes.SYSTEM_PACKAGE_SCRIPTS[manifest]
+                            ), name
+                        for script in re.findall(
+                            r"(?:^|&& )bun ([\w./-]+\.(?:[cm]?js|[cm]?ts))", args[1]
+                        ):
+                            assert check_gate_changes.is_gate_definition(
+                                (directory / script).as_posix()
+                            ), name
+            hooks[name, kind] += 1
     assert hooks == entries
+
+
+@pytest.mark.parametrize(
+    ("group", "package"),
+    [("ods", "onyx-devtools"), ("ruff", "ruff"), ("zizmor", "zizmor"), ("dev", "ty")],
+)
+def test_uv_hook_pins_and_lock_artifacts_are_protected(
+    group: str, package: str
+) -> None:
+    manifest = f'[dependency-groups]\n{group} = ["{package}==1"]\n'
+    assert check_change("pyproject.toml", manifest, manifest.replace("==1", "==2"))
+    lock = f'[[package]]\nname = "{package}"\nversion = "1"\n'
+    assert check_change("uv.lock", lock, lock.replace('version = "1"', 'version = "2"'))
+
+
+def test_ods_wheel_hash_and_source_override_require_approval() -> None:
+    root = Path(__file__).resolve().parents[4]
+    lock = (root / "uv.lock").read_text()
+    ods = next(
+        package
+        for package in tomllib.loads(lock)["package"]
+        if package["name"] == "onyx-devtools"
+    )
+    assert ods["source"] == {"registry": "https://pypi.org/simple"}
+    digest = ods["wheels"][0]["hash"]
+    assert check_change("uv.lock", lock, lock.replace(digest, "sha256:" + "0" * 64, 1))
+    assert check_change(
+        "pyproject.toml",
+        '[dependency-groups]\nods = ["onyx-devtools==1"]',
+        '[dependency-groups]\nods = ["onyx-devtools==1"]\n'
+        "[tool.uv.sources]\nonyx-devtools = { workspace = true }",
+    )
+    assert (
+        check_change(
+            "tools/ods/internal/coverage/kind.go", "old tolerance", "new tolerance"
+        )
+        is None
+    )
+
+
+def test_unrelated_dependency_updates_pass() -> None:
+    lock = '[[package]]\nname = "unrelated"\nversion = "1"\n'
+    assert (
+        check_change("uv.lock", lock, lock.replace('version = "1"', 'version = "2"'))
+        is None
+    )
+    manifest = '[dependency-groups]\ndev = ["ty==1", "pytest==1"]'
+    assert (
+        check_change(
+            "pyproject.toml", manifest, manifest.replace("pytest==1", "pytest==2")
+        )
+        is None
+    )
 
 
 def test_web_gate_command_changes_require_approval() -> None:
