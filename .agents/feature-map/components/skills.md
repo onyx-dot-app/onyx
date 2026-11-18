@@ -839,14 +839,12 @@ the app from the same rule
   default) is DENY, or when cloud withholds it. Personal and task DENY choices
   are not listed, so the agent can try an action that the proxy then blocks
   ([[craft-external-apps]]).
-- **External-app admin writes push in different orders.** The old
+- **Integration writes reload sandboxes after the commit.** The old
   external-app admin routes are gone; integration writes call
   `backend/onyx/integrations/service.py:reload_craft_sessions` after the
-  commit. Their comments say a
-  push failure rolls back the change, but `push_skills_for_users` logs and
-  drops every failure ([[#push-holds-row-locks]]), so the change commits
-  anyway. If that commit fails, the sandboxes hold files that the database
-  does not.
+  commit. The reload is best-effort: `push_skills_for_users` logs and drops
+  every failure ([[#push-holds-row-locks]]), so a sandbox can keep old files
+  until its next push.
 - **A new app gives its built-in skill to nobody.** Creating an external app
   does not create an integration or a plugin that holds it, so
   [[#built-in-app-skill-rule]] finds no user for that app. Apps that existed
