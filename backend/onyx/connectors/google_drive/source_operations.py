@@ -1003,7 +1003,7 @@ class GoogleDriveSourceOperations(SourceOperations):
         resource_key: str | None = None,
     ) -> GoogleDriveFileType | None:
         """files.get, or None when the user cannot see the file (403, 404, or a
-        failed impersonation)."""
+        failed impersonation). A rate limit raises."""
 
         def build_request(drive: Any) -> Any:
             request = drive.files().get(
@@ -1015,7 +1015,8 @@ class GoogleDriveSourceOperations(SourceOperations):
         try:
             file = self._execute_drive(user_email, build_request, DRIVE_READ_UNITS)
         except HttpError as e:
-            if e.resp.status in (403, 404):
+            # A 403 rate limit that outlasted the retries is no denial.
+            if is_access_denied(e):
                 logger.debug("Cannot access Drive file %s: %s", file_id, e)
                 return None
             raise
@@ -1194,7 +1195,8 @@ class GoogleDriveSourceOperations(SourceOperations):
                 DRIVE_READ_UNITS,
             )
         except HttpError as e:
-            if e.resp.status in (403, 404):
+            # A 403 rate limit that outlasted the retries is no denial.
+            if is_access_denied(e):
                 logger.debug("Cannot access drive %s: %s", drive_id, e)
                 return None
             raise

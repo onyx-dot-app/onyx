@@ -4,15 +4,22 @@ a read after the listing. A folder shared only by link is a node only as the
 parent of another node."""
 
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from onyx.connectors.google_drive import connector as connector_module
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
+from onyx.connectors.google_drive.doc_conversion import PermissionSyncContext
 from onyx.connectors.google_drive.models import (
     DriveListingState,
     GoogleDriveCheckpoint,
     RetrievedDriveFile,
+)
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveHttpError,
+    GoogleDriveSourceOperations,
 )
 from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.connectors.models import HierarchyNode
@@ -530,3 +537,55 @@ def test_a_shared_drive_path_that_reaches_the_drive_is_complete() -> None:
     assert connector._listed_folder_path(
         checkpoint, listing, _shared_drive_file("inner")
     ) == ["Team", "Outer", "Inner"]
+
+
+def test_a_failed_folder_permission_read_keeps_the_stored_access() -> None:
+    """The listing gave no permission ids, and the read of them fails. The
+    node has no access value, so the stored access stays: an unread access
+    is never written as no access."""
+    connector = _connector()
+    connector._ops = MagicMock(spec=GoogleDriveSourceOperations)
+    connector._primary_admin_email = "admin@x.com"
+    ops = connector.ops
+    assert isinstance(ops, MagicMock)
+    ops.get_file.side_effect = GoogleDriveHttpError(
+        status_code=500, reasons=(), access_denied=False, message="backend error"
+    )
+    context = PermissionSyncContext(
+        primary_admin_email="admin@x.com", google_domain="x.com"
+    )
+
+    with patch.object(
+        connector_module, "get_external_access_for_folder"
+    ) as external_access:
+        node = connector._listed_folder_node(
+            _folder("folder-1", parent_id="drive-1"), context, add_prefix=False
+        )
+
+    external_access.assert_not_called()
+    assert node.external_access is None
+
+
+def test_the_folder_name_map_stops_at_its_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Past the cap, a folder is not in the map. A file under it gets no
+    stored path, and conversion builds the path."""
+    monkeypatch.setattr(connector_module, "MAX_LISTED_FOLDER_NAMES", 1)
+    connector = _connector()
+    checkpoint = _checkpoint(connector)
+    listing = checkpoint.listing
+    assert listing is not None
+    listing.drive_names["drive-1"] = "Team"
+
+    _nodes(connector, checkpoint, [_folder("outer", parent_id="drive-1")])
+    _nodes(connector, checkpoint, [_folder("inner", parent_id="outer")])
+
+    assert list(listing.folder_names) == ["outer"]
+    assert (
+        connector._listed_folder_path(checkpoint, listing, _shared_drive_file("inner"))
+        is None
+    )
+    assert connector._listed_folder_path(
+        checkpoint, listing, _shared_drive_file("outer")
+    ) == ["Team", "outer"]

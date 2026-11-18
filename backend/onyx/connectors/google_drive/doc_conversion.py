@@ -1,6 +1,5 @@
 import io
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from dataclasses import dataclass
 from datetime import datetime
 from typing import NamedTuple, cast
 from urllib.parse import urlparse, urlunparse
@@ -872,14 +871,15 @@ def _needs_doc_export(doc_sections: list[TextSection], size_threshold: int) -> b
     """Whether a Google Doc's Drive export is still needed after its Docs API
     read. The export has the text of smart chips, which the Docs API gives
     only as SMART_CHIP_CHAR. The export also decides the size skip, so a doc
-    whose text is near the size threshold is exported too."""
+    whose text is near the size threshold is exported too, whatever its
+    number of sections."""
+    text_bytes = sum(len(section.text.encode("utf-8")) for section in doc_sections)
+    if text_bytes * _DOC_EXPORT_SIZE_MARGIN > size_threshold:
+        return True
     if len(doc_sections) > ADVANCED_PARSE_MAX_SECTIONS:
         # Too many sections to align: the Docs API sections are used alone.
         return False
-    if any(SMART_CHIP_CHAR in section.text for section in doc_sections):
-        return True
-    text_bytes = sum(len(section.text.encode("utf-8")) for section in doc_sections)
-    return text_bytes * _DOC_EXPORT_SIZE_MARGIN > size_threshold
+    return any(SMART_CHIP_CHAR in section.text for section in doc_sections)
 
 
 def _read_google_doc(
