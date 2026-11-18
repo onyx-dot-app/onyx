@@ -185,8 +185,8 @@ class ChatFullResponse(BaseModel):
     pending_tool_approvals: list[ToolApprovalRequest] = []
 ```
 
-Each `ToolCallResponse` of a `publish_files` call lists the files it published in `published_files`,
-with the same fields as the `publish_files_end` packet.
+Each `ToolCallResponse` of a `publish_files` call lists the files it published in `published_files`.
+Each entry has the fields `file_id`, `name`, `title`, `path`, `size`, and `mime_type`.
 
 ## Tool Approvals
 

@@ -269,11 +269,12 @@ The API server deletes the Firecracker data of a session or a user when you dele
 
 - **Craft session delete.** The API server deletes the saves of the session from the file store,
   and the session directory on the running microVM. It cancels the commands of the session.
-  The artifacts that the session published stay.
 - **User delete.** The API server stops the microVM of the user. The host agent removes the microVM disk.
-  The API server deletes all saves and published artifacts of the user's sandbox from the file store.
+  The API server deletes all saves of the user's sandbox from the file store.
 - **Chat retention.** {/* depends: #17841 */} When a session had no activity for the retention window
   (`maximum_chat_retention_days`), chat retention also deletes its saves from the file store.
+- **Published files.** The files that the model published in a chat go with the messages of the chat:
+  a hard delete of the chat and chat retention delete them from the file store.
 
 A save that is in progress during the delete does not commit, and the API server deletes its archive.
 If a delete step fails,

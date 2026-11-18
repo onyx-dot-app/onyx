@@ -2,7 +2,7 @@ import base64
 from collections.abc import Callable
 from io import BytesIO
 from typing import cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import requests
 from sqlalchemy.orm import Session
@@ -17,6 +17,7 @@ from onyx.db.models import UserFile
 from onyx.db.projects import get_project_user_files_by_file_ids
 from onyx.db.user_file import get_user_file_by_id
 from onyx.file_processing.file_types import guess_mime_type
+from onyx.file_store.constants import CHAT_ARTIFACT_FILE_PREFIX
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import (
     ChatFileType,
@@ -250,7 +251,9 @@ def save_chat_output_file(
     chat session: `access.py:user_can_access_chat_file` gives a stamped file
     of a `CHAT_OUTPUT_FILE_ORIGINS` origin to the users who may read that
     session. Only `CHAT_IMAGE_GEN` rows written before stamping existed lack
-    the stamp. Returns the file ID."""
+    the stamp. A `CHAT_ARTIFACT` file gets an ID under
+    `CHAT_ARTIFACT_FILE_PREFIX` and the chat session, by which the chat delete
+    deletes it. Returns the file ID."""
     if file_origin not in CHAT_OUTPUT_FILE_ORIGINS:
         raise ValueError(f"{file_origin} is not a chat output origin")
     return get_default_file_store().save_file(
@@ -259,6 +262,9 @@ def save_chat_output_file(
         file_origin=file_origin,
         file_type=file_type,
         file_metadata={CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat_session_id)},
+        file_id=f"{CHAT_ARTIFACT_FILE_PREFIX}{chat_session_id}-{uuid4().hex}"
+        if file_origin == FileOrigin.CHAT_ARTIFACT
+        else None,
     )
 
 

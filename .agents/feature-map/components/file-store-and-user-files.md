@@ -120,8 +120,10 @@ does them ([[indexing-pipeline]]).
 and the stamp of the root chat session
 (`tools/tool_implementations/sandbox/sandbox_tools.py:PublishFilesTool`). They
 get a `FileRecord` but no `UserFile`. The chat shows them through
-`/chat/file/{file_id}`. A published file is also in its response's
-`ChatMessage.files`, so a chat delete deletes it ([[chat-persistence]]).
+`/chat/file/{file_id}`. A published file has an ID under
+`CHAT_ARTIFACT_FILE_PREFIX` and the root chat session ID, by which a chat
+delete deletes it, also when its response never saved; a saved response also
+lists it in `ChatMessage.files` ([[chat-persistence]]).
 
 **Serving.** `server/query_and_chat/chat_backend.py:fetch_chat_file` resolves
 the id, calls `backend/onyx/access/access.py:user_can_access_chat_file`, and

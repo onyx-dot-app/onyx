@@ -141,6 +141,8 @@ class ApplyPatchResult(BaseModel):
 
 # Largest file that publish_files copies to the file store.
 PUBLISH_FILES_MAX_BYTES = 100 << 20
+# Most files that one publish_files call publishes.
+PUBLISH_FILES_MAX_FILES = 20
 
 
 class PublishFileArgument(BaseModel):
@@ -160,7 +162,9 @@ class PublishFilesArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     files: list[PublishFileArgument] = Field(
-        min_length=1, description="The files to give the user."
+        min_length=1,
+        max_length=PUBLISH_FILES_MAX_FILES,
+        description="The files to give the user.",
     )
     description: str | None = Field(
         default=None, description="One sentence about the files, for the user."

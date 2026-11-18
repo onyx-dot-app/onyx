@@ -294,7 +294,8 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         The file tools and publish_files share one
                                         sequence_group: their calls of one step run one at
                                         a time, so a publish sees the step's earlier edits
-  PublishFilesTool (SEQUENTIAL)         for each file in order: HarnessSandbox.read_file
+  PublishFilesTool (SEQUENTIAL)         at most PUBLISH_FILES_MAX_FILES (20) files a call;
+                                        for each file in order: HarnessSandbox.read_file
                                         (a working-directory path, or an absolute path
                                         under ONYX_VM_FILES_ROOT; other paths are refused
                                         with a hint to copy the file into the working
@@ -302,7 +303,8 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         PUBLISH_FILES_MAX_BYTES, 100 MiB), then
                                         file_store/utils.save_chat_output_file with
                                         FileOrigin.CHAT_ARTIFACT and the SandboxTurn's chat
-                                        session (the root chat's: subagents share the turn).
+                                        session (the root chat's: subagents share the turn;
+                                        file ID chat-artifact-<session>-<hex>).
                                         A failure, or a Stop during or after the copies,
                                         deletes the files that the call saved: all or none.
                                         Saves PublishedFiles (file ID, name, title, absolute

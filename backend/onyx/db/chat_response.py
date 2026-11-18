@@ -312,8 +312,9 @@ def save_chat_turn(
     assistant_message.citations = citation_number_to_search_doc_id or None
 
     # Preserve referenced generated files for subsequent turns; unreferenced
-    # ones remain intermediate artifacts. Published files belong to the
-    # message, so a chat delete deletes them. A response saves once.
+    # ones remain intermediate artifacts. Published files are files of the
+    # message; the chat delete finds them by their ID prefix
+    # (CHAT_ARTIFACT_FILE_PREFIX) either way. A response saves once.
     attached = [
         *(
             _extract_referenced_file_descriptors(tool_calls, sanitized_message_text)

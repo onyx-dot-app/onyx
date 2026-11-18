@@ -77,6 +77,7 @@ from onyx.db.sandbox import (
 from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.constants import CHAT_ARTIFACT_FILE_PREFIX
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.utils import plaintext_file_name_for_id
 from onyx.integrations.models import ApprovalMode
@@ -148,6 +149,7 @@ from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_implementations.code_mode import cells
 from onyx.tools.tool_implementations.sandbox import sandbox_tools
 from onyx.tools.tool_implementations.sandbox.models import (
+    PUBLISH_FILES_MAX_FILES,
     ApplyPatchFileChange,
     ApplyPatchResult,
     PublishedFile,
@@ -2269,6 +2271,8 @@ def test_everyone_who_can_read_the_chat_can_download_a_published_file(
     result, _ = _run(tools.publish_files, {"files": [{"path": "report.md"}]})
     assert isinstance(result.details, PublishedFiles)
     [file] = result.details.files
+    # Not a UUID: the download's user file lookup passes it through.
+    assert file.file_id.startswith(f"{CHAT_ARTIFACT_FILE_PREFIX}{chat_session.id}-")
     other = make_test_user("published_viewer")
 
     def download(reader: User) -> int:
@@ -2543,12 +2547,14 @@ def test_a_stop_during_the_last_copy_publishes_nothing(
 
 
 @pytest.mark.usefixtures("node", "initialize_file_store")
-def test_a_response_that_parks_and_resumes_lists_its_published_file_once(
+@pytest.mark.parametrize("resume", [True, False])
+def test_a_parked_response_lists_its_published_file_once_and_a_chat_delete_deletes_it(
     monkeypatch: pytest.MonkeyPatch,
     db_session: Session,
     sandbox: FirecrackerHarnessSandbox,
     chat: SandboxChat,
     gated_integration: int,
+    resume: bool,
 ) -> None:
     sandbox.write_file(chat.ref(db_session), "report.md", b"# Report\n")
     gated = _gated(gated_integration, [])
@@ -2579,6 +2585,17 @@ def test_a_response_that_parks_and_resumes_lists_its_published_file_once(
     ).one()
     response_id = approval.chat_message_id
     [record] = _published_records(db_session, chat.chat_session_id)
+    if not resume:
+        # No save lists the file: the chat delete finds it by its ID.
+        assert _answer_file_ids(db_session, chat.chat_session_id) == []
+        delete_chat_session_by_id(
+            chat.chat_session_id,
+            hard_delete=True,
+            user=chat.user,
+            db_session=db_session,
+        )
+        assert _published_records(db_session, chat.chat_session_id) == []
+        return
 
     with get_session_with_current_tenant() as session:
         decide_approval(
@@ -2600,3 +2617,21 @@ def test_a_response_that_parks_and_resumes_lists_its_published_file_once(
     delete_chat_session_by_id(
         chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
     )
+    assert _published_records(db_session, chat.chat_session_id) == []
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_a_publish_of_too_many_files_publishes_none(
+    db_session: Session, sandbox: FirecrackerHarnessSandbox, make_tools: MakeTools
+) -> None:
+    tools = make_tools()
+    sandbox.write_file(tools.ref, "report.md", b"# Report\n")
+
+    result, _ = _run(
+        tools.publish_files,
+        {"files": [{"path": "report.md"}] * (PUBLISH_FILES_MAX_FILES + 1)},
+    )
+
+    assert result.is_error
+    assert f"at most {PUBLISH_FILES_MAX_FILES} items" in result.text
+    assert _published_records(db_session, tools.ref.session_id) == []
