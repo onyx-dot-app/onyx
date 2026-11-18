@@ -216,7 +216,8 @@ test.describe("LLM Runtime Selection", () => {
     ]);
 
     await loginWithCleanCookies(page, testInfo.workerIndex);
-    await new ChatPage(page).goto();
+    const chat = new ChatPage(page);
+    await chat.goto();
 
     let turn = 0;
     await page.route("**/api/chat/send-chat-message", async (route) => {
@@ -228,10 +229,10 @@ test.describe("LLM Runtime Selection", () => {
       });
     });
 
-    const selectedModelDisplay = await selectModelFromInputPopover(page, [
-      persistenceModelName,
-    ]);
-    await verifyCurrentModel(page, selectedModelDisplay);
+    await chat.openModelList(persistenceModelName);
+    const selectedModelDisplay = await chat.chooseModelOption(
+      chat.modelOption(persistenceModelName).first()
+    );
 
     const firstPayload = await sendMessageAndCapturePayload(
       page,
@@ -246,10 +247,7 @@ test.describe("LLM Runtime Selection", () => {
     expect(page.url()).toContain("chatId=");
 
     await page.reload();
-    await page.waitForLoadState("networkidle");
-    await page.waitForSelector("#onyx-chat-input-textbox", { timeout: 15000 });
-
-    await verifyCurrentModel(page, selectedModelDisplay);
+    await chat.expectModelPill(selectedModelDisplay);
 
     const secondPayload = await sendMessageAndCapturePayload(
       page,
