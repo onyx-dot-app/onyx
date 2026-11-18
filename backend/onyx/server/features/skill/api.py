@@ -12,7 +12,6 @@ from onyx.auth.permissions import (
 )
 from onyx.db.engine.sql_engine import get_session, get_session_with_tenant
 from onyx.db.enums import (
-    AccountType,
     ExternalAppType,
     Permission,
 )
@@ -44,6 +43,7 @@ from onyx.db.skill import (
     enable_new_skill_if_name_available__no_commit,
     ensure_can_edit_org_visibility,
     fetch_editable_skill,
+    fetch_new_skill_owner,
     fetch_skill,
     is_published,
     list_chat_skills,
@@ -1161,19 +1161,7 @@ def transfer_current_user_skill_ownership(
             "Only the owner can transfer ownership of this skill.",
         )
 
-    target = fetch_user_by_id(db_session, transfer_req.new_owner_user_id)
-    if target is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "New owner not found.")
-    if not target.is_active:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Ownership can only be transferred to an active user.",
-        )
-    if target.account_type is not None and target.account_type != AccountType.STANDARD:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Ownership cannot be transferred to bots or service accounts.",
-        )
+    target = fetch_new_skill_owner(transfer_req.new_owner_user_id, db_session)
     if target.id == skill.author_user_id:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,

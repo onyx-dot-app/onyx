@@ -49,6 +49,7 @@ from onyx.auth.permissions import has_global_permission, has_permission
 from onyx.db.app_skill import built_in_app_skills
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
+    AccountType,
     MarketplaceKind,
     Permission,
     PermissionAuthority,
@@ -75,6 +76,7 @@ from onyx.db.plugin import (
     check_base_version,
     create_skill_plugin__no_commit,
     get_plugin_version,
+    private_plugins_blocking_user_delete,
     publish_or_request_review__no_commit,
     set_plugin_preferences__no_commit,
     transfer_plugin__no_commit,
@@ -93,6 +95,7 @@ from onyx.db.plugin_access import (
     visible_plugin_ids,
 )
 from onyx.db.skill_limit import check_skill_limit, lock_user_skill_preferences
+from onyx.db.users import fetch_user_by_id
 from onyx.db.utils import UNSET, UnsetType, is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -732,21 +735,43 @@ def replace_skill_shares(
     ).raise_first_failure()
 
 
+def fetch_new_skill_owner(new_owner_user_id: UUID, db_session: Session) -> User:
+    """The user that can receive skill ownership, or an OnyxError."""
+    target = fetch_user_by_id(db_session, new_owner_user_id)
+    if target is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "New owner not found.")
+    if not target.is_active:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Ownership can only be transferred to an active user.",
+        )
+    if target.account_type is not None and target.account_type != AccountType.STANDARD:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Ownership cannot be transferred to bots or service accounts.",
+        )
+    return target
+
+
 def transfer_skill_ownership(
     *,
     skill: Plugin,
     new_owner_user_id: UUID,
     db_session: Session,
+    on_name_clash: NameClashAction = "raise",
 ) -> None:
     """Make another user the owner. The previous owner keeps EDITOR. A private
-    skill moves to the new owner's "My uploads", and a name clash there is
-    refused with CONFLICT. A published skill stays published."""
+    skill moves to the new owner's "My uploads". On a name clash there,
+    "raise" refuses with CONFLICT and "rename" takes the next free name. A
+    published skill stays published."""
     previous_owner_user_id = skill.author_user_id
     if new_owner_user_id == previous_owner_user_id:
         return
 
     try:
-        transfer_plugin__no_commit(skill.id, new_owner_user_id, db_session)
+        transfer_plugin__no_commit(
+            skill.id, new_owner_user_id, db_session, on_name_clash
+        )
     except IntegrityError as e:
         if is_fk_violation(e):
             raise OnyxError(
@@ -773,6 +798,58 @@ def transfer_skill_ownership(
         None,
         db_session,
     ).raise_first_failure()
+
+
+class PluginRename(BaseModel):
+    plugin_id: UUID
+    old_name: str
+    new_name: str
+
+
+class PrivatePluginsTransfer(BaseModel):
+    plugin_ids: list[UUID]
+    renames: list[PluginRename]
+    affected_user_ids: set[UUID]
+
+
+def transfer_private_plugins__no_commit(
+    *,
+    user_id: UUID,
+    new_owner_user_id: UUID,
+    db_session: Session,
+) -> PrivatePluginsTransfer:
+    """Transfer each private plugin that blocks the user's delete to the new
+    owner. A name clash takes the next free name."""
+    if new_owner_user_id == user_id:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "The new owner must be a different user.",
+        )
+    fetch_new_skill_owner(new_owner_user_id, db_session)
+    plugins = db_session.scalars(
+        private_plugins_blocking_user_delete(user_id).with_for_update(of=Plugin)
+    ).all()
+    plugin_ids = [plugin.id for plugin in plugins]
+    affected_user_ids = affected_user_ids_for_plugins(plugin_ids, db_session)
+    renames: list[PluginRename] = []
+    for plugin in plugins:
+        old_name = plugin.name
+        transfer_skill_ownership(
+            skill=plugin,
+            new_owner_user_id=new_owner_user_id,
+            db_session=db_session,
+            on_name_clash="rename",
+        )
+        if plugin.name != old_name:
+            renames.append(
+                PluginRename(
+                    plugin_id=plugin.id, old_name=old_name, new_name=plugin.name
+                )
+            )
+    affected_user_ids |= affected_user_ids_for_plugins(plugin_ids, db_session)
+    return PrivatePluginsTransfer(
+        plugin_ids=plugin_ids, renames=renames, affected_user_ids=affected_user_ids
+    )
 
 
 def delete_skill(skill: Plugin, db_session: Session) -> list[str]:

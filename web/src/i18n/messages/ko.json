@@ -9277,7 +9277,14 @@
         "toasts": {
           "blockedBySkills": "이 사용자를 삭제할 수 없습니다",
           "openSkills": "스킬을 열어 이전하기",
+          "renamed": "새 소유자에게 같은 이름의 스킬이 이미 있어 이동한 스킬의 이름이 변경되었습니다",
           "success": "사용자를 삭제했습니다"
+        },
+        "transfer": {
+          "description": "<strong>{email}</strong> 님은 {count, plural, other {비공개 스킬 #개}}를 소유하고 있습니다. 소유권을 다른 사용자에게 이전하면 계정이 삭제됩니다.",
+          "submit": {
+            "label": "모두 이전 후 삭제"
+          }
         }
       },
       "editModal": {

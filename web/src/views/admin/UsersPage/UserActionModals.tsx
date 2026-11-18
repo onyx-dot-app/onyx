@@ -12,17 +12,24 @@ import {
   SvgXCircle,
   SvgKey,
 } from "@opal/icons";
-import { ConfirmationModalLayout } from "@opal/layouts";
+import { ConfirmationModalLayout, Section } from "@opal/layouts";
 import { toast } from "@opal/layouts";
 import { useNavigation } from "@opal/navigation";
 import { FetchError } from "@/lib/fetcher";
+import useShareableUsers from "@/hooks/useShareableUsers";
+import {
+  TransferOwnershipView,
+  type TransferOwnershipTarget,
+} from "@/sections/modals/TransferOwnershipView";
 import {
   deactivateUser,
   activateUser,
   deleteUser,
   cancelInvite,
   resetPassword,
-} from "./svc";
+  transferPrivatePlugins,
+} from "@/views/admin/UsersPage/svc";
+import type { PrivatePlugin } from "@/views/admin/UsersPage/types";
 
 // ---------------------------------------------------------------------------
 // Shared helper
@@ -257,6 +264,28 @@ interface DeleteUserModalProps {
   onMutate: () => void;
 }
 
+function isPrivatePlugin(value: unknown): value is PrivatePlugin {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    typeof value.id === "string" &&
+    "name" in value &&
+    typeof value.name === "string"
+  );
+}
+
+/** The private plugins that refused the delete, or null for another error. */
+function privatePluginsFrom(err: unknown): PrivatePlugin[] | null {
+  if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
+    return null;
+  }
+  const info: object = err.info;
+  const plugins = "private_plugins" in info ? info.private_plugins : null;
+  if (!Array.isArray(plugins) || plugins.length === 0) return null;
+  return plugins.filter(isPrivatePlugin);
+}
+
 export function DeleteUserModal({
   email,
   onClose,
@@ -266,8 +295,19 @@ export function DeleteUserModal({
   const { appName } = useSettings();
   const navigation = useNavigation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [privatePlugins, setPrivatePlugins] = useState<PrivatePlugin[] | null>(
+    null
+  );
+  const [transferTarget, setTransferTarget] =
+    useState<TransferOwnershipTarget>(null);
+  const { data: users } = useShareableUsers({ includeApiKeys: false });
 
   function showPrivateSkillsToast(err: unknown): boolean {
+    const plugins = privatePluginsFrom(err);
+    if (plugins) {
+      setPrivatePlugins(plugins);
+      return true;
+    }
     if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
       return false;
     }
@@ -282,6 +322,82 @@ export function DeleteUserModal({
       },
     });
     return true;
+  }
+
+  function onDeleted() {
+    toast.dismiss(PRIVATE_SKILLS_TOAST_ID);
+    onMutate();
+    onClose();
+  }
+
+  async function transferAllThenDelete(newOwner: string) {
+    const result = await transferPrivatePlugins(email, newOwner);
+    await deleteUser(email);
+    if (result.renames.length > 0) {
+      toast.info(t("deleteModal.toasts.renamed"), {
+        description: result.renames
+          .map((rename) => `${rename.old_name} → ${rename.new_name}`)
+          .join(", "),
+      });
+    }
+  }
+
+  if (privatePlugins) {
+    const newOwner = transferTarget?.type === "user" ? transferTarget : null;
+    return (
+      <ConfirmationModalLayout
+        icon={(props) => (
+          <SvgUserX {...props} className="text-action-danger-05" />
+        )}
+        title={t("deleteModal.title")}
+        onClose={isSubmitting ? undefined : onClose}
+        submit={
+          <Button
+            disabled={isSubmitting || !newOwner}
+            variant="danger"
+            onClick={() => {
+              if (!newOwner) return;
+              runAction(
+                () =>
+                  transferAllThenDelete(newOwner.value.replace("user-", "")),
+                t("deleteModal.toasts.success"),
+                t("modals.toasts.error"),
+                onDeleted,
+                setIsSubmitting
+              );
+            }}
+          >
+            {t("deleteModal.transfer.submit.label")}
+          </Button>
+        }
+      >
+        <Section gap={3} height="auto" alignItems="stretch">
+          <Text as="p" color="text-03">
+            {richNodes(
+              t.rich("deleteModal.transfer.description", {
+                email,
+                count: privatePlugins.length,
+                strong: emailTag,
+              })
+            )}
+          </Text>
+          <Section gap={0.5} height="auto" alignItems="start">
+            {privatePlugins.map((plugin) => (
+              <Text key={plugin.id} font="main-ui-body" color="text-04">
+                {plugin.name}
+              </Text>
+            ))}
+          </Section>
+          <TransferOwnershipView
+            agent={null}
+            groups={[]}
+            onSelectedTargetChange={setTransferTarget}
+            selectedTarget={transferTarget}
+            users={(users ?? []).filter((user) => user.email !== email)}
+          />
+        </Section>
+      </ConfirmationModalLayout>
+    );
   }
 
   return (
@@ -300,11 +416,7 @@ export function DeleteUserModal({
               () => deleteUser(email),
               t("deleteModal.toasts.success"),
               t("modals.toasts.error"),
-              () => {
-                toast.dismiss(PRIVATE_SKILLS_TOAST_ID);
-                onMutate();
-                onClose();
-              },
+              onDeleted,
               setIsSubmitting,
               showPrivateSkillsToast
             )

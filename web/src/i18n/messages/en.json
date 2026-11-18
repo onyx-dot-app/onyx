@@ -9277,7 +9277,14 @@
         "toasts": {
           "blockedBySkills": "Can't delete this user",
           "openSkills": "Open skills to transfer them",
+          "renamed": "The new owner already had skills with these names, so the moved skills got new names",
           "success": "User deleted"
+        },
+        "transfer": {
+          "description": "<strong>{email}</strong> owns {count, plural, one {# private skill} other {# private skills}}. Transfer ownership to another user, then the account is deleted.",
+          "submit": {
+            "label": "Transfer All and Delete"
+          }
         }
       },
       "editModal": {

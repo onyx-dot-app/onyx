@@ -1,5 +1,11 @@
 import { renderHook } from "@testing-library/react";
-import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
+import {
+  fireEvent,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+} from "@tests/setup/test-utils";
 import { toast } from "@opal/layouts";
 import { FetchError } from "@/lib/fetcher";
 import {
@@ -7,7 +13,11 @@ import {
   ResetPasswordModal,
   useClosePrivateSkillsToastOnLeave,
 } from "@/views/admin/UsersPage/UserActionModals";
-import { deleteUser, resetPassword } from "@/views/admin/UsersPage/svc";
+import {
+  deleteUser,
+  resetPassword,
+  transferPrivatePlugins,
+} from "@/views/admin/UsersPage/svc";
 
 const mockGo = jest.fn();
 
@@ -15,6 +25,17 @@ jest.mock("@/views/admin/UsersPage/svc", () => ({
   ...jest.requireActual("@/views/admin/UsersPage/svc"),
   deleteUser: jest.fn(),
   resetPassword: jest.fn(),
+  transferPrivatePlugins: jest.fn(),
+}));
+
+jest.mock("@/hooks/useShareableUsers", () => ({
+  __esModule: true,
+  default: () => ({
+    data: [
+      { id: "leaver-id", email: "user@example.com" },
+      { id: "heir-id", email: "heir@example.com" },
+    ],
+  }),
 }));
 
 jest.mock("@opal/navigation", () => ({
@@ -27,6 +48,8 @@ jest.mock("@/lib/settings/hooks", () => ({
 }));
 
 const mockDeleteUser = deleteUser as jest.MockedFunction<typeof deleteUser>;
+const mockTransferPrivatePlugins =
+  transferPrivatePlugins as jest.MockedFunction<typeof transferPrivatePlugins>;
 const mockResetPassword = resetPassword as jest.MockedFunction<
   typeof resetPassword
 >;
@@ -99,6 +122,62 @@ describe("DeleteUserModal", () => {
     expect(dismiss).not.toHaveBeenCalled();
     errorToast.mockRestore();
     dismiss.mockRestore();
+  });
+
+  it("transfers all private plugins to one user, then deletes", async () => {
+    const conflictBody = {
+      error_code: "CONFLICT",
+      detail: conflictDetail,
+      private_plugins: [
+        { id: "p1", name: "deploy" },
+        { id: "p2", name: "review" },
+      ],
+    };
+    mockDeleteUser
+      .mockRejectedValueOnce(new FetchError(conflictDetail, 409, conflictBody))
+      .mockResolvedValueOnce();
+    mockTransferPrivatePlugins.mockResolvedValue({
+      plugin_ids: ["p1", "p2"],
+      renames: [{ plugin_id: "p1", old_name: "deploy", new_name: "deploy-2" }],
+    });
+    const errorToast = jest.spyOn(toast, "error");
+    const infoToast = jest.spyOn(toast, "info").mockReturnValue("toast-id");
+    const onClose = jest.fn();
+    const user = setupUser();
+    render(
+      <DeleteUserModal
+        email="user@example.com"
+        onClose={onClose}
+        onMutate={() => {}}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByText("deploy")).toBeInTheDocument();
+    expect(screen.getByText("review")).toBeInTheDocument();
+    expect(errorToast).not.toHaveBeenCalled();
+    const submit = screen.getByRole("button", {
+      name: "Transfer All and Delete",
+    });
+    expect(submit).toBeDisabled();
+
+    await user.type(screen.getByPlaceholderText("Add a user or group"), "@");
+    expect(
+      screen.queryByRole("option", { name: "user@example.com" })
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: "heir@example.com" }));
+    await user.click(submit);
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(mockTransferPrivatePlugins).toHaveBeenCalledWith(
+      "user@example.com",
+      "heir-id"
+    );
+    expect(mockDeleteUser).toHaveBeenCalledTimes(2);
+    expect(infoToast.mock.calls[0]![1]?.description).toBe("deploy → deploy-2");
+    errorToast.mockRestore();
+    infoToast.mockRestore();
   });
 
   it("closes the private-skills toast when the delete succeeds", async () => {
