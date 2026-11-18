@@ -40,7 +40,11 @@ from onyx.integrations.connection_models import (
     literal_header_value,
     read_connection_secret,
 )
-from onyx.integrations.connections import literal_headers
+from onyx.integrations.connections import (
+    MissingHeaderValueError,
+    literal_headers,
+    render_headers,
+)
 from onyx.integrations.models import IntegrationPluginRow
 from onyx.integrations.service import (
     create_integration__no_commit,
@@ -175,17 +179,16 @@ def _stored_headers(
     """The headers a call sends, with the organization values filled in. A
     migrated tool keeps its headers on the organization connection."""
     secret = _organization_secret(organization)
-    fields = secret.fields
     headers = literal_headers(secret.headers)
     for name, template in (integration.header_template or {}).items():
         if template == _BEARER_TEMPLATE and name.lower() == "authorization":
             continue
-        if template.startswith("{") and template.endswith("}"):
-            value = fields.get(template[1:-1])
-            if value is not None:
-                headers[name] = value
+        try:
+            headers.update(
+                render_headers({name: template}, ConnectionSecret(fields=secret.fields))
+            )
+        except MissingHeaderValueError:
             continue
-        headers[name] = template
     return headers
 
 

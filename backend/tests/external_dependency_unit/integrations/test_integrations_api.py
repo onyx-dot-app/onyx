@@ -1744,6 +1744,43 @@ def test_custom_tool_alias_reads_and_keeps_migrated_headers(
     assert read_connection_secret(connection).fields == {"X-Api-Key": "abc{1}-secret"}
 
 
+def test_custom_tool_alias_keeps_a_passthrough_header_with_braces(
+    db_session: Session, admin: User, created: Created
+) -> None:
+    snapshot = tool_api.create_custom_tool(
+        CustomToolCreate(
+            name=f"passthrough-{uuid4().hex[:8]}",
+            description="Passthrough",
+            definition=OPENAPI_SPEC,
+            custom_headers=[Header(key="X-Meta", value='{"team":"blue"}')],
+            passthrough_auth=True,
+        ),
+        db_session,
+        admin,
+    )
+    integration = get_integration_by_kind_row(
+        Integration.tool_id, snapshot.id, db_session
+    )
+    assert integration is not None
+    created.add(integration.id)
+
+    fetched = tool_api.get_custom_tool(snapshot.id, db_session, admin)
+    assert fetched.custom_headers is not None
+    assert [header["key"] for header in fetched.custom_headers] == ["X-Meta"]
+    tool_api.update_custom_tool(
+        snapshot.id,
+        CustomToolUpdate(
+            custom_headers=[Header(**header) for header in fetched.custom_headers],
+            passthrough_auth=True,
+        ),
+        db_session,
+        admin,
+    )
+    db_session.expire_all()
+    assert integration.header_template is not None
+    assert integration.header_template["X-Meta"] == '{{"team":"blue"}}'
+
+
 def test_custom_tool_alias_save_keeps_oauth_sign_in(
     db_session: Session, admin: User, created: Created
 ) -> None:
