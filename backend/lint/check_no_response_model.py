@@ -80,7 +80,9 @@ def _marker_comments(source: str) -> dict[int, str]:
     }
 
 
-def find_response_models(source: str) -> list[tuple[int, str]]:
+def find_response_models(
+    source: str, *, accepted: set[int] | None = None
+) -> list[tuple[int, str]]:
     """One-based line and problem for each route that sets `response_model`."""
     markers = _marker_comments(source) if ALLOW_MARKER in source else {}
     tree = ast.parse(source)
@@ -115,6 +117,8 @@ def find_response_models(source: str) -> list[tuple[int, str]]:
             found.append((keyword.lineno, "response_model= on a route"))
         elif not any(_MARKER_WITH_REASON.search(line) for line in marked):
             found.append((keyword.lineno, "allow marker without a reason"))
+        elif accepted is not None:
+            accepted.add(keyword.lineno)
     return sorted(found)
 
 

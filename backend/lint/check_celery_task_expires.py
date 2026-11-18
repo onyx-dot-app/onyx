@@ -59,8 +59,9 @@ _FIX_REASON = (
 
 
 class _Finder(ast.NodeVisitor):
-    def __init__(self, comments: dict[int, str]) -> None:
+    def __init__(self, comments: dict[int, str], accepted: set[int] | None) -> None:
         self._comments = comments
+        self._accepted = accepted
         self._statement: ast.stmt | None = None
         self.found: dict[int, str] = {}
 
@@ -77,6 +78,8 @@ class _Finder(ast.NodeVisitor):
             lines.add(self._statement.lineno)
         marked = [self._comments[line] for line in lines if line in self._comments]
         if any(_ALLOW_WITH_REASON.search(line) for line in marked):
+            if self._accepted is not None:
+                self._accepted.add(node.lineno)
             return
         if any(ALLOW_MARKER in line for line in marked):
             message = _FIX_REASON
@@ -120,7 +123,9 @@ def _literal_keys(node: ast.Dict) -> dict[str, ast.expr]:
     }
 
 
-def find_missing_expires(source: str) -> dict[int, str]:
+def find_missing_expires(
+    source: str, *, accepted: set[int] | None = None
+) -> dict[int, str]:
     """One-based line number of each enqueue without an expiry, with its fix."""
     # Comments only, so marker text in a string does not exempt a send.
     comments = {
@@ -128,7 +133,7 @@ def find_missing_expires(source: str) -> dict[int, str]:
         for token in tokenize.generate_tokens(io.StringIO(source).readline)
         if token.type == tokenize.COMMENT
     }
-    finder = _Finder(comments)
+    finder = _Finder(comments, accepted)
     finder.visit(ast.parse(source))
     return dict(sorted(finder.found.items()))
 

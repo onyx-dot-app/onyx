@@ -1,9 +1,11 @@
 import ast
 import re
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 import pytest
+import yaml
 from lint import check_gate_changes
 from lint.check_gate_changes import check_change, violations
 
@@ -43,12 +45,6 @@ def test_set_ratchet(path: str, row: str) -> None:
 @pytest.mark.parametrize(
     "marker",
     [
-        "celery-expires: allow (reason)",
-        "db-ops-outside-db: allow reason",
-        "http-exception: allow reason",
-        "migration-determinism: allow",
-        "no-response-model: allow reason",
-        "no-direct-redis: allow reason",
         "noqa: S101 - reason",
         "noqa: C901",
         "noqa",
@@ -67,7 +63,7 @@ def test_suppression_ratchet(marker: str) -> None:
 
 def test_marker_text_in_string() -> None:
     assert check_change("example.py", "", 'text = "# noqa: S101"') is None
-    assert check_change("example.py", "", 'text = "no-direct-redis: allow"')
+    assert check_change("example.py", "", 'text = "no-direct-redis: allow"') is None
 
 
 @pytest.mark.parametrize(
@@ -211,12 +207,12 @@ def test_ruff_range_can_shrink_but_cannot_extend() -> None:
     [
         (
             "backend/alembic/versions/rev.py",
-            "op.create_index()",
+            'def upgrade():\n    op.create_index("index", "table", ["id"])',
             "# migration-design: allow blocking-index - reviewed",
         ),
         (
             "backend/tests/unit/example.py",
-            "time.sleep(1)",
+            "import time\ntime.sleep(1)",
             "# test-flakes: allow reviewed",
         ),
         (
@@ -279,10 +275,7 @@ def test_all_backend_gate_definitions_have_coverage() -> None:
             if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
                 continue
             for marker in re.findall(r"[a-z][a-z0-9-]*: allow\b", node.value):
-                assert marker in (
-                    *check_gate_changes.MARKERS,
-                    *check_gate_changes.RAW_MARKERS,
-                ), path
+                assert marker in check_gate_changes.MARKERS, path
             if re.fullmatch(r"[\w-]+\.(?:toml|txt)", node.value):
                 definition = lint / node.value
                 if definition.is_file():
@@ -298,3 +291,147 @@ def test_all_backend_gate_definitions_have_coverage() -> None:
                 | check_gate_changes.SET_BASELINES
             )
             assert check_change(relative, path.read_text(), "") is None
+
+
+@pytest.mark.parametrize(
+    ("path", "before", "after"),
+    [
+        (
+            "backend/onyx/example.py",
+            "task.apply_async(\n    expires=10,\n    # celery-expires: allow (deliberate)\n)",
+            "task.apply_async(\n    expires=None,\n    # celery-expires: allow (deliberate)\n)",
+        ),
+        (
+            "backend/onyx/example.py",
+            "from elsewhere import select\n# db-ops-outside-db: allow reviewed\nselect(User.id)",
+            "from sqlalchemy import select\n# db-ops-outside-db: allow reviewed\nselect(User.id)",
+        ),
+        (
+            "backend/onyx/example.py",
+            "from elsewhere import HTTPException\n# http-exception: allow reviewed\nraise HTTPException()",
+            "from fastapi import HTTPException\n# http-exception: allow reviewed\nraise HTTPException()",
+        ),
+        (
+            "backend/onyx/example.py",
+            "# no-direct-redis: allow reviewed\nimport math",
+            "# no-direct-redis: allow reviewed\nimport redis",
+        ),
+        (
+            "backend/onyx/example.py",
+            "@router.get(  # no-response-model: allow reviewed\n"
+            '    "/route", response_model=None\n)\ndef route(): ...',
+            "@router.get(  # no-response-model: allow reviewed\n"
+            '    "/route", response_model=Model\n)\ndef route(): ...',
+        ),
+        (
+            "backend/alembic/versions/example.py",
+            'def upgrade():\n    op.execute(  # migration-determinism: allow\n        "INSERT INTO t VALUES (1)"\n    )',
+            'def upgrade():\n    op.execute(  # migration-determinism: allow\n        "INSERT INTO t VALUES (now())"\n    )',
+        ),
+        (
+            "backend/alembic/versions/example.py",
+            'def upgrade():\n    op.create_table("table")\n    op.create_index(\n        "idx", "table", ["id"],  # migration-design: allow blocking-index - reviewed\n    )',
+            'def upgrade():\n    op.create_index(\n        "idx", "table", ["id"],  # migration-design: allow blocking-index - reviewed\n    )',
+        ),
+        (
+            "backend/tests/unit/example.py",
+            "from elsewhere import sleep\nsleep(1)  # test-flakes: allow reviewed",
+            "from time import sleep\nsleep(1)  # test-flakes: allow reviewed",
+        ),
+        (
+            "web/tests/example.spec.tsx",
+            "await page.waitForTimeout(1);",
+            "await page.waitForTimeout(1); /*\n test-flakes: allow reviewed\n */",
+        ),
+    ],
+)
+def test_newly_accepted_exception(path: str, before: str, after: str) -> None:
+    assert check_change(path, before, after)
+    assert check_change(path, after, before) is None
+
+
+@pytest.mark.parametrize(
+    ("path", "before", "after"),
+    [
+        (
+            "backend/onyx/example.py",
+            "getattr(x, field)",
+            "getattr(x, field)  # ods: ignore[getattr] - reason",
+        ),
+        (
+            "backend/onyx/example.py",
+            "f(x)",
+            "f(x)  # ty: ignore[invalid-argument-type]",
+        ),
+        ("backend/onyx/example.py", "f(x)", "f(x)  # type: ignore"),
+        ("web/src/example.ts", "f(x);", "// @ts-ignore\nf(x);"),
+        ("web/src/example.tsx", "f(x);", "// @ts-expect-error\nf(x);"),
+        ("web/src/example.ts", "f(x);", "// @ts-nocheck\nf(x);"),
+        ("web/src/example.ts", "f(x);", "/* oxlint-disable rule */\nf(x);"),
+        ("mobile/app/example.tsx", "f(x);", "// eslint-disable-next-line rule\nf(x);"),
+        (
+            "web/tests/example.spec.ts",
+            "import { customTest } from './fixture';\ncustomTest.skip();",
+            "import { customTest } from './fixture';\ncustomTest.skip(); /*\n test-flakes: allow reviewed\n */",
+        ),
+    ],
+)
+def test_new_external_gate_directive(path: str, before: str, after: str) -> None:
+    assert check_change(path, before, after)
+    assert check_change(path, after, before) is None
+
+
+def test_js_lint_range_expansion() -> None:
+    path = "web/src/example.ts"
+    reduced = "/* oxlint-disable foo */\na();\n/* oxlint-enable foo */\nb();"
+    expanded = reduced.replace("/* oxlint-enable foo */\n", "")
+    assert check_change(path, reduced, expanded)
+    assert check_change(path, reduced, expanded + "\n/* oxlint-enable foo */")
+    assert check_change(path, expanded, reduced) is None
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "web/.oxlintrc.json",
+        "web/tools/oxlint/opal/index.ts",
+        "web/tsconfig.json",
+        "mobile/eslint.config.js",
+        ".greptile/rules.md",
+        "cubic.yaml",
+        "tools/ods/cmd/check_getattr.go",
+        "tools/ods/internal/lazyimports/checker.go",
+        "tools/ods/internal/typecoverage/typescript.go",
+        "ty.toml",
+    ],
+)
+def test_new_policy_definition(path: str) -> None:
+    assert check_change(path, "old policy", "changed policy")
+
+
+def test_lowering_type_coverage_requires_approval() -> None:
+    path = "web/.type-coverage-baseline.yaml"
+    assert check_change(path, "total: 99\n", "total: 98\n")
+    assert check_change(path, "total: 99\n", "")
+
+
+def test_ty_configuration_requires_approval() -> None:
+    assert check_change(
+        "pyproject.toml",
+        '[tool.ty.rules]\nall = "error"',
+        '[tool.ty.rules]\nall = "ignore"',
+    )
+
+
+def test_every_pre_commit_hook_has_an_inventory_entry() -> None:
+    root = Path(__file__).resolve().parents[4]
+    config = yaml.safe_load((root / ".pre-commit-config.yaml").read_text())
+    hooks = Counter(
+        hook.get("alias", hook["id"]) if hook["id"] != "uv-export" else hook["name"]
+        for repo in config["repos"]
+        for hook in repo["hooks"]
+    )
+    inventory = (root / "backend/lint/gate_inventory.md").read_text()
+    entries = Counter(re.findall(r"^\| ([\w][^|]*?) \|", inventory, re.MULTILINE))
+    entries.pop("Hook")
+    assert hooks == entries

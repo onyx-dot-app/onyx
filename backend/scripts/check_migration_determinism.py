@@ -57,8 +57,9 @@ class _RunDependentFinder(ast.NodeVisitor):
     """Collects values that differ between runs, erring toward flagging. The
     allow marker clears the rare deliberate exception."""
 
-    def __init__(self, lines: list[str]) -> None:
+    def __init__(self, lines: list[str], accepted: set[int] | None) -> None:
         self._lines = lines
+        self._accepted = accepted
         self._statement: ast.stmt | None = None
         self._not_row_depth = 0
         self.found: set[int] = set()
@@ -79,6 +80,8 @@ class _RunDependentFinder(ast.NodeVisitor):
         ]
         if not any(ALLOW_MARKER in line for line in marked):
             self.found.add(node.lineno)
+        elif self._accepted is not None:
+            self._accepted.add(node.lineno)
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         # downgrade may restore what it removed, with whatever values it had.
@@ -150,9 +153,11 @@ def _terminal_name(node: ast.expr | None) -> str | None:
     return node.attr if isinstance(node, ast.Attribute) else None
 
 
-def find_run_dependent_values(source: str) -> list[int]:
+def find_run_dependent_values(
+    source: str, *, accepted: set[int] | None = None
+) -> list[int]:
     """One-based line numbers of run-dependent values outside downgrade."""
-    finder = _RunDependentFinder(source.splitlines())
+    finder = _RunDependentFinder(source.splitlines(), accepted)
     finder.visit(ast.parse(source))
     return sorted(finder.found)
 

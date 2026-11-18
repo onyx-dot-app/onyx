@@ -31,7 +31,8 @@ _FIXES = {
     "not-null": "Set a server_default or add a nullable column, backfill it, then set NOT NULL.",
     "blocking-index": "Commit and build the index concurrently on an AUTOCOMMIT connection. See 9d8f310ac672.",
 }
-_ALLOW = re.compile(r"# migration-design: allow ([a-z-]+) - (\S.*)")
+ALLOW_MARKER = "migration-design: allow"
+_ALLOW = re.compile(rf"# {re.escape(ALLOW_MARKER)} ([a-z-]+) - (\S.*)")
 _CONSTRAINTS = {
     "create_check_constraint": ("table_name", "schema"),
     "create_foreign_key": ("source_table", "source_schema"),
@@ -138,7 +139,9 @@ def _operation_rules(
         yield "blocking-index"
 
 
-def find_violations(tree: ast.Module, source: str) -> list[tuple[int, str]]:
+def find_violations(
+    tree: ast.Module, source: str, *, accepted: set[tuple[int, str]] | None = None
+) -> list[tuple[int, str]]:
     """Check direct op calls and literal constraint options outside downgrade."""
     comments: dict[int, str] = {}
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
@@ -192,6 +195,8 @@ def find_violations(tree: ast.Module, source: str) -> list[tuple[int, str]]:
                         )
                     ):
                         violations.add((call.lineno, rule))
+                    elif accepted is not None:
+                        accepted.add((call.lineno, rule))
             value = (
                 statement.value
                 if isinstance(statement, (ast.Expr, ast.Assign, ast.AnnAssign))

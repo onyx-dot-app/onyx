@@ -154,7 +154,9 @@ def _is_allowed(lines: list[str], line: int) -> bool:
     return above.startswith("#") and ALLOW_MARKER in above
 
 
-def find_direct_redis_uses(source: str) -> list[Use]:
+def find_direct_redis_uses(
+    source: str, *, accepted: set[int] | None = None
+) -> list[Use]:
     """Direct uses of Redis in one file, without the lines that carry the marker."""
     tree = ast.parse(source)
     lines = source.splitlines()
@@ -192,7 +194,13 @@ def find_direct_redis_uses(source: str) -> list[Use]:
         elif func.attr in _LUA_METHODS or (func.attr == "eval" and _is_lua_eval(node)):
             uses.append(Use(node.lineno, f"Lua script call `{func.attr}`"))
 
-    return sorted(use for use in uses if not _is_allowed(lines, use.line))
+    violations: list[Use] = []
+    for use in uses:
+        if not _is_allowed(lines, use.line):
+            violations.append(use)
+        elif accepted is not None:
+            accepted.add(use.line)
+    return sorted(violations)
 
 
 def allowed_reason(relative_path: str) -> str | None:

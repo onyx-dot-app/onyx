@@ -119,9 +119,14 @@ def _allow_lines(source: str) -> tuple[set[int], set[int]]:
 
 class _Finder(ast.NodeVisitor):
     def __init__(
-        self, aliases: dict[str, str], allow: set[int], comment_only: set[int]
+        self,
+        aliases: dict[str, str],
+        allow: set[int],
+        comment_only: set[int],
+        accepted: set[int] | None,
     ) -> None:
         self._aliases = aliases
+        self._accepted = accepted
         self._allow = allow
         self._comment_only = comment_only
         self._statement: ast.stmt | None = None
@@ -163,16 +168,19 @@ class _Finder(ast.NodeVisitor):
         covers the statement. A compound statement, such as a `def`, does not
         pass a marker to its body."""
         last = node.end_lineno or node.lineno
-        if any(line in self._allow for line in range(node.lineno, last + 1)):
-            return
-        if self._allowed_above(node.lineno):
-            return
         statement = self._statement
-        if isinstance(statement, _SIMPLE_STATEMENTS) and self._allowed_above(
-            statement.lineno
+        if (
+            any(line in self._allow for line in range(node.lineno, last + 1))
+            or self._allowed_above(node.lineno)
+            or (
+                isinstance(statement, _SIMPLE_STATEMENTS)
+                and self._allowed_above(statement.lineno)
+            )
         ):
-            return
-        self.found.add((name.lineno, name.col_offset))
+            if self._accepted is not None:
+                self._accepted.add(name.lineno)
+        else:
+            self.found.add((name.lineno, name.col_offset))
 
     def _is_http_exception(self, node: ast.expr | None) -> bool:
         return node is not None and self._qualified(node) in _HTTP_EXCEPTIONS
@@ -208,12 +216,12 @@ class _Finder(ast.NodeVisitor):
         return qualified is not None and bool(_STATUS_CONSTANT.match(qualified))
 
 
-def find_violations(source: str) -> list[int]:
+def find_violations(source: str, *, accepted: set[int] | None = None) -> list[int]:
     """One-based line numbers of violations, one entry per violation."""
     if not _TEXT_GATE.search(source):
         return []
     tree = ast.parse(source)
-    finder = _Finder(_import_aliases(tree), *_allow_lines(source))
+    finder = _Finder(_import_aliases(tree), *_allow_lines(source), accepted)
     finder.visit(tree)
     return [line for line, _ in sorted(finder.found)]
 

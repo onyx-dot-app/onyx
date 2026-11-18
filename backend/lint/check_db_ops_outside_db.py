@@ -283,7 +283,9 @@ def _comments(source: str) -> dict[int, str]:
     return comments
 
 
-def find_db_operations(source: str) -> tuple[list[int], list[int]]:
+def find_db_operations(
+    source: str, *, accepted: set[int] | None = None
+) -> tuple[list[int], list[int]]:
     """One-based lines of database operations, and of allow markers with no reason."""
     tree = ast.parse(source)
     lines = source.splitlines()
@@ -313,6 +315,8 @@ def find_db_operations(source: str) -> tuple[list[int], list[int]]:
             line for line in marker_lines if ALLOW_MARKER in comments.get(line, "")
         ]
         if any(_ALLOW_WITH_REASON.search(comments[line]) for line in marked):
+            if accepted is not None:
+                accepted.add(call.lineno)
             continue
         no_reason.update(marked)
         found.add(call.lineno)

@@ -17,7 +17,8 @@ from tree_sitter_typescript import language_tsx, language_typescript
 from .check_no_response_model import read_baseline
 
 _ROOT = Path(__file__).resolve().parents[2]
-_MARKER = re.compile(r"^\s*(?://|#|/\*)\s*test-flakes: allow\s+.*\w")
+ALLOW_MARKER = "test-flakes: allow"
+_MARKER = re.compile(rf"^\s*(?://|#|/\*)\s*{re.escape(ALLOW_MARKER)}\s+.*\w")
 Kind = Literal["sleep", "skip"]
 Finding = tuple[int, Kind, bool]
 _KINDS: tuple[Kind, ...] = ("sleep", "skip")
@@ -63,7 +64,9 @@ def _python_has_reason(value: ast.expr) -> bool:
     )
 
 
-def python_findings(source: str) -> Iterator[Finding]:
+def python_findings(
+    source: str, *, accepted: set[tuple[int, Kind]] | None = None
+) -> Iterator[Finding]:
     tree = ast.parse(source)
     nodes = list(ast.walk(tree))
     imports = {
@@ -95,6 +98,8 @@ def python_findings(source: str) -> Iterator[Finding]:
         head, dot, tail = name.partition(".")
         name = imports.get(head, head) + dot + tail
         if isinstance(node, ast.Call) and name in {"time.sleep", "asyncio.sleep"}:
+            if accepted is not None and node.lineno in marked:
+                accepted.add((node.lineno, "sleep"))
             yield node.lineno, "sleep", node.lineno in marked
         elif name in {"pytest.mark.skip", "pytest.mark.skipif", "pytest.skip"}:
             if not isinstance(node, ast.Call) and name == "pytest.skip":
@@ -105,6 +110,8 @@ def python_findings(source: str) -> Iterator[Finding]:
                 if name == "pytest.skip":
                     values.extend(node.args[:1])
                 reason = any(_python_has_reason(value) for value in values)
+            if accepted is not None and node.lineno in marked:
+                accepted.add((node.lineno, "skip"))
             yield node.lineno, "skip", reason or node.lineno in marked
 
 
@@ -222,18 +229,35 @@ def _parse_typescript(source: str, *, tsx: bool) -> list[Node]:
     )
 
 
-def playwright_findings(source: str, *, tsx: bool = False) -> Iterator[Finding]:
+def typescript_comments(source: str, *, tsx: bool) -> Iterator[tuple[int, str]]:
+    for node in _parse_typescript(source, tsx=tsx):
+        if node.type == "comment":
+            yield node.start_point.row + 1, _ts_text(node)
+
+
+def playwright_marker(comment: str) -> bool:
+    return bool(_MARKER.match(comment))
+
+
+def playwright_findings(
+    source: str, *, tsx: bool = False, accepted: set[tuple[int, Kind]] | None = None
+) -> Iterator[Finding]:
     nodes = _parse_typescript(source, tsx=tsx)
     path = Path("test.ts")
     names = _playwright_test_names({path: nodes}, Path())
-    yield from _playwright_findings(nodes, names[path])
+    yield from _playwright_findings(nodes, names[path], accepted=accepted)
 
 
-def _playwright_findings(nodes: list[Node], test_names: set[str]) -> Iterator[Finding]:
+def _playwright_findings(
+    nodes: list[Node],
+    test_names: set[str],
+    *,
+    accepted: set[tuple[int, Kind]] | None = None,
+) -> Iterator[Finding]:
     marked = {
         node.start_point.row + 1
         for node in nodes
-        if node.type == "comment" and _MARKER.match(_ts_text(node))
+        if node.type == "comment" and playwright_marker(_ts_text(node))
     }
     for node in nodes:
         if node.type != "call_expression":
@@ -248,6 +272,8 @@ def _playwright_findings(nodes: list[Node], test_names: set[str]) -> Iterator[Fi
         method = _ts_text(prop)
         line = prop.start_point.row + 1
         if method == "waitForTimeout":
+            if accepted is not None and line in marked:
+                accepted.add((line, "sleep"))
             yield line, "sleep", line in marked
         elif method in {"skip", "fixme"} and _is_playwright_test(
             callee.child_by_field_name("object") or callee, test_names
@@ -264,6 +290,8 @@ def _playwright_findings(nodes: list[Node], test_names: set[str]) -> Iterator[Fi
                     for part in values[1].named_children
                 )
             )
+            if accepted is not None and line in marked:
+                accepted.add((line, "skip"))
             yield line, "skip", reason or line in marked
 
 

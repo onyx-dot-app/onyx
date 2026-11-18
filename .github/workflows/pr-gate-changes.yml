@@ -26,6 +26,19 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # ratchet:actions/setup-python@v7.0.0
+        if: github.event_name == 'pull_request_target'
+        with:
+          python-version: "3.13"
+
+      - name: Install the lint parsers
+        if: github.event_name == 'pull_request_target'
+        run: |
+          python3 -I -m pip --isolated install --only-binary=:all: --no-deps --require-hashes -r /dev/stdin <<'REQUIREMENTS'
+          tree-sitter==0.25.2 --hash=sha256:b878e296e63661c8e124177cc3084b041ba3f5936b43076d57c487822426f614
+          tree-sitter-typescript==0.23.2 --hash=sha256:e96d36b85bcacdeb8ff5c2618d75593ef12ebaf1b4eace3477e2bdb2abb1752c
+          REQUIREMENTS
+
       - name: Fetch PR objects and check changes
         if: github.event_name == 'pull_request_target'
         env:
@@ -37,4 +50,10 @@ jobs:
         run: |
           git -c credential.helper= -c "credential.helper=!gh auth git-credential" fetch --no-tags origin "refs/pull/${PR_NUMBER}/head"
           test "$(git rev-parse FETCH_HEAD)" = "$HEAD_SHA"
-          python3 -I backend/lint/check_gate_changes.py "$BASE_SHA" "$HEAD_SHA" --pr "$PR_NUMBER"
+          python3 -I -c '
+          import runpy
+          import sys
+
+          sys.path.append("backend")
+          runpy.run_module("lint.check_gate_changes", run_name="__main__", alter_sys=True)
+          ' "$BASE_SHA" "$HEAD_SHA" --pr "$PR_NUMBER"

@@ -20,3 +20,12 @@
 /.github/workflows/pr-quality-checks.yml @onyx-dot-app/onyx-core-team
 /.github/workflows/pr-gate-changes.yml @onyx-dot-app/onyx-core-team
 /.github/CODEOWNERS @onyx-dot-app/onyx-core-team
+/.greptile/ @onyx-dot-app/onyx-core-team
+/cubic.yaml @onyx-dot-app/onyx-core-team
+/web/.type-coverage-baseline.yaml @onyx-dot-app/onyx-core-team
+/web/.oxlintrc.json @onyx-dot-app/onyx-core-team
+/web/tools/oxlint/ @onyx-dot-app/onyx-core-team
+/mobile/eslint.config.js @onyx-dot-app/onyx-core-team
+/tools/ods/internal/pycheck/ @onyx-dot-app/onyx-core-team
+/tools/ods/internal/lazyimports/ @onyx-dot-app/onyx-core-team
+/tools/ods/internal/typecoverage/ @onyx-dot-app/onyx-core-team
