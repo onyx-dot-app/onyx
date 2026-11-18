@@ -234,7 +234,7 @@ func TestStatusHealthyAndDrift(t *testing.T) {
 
 	// nginx (a stock image, listed first like the real deployment) must not
 	// be mistaken for the running Onyx version.
-	psOut := "onyx-nginx-1\tnginx:1.30.7-alpine\tUp 2 hours\t0.0.0.0:3000->80/tcp\n" +
+	psOut := "onyx-nginx-1\tnginx:1.25.5-alpine\tUp 2 hours\t0.0.0.0:3000->80/tcp\n" +
 		"onyx-api_server-1\tonyxdotapp/onyx-backend:v4.2.0\tUp 2 hours (healthy)\t\n"
 	statusRunner := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
 		if strings.Contains(argv(c), "ps -a") {
@@ -296,7 +296,7 @@ func TestStatusJSON(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.2.0")
 
-	psOut := "onyx-nginx-1\tnginx:1.30.7-alpine\tUp 1 minute\t0.0.0.0:3000->80/tcp\n" +
+	psOut := "onyx-nginx-1\tnginx:1.25.5-alpine\tUp 1 minute\t0.0.0.0:3000->80/tcp\n" +
 		"onyx-api_server-1\tonyxdotapp/onyx-backend:v4.2.0\tUp 1 minute (healthy)\t\n"
 	statusRunner := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
 		if strings.Contains(argv(c), "ps -a") {
@@ -379,7 +379,7 @@ func TestStatusExplainsCrashLoop(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.2.0")
 
-	psOut := "onyx-nginx-1\tnginx:1.30.7-alpine\tUp 2 hours\t0.0.0.0:3000->80/tcp\tnginx\n" +
+	psOut := "onyx-nginx-1\tnginx:1.25.5-alpine\tUp 2 hours\t0.0.0.0:3000->80/tcp\tnginx\n" +
 		"onyx-api_server-1\tonyxdotapp/onyx-backend:v4.2.0\tRestarting (255) 13 seconds ago\t\tapi_server\n"
 	inspectOut := `{"name":"/onyx-api_server-1","restarts":18,"exit":255,"oom":false,"error":"","health":null}`
 	statusRunner := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
@@ -429,7 +429,7 @@ func TestStatusExplainsEveryContainerItCounted(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.2.0")
 
-	psOut := "onyx-nginx-1\tnginx:1.30.7-alpine\tCreated\t\tnginx\n" +
+	psOut := "onyx-nginx-1\tnginx:1.25.5-alpine\tCreated\t\tnginx\n" +
 		"onyx-api_server-1\tonyxdotapp/onyx-backend:v4.2.0\tUp 2 hours (healthy)\t\tapi_server\n" +
 		"onyx-code-interpreter-1\tonyxdotapp/onyx-backend:v4.2.0\tExited (0) 6 seconds ago\t\tcode-interpreter\n"
 	inspectOut := `{"name":"/onyx-nginx-1","restarts":0,"exit":0,"oom":false,"error":"","health":null}` + "\n" +
@@ -476,7 +476,7 @@ func TestStatusCatchesCrashLoopBetweenRestarts(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.2.0")
 
-	psOut := "onyx-nginx-1\tnginx:1.30.7-alpine\tUp 2 hours\t0.0.0.0:3000->80/tcp\tnginx\n" +
+	psOut := "onyx-nginx-1\tnginx:1.25.5-alpine\tUp 2 hours\t0.0.0.0:3000->80/tcp\tnginx\n" +
 		"onyx-api_server-1\tonyxdotapp/onyx-backend:v4.2.0\tUp 2 seconds (health: starting)\t\tapi_server\n"
 	inspectOut := `{"name":"/onyx-api_server-1","restarts":9,"exit":255,"oom":false,"error":"","health":null}`
 	statusRunner := &fakeRunner{handler: func(c dockercmd.Command) (dockercmd.Result, error) {
@@ -596,7 +596,7 @@ func TestStatusReportsServicesStillStarting(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.2.0")
 
-	psOut := "onyx-nginx-1\tnginx:1.30.7-alpine\tUp 3 seconds\t0.0.0.0:3000->80/tcp\tnginx\n" +
+	psOut := "onyx-nginx-1\tnginx:1.25.5-alpine\tUp 3 seconds\t0.0.0.0:3000->80/tcp\tnginx\n" +
 		"onyx-api_server-1\tonyxdotapp/onyx-backend:v4.2.0\tUp 3 seconds (health: starting)\t\tapi_server\n"
 	inspectOut := `{"name":"/onyx-api_server-1","restarts":0,"exit":0,"oom":false,"error":"",` +
 		`"health":{"Status":"starting","FailingStreak":1,"Log":[{"ExitCode":1,"Output":"connection refused"}]}}`

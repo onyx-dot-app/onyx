@@ -39,13 +39,14 @@ nginx:
       use-http2: "false"
 ```
 
-After the upgrade, check that the controller pods restarted. If they did not, restart the controller Deployment:
+After the upgrade, check that the controller pods restarted. If they did not, restart the controller:
 
 ```bash
-kubectl rollout restart deployment "<controller-deployment>" -n "<namespace>"
+kubectl rollout restart "deployment/<controller-name>" -n "<namespace>"
 ```
 
-Wait for the new pods to be ready. This setting does not update the controller image or fix other NGINX vulnerabilities.
+If `nginx.controller.kind` is `DaemonSet`, use `daemonset/<controller-name>` instead. Wait for the new pods to be ready.
+This setting does not update the controller image or fix other NGINX vulnerabilities.
 
 ## Credentials
 
