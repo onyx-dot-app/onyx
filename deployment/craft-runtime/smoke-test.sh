@@ -37,6 +37,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import pdfplumber
+import power_pptx
 import requests
 from docx import Document
 from PIL import Image
