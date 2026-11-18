@@ -166,13 +166,23 @@ pub async fn change_server(app: AppHandle, state: State<'_, AppState>) -> Result
 #[tauri::command]
 pub async fn ask(
     question: String,
+    chat_session_id: Option<String>,
     on_event: Channel<AskEvent>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let epoch = state.epoch();
     let (server, token) = state.session()?;
     let current = || state.epoch() == epoch;
-    let result = ask::run(&state.api, &server, &token, &question, &on_event, &current).await;
+    let result = ask::run(
+        &state.api,
+        &server,
+        &token,
+        &question,
+        chat_session_id.as_deref(),
+        &on_event,
+        &current,
+    )
+    .await;
     let event = match &result {
         Ok(_) => AskEvent::Done,
         Err(message) => AskEvent::Error {

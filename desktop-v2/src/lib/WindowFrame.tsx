@@ -13,7 +13,7 @@ interface WindowFrameProps {
 const TITLE_BAR = 24;
 
 // Shared layout for the small native windows (onboarding, login, preferences).
-// Like Claude Desktop's dialogs, the window is as tall as its content.
+// The window is as tall as its content.
 export function WindowFrame({ title, subtitle, children }: WindowFrameProps) {
   const contentRef = useRef<HTMLDivElement>(null);
 

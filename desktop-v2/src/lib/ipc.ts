@@ -30,6 +30,10 @@ export interface Citation {
 export type AskEvent =
   | { kind: "session"; chatSessionId: string }
   | { kind: "delta"; text: string }
+  // What the answer is doing while no text streams.
+  | { kind: "status"; text: string }
+  // The text so far was narration before a tool step; the answer restarts.
+  | { kind: "restart"; text: string }
   | { kind: "citations"; docs: Citation[] }
   | { kind: "needsApproval"; tool: string | null }
   | { kind: "done" }
@@ -75,13 +79,15 @@ export const changeServer = (): Promise<void> => invoke("change_server");
 
 export const signOut = (): Promise<void> => invoke("sign_out");
 
+/** `chatSessionId` continues that chat with a follow-up; null starts a new one. */
 export function ask(
   question: string,
+  chatSessionId: string | null,
   onEvent: (event: AskEvent) => void
 ): Promise<void> {
   const channel = new Channel<AskEvent>();
   channel.onmessage = onEvent;
-  return invoke("ask", { question, onEvent: channel });
+  return invoke("ask", { question, chatSessionId, onEvent: channel });
 }
 
 export const search = (query: string): Promise<SearchHit[]> =>

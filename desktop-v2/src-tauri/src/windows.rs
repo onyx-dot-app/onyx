@@ -54,8 +54,7 @@ fn local_window(
     size: (f64, f64),
 ) -> Result<WebviewWindow, String> {
     if let Some(window) = app.get_webview_window(label) {
-        let _ = window.show();
-        let _ = window.set_focus();
+        bring_forward(app, &window);
         return Ok(window);
     }
     let nav_app = app.clone();
@@ -65,14 +64,44 @@ fn local_window(
         .resizable(false)
         .center()
         .focused(true)
+        // The first click also acts on the control, not only on the window.
+        .accept_first_mouse(true)
         .on_navigation(move |url| local_navigation_allowed(&nav_app, url))
         .on_new_window(local_new_window(app));
     #[cfg(target_os = "macos")]
     let builder = builder
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true);
-    builder.build().map_err(|e| e.to_string())
+    let window = builder.build().map_err(|e| e.to_string())?;
+    activate_app(app);
+    Ok(window)
 }
+
+/// Shows `window` in front of every app. Showing a window does not activate
+/// the app: from the tray or the launcher, the window would open behind the
+/// app in front.
+pub fn bring_forward(app: &AppHandle, window: &WebviewWindow) {
+    // Queued on the main thread ahead of the focus change below.
+    crate::launcher::keep_app_shown(app);
+    let _ = window.show();
+    let _ = window.unminimize();
+    activate_app(app);
+    let _ = window.set_focus();
+}
+
+#[cfg(target_os = "macos")]
+fn activate_app(app: &AppHandle) {
+    let _ = app.run_on_main_thread(|| {
+        if let Some(mtm) = objc2::MainThreadMarker::new() {
+            let ns_app = objc2_app_kit::NSApplication::sharedApplication(mtm);
+            #[allow(deprecated)] // `activate` needs macOS 14.
+            ns_app.activateIgnoringOtherApps(true);
+        }
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+fn activate_app(_app: &AppHandle) {}
 
 pub fn open_onboarding(app: &AppHandle) -> Result<WebviewWindow, String> {
     local_window(
@@ -188,16 +217,9 @@ pub fn route(app: &AppHandle) {
 
 /// Dock click, tray "Open Onyx" and second launches.
 pub fn show_primary(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window(main_window::LABEL) {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-        return;
-    }
-    for label in [ONBOARDING, LOGIN] {
+    for label in [main_window::LABEL, ONBOARDING, LOGIN] {
         if let Some(window) = app.get_webview_window(label) {
-            let _ = window.show();
-            let _ = window.set_focus();
+            bring_forward(app, &window);
             return;
         }
     }
