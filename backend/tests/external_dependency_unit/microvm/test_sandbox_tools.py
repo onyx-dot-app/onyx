@@ -148,7 +148,7 @@ from tests.external_dependency_unit.code_mode_helpers import (
     tool_step,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
-from tests.external_dependency_unit.db.test_chat_tool_selection import (
+from tests.external_dependency_unit.db.test_chat_tool_options import (
     ResearchCapableModel,
 )
 from tests.external_dependency_unit.integration_helpers import (
