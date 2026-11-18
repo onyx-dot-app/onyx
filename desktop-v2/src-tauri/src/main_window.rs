@@ -349,6 +349,48 @@ pub fn close(app: &AppHandle, server: &str) {
     }
 }
 
+/// Renews the stored session so a running app never signs out. Returns the
+/// token to use from now on, or `None` when the session ended meanwhile (a
+/// sign-out, a new sign-in or a server change): the caller must stop.
+pub async fn renew_session(app: &AppHandle, server: &str, token: &str) -> Option<String> {
+    let state = app.state::<AppState>();
+    match state.api.refresh(server, token).await {
+        // Saved only if this session is still the stored one.
+        Ok(fresh) if state.replace_token(server, token, &fresh) => {
+            if let (Some(window), Ok(server_url)) =
+                (app.get_webview_window(LABEL), Url::parse(server))
+            {
+                let name = state.cached_cookie_name(server);
+                let _ = hand_over_session(&window, &server_url, &name, &fresh);
+            }
+            Some(fresh)
+        }
+        Ok(_) => None,
+        Err(e) => {
+            log::warn!("session renewal failed: {e}");
+            // A transient failure keeps the current token, if it is still current.
+            (state.token(server).as_deref() == Some(token)).then(|| token.to_string())
+        }
+    }
+}
+
+/// Renews the session while the app runs, as often as the web app does
+/// (every 10 minutes), so short server session lifetimes
+/// (`SESSION_EXPIRE_TIME_SECONDS`) do not expire while only the launcher is
+/// in use.
+pub fn spawn_session_renewal(app: &AppHandle) {
+    const RENEWAL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(RENEWAL_INTERVAL).await;
+            if let Ok((server, token)) = app.state::<AppState>().session() {
+                renew_session(&app, &server, &token).await;
+            }
+        }
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::{classify, LinkAction};

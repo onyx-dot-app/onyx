@@ -4,6 +4,8 @@ const COMMANDS: &[&str] = &[
     "check_server",
     "save_server",
     "login",
+    "get_auth_methods",
+    "sign_in_with_sso",
     "get_prefs",
     "set_hotkey",
     "change_server",

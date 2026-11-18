@@ -13,6 +13,7 @@ mod main_window;
 mod menu;
 mod session_store;
 mod shortcut;
+mod sso;
 mod state;
 mod windows;
 
@@ -23,10 +24,12 @@ use crate::state::AppState;
 
 fn main() {
     let builder = tauri::Builder::default()
-        // Must come first: a second launch hands over to the running instance.
+        // Must come first: a second launch (or an onyx:// link that starts
+        // the app) hands its URL to the running instance and exits.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             windows::show_primary(app);
         }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         // Remember the main window's size and position; small windows stay centred.
@@ -55,12 +58,25 @@ fn main() {
             }
             launcher::preload(handle);
 
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let link_app = handle.clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        sso::handle_callback(&link_app, &url);
+                    }
+                });
+            }
+
+            main_window::spawn_session_renewal(handle);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::check_server,
             commands::save_server,
             commands::login,
+            commands::get_auth_methods,
+            commands::sign_in_with_sso,
             commands::get_prefs,
             commands::set_hotkey,
             commands::change_server,

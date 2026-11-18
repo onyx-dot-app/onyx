@@ -117,6 +117,23 @@ impl AppState {
         Ok(true)
     }
 
+    /// Replaces `old` with `new` only if `old` is still the stored session;
+    /// a sign-out or a new sign-in during a renewal wins. Returns whether it
+    /// replaced the token. If the keychain cannot save it, the new token is
+    /// still used for this run (the session stays usable) and the failure is
+    /// logged; the next launch starts from the token saved before.
+    pub fn replace_token(&self, server: &str, old: &str, new: &str) -> bool {
+        let mut cache = self.token.lock().unwrap_or_else(|p| p.into_inner());
+        if cache.as_ref() != Some(&(server.to_string(), old.to_string())) {
+            return false;
+        }
+        if let Err(e) = session_store::store(server, new) {
+            log::warn!("could not save the renewed session: {e}");
+        }
+        *cache = Some((server.to_string(), new.to_string()));
+        true
+    }
+
     pub fn clear_token(&self, server: &str) -> Result<(), String> {
         // Held until the keychain entry is gone, so a concurrent `token()`
         // cannot load the old token back into the cache.

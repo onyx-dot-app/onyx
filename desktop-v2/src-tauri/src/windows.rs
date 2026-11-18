@@ -162,6 +162,10 @@ pub fn route(app: &AppHandle) {
                     log::warn!("could not open main window: {e}");
                     open_failed(&app, "Could not open Onyx", &e);
                 }
+                // After the window is up, so a slow refresh never delays it.
+                // The renewed token reaches the window only if this session
+                // is still the stored one.
+                main_window::renew_session(&app, &server, &token).await;
             }
             Ok(false) => {
                 let _ = state.clear_token(&server);

@@ -34,6 +34,13 @@ shipping unchanged and stays the default desktop app. v2 has its own bundle ID
   hides when you click away. **Ask** streams an answer through
   `POST /api/chat/send-chat-message`. **Search** calls `POST /api/search/send-search-message`
   (EE). `Tab` switches mode, `Cmd+Enter` opens the chat in the main window, `Esc` closes.
+- SSO in the system browser, where you are often signed in already. The browser runs the
+  server's normal OAuth flow with Onyx's mobile SSO parameters and PKCE, and the server ends it
+  with `onyx://auth/callback?code=..`. The app swaps the one-time code for a session token
+  (`src-tauri/src/sso.rs`). The identity provider needs no new redirect URI: the flow returns
+  to the web callback that is already registered. Servers without this flow fall back to the
+  web login page in an app window.
+- The app renews the session on launch and every 12 hours, so regular use never signs you out.
 
 Closing the main window keeps the app running in the menu bar; the Dock icon, the tray's
 **Open Onyx** or a second launch brings it back.
@@ -93,6 +100,9 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 - wry calls the navigation hook for iframes too, so a cross-origin iframe in the web UI
   opens in the browser instead of rendering inline.
+- Browser SSO needs a server with the native-app sign-in pass-through in its web OAuth
+  callback. v1 also registers the `onyx://` scheme; with both apps installed, macOS sends the
+  sign-in link to whichever app registered it last.
 - macOS only for now. The code builds on other platforms, but the launcher panel, native
   cookies and dialogs are macOS-specific.
 - The shell-side React and Opal dependencies resolve from `web/node_modules`.

@@ -24,6 +24,48 @@ pub struct SearchHit {
     pub source_type: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthMethods {
+    pub password: bool,
+    pub sso: Vec<SsoOption>,
+    /// The server's OAuth sign-in (`/api/auth/oauth/authorize`) is configured,
+    /// so SSO can run in the system browser.
+    pub browser_sso: bool,
+}
+
+/// One SSO button on the login window.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SsoOption {
+    pub label: String,
+    /// True for the server's built-in Google sign-in, which runs in the
+    /// system browser; false for sign-in on the server's own login page in an
+    /// app window (provider rows, and cloud workspaces).
+    pub browser: bool,
+}
+
+#[derive(Deserialize)]
+struct SsoProvider {
+    display_name: String,
+}
+
+#[derive(Deserialize)]
+struct AuthTypeResponse {
+    #[serde(default)]
+    multi_tenant: bool,
+    #[serde(default = "default_true")]
+    password_auth_enabled: bool,
+    #[serde(default)]
+    oauth_enabled: bool,
+    #[serde(default)]
+    sso_providers: Vec<SsoProvider>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
 /// The web UI's default session cookie (`AUTH_COOKIE_NAME` unset).
 pub const DEFAULT_SESSION_COOKIE: &str = "fastapiusersauth";
 
@@ -176,6 +218,85 @@ impl Api {
             .unwrap_or_else(|| DEFAULT_SESSION_COOKIE.to_string()))
     }
 
+    /// Which sign-in methods the server offers (`GET /api/auth/type`).
+    pub async fn auth_methods(&self, server: &str) -> Result<AuthMethods, String> {
+        let response = self
+            .http
+            .get(format!("{server}/api/auth/type"))
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await
+            .map_err(|e| format!("Could not reach the server: {e}"))?;
+        if !response.status().is_success() {
+            return Err(error_detail(response).await);
+        }
+        let parsed = response
+            .json::<AuthTypeResponse>()
+            .await
+            .map_err(|e| format!("Unexpected response: {e}"))?;
+        // `oauth_enabled` is the built-in Google sign-in, the only flow with
+        // the mobile parameters the browser sign-in needs. Provider rows (OIDC,
+        // SAML) have their own routes and use the in-app window instead.
+        // Cloud (multi-tenant) servers can require a CAPTCHA before the OAuth
+        // callback, which only their login page can pass, so cloud sign-in
+        // always uses that page in an app window.
+        let browser_sso =
+            parsed.oauth_enabled && parsed.sso_providers.is_empty() && !parsed.multi_tenant;
+        let mut sso: Vec<SsoOption> = parsed
+            .sso_providers
+            .into_iter()
+            .map(|p| SsoOption {
+                label: p.display_name,
+                browser: false,
+            })
+            .collect();
+        if browser_sso {
+            sso.push(SsoOption {
+                label: "Continue with Google".into(),
+                browser: true,
+            });
+        }
+        // Cloud workspaces list no providers here; the server's login page
+        // offers Google and finds a workspace's OIDC or SAML sign-in from the
+        // email address.
+        if parsed.multi_tenant {
+            sso.push(SsoOption {
+                label: "Continue with Google or SSO".into(),
+                browser: false,
+            });
+        }
+        Ok(AuthMethods {
+            password: parsed.password_auth_enabled,
+            sso,
+            browser_sso,
+        })
+    }
+
+    /// Swaps a one-time SSO code (and its PKCE verifier) for a session token.
+    pub async fn mobile_sso_exchange(
+        &self,
+        server: &str,
+        code: &str,
+        verifier: &str,
+    ) -> Result<String, String> {
+        let response = self
+            .http
+            .post(format!("{server}/api/auth/mobile/sso/exchange"))
+            .json(&json!({ "code": code, "code_verifier": verifier }))
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !response.status().is_success() {
+            return Err(error_detail(response).await);
+        }
+        response
+            .json::<TokenResponse>()
+            .await
+            .map(|t| t.access_token)
+            .map_err(|e| e.to_string())
+    }
+
     pub async fn login(&self, server: &str, email: &str, password: &str) -> Result<String, String> {
         let response = self
             .http
@@ -216,6 +337,26 @@ impl Api {
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Ok(false),
             s => Err(format!("The server returned {s}.")),
         }
+    }
+
+    /// Exchanges a valid session token for a fresh one with a new lifetime.
+    pub async fn refresh(&self, server: &str, token: &str) -> Result<String, String> {
+        let response = self
+            .http
+            .post(format!("{server}/api/auth/mobile/refresh"))
+            .bearer_auth(token)
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !response.status().is_success() {
+            return Err(error_detail(response).await);
+        }
+        response
+            .json::<TokenResponse>()
+            .await
+            .map(|t| t.access_token)
+            .map_err(|e| e.to_string())
     }
 
     pub async fn logout(&self, server: &str, token: &str) {
