@@ -725,6 +725,8 @@ def get_bootsteps() -> list[type]:
 # Task modules that require a vector DB (OpenSearch).
 # When DISABLE_VECTOR_DB is True these are excluded from autodiscover lists.
 _VECTOR_DB_TASK_MODULES: set[str] = {
+    # Its runs read chunks from and search the document index.
+    "onyx.background.celery.tasks.suggested_questions",
     "onyx.background.celery.tasks.connector_deletion",
     "onyx.background.celery.tasks.docprocessing",
     "onyx.background.celery.tasks.docfetching",

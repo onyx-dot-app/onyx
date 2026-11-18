@@ -116,12 +116,20 @@ def _search_position(
 ) -> int | None:
     """Where the question's document ranks among the first SQ_TOP_K_DOCS
     distinct documents, or None when it is not there. Positions are compared,
-    not scores: hybrid scores are normalised per query."""
-    chunks = (
-        _search_as(user, acl_filters, draft.text, document_index, embedding_model)
-        if user and acl_filters
-        else _search_everything(draft.text, document_index, embedding_model)
-    )
+    not scores: hybrid scores are normalised per query. A failed search also
+    gives None, so one failure does not lose the run's other questions after
+    the model calls are paid for."""
+    try:
+        chunks = (
+            _search_as(user, acl_filters, draft.text, document_index, embedding_model)
+            if user and acl_filters
+            else _search_everything(draft.text, document_index, embedding_model)
+        )
+    except Exception:
+        logger.warning(
+            "Suggested questions: search test failed for one question", exc_info=True
+        )
+        return None
     documents = list(dict.fromkeys(chunk.document_id for chunk in chunks))
     top = documents[:SQ_TOP_K_DOCS]
     document_id = draft.chunk.document_id

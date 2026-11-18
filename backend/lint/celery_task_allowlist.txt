@@ -73,6 +73,8 @@ task PURGE_EXPIRED_HARNESS_SESSIONS: Deletes sandbox session saves that chat ret
 task EXPORT_QUERY_HISTORY_TASK: User-started CSV export of chat history, too heavy for the API server.
 task EXPORT_QUERY_HISTORY_CLEANUP_TASK: Beat cleanup of finished and failed query history export rows.
 task GENERATE_USAGE_REPORT_TASK: Builds the usage report files, from a user request or the monthly beat entry.
+task GENERATE_SUGGESTED_QUESTIONS_POOL: Writes and tests suggested questions for a company, about 5 to 15 seconds of model calls, requested again as documents are indexed.
+task GENERATE_SUGGESTED_QUESTIONS_FOR_USER: Writes and tests suggested questions for one person who is short of them, requested again from chat.
 task EXPORT_LOGS_COLLECT_TASK: Collects one container's log files for a user-started log export.
 task EXPORT_LOGS_CLEANUP_TASK: Beat cleanup of log export files past their retention window.
 task HOOK_EXECUTION_LOG_CLEANUP_TASK: Beat cleanup of old hook execution logs.
