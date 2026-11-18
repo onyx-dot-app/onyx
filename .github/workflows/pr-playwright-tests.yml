@@ -13,6 +13,8 @@ on:
     # avoids the dual-workflow skip pattern where a `paths-ignore`'d skip
     # workflow can race the real workflow's same-named status check under
     # branch protection.
+    # A draft skips the slow suites, so they run again when the draft state changes.
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     paths-ignore:
       - "documentation/**"
@@ -94,17 +96,17 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      # A PR with an open child PR skips the suite: the stack tip runs it for
-      # every change below the tip. A stacked tip runs every optional suite,
-      # because its path filters see only the tip's own diff.
-      covered_by: ${{ steps.stack.outputs.child }}
-      playwright: ${{ github.event_name != 'pull_request' && 'true' || steps.stack.outputs.child != '' && 'false' || steps.stack.outputs.stacked == 'true' && 'true' || (steps.filter.outputs.playwright == 'true' || steps.backend_src.outputs.backend == 'true') && 'true' || 'false' }}
-      airgap: ${{ steps.stack.outputs.child != '' && 'false' || steps.stack.outputs.stacked == 'true' && 'true' || steps.filter.outputs.airgap || 'true' }}
+      # A draft PR, or a PR with an open, ready child PR, skips the suite (see
+      # .github/actions/stack-position). The path filters of a stacked tip
+      # see every change in its stack.
+      skip_reason: ${{ steps.stack.outputs.skip_reason }}
+      playwright: ${{ github.event_name != 'pull_request' && 'true' || steps.stack.outputs.skip_reason != '' && 'false' || (steps.filter.outputs.playwright == 'true' || steps.backend_src.outputs.backend == 'true') && 'true' || 'false' }}
+      airgap: ${{ steps.stack.outputs.skip_reason != '' && 'false' || steps.filter.outputs.airgap || 'true' }}
       # Whether this change touches MCP-OAuth-relevant code. Drives whether a
       # same-repo PR validates the OAuth spec against the real Okta org instead of
       # the mock IdP. A push to main always runs it; other events without the
       # filter default to 'false'.
-      mcp_oauth: ${{ steps.stack.outputs.stacked == 'true' && 'true' || steps.filter.outputs.mcp_oauth || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'true' || 'false' }}
+      mcp_oauth: ${{ steps.filter.outputs.mcp_oauth || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'true' || 'false' }}
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request'
@@ -119,6 +121,10 @@ jobs:
         id: backend_src
         if: github.event_name == 'pull_request'
         with:
+          # A stacked PR diffs against the base of its whole stack: without a
+          # token, paths-filter runs git diff from `base`. See stack-position.
+          token: ${{ steps.stack.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ steps.stack.outputs.stack_base }}
           # `every`: a file matches only if it matches all patterns, so a PR
           # that changes only unit or external-dependency tests skips this suite.
           predicate-quantifier: every
@@ -131,6 +137,10 @@ jobs:
         id: filter
         if: github.event_name == 'pull_request'
         with:
+          # A stacked PR diffs against the base of its whole stack: without a
+          # token, paths-filter runs git diff from `base`. See stack-position.
+          token: ${{ steps.stack.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ steps.stack.outputs.stack_base }}
           filters: |
             playwright:
               - 'web/**'
@@ -1296,7 +1306,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           CHANGES_RESULT: ${{ needs.changes.result }}
-          COVERED_BY: ${{ needs.changes.outputs.covered_by }}
+          SKIP_REASON: ${{ needs.changes.outputs.skip_reason }}
           RUN_AIRGAP: ${{ needs.changes.outputs.airgap }}
           RUN_TESTS: ${{ needs.changes.outputs.playwright }}
           AIRGAP_RESULT: ${{ needs.airgap-health.result }}
@@ -1312,8 +1322,8 @@ jobs:
             echo "changes job did not succeed (result: ${CHANGES_RESULT})"
             exit 1
           fi
-          if [ -n "${COVERED_BY}" ]; then
-            echo "PR #${COVERED_BY} is stacked on this PR. The stack tip runs the suite for this PR's changes."
+          if [ -n "${SKIP_REASON}" ]; then
+            echo "${SKIP_REASON}"
             exit 0
           fi
           if [ "${RUN_AIRGAP}" = "true" ] && [ "${AIRGAP_RESULT}" != "success" ]; then
@@ -1345,7 +1355,7 @@ jobs:
       - name: Record tested base
         if: >-
           github.event_name == 'pull_request' &&
-          needs.changes.outputs.covered_by == '' &&
+          needs.changes.outputs.skip_reason == '' &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           github.actor != 'dependabot[bot]'
         env:
