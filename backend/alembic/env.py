@@ -17,6 +17,7 @@ from sqlalchemy import pool
 from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.engine.base import Connection
+from sqlalchemy.schema import SchemaItem
 import os
 from itertools import chain
 import asyncio
@@ -60,6 +61,26 @@ if config.config_file_name is not None and config.attributes.get(
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = [Base.metadata, ResultModelBase.metadata]
+
+# Tables that stay in the database for rollback after their model was deleted.
+# Without this filter, autogenerate proposes to drop them.
+_TABLES_KEPT_WITHOUT_MODEL = frozenset({"external_app__skill"})
+
+
+def include_object(
+    _object: SchemaItem,
+    name: str | None,
+    type_: str,
+    reflected: bool,
+    compare_to: SchemaItem | None,
+) -> bool:
+    return not (
+        type_ == "table"
+        and reflected
+        and compare_to is None
+        and name in _TABLES_KEPT_WITHOUT_MODEL
+    )
+
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +284,7 @@ def do_run_migrations(
         target_metadata=target_metadata,
         version_table_schema=schema_name,
         include_schemas=True,
+        include_object=include_object,
         compare_type=True,
         compare_server_default=True,
         script_location=config.get_main_option("script_location"),
@@ -542,6 +564,7 @@ def run_migrations_online() -> None:
                     None if schema_name == POSTGRES_DEFAULT_SCHEMA else schema_name
                 ),
                 include_schemas=schema_name != POSTGRES_DEFAULT_SCHEMA,
+                include_object=include_object,
                 compare_type=True,
                 compare_server_default=True,
                 script_location=config.get_main_option("script_location"),
