@@ -1,8 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod api;
+mod ask;
 mod commands;
 mod config;
+mod launcher;
 #[cfg(target_os = "macos")]
 mod macos_cookies;
 #[cfg(target_os = "macos")]
@@ -10,6 +12,7 @@ mod macos_dialogs;
 mod main_window;
 mod menu;
 mod session_store;
+mod shortcut;
 mod state;
 mod windows;
 
@@ -24,13 +27,17 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             windows::show_primary(app);
         }))
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         // Remember the main window's size and position; small windows stay centred.
         .plugin(
             tauri_plugin_window_state::Builder::default()
-                .with_denylist(&["onboarding", "login", "preferences"])
+                .with_denylist(&["onboarding", "login", "preferences", "launcher"])
                 .build(),
         );
+    // Launcher as a non-activating NSPanel (see launcher.rs); macOS only.
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_nspanel::init());
     let app = builder
         .setup(|app| {
             let config_path = app.path().app_config_dir()?.join("config.json");
@@ -42,6 +49,12 @@ fn main() {
             app.on_menu_event(|app, event| menu::handle(app, event.id().as_ref()));
             menu::build_tray(handle)?;
 
+            let hotkey = app.state::<AppState>().config.get().hotkey();
+            if let Err(e) = shortcut::register(handle, &hotkey) {
+                log::warn!("{e}");
+            }
+            launcher::preload(handle);
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -49,9 +62,14 @@ fn main() {
             commands::save_server,
             commands::login,
             commands::get_prefs,
+            commands::set_hotkey,
             commands::change_server,
             commands::sign_out,
+            commands::ask,
+            commands::search,
+            commands::open_chat_in_main,
             commands::open_external,
+            commands::hide_launcher,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the Onyx desktop app");

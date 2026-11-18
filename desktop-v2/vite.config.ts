@@ -74,6 +74,7 @@ export default defineConfig({
       input: {
         onboarding: path.resolve(root, "onboarding.html"),
         login: path.resolve(root, "login.html"),
+        launcher: path.resolve(root, "launcher.html"),
         preferences: path.resolve(root, "preferences.html"),
       },
     },

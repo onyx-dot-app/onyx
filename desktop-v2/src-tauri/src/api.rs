@@ -4,13 +4,24 @@
 use std::time::Duration;
 
 use reqwest::{Client, Response, StatusCode};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use url::Url;
 
 const USER_AGENT: &str = concat!("OnyxDesktop/", env!("CARGO_PKG_VERSION"));
 
 pub struct Api {
     http: Client,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchHit {
+    pub document_id: String,
+    pub title: String,
+    pub link: Option<String>,
+    pub blurb: String,
+    pub source_type: String,
 }
 
 /// The web UI's default session cookie (`AUTH_COOKIE_NAME` unset).
@@ -29,6 +40,29 @@ struct VersionResponse {
 #[derive(Deserialize)]
 struct TokenResponse {
     access_token: String,
+}
+
+#[derive(Deserialize)]
+struct ChatSessionResponse {
+    chat_session_id: String,
+}
+
+#[derive(Deserialize)]
+struct SearchDoc {
+    document_id: String,
+    semantic_identifier: String,
+    link: Option<String>,
+    #[serde(default)]
+    blurb: String,
+    #[serde(default)]
+    source_type: String,
+}
+
+#[derive(Deserialize)]
+struct SearchResponse {
+    #[serde(default)]
+    search_docs: Vec<SearchDoc>,
+    error: Option<String>,
 }
 
 /// Reduce user input to a server origin such as `https://cloud.onyx.app`.
@@ -192,6 +226,105 @@ impl Api {
             .timeout(Duration::from_secs(10))
             .send()
             .await;
+    }
+
+    pub async fn create_chat_session(&self, server: &str, token: &str) -> Result<String, String> {
+        let response = self
+            .http
+            .post(format!("{server}/api/chat/create-chat-session"))
+            .bearer_auth(token)
+            .json(&json!({ "persona_id": 0, "description": null }))
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !response.status().is_success() {
+            return Err(error_detail(response).await);
+        }
+        response
+            .json::<ChatSessionResponse>()
+            .await
+            .map(|r| r.chat_session_id)
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn send_message(
+        &self,
+        server: &str,
+        token: &str,
+        chat_session_id: &str,
+        message: &str,
+    ) -> Result<Response, String> {
+        // Bounds the wait for the response headers only; the streamed answer
+        // that follows has its own idle timeout in `ask::run`.
+        let request = self
+            .http
+            .post(format!("{server}/api/chat/send-chat-message"))
+            .bearer_auth(token)
+            .json(&json!({
+                "message": message,
+                "chat_session_id": chat_session_id,
+                "parent_message_id": null,
+                "file_descriptors": [],
+                "deep_research": false,
+                "origin": "unknown",
+            }))
+            .send();
+        let response = tokio::time::timeout(Duration::from_secs(120), request)
+            .await
+            .map_err(|_| "The server did not start answering.".to_string())?
+            .map_err(|e| e.to_string())?;
+        if !response.status().is_success() {
+            return Err(error_detail(response).await);
+        }
+        Ok(response)
+    }
+
+    pub async fn search(
+        &self,
+        server: &str,
+        token: &str,
+        query: &str,
+    ) -> Result<Vec<SearchHit>, String> {
+        let response = self
+            .http
+            .post(format!("{server}/api/search/send-search-message"))
+            .bearer_auth(token)
+            .json(&json!({
+                "search_query": query,
+                "num_hits": 15,
+                "include_content": false,
+                "stream": false,
+            }))
+            .timeout(Duration::from_secs(60))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if response.status() == StatusCode::NOT_FOUND || response.status() == StatusCode::FORBIDDEN
+        {
+            return Err("Knowledge search is not available on this server.".into());
+        }
+        if !response.status().is_success() {
+            return Err(error_detail(response).await);
+        }
+        let parsed = response
+            .json::<SearchResponse>()
+            .await
+            .map_err(|e| format!("Unexpected search response: {e}"))?;
+        if let Some(error) = parsed.error {
+            return Err(error);
+        }
+        Ok(parsed
+            .search_docs
+            .into_iter()
+            .map(|doc| SearchHit {
+                document_id: doc.document_id,
+                title: doc.semantic_identifier,
+                link: doc.link,
+                blurb: doc.blurb,
+                source_type: doc.source_type,
+            })
+            .collect())
     }
 }
 

@@ -2,7 +2,8 @@
 
 > Thin clients that bring Onyx outside the main web app: a Tauri desktop
 > shell, a chat widget that a site embeds, and a Chrome extension. None runs
-> product logic, and only the widget calls the chat endpoints itself.
+> product logic, and only the widget and desktop v2's launcher call the chat
+> endpoints themselves.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE. JWT passthrough for the widget works on single-tenant
@@ -54,7 +55,13 @@ It also holds desktop v2 (`desktop-v2/`), a preview native macOS app that
 installs beside v1 and is not the default. It signs in through
 `/api/auth/mobile/login`, hands the token to the remote web UI as the session
 cookie, and gives IPC only to its bundled windows. It has its own CI build
-and release; v1's release does not build it.
+and release; v1's release does not build it. Its launcher panel (global
+shortcut) calls the chat endpoints from Rust with the bearer token:
+`POST /chat/create-chat-session`, then `POST /chat/send-chat-message`
+(`origin "unknown"`), and it reads the streamed packets (text, citations,
+`stop`, `tool_approval_request`). Search mode calls
+`POST /search/send-search-message`. A change to those request or packet
+shapes must keep the launcher working.
 
 It does not own the chat UI that the desktop shell and the side panel load
 ([[chat-frontend]]), the chat endpoints ([[core-chat-loop]]), API keys and JWT

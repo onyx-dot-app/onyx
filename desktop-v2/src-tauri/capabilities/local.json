@@ -6,6 +6,7 @@
   "windows": [
     "onboarding",
     "login",
+    "launcher",
     "preferences"
   ],
   "permissions": [
@@ -15,8 +16,13 @@
     "allow-save-server",
     "allow-login",
     "allow-get-prefs",
+    "allow-set-hotkey",
     "allow-change-server",
     "allow-sign-out",
-    "allow-open-external"
+    "allow-ask",
+    "allow-search",
+    "allow-open-chat-in-main",
+    "allow-open-external",
+    "allow-hide-launcher"
   ]
 }

@@ -27,6 +27,13 @@ shipping unchanged and stays the default desktop app. v2 has its own bundle ID
   sidebar fully away. In full screen the button moves to the left edge. The sidebar's top row
   and the chat area's top bar drag the window. Zoom (`Cmd+=`/`Cmd+-`) keeps the title-bar row
   at its native size. Window size and position are remembered.
+- Launcher panel on a global shortcut (default `Cmd+Shift+Space`, set in Preferences) that
+  works from any app. On macOS it is a non-activating `NSPanel` (`src-tauri/src/launcher.rs`),
+  like Spotlight or Claude Desktop's quick entry: it appears over the app you are in, also
+  full-screen apps and on every Space, without bringing Onyx's other windows forward, and it
+  hides when you click away. **Ask** streams an answer through
+  `POST /api/chat/send-chat-message`. **Search** calls `POST /api/search/send-search-message`
+  (EE). `Tab` switches mode, `Cmd+Enter` opens the chat in the main window, `Esc` closes.
 
 Closing the main window keeps the app running in the menu bar; the Dock icon, the tray's
 **Open Onyx** or a second launch brings it back.
@@ -35,6 +42,7 @@ Closing the main window keeps the app running in the menu bar; the Dock icon, th
 
 | Shortcut | Action |
 |---|---|
+| `Cmd+Shift+Space` (global, configurable) | Show or hide the launcher |
 | `Cmd+N` | New chat |
 | `Cmd+,` | Preferences |
 | `Cmd+R` | Reload |
@@ -42,10 +50,11 @@ Closing the main window keeps the app running in the menu bar; the Dock icon, th
 | `Cmd+0` / `Cmd+=` / `Cmd+-` | Actual size / zoom in / zoom out (remembered) |
 | `Ctrl+Cmd+F` | Full screen |
 | `Cmd+M`, `Cmd+H`, `Cmd+W`, `Cmd+Q` | Minimize, hide, close window, quit |
+| Launcher: `Enter`, `Tab`, `Cmd+Enter`, `Esc` | Ask or search, switch mode, open in window, close |
 
 ## Security boundary
 
-- Only the bundled windows (onboarding, login, preferences)
+- Only the bundled windows (onboarding, login, preferences, launcher)
   can call app commands. Every app command needs an explicit permission (`build.rs` app
   manifest), and the capability in `src-tauri/capabilities/local.json` grants them to those
   windows only. The remote main window gets no app command.

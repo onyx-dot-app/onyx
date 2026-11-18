@@ -1,4 +1,4 @@
-//! Local (bundled) windows: onboarding, login and preferences.
+//! Local (bundled) windows: onboarding, login, preferences and the launcher panel.
 
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
@@ -10,6 +10,7 @@ use crate::state::AppState;
 pub const ONBOARDING: &str = "onboarding";
 pub const LOGIN: &str = "login";
 pub const PREFERENCES: &str = "preferences";
+pub const LAUNCHER: &str = "launcher";
 
 /// Local windows may only show bundled pages; anything else opens in the browser.
 pub(crate) fn local_navigation_allowed(app: &AppHandle, url: &Url) -> bool {
@@ -103,6 +104,21 @@ pub fn close(app: &AppHandle, label: &str) {
     }
 }
 
+pub fn hide_launcher(app: &AppHandle) {
+    crate::launcher::hide(app);
+}
+
+/// Hides the launcher and drops what it shows, so the next account never sees
+/// the previous one's answers or search results.
+pub fn reset_launcher(app: &AppHandle) {
+    crate::launcher::reset(app);
+}
+
+/// Bound to the global shortcut: shows the launcher over any app, or hides it.
+pub fn toggle_launcher(app: &AppHandle) {
+    crate::launcher::toggle(app, route);
+}
+
 /// Opens whichever window the current state needs: onboarding, login or the main window.
 /// Onyx could not open although the session may be valid (the server could
 /// not be reached, or its sign-in settings did not load): keep the session,
@@ -149,6 +165,8 @@ pub fn route(app: &AppHandle) {
             }
             Ok(false) => {
                 let _ = state.clear_token(&server);
+                // The rejected account's answers must not reach the next one.
+                reset_launcher(&app);
                 let _ = open_login(&app);
             }
             // Unreachable is not signed out: the session is kept, and

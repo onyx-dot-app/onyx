@@ -2,10 +2,13 @@
 //! limits them to those windows; the remote main window cannot call any of them.
 
 use serde::Serialize;
+use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 
-use crate::api::normalize_server_url;
+use crate::api::{normalize_server_url, SearchHit};
+use crate::ask::{self, AskEvent};
 use crate::main_window;
+use crate::shortcut;
 use crate::state::AppState;
 use crate::windows;
 
@@ -20,6 +23,7 @@ pub struct ServerInfo {
 #[serde(rename_all = "camelCase")]
 pub struct Prefs {
     server_url: Option<String>,
+    hotkey: String,
     signed_in: bool,
 }
 
@@ -69,9 +73,26 @@ pub fn get_prefs(state: State<'_, AppState>) -> Prefs {
         .as_deref()
         .is_some_and(|server| state.token(server).is_some());
     Prefs {
+        hotkey: config.hotkey(),
         server_url: config.server_url,
         signed_in,
     }
+}
+
+#[tauri::command]
+pub fn set_hotkey(
+    hotkey: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let old = state.config.get().hotkey();
+    shortcut::rebind(&app, &old, &hotkey)?;
+    // A shortcut that cannot be saved is not kept: it would revert on restart.
+    if let Err(e) = state.config.update(|c| c.hotkey = Some(hotkey.clone())) {
+        let _ = shortcut::rebind(&app, &hotkey, &old);
+        return Err(e);
+    }
+    Ok(())
 }
 
 async fn end_session(app: &AppHandle) -> Result<(), String> {
@@ -86,6 +107,7 @@ async fn end_session(app: &AppHandle) -> Result<(), String> {
     }
     state.clear_token(&server)?;
     main_window::close(app, &server);
+    windows::reset_launcher(app);
     Ok(())
 }
 
@@ -110,6 +132,53 @@ pub async fn change_server(app: AppHandle, state: State<'_, AppState>) -> Result
     windows::close(&app, windows::LOGIN);
     windows::close(&app, windows::PREFERENCES);
     Ok(())
+}
+
+#[tauri::command]
+pub async fn ask(
+    question: String,
+    on_event: Channel<AskEvent>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let (server, token) = state.session()?;
+    let epoch = state.epoch();
+    let current = || state.epoch() == epoch;
+    let result = ask::run(&state.api, &server, &token, &question, &on_event, &current).await;
+    let event = match &result {
+        Ok(_) => AskEvent::Done,
+        Err(message) => AskEvent::Error {
+            message: message.clone(),
+        },
+    };
+    let _ = on_event.send(event);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn search(query: String, state: State<'_, AppState>) -> Result<Vec<SearchHit>, String> {
+    let (server, token) = state.session()?;
+    let epoch = state.epoch();
+    let hits = state.api.search(&server, &token, &query).await?;
+    // Results for a session that has since ended are dropped.
+    if state.epoch() != epoch {
+        return Err("Signed out.".into());
+    }
+    Ok(hits)
+}
+
+#[tauri::command]
+pub async fn open_chat_in_main(
+    chat_session_id: Option<String>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let (server, token) = state.session()?;
+    let path = match chat_session_id {
+        Some(id) => format!("/app?chatId={id}"),
+        None => "/app".to_string(),
+    };
+    windows::hide_launcher(&app);
+    main_window::open(&app, &server, &token, &path).await
 }
 
 #[tauri::command]
@@ -140,9 +209,15 @@ pub async fn open_external(
             if let Some(fragment) = parsed.fragment() {
                 path = format!("{path}#{fragment}");
             }
+            windows::hide_launcher(&app);
             return main_window::open(&app, &server, &token, &path).await;
         }
     }
     main_window::open_external(&app, parsed.as_str());
     Ok(())
+}
+
+#[tauri::command]
+pub fn hide_launcher(app: AppHandle) {
+    windows::hide_launcher(&app);
 }
