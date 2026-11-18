@@ -2,6 +2,7 @@
 enabled integration of a tenant, cached for a short time."""
 
 import threading
+import time
 from collections.abc import Callable, Hashable
 from typing import Any
 from uuid import UUID
@@ -29,9 +30,11 @@ CACHE_TTL_S = 30.0
 
 
 class TTLMemo[K: Hashable, V]:
-    def __init__(self, ttl_s: float) -> None:
+    def __init__(
+        self, ttl_s: float, timer: Callable[[], float] = time.monotonic
+    ) -> None:
         self._lock = threading.Lock()
-        self._cache: TTLCache[K, V] = TTLCache(maxsize=10_000, ttl=ttl_s)
+        self._cache: TTLCache[K, V] = TTLCache(maxsize=10_000, ttl=ttl_s, timer=timer)
 
     def get(self, key: K, load: Callable[[], V]) -> V:
         with self._lock:
@@ -47,9 +50,15 @@ class TTLMemo[K: Hashable, V]:
 
 
 class UsableIntegrations:
-    def __init__(self, ttl_s: float = CACHE_TTL_S) -> None:
-        self._memo: TTLMemo[tuple[str, UUID], UsableIntegrationIds] = TTLMemo(ttl_s)
-        self._targets: TTLMemo[str, tuple[IntegrationMatchTarget, ...]] = TTLMemo(ttl_s)
+    def __init__(
+        self, ttl_s: float = CACHE_TTL_S, timer: Callable[[], float] = time.monotonic
+    ) -> None:
+        self._memo: TTLMemo[tuple[str, UUID], UsableIntegrationIds] = TTLMemo(
+            ttl_s, timer
+        )
+        self._targets: TTLMemo[str, tuple[IntegrationMatchTarget, ...]] = TTLMemo(
+            ttl_s, timer
+        )
 
     def get(self, tenant_id: str, user_id: UUID) -> UsableIntegrationIds:
         return self._memo.get(
@@ -70,12 +79,16 @@ class UsableIntegrations:
             return load_match_targets(db)
 
 
-def load_match_targets(db_session: Session) -> tuple[IntegrationMatchTarget, ...]:
-    """One query for each kind table. An integration with an unusable URL
-    matches nothing; one with settings that do not parse gets a
-    ``load_error``."""
+def load_match_targets(
+    db_session: Session, only_integration_id: int | None = None
+) -> tuple[IntegrationMatchTarget, ...]:
+    """One query for each kind table, for each enabled integration or for only
+    ``only_integration_id``. An integration with an unusable URL matches
+    nothing; one with settings that do not parse gets a ``load_error``."""
     targets: list[IntegrationMatchTarget] = []
-    for integration_id, server_url in list_enabled_mcp_server_urls(db_session):
+    for integration_id, server_url in list_enabled_mcp_server_urls(
+        db_session, only_integration_id
+    ):
         endpoint = parse_target(integration_id, server_url)
         if endpoint is not None:
             targets.append(
@@ -85,13 +98,17 @@ def load_match_targets(db_session: Session) -> tuple[IntegrationMatchTarget, ...
                     endpoint=endpoint,
                 )
             )
-    for integration_id, schema in list_enabled_openapi_schemas(db_session):
+    for integration_id, schema in list_enabled_openapi_schemas(
+        db_session, only_integration_id
+    ):
         target = openapi_match_target(integration_id, schema)
         if target is not None:
             targets.append(target)
     targets.extend(
         app_match_target(integration_id, app)
-        for integration_id, app in list_enabled_external_apps(db_session)
+        for integration_id, app in list_enabled_external_apps(
+            db_session, only_integration_id
+        )
     )
     return tuple(targets)
 

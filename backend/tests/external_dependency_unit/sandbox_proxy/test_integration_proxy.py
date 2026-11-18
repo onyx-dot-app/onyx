@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-import time
 from collections.abc import Generator
 from typing import Any
 from uuid import UUID, uuid4
@@ -36,6 +35,7 @@ from onyx.db.models import (
     BuildSession,
     Integration,
     IntegrationActionPolicy,
+    MCPServer,
     Plugin,
     ScheduledTask,
     ScheduledTask__Plugin,
@@ -297,6 +297,40 @@ def test_sandbox_calls_a_preset_app_a_custom_app_and_an_mcp_server(
     assert _headers(initialize, user, protocol) == {"Authorization": "Bearer mcp-tok"}
 
 
+def test_a_request_to_a_moved_endpoint_gets_no_credential(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    """The gate matches against cached targets. After an admin moves the
+    server, a request to the old host gets no credential."""
+    usable = UsableIntegrations()
+    old_host = _host()
+    mcp = _mcp(
+        db_session,
+        created,
+        f"https://{old_host}/mcp",
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+    )
+    _run(db_session, [mcp])
+    add_connection(db_session, mcp, user.id, ConnectionSecret(access_token="mcp-tok"))
+    request = _request(f"https://{old_host}/mcp", _tool_call("update"))
+    evaluator = IntegrationRequestEvaluator(usable)
+    assert isinstance(
+        evaluator.evaluate(request, TENANT, user.id, None), AllMatchedActions
+    )
+
+    server = db_session.get(MCPServer, mcp.mcp_server_id)
+    assert server is not None
+    server.server_url = f"https://{_host()}/mcp"
+    db_session.commit()
+
+    matched = evaluator.evaluate(request, TENANT, user.id, None)
+    assert isinstance(matched, AllMatchedActions)
+    ctx = InjectionContext(sandbox=_sandbox(user), matched_actions=matched)
+    with pytest.raises(CredentialUnavailableError):
+        IntegrationResolver(usable).resolve(request, ctx)
+
+
 def test_a_missing_connection_blocks_with_the_reason(
     db_session: Session, created: list[int], user: User
 ) -> None:
@@ -376,7 +410,8 @@ def test_the_match_targets_reload_after_the_cache_time(
     """The targets are cached for each tenant. A new integration matches
     after the cache time; a disabled one stops at once, because the
     evaluator reads the enabled integrations for each request."""
-    usable = UsableIntegrations(ttl_s=0.5)
+    now = [0.0]
+    usable = UsableIntegrations(ttl_s=30, timer=lambda: now[0])
     evaluator = IntegrationRequestEvaluator(usable)
     resolver = IntegrationResolver(usable)
     host = _host()
@@ -391,7 +426,7 @@ def test_the_match_targets_reload_after_the_cache_time(
     assert evaluator.evaluate(request, TENANT, user.id, None) is None
     assert not resolver.claims(request, ctx)
 
-    time.sleep(0.6)
+    now[0] += 31
     matched = evaluator.evaluate(request, TENANT, user.id, None)
     assert isinstance(matched, AllMatchedActions)
     assert matched.target.integration_id == mcp.id

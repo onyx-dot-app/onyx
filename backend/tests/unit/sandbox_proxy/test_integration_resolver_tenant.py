@@ -46,6 +46,7 @@ def test_a_credential_resolves_in_the_tenant_of_the_sandbox() -> None:
     with (
         patch(f"{MODULE}.get_session_with_tenant", _session),
         patch(f"{MODULE}.get_integration_by_id", return_value=MagicMock(id=3)),
+        patch(f"{MODULE}._matches_live_endpoint", return_value=True),
         patch(f"{MODULE}.fetch_user_by_id", return_value=MagicMock()),
         patch(f"{MODULE}.resolve_call_credentials", resolve),
         patch(f"{MODULE}.emit_credential_access"),
@@ -53,6 +54,7 @@ def test_a_credential_resolves_in_the_tenant_of_the_sandbox() -> None:
         headers = IntegrationResolver()._resolve_for_target(
             GatedTarget(integration_id=3, kind=IntegrationKind.MCP, app_name="crm"),
             sandbox,
+            MagicMock(),
         )
 
     assert headers == {"Authorization": "Bearer t"}

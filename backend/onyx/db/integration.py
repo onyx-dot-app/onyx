@@ -2,7 +2,7 @@ from collections.abc import Collection, Sequence
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import ColumnElement, and_, delete, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.db.enums import IntegrationActionSource
@@ -101,41 +101,53 @@ def get_external_app_for_integration(
     )
 
 
-def list_enabled_mcp_server_urls(db_session: Session) -> list[tuple[int, str]]:
-    """``(integration_id, server_url)`` of each enabled MCP integration."""
+def _enabled(integration_id: int | None) -> ColumnElement[bool]:
+    enabled = Integration.enabled.is_(True)
+    if integration_id is None:
+        return enabled
+    return and_(enabled, Integration.id == integration_id)
+
+
+def list_enabled_mcp_server_urls(
+    db_session: Session, integration_id: int | None = None
+) -> list[tuple[int, str]]:
+    """``(integration_id, server_url)`` of each enabled MCP integration, or of
+    only ``integration_id``."""
     return list(
         db_session.execute(
             select(Integration.id, MCPServer.server_url)
             .join(MCPServer, MCPServer.id == Integration.mcp_server_id)
-            .where(Integration.enabled.is_(True))
+            .where(_enabled(integration_id))
             .order_by(Integration.id)
         ).tuples()
     )
 
 
 def list_enabled_openapi_schemas(
-    db_session: Session,
+    db_session: Session, integration_id: int | None = None
 ) -> list[tuple[int, dict[str, Any] | None]]:
-    """``(integration_id, openapi_schema)`` of each enabled OpenAPI integration."""
+    """``(integration_id, openapi_schema)`` of each enabled OpenAPI integration,
+    or of only ``integration_id``."""
     return list(
         db_session.execute(
             select(Integration.id, Tool.openapi_schema)
             .join(Tool, Tool.id == Integration.tool_id)
-            .where(Integration.enabled.is_(True))
+            .where(_enabled(integration_id))
             .order_by(Integration.id)
         ).tuples()
     )
 
 
 def list_enabled_external_apps(
-    db_session: Session,
+    db_session: Session, integration_id: int | None = None
 ) -> list[tuple[int, ExternalApp]]:
-    """``(integration_id, external_app)`` of each enabled preset or custom app."""
+    """``(integration_id, external_app)`` of each enabled preset or custom app,
+    or of only ``integration_id``."""
     return list(
         db_session.execute(
             select(Integration.id, ExternalApp)
             .join(ExternalApp, ExternalApp.id == Integration.external_app_id)
-            .where(Integration.enabled.is_(True))
+            .where(_enabled(integration_id))
             .order_by(Integration.id)
         ).tuples()
     )

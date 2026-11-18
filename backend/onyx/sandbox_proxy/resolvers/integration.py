@@ -4,6 +4,7 @@ so unmatched requests fail closed."""
 from __future__ import annotations
 
 from mitmproxy import http
+from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import IntegrationKind
@@ -22,10 +23,15 @@ from onyx.sandbox_proxy.models import InjectionContext, McpRpcKind
 from onyx.sandbox_proxy.resolvers.mcp_matching import (
     CraftMCPTarget,
     host_targets,
+    may_match,
     normalized_request_path,
+    path_within_prefix,
 )
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
-from onyx.sandbox_proxy.usable_integrations import UsableIntegrations
+from onyx.sandbox_proxy.usable_integrations import (
+    UsableIntegrations,
+    load_match_targets,
+)
 from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -76,7 +82,7 @@ class IntegrationResolver(CredentialResolver):
         if target is not None:
             # Inject for the exact integration the gate evaluated, never a
             # re-match against the cached targets.
-            return self._resolve_for_target(target, ctx.sandbox)
+            return self._resolve_for_target(target, ctx.sandbox, request)
         classification = classify_mcp_request(request)
         if classification.kind is not McpRpcKind.PLUMBING:
             raise CredentialUnavailableError(
@@ -100,18 +106,18 @@ class IntegrationResolver(CredentialResolver):
         )
 
     def _resolve_for_target(
-        self, target: GatedTarget, sandbox: ResolvedSandbox
+        self, target: GatedTarget, sandbox: ResolvedSandbox, request: http.Request
     ) -> dict[str, str]:
         # A refresh reads the tenant from the context: the cache lock names and
         # the token storage of an MCP sign-in.
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(sandbox.tenant_id)
         try:
-            return self._resolve_in_tenant(target, sandbox)
+            return self._resolve_in_tenant(target, sandbox, request)
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
     def _resolve_in_tenant(
-        self, target: GatedTarget, sandbox: ResolvedSandbox
+        self, target: GatedTarget, sandbox: ResolvedSandbox, request: http.Request
     ) -> dict[str, str]:
         with get_session_with_tenant(tenant_id=sandbox.tenant_id) as db:
             integration = get_integration_by_id(target.integration_id, db)
@@ -119,6 +125,16 @@ class IntegrationResolver(CredentialResolver):
                 raise CredentialUnavailableError(
                     f"integration {target.integration_id} is no longer available",
                     sandbox_detail=f'"{target.app_name}" is no longer available.',
+                )
+            # The gate matched against cached targets; an admin can have
+            # moved the endpoint since.
+            if not _matches_live_endpoint(db, integration.id, request):
+                raise CredentialUnavailableError(
+                    f"request to {request.host} no longer matches integration "
+                    f"{integration.id}",
+                    sandbox_detail=(
+                        f'"{target.app_name}" changed its address. Retry the call.'
+                    ),
                 )
             user = fetch_user_by_id(db, sandbox.user_id)
             if user is None:
@@ -153,3 +169,19 @@ class IntegrationResolver(CredentialResolver):
             for target in self._usable.targets(tenant_id)
             if target.kind is IntegrationKind.MCP and target.endpoint is not None
         )
+
+
+def _matches_live_endpoint(
+    db_session: Session, integration_id: int, request: http.Request
+) -> bool:
+    path = normalized_request_path(request.path or "")
+    return any(
+        live.load_error is None
+        and may_match(live, request)
+        and (
+            live.kind is not IntegrationKind.MCP
+            or live.endpoint is None
+            or path_within_prefix(path, live.endpoint.path_prefix)
+        )
+        for live in load_match_targets(db_session, integration_id)
+    )
