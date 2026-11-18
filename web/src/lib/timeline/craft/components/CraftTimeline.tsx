@@ -32,6 +32,18 @@ import {
 } from "@/lib/timeline/craft/components/tool-cards/toolCallContent";
 import type { CraftTimelineEntry } from "@/lib/timeline/craft/timelineEntries";
 
+/**
+ * Agent reasoning separates lines with single newlines, which markdown joins,
+ * and runs bold section titles into the text around them. Give each line its
+ * own paragraph and each bold title its own block.
+ */
+function normalizeThinking(text: string): string {
+  let out = text.replace(/(?<!\n)\n(?!\n)/g, "\n\n");
+  out = out.replace(/([.!?)\]])(\*\*[^*\n]+\*\*)/g, "$1\n\n$2");
+  out = out.replace(/(\*\*[^*\n]+\*\*)(?=[A-Z([])/g, "$1\n\n");
+  return out;
+}
+
 interface CraftTimelineStepProps {
   entry: CraftTimelineEntry;
   position: TimelineStepPosition;
@@ -72,7 +84,9 @@ function CraftTimelineStep({
         {isExpanded ? (
           <ThinkingBody
             content={payload.content}
-            displayContent={title ? remainingContent : payload.content}
+            displayContent={normalizeThinking(
+              title ? remainingContent : payload.content
+            )}
             isStreaming={payload.isStreaming}
           />
         ) : null}
