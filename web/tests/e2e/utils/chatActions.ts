@@ -54,42 +54,6 @@ export async function sendMessage(page: Page, message: string) {
   );
 }
 
-export async function verifyCurrentModel(page: Page, modelName: string) {
-  await new ChatPage(page).expectModelPill(modelName);
-}
-
-export async function selectModelFromInputPopover(
-  page: Page,
-  preferredModels: string[]
-): Promise<string> {
-  const chatPage = new ChatPage(page);
-  await chatPage.openModelList();
-  const { modelOptions, unselectedModelOptions } = chatPage;
-
-  for (const modelName of preferredModels) {
-    await chatPage.modelSearchInput.fill(modelName);
-    if ((await modelOptions.count()) > 0) {
-      const candidate =
-        (await unselectedModelOptions.count()) > 0
-          ? unselectedModelOptions.first()
-          : modelOptions.first();
-      return chatPage.chooseModelOption(candidate);
-    }
-  }
-
-  // Reset search so fallback sees all available models.
-  await chatPage.modelSearchInput.fill("");
-
-  if ((await unselectedModelOptions.count()) > 0) {
-    const fallback = unselectedModelOptions.first();
-    await expect(fallback).toBeVisible();
-    return chatPage.chooseModelOption(fallback);
-  }
-
-  await chatPage.closeModelPicker().catch(() => {});
-  return chatPage.readModelPillText();
-}
-
 export async function switchModel(page: Page, modelName: string) {
   await new ChatPage(page).switchModel(modelName);
 }
