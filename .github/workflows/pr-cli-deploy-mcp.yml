@@ -1,0 +1,94 @@
+# Installs Onyx with the onyx-cli built from this commit into an empty
+# directory, the way customers do, and checks that nginx routes MCP to the MCP
+# server. Other MCP Docker jobs mount deployment/ from the checkout, so they
+# cannot see files that the CLI fails to write (#17008, #17352).
+name: CLI Deploy MCP
+
+on:
+  pull_request:
+    paths:
+      - "cli/cmd/deploy*.go"
+      - "cli/internal/deploy/**"
+      - "cli/go.mod"
+      - "cli/go.sum"
+      - "deployment/data/nginx/**"
+      - "deployment/docker_compose/docker-compose.yml"
+      - "deployment/docker_compose/docker-compose.onyx-lite.yml"
+      - "deployment/docker_compose/env.template"
+      - "tools/ods/internal/deployfilessync/**"
+      - ".github/scripts/check-mcp-compatibility.py"
+      - ".github/workflows/pr-cli-deploy-mcp.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-deploy-mcp-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  GO_VERSION: "1.27.4"
+
+jobs:
+  cli-install:
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-x64
+      - spot=false
+      - volume=60gb
+      - "run-id=${{ github.run_id }}-cli-deploy-mcp"
+    timeout-minutes: 30
+    env:
+      ONYX_CLI: ${{ github.workspace }}/onyx-cli-bin/onyx-cli
+      ONYX_DEPLOY_DIR: ${{ github.workspace }}/onyx-deploy
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: Build onyx-cli
+        working-directory: cli
+        run: go build -o "$ONYX_CLI" .
+      # --local writes the deployment files embedded in this CLI build into
+      # the empty directory; edge is the newest main image build.
+      - name: Install Onyx into an empty directory
+        env:
+          ONYX_BACKEND_IMAGE: ${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-backend:edge
+          ONYX_WEB_SERVER_IMAGE: ${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-web-server:edge
+        run: >-
+          "$ONYX_CLI" deploy install --dir "$ONYX_DEPLOY_DIR"
+          --no-prompt --local --tag edge
+      - name: Check MCP discovery and challenge
+        run: python3 .github/scripts/check-mcp-compatibility.py --base-url http://localhost:3000
+      # An install from an older CLI can lack files that this CLI manages.
+      # A restart with --local must write them again before nginx starts.
+      - name: Remove the nginx include files and restart
+        env:
+          ONYX_BACKEND_IMAGE: ${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-backend:edge
+          ONYX_WEB_SERVER_IMAGE: ${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-web-server:edge
+        run: |
+          "$ONYX_CLI" deploy stop --dir "$ONYX_DEPLOY_DIR"
+          rm "$ONYX_DEPLOY_DIR"/data/nginx/mcp.conf.inc.template \
+            "$ONYX_DEPLOY_DIR"/data/nginx/mcp_upstream.conf.inc.template \
+            "$ONYX_DEPLOY_DIR"/data/nginx/webhook.conf.inc
+          "$ONYX_CLI" deploy install --dir "$ONYX_DEPLOY_DIR" --no-prompt --local --tag edge
+      - name: Check MCP discovery and challenge after the restart
+        run: python3 .github/scripts/check-mcp-compatibility.py --base-url http://localhost:3000
+      - name: Dump deployment diagnostics
+        if: failure()
+        run: |
+          ls -la "$ONYX_DEPLOY_DIR"/data/nginx || true
+          "$ONYX_CLI" deploy status --dir "$ONYX_DEPLOY_DIR" || true
+          "$ONYX_CLI" deploy logs --dir "$ONYX_DEPLOY_DIR" nginx mcp_server api_server || true
+      - name: Remove the deployment
+        if: always()
+        run: '"$ONYX_CLI" deploy uninstall --dir "$ONYX_DEPLOY_DIR" --force || true'
