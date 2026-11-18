@@ -15,6 +15,8 @@
 # A PR with an open child PR skips the suite and records no verdict (see
 # .github/actions/stack-position). Its verdict then comes from an open
 # descendant whose passing run tested a head that contains this PR's head.
+# That run tested the PR only together with the PRs up to the descendant, so
+# all of them must be in the merge queue: a stack merges as one unit.
 #
 # Runs with a read-only token. Needs contents:read, pull-requests:read, and
 # statuses:read.
@@ -135,33 +137,75 @@ if [[ -n "${own_record}" ]] && base_landed "${own_record}"; then
   exit 0
 fi
 
-# Open descendants of this PR, nearest first.
+# Open descendants of this PR, nearest first, as "number<TAB>head sha<TAB>chain",
+# where chain lists the PR numbers from this PR's child down to the descendant.
 descendants() {
-  local refs=("${HEAD_REF}") ref children
+  local refs=("${HEAD_REF}") chains=("") ref chain children number head_ref head_sha
   local seen=0
   while ((${#refs[@]} > 0 && seen < MAX_CHAIN_DEPTH)); do
     ref="${refs[0]}"
+    chain="${chains[0]}"
     refs=("${refs[@]:1}")
+    chains=("${chains[@]:1}")
     children="$(jq -r --arg ref "${ref}" '.[] | select(.baseRefName == $ref) | [.number, .headRefName, .headRefOid] | @tsv' <<<"${OPEN_PRS}")"
     while IFS=$'\t' read -r number head_ref head_sha; do
       [[ -z "${number}" ]] && continue
-      printf '%s\t%s\n' "${number}" "${head_sha}"
+      printf '%s\t%s\t%s\n' "${number}" "${head_sha}" "${chain}${number} "
       refs+=("${head_ref}")
+      chains+=("${chain}${number} ")
       seen=$((seen + 1))
     done <<<"${children}"
   done
 }
 
-while IFS=$'\t' read -r number head_sha; do
+# PR numbers in the merge queue of TARGET, space separated. A descendant's
+# verdict tested this PR together with every PR up to that descendant, so it
+# covers this PR only when all of them merge as one unit (gh stack merge).
+QUEUED=""
+QUEUE_LOADED=false
+load_queue() {
+  if [[ "${QUEUE_LOADED}" != "true" ]]; then
+    # shellcheck disable=SC2016 # GraphQL variables, not shell expansions.
+    QUEUED=" $(gh api graphql \
+      -f query='query($owner: String!, $name: String!, $branch: String!) {
+        repository(owner: $owner, name: $name) {
+          mergeQueue(branch: $branch) { entries(first: 100) { nodes { pullRequest { number } } } }
+        }
+      }' \
+      -f owner="${REPO%%/*}" -f name="${REPO#*/}" -f branch="${TARGET}" \
+      --jq '.data.repository.mergeQueue.entries.nodes[].pullRequest.number' | tr '\n' ' ')"
+    QUEUE_LOADED=true
+    echo "merge queue for ${TARGET}:${QUEUED}"
+  fi
+}
+
+not_queued=""
+while IFS=$'\t' read -r number head_sha chain; do
   [[ -z "${number}" ]] && continue
   record="$(verdict_on "${head_sha}")"
   [[ -z "${record}" ]] && continue
   echo "descendant PR #${number} has a ${CONTEXT} verdict on ${head_sha}"
-  if is_ancestor "${HEAD_SHA}" "${head_sha}" && base_landed "${record}"; then
-    echo "${CONTEXT} for PR #${PR_NUMBER} accepted: descendant PR #${number} tested ${head_sha}, which contains ${HEAD_SHA}."
-    exit 0
+  if ! is_ancestor "${HEAD_SHA}" "${head_sha}" || ! base_landed "${record}"; then
+    continue
   fi
+  load_queue
+  missing=""
+  for pr in ${chain}; do
+    [[ "${QUEUED}" == *" ${pr} "* ]] || missing+=" #${pr}"
+  done
+  if [[ -n "${missing}" ]]; then
+    echo "PR #${number} tested this PR, but${missing} not in the merge queue."
+    not_queued+=" #${number}"
+    continue
+  fi
+  echo "${CONTEXT} for PR #${PR_NUMBER} accepted: descendant PR #${number} tested ${head_sha}, which contains ${HEAD_SHA}, and merges with it."
+  exit 0
 done < <(descendants)
+
+if [[ -n "${not_queued}" ]]; then
+  echo "::error::PR #${PR_NUMBER} has no ${CONTEXT} verdict of its own, because it is in a stack. The run of${not_queued} tested it together with the PRs above it, so it can merge only with them. Merge the stack up to that PR as one unit: gh stack merge <PR number>."
+  exit 1
+fi
 
 if [[ -z "${own_record}" ]]; then
   echo "::error::No ${CONTEXT} verdict covers ${HEAD_SHA} (PR #${PR_NUMBER}). The PR has no verdict of its own, and no open descendant PR has a passing run that contains this head. Push the whole stack again, so that the stack tip runs, then re-queue. 'Re-run jobs' does not help: it reuses the old base."
