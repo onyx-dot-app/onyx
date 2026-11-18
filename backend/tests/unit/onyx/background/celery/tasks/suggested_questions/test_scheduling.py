@@ -1,4 +1,5 @@
 import sys
+import types
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -107,25 +108,49 @@ def test_count_usable_questions_skips_deleted_and_old() -> None:
     assert scheduling.count_usable_questions(pool, {"live", "old"}, NOW) == 1
 
 
+def _as_bytes(value: Any) -> bytes:
+    return value if isinstance(value, bytes) else str(value).encode()
+
+
 class _FakeCache:
     def __init__(self) -> None:
-        self.values: dict[str, Any] = {}
+        self.values: dict[str, bytes] = {}
 
     def set_if_absent(self, key: str, value: Any, ex: int | None = None) -> bool:  # noqa: ARG002
         if key in self.values:
             return False
-        self.values[key] = value
+        self.values[key] = _as_bytes(value)
         return True
 
     def get(self, key: str) -> bytes | None:
-        value = self.values.get(key)
-        return None if value is None else str(value).encode()
+        return self.values.get(key)
 
     def set(self, key: str, value: Any, ex: int | None = None) -> None:  # noqa: ARG002
-        self.values[key] = value
+        self.values[key] = _as_bytes(value)
 
     def delete(self, key: str) -> None:
         self.values.pop(key, None)
+
+    def ttl(self, key: str) -> int:
+        return 100 if key in self.values else -2
+
+    def replace_if_value(
+        self,
+        key: str,
+        expected: bytes,
+        value: Any,
+        ex: int | None = None,  # noqa: ARG002
+    ) -> bool:
+        if self.values.get(key) != expected:
+            return False
+        self.values[key] = _as_bytes(value)
+        return True
+
+    def delete_if_value(self, key: str, expected: bytes) -> bool:
+        if self.values.get(key) != expected:
+            return False
+        del self.values[key]
+        return True
 
 
 @pytest.fixture
@@ -218,7 +243,7 @@ def test_is_enabled_only_on_an_active_playground(
 ) -> None:
     monkeypatch.setattr(scheduling, "IS_PLAYGROUND", playground)
     monkeypatch.setattr(
-        scheduling, "load_settings", lambda: Settings(application_status=status)
+        scheduling, "load_settings", lambda **_kw: Settings(application_status=status)
     )
 
     assert scheduling.is_enabled() is enabled
@@ -296,3 +321,94 @@ def test_a_failed_send_removes_the_queued_flag(
 
     assert cache.values == {}
     assert client.send_task.call_count == 2
+
+
+def _client(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    client = MagicMock()
+    monkeypatch.setitem(
+        sys.modules,
+        "onyx.background.celery.versioned_apps.client",
+        MagicMock(app=client),
+    )
+    return client
+
+
+_KEY = "suggested_questions_pool_queued"
+
+
+def test_a_failed_upgrade_restores_the_earlier_flag(
+    cache: _FakeCache, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = _client(monkeypatch)
+    scheduling.request_pool_refresh("tenant", RefreshReason.GROWTH)
+    growth_flag = cache.values[_KEY]
+    client.send_task.side_effect = ConnectionError("broker down")
+
+    scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
+
+    # The queued growth run still holds the slot, so it is not sent twice.
+    assert cache.values[_KEY] == growth_flag
+
+
+def test_a_failed_send_leaves_another_requests_flag(
+    cache: _FakeCache, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = _client(monkeypatch)
+
+    def another_request_wins(*_args: Any, **_kwargs: Any) -> None:
+        cache.values[_KEY] = b"1:another-request"
+        raise ConnectionError("broker down")
+
+    client.send_task.side_effect = another_request_wins
+
+    scheduling.request_pool_refresh("tenant", RefreshReason.GROWTH)
+
+    assert cache.values[_KEY] == b"1:another-request"
+
+
+def test_two_upgrades_at_once_send_one_task(
+    cache: _FakeCache, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = _client(monkeypatch)
+    scheduling.request_pool_refresh("tenant", RefreshReason.GROWTH)
+    growth_flag = cache.values[_KEY]
+    scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
+    # The second request read the flag before the first one replaced it.
+    monkeypatch.setattr(cache, "get", lambda _key: growth_flag)
+
+    scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
+
+    assert client.send_task.call_count == 2  # growth, then one upgrade
+
+
+def test_a_failed_client_import_removes_the_flag(
+    cache: _FakeCache, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(
+        sys.modules,
+        "onyx.background.celery.versioned_apps.client",
+        types.ModuleType("client_without_app"),
+    )
+
+    scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
+
+    assert cache.values == {}
+
+
+def test_a_failed_settings_read_sends_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    monkeypatch.setattr(scheduling, "get_cache_backend", lambda **_kw: _FakeCache())
+    monkeypatch.setattr(scheduling, "IS_PLAYGROUND", True)
+
+    def unreadable(raise_on_error: bool = False) -> Settings:
+        # Like load_settings: on a failed read it returns defaults (ACTIVE)
+        # unless asked to raise.
+        if raise_on_error:
+            raise RuntimeError("settings store down")
+        return Settings()
+
+    monkeypatch.setattr(scheduling, "load_settings", unreadable)
+
+    scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
+
+    client.send_task.assert_not_called()
