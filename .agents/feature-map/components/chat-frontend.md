@@ -428,8 +428,8 @@ shows no step. `expandCodeModeSteps` returns the steps and `codeModeWorking`
 in one pass: a program runs from `code_mode_start` until a `code_mode_delta`
 reports a status, and a running program whose cell has no running call sets
 it. A yield (status `running`) ends the program's turn: the model acts next.
-`useTimelineUIState` takes `codeModeWorking`, so the header reads "Working"
-even when the last turn group is parallel.
+`useTimelineHeader` takes `codeModeWorking`, so the header reads "Working"
+while the program runs between calls.
 The header names a step's activity from its own first packet; nested packets
 do not decide it. `TransformedStep.groupKey` keeps the packet group of a step,
 so pacing still knows restored steps. The expanded timeline renders one list
@@ -437,9 +437,8 @@ keyed by step (a parallel group by its first step), not by position, because a
 cell's new call can move later steps into another turn group. The rail
 primitives, `StepContainer` and that list (`TimelineSteps`) live in
 `web/src/lib/timeline/`, which Craft shares ([[craft-frontend]]).
-`web/src/lib/timeline/chat/transformers.ts:groupStepsByTurn`
-groups through
-`web/src/lib/timeline/entries.ts:groupTimelineEntries`. Concurrent calls of one program show as
+`web/src/lib/timeline/chat/transformers.ts:groupStepsByTurn` gives every
+step its own group, in turn order. Concurrent calls of one program show as
 sequential steps, not parallel tabs: on replay the backend emits each call's
 packets one after another, and the saved calls have no start or end order, so
 the client cannot tell which calls overlapped. Mobile mirrors these transforms
