@@ -49,6 +49,7 @@ export default function useContainerCenter(): ContainerCenter {
     }
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- resize observer on the app layout container that measures its center, rebound per route
   useEffect(() => {
     const container = document.querySelector<HTMLElement>(SELECTOR);
     if (!container) {

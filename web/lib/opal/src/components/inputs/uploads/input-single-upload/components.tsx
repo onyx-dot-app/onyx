@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import UploadControl, {
   type UploadBaseProps,
 } from "@opal/components/inputs/uploads/UploadControl";
@@ -55,20 +55,12 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
   // from: a file's name, or a paste.
   const [ownText, setOwnText] = useState<string>("");
   const [source, setSource] = useState<
-    { kind: "file"; name: string } | { kind: "paste" } | null
+    | { kind: "file"; name: string; text: string }
+    | { kind: "paste"; text: string }
+    | null
   >(null);
   // File mode: the file, when the caller does not own it.
   const [ownFile, setOwnFile] = useState<File | null>(null);
-
-  // The last value this control reported. A different one from outside (a
-  // form reset) forgets where the old value came from.
-  const reportedRef = useRef<string | undefined>(undefined);
-  const outsideText = props.mode !== "file" ? props.value : undefined;
-  useEffect(() => {
-    if (outsideText !== undefined && outsideText !== reportedRef.current) {
-      setSource(null);
-    }
-  }, [outsideText]);
 
   const currentFile: File | null =
     props.mode === "file"
@@ -79,14 +71,18 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
   const currentText: string =
     props.mode === "file" ? "" : (props.value ?? ownText);
 
+  // A value set from outside (a form reset) no longer matches the text the
+  // source describes, so the source is ignored.
+  const shownSource = source?.text === currentText ? source : null;
+
   // What the control shows: the file's name, "Pasted text", or, for a value
   // set from outside, "File attached".
   const label: string | null =
     props.mode === "file"
       ? (currentFile?.name ?? null)
-      : source?.kind === "file"
-        ? source.name
-        : source?.kind === "paste"
+      : shownSource?.kind === "file"
+        ? shownSource.name
+        : shownSource?.kind === "paste"
           ? strings.inputUploadPasted
           : currentText
             ? strings.inputUploadAttached
@@ -94,7 +90,6 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
 
   function reportText(text: string) {
     if (props.mode === "file") return;
-    reportedRef.current = text;
     if (props.value === undefined) setOwnText(text);
     props.setValue(text);
   }
@@ -118,8 +113,9 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
     }
     const reader = new FileReader();
     reader.onload = () => {
-      setSource({ kind: "file", name: file.name });
-      reportText(typeof reader.result === "string" ? reader.result : "");
+      const text = typeof reader.result === "string" ? reader.result : "";
+      setSource({ kind: "file", name: file.name, text });
+      reportText(text);
     };
     reader.onerror = clear;
     reader.readAsText(file);
@@ -142,7 +138,7 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
         props.mode === "file"
           ? undefined
           : (pastedText) => {
-              setSource({ kind: "paste" });
+              setSource({ kind: "paste", text: pastedText });
               reportText(pastedText);
             }
       }

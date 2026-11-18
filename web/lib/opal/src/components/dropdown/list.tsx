@@ -161,6 +161,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     // What had focus when the pointer pressed in the list; the release
     // gives focus back to it.
     const focusBeforePressRef = useRef<HTMLElement | null>(null);
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- focuses the search field on each open and view change
     useEffect(() => {
       // preventScroll: the field can be anywhere before floating-ui places
       // the list, and a focus scroll would move the page behind the portal.
@@ -200,6 +201,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       width: number | null;
     } | null>(null);
     const lastViewKeyRef = useRef(viewKey);
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- snapshots the last committed card for the view-swap and close animations, and reads the reduced-motion media query
     useLayoutEffect(() => {
       if (!isOpen) {
         // Closing resets the view underneath the exit: no swap to show,
@@ -227,6 +229,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
 
     // Keyboard navigation keeps the highlighted row in view. Pointer
     // highlights never scroll: the list must not move under the mouse.
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the list DOM to keep the keyboard-highlighted row in view
     useEffect(() => {
       if (!isOpen || !keyboardNav || highlightedIndex < 0) return;
       scrollWithinList(
@@ -242,6 +245,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
     // floating-ui to size the box: before that the rows lay out single-line
     // at the wrong width, the centre is computed on those heights, and the
     // selection lands below the fold once the descriptions wrap.
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the list DOM to centre the selected row once floating-ui has positioned it
     useEffect(() => {
       if (!isOpen || !isPositioned) return;
       const selected = liveCard(listRef.current)?.querySelector(
@@ -269,6 +273,7 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       searchField,
     };
     // What this commit shows, for the next view change to animate away.
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- records this commit's card and its measured DOM width for the next view swap
     useLayoutEffect(() => {
       if (!isOpen) return;
       lastCardRef.current = {

@@ -223,6 +223,7 @@ export default function useDataTable<TData extends RowData>(
     [isControlled, values, ownRowSelection]
   );
   const onSelectionChangeRef = useRef(onSelectionChange);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest onSelectionChange in a ref so TanStack's selection updater calls the current callback
   useEffect(() => {
     onSelectionChangeRef.current = onSelectionChange;
   }, [onSelectionChange]);
@@ -292,6 +293,7 @@ export default function useDataTable<TData extends RowData>(
   // Single ref for the whole serverSide config — prevents effects from
   // re-firing when the consumer passes an inline object each render.
   const serverSideRef = useRef(serverSide);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest serverSide config in a ref so the server callbacks do not refire on an inline object
   useEffect(() => {
     serverSideRef.current = serverSide;
   }, [serverSide]);

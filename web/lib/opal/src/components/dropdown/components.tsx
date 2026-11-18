@@ -584,6 +584,7 @@ function DropdownData(props: DropdownDataProps) {
   );
   const stackRef = useRef(stack);
   const registryRef = useRef(viewRegistry);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- publishes the stack and view registry to refs that handlers read at event time
   useLayoutEffect(() => {
     stackRef.current = stack;
     registryRef.current = viewRegistry;
@@ -646,6 +647,7 @@ function DropdownData(props: DropdownDataProps) {
   const pendingHighlightRef = useRef<PendingHighlight | null>(null);
   // Read at event time, so Escape can count as the keyboard before a pop.
   const isKeyboardNavRef = useRef(isKeyboardNav);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- publishes keyboard-nav state to a ref that Escape reads at event time
   useLayoutEffect(() => {
     isKeyboardNavRef.current = isKeyboardNav;
   });
@@ -700,6 +702,7 @@ function DropdownData(props: DropdownDataProps) {
   // field that just left does not drop focus on the body.
   const hasSearch = search !== undefined;
   const lastViewKeyRef = useRef(currentViewKey);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus to the trigger when the new view has no search field
   useEffect(() => {
     if (lastViewKeyRef.current === currentViewKey) return;
     lastViewKeyRef.current = currentViewKey;
@@ -837,6 +840,7 @@ function DropdownData(props: DropdownDataProps) {
 
   // The keyboard reads the stops through the ref at event time; the
   // trigger reads the highlighted stop's id for aria-activedescendant.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- publishes the nav stops and handlers to the ref the keyboard reads at event time
   useLayoutEffect(() => {
     listRef.current = { items: navItems, activate, secondary, back };
   });

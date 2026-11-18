@@ -89,6 +89,7 @@ function MultiSelectFieldInner(props: MultiSelectFieldProps) {
   // and the keyboard.
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- registers the mounted input or trigger DOM node as the dropdown's focus target
   useEffect(() => {
     setTriggerRef(typeIn ? inputRef.current : triggerRef.current);
   }, [typeIn, setTriggerRef]);

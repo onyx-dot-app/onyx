@@ -90,6 +90,7 @@ function InputTextArea({
     textarea.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
   }, [autoResize, rows, maxRows]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- measures the textarea scrollHeight and resizes it after the value renders
   React.useEffect(() => {
     adjustHeight();
   }, [adjustHeight, props.value]);

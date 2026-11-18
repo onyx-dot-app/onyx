@@ -42,6 +42,7 @@ function TextLoader({ children, font = "main-ui-action" }: TextLoaderProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const waveRef = useRef<HTMLSpanElement>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- resize observer that measures the text run length and sets the wave CSS variables
   useLayoutEffect(() => {
     const root = rootRef.current;
     const wave = waveRef.current;

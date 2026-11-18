@@ -87,6 +87,7 @@ export function CopyButton({
     }, 3000);
   }
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the pending copied-state reset timer on unmount
   useEffect(() => {
     return () => {
       if (copyTimeoutRef.current) {

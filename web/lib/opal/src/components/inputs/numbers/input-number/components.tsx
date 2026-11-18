@@ -127,9 +127,11 @@ export default function InputNumber({
     (decimalPlaces === 0 ? "[0-9]*" : `[0-9]*[.]?[0-9]{0,${decimalPlaces}}`);
 
   // Sync input value when external value changes (e.g., from stepper buttons or reset)
-  React.useEffect(() => {
-    setInputValue((typed) => textFor(value, typed));
-  }, [value]);
+  const [syncedValue, setSyncedValue] = React.useState(value);
+  if (!Object.is(value, syncedValue)) {
+    setSyncedValue(value);
+    setInputValue(textFor(value, inputValue));
+  }
 
   const effectiveValue = value ?? 0;
   const canIncrement = max === undefined || effectiveValue < max;

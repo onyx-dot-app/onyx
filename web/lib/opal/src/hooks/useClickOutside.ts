@@ -73,6 +73,7 @@ export function useClickOutside<T extends HTMLElement>(
   callback: () => void,
   enabled: boolean = true
 ): void {
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- document mousedown listener that calls back on a click outside the refs
   useEffect(() => {
     if (!enabled) {
       return;

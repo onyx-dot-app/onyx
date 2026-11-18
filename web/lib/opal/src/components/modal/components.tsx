@@ -43,6 +43,7 @@ function ModalRoot({ open, ...props }: ModalRootProps) {
 function ModalExitSignal() {
   // A stable store method, so this runs only on mount and unmount.
   const registerCard = useModalOwner()?.registerCard;
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- registers the card with the modal owner store until unmount
   React.useEffect(() => registerCard?.(), [registerCard]);
   return null;
 }
@@ -189,6 +190,7 @@ function ModalContent({
     null
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- listens for input events on the modal content DOM node
   React.useEffect(() => {
     if (!contentNode) return;
 
@@ -403,6 +405,7 @@ function ModalHeader({
   const { closeButtonRef, setHasDescription } = useModalContext();
   const strings = useOpalStrings();
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- tells the dialog content whether a description exists, so Radix sets aria-describedby only then
   React.useLayoutEffect(() => {
     setHasDescription(!!description);
   }, [description, setHasDescription]);

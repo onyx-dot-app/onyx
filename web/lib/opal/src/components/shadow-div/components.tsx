@@ -114,6 +114,7 @@ function ShadowDiv({
     }
   }, [containerRef, showTop, showBottom]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scroll listener and resize and mutation observers that show the edge shadows while the container can scroll
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;

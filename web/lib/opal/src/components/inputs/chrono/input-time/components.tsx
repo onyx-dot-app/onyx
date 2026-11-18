@@ -162,13 +162,15 @@ function InputTime({
   const valueKey = value
     ? `${value.hours}:${value.minutes}:${value.seconds}`
     : null;
-  React.useEffect(() => {
+  // Key on the field triple, not object identity, so parent re-renders
+  // that recreate an equal value don't clobber in-progress typing. The
+  // string form keeps distinct triples distinct (a second count would
+  // collapse 01:00:00 and 00:60:00).
+  const [syncedKey, setSyncedKey] = React.useState(valueKey);
+  if (valueKey !== syncedKey) {
+    setSyncedKey(valueKey);
     setSegments(toSegments(value));
-    // Key on the field triple, not object identity, so parent re-renders
-    // that recreate an equal value don't clobber in-progress typing. The
-    // string form keeps distinct triples distinct (a second count would
-    // collapse 01:00:00 and 00:60:00).
-  }, [valueKey]);
+  }
 
   function commit(next: TimeSegments) {
     const parsed = parseSegments(next, showSeconds);

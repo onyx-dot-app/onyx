@@ -28,6 +28,7 @@ export default function usePresence(open: boolean, exitFallbackMs = 160) {
     setExiting(!open);
   }
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- fallback timer that unmounts after exitFallbackMs when no exit animation runs
   useEffect(() => {
     if (open) return;
     const id = window.setTimeout(() => setExiting(false), exitFallbackMs);

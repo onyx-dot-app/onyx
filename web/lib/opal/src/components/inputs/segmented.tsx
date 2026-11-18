@@ -52,6 +52,7 @@ export function usePendingCaret<S extends { [K in keyof S]: string }>(
     input: HTMLInputElement;
     position: number;
   } | null>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- restores the DOM caret after React writes the new segment value
   React.useLayoutEffect(() => {
     const pending = pendingCaretRef.current;
     if (!pending) return;

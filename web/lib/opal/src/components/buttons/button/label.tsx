@@ -45,6 +45,7 @@ function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
   const [fromWidth, setFromWidth] = useState(0);
   // The newest label, for steps that finish after a later render.
   const latestRef = useRef(children);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the newest label for transition callbacks that finish after a later render
   useLayoutEffect(() => {
     latestRef.current = children;
   });
@@ -73,6 +74,7 @@ function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
   // While the label is stale (fading out, or hidden during the resize), the
   // button must not run an action its label does not show yet. A capture
   // listener on the button stops the click before React's handler sees it.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- blocks clicks on the parent button through a capture listener while the label is stale
   useLayoutEffect(() => {
     if (phase !== "out" && phase !== "resize") return;
     const control = ref.current?.closest("button, a");
@@ -86,6 +88,7 @@ function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
   }, [phase]);
 
   // Resize: hold the old width, then transition to the new text's width.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- runs the DOM width transition from the old label width to the new one
   useLayoutEffect(() => {
     const label = ref.current;
     if (phase !== "resize" || !label) return;
@@ -119,10 +122,12 @@ function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
 
   // No step stalls when `transitionend` does not arrive.
   const advanceRef = useRef(advance);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest step function for the fallback timer
   useLayoutEffect(() => {
     advanceRef.current = advance;
   });
   // A new target mid-resize restarts the timer.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- fallback timer that advances the label when transitionend does not fire
   useEffect(() => {
     if (phase === "idle") return;
     const fallback = window.setTimeout(

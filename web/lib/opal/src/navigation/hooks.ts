@@ -305,12 +305,14 @@ export function useNavigation(): Navigation {
       }),
     [router]
   );
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- releases this hook's requests from the module-wide queryRequestsInFlight count when the transition ends
   useEffect(() => {
     if (isPending) return;
     queryRequestsInFlight -= pendingQueryRequests.current;
     pendingQueryRequests.current = 0;
   }, [isPending]);
   // Unmounting mid-request stops counting it.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- releases this hook's requests from the module-wide queryRequestsInFlight count on unmount
   useEffect(
     () => () => {
       queryRequestsInFlight -= pendingQueryRequests.current;
@@ -357,13 +359,16 @@ export function useRouteRendering(base: string): boolean {
   // Segments may come decoded while the URL keeps `%31`, so compare both
   // decoded, segment by segment.
   const rendering = pathSegments(renderedPathname) !== pathSegments(pathname);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the module-wide routeNavigationInFlight flag once Next renders the URL's route
   useEffect(() => {
     if (!rendering) routeNavigationInFlight = false;
   }, [rendering]);
   // After each commit, since Next's own history write drops the depth.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- writes the history depth stamp back after Next's own history write drops it
   useEffect(() => {
     if (!rendering) restoreDepth();
   });
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- popstate listener that forgets the history depth stamp
   useEffect(() => {
     const forget = () => {
       depthStamp = null;
