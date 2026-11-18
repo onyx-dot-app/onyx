@@ -283,8 +283,8 @@ admin value is not Ask.
   preset or URL patterns), then the `integration` row with exactly one of
   `mcp_server_id`, `tool_id` or `external_app_id`, the OAuth client, one
   plugin that holds it (`db/plugin.py:create_integration_plugin__no_commit`:
-  version 1 with no files, Organization library or the creator's "My uploads")
-  and the actions. A public MCP server (`auth_mode` none) is asked for its
+  version 1 with no files, Organization library or the creator's "My uploads",
+  where it starts on for the creator) and the actions. A public MCP server (`auth_mode` none) is asked for its
   tools before the first insert (`_discover_new_server`); a failure gives a
   502 and saves nothing. An MCP server with a sign-in starts with no actions.
 - The admin list, the member list, the agent catalog and `GET /tool` read
