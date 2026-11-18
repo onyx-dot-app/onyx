@@ -10793,16 +10793,54 @@
           "label": "保存"
         }
       },
-      "mcp": {
-        "noAccess": {
-          "tooltip": "このMCPサーバーへのアクセス権がなくなりました。既存のツールは保持されます。"
-        },
-        "searchTools": {
-          "placeholder": "ツールを検索..."
-        }
-      },
       "page": {
         "ariaLabel": "エージェントエディターページ"
+      },
+      "plugins": {
+        "askHint": "確認なしで実行するには、管理者が統合でこれを許可に設定するか、各ユーザーが常に許可を選びます。",
+        "askHintAdminOnly": "確認なしで実行するには、管理者が統合でこれを許可に設定します。",
+        "askHintAgent": "確認なしで実行するには、エージェントの設定を変更するか、各ユーザーが常に許可を選びます。",
+        "askHintAgentOnly": "確認なしで実行するには、エージェントの設定を変更します。",
+        "choice": {
+          "inherit": "統合の設定を使う",
+          "agentDefault": "エージェントのデフォルトを使用"
+        },
+        "default": {
+          "description": "独自の設定がない各アクションに適用されます。統合が後で追加するアクションにも適用されます。",
+          "title": "その他のアクションのデフォルト"
+        },
+        "description": "エージェントにプラグインを付与します。別の設定を選ばない限り、各アクションは統合の設定を使います。",
+        "effective": "{policy, select, allow {許可} ask {確認} other {ブロック}}（{source, select, integration {統合の設定} agentDefault {エージェントのデフォルト} other {エージェントの設定}}）",
+        "empty": "利用できる統合付きのプラグインはありません。",
+        "loadFailed": "プラグインを読み込めませんでした。",
+        "lock": {
+          "adminBlocked": "許可は選べません: 管理者がこのアクションをブロックしました。",
+          "alwaysAsks": "許可は使用できません: Craft はこれらのリクエストごとに承認を求めます。",
+          "adminFinal": "許可は選べません: この統合の管理者設定は確定しています。",
+          "defaultFinal": "許可は選べません: これらの統合の管理者設定は確定しています。"
+        },
+        "noActions": "この統合にはまだアクションがありません。",
+        "notVisible": "このプラグインのアクションは表示できません。設定はそのまま保持されます。",
+        "title": "プラグイン",
+        "add": {
+          "placeholder": "プラグインを追加"
+        },
+        "remove": {
+          "ariaLabel": "{plugin} を削除"
+        },
+        "retry": {
+          "label": "再試行"
+        },
+        "actionSetting": {
+          "label": "{action} の設定"
+        },
+        "defaultSetting": {
+          "label": "{plugin} のデフォルト設定"
+        },
+        "openIntegration": {
+          "label": "{integration} のアクションを開く"
+        },
+        "stricterPlugin": "このエージェントの {plugin} プラグインが、このアクションにより厳しい設定を適用しています。"
       },
       "prompts": {
         "instructions": {
@@ -11059,14 +11097,6 @@
         "knowledgeCutoff": {
           "description": "この日付より前に最終更新されたドキュメントは無視されます。",
           "title": "ナレッジのカットオフ日"
-        },
-        "mcpCard": {
-          "expand": {
-            "label": "展開"
-          },
-          "fold": {
-            "label": "折りたたむ"
-          }
         },
         "moreInfo": {
           "title": "詳細情報"

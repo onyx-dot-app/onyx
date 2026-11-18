@@ -8,6 +8,8 @@ export type ConnectionState =
   | "needs_reconnect"
   | "not_set_up";
 export type PolicyValue = "allow" | "ask" | "blocked";
+
+export type LinkValue = "inherit" | PolicyValue;
 export type InstallationPolicy =
   | "REQUIRED"
   | "DEFAULT"
@@ -79,6 +81,23 @@ export interface IntegrationAction {
   effective_admin_policy: PolicyValue;
   /** Craft asks before each call of this action, so Allow has no effect. */
   always_asks: boolean;
+}
+
+/** One integration of a plugin in `GET /integrations/agent-catalog`. */
+export interface AgentCatalogIntegration {
+  id: number;
+  name: string;
+  kind: IntegrationKind;
+  shape: IntegrationShape;
+  users_can_save_always_allow: boolean;
+  actions: IntegrationAction[];
+}
+
+export interface AgentPluginOption {
+  plugin_id: string;
+  plugin_name: string;
+  description: string | null;
+  integrations: AgentCatalogIntegration[];
 }
 
 export interface AdminIntegration {

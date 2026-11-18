@@ -10793,16 +10793,54 @@
           "label": "Salvar"
         }
       },
-      "mcp": {
-        "noAccess": {
-          "tooltip": "Você não tem mais acesso a este servidor MCP. Suas ferramentas existentes serão preservadas."
-        },
-        "searchTools": {
-          "placeholder": "Pesquisar ferramentas..."
-        }
-      },
       "page": {
         "ariaLabel": "Página do editor de agentes"
+      },
+      "plugins": {
+        "askHint": "Para executar sem perguntar, um administrador define como Permitir na integração, ou cada usuário escolhe Sempre permitir.",
+        "askHintAdminOnly": "Para executar sem perguntar, um administrador define como Permitir na integração.",
+        "askHintAgent": "Para executar isto sem confirmação, altere a configuração do agente, ou cada usuário escolhe Sempre permitir.",
+        "askHintAgentOnly": "Para executar isto sem confirmação, altere a configuração do agente.",
+        "choice": {
+          "inherit": "Usar a configuração da integração",
+          "agentDefault": "Usar o padrão do agente"
+        },
+        "default": {
+          "description": "Aplica-se a cada ação sem configuração própria, também às ações que a integração adicionar depois.",
+          "title": "Padrão para Outras Ações"
+        },
+        "description": "Dê plugins ao agente. Cada ação usa a configuração da integração, a menos que você escolha outra.",
+        "effective": "{policy, select, allow {Permite} ask {Pergunta} other {Bloqueada}} ({source, select, integration {configuração da integração} agentDefault {padrão do agente} other {configuração do agente}})",
+        "empty": "Nenhum plugin com integrações está disponível para você.",
+        "loadFailed": "Não foi possível carregar os plugins.",
+        "lock": {
+          "adminBlocked": "Permitir não está disponível: um administrador bloqueou esta ação.",
+          "alwaysAsks": "Permitir não está disponível: o Craft pede aprovação para cada uma dessas solicitações.",
+          "adminFinal": "Permitir não está disponível: a configuração do administrador desta integração é definitiva.",
+          "defaultFinal": "Permitir não está disponível: as configurações do administrador destas integrações são definitivas."
+        },
+        "noActions": "Esta integração ainda não tem ações.",
+        "notVisible": "Você não pode ver as ações deste plugin. As configurações dele ficam como estão.",
+        "title": "Plugins",
+        "add": {
+          "placeholder": "Adicionar um plugin"
+        },
+        "remove": {
+          "ariaLabel": "Remover {plugin}"
+        },
+        "retry": {
+          "label": "Tentar novamente"
+        },
+        "actionSetting": {
+          "label": "Configuração para {action}"
+        },
+        "defaultSetting": {
+          "label": "Configuração padrão para {plugin}"
+        },
+        "openIntegration": {
+          "label": "Abrir ações de {integration}"
+        },
+        "stricterPlugin": "O plugin {plugin} deste agente define uma configuração mais restrita para esta ação."
       },
       "prompts": {
         "instructions": {
@@ -11059,14 +11097,6 @@
         "knowledgeCutoff": {
           "description": "Documentos com data da última atualização anterior a esta serão ignorados.",
           "title": "Data de corte do conhecimento"
-        },
-        "mcpCard": {
-          "expand": {
-            "label": "Expandir"
-          },
-          "fold": {
-            "label": "Recolher"
-          }
         },
         "moreInfo": {
           "title": "Mais informações"

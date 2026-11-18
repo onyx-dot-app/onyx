@@ -2,6 +2,7 @@ import type { ExternalAppType } from "@/app/craft/v1/apps/registry";
 import type {
   ConnectionState,
   IntegrationKind,
+  LinkValue,
   PolicyValue,
 } from "@/lib/integrations/types";
 /**
@@ -140,12 +141,9 @@ export interface UnviewedTaskCountResponse {
   count: number;
 }
 
-/** The setting of one action on a task; ``inherit`` uses the integration setting. */
-export type TaskLinkValue = "inherit" | "allow" | "ask" | "blocked";
-
 export interface TaskActionSettings {
-  default: TaskLinkValue;
-  actions: Record<string, TaskLinkValue>;
+  default: LinkValue;
+  actions: Record<string, LinkValue>;
 }
 
 /** A plugin the task uses, with its action settings. */

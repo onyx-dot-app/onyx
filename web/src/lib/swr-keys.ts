@@ -258,10 +258,9 @@ export const SWR_KEYS = {
   scimToken: "/api/admin/enterprise-settings/scim/token",
 
   // ── MCP Servers ───────────────────────────────────────────────────────────
-  mcpServers: "/api/mcp/servers",
-  agentMcpServers: (agentId: number) => `/api/mcp/servers/persona/${agentId}`,
 
   // ── Integrations ──────────────────────────────────────────────────────────
+  agentPluginCatalog: "/api/integrations/agent-catalog",
   adminIntegrations: "/api/admin/integrations",
   adminIntegrationPresets: "/api/admin/integrations/presets",
   adminIntegration: (integrationId: number) =>
@@ -294,7 +293,6 @@ export const SWR_KEYS = {
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
-  openApiTools: "/api/tool/openapi",
   adminOAuthTestClaims: "/api/admin/oauth-test/claims",
 
   // ── Voice ─────────────────────────────────────────────────────────────────

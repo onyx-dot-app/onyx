@@ -10793,16 +10793,54 @@
           "label": "Save"
         }
       },
-      "mcp": {
-        "noAccess": {
-          "tooltip": "You no longer have access to this MCP server. Its existing tools will be preserved."
-        },
-        "searchTools": {
-          "placeholder": "Search tools..."
-        }
-      },
       "page": {
         "ariaLabel": "Agents Editor Page"
+      },
+      "plugins": {
+        "askHint": "To run this with no prompt, an admin sets it to Allow on the integration, or each user picks Always allow.",
+        "askHintAdminOnly": "To run this with no prompt, an admin sets it to Allow on the integration.",
+        "askHintAgent": "To run this with no prompt, change the agent setting, or each user picks Always allow.",
+        "askHintAgentOnly": "To run this with no prompt, change the agent setting.",
+        "choice": {
+          "inherit": "Use the integration setting",
+          "agentDefault": "Use the agent default"
+        },
+        "default": {
+          "description": "Applies to each action with no setting of its own, also to actions that the integration adds later.",
+          "title": "Default for Other Actions"
+        },
+        "description": "Give the agent plugins. Each action uses the integration setting unless you pick another one.",
+        "effective": "{policy, select, allow {Allows} ask {Asks} other {Blocked}} ({source, select, integration {integration setting} agentDefault {agent default} other {agent setting}})",
+        "empty": "No plugins with integrations are available to you.",
+        "loadFailed": "Could not load the plugins.",
+        "lock": {
+          "adminBlocked": "Allow is not available: an admin blocked this action.",
+          "alwaysAsks": "Allow is not available: Craft asks for approval for each of these requests.",
+          "adminFinal": "Allow is not available: the admin setting of this integration is final.",
+          "defaultFinal": "Allow is not available: the admin settings of these integrations are final."
+        },
+        "noActions": "This integration has no actions yet.",
+        "notVisible": "You cannot see the actions of this plugin. Its settings stay as they are.",
+        "title": "Plugins",
+        "add": {
+          "placeholder": "Add a plugin"
+        },
+        "remove": {
+          "ariaLabel": "Remove {plugin}"
+        },
+        "retry": {
+          "label": "Try again"
+        },
+        "actionSetting": {
+          "label": "Setting for {action}"
+        },
+        "defaultSetting": {
+          "label": "Default setting for {plugin}"
+        },
+        "openIntegration": {
+          "label": "Open {integration} actions"
+        },
+        "stricterPlugin": "The {plugin} plugin of this agent sets a stricter setting for this action."
       },
       "prompts": {
         "instructions": {
@@ -11059,14 +11097,6 @@
         "knowledgeCutoff": {
           "description": "Documents with a last-updated date prior to this will be ignored.",
           "title": "Knowledge Cutoff Date"
-        },
-        "mcpCard": {
-          "expand": {
-            "label": "Expand"
-          },
-          "fold": {
-            "label": "Fold"
-          }
         },
         "moreInfo": {
           "title": "More Info"

@@ -9,6 +9,7 @@ import {
   mockLlmApiBase,
 } from "@tests/e2e/utils/mockLlm";
 import type { ProjectFile, UserFileStatus } from "@/lib/projects/types";
+import type { AgentPluginLink } from "@/lib/agents/types";
 import type {
   AdminIntegrationDetail,
   IntegrationActionsResponse,
@@ -1376,6 +1377,7 @@ export class OnyxApiClient {
       in_code_tool_id?: string | null;
       mcp_server_id?: number | null;
     }>;
+    plugins: AgentPluginLink[];
   }> {
     const response = await this.get(`/persona/${agentId}`);
     return await this.handleResponse(
