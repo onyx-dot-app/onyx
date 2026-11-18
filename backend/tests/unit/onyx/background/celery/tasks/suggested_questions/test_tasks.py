@@ -66,7 +66,7 @@ def run(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     set_(tasks, "worth_running", lambda *_a, **_kw: state["decision"])
     set_(tasks, "get_recently_active_users", lambda _s, _now: [])
     set_(tasks, "choose_documents", lambda *_a, **_kw: state["candidates"])
-    set_(tasks, "fetch_chunks", lambda *_a: [])
+    set_(tasks, "fetch_chunks", lambda *_a: [MagicMock()])
     set_(tasks, "build_triage_clients", list)
     state["triage"] = MagicMock(return_value=[])
     set_(tasks, "triage_chunks", state["triage"])
@@ -180,6 +180,39 @@ def test_pool_run_retries_when_writing_fails(
         _pool_task()
 
     assert retry.call_args.kwargs["countdown"] == tasks.SQ_RUN_RETRY_DELAY_S
+    assert run["saved"] is None
+
+
+def test_pool_run_retries_when_its_documents_are_not_searchable_yet(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(tasks, "fetch_chunks", lambda *_a: [])
+    retry = MagicMock(side_effect=Retry())
+    monkeypatch.setattr(tasks.generate_suggested_questions_pool, "retry", retry)
+
+    with pytest.raises(Retry):
+        _pool_task()
+
+    assert retry.call_args.kwargs["countdown"] == tasks.SQ_RUN_RETRY_DELAY_S
+    run["triage"].assert_not_called()
+    # No run is recorded, so a first run stays a first run.
+    assert run["saved"] is None
+
+
+def test_unsearchable_documents_on_the_last_retry_record_no_run(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    task: Any = tasks.generate_suggested_questions_pool
+    monkeypatch.setattr(tasks, "fetch_chunks", lambda *_a: [])
+    retry = MagicMock()
+    monkeypatch.setattr(task, "retry", retry)
+    task.push_request(retries=task.max_retries)
+    try:
+        task.run(tenant_id="tenant", reason="first_run")
+    finally:
+        task.pop_request()
+
+    retry.assert_not_called()
     assert run["saved"] is None
 
 

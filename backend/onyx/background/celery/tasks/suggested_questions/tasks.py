@@ -79,6 +79,10 @@ class RunOutOfTime(Exception):
     """The run used its time budget before its next model call."""
 
 
+class NothingSearchableYet(Exception):
+    """The chosen documents have no chunks in the search index yet."""
+
+
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.GENERATE_SUGGESTED_QUESTIONS_POOL,
     bind=True,
@@ -96,8 +100,19 @@ def generate_suggested_questions_pool(
     except CacheLockAcquisitionError:
         # Try again later rather than drop the request: documents indexed
         # during the running run are not in it. worth_running decides then.
-        _retry_when_busy(
-            self, SQ_POOL_BUSY_RETRY_S, {"tenant_id": tenant_id, "reason": reason}
+        _retry_later(
+            self,
+            SQ_POOL_BUSY_RETRY_S,
+            {"tenant_id": tenant_id, "reason": reason},
+            "pool still busy",
+        )
+    except NothingSearchableYet:
+        # Not recorded as a run, so a first run stays a first run.
+        _retry_later(
+            self,
+            SQ_RUN_RETRY_DELAY_S,
+            {"tenant_id": tenant_id, "reason": reason},
+            "documents not searchable yet",
         )
     except Exception as e:
         task_logger.exception("Suggested questions: pool run failed (%s)", reason)
@@ -124,10 +139,18 @@ def generate_suggested_questions_for_user(
             _run_topup(tenant_id, UUID(user_id), attempt)
     except CacheLockAcquisitionError:
         # The person is waiting, so try again soon.
-        _retry_when_busy(
+        _retry_later(
             self,
             SQ_LOCK_BUSY_RETRY_S,
             {"tenant_id": tenant_id, "user_id": user_id, **attempt},
+            "pool still busy",
+        )
+    except NothingSearchableYet:
+        _retry_later(
+            self,
+            SQ_RUN_RETRY_DELAY_S,
+            {"tenant_id": tenant_id, "user_id": user_id, **attempt},
+            "documents not searchable yet",
         )
     except Exception as e:
         task_logger.exception("Suggested questions: top-up failed for %s", user_id)
@@ -138,11 +161,12 @@ def generate_suggested_questions_for_user(
         )
 
 
-def _retry_when_busy(task: Task, countdown: int, kwargs: dict[str, Any]) -> None:
-    """Retry a run that found the pool locked. After the last retry, stop
-    quietly: the run holding the pool is doing the same work."""
+def _retry_later(task: Task, countdown: int, kwargs: dict[str, Any], why: str) -> None:
+    """Retry a run that could not start its work: the pool was locked, or its
+    documents were not searchable yet. After the last retry, stop quietly:
+    a later request runs it again."""
     if task.max_retries is not None and task.request.retries >= task.max_retries:
-        task_logger.info("Suggested questions: pool still busy, giving up")
+        task_logger.info("Suggested questions: %s, giving up", why)
         return
     raise task.retry(countdown=countdown, kwargs=kwargs)
 
@@ -253,6 +277,10 @@ def _write_and_test(
     run passes no user; a top-up passes the person."""
     with get_session_with_current_tenant() as db_session:
         chunks = fetch_chunks(db_session, candidates, tenant_id)
+    if not chunks:
+        # Chunks become searchable at the index's next refresh, about a
+        # second after indexing. A run started sooner reads nothing.
+        raise NothingSearchableYet(f"No chunks for {len(candidates)} documents")
     passages = best_chunks_per_document(triage_chunks(chunks, build_triage_clients()))
     # Keep the candidates' order (a top-up's private documents first), so the
     # writing call's passage limit drops the least wanted ones.
