@@ -187,7 +187,10 @@ opensearch:
   # Java heap should be ~50% of memory limit.
   # See https://opster.com/guides/opensearch/opensearch-basics/opensearch-heap-size-usage-and-jvm-garbage-collection/
   # Xms is the starting size, Xmx is the maximum size. These should be the same.
-  opensearchJavaOpts: "-Xmx4g -Xms4g"
+  # -XX:-UseBASE64Intrinsics turns off the JVM's native Base64 decoder
+  # (Java4Shell, CVE-2026-114938). Keep it when you change the heap, until the
+  # OpenSearch image ships a fixed JDK.
+  opensearchJavaOpts: "-Xmx4g -Xms4g -XX:-UseBASE64Intrinsics"
 
 persistent:
   storageClassName: ""
