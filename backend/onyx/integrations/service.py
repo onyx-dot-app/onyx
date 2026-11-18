@@ -1375,7 +1375,9 @@ def save_connection_fields__no_commit(
     """Check the key with the server of an MCP integration, then save the
     connection of ``user``, or of the organization when ``user`` is None.
     The check runs before the save locks the integration row."""
-    check_mcp_credential_fields(integration, fields, db_session)
+    check_mcp_credential_fields(
+        integration, fields, user.email if user is not None else None, db_session
+    )
     connect_with_fields__no_commit(integration, user, fields, db_session)
 
 

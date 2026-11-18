@@ -128,7 +128,10 @@ def fetch_mcp_actions(
 
 
 def check_mcp_credential_fields(
-    integration: Integration, fields: Mapping[str, str], db_session: Session
+    integration: Integration,
+    fields: Mapping[str, str],
+    user_email: str | None,
+    db_session: Session,
 ) -> None:
     """Ask the MCP server of an API key integration for its tools with the
     headers that ``fields`` give. Raises CREDENTIAL_INVALID when the server
@@ -144,7 +147,9 @@ def check_mcp_credential_fields(
         return
     try:
         headers = render_headers(
-            integration.header_template, ConnectionSecret(fields=dict(fields))
+            integration.header_template,
+            ConnectionSecret(fields=dict(fields)),
+            extra_values={"user_email": user_email} if user_email else None,
         )
     except MissingHeaderValueError:
         # The save refuses the missing fields with its own message.

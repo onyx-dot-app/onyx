@@ -1242,7 +1242,10 @@ def test_member_connect_refuses_a_key_that_the_mcp_server_rejects(
                 name=f"mcp-{uuid4().hex[:8]}",
                 auth_mode=IntegrationAuthMode.INDIVIDUAL,
                 auth_method=IntegrationAuthMethod.API_KEY,
-                header_template={"Authorization": "Bearer {api_key}"},
+                header_template={
+                    "Authorization": "Bearer {api_key}",
+                    "X-User": "{user_email}",
+                },
                 config=McpServerConfigInput(server_url="https://mcp.example.com/mcp"),
             ),
             admin,
@@ -1264,7 +1267,10 @@ def test_member_connect_refuses_a_key_that_the_mcp_server_rejects(
             db_session,
         )
     assert error.value.error_code is OnyxErrorCode.CREDENTIAL_INVALID
-    assert discover.call_args.args[1] == {"Authorization": "Bearer wrong-key"}
+    assert discover.call_args.args[1] == {
+        "Authorization": "Bearer wrong-key",
+        "X-User": member.email,
+    }
     db_session.rollback()
 
     with patch(
