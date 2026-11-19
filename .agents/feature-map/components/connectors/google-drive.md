@@ -52,13 +52,20 @@ credential of the other kind.
 listing, the shard engine (see **Shard engine**), for a service account and
 for OAuth. `GoogleDriveConnector._plan_listing` plans it on the first call of
 an attempt, and `_fetch_drive_items` runs one call. The listing state grows
-with drives, users and open shards. Only the dedup set grows with files
-([[#dedup-set-capped]]).
+with drives, users and open shards, and with folders: `folder_names` keeps the
+name and parent of each listed folder, so a stub's folder path needs no read.
+Only the dedup set grows with files ([[#dedup-set-capped]]).
 
 **Checkpointed slim listing.**
 `GoogleDriveConnector.retrieve_slim_docs_from_checkpoint` runs one call of the
 slim listing and returns the checkpoint. It yields `SlimDocumentStub`s with a
-`DriveListingPayload` (the user who listed the file).
+`DriveListingPayload` (the user who listed the file). It asks Drive for no
+permissions; `resolve_targets` reads every permission of a file before the
+link-only filter and permission sync use them. With permission sync, each
+folder node still gets its permissions (`_listed_folder_node`), so a private
+folder is never a public node. Without permission sync, a folder node has
+`external_access=None`, so the stored access stays. Inline indexing and pruning ask for permissions
+when `exclude_domain_link_only` is on, because they filter at the listing.
 
 **Indexability.** `connectors/google_drive/doc_conversion.py:drive_file_skip_reason` is the metadata
 check: shortcut or folder, `exclude_domain_link_only`, size, images and the
@@ -133,7 +140,11 @@ parent and is not marked as seen, so a later child can add a reader. A
 document that arrives before its folder gets a STUB parent in docfetching, so
 the connector yields children and parents in any order. A folder subtree gets
 no `FOLDERS` shard: the folders it walks are the nodes. `reindex` reads the
-parents of its files the same way.
+parents of its files the same way. It reads the files with batches of
+files.get (`connectors/google_drive/source_operations.py:batch_get_files`). A call of a batch that
+Google refuses for its rate, or fails with a server error, goes again in a new
+batch through the limiter, so only a denial, or a refusal that outlasts the
+retries, fails the document.
 
 A checkpoint with no listing state starts the listing again from the window
 start. A checkpoint of the serial crawl that came before (`phase_progress`,

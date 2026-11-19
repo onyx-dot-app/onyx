@@ -23,6 +23,7 @@ from onyx.server.metrics.source_api_metrics import (
     SOURCE_API_REQUESTS,
     RequestOutcome,
 )
+from onyx.utils.retry_wrapper import retry_builder
 
 _RATE_LIMIT_BODY = (
     b'{"error": {"errors": [{"reason": "rateLimitExceeded"}], '
@@ -171,8 +172,19 @@ def test_each_request_of_a_batch_counts_by_its_own_answer() -> None:
     drive.new_batch_http_request.side_effect = lambda callback: _FakeBatch(callback)
 
     def run() -> None:
-        with mock.patch.object(
-            GoogleDriveSourceOperations, "_drive", return_value=drive
+        # One try: a refused call goes again in a new batch, which counts
+        # its own answers.
+        with (
+            mock.patch.object(
+                GoogleDriveSourceOperations, "_drive", return_value=drive
+            ),
+            mock.patch.object(
+                source_operations,
+                "_retry_transient_batch_calls",
+                retry_builder(
+                    tries=1, exceptions=source_operations._TransientBatchCalls
+                ),
+            ),
         ):
             gateway.batch_get_files(
                 user_email="a@co.com",
