@@ -335,7 +335,7 @@ test.describe("Published files", () => {
       ).toContainText(REPORT_TEXT);
 
       // Closing and reopening the panel keeps the tabs.
-      await page.getByRole("button", { name: "Close panel" }).click();
+      await chatPage.closeRightPanel();
       await expect(chatPage.publishedFilesPanel).toBeHidden();
       await chatPage.publishedFilesButton.click();
       await expect(chatPage.rightPanelTab("Q3 report")).toBeVisible();
@@ -345,23 +345,12 @@ test.describe("Published files", () => {
       );
 
       // A mouse drag of the edge widens the panel.
-      const handle = page.getByRole("separator", { name: "Resize panel" });
-      const before = Number(await handle.getAttribute("aria-valuenow"));
-      // The panel slides open: drag once its edge is in place
+      const before = await chatPage.rightPanelWidth();
+      await chatPage.widenRightPanel(200);
       await expect
-        .poll(async () => (await handle.boundingBox())?.x ?? Infinity)
-        .toBeLessThan(1600 - before + 2);
-      const box = await handle.boundingBox();
-      if (!box) throw new Error("The resize handle has no box");
-      const y = box.y + box.height / 2;
-      await page.mouse.move(box.x + box.width / 2, y);
-      await page.mouse.down();
-      await page.mouse.move(box.x - 200, y, { steps: 10 });
-      await page.mouse.up();
-      await expect
-        .poll(async () => Number(await handle.getAttribute("aria-valuenow")))
+        .poll(() => chatPage.rightPanelWidth())
         .toBeGreaterThan(before + 150);
-      const width = Number(await handle.getAttribute("aria-valuenow"));
+      const width = await chatPage.rightPanelWidth();
 
       // The chat keeps the width through a reload.
       await chatPage.reload();
@@ -371,20 +360,13 @@ test.describe("Published files", () => {
       await expect(
         chatPage.publishedFilePreview("Meeting notes")
       ).toContainText(REPORT_TEXT);
-      await expect
-        .poll(async () => Number(await handle.getAttribute("aria-valuenow")))
-        .toBe(width);
+      await expect.poll(() => chatPage.rightPanelWidth()).toBe(width);
 
       // Escape leaves full screen, then closes each file's tab, then the
       // panel.
-      await page.getByRole("button", { name: "Expand panel" }).click();
-      await expect(
-        page.getByRole("button", { name: "Restore panel" })
-      ).toBeVisible();
+      await chatPage.expandRightPanel();
       await page.keyboard.press("Escape");
-      await expect(
-        page.getByRole("button", { name: "Expand panel" })
-      ).toBeVisible();
+      await chatPage.expectRightPanelExpanded(false);
       await expect(chatPage.rightPanelTab("Meeting notes")).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(chatPage.rightPanelTab("Meeting notes")).toBeHidden();
