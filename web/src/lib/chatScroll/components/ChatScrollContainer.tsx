@@ -171,7 +171,9 @@ const ChatScrollContainer = React.memo(
           const memory = getChatScrollMemory(id);
           const atEnd =
             (isAtBottomRef.current && autoScrollRef.current) ||
-            (isAtScrollEnd(container, 1) && spacerHeightRef.current === 0);
+            // 2px: a fractional scrollTop (Firefox) can sit just short of
+            // the rounded end.
+            (isAtScrollEnd(container, 2) && spacerHeightRef.current === 0);
           if (atEnd) {
             memory.position = { kind: "end" };
             return;
@@ -409,6 +411,17 @@ const ChatScrollContainer = React.memo(
             ) {
               // scrollToBottom handles isAutoScrollingRef and ref updates
               scrollToBottom("instant");
+            } else if (
+              !following &&
+              !isAutoScrollingRef.current &&
+              container.dataset.smoothScrollActive !== "true"
+            ) {
+              // Not following, so growth leaves the end behind: the view is
+              // no longer at the bottom, and a later resume must not jump.
+              isAtBottomRef.current = isAtScrollEnd(
+                container,
+                buttonThresholdPx
+              );
             }
 
             updateScrollState();
@@ -435,7 +448,13 @@ const ChatScrollContainer = React.memo(
           resizeObserver.disconnect();
           if (rafId) cancelAnimationFrame(rafId);
         };
-      }, [updateScrollState, scrollToBottom, savePosition, sessionId]);
+      }, [
+        updateScrollState,
+        scrollToBottom,
+        savePosition,
+        buttonThresholdPx,
+        sessionId,
+      ]);
 
       // Handle session changes and anchor changes. A layout effect: opening a
       // chat whose messages are already rendered scrolls it into place before

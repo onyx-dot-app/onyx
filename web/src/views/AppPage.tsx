@@ -384,7 +384,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // is jarring.
   const autoScrollPreference = user?.preferences?.auto_scroll !== false;
   const isStreamDraining = useCurrentIsStreamDraining();
-  const autoScrollEnabled = autoScrollPreference && !isStreamDraining;
+  // The setting decides whether a running reply is followed. With nothing
+  // running, growth is layout settling (an action row, a card growing in),
+  // so a view at the end keeps to it, and a reopened chat lands at the end.
+  const autoScrollEnabled =
+    !isStreamDraining && (autoScrollPreference || currentChatState === "input");
   const isStreaming = currentChatState === "streaming";
 
   const multiModel = useMultiModelChat(llmManager);
