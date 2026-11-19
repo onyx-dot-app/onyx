@@ -153,7 +153,22 @@ export default function CraftTimeline({
   // Every run folds, even with one step. Open while the run is active so
   // streaming steps stay visible; settled runs start folded.
   const [isOpen, setIsOpen] = useState(isRunning);
-  const toggle = () => setIsOpen((prev) => !prev);
+  // A run the user folded or opened keeps their choice.
+  const userToggled = useRef(false);
+  const toggle = () => {
+    userToggled.current = true;
+    setIsOpen((prev) => !prev);
+  };
+
+  // Open when the run becomes active after mounting settled (its first call
+  // arrived complete); only on that change, so a later fold sticks.
+  const wasRunning = useRef(isRunning);
+  useEffect(() => {
+    if (isRunning && !wasRunning.current && !userToggled.current) {
+      setIsOpen(true);
+    }
+    wasRunning.current = isRunning;
+  }, [isRunning]);
 
   // Fold closed once a message follows; fire once so a manual re-open sticks.
   const didAutoCollapse = useRef(false);
