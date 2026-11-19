@@ -29,7 +29,10 @@ from onyx.db.integration import (
     get_integration_by_kind_row,
     get_mcp_server_for_integration,
 )
-from onyx.db.integration_access import load_integration_shares
+from onyx.db.integration_access import (
+    load_integration_group_settings,
+    load_integration_shares,
+)
 from onyx.db.integration_connection import get_connection
 from onyx.db.mcp import get_mcp_server_by_id
 from onyx.db.models import Integration, User
@@ -39,6 +42,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.access import (
     publish_integration__no_commit,
     set_company_policy__no_commit,
+    set_group_settings__no_commit,
     share_integration__no_commit,
 )
 from onyx.integrations.connection_models import read_connection_secret
@@ -274,6 +278,16 @@ def _apply_access(
     if not is_private(integration):
         affected |= set_company_policy__no_commit(
             integration, PluginInstallationPolicy.NOT_AVAILABLE, db_session
+        )
+    # The legacy model has no group settings: private means only these
+    # shares, so a group setting that gives access goes too.
+    group_settings = load_integration_group_settings(integration.id, db_session)
+    if group_settings:
+        affected |= set_group_settings__no_commit(
+            user,
+            integration,
+            {setting.group_id: None for setting in group_settings},
+            db_session,
         )
     users, groups = _shares(integration, db_session)
     return affected | share_integration__no_commit(

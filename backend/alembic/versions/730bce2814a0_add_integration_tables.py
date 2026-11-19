@@ -3,8 +3,10 @@ OpenAPI custom tool into them. Each integration stands alone and owns its
 access: its owner, its install setting, its shares and the on/off choice of
 each user. An agent and a task link to an integration directly. The copy
 makes no plugin. An agent gives no access: a person who used a private
-integration only through an agent gets no share, and loses those tools until
-the owner shares the integration.
+integration only through an agent shared with some people gets no share, and
+loses those tools until the owner shares the integration. A custom tool that
+an admin made, or that default Chat or a listed public agent has, is
+Available, because each user had it.
 
 The old tables stay the tables of each kind: each integration points at its
 mcp_server, external_app or OpenAPI tool row, as gated_app does. The old tables
@@ -725,16 +727,11 @@ _CREATE_SOURCES = f"""
             m.oauth_cimd_enabled,
             NULL::jsonb,
             coalesce(m.users_can_manage_policies, true),
-            NOT (
-                m.is_public OR m.shared_with_basic OR m.owner_user_id IS NULL
-            ),
+            -- A private server with no owner stays private; its admins get
+            -- a share (_INSERT_ORPHAN_ADMIN_SHARES).
+            NOT (m.is_public OR m.shared_with_basic),
             m.owner_user_id,
-            CASE
-                WHEN NOT (m.is_public OR m.shared_with_basic)
-                    AND m.owner_user_id IS NULL
-                    THEN 'NOT_AVAILABLE'
-                WHEN m.is_default_chat THEN 'DEFAULT'
-            END,
+            CASE WHEN m.is_default_chat THEN 'DEFAULT' END,
             coalesce(m.created_at, TIMESTAMPTZ '{FALLBACK_CREATED_AT}'),
             coalesce(
                 m.updated_at, m.created_at, TIMESTAMPTZ '{FALLBACK_CREATED_AT}'
@@ -779,9 +776,27 @@ _CREATE_SOURCES = f"""
             false,
             NULL,
             true,
-            -- A tool of a person stays private unless default Chat has it.
-            -- An agent gives no access, so its users get no share.
-            NOT (t.user_id IS NULL OR is_default.value),
+            -- A tool of a person stays private unless default Chat or a
+            -- listed public agent has it, or an admin made it. Each user had
+            -- those. An agent shared with some people gives them no share.
+            NOT (
+                t.user_id IS NULL
+                OR is_default.value
+                OR EXISTS (
+                    SELECT 1 FROM "user" u
+                    WHERE u.id = t.user_id
+                      AND u.effective_permissions @> '["admin"]'::jsonb
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM persona__tool pt
+                    JOIN persona p ON p.id = pt.persona_id
+                    WHERE pt.tool_id = t.id
+                      -- Default Chat (id 0) is is_default above.
+                      AND p.id <> 0
+                      AND NOT p.deleted AND p.is_public AND p.is_listed
+                )
+            ),
             t.user_id,
             CASE WHEN is_default.value THEN 'DEFAULT' END,
             TIMESTAMPTZ '{FALLBACK_CREATED_AT}',
@@ -1075,6 +1090,20 @@ _INSERT_MCP_USER_SHARES = """
     ON CONFLICT DO NOTHING
 """
 
+# A private server whose owner was deleted keeps its admins, who could use
+# it before through the admin check.
+_INSERT_ORPHAN_ADMIN_SHARES = """
+    INSERT INTO integration__user (integration_id, user_id, permission, created_at)
+    SELECT src.id, u.id, 'VIEWER', src.created_at
+    FROM integration_source src
+    JOIN "user" u ON u.effective_permissions @> '["admin"]'::jsonb
+    WHERE src.mcp_server_id IS NOT NULL
+      AND src.is_private
+      AND src.owner_user_id IS NULL
+    ORDER BY src.id, u.id
+    ON CONFLICT DO NOTHING
+"""
+
 _INSERT_MCP_GROUP_SHARES = """
     INSERT INTO integration__user_group
         (integration_id, user_group_id, permission, installation_policy,
@@ -1170,9 +1199,10 @@ _INSERT_PRIVATE_DEFAULT_PREFERENCES = """
     ), recipients AS (
         SELECT id, owner_user_id AS user_id FROM private_default
         UNION
-        SELECT src.id, su.user_id
+        -- The user shares, with the admins of a server with no owner.
+        SELECT src.id, iu.user_id
         FROM private_default src
-        JOIN mcp_server__user su USING (mcp_server_id)
+        JOIN integration__user iu ON iu.integration_id = src.id
         UNION
         SELECT src.id, ug.user_id
         FROM private_default src
@@ -1360,6 +1390,7 @@ def _copy_integrations() -> None:
         _INSERT_MCP_ACTIONS,
         _CREATE_TOOL_INTEGRATIONS,
         _INSERT_MCP_USER_SHARES,
+        _INSERT_ORPHAN_ADMIN_SHARES,
         _INSERT_MCP_GROUP_SHARES,
         _INSERT_UNSELECTED_MCP_TOOLS,
         _INSERT_ADMIN_POLICIES,

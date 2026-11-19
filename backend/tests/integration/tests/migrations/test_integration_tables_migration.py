@@ -146,6 +146,8 @@ class Seeded:
     custom_default: int
     custom_oauth: int
     custom_disabled: int
+    custom_admin: int
+    custom_public: int
     only_skill: UUID
     built_in_tool: int
     chat_session: UUID
@@ -173,6 +175,13 @@ def _seed(conn: Connection) -> Seeded:
     conn.execute(
         text('UPDATE "user" SET is_active = false WHERE id = :id'),
         {"id": users["inactive"]},
+    )
+    conn.execute(
+        text(
+            'UPDATE "user" SET effective_permissions = \'["admin"]\'::jsonb '
+            "WHERE id = :id"
+        ),
+        {"id": users["admin"]},
     )
     group = _insert(
         conn,
@@ -428,6 +437,7 @@ def _seed(conn: Connection) -> Seeded:
         headers: list[dict[str, str]] | None,
         oauth: int | None,
         enabled: bool = True,
+        owner: str = "owner",
     ) -> int:
         return _insert(
             conn,
@@ -438,7 +448,7 @@ def _seed(conn: Connection) -> Seeded:
             name=name,
             schema=json.dumps(OPENAPI_SCHEMA),
             headers=json.dumps(headers) if headers is not None else None,
-            owner=users["owner"],
+            owner=users[owner],
             oauth=oauth,
             enabled=enabled,
         )
@@ -466,6 +476,8 @@ def _seed(conn: Connection) -> Seeded:
         )
     # Turned off for the default agent; a custom agent still has it.
     custom_disabled = custom(f"u1-custom-disabled-{s}", None, None, enabled=False)
+    custom_admin = custom(f"u1-custom-admin-{s}", None, None, owner="admin")
+    custom_public = custom(f"u1-custom-public-{s}", None, None)
 
     # The agents that give a private server to their users.
     shared_persona = persona(users["other"], "shared-persona")
@@ -525,6 +537,7 @@ def _seed(conn: Connection) -> Seeded:
         (group_persona, tool_selected),
         (unselected_persona, tool_unselected),
         (public_persona, tool_agent_public),
+        (public_persona, custom_public),
         (other_persona, tool_read),
         (other_persona, custom_shared),
         (own_persona, custom_private),
@@ -537,6 +550,8 @@ def _seed(conn: Connection) -> Seeded:
         (0, tool_selected),
         (0, custom_default),
         (0, custom_disabled),
+        # Default Chat has the private server with no owner.
+        (0, tool_agent_orphan),
         (own_persona, custom_disabled),
     ):
         conn.execute(
@@ -544,10 +559,13 @@ def _seed(conn: Connection) -> Seeded:
             {"p": persona_id, "t": tool_id},
         )
 
-    conn.execute(
-        text("INSERT INTO mcp_server__user (mcp_server_id, user_id) VALUES (:s, :u)"),
-        {"s": mcp_private, "u": users["other"]},
-    )
+    for server in (mcp_private, mcp_agent_orphan):
+        conn.execute(
+            text(
+                "INSERT INTO mcp_server__user (mcp_server_id, user_id) VALUES (:s, :u)"
+            ),
+            {"s": server, "u": users["other"]},
+        )
     for group_id in (group, default_group):
         conn.execute(
             text(
@@ -794,6 +812,8 @@ def _seed(conn: Connection) -> Seeded:
         custom_default=custom_default,
         custom_oauth=custom_oauth,
         custom_disabled=custom_disabled,
+        custom_admin=custom_admin,
+        custom_public=custom_public,
         only_skill=only_skill,
         built_in_tool=built_in_tool,
         chat_session=chat_session_id,
@@ -810,6 +830,8 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
         seeded.custom_default,
         seeded.custom_oauth,
         seeded.custom_disabled,
+        seeded.custom_admin,
+        seeded.custom_public,
     ]
     if conn.execute(text("SELECT to_regclass('integration')")).scalar_one():
         params = {
@@ -1103,6 +1125,8 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             "default": seeded.custom_default,
             "oauth": seeded.custom_oauth,
             "disabled": seeded.custom_disabled,
+            "admin": seeded.custom_admin,
+            "public": seeded.custom_public,
         }
         custom = {
             key: _copied(conn, TOOL_INTEGRATION, t=tool_id)
@@ -1416,6 +1440,9 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             # Only an agent of its owner has it.
             "custom_oauth": "NOT_AVAILABLE",
             "custom_disabled": "NOT_AVAILABLE",
+            # Each user had these: an admin made one, a public agent has one.
+            "custom_admin": "AVAILABLE",
+            "custom_public": "AVAILABLE",
         }
         # A private server keeps its own people. An agent gives no access, so
         # the users of its agents get no share. A default group becomes its
@@ -1426,23 +1453,40 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         assert _integration_shares(
             conn, "integration__user_group", "user_group_id", private.id
         ) == {seeded.group}
-        # A server with no owner and a server of a public agent stay private
-        # with no share.
-        for key in ("mcp_agent_orphan", "mcp_agent_public"):
-            agent_server = _copied(conn, "i.id = :id", id=seeded.gated[key])
-            assert agent_server.installation_policy == "NOT_AVAILABLE"
-            assert (
-                _integration_shares(
-                    conn, "integration__user", "user_id", agent_server.id
+        # A server of a public agent stays private with no share: an agent
+        # gives no access.
+        agent_public = _copied(conn, "i.id = :id", id=seeded.gated["mcp_agent_public"])
+        assert agent_public.installation_policy == "NOT_AVAILABLE"
+        assert (
+            _integration_shares(conn, "integration__user", "user_id", agent_public.id)
+            == set()
+        )
+        # A private server with no owner keeps its admins.
+        agent_orphan = _copied(conn, "i.id = :id", id=seeded.gated["mcp_agent_orphan"])
+        assert agent_orphan.installation_policy == "NOT_AVAILABLE"
+        admins = set(
+            conn.execute(
+                text(
+                    'SELECT id FROM "user" '
+                    "WHERE effective_permissions @> '[\"admin\"]'::jsonb"
                 )
-                == set()
+            ).scalars()
+        )
+        assert seeded.admin in admins
+        assert _integration_shares(
+            conn, "integration__user", "user_id", agent_orphan.id
+        ) == admins | {seeded.other}
+        # Default Chat had it, so it stays on for the share and the admins.
+        assert {
+            row.user_id
+            for row in conn.execute(
+                text(
+                    "SELECT user_id FROM user_integration_preference "
+                    "WHERE integration_id = :i AND enabled"
+                ),
+                {"i": agent_orphan.id},
             )
-            assert (
-                _integration_shares(
-                    conn, "integration__user_group", "user_group_id", agent_server.id
-                )
-                == set()
-            )
+        } >= {seeded.other, seeded.admin}
         # No copied group row holds an install setting.
         assert (
             conn.execute(
@@ -1508,6 +1552,7 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             public.id: (False, None),
             private.id: (False, None),
             custom["default"].id: (False, None),
+            agent_orphan.id: (True, None),
         }
         assert {
             row.user_id: row.enabled

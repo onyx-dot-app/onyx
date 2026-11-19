@@ -8,7 +8,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MASK_CREDENTIAL_SHORT
@@ -24,17 +24,25 @@ from onyx.db.integration import (
     count_integration_actions,
     get_integration_by_kind_row,
 )
+from onyx.db.integration_access import load_integration_group_settings
 from onyx.db.integration_connection import get_connection
 from onyx.db.integration_policy import list_persona_integration_links
 from onyx.db.models import (
     Integration,
+    Integration__UserGroup,
     MCPServer,
     Tool,
     User,
+    UserGroup,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_connection_secret
+from onyx.server.features.integrations import admin_api
+from onyx.server.features.integrations.models import (
+    IntegrationGroupSettingChange,
+    IntegrationGroupSettingsUpdate,
+)
 from onyx.server.features.mcp import api as mcp_api
 from onyx.server.features.mcp.models import (
     MCPAuthTemplate,
@@ -46,6 +54,7 @@ from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.tool import api as tool_api
 from onyx.server.features.tool.models import CustomToolCreate
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.craft.db_helpers import make_group
 from tests.external_dependency_unit.integration_helpers import delete_integrations
 
 SERVER_URL = "https://mcp.example.com/mcp"
@@ -489,3 +498,48 @@ def test_agent_mcp_tool_ids_round_trip_and_change_the_selection(
     cleared = persona_api.update_persona(agent.id, request([], name), admin, db_session)
     assert cleared.tools == []
     assert links() == []
+
+
+def test_making_a_server_private_removes_its_group_settings(
+    db_session: Session, admin: User, created: list[int]
+) -> None:
+    """The legacy model has no group settings, so private means only the
+    shares in the request: a group setting that gives access goes."""
+    group = make_group(db_session)
+    db_session.commit()
+    try:
+        server_id = _upsert(db_session, admin, created)
+        integration = _integration(db_session, server_id)
+        admin_api.set_integration_group_settings(
+            integration.id,
+            IntegrationGroupSettingsUpdate(
+                group_settings=[
+                    IntegrationGroupSettingChange(
+                        group_id=group.id,
+                        installation_policy=PluginInstallationPolicy.AVAILABLE,
+                    )
+                ]
+            ),
+            admin,
+            db_session,
+        )
+
+        mcp_api.update_mcp_server_alias(
+            server_id,
+            MCPServerSimpleUpdateRequest(is_public=False),
+            db_session,
+            admin,
+        )
+
+        assert load_integration_group_settings(integration.id, db_session) == []
+        server = mcp_api.get_mcp_server_alias(server_id, db_session, admin)
+        assert (server.is_public, server.groups) == (False, [])
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(Integration__UserGroup).where(
+                Integration__UserGroup.user_group_id == group.id
+            )
+        )
+        db_session.execute(delete(UserGroup).where(UserGroup.id == group.id))
+        db_session.commit()
