@@ -190,32 +190,26 @@ pub fn on_menu(app: &AppHandle) {
 }
 
 fn show_message(app: &AppHandle, title: &str, detail: &str) {
-    let (title, detail) = (title.to_string(), detail.to_string());
-    let _ = app.run_on_main_thread(move || {
-        rfd::MessageDialog::new()
-            .set_title(&title)
-            .set_description(&detail)
-            .set_buttons(rfd::MessageButtons::Ok)
-            .show();
-    });
+    let dialog = rfd::MessageDialog::new()
+        .set_title(title)
+        .set_description(detail)
+        .set_buttons(rfd::MessageButtons::Ok);
+    crate::dialog::show(app, dialog, |_, _| {});
 }
 
 fn offer_restart(app: &AppHandle, version: &str) {
-    let handle = app.clone();
-    let version = version.to_string();
-    let _ = app.run_on_main_thread(move || {
-        let choice = rfd::MessageDialog::new()
-            .set_title("An update is ready")
-            .set_description(format!(
-                "Onyx {version} has been downloaded. Restart now to finish updating?"
-            ))
-            .set_buttons(rfd::MessageButtons::OkCancelCustom(
-                "Restart Now".into(),
-                "Later".into(),
-            ))
-            .show();
+    let dialog = rfd::MessageDialog::new()
+        .set_title("An update is ready")
+        .set_description(format!(
+            "Onyx {version} has been downloaded. Restart now to finish updating?"
+        ))
+        .set_buttons(rfd::MessageButtons::OkCancelCustom(
+            "Restart Now".into(),
+            "Later".into(),
+        ));
+    crate::dialog::show(app, dialog, |app, choice| {
         if choice == rfd::MessageDialogResult::Custom("Restart Now".into()) {
-            start_install(&handle);
+            start_install(app);
         }
     });
 }

@@ -153,21 +153,18 @@ pub fn toggle_launcher(app: &AppHandle) {
 /// not be reached, or its sign-in settings did not load): keep the session,
 /// explain, and let the user try again or sign in.
 fn open_failed(app: &AppHandle, title: &str, error: &str) {
-    let handle = app.clone();
-    let (title, error) = (title.to_string(), error.to_string());
-    let _ = app.run_on_main_thread(move || {
-        let choice = rfd::MessageDialog::new()
-            .set_title(&title)
-            .set_description(&error)
-            .set_buttons(rfd::MessageButtons::OkCancelCustom(
-                "Try Again".into(),
-                "Sign In".into(),
-            ))
-            .show();
+    let dialog = rfd::MessageDialog::new()
+        .set_title(title)
+        .set_description(error)
+        .set_buttons(rfd::MessageButtons::OkCancelCustom(
+            "Try Again".into(),
+            "Sign In".into(),
+        ));
+    crate::dialog::show(app, dialog, |app, choice| {
         if choice == rfd::MessageDialogResult::Custom("Try Again".into()) {
-            route(&handle);
+            route(app);
         } else {
-            let _ = open_login(&handle);
+            let _ = open_login(app);
         }
     });
 }

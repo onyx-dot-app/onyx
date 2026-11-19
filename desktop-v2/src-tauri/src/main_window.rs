@@ -224,6 +224,7 @@ fn session_cookie(server: &Url, name: &str, token: &str) -> Result<Cookie<'stati
     Ok(cookie.build())
 }
 
+#[cfg(not(target_os = "linux"))]
 fn choose_download_path(destination: &mut std::path::PathBuf) -> bool {
     let suggested = destination
         .file_name()
@@ -240,6 +241,13 @@ fn choose_download_path(destination: &mut std::path::PathBuf) -> bool {
         }
         None => false,
     }
+}
+
+/// wry asks on the GTK main thread, where rfd's blocking dialog would deadlock,
+/// so Linux keeps wry's unique path in the Downloads folder.
+#[cfg(target_os = "linux")]
+fn choose_download_path(_destination: &mut std::path::PathBuf) -> bool {
+    true
 }
 
 fn hand_over_session(

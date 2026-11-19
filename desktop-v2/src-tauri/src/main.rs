@@ -5,6 +5,7 @@ mod api;
 mod ask;
 mod commands;
 mod config;
+mod dialog;
 mod launcher;
 #[cfg(target_os = "macos")]
 mod macos_cookies;
