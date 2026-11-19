@@ -17,9 +17,9 @@ import {
 } from "./TimelineRendererComponent";
 import { Button, Tabs } from "@opal/components";
 import { SvgBranch, SvgFold, SvgExpand } from "@opal/icons";
-import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
-import { TimelineSurface } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
-import { TimelineTopSpacer } from "@/app/app/message/messageComponents/timeline/primitives/TimelineTopSpacer";
+import { TimelineRow } from "@/lib/timeline/primitives/TimelineRow";
+import { TimelineSurface } from "@/lib/timeline/primitives/TimelineSurface";
+import { TimelineTopSpacer } from "@/lib/timeline/primitives/TimelineTopSpacer";
 import { TimelineStepComposer } from "./TimelineStepComposer";
 
 export interface ParallelTimelineTabsProps {

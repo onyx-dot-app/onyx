@@ -2,7 +2,15 @@ import { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hook
 import {
   CodeModeProgram,
   NestedCall,
+  isGroupEndPacket,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
+import { PacketType } from "@/app/app/services/streamingModels";
+import { groupTimelineEntries } from "@/lib/timeline/entries";
+import type {
+  TimelineEntry,
+  TimelineEntryStatus,
+  TimelineGroup,
+} from "@/lib/timeline/types";
 
 /**
  * Transformed step data ready for rendering
@@ -97,32 +105,45 @@ export function transformPacketGroups(
  * // └─────────────────────────────────────────────┘
  */
 export function groupStepsByTurn(steps: TransformedStep[]): TurnGroup[] {
-  const turnMap = new Map<number, TransformedStep[]>();
+  const ordered = [...steps].sort(
+    (a, b) => a.turnIndex - b.turnIndex || a.tabIndex - b.tabIndex
+  );
+  return groupTimelineEntries(ordered.map(toChatTimelineEntry)).map(
+    (group) => ({
+      turnIndex: group.entries[0]?.payload.turnIndex ?? 0,
+      steps: group.entries.map((entry) => entry.payload),
+      isParallel: group.isParallel,
+    })
+  );
+}
 
-  for (const step of steps) {
-    const existing = turnMap.get(step.turnIndex);
-    if (existing) {
-      existing.push(step);
-    } else {
-      turnMap.set(step.turnIndex, [step]);
-    }
+function chatStepStatus(step: TransformedStep): TimelineEntryStatus {
+  if (step.packets.some((packet) => packet.obj.type === PacketType.ERROR)) {
+    return "error";
   }
+  return step.packets.some(isGroupEndPacket) ? "done" : "streaming";
+}
 
-  const result: TurnGroup[] = [];
-  const sortedTurnIndices = Array.from(turnMap.keys()).sort((a, b) => a - b);
+/** A chat step as a timeline entry; parallel tabs share their section's group. */
+export function toChatTimelineEntry(
+  step: TransformedStep
+): TimelineEntry<TransformedStep> {
+  return {
+    id: step.key,
+    status: chatStepStatus(step),
+    groupId: String(step.turnIndex),
+    payload: step,
+  };
+}
 
-  for (const turnIndex of sortedTurnIndices) {
-    const stepsForTurn = turnMap.get(turnIndex)!;
-    stepsForTurn.sort((a, b) => a.tabIndex - b.tabIndex);
-
-    result.push({
-      turnIndex,
-      steps: stepsForTurn,
-      isParallel: stepsForTurn.length > 1,
-    });
-  }
-
-  return result;
+export function toChatTimelineGroup(
+  turnGroup: TurnGroup
+): TimelineGroup<TransformedStep> {
+  return {
+    id: String(turnGroup.turnIndex),
+    entries: turnGroup.steps.map(toChatTimelineEntry),
+    isParallel: turnGroup.isParallel,
+  };
 }
 
 export interface CodeModeTimeline {

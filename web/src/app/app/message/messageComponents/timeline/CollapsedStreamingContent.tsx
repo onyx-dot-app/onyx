@@ -11,8 +11,8 @@ import {
   TimelineRendererComponent,
   TimelineRendererOutput,
 } from "./TimelineRendererComponent";
-import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
-import { TimelineSurface } from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
+import { TimelineRow } from "@/lib/timeline/primitives/TimelineRow";
+import { TimelineSurface } from "@/lib/timeline/primitives/TimelineSurface";
 
 export interface CollapsedStreamingContentProps {
   step: TransformedStep;

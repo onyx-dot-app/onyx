@@ -132,6 +132,14 @@ keyed by path, inventory revision and an explicit reload counter.
 `web/src/app/craft/components/OutputPanel.tsx` keeps a few recent file viewers
 mounted but hidden and `inert`, so switching tabs does not fetch them again.
 
+**Transcript timeline.** `web/src/app/craft/utils/timelineEntries.ts:buildCraftTranscript`
+splits a turn's stream items into rail blocks (consecutive tool calls and
+thinking) and inline items (text, to-do list, notices). An entry is keyed by
+tool-call id or stream item id, so a late update changes it in place.
+`web/src/app/craft/components/CraftTimeline.tsx` draws a block on the rail that
+chat uses (`web/src/lib/timeline/`, [[chat-frontend]]). A block with more than
+one entry gets a "Working" header that folds it once a text reply follows.
+
 ---
 
 ## Contracts and traps

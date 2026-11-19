@@ -1,12 +1,12 @@
 import React, { FunctionComponent } from "react";
 import { cn } from "@opal/utils";
 import { IconProps } from "@opal/types";
-import { TimelineRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRow";
+import { TimelineRow } from "@/lib/timeline/primitives/TimelineRow";
 import {
   TimelineSurface,
   TimelineSurfaceBackground,
-} from "@/app/app/message/messageComponents/timeline/primitives/TimelineSurface";
-import { TimelineStepContent } from "@/app/app/message/messageComponents/timeline/primitives/TimelineStepContent";
+} from "@/lib/timeline/primitives/TimelineSurface";
+import { TimelineStepContent } from "@/lib/timeline/primitives/TimelineStepContent";
 
 export interface StepContainerProps {
   /** Main content */
@@ -15,8 +15,12 @@ export interface StepContainerProps {
   stepIcon?: FunctionComponent<IconProps>;
   /** Header left slot */
   header?: React.ReactNode;
+  /** Rendered at the inline end of the header, before the toggle */
+  headerAccessory?: React.ReactNode;
   /** Button title for toggle */
   buttonTitle?: string;
+  /** Accessible name of the icon-only toggle */
+  toggleLabel?: string;
   /** Controlled expanded state */
   isExpanded?: boolean;
   /** Toggle callback */
@@ -48,7 +52,9 @@ export function StepContainer({
   children,
   stepIcon: StepIconComponent,
   header,
+  headerAccessory,
   buttonTitle,
+  toggleLabel,
   isExpanded = true,
   onToggle,
   collapsible = true,
@@ -80,7 +86,9 @@ export function StepContainer({
     >
       <TimelineStepContent
         header={header}
+        headerAccessory={headerAccessory}
         buttonTitle={buttonTitle}
+        toggleLabel={toggleLabel}
         isExpanded={isExpanded}
         onToggle={onToggle}
         collapsible={collapsible}

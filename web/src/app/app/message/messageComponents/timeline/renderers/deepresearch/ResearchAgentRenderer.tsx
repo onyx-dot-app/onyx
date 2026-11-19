@@ -13,7 +13,7 @@ import {
   FullChatState,
   RenderType,
 } from "@/app/app/message/messageComponents/types";
-import { StepContainer } from "@/app/app/message/messageComponents/timeline/StepContainer";
+import { StepContainer } from "@/lib/timeline/StepContainer";
 import {
   isGroupEndPacket,
   NestedCall,

@@ -1,5 +1,5 @@
 import React from "react";
-import { TimelineTopSpacerVariant } from "./tokens";
+import { TimelineTopSpacerVariant } from "@/lib/timeline/primitives/tokens";
 
 export interface TimelineTopSpacerProps {
   variant?: TimelineTopSpacerVariant;

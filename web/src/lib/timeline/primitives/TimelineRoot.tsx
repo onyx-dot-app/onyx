@@ -1,5 +1,8 @@
 import React from "react";
-import { getTimelineStyles, TimelineTokens } from "./tokens";
+import {
+  getTimelineStyles,
+  TimelineTokens,
+} from "@/lib/timeline/primitives/tokens";
 
 export interface TimelineRootProps {
   children: React.ReactNode;
