@@ -198,9 +198,11 @@ pub fn defer_open(app: &AppHandle, path: &str) -> bool {
     true
 }
 
-/// Checks the server now (Retry button, network back).
+/// Checks the server now (Retry button, network back). Wakes every waiting
+/// monitor: an old one from a closed window exits, the current one checks.
+/// A monitor that is checking at that moment needs no wake.
 pub fn retry_now(app: &AppHandle) {
-    app.state::<Offline>().wake.notify_one();
+    app.state::<Offline>().wake.notify_waiters();
 }
 
 pub fn status(app: &AppHandle) -> Option<OfflineStatus> {
