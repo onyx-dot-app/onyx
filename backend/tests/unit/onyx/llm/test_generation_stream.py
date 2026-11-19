@@ -9,6 +9,7 @@ import pytest
 from pydantic import BaseModel, JsonValue
 
 from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
+from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.interfaces import GenerationContext, LLMConfig
 from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.model_response import (
@@ -633,9 +634,14 @@ def test_stream_failure_recovers_no_call_from_an_unfinished_payload() -> None:
     assert record.call_args.kwargs["tool_calls"] is None
 
 
-def test_stream_failure_keeps_prose_after_a_closed_xml_block() -> None:
-    failure = RuntimeError("provider failed")
-
+@pytest.mark.parametrize(
+    "failure",
+    [RuntimeError("provider failed"), AgentCancelled()],
+    ids=["error", "cancel"],
+)
+def test_interrupted_stream_keeps_prose_after_a_closed_xml_block(
+    failure: BaseException,
+) -> None:
     def chunks() -> Iterator[ModelResponseStream]:
         yield _stream_chunk(
             Delta(
@@ -653,13 +659,15 @@ def test_stream_failure_keeps_prose_after_a_closed_xml_block() -> None:
     events: list[GenerationEvent] = []
     with (
         patch.object(client, "stream_raw", return_value=chunks()),
-        pytest.raises(RuntimeError) as caught,
+        patch("onyx.llm.multi_llm.record_llm_span_output") as record,
+        pytest.raises(type(failure)) as caught,
     ):
         events.extend(client.stream(request))
     assert caught.value is failure
-    message = collect_generation(events)
-    assert message.text == "Before after"
-    assert message.tool_calls == []
+    assert record.call_args.kwargs["output"] == "Before after"
+    assert record.call_args.kwargs["tool_calls"] is None
+    if isinstance(failure, Exception):
+        assert collect_generation(events).text == "Before after"
 
 
 def test_incremental_events_preserve_partial_content_and_snapshot_isolation() -> None:
