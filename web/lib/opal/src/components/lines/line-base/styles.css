@@ -56,6 +56,13 @@
   @apply p-0;
 }
 
+/* A card that cannot fold yet keeps its header (see `Line`), disabled: no
+   toggle, and an ordinary cursor rather than a not-allowed one. */
+.opal-line[data-opal-line-flavour="card"]
+  .opal-collapsible-header[data-disabled] {
+  @apply cursor-auto;
+}
+
 /* ── Card flavour ────────────────────────────────────────────────────────────
    A run card: 0.25rem of padding around the header and the body, 0.75rem
    corners, and a neutral fill while filled. A folded card that its header

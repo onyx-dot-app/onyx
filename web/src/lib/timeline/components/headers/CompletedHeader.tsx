@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { SvgAddLines, SvgMaximize2 } from "@opal/icons";
-import { Button, Text } from "@opal/components";
+import { Button, Presence, Text } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Tooltip } from "@opal/components";
 import { ContentAction, Section } from "@opal/layouts";
@@ -21,7 +21,7 @@ interface MemoryTagWithTooltipProps {
   memoryIndex: number | null;
 }
 
-function MemoryTagWithTooltip({
+export function MemoryTagWithTooltip({
   memoryText,
   memoryOperation,
   memoryId,
@@ -126,14 +126,20 @@ export function CompletedHeader({
 
   if (isMemoryOnly) {
     return (
-      <div className="flex flex-1 min-w-0 items-center px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        gap={0}
+        height="fit"
+        className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
+      >
         <MemoryTagWithTooltip
           memoryText={memoryText}
           memoryOperation={memoryOperation}
           memoryId={memoryId}
           memoryIndex={memoryIndex}
         />
-      </div>
+      </Section>
     );
   }
 
@@ -148,19 +154,25 @@ export function CompletedHeader({
       ? t("generatedImages.label", { count: generatedImageCount })
       : null;
 
+  const shownText = isExpanded ? durationText : (imageText ?? durationText);
+
+  // The summary swaps through Presence.Swap whenever its text changes
+  // (opening the card shows the duration in place of the image count). A
+  // saved memory's tag sits on the card's right side (see RunCard), so it
+  // never swaps the summary.
   return (
-    <div className="flex flex-1 min-w-0 items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-      <Text as="p" font="main-ui-action" color="text-03">
-        {isExpanded ? durationText : (imageText ?? durationText)}
-      </Text>
-      {memoryOperation && !isExpanded && (
-        <MemoryTagWithTooltip
-          memoryText={memoryText}
-          memoryOperation={memoryOperation}
-          memoryId={memoryId}
-          memoryIndex={memoryIndex}
-        />
-      )}
-    </div>
+    <Presence.Swap swapKey={shownText}>
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        gap={0}
+        height="fit"
+        className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
+      >
+        <Text as="p" font="main-ui-action" color="text-03">
+          {shownText}
+        </Text>
+      </Section>
+    </Presence.Swap>
   );
 }

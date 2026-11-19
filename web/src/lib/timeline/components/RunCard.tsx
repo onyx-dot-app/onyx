@@ -10,6 +10,7 @@ import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot"
 import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
 import {
   CompletedHeader,
+  MemoryTagWithTooltip,
   type CompletedHeaderProps,
 } from "@/lib/timeline/components/headers/CompletedHeader";
 import { StoppedHeader } from "@/lib/timeline/components/headers/StoppedHeader";
@@ -129,12 +130,14 @@ export function RunCard<S extends RunCardStep>({
     }
   }, [isRunning, startedAt]);
 
-  if (steps.length === 0 && !isRunning) return null;
-
+  // A run that stopped working with no steps (e.g. "Thinking..." before a
+  // text-only answer) has nothing to show. It leaves through Presence's exit,
+  // so it fades out and its height closes, instead of vanishing.
+  const visible = steps.length > 0 || isRunning;
   const foldable = steps.length > 0;
 
   return (
-    <Presence appear={arrivedLive} grow>
+    <Presence show={visible} appear={arrivedLive} grow>
       <TimelineRoot>
         <Line
           flavour="card"
@@ -150,6 +153,22 @@ export function RunCard<S extends RunCardStep>({
           rightChildren={
             foldable && (
               <>
+                {/* A saved memory's tag, on the right so it never swaps the
+                    summary. Shown on a finished card while it is folded. */}
+                {summary?.memoryOperation && !summary.isMemoryOnly && (
+                  <Presence
+                    show={!isRunning && !stopped && !isOpen}
+                    from="end"
+                    width="fit"
+                  >
+                    <MemoryTagWithTooltip
+                      memoryText={summary.memoryText ?? null}
+                      memoryOperation={summary.memoryOperation}
+                      memoryId={summary.memoryId ?? null}
+                      memoryIndex={summary.memoryIndex ?? null}
+                    />
+                  </Presence>
+                )}
                 {/* The timer is plain text beside the button: a button label
                     animates its changes, so each tick would flash. */}
                 <Presence
@@ -190,11 +209,17 @@ export function RunCard<S extends RunCardStep>({
             </Section>
           }
         >
-          {/* Working, finished and stopped titles swap through one
-              animation instead of flashing. A new activity in the working
-              title keeps its key, so it only resizes. */}
+          {/* Every title change swaps through one animation instead of
+              flashing: each new activity while working ("Thinking..." to
+              "Searching..."), and the finished or stopped title after. */}
           <Presence.Swap
-            swapKey={isRunning ? "working" : stopped ? "stopped" : "done"}
+            swapKey={
+              isRunning
+                ? `working:${workingText}`
+                : stopped
+                  ? "stopped"
+                  : "done"
+            }
           >
             {isRunning ? (
               <StreamingHeader headerText={workingText} />

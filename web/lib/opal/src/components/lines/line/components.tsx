@@ -3,6 +3,7 @@
 import { Section } from "@opal/layouts/general/components";
 import { Text } from "@opal/components/text/components";
 import { Collapsible } from "@opal/components/collapsible/components";
+import { Presence } from "@opal/components/presence/components";
 import {
   LineRoot,
   LineRow,
@@ -78,14 +79,18 @@ function LineStep({
       className="min-w-0 flex-1"
     >
       <span className="opal-line-title">
-        <Text
-          maxLines={1}
-          overflowTooltip
-          font="secondary-action"
-          color="inherit"
-        >
-          {title}
-        </Text>
+        {/* A new title (e.g. "Searching" to "Searched") swaps; it never
+            flashes. */}
+        <Presence.Swap swapKey={typeof title === "string" ? title : title.raw}>
+          <Text
+            maxLines={1}
+            overflowTooltip
+            font="secondary-action"
+            color="inherit"
+          >
+            {title}
+          </Text>
+        </Presence.Swap>
       </span>
     </Section>
   );
@@ -162,24 +167,22 @@ function LineCard({
       <Collapsible.Root
         open={!!expandable && expanded}
         onOpenChange={() => onClick?.()}
+        // A card without `onClick` (e.g. a run with no steps yet) cannot fold.
+        disabled={!onClick}
       >
-        {onClick ? (
-          // The header toggles the card; its fold button carries the label
-          // (e.g. "N steps") and lights up while the header is hovered.
-          <Collapsible.Header
-            rightChildren={rightChildren}
-            size="md"
-            foldButton={foldLabel === undefined ? "none" : "icon"}
-            foldLabel={foldLabel}
-          >
-            {children}
-          </Collapsible.Header>
-        ) : (
-          <Section flexDirection="row" justifyContent="between" height="fit">
-            <div className="min-w-0 flex-1">{children}</div>
-            {rightChildren}
-          </Section>
-        )}
+        {/* Always the same header, foldable or not, so the header's content
+            (e.g. a title in Presence.Swap) keeps its place when the card
+            becomes foldable, and swaps instead of remounting. Its fold
+            button carries the label (e.g. "N steps") and lights up while the
+            header is hovered. */}
+        <Collapsible.Header
+          rightChildren={rightChildren}
+          size="md"
+          foldButton={onClick && foldLabel !== undefined ? "icon" : "none"}
+          foldLabel={foldLabel}
+        >
+          {children}
+        </Collapsible.Header>
         {expandable && (
           <Collapsible.Content>
             <div className="opal-line-body" data-opal-line-body-inset="flush">
