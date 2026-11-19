@@ -280,7 +280,7 @@ function SettingsHeader({
             stackActionsOnMobile && "flex-col sm:flex-row"
           )}
         >
-          <div aria-label="admin-page-title">
+          <div aria-label="admin-page-title" className="min-w-0">
             <Content
               font="heading-headline"
               orientation="stacked"

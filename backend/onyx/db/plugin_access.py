@@ -290,6 +290,20 @@ def frontmatter_in_version(
     )
 
 
+def holds_one_root_skill(version_id: ColumnElement[UUID]) -> ColumnElement[bool]:
+    """SQL form of ``onyx.db.plugin.is_skill_version``: the version holds one
+    skill, with SKILL.md at the bundle root."""
+    skills = (
+        select(PluginSkill.id)
+        .where(PluginSkill.plugin_version_id == version_id)
+        .correlate_except(PluginSkill)
+    )
+    return and_(
+        skills.where(PluginSkill.path == "").exists(),
+        ~skills.where(PluginSkill.path != "").exists(),
+    )
+
+
 def version_is_valid(version_id: ColumnElement[UUID]) -> ColumnElement[bool | None]:
     """Lazy validity of a version. NULL while the push has not classified it."""
     return (

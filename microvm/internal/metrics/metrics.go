@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -333,13 +334,20 @@ func (m *Metrics) GuestLog(stream string, shipped, dropped int) {
 
 // stateCollector reads the VM table and the node at scrape time.
 type stateCollector struct {
-	src         Source
-	vms         *prometheus.Desc
-	memTotal    *prometheus.Desc
-	memAvail    *prometheus.Desc
-	diskFree    *prometheus.Desc
-	memAlloc    *prometheus.Desc
-	memPrivate  *prometheus.Desc
+	src        Source
+	vms        *prometheus.Desc
+	memTotal   *prometheus.Desc
+	memAvail   *prometheus.Desc
+	diskFree   *prometheus.Desc
+	memAlloc   *prometheus.Desc
+	memPrivate *prometheus.Desc
+	oomKills   *prometheus.Desc
+	// oomLast is the slice's last oom_kill read (first: when the agent
+	// started), and oomTotal the kills counted since then. A recreated slice
+	// cgroup starts again at 0, so a lower raw value is all new kills.
+	oomMu       sync.Mutex
+	oomLast     *uint64
+	oomTotal    uint64
 	vcpuAlloc   *prometheus.Desc
 	relayOpen   *prometheus.Desc
 	dialOpen    *prometheus.Desc
@@ -348,6 +356,16 @@ type stateCollector struct {
 }
 
 func newStateCollector(src Source) *stateCollector {
+	c := newStateDescs(src)
+	if src.Stats != nil {
+		if kills, err := src.Stats.SliceOOMKills(); err == nil {
+			c.oomLast = &kills
+		}
+	}
+	return c
+}
+
+func newStateDescs(src Source) *stateCollector {
 	d := func(name, help string, labels ...string) *prometheus.Desc {
 		return prometheus.NewDesc(prometheus.BuildFQName(namespace, "", name), help, labels, nil)
 	}
@@ -360,17 +378,19 @@ func newStateCollector(src Source) *stateCollector {
 		memAlloc: d("vm_memory_allocated_bytes", "Guest memory of the VMs that are not exited."),
 		memPrivate: d("vm_memory_private_bytes", "Anonymous memory (smaps_rollup) of the Firecracker processes of the VMs that are not exited: "+
 			"the guest pages each VM wrote, plus the VMM's own heap. Page cache of the snapshot memory files is not in it. Balloon free page reporting and the guest's idle reclaim lower it."),
+		oomKills: d("vm_slice_oom_kills_total", "OOM kills in the VM slice and its VM scopes since the agent started (oom_kill of the slice's memory.events). "+
+			"Each one stops a VM: the guest used more than its scope limit, the VMs together more than the slice limit, or the node ran out of memory."),
 		vcpuAlloc:   d("vm_vcpus_allocated", "vCPUs of the VMs that are not exited."),
 		relayOpen:   d("relay_open_connections", "Open egress relay connections."),
 		dialOpen:    d("dial_open_streams", "Open Dial streams."),
-		statsFailed: d("node_stats_errors", "1 if the last scrape could not read node memory, disk, or the private memory of a VM.", "stat"),
+		statsFailed: d("node_stats_errors", "1 if the last scrape could not read node memory, disk, the private memory of a VM, or the VM slice OOM kills.", "stat"),
 		maxVMs:      d("max_vms", "The VM cap (--max-vms); 0 is no cap."),
 	}
 }
 
 func (c *stateCollector) Describe(ch chan<- *prometheus.Desc) {
 	for _, d := range []*prometheus.Desc{
-		c.vms, c.memTotal, c.memAvail, c.diskFree, c.memAlloc, c.memPrivate, c.vcpuAlloc, c.relayOpen, c.dialOpen, c.statsFailed, c.maxVMs,
+		c.vms, c.memTotal, c.memAvail, c.diskFree, c.memAlloc, c.memPrivate, c.oomKills, c.vcpuAlloc, c.relayOpen, c.dialOpen, c.statsFailed, c.maxVMs,
 	} {
 		ch <- d
 	}
@@ -435,6 +455,11 @@ func (c *stateCollector) Collect(ch chan<- prometheus.Metric) {
 			gauge(c.diskFree, float64(free))
 		}
 		gauge(c.statsFailed, boolFloat(err != nil), "disk")
+		kills, err := c.oomCount()
+		if err == nil {
+			ch <- prometheus.MustNewConstMetric(c.oomKills, prometheus.CounterValue, float64(kills))
+		}
+		gauge(c.statsFailed, boolFloat(err != nil), "slice_oom")
 	}
 	if c.src.RelayConns != nil {
 		gauge(c.relayOpen, float64(c.src.RelayConns()))
@@ -442,6 +467,27 @@ func (c *stateCollector) Collect(ch chan<- prometheus.Metric) {
 	if c.src.DialStreams != nil {
 		gauge(c.dialOpen, float64(c.src.DialStreams()))
 	}
+}
+
+// oomCount reads the slice's oom_kill and returns the kills since the agent
+// started. The read is under oomMu, so overlapping scrapes apply their reads
+// in the order they made them.
+func (c *stateCollector) oomCount() (uint64, error) {
+	c.oomMu.Lock()
+	defer c.oomMu.Unlock()
+	raw, err := c.src.Stats.SliceOOMKills()
+	if err != nil {
+		return 0, err
+	}
+	switch {
+	case c.oomLast == nil:
+	case raw >= *c.oomLast:
+		c.oomTotal += raw - *c.oomLast
+	default:
+		c.oomTotal += raw
+	}
+	c.oomLast = &raw
+	return c.oomTotal, nil
 }
 
 func boolFloat(b bool) float64 {

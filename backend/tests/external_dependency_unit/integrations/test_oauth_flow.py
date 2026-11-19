@@ -485,6 +485,52 @@ def test_first_mcp_discovery_sign_in_registers_a_client_and_completes(
     assert read_connection_secret(connection).access_token == "dcr-access"
 
 
+def test_mcp_registration_after_a_settings_change_is_rejected(
+    db_session: Session,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration, _ = make_mcp_integration(
+        db_session,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.OAUTH2,
+        oauth_client=new_oauth_client(IntegrationOAuthProviderMode.DISCOVERY),
+    )
+    user = make_test_user("oauth_mcp_late_registration")
+
+    async def change_settings_then_register(
+        oauth_provider: OAuthClientProvider, **_: Any
+    ) -> OAuthAuthorizationRedirect:
+        with get_session_with_current_tenant() as other_session:
+            server = get_mcp_server_for_integration(integration.id, other_session)
+            assert server is not None
+            server.server_url = "https://other.example.test/mcp"
+            other_session.commit()
+        context = oauth_provider.context
+        await context.storage.set_client_info(
+            OAuthClientInformationFull(
+                client_id="late-client",
+                redirect_uris=context.client_metadata.redirect_uris,
+                token_endpoint_auth_method="none",
+            )
+        )
+        raise AssertionError("the late registration was saved")
+
+    with (
+        patch(
+            "onyx.integrations.oauth.run_oauth_discovery",
+            change_settings_then_register,
+        ),
+        pytest.raises(OnyxError) as error,
+    ):
+        start_integration_oauth(integration, user, db_session)
+
+    assert "sign-in settings changed" in error.value.detail
+    db_session.expire_all()
+    oauth_client = get_oauth_client(db_session, integration.id)
+    assert oauth_client is not None
+    assert read_oauth_client(oauth_client).client_id is None
+
+
 def test_mcp_discovery_sends_the_static_headers_of_the_integration(
     db_session: Session,
     make_test_user: MakeTestUser,

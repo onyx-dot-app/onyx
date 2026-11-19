@@ -11,13 +11,10 @@ from pathlib import Path
 from string import Formatter
 from typing import Literal
 
-from tree_sitter import Language, Node, Parser
-from tree_sitter_typescript import language_tsx, language_typescript
-
 from .check_no_response_model import read_baseline
 
 _ROOT = Path(__file__).resolve().parents[2]
-_MARKER = re.compile(r"^\s*(?://|#|/\*)\s*test-flakes: allow\s+.*\w")
+_MARKER = re.compile(r"^\s*#\s*test-flakes: allow\s+.*\w")
 Kind = Literal["sleep", "skip"]
 Finding = tuple[int, Kind, bool]
 _KINDS: tuple[Kind, ...] = ("sleep", "skip")
@@ -108,165 +105,6 @@ def python_findings(source: str) -> Iterator[Finding]:
             yield node.lineno, "skip", reason or node.lineno in marked
 
 
-def _descendants(root: Node) -> Iterator[Node]:
-    pending = [root]
-    while pending:
-        node = pending.pop()
-        yield node
-        pending.extend(reversed(node.named_children))
-
-
-def _ts_text(node: Node) -> str:
-    return (node.text or b"").decode()
-
-
-def _playwright_imports(nodes: list[Node]) -> Iterator[tuple[str, str, str]]:
-    for node in nodes:
-        if node.type != "import_statement":
-            continue
-        source = node.child_by_field_name("source")
-        if source is None:
-            continue
-        for entry in _descendants(node):
-            if entry.type != "import_specifier":
-                continue
-            name = entry.child_by_field_name("name")
-            if name is not None:
-                alias = entry.child_by_field_name("alias") or name
-                yield _ts_text(source)[1:-1], _ts_text(name), _ts_text(alias)
-
-
-def _playwright_extensions(nodes: list[Node]) -> Iterator[tuple[str, str]]:
-    for node in nodes:
-        if node.type != "variable_declarator":
-            continue
-        name = node.child_by_field_name("name")
-        value = node.child_by_field_name("value")
-        if name is None or name.type != "identifier" or value is None:
-            continue
-        if value.type != "call_expression":
-            continue
-        callee = value.child_by_field_name("function")
-        if callee is None:
-            continue
-        prop = callee.child_by_field_name("property")
-        receiver = callee.child_by_field_name("object")
-        if prop is not None and _ts_text(prop) == "extend" and receiver is not None:
-            if receiver.type == "identifier":
-                yield _ts_text(receiver), _ts_text(name)
-
-
-def _local_test_module(
-    path: Path, module: str, web_tests: Path, files: dict[Path, list[Node]]
-) -> Path | None:
-    if module.startswith("@tests/"):
-        candidate = web_tests / module.removeprefix("@tests/")
-    elif module.startswith(("./", "../")):
-        candidate = path.parent / module
-    else:
-        return None
-    candidate = candidate.resolve()
-    for resolved in (
-        candidate,
-        Path(f"{candidate}.ts"),
-        Path(f"{candidate}.tsx"),
-        candidate / "index.ts",
-        candidate / "index.tsx",
-    ):
-        if resolved in files:
-            return resolved
-    return None
-
-
-def _playwright_test_names(
-    files: dict[Path, list[Node]], web_tests: Path
-) -> dict[Path, set[str]]:
-    names: dict[Path, set[str]] = {path: set() for path in files}
-    dependents: dict[tuple[Path, str], list[tuple[Path, str]]] = {}
-    pending: list[tuple[Path, str]] = []
-    for path, nodes in files.items():
-        for source, imported, local in _playwright_imports(nodes):
-            if source == "@playwright/test" and imported == "test":
-                pending.append((path, local))
-            elif fixture := _local_test_module(path, source, web_tests, files):
-                dependents.setdefault((fixture, imported), []).append((path, local))
-        for receiver, extended in _playwright_extensions(nodes):
-            dependents.setdefault((path, receiver), []).append((path, extended))
-
-    while pending:
-        path, name = pending.pop()
-        if name in names[path]:
-            continue
-        names[path].add(name)
-        pending.extend(dependents.get((path, name), ()))
-    return names
-
-
-def _is_playwright_test(receiver: Node, test_names: set[str]) -> bool:
-    if receiver.type == "member_expression":
-        prop = receiver.child_by_field_name("property")
-        target = receiver.child_by_field_name("object")
-        if prop is None or _ts_text(prop) != "describe" or target is None:
-            return False
-        receiver = target
-    if receiver.type != "identifier":
-        return False
-    name = _ts_text(receiver)
-    return name == "test" or name in test_names
-
-
-def _parse_typescript(source: str, *, tsx: bool) -> list[Node]:
-    grammar = language_tsx() if tsx else language_typescript()
-    return list(
-        _descendants(Parser(Language(grammar)).parse(source.encode()).root_node)
-    )
-
-
-def playwright_findings(source: str, *, tsx: bool = False) -> Iterator[Finding]:
-    nodes = _parse_typescript(source, tsx=tsx)
-    path = Path("test.ts")
-    names = _playwright_test_names({path: nodes}, Path())
-    yield from _playwright_findings(nodes, names[path])
-
-
-def _playwright_findings(nodes: list[Node], test_names: set[str]) -> Iterator[Finding]:
-    marked = {
-        node.start_point.row + 1
-        for node in nodes
-        if node.type == "comment" and _MARKER.match(_ts_text(node))
-    }
-    for node in nodes:
-        if node.type != "call_expression":
-            continue
-        callee = node.child_by_field_name("function")
-        args = node.child_by_field_name("arguments")
-        if callee is None or args is None:
-            continue
-        prop = callee.child_by_field_name("property")
-        if prop is None:
-            continue
-        method = _ts_text(prop)
-        line = prop.start_point.row + 1
-        if method == "waitForTimeout":
-            yield line, "sleep", line in marked
-        elif method in {"skip", "fixme"} and _is_playwright_test(
-            callee.child_by_field_name("object") or callee, test_names
-        ):
-            values = [arg for arg in args.named_children if arg.type != "comment"]
-            # A title plus a test body declares a disabled test. Its title
-            # is not a reason. A condition plus a description is a modifier.
-            reason = (
-                len(values) == 2
-                and values[0].type not in {"string", "template_string"}
-                and values[1].type in {"string", "template_string"}
-                and any(
-                    part.type == "string_fragment" and _ts_text(part).strip()
-                    for part in values[1].named_children
-                )
-            )
-            yield line, "skip", reason or line in marked
-
-
 def scan(root: Path) -> Iterator[tuple[str, Finding]]:
     paths = (root / "backend/tests").rglob("*.py")
     for path in sorted(paths):
@@ -274,20 +112,6 @@ def scan(root: Path) -> Iterator[tuple[str, Finding]]:
         if any(word in source for word in ("sleep", "skip", "mark")):
             for finding in python_findings(source):
                 yield path.relative_to(root).as_posix(), finding
-    web_tests = (root / "web/tests").resolve()
-    files: dict[Path, list[Node]] = {}
-    candidates: list[Path] = []
-    for path in sorted(web_tests.rglob("*.ts*")):
-        if path.suffix not in {".ts", ".tsx"}:
-            continue
-        source = path.read_text(encoding="utf-8")
-        files[path] = _parse_typescript(source, tsx=path.suffix == ".tsx")
-        if any(word in source for word in ("waitForTimeout", "skip", "fixme")):
-            candidates.append(path)
-    names = _playwright_test_names(files, web_tests)
-    for path in candidates:
-        for finding in _playwright_findings(files[path], names[path]):
-            yield path.relative_to(root.resolve()).as_posix(), finding
 
 
 def check(root: Path, baseline_dir: Path, *, write: bool = False) -> int:
@@ -320,8 +144,7 @@ def check(root: Path, baseline_dir: Path, *, write: bool = False) -> int:
         print(
             "Wait for the condition. Use the backend integration manager's wait_for_*"
         )
-        print("helper, threading.Event.wait for thread coordination, or Playwright")
-        print("locator assertions and expect.poll for values.")
+        print("helper or threading.Event.wait for thread coordination.")
         print("Give each skip a nonempty reason. For a deliberate exception, use")
         print("'test-flakes: allow <reason>' in a comment on the same line.")
         print("After removing a violation, regenerate with --write-baseline.")

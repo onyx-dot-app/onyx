@@ -137,9 +137,8 @@ reasoning, temperature, or explicit-cache kwarg, `_completion` retries without i
 (`_retry_attempts`). A cache fallback also removes the breakpoint markers. It
 never drops tools, tool choice or messages during that retry; the one message
 edit is the removal of rejected `reasoning_items`
-([[#openai-reasoning-items-replay]]). Separately, final-answer
-requests omit tool definitions for native Bedrock and Ollama adapters that cannot
-enforce `NONE`. Prior tool evidence stays in the messages. `_track_llm_cost` counts
+([[#openai-reasoning-items-replay]]). Typed requests with tool choice `NONE`
+keep their tool definitions ([[#none-tool-choice-keeps-tools]]). `_track_llm_cost` counts
 cost only when usage limits are on and the key is Onyx-managed. Per-user usage comes from
 spans, not from this call.
 
@@ -295,6 +294,25 @@ build their own clients.
     or tool call did not survive, because the API rejects a lone item. The
     Anthropic `thinking_blocks` rule is separate: a block type needs the route
     that can read it.
+17. `none-tool-choice-keeps-tools` **A typed `NONE` request keeps its tools.**
+    `LitellmLLM._prepare_tools` sends the request's tool definitions with a
+    `NONE` choice. (A named choice on Claude, Qwen or GLM sends only the named
+    tool.) `llm/model_capabilities.py:model_supports_none_tool_choice`
+    says whether the provider and model can take `NONE`: Bedrock, Bedrock
+    Converse, Ollama and Ollama Chat cannot (`PROVIDERS_WITHOUT_NONE_TOOL_CHOICE`),
+    and Qwen and GLM deployments can reject it. Those requests send `AUTO`. The
+    agent runtime denies any call that comes back ([[core-chat-loop#stopping-tools]]).
+    Decoding follows the choice that was sent (`llm/model_response.py:_provider_may_call`):
+    after `AUTO`, a call written as text is recovered so the runtime can deny it,
+    and call-like text that names no declared tool stays part of the answer;
+    after `NONE`, all call-like text stays part of the answer.
+    Only the providers that receive `AUTO` reuse the whole cached prefix on a
+    final step. Claude through Anthropic, Vertex, OpenRouter or a proxy receives
+    `NONE`, and its prompt cache counts a changed tool choice as a change to the
+    messages, so the message history misses on that step. Raw calls
+    (`invoke_raw`, `stream_raw`, used by the gateway) do not send `AUTO` for
+    `NONE`: `_completion` omits the schemas of a `NONE` request to the providers
+    in `PROVIDERS_WITHOUT_NONE_TOOL_CHOICE` and sends `NONE` to other models.
 
 ---
 

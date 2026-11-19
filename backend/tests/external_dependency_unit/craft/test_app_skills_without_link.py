@@ -28,7 +28,6 @@ from onyx.db.models import (
 )
 from onyx.db.plugin_access import load_user_plugin_states, skill_usage_by_user
 from onyx.db.skill import (
-    SkillManagementPolicy,
     fetch_skill,
     list_chat_skills,
     list_runtime_skills_for_user,
@@ -90,7 +89,7 @@ def test_custom_app_skill_runs_without_a_connection(session: Session) -> None:
     assert states[skill.id].can_run
     assert skill.name in {s.name for s in list_chat_skills(session, user)}
     assert skill.id in {
-        runtime.skill.id
+        runtime.id
         for runtime in list_runtime_skills_for_user(db_session=session, user=user)
     }
     usage = skill_usage_by_user(
@@ -110,6 +109,7 @@ def test_built_in_app_skill_follows_the_plugin_the_user_runs(
     runner = make_user(session)
     turned_off = make_user(session)
     no_plugin = make_user(session)
+    admin = make_user(session, is_admin=True)
     slack_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.SLACK]
     built_in = reset_built_in_skill_row(session, built_in_skill_id=slack_id)
     app = make_external_app(
@@ -126,20 +126,17 @@ def test_built_in_app_skill_follows_the_plugin_the_user_runs(
         return {
             r.name: r.external_app_id
             for r in list_runtime_skills_for_user(db_session=session, user=user)
-            if r.skill.built_in_skill_id is not None
+            if r.built_in_skill_id is not None
         }
 
     def viewable(user: User) -> set[str]:
-        rows = list_skills(
-            policy=SkillManagementPolicy.VIEW, user=user, db_session=session
-        )
+        rows = list_skills(user=user, db_session=session)
         listed = {
             skill.name
             for skill in skills_list_response_for_user(rows, user, session).builtins
         }
         fetched = fetch_skill(
             built_in.id,
-            policy=SkillManagementPolicy.VIEW,
             user=user,
             db_session=session,
         )
@@ -149,7 +146,7 @@ def test_built_in_app_skill_follows_the_plugin_the_user_runs(
     assert runtime(runner).get(slack_id) == app.id
     assert slack_id in viewable(runner)
     assert skill_user_states(runner, [built_in.id], session)[built_in.id].enabled
-    for user in (turned_off, no_plugin):
+    for user in (turned_off, no_plugin, admin):
         assert slack_id not in runtime(user)
         assert slack_id not in viewable(user)
         assert not skill_user_states(user, [built_in.id], session)[built_in.id].enabled
@@ -189,7 +186,7 @@ def test_left_out_plugin_gives_no_built_in_skill(session: Session) -> None:
             for r in list_runtime_skills_for_user(
                 db_session=session, user=user, left_out=left_out
             )
-            if r.skill.built_in_skill_id == slack_id
+            if r.built_in_skill_id == slack_id
         }
 
     assert runtime_built_ins(set()) != set()
@@ -220,7 +217,7 @@ def test_turned_off_integration_gives_no_built_in_skill(session: Session) -> Non
 
     assert _app_skills(user, session) == {}
     runtime = {
-        r.skill.id: r.name
+        r.id: r.name
         for r in list_runtime_skills_for_user(db_session=session, user=user)
     }
     assert custom.id in runtime
@@ -246,7 +243,6 @@ def test_app_delete_keeps_custom_skill_plugins(session: Session) -> None:
     delete_external_app__no_commit(session, app.id)
 
     assert session.get(Plugin, skill.id) is not None
-    assert session.get(Skill, skill.id) is not None
     assert session.scalar(
         select(UserPluginPreference.enabled).where(
             UserPluginPreference.user_id == user.id,
@@ -254,7 +250,7 @@ def test_app_delete_keeps_custom_skill_plugins(session: Session) -> None:
         )
     )
     assert skill.id in {
-        runtime.skill.id
+        runtime.id
         for runtime in list_runtime_skills_for_user(db_session=session, user=user)
     }
 

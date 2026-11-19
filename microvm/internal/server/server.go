@@ -211,7 +211,7 @@ func toTemplateInfo(t *template.Template, node template.NodeKey) *pb.TemplateInf
 		GuestKernel: t.GuestKernel, FirecrackerVersion: t.FirecrackerVersion,
 		ImageRef: t.ImageRef, ImageDigest: t.ImageDigest, RootfsSha256: t.RootfsSHA256, KeySha256: t.KeySHA256,
 		CaFingerprint: t.CAFingerprint, BuiltAt: timestamppb.New(t.BuiltAt), Compatible: t.CheckNode(node) == nil,
-		ManagedSlots: uint32(t.ManagedSlots()), Balloon: t.HasBalloon(), ManagedMounts: t.ManagedMounts(),
+		ManagedSlots: template.ManagedSlots, ManagedMounts: t.ManagedMounts(),
 	}
 }
 

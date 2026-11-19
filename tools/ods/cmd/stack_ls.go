@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -31,7 +32,8 @@ leases. It takes no locks and changes nothing.
 
 Statuses:
   orphaned     no worktree owns the stack any more: stop it with
-               'ods stack down --project NAME' or 'ods stack prune'
+               'ods stack down --project NAME' or 'ods stack prune', or
+               delete the volumes it left with 'ods stack prune --volumes'
   active       application processes run
   app-stopped  infrastructure runs, 'ods stack stop' stopped the app
   infra-only   infrastructure runs, no application process does
@@ -84,33 +86,99 @@ source could be read.`,
 
 func newStackPruneCommand() *cobra.Command {
 	var yes, volumes bool
-	var stopTimeout, lockWait time.Duration
+	var stopTimeout, lockWait, idle time.Duration
 	cmd := &cobra.Command{
 		Use:   "prune",
-		Short: "Run 'down --project' for every orphaned stack (volumes are kept)",
-		Args:  cobra.NoArgs,
+		Short: "Run 'down --project' for every orphaned stack, and with --idle every idle one (volumes are kept)",
+		Long: `Run 'down --project' for every orphaned stack. Volumes are kept, and so is
+the owner record that links a removed worktree to its volumes.
+
+With --volumes, prune also deletes the Docker volumes of each orphan,
+including a removed stack that left only its volumes. Idle stacks always
+keep their volumes.
+
+With --idle DURATION, prune also stops each isolated stack whose worktree had
+no activity for DURATION. Activity is the stack start, a Git operation in the
+worktree (commit, checkout, add, rebase), a change to a modified or untracked
+file, or a running coding agent (claude, codex, opencode, cursor-agent) whose
+working directory is in the worktree. prune checks the activity again after
+it holds the stack lock, and skips a stack that had activity. Shared stacks
+serve several worktrees and are never stopped as idle. Run 'ods stack up' in the worktree to start a
+pruned stack again.`,
+		Example: `  ods stack prune
+  ods stack prune --idle 6h --yes
+  ods stack prune --volumes`,
+		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
+			if idle < 0 {
+				log.Fatal("--idle must not be negative")
+			}
 			inv := discoverStacks()
 			for _, warning := range inv.Warnings {
 				log.Warn(warning)
 			}
-			rows := filterStackRows(inv.Rows, true, true)
+			now := time.Now()
+			agents := []string{}
+			if idle > 0 {
+				var err error
+				if agents, err = devstack.AgentDirs(); err != nil {
+					log.Fatalf("--idle needs the running coding agents: %v", err)
+				}
+			}
+			rows := pruneRows(inv.Rows, idle, volumes, now, func(row devstack.StackRow) time.Time {
+				last, err := devstack.LastActivity(row, agents, now)
+				if err != nil {
+					log.Warnf("%s: not stopped as idle: %v", stackRowName(row), err)
+					return now
+				}
+				return last
+			})
+			if !volumes {
+				left := 0
+				for _, row := range inv.Rows {
+					if row.Status == devstack.StatusOrphaned && row.OnlyVolumes() {
+						left++
+					}
+				}
+				if left > 0 {
+					log.Infof("%d removed stack(s) left only Docker volumes; 'ods stack prune --volumes' deletes them", left)
+				}
+			}
 			if len(rows) == 0 {
-				log.Info("No orphaned stacks")
+				if idle > 0 {
+					log.Infof("No orphaned stacks and no stacks idle for %s", idle)
+				} else {
+					log.Info("No orphaned stacks")
+				}
 				return
 			}
 			printStackRows(os.Stdout, rows, time.Now())
-			if !yes && !prompt.Confirm(fmt.Sprintf("Stop %d orphaned stack(s) and their containers? Volumes are kept. (yes/no): ", len(rows))) {
+			if !yes && !prompt.Confirm(fmt.Sprintf("Stop %d orphaned or idle stack(s) and their containers? Volumes are kept. (yes/no): ", len(rows))) {
 				log.Fatal("Aborted")
 			}
-			if volumes && !prompt.Confirm(fmt.Sprintf("Also DELETE the Docker volumes (database, index, files) of %s? (yes/no): ", stackRowNames(rows))) {
+			var orphans []devstack.StackRow
+			for _, row := range rows {
+				if row.Status == devstack.StatusOrphaned {
+					orphans = append(orphans, row)
+				}
+			}
+			if volumes && len(orphans) > 0 && !prompt.Confirm(fmt.Sprintf("Also DELETE the Docker volumes (database, index, files) of %s? (yes/no): ", stackRowNames(orphans))) {
 				log.Fatal("Aborted")
 			}
 			registry := runtimeRegistry()
 			failed := 0
 			for _, row := range rows {
-				result, err := devstack.CleanupRow(context.Background(), registry, row, composeDownProject,
-					devstack.ProjectOptions{StopTimeout: stopTimeout, LockWait: lockWait, Volumes: volumes})
+				// An idle stack still has its worktree, so it needs Force and keeps its volumes.
+				orphan := row.Status == devstack.StatusOrphaned
+				opts := devstack.ProjectOptions{StopTimeout: stopTimeout, LockWait: lockWait, Volumes: volumes && orphan, Force: !orphan}
+				if !orphan {
+					opts.IdleCutoff = now.Add(-idle)
+				}
+				result, err := devstack.CleanupRow(context.Background(), registry, row, composeDownProject, opts)
+				if errors.Is(err, devstack.ErrNotIdle) {
+					log.Infof("%s: skipped, it had activity after it was listed", stackRowName(row))
+					continue
+				}
 				if err != nil {
 					log.Errorf("%s: %v", stackRowName(row), err)
 					failed++
@@ -124,10 +192,25 @@ func newStackPruneCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "Do not ask for confirmation (the --volumes confirmation is still asked)")
-	cmd.Flags().BoolVar(&volumes, "volumes", false, "Also delete the Docker volumes of the orphaned stacks")
+	cmd.Flags().BoolVar(&volumes, "volumes", false, "Also delete the Docker volumes of the orphaned stacks (idle stacks keep theirs)")
+	cmd.Flags().DurationVar(&idle, "idle", 0, "Also stop isolated stacks whose worktree had no activity for this long, such as 6h")
 	cmd.Flags().DurationVar(&stopTimeout, "timeout", 20*time.Second, "Grace period before a service is killed")
 	cmd.Flags().DurationVar(&lockWait, "lock-wait", 10*time.Minute, "How long to wait for another lifecycle command on a stack")
 	return cmd
+}
+
+// pruneRows selects the orphaned stacks and, when idle is set, the stacks
+// with no activity since now minus idle. An orphan with only volumes left has
+// nothing to stop, so it is selected only when its volumes are deleted.
+func pruneRows(rows []devstack.StackRow, idle time.Duration, volumes bool, now time.Time, activity func(devstack.StackRow) time.Time) []devstack.StackRow {
+	kept := []devstack.StackRow{}
+	for _, row := range rows {
+		orphan := row.Status == devstack.StatusOrphaned && (volumes || !row.OnlyVolumes())
+		if orphan || (idle > 0 && devstack.Idle(row, now.Add(-idle), activity)) {
+			kept = append(kept, row)
+		}
+	}
+	return kept
 }
 
 func discoverStacks() devstack.Inventory {
@@ -147,7 +230,7 @@ func filterStackRows(rows []devstack.StackRow, all, orphaned bool) []devstack.St
 				continue
 			}
 		case !all:
-			if !row.Running() {
+			if !row.Running() && (row.Status != devstack.StatusOrphaned || !row.OnlyVolumes()) {
 				continue
 			}
 		}
@@ -199,7 +282,10 @@ func projectInCheckout(project string) bool {
 
 func logProjectResult(result *devstack.ProjectResult) {
 	parts := []string{fmt.Sprintf("%d service(s) stopped", result.StoppedServices)}
-	if result.ComposeDown {
+	switch {
+	case result.RemovedVolumes:
+		parts = append(parts, "containers and volumes removed")
+	case result.ComposeDown:
 		parts = append(parts, "containers removed")
 	}
 	if result.ReleasedLeases > 0 {

@@ -194,6 +194,10 @@ class SendMessageRequest(BaseModel):
     # When False, returns ChatFullResponse with complete data
     stream: bool = True
 
+    # The streamed wire format. 1 (default): chat's packets. 2: ACP updates
+    # (see acp_stream.py). Single-model streams only; others stay on 1.
+    protocol_version: Literal[1, 2] = 1
+
     # When False, disables citation generation:
     # - Citation markers like [1], [2] are removed from response text
     # - No CitationInfo packets are emitted during streaming

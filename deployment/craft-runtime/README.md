@@ -156,6 +156,7 @@ The rootfs converter makes the mount points and `/home/onyx/workspaces`, the par
 This image does not install or synchronize skill bundles.
 
 The rootfs converter owns scratch overlays for `/etc`, `/home`, `/root`, `/opt`, `/srv`, `/usr`, `/var`, and `/workspace`.
+The template boot makes `/tmp/onyx/tool-results`, `/tmp/onyx/search-files` and `/tmp/onyx/artifacts` on the `/tmp` tmpfs, owned by the sandbox user; the template snapshot keeps them.
 It makes the sandbox user's empty NSS database. The guest daemon adds the proxy CA to it at `Init`.
 Browser management and file/session APIs are separate guest-daemon features; this image does not implement them.
 

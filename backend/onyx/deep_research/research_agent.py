@@ -313,11 +313,8 @@ class ResearchAgent(Agent, RestorableFeature):
         )
         for tool_result in result.tool_results:
             self._update_sources(tool_result)
-        if result.options.tool_choice != ToolChoiceOptions.NONE:
-            return True
-        if not result.message.text:
-            raise ValueError("Model failed to produce a research report")
-        return False
+        # Research steps continue; the runtime ends the report step.
+        return True
 
     def _update_sources(self, result: ToolResultMessage) -> None:
         if isinstance(result.details, SearchDocsResponse):

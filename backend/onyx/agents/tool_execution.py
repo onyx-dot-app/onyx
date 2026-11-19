@@ -46,6 +46,12 @@ if TYPE_CHECKING:
 
 logger = setup_logger()
 
+# The result of a call on a step where no tool can run. It asks the model for
+# its final answer.
+NO_TOOL_CAN_RUN_RESULT = (
+    "No more tools can run in this response. Write your final answer now."
+)
+
 
 def _tool_view(message: Message) -> Message:
     """An owned copy of a conversation message for a tool. Result details stay
@@ -398,7 +404,11 @@ class ToolBatch:
                 and call.name != options.tool_choice.name
             )
         ):
-            content = f"Tool {call.name} is unavailable for this step."
+            content = (
+                NO_TOOL_CAN_RUN_RESULT
+                if options.tool_choice == ToolChoiceOptions.NONE
+                else f"Tool {call.name} is unavailable for this step."
+            )
             # A call of a tool that runs only inside an offered tool's calls,
             # such as a code mode function, says how to call it there.
             if tool is None and options.tool_choice != ToolChoiceOptions.NONE:

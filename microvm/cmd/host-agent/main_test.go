@@ -12,7 +12,7 @@ import (
 
 func TestCheckRanges(t *testing.T) {
 	ok := flags{uidBase: 1000000, uidCount: 65536, maxScratchGiB: 100, tplVCPUs: 2, tplMemMiB: 4096, tplScratchGiB: 1, tplKeep: 2,
-		managedKeep: 3, managedZipMiB: 256, managedMaxMiB: 512, managedFiles: 50000, managedBuilds: 1, swapTimeout: time.Second, memOverhead: 128,
+		managedKeep: 3, managedZipMiB: 256, managedMaxMiB: 512, managedFiles: 50000, managedBuilds: 1, swapTimeout: time.Second, memOverhead: 128, startingMemDiv: 2,
 		transferPar: 8, transferPart: 8 << 20}
 	if err := checkRanges(ok); err != nil {
 		t.Fatal(err)
@@ -32,6 +32,8 @@ func TestCheckRanges(t *testing.T) {
 	}
 	for name, edit := range map[string]func(f *flags){
 		"max vms negative":    func(f *flags) { f.maxVMs = -1 },
+		"mem divisor 0":       func(f *flags) { f.startingMemDiv = 0 },
+		"mem divisor 17":      func(f *flags) { f.startingMemDiv = 17 },
 		"managed keep 0":      func(f *flags) { f.managedKeep = 0 },
 		"managed zip 0":       func(f *flags) { f.managedZipMiB = 0 },
 		"managed content 0":   func(f *flags) { f.managedMaxMiB = 0 },

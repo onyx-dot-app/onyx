@@ -21,6 +21,10 @@ from onyx.db.enums import (
     PluginInstallationPolicy,
 )
 from onyx.db.integration import list_integration_actions
+from onyx.db.integration_policy import (
+    list_policy_rows,
+    list_session_granted_actions,
+)
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
@@ -188,6 +192,15 @@ def _resolve(
         approval_mode=ApprovalMode.INTERACTIVE,
         chat_session_id=chat_session_id,
     )[action_key]
+
+
+def test_bulk_reads_of_no_integration_or_no_chat_are_empty(
+    world: PolicyWorld, integrations: list[int], db_session: Session
+) -> None:
+    assert list_policy_rows(db_session, [], world.user.id) == {}
+    assert list_session_granted_actions(db_session, None, integrations) == {
+        key: set() for key in integrations
+    }
 
 
 def test_the_stored_action_and_the_admin_rows_give_the_admin_value(

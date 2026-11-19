@@ -15,10 +15,11 @@ from onyx.configs.constants import (
     CHAT_SESSION_ID_FILE_METADATA_KEY,
     PUBLIC_DOC_PAT,
     DocumentSource,
+    FileOrigin,
 )
 from onyx.context.search.models import CCPairAccessMode, InferenceChunk
 from onyx.db.access import (
-    get_chat_image_gen_file_metadata_row,
+    get_chat_output_file_row,
     get_document_ids_for_file,
     get_document_ids_from_file_connector_config,
     user_can_access_chat_message_file,
@@ -255,8 +256,9 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
       or directly shared via `Persona.users`).
     - `ChatMessage.files` of a session the user owns or that is shared as
       `ChatSessionSharedStatus.PUBLIC`.
-    - `FileRecord` with origin `CHAT_IMAGE_GEN` whose stamped chat session the
-      user may read (owned, or shared as `PUBLIC`).
+    - A chat output file (`CHAT_OUTPUT_FILE_ORIGINS`: generated images and
+      published files) whose stamped chat session the user may read (owned,
+      or shared as `PUBLIC`). The stamp grants nothing on other origins.
     - `Document` whose ACL grants access (covers connector-ingested files).
 
     TODO(auth-perf): split `/chat/file` into per-asset-class endpoints so the
@@ -272,36 +274,29 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
     if user_can_access_chat_message_file(db_session, file_id, user.id):
         return True
 
-    # Generated images never reach ChatMessage.files, and a code-interpreter file
-    # reaches it only when the reply cites the id, so this branch is the real
-    # access path for them. Kept above the connector branch so previews hit a PK
-    # lookup.
-    chat_image_gen_row = get_chat_image_gen_file_metadata_row(db_session, file_id)
-    if chat_image_gen_row is not None:
-        return _user_can_access_chat_image_gen_file(
-            chat_image_gen_row.file_metadata, user, db_session
+    # Generated images never reach ChatMessage.files, a code-interpreter file
+    # reaches it only when the reply cites the id, and a published file only
+    # when its response is saved, so the stamp is the real access path for
+    # them. Kept above the connector branch so previews hit a PK lookup.
+    record = get_chat_output_file_row(db_session, file_id)
+    if record is not None:
+        origin, file_metadata = record
+        raw_session_id = (
+            file_metadata.get(CHAT_SESSION_ID_FILE_METADATA_KEY)
+            if isinstance(file_metadata, dict)
+            else None
         )
+        if raw_session_id is None:
+            # Generated images written before files were stamped with their
+            # session.
+            return origin == FileOrigin.CHAT_IMAGE_GEN
+        try:
+            chat_session_id = UUID(str(raw_session_id))
+        except ValueError:
+            return False
+        return user_can_read_chat_session(db_session, chat_session_id, user.id)
 
     return _user_can_access_connector_file(file_id, user, db_session)
-
-
-def _user_can_access_chat_image_gen_file(
-    file_metadata: object, user: User, db_session: Session
-) -> bool:
-    raw_session_id = (
-        file_metadata.get(CHAT_SESSION_ID_FILE_METADATA_KEY)
-        if isinstance(file_metadata, dict)
-        else None
-    )
-    if raw_session_id is None:
-        # Written before generated files were stamped with their session.
-        return True
-    try:
-        chat_session_id = UUID(str(raw_session_id))
-    except ValueError:
-        return False
-
-    return user_can_read_chat_session(db_session, chat_session_id, user.id)
 
 
 def _user_can_access_connector_file(

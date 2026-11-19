@@ -48,6 +48,12 @@ export interface MemberPluginState {
   installation_policy: InstallationPolicy;
 }
 
+/** `POST /plugins/{id}/publish`: the name can change on a clash. */
+export interface PluginPublishResponse {
+  plugin_id: string;
+  name: string;
+}
+
 export type PluginSharePermission = "EDITOR" | "VIEWER";
 
 /** The shares of a private plugin that holds only integrations. */
@@ -197,7 +203,8 @@ export interface IntegrationActionsResponse {
 }
 
 export interface IntegrationActionsUpdate {
-  default_policy: PolicyValue | null;
+  /** Left out, the default row stays as it is. */
+  default_policy?: PolicyValue | null;
   actions: Record<string, PolicyValue | null>;
 }
 

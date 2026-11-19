@@ -166,10 +166,14 @@ OpenAPI tool, external app). Queries are in `db/integration_connection.py`.
   rolls back the session of the caller. The `onyx_login` refresh does the same.
 - `integration_status` gives Connected, Not connected, Needs reconnect or Not set
   up. It maps `resolve_connection(..., refresh=False)`, so it never calls the
-  service.
+  service. An OAuth integration with no client ID, and an individual API key
+  integration with no credential field, are Not set up
+  (`sign_in_configured`). The admin views (`integrations/service.py:_organization_statuses`)
+  give admin text for Not set up and for a sign-in change.
 - `mark_sign_in_settings_changed` sets every connection to Needs reconnect.
   Compare `sign_in_settings_for` before and after an edit: a change of only the
-  client secret or a label keeps the connections. Deactivation
+  client secret or a label keeps the connections. A new credential field key
+  (a new placeholder in the header template) also resets them. Deactivation
   (`db/user_preferences.py:deactivate_user`, the SCIM DAL) deletes the user's
   rows. A user delete removes them by FK cascade.
 
@@ -201,7 +205,10 @@ calls with the organization values when they fill the template; an MCP server wi
 whose template needs values that the user did not save is Not connected. Every secret write
 (`upsert_connection__no_commit`, `update_connection_secret__no_commit`,
 `set_oauth_client_credentials__no_commit`) saves the new format and clears the
-tag; a status-only change keeps it. There is no import job.
+tag; a status-only change keeps it. There is no import job. The migration
+decrypts one thing: the admin config of a per-user API key MCP server, to copy
+its header template (or `Authorization: Bearer {api_key}` when it has none)
+into `integration.header_template` and `credential_fields`.
 
 Chat, the sandbox proxy and Craft read only the integration tables. The old
 MCP, OAuth config, user OAuth token, Craft external app and tool status routes
@@ -271,7 +278,10 @@ admin value is not Ask.
   `GET`/`PUT /plugins/{id}/access` reads and replaces the shares of a private
   plugin (its owner or an organization-wide action manager), and
   `POST /plugins/{id}/publish` moves a private plugin to the Organization
-  library (organization-wide manage-actions, no review). The writes go through
+  library (organization-wide manage-actions, no review) and returns its new
+  name. A skill name there is refused with CONFLICT, as for a skill publish;
+  the name of another integration plugin gives a free name (`-2`). The MCP
+  server alias publishes with a free name in both cases. The writes go through
   `db/plugin.py:apply_plugin_access_change__no_commit`,
   `publish_or_request_review__no_commit` and
   `set_plugin_preferences__no_commit`. A plugin that holds a skill gets 400.
@@ -280,8 +290,8 @@ admin value is not Ask.
   preset or URL patterns), then the `integration` row with exactly one of
   `mcp_server_id`, `tool_id` or `external_app_id`, the OAuth client, one
   plugin that holds it (`db/plugin.py:create_integration_plugin__no_commit`:
-  version 1 with no files, Organization library or the creator's "My uploads")
-  and the actions. A public MCP server (`auth_mode` none) is asked for its
+  version 1 with no files, Organization library or the creator's "My uploads",
+  where it starts on for the creator) and the actions. A public MCP server (`auth_mode` none) is asked for its
   tools before the first insert (`_discover_new_server`); a failure gives a
   502 and saves nothing. An MCP server with a sign-in starts with no actions.
 - The admin list, the member list, the agent catalog and `GET /tool` read
@@ -309,7 +319,9 @@ admin value is not Ask.
   of a review request) has organization-wide manage:actions. Manage-plugins
   scope gives no right on an integration.
 - PATCH compares `sign_in_settings_for` before and after and calls
-  `mark_sign_in_settings_changed`; `client_secret: null` keeps the secret.
+  `mark_sign_in_settings_changed`; `client_secret: null` keeps the secret. A
+  change away from `api_key` drops the header template unless the request sets
+  one, and clears the credential fields.
 - MCP actions:
   `backend/onyx/integrations/kinds/mcp_server.py:fetch_mcp_actions` asks the server with
   the acting user's credential; the refresh writes the result as
@@ -860,7 +872,10 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   reached saves nothing (502). A server with a sign-in saves first, because the
   sign-in needs the integration; its actions come from a refresh after the
   sign-in. The public alias `POST /admin/mcp/servers/create` uses the same
-  create.
+  create, with one exception: `upsert_mcp_server_alias` passes
+  `save_unreachable_server=True`, so a server that cannot be reached is
+  saved with no actions. A failed discovery through the alias, for example
+  from Terraform, can leave a record.
 
 ---
 

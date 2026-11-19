@@ -1,6 +1,5 @@
-"""Every access write to a custom skill also goes to its plugin, and the legacy
-skill rows stay correct. Publishing is one-way, and the organization never
-gets edit access.
+"""Every access write to a custom skill goes to its plugin. Publishing is
+one-way, and the organization never gets edit access.
 
 The API has no plugin reads yet, so these tests read the plugin rows from the
 database after each request."""
@@ -37,11 +36,7 @@ from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.tests.skills.conftest import share_skill, unique_name
-from tests.utils.plugin_access import (
-    ORGANIZATION_LIBRARY_ID,
-    plugin_access_mismatches,
-    user_uploads_id,
-)
+from tests.utils.plugin_access import ORGANIZATION_LIBRARY_ID, user_uploads_id
 
 
 @pytest.fixture
@@ -97,11 +92,6 @@ def _publish(user: DATestUser, skill: SkillResponse) -> SkillResponse:
 # --- Database reads ----------------------------------------------------------
 
 
-def _assert_rows_match(*skill_ids: UUID | str) -> None:
-    with get_session_with_current_tenant() as db_session:
-        assert plugin_access_mismatches(db_session, skill_ids) == []
-
-
 def _plugin(skill_id: UUID | str) -> Plugin:
     with get_session_with_current_tenant() as db_session:
         plugin = db_session.get(Plugin, UUID(str(skill_id)))
@@ -152,15 +142,6 @@ def _choice(
         return (row[0], row[1]) if row is not None else None
 
 
-def _drop_plugin(skill_id: UUID | str) -> None:
-    """Leave the skill with no plugin row, as an older server does."""
-    with get_session_with_current_tenant() as db_session:
-        plugin = db_session.get(Plugin, UUID(str(skill_id)))
-        assert plugin is not None
-        db_session.delete(plugin)
-        db_session.commit()
-
-
 # --- Shares ------------------------------------------------------------------
 
 
@@ -189,7 +170,6 @@ def test_share_writes_plugin_shares(admin_user: DATestUser) -> None:
             )
         ],
     )
-    _assert_rows_match(skill.id)
     viewer_created_at = _user_share_created_at(skill.id, viewer.id)
     assert viewer_created_at is not None
     assert _group_share_created_at(skill.id, group.id) is not None
@@ -205,7 +185,6 @@ def test_share_writes_plugin_shares(admin_user: DATestUser) -> None:
         ],
         group_shares=[],
     )
-    _assert_rows_match(skill.id)
     assert _user_share_created_at(skill.id, viewer.id) == viewer_created_at
     assert _user_share_created_at(skill.id, editor.id) is None
     assert _group_share_created_at(skill.id, group.id) is None
@@ -241,7 +220,6 @@ def test_bulk_share_writes_plugin_rows(admin_user: DATestUser) -> None:
         },
     )
     assert result.failed == []
-    _assert_rows_match(first.id, second.id)
     for skill in (first, second):
         plugin = _plugin(skill.id)
         assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
@@ -266,7 +244,6 @@ def test_publish_moves_plugin_to_organization_library(owner: DATestUser) -> None
     assert after.published_version_id == after.current_version_id
     assert after.name == skill.name
     assert after.author_user_id == UUID(owner.id)
-    _assert_rows_match(skill.id)
 
     # Publishing a published plugin changes nothing.
     _publish(owner, skill)
@@ -291,7 +268,6 @@ def test_publish_with_a_used_name_returns_conflict(owner: DATestUser) -> None:
     assert name in response.json()["detail"]
     assert SkillManager.get_for_user(str(second.id), owner).public_permission is None
     assert _plugin(second.id).marketplace_id == user_uploads_id(owner.id)
-    _assert_rows_match(first.id, second.id)
 
 
 def test_create_public_with_a_used_name_takes_a_free_name(owner: DATestUser) -> None:
@@ -321,7 +297,6 @@ def test_create_public_with_a_used_name_takes_a_free_name(owner: DATestUser) -> 
     assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
     assert plugin.name == f"{name}-2"
     assert plugin.published_version_id == plugin.current_version_id
-    _assert_rows_match(first.id, item["skill"]["id"])
 
 
 def test_published_skill_cannot_be_made_private(owner: DATestUser) -> None:
@@ -349,7 +324,6 @@ def test_published_skill_cannot_be_made_private(owner: DATestUser) -> None:
         == SkillSharePermission.VIEWER
     )
     assert _plugin(skill.id).marketplace_id == ORGANIZATION_LIBRARY_ID
-    _assert_rows_match(skill.id)
 
 
 def test_organization_editor_is_refused(owner: DATestUser) -> None:
@@ -381,7 +355,6 @@ def test_organization_editor_is_refused(owner: DATestUser) -> None:
         SkillManager.get_for_user(str(published.id), owner).public_permission
         == SkillSharePermission.VIEWER
     )
-    _assert_rows_match(private.id, published.id)
 
 
 # --- Install setting ---------------------------------------------------------
@@ -424,7 +397,6 @@ def test_install_setting_writes_plugin_policy(
     for skill in (single, bulk):
         policy_value = _plugin(skill.id).installation_policy
         assert (policy_value.value if policy_value else None) == plugin_policy
-    _assert_rows_match(single.id, bulk.id)
 
 
 # --- User choices ------------------------------------------------------------
@@ -435,18 +407,15 @@ def test_enable_and_disable_write_the_user_choice(owner: DATestUser) -> None:
     # The auto-enable on create writes the choice with enabled_at.
     created = _choice(skill.id, owner.id)
     assert created is not None and created[0] is True and created[1] is not None
-    _assert_rows_match(skill.id)
 
     SkillManager.set_enabled(skill, owner, enabled=False)
     disabled = _choice(skill.id, owner.id)
     assert disabled == (False, created[1])
-    _assert_rows_match(skill.id)
 
     SkillManager.set_enabled(skill, owner, enabled=True)
     enabled = _choice(skill.id, owner.id)
     assert enabled is not None and enabled[0] is True
     assert enabled[1] is not None and enabled[1] > created[1]
-    _assert_rows_match(skill.id)
 
     result = _bulk(owner, {"action": "disable", "skill_ids": [str(skill.id)]})
     assert result.failed == []
@@ -456,7 +425,6 @@ def test_enable_and_disable_write_the_user_choice(owner: DATestUser) -> None:
     bulk_enabled = _choice(skill.id, owner.id)
     assert bulk_enabled is not None and bulk_enabled[0] is True
     assert bulk_enabled[1] is not None and bulk_enabled[1] > enabled[1]
-    _assert_rows_match(skill.id)
 
 
 def test_replacing_a_same_named_skill_turns_the_other_plugin_off(
@@ -471,7 +439,6 @@ def test_replacing_a_same_named_skill_turns_the_other_plugin_off(
     second_choice = _choice(second.id, owner.id)
     assert first_choice is not None and first_choice[0] is False
     assert second_choice is not None and second_choice[0] is True
-    _assert_rows_match(first.id, second.id)
 
 
 # --- Transfer ----------------------------------------------------------------
@@ -498,7 +465,6 @@ def test_transfer_moves_private_plugin_to_new_owner(owner: DATestUser) -> None:
     # The new owner's share goes; the previous owner keeps EDITOR.
     assert _user_share_created_at(skill.id, new_owner.id) is None
     assert _user_share_created_at(skill.id, owner.id) is not None
-    _assert_rows_match(skill.id)
 
 
 def test_transfer_with_a_used_name_returns_conflict(owner: DATestUser) -> None:
@@ -515,7 +481,6 @@ def test_transfer_with_a_used_name_returns_conflict(owner: DATestUser) -> None:
     plugin = _plugin(skill.id)
     assert plugin.author_user_id == UUID(owner.id)
     assert plugin.marketplace_id == user_uploads_id(owner.id)
-    _assert_rows_match(skill.id)
 
 
 def test_transfer_keeps_a_published_plugin_published(owner: DATestUser) -> None:
@@ -527,7 +492,6 @@ def test_transfer_keeps_a_published_plugin_published(owner: DATestUser) -> None:
     plugin = _plugin(skill.id)
     assert plugin.author_user_id == UUID(new_owner.id)
     assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
-    _assert_rows_match(skill.id)
 
 
 # --- Delete ------------------------------------------------------------------
@@ -560,44 +524,3 @@ def test_only_a_manager_can_delete_a_published_skill(
     assert result.succeeded == [bulk.id]
     assert _plugin_or_none(single.id) is None
     assert _plugin_or_none(bulk.id) is None
-
-
-# --- Skills with no plugin row -----------------------------------------------
-
-
-@pytest.mark.parametrize("change", ["share", "publish", "policy"])
-def test_access_write_on_skill_without_plugin_row_converges(
-    owner: DATestUser, admin_user: DATestUser, change: str
-) -> None:
-    """Reads come from the plugin tables, so a skill with no plugin row is
-    hidden from everyone but an admin. The re-sync migration leaves none; an
-    admin write on one still makes the plugin from the legacy rows first."""
-    viewer = _user("converge_viewer")
-    skill = SkillManager.create_custom(owner, name=unique_name("converge"))
-    SkillManager.share(
-        skill,
-        owner,
-        user_shares=[
-            SkillUserShareRequest(
-                user_id=UUID(viewer.id), permission=SkillSharePermission.VIEWER
-            )
-        ],
-    )
-    _drop_plugin(skill.id)
-    hidden = client.get(
-        f"{API_SERVER_URL}/skills/custom/{skill.id}/share", headers=owner.headers
-    )
-    assert hidden.status_code == 404
-
-    if change == "share":
-        response = share_skill(admin_user, skill.id, {"group_shares": []})
-    elif change == "publish":
-        response = share_skill(admin_user, skill.id, {"public_permission": "VIEWER"})
-    else:
-        response = share_skill(admin_user, skill.id, {"installation_policy": "DEFAULT"})
-    response.raise_for_status()
-
-    # The plugin is made from the legacy rows, with the shares and choices
-    # that were there before, and then gets the change.
-    assert _plugin_or_none(skill.id) is not None
-    _assert_rows_match(skill.id)

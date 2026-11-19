@@ -21,7 +21,7 @@ type chownLog struct {
 }
 
 func (c *chownLog) use(s *Store) {
-	s.chown = func(_ *os.Root, name string, uid, gid int) error {
+	s.chown = func(_ *os.File, name string, uid, gid int) error {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		if uid != 1000 || gid != 1001 {
@@ -56,6 +56,9 @@ func ownedStore(t *testing.T) (*Store, string, *chownLog) {
 		t.Fatal(err)
 	}
 	root := filepath.Join(dir, "workspace", "sessions")
+	if err := os.Mkdir(filepath.Dir(root), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	s, err := New(Config{SessionsRoot: root, CaptureRoots: []string{"work", "attachments"}, Owner: &Owner{UID: 1000, GID: 1001}})
 	if err != nil {
 		t.Fatal(err)
@@ -73,7 +76,7 @@ func TestWriteGivesNewFilesAndDirectoriesToTheOwner(t *testing.T) {
 	if _, _, err := s.Write(ctx, sid, WriteSpec{Path: "a/b/c.txt", Size: 1, MakeParents: true}, strings.NewReader("x")); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{".", sid, "a", "a/b", "a/b/" + writePrefix + "*"}
+	want := []string{"sessions", sid, "a", "a/b", "a/b/" + writePrefix + "*"}
 	if got := log.got(); !slices.Equal(got, want) {
 		t.Fatalf("chown %v, want %v", got, want)
 	}
@@ -90,12 +93,35 @@ func TestWriteGivesNewFilesAndDirectoriesToTheOwner(t *testing.T) {
 	}
 }
 
+func TestOnyxWriteGivesTheRootAndNewDirectoriesToTheOwner(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	onyx := filepath.Join(dir, "onyx")
+	s, err := New(Config{SessionsRoot: filepath.Join(dir, "sessions"), OnyxRoot: onyx, Owner: &Owner{UID: 1000, GID: 1001}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := &chownLog{}
+	log.use(s)
+	spec := WriteSpec{Path: onyx + "/a/b.txt", Size: 1, Overwrite: true, MakeParents: true}
+	if _, _, err := s.Write(context.Background(), "", spec, strings.NewReader("x")); err != nil {
+		t.Fatal(err)
+	}
+	// So the sandbox user can delete what Onyx wrote.
+	want := []string{"onyx", "a", "a/" + writePrefix + "*"}
+	if got := log.got(); !slices.Equal(got, want) {
+		t.Fatalf("chown %v, want %v", got, want)
+	}
+}
+
 func TestUploadGivesTheFileAndItsDirectoryToTheOwner(t *testing.T) {
 	s, _, log := ownedStore(t)
 	if _, _, err := s.Upload(context.Background(), sid, UploadSpec{FileName: "r.pdf", Size: 2}, strings.NewReader("pd")); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{".", sid, "attachments", "attachments/" + writePrefix + "*"}
+	want := []string{"sessions", sid, "attachments", "attachments/" + writePrefix + "*"}
 	if got := log.got(); !slices.Equal(got, want) {
 		t.Fatalf("chown %v, want %v", got, want)
 	}
@@ -110,7 +136,7 @@ func TestRestoreGivesEveryMemberToTheOwner(t *testing.T) {
 	if _, err := restore(s, sid, makeArchive(t, ms), RestoreSpec{}); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{".", sid, "work", "work/d", "work/d/f.txt"}
+	want := []string{"sessions", sid, "work", "work/d", "work/d/f.txt"}
 	if got := log.got(); !slices.Equal(got, want) {
 		t.Fatalf("chown %v, want %v", got, want)
 	}
@@ -136,7 +162,7 @@ func TestOwnerFailureFailsTheCallAndLeavesNoFile(t *testing.T) {
 
 func TestNoOwnerChangesNothing(t *testing.T) {
 	s, _ := newStore(t, Config{})
-	s.chown = func(*os.Root, string, int, int) error { t.Fatal("chown without an owner"); return nil }
+	s.chown = func(*os.File, string, int, int) error { t.Fatal("chown without an owner"); return nil }
 	if _, _, err := s.Write(context.Background(), sid, WriteSpec{Path: "x/y.txt", Size: 1, MakeParents: true}, strings.NewReader("x")); err != nil {
 		t.Fatal(err)
 	}
@@ -158,6 +184,9 @@ func TestOwnerOnDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	ws := filepath.Join(dir, "workspace")
+	if err := os.Mkdir(ws, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	s, err := New(Config{SessionsRoot: filepath.Join(ws, "sessions"), Owner: &Owner{UID: 1000, GID: 1000}})
 	if err != nil {
 		t.Fatal(err)
@@ -217,7 +246,7 @@ func TestAFailedOwnerChangeLeavesNoNewDirectory(t *testing.T) {
 	if _, _, err := s.Write(ctx, sid, WriteSpec{Path: "a/f.txt", Size: 1, MakeParents: true}, strings.NewReader("x")); err != nil {
 		t.Fatal(err)
 	}
-	if got := log.got(); !slices.Equal(got, []string{".", sid, "a", "a/" + writePrefix + "*"}) {
+	if got := log.got(); !slices.Equal(got, []string{"sessions", sid, "a", "a/" + writePrefix + "*"}) {
 		t.Fatalf("chown %v", got)
 	}
 

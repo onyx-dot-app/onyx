@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
-from onyx.configs.constants import OnyxCeleryTask
+from onyx.configs.constants import TARGETED_REINDEX_TIMEOUT, OnyxCeleryTask
 from onyx.connectors.models import ConnectorFailure
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IndexAttemptErrorResolvedReason, IndexingStatus
@@ -35,13 +35,12 @@ from onyx.db.targeted_reindex import (
     resolve_failure_derived_targets,
     targets_to_connector_failures,
 )
+from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from shared_configs.contextvars import get_current_tenant_id
 
 if TYPE_CHECKING:
     from onyx.background.indexing.run_targeted_reindex import CCPairReindexResult
 
-_TARGETED_REINDEX_SOFT_TIME_LIMIT = 60 * 30  # 30 minutes
-_TARGETED_REINDEX_TIME_LIMIT = _TARGETED_REINDEX_SOFT_TIME_LIMIT + 60
 _CANCELED_MSG = "Canceled by a user."
 
 
@@ -156,11 +155,13 @@ def run_targeted_reindex(
     )
 
     with get_session_with_current_tenant() as db_session:
-        job = get_targeted_reindex_job(db_session, targeted_reindex_job_id)
+        job = get_targeted_reindex_job(
+            db_session, targeted_reindex_job_id, for_update=True
+        )
         if job is None:
             log.warning("Job not found, dropping task")
             return
-        if job.status.is_terminal():
+        if job.status != IndexingStatus.NOT_STARTED:
             log.info("Job already terminal, dropping task")
             return
 
@@ -173,13 +174,15 @@ def run_targeted_reindex(
             attempt.time_started = datetime.datetime.now(datetime.timezone.utc)
         job.status = IndexingStatus.IN_PROGRESS
         db_session.commit()
+        tenant_id = get_current_tenant_id()
+        # Keeps check_for_indexing, which runs the stale-job validator,
+        # scheduled for this tenant while the job is open.
+        maybe_mark_tenant_active(tenant_id, caller="targeted_reindex")
 
         resolved_count = 0
         still_failing_count = 0
         runtime_skipped = 0
         try:
-            tenant_id = get_current_tenant_id()
-
             # 2. group targets by cc_pair (the unit of connector invocation).
             target_rows = get_targets_for_job(db_session, targeted_reindex_job_id)
             by_cc_pair = group_targets_by_cc_pair(target_rows)
@@ -199,6 +202,11 @@ def run_targeted_reindex(
             failed_keys: set[tuple[int, str]] = set()
             pair_ends: dict[int, _PairEnd] = {}
             for cc_pair_id, cc_targets in by_cc_pair.items():
+                # The stale-job validator can fail the job while a pair runs.
+                # Index no more pairs after that.
+                db_session.refresh(job, ["status"])
+                if job.status.is_terminal():
+                    break
                 # A Cancel stops the pairs not yet fetched. One that arrives
                 # while a pair runs ends that pair's attempts CANCELED after it.
                 if cc_pair_id in _canceled_pair_ids(db_session, attempts):
@@ -234,6 +242,14 @@ def run_targeted_reindex(
                         "cc_pair_id=%s connector does not support targeted reindex",
                         cc_pair_id,
                     )
+
+            # Do not overwrite a job that the stale-job validator failed.
+            job = get_targeted_reindex_job(
+                db_session, targeted_reindex_job_id, for_update=True
+            )
+            if job is None or job.status.is_terminal():
+                db_session.rollback()
+                return
 
             # 4. resolution tracking: clear error rows only for the
             #    (cc_pair, doc) pairs that actually landed. Errors
@@ -299,7 +315,9 @@ def run_targeted_reindex(
             log.exception("Targeted reindex task failed; marking job FAILED")
             try:
                 db_session.rollback()
-                job = get_targeted_reindex_job(db_session, targeted_reindex_job_id)
+                job = get_targeted_reindex_job(
+                    db_session, targeted_reindex_job_id, for_update=True
+                )
                 if job is not None and not job.status.is_terminal():
                     attempts = get_index_attempts_for_targeted_reindex_job(
                         db_session, targeted_reindex_job_id
@@ -316,7 +334,7 @@ def run_targeted_reindex(
             except Exception:
                 log.exception(
                     "Failed to mark job FAILED during error recovery; "
-                    "row may remain IN_PROGRESS until the celery retry"
+                    "row may remain IN_PROGRESS until the stale-job validator"
                 )
             raise
 
@@ -330,8 +348,8 @@ def run_targeted_reindex(
 
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.TARGETED_REINDEX_TASK,
-    soft_time_limit=_TARGETED_REINDEX_SOFT_TIME_LIMIT,
-    time_limit=_TARGETED_REINDEX_TIME_LIMIT,
+    soft_time_limit=TARGETED_REINDEX_TIMEOUT,
+    time_limit=TARGETED_REINDEX_TIMEOUT + 60,
     bind=True,
 )
 def targeted_reindex_task(

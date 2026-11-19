@@ -22,28 +22,43 @@ shipping unchanged and stays the default desktop app. v2 has its own bundle ID
   native save panel. `alert()`, `confirm()` and `prompt()` show native dialogs.
 - Tray icon, standard macOS menus (with Edit), and a Preferences window (`Cmd+,`) for the
   server and sign-out.
-- Main window chrome like Claude Desktop: overlay title bar, the sidebar runs to the top with
+- Native main window chrome: overlay title bar, the sidebar runs to the top with
   the traffic lights inside it, the collapse button sits on that row, and collapsing slides the
   sidebar fully away. In full screen the button moves to the left edge. The sidebar's top row
   and the chat area's top bar drag the window. Zoom (`Cmd+=`/`Cmd+-`) keeps the title-bar row
   at its native size. Window size and position are remembered.
 - Launcher panel on a global shortcut (default `Cmd+Shift+Space`, set in Preferences) that
   works from any app. On macOS it is a non-activating `NSPanel` (`src-tauri/src/launcher.rs`),
-  like Spotlight or Claude Desktop's quick entry: it appears over the app you are in, also
+  like Spotlight: it appears over the app you are in, also
   full-screen apps and on every Space, without bringing Onyx's other windows forward, and it
-  hides when you click away. **Ask** streams an answer through
-  `POST /api/chat/send-chat-message`. **Search** calls `POST /api/search/send-search-message`
-  (EE). `Tab` switches mode, `Cmd+Enter` opens the chat in the main window, `Esc` closes.
+  hides when you click away. It keeps its chat and query while hidden, also an answer that is
+  still streaming. **Ask** streams an answer through `POST /api/chat/send-chat-message`, shows
+  what it is doing (searching, reading sources) until text arrives, and shows the answer as
+  markdown. A question after an answer is a follow-up in the same chat. **Search** calls
+  `POST /api/search/send-search-message` (EE). If Onyx is hidden (`Cmd+H`), the launcher still
+  opens over the current app and Onyx stays hidden.
 - SSO in the system browser, where you are often signed in already. The browser runs the
   server's normal OAuth flow with Onyx's mobile SSO parameters and PKCE, and the server ends it
   with `onyx://auth/callback?code=..`. The app swaps the one-time code for a session token
   (`src-tauri/src/sso.rs`). The identity provider needs no new redirect URI: the flow returns
-  to the web callback that is already registered. Servers without this flow fall back to the
-  web login page in an app window.
+  to the web callback that is already registered. It works for the legacy Google sign-in and
+  for Google and OIDC providers set up in the admin panel, when the server lists them with
+  `native_app_sso`. SAML, cloud workspaces and older servers use the web login page in an app
+  window.
 - The app renews the session on launch and every 12 hours, so regular use never signs you out.
 
 Closing the main window keeps the app running in the menu bar; the Dock icon, the tray's
 **Open Onyx** or a second launch brings it back.
+
+### Aonyx (easter egg)
+
+Click the Onyx logo in the launcher five times quickly and Aonyx, the Onyx otter, appears in
+the bottom-right corner of the screen (`src-tauri/src/aonyx.rs`, `src/pages/Aonyx.tsx`). It is
+a small transparent panel above other apps and on every Space that never takes focus. It
+thinks while a launcher answer streams, is happy when it is done, and hops when the launcher
+opens. Click it to open the launcher, drag it anywhere, right-click to hide it. Five more logo
+clicks send it away. Whether it is shown and where it sits are saved in `config.json`. The
+sprite sheets in `public/aonyx/` are played faster than the pack's timing.
 
 ## Keyboard shortcuts
 
@@ -58,6 +73,7 @@ Closing the main window keeps the app running in the menu bar; the Dock icon, th
 | `Ctrl+Cmd+F` | Full screen |
 | `Cmd+M`, `Cmd+H`, `Cmd+W`, `Cmd+Q` | Minimize, hide, close window, quit |
 | Launcher: `Enter`, `Tab`, `Cmd+Enter`, `Esc` | Ask or search, switch mode, open in window, close |
+| Launcher: `Cmd+N`, `↑` in an empty input | New chat, recent questions |
 
 ## Security boundary
 
@@ -110,7 +126,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 ## Auto-update
 
-`src-tauri/src/updater.rs`, like Claude Desktop: the app checks the feed 15 seconds after launch
+`src-tauri/src/updater.rs`: the app checks the feed 15 seconds after launch
 and every 6 hours, downloads a newer version in the background, then changes **Check for
 Updates…** (app menu and tray) to **Restart to Update (vX)**. It does not restart on its own.
 Every download is verified against `plugins.updater.pubkey` in `tauri.conf.json` before it is

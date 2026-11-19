@@ -398,6 +398,8 @@ def test_resolved_workspace_authorize_urls_carry_a_workspace_pin(
     [provider] = response.json()["providers"]
     assert provider["authorize_url"].startswith("/api/auth/oidc/okta/authorize?")
     assert "workspace_token=" in provider["authorize_url"]
+    # An OIDC row's authorize URL takes the native-app SSO parameters.
+    assert provider["native_app_sso"] is True
 
 
 @patch("ee.onyx.db.tenant_sso_domain.MULTI_TENANT", True)

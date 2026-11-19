@@ -60,6 +60,7 @@ from onyx.db.engine.sql_engine import get_session, get_session_with_shared_schem
 from onyx.db.enums import AccountType, Permission
 from onyx.db.models import User
 from onyx.db.pinned_personas import set_pinned_personas
+from onyx.db.skill import transfer_private_plugins__no_commit
 from onyx.db.tenant_invite_counter import release_trial_invites, reserve_trial_invites
 from onyx.db.user_file import fetch_recent_user_files
 from onyx.db.user_preferences import (
@@ -125,6 +126,8 @@ from onyx.server.manage.models import (
     TenantInfo,
     TenantSnapshot,
     ThemePreferenceRequest,
+    TransferPrivatePluginsRequest,
+    TransferPrivatePluginsResponse,
     UserAdminAccessUpdateRequest,
     UserByEmail,
     UserCraftAccessUpdateRequest,
@@ -144,6 +147,7 @@ from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import resolve_user_language
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
+from onyx.skills.push import push_skills_and_commit
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -891,6 +895,27 @@ async def delete_user(
         db_session.rollback()
         logger.error("Error deleting user %s: %s", user_to_delete.email, str(e))
         raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Error deleting user")
+
+
+@router.post("/manage/admin/transfer-private-plugins", tags=PUBLIC_API_TAGS)
+def transfer_private_plugins(
+    transfer_req: TransferPrivatePluginsRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> TransferPrivatePluginsResponse:
+    user = get_user_by_email(email=transfer_req.user_email, db_session=db_session)
+    if user is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
+    result = transfer_private_plugins__no_commit(
+        user_id=user.id,
+        new_owner_user_id=transfer_req.new_owner_user_id,
+        db_session=db_session,
+    )
+    db_session.commit()
+    push_skills_and_commit(result.affected_user_ids, db_session)
+    return TransferPrivatePluginsResponse(
+        plugin_ids=result.plugin_ids, renames=result.renames
+    )
 
 
 @router.patch("/manage/admin/activate-user", tags=PUBLIC_API_TAGS)

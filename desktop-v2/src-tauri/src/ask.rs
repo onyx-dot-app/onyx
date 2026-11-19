@@ -30,6 +30,15 @@ pub enum AskEvent {
     Delta {
         text: String,
     },
+    /// What the answer is doing while no text streams (searching, reading).
+    Status {
+        text: String,
+    },
+    /// A new message after a tool step: the text so far was the agent's
+    /// narration, not the answer, and the answer starts again with `text`.
+    Restart {
+        text: String,
+    },
     Citations {
         docs: Vec<Citation>,
     },
@@ -52,6 +61,12 @@ struct StreamState {
     stop_reason: Option<String>,
     awaiting_approval: bool,
     approval_tool: Option<String>,
+    /// Answer text has been sent since the last message started.
+    has_text: bool,
+}
+
+fn status(text: impl Into<String>) -> Option<AskEvent> {
+    Some(AskEvent::Status { text: text.into() })
 }
 
 impl StreamState {
@@ -78,31 +93,64 @@ impl StreamState {
         }
     }
 
-    /// Returns the text to append, if the line carries answer text.
-    fn apply(&mut self, line: &Value) -> Result<Option<String>, String> {
+    /// Returns the event for the launcher, if the line carries one.
+    fn apply(&mut self, line: &Value) -> Result<Option<AskEvent>, String> {
         if let Some(error) = line.get("error").and_then(Value::as_str) {
             return Err(error.to_string());
         }
         let Some(obj) = line.get("obj") else {
             return Ok(None);
         };
-        match obj.get("type").and_then(Value::as_str) {
+        let content = || {
+            obj.get("content")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        Ok(match obj.get("type").and_then(Value::as_str) {
             Some("message_start") => {
                 self.record_docs(obj.get("final_documents"));
-                Ok(obj
-                    .get("content")
-                    .and_then(Value::as_str)
-                    .filter(|s| !s.is_empty())
-                    .map(str::to_string))
+                let text = content();
+                if std::mem::replace(&mut self.has_text, !text.is_empty()) {
+                    Some(AskEvent::Restart { text })
+                } else {
+                    (!text.is_empty()).then_some(AskEvent::Delta { text })
+                }
             }
-            Some("message_delta") => Ok(obj
-                .get("content")
-                .and_then(Value::as_str)
-                .map(str::to_string)),
+            Some("message_delta") => {
+                let text = content();
+                self.has_text |= !text.is_empty();
+                Some(AskEvent::Delta { text })
+            }
+            Some("reasoning_start") => status("Thinking…"),
+            Some("search_tool_start") => {
+                if obj.get("is_internet_search").and_then(Value::as_bool) == Some(true) {
+                    status("Searching the web…")
+                } else {
+                    status("Searching your company's knowledge…")
+                }
+            }
             Some("search_tool_documents_delta") => {
+                let count = obj
+                    .get("documents")
+                    .and_then(Value::as_array)
+                    .map_or(0, Vec::len);
                 self.record_docs(obj.get("documents"));
-                Ok(None)
+                (count > 0).then(|| AskEvent::Status {
+                    text: format!(
+                        "Reading {count} source{}…",
+                        if count == 1 { "" } else { "s" }
+                    ),
+                })
             }
+            Some("open_url_start") => status("Opening pages…"),
+            Some("file_reader_start") => status("Reading files…"),
+            Some("python_tool_start") | Some("code_mode_start") => status("Running code…"),
+            Some("image_generation_start") => status("Creating an image…"),
+            Some("custom_tool_start") => obj
+                .get("display_name")
+                .and_then(Value::as_str)
+                .and_then(|name| status(format!("Using {name}…"))),
             Some("citation_info") => {
                 if let (Some(number), Some(id)) = (
                     obj.get("citation_number").and_then(Value::as_u64),
@@ -110,14 +158,14 @@ impl StreamState {
                 ) {
                     self.cited.insert(number, id.to_string());
                 }
-                Ok(None)
+                None
             }
             Some("tool_approval_request") => {
                 self.approval_tool = obj
                     .get("display_name")
                     .and_then(Value::as_str)
                     .map(str::to_string);
-                Ok(None)
+                None
             }
             Some("stop") => {
                 self.finished = true;
@@ -126,10 +174,10 @@ impl StreamState {
                     .and_then(Value::as_str)
                     .map(str::to_string);
                 self.awaiting_approval = self.stop_reason.as_deref() == Some("awaiting_approval");
-                Ok(None)
+                None
             }
-            _ => Ok(None),
-        }
+            _ => None,
+        })
     }
 
     fn citations(&self) -> Vec<Citation> {
@@ -155,15 +203,15 @@ const MAX_RECORD_BYTES: usize = 4 * 1024 * 1024;
 fn apply_record(
     record: &[u8],
     state: &mut StreamState,
-    send: &dyn Fn(String),
+    send: &dyn Fn(AskEvent),
 ) -> Result<(), String> {
     if record.iter().all(u8::is_ascii_whitespace) {
         return Ok(());
     }
     let value = serde_json::from_slice::<Value>(record)
         .map_err(|_| "The server sent an answer the app could not read.".to_string())?;
-    if let Some(text) = state.apply(&value)? {
-        send(text);
+    if let Some(event) = state.apply(&value)? {
+        send(event);
     }
     Ok(())
 }
@@ -187,7 +235,7 @@ fn stream_complete(state: &StreamState) -> Result<(), String> {
 fn drain_records(
     buffer: &mut Vec<u8>,
     state: &mut StreamState,
-    send: &dyn Fn(String),
+    send: &dyn Fn(AskEvent),
 ) -> Result<(), String> {
     let mut start = 0;
     while let Some(offset) = buffer[start..].iter().position(|b| *b == b'\n') {
@@ -210,11 +258,16 @@ pub async fn run(
     server: &str,
     token: &str,
     question: &str,
+    // The chat to continue with a follow-up; `None` starts a new chat.
+    follow_up_of: Option<&str>,
     channel: &Channel<AskEvent>,
     // False once the session that started this answer has ended.
     is_current: &(dyn Fn() -> bool + Sync),
 ) -> Result<String, String> {
-    let session_id = api.create_chat_session(server, token).await?;
+    let session_id = match follow_up_of {
+        Some(id) => id.to_string(),
+        None => api.create_chat_session(server, token).await?,
+    };
     // A sign-out while the chat was being created must not send the question.
     if !is_current() {
         return Err("Signed out.".into());
@@ -224,13 +277,13 @@ pub async fn run(
     });
 
     let response = api
-        .send_message(server, token, &session_id, question)
+        .send_message(server, token, &session_id, question, follow_up_of.is_some())
         .await?;
     let mut stream = response.bytes_stream();
     let mut buffer: Vec<u8> = Vec::new();
     let mut state = StreamState::default();
-    let send = |text: String| {
-        let _ = channel.send(AskEvent::Delta { text });
+    let send = |event: AskEvent| {
+        let _ = channel.send(event);
     };
 
     loop {
@@ -239,10 +292,10 @@ pub async fn run(
         let next = tokio::time::timeout(STREAM_IDLE_TIMEOUT, stream.next())
             .await
             .map_err(|_| "The server stopped sending the answer.".to_string())?;
-        let Some(chunk) = next else { break };
         if !is_current() {
             return Err("Signed out.".into());
         }
+        let Some(chunk) = next else { break };
         let chunk = chunk.map_err(|e| format!("The answer stream broke: {e}"))?;
         buffer.extend_from_slice(&chunk);
         drain_records(&mut buffer, &mut state, &send)?;
@@ -265,7 +318,16 @@ pub async fn run(
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_record, drain_records, stream_complete, StreamState, MAX_RECORD_BYTES};
+    use super::{
+        apply_record, drain_records, stream_complete, AskEvent, StreamState, MAX_RECORD_BYTES,
+    };
+
+    fn text_of(event: Option<AskEvent>) -> Option<String> {
+        match event {
+            Some(AskEvent::Delta { text }) => Some(text),
+            _ => None,
+        }
+    }
     use serde_json::json;
 
     #[test]
@@ -284,7 +346,7 @@ mod tests {
         ];
         let text: String = lines
             .iter()
-            .filter_map(|l| state.apply(l).unwrap())
+            .filter_map(|l| text_of(state.apply(l).unwrap()))
             .collect();
         assert_eq!(text, "Hi there");
         assert!(state.finished);
@@ -312,7 +374,11 @@ mod tests {
     #[test]
     fn reads_records_across_chunks_and_rejects_bad_ones() {
         let texts = std::cell::RefCell::new(String::new());
-        let send = |t: String| texts.borrow_mut().push_str(&t);
+        let send = |e: AskEvent| {
+            if let Some(t) = text_of(Some(e)) {
+                texts.borrow_mut().push_str(&t);
+            }
+        };
         let mut state = StreamState::default();
         let mut buffer =
             b"{\"obj\":{\"type\":\"message_delta\",\"content\":\"a\"}}\n\n{\"obj\":{\"ty".to_vec();
@@ -343,6 +409,28 @@ mod tests {
             .apply(&json!({"obj": {"type": "stop", "stop_reason": "timed_out"}}))
             .unwrap();
         assert!(stream_complete(&state).is_err());
+    }
+
+    #[test]
+    fn narration_before_a_tool_step_is_not_part_of_the_answer() {
+        let mut state = StreamState::default();
+        let events: Vec<_> = [
+            json!({"obj": {"type": "message_start", "content": "Retrying with a simpler query."}}),
+            json!({"obj": {"type": "search_tool_start"}}),
+            json!({"obj": {"type": "search_tool_documents_delta", "documents": [
+                {"document_id": "d1", "semantic_identifier": "Handbook"}
+            ]}}),
+            json!({"obj": {"type": "message_start", "content": "I couldn't find"}}),
+        ]
+        .iter()
+        .filter_map(|l| state.apply(l).unwrap())
+        .collect();
+        assert!(
+            matches!(&events[0], AskEvent::Delta { text } if text == "Retrying with a simpler query.")
+        );
+        assert!(matches!(&events[1], AskEvent::Status { text } if text.starts_with("Searching")));
+        assert!(matches!(&events[2], AskEvent::Status { text } if text == "Reading 1 source…"));
+        assert!(matches!(&events[3], AskEvent::Restart { text } if text == "I couldn't find"));
     }
 
     #[test]

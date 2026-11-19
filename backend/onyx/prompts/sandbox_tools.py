@@ -1,5 +1,11 @@
 # Descriptions of the sandbox tools that the model reads.
 
+from onyx.server.features.build.sandbox.harness_base import ONYX_VM_FILES_ROOT
+from onyx.tools.tool_implementations.sandbox.models import (
+    PUBLISH_FILES_MAX_BYTES,
+    PUBLISH_FILES_MAX_FILES,
+)
+
 # The chat system prompt's section about the sandbox, when the turn offers the
 # sandbox tools; `uses` names each tool with its use (the *_USE texts).
 SANDBOX_GUIDANCE = """
@@ -91,4 +97,15 @@ Usage:
 - Prefer edit for changes to an existing file: it sends only the changed text.
 - Missing parent directories are created. An existing file keeps its permissions.
 - Paths are relative to the chat session directory, or absolute inside it. To change files elsewhere, use exec_command.
+"""
+
+PUBLISH_FILES_DESCRIPTION = f"""Gives files from the VM to the user. Each file shows as a download card in your reply.
+
+Usage:
+- Make and check files anywhere in the VM. Publish only finished deliverables, not drafts, scripts or intermediate files.
+- Each path must be a regular file of at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}. Copy a file from elsewhere into the working directory first.
+- One call publishes at most {PUBLISH_FILES_MAX_FILES} files. If one file fails, the call publishes none.
+- Publishing a file with the same name again adds a new version; earlier cards do not change.
+- Do not paste the contents of a published file into your reply.
+- Do not tell the user that a file is available unless this tool succeeded.
 """

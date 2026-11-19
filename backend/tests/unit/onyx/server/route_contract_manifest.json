@@ -638,6 +638,7 @@
   "POST /manage/admin/slack-app/channel": "manage:bots",
   "POST /manage/admin/standard-answer": "admin",
   "POST /manage/admin/standard-answer/category": "admin",
+  "POST /manage/admin/transfer-private-plugins": "admin",
   "POST /manage/admin/user-group": "manage:user_groups",
   "POST /manage/admin/user-group/{user_group_id}/add-users": "manage:user_groups +scope",
   "POST /manage/connector-request": "basic",

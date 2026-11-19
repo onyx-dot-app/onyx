@@ -15,7 +15,6 @@ from onyx.db.enums import (
     Permission,
     PersonaSharePermission,
     PluginInstallationPolicy,
-    SkillSharePermission,
 )
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -37,7 +36,6 @@ from onyx.db.models import (
     Plugin__UserGroup,
     PublicExternalUserGroup,
     ScimToken,
-    Skill,
     StandardAnswer,
     TokenRateLimit,
     User,
@@ -51,7 +49,6 @@ from onyx.db.models import (
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.plugin import (
     get_or_create_organization_library__no_commit,
-    lock_skill_plugin__no_commit,
     publish_plugin__no_commit,
 )
 from onyx.db.users import (
@@ -234,52 +231,21 @@ def _make_group_shared_resources_public__no_commit(
             != PluginInstallationPolicy.NOT_AVAILABLE,
         ),
     )
-    # Skill rows first, then their plugin rows in id order.
-    skills: Sequence[Skill] = db_session.scalars(
-        select(Skill)
-        .where(
-            Skill.id.in_(
-                select(Plugin.id).where(
-                    Plugin.id.in_(shared_plugin_ids),
-                    Plugin.marketplace_id != library_id,
-                )
-            ),
-            Skill.built_in_skill_id.is_(None),
-        )
-        .order_by(Skill.id)
+    plugin_ids: Sequence[UUID] = db_session.scalars(
+        select(Plugin.id)
+        .where(Plugin.id.in_(shared_plugin_ids), Plugin.marketplace_id != library_id)
+        .order_by(Plugin.id)
         .with_for_update()
     ).all()
-    plugin_ids = [
-        lock_skill_plugin__no_commit(skill, db_session).id for skill in skills
-    ]
-    for skill in skills:
-        skill.public_permission = SkillSharePermission.VIEWER
-    db_session.flush()
-    for skill, plugin_id in zip(skills, plugin_ids, strict=True):
+    for plugin_id in plugin_ids:
         publish_plugin__no_commit(plugin_id, "rename", db_session)
         published_name = db_session.scalar(
             select(Plugin.name).where(Plugin.id == plugin_id)
         )
         logger.info(
-            "Community downgrade published skill %s (%s) to the organization as '%s'",
-            skill.name,
+            "Community downgrade published plugin %s to the organization as '%s'",
             plugin_id,
             published_name,
-        )
-    # A plugin with no skill row, such as one that holds only integrations.
-    other_plugin_ids: Sequence[UUID] = db_session.scalars(
-        select(Plugin.id)
-        .where(
-            Plugin.id.in_(shared_plugin_ids),
-            Plugin.marketplace_id != library_id,
-            ~select(Skill.id).where(Skill.id == Plugin.id).exists(),
-        )
-        .order_by(Plugin.id)
-    ).all()
-    for plugin_id in other_plugin_ids:
-        publish_plugin__no_commit(plugin_id, "rename", db_session)
-        logger.info(
-            "Community downgrade published plugin %s to the organization", plugin_id
         )
 
 

@@ -3,9 +3,12 @@ package hostinfo
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -15,6 +18,106 @@ type Stats struct {
 	DataDir string
 	// NodeDir is the node file system under a loop store data dir, or "".
 	NodeDir string
+	// SliceDir is the host cgroup directory of the VM slice (SliceCgroupDir),
+	// or "": no slice limit and no OOM count.
+	SliceDir string
+	// SliceLimitBytes is the memory.max that the agent set on the slice (0:
+	// none). It is the room while the slice has no cgroup yet.
+	SliceLimitBytes uint64
+}
+
+// SliceCgroupDir returns the cgroup directory of a systemd slice under the
+// cgroup2 mount root: "a-b.slice" is in "a.slice/a-b.slice".
+func SliceCgroupDir(root, slice string) string {
+	name := strings.TrimSuffix(slice, ".slice")
+	dir := root
+	for i := range len(name) {
+		if name[i] == '-' {
+			dir = filepath.Join(dir, name[:i]+".slice")
+		}
+	}
+	return filepath.Join(dir, slice)
+}
+
+// SliceRoomMiB returns the memory that the VM slice can still take before
+// its memory.max: memory.max minus the slice's memory that the kernel cannot
+// drop (memory.current less its file page cache). limited is false when the
+// slice has no limit or Stats has no SliceDir. While the slice has no cgroup
+// yet (systemd makes it when the first VM scope starts), the room is
+// SliceLimitBytes.
+func (s Stats) SliceRoomMiB() (room uint64, limited bool, err error) {
+	if s.SliceDir == "" {
+		return 0, false, nil
+	}
+	var raw [3][]byte
+	for i, name := range []string{"memory.max", "memory.current", "memory.stat"} {
+		if raw[i], err = os.ReadFile(filepath.Join(s.SliceDir, name)); err != nil {
+			if i == 0 && errors.Is(err, fs.ErrNotExist) {
+				return s.SliceLimitBytes >> 20, s.SliceLimitBytes > 0, nil
+			}
+			return 0, false, err
+		}
+	}
+	return sliceRoom(string(raw[0]), string(raw[1]), string(raw[2]))
+}
+
+func sliceRoom(maxRaw, currentRaw, stat string) (uint64, bool, error) {
+	maxRaw = strings.TrimSpace(maxRaw)
+	if maxRaw == "max" {
+		return 0, false, nil
+	}
+	limit, err := strconv.ParseUint(maxRaw, 10, 64)
+	if err != nil {
+		return 0, false, fmt.Errorf("memory.max %q: %w", maxRaw, err)
+	}
+	current, err := strconv.ParseUint(strings.TrimSpace(currentRaw), 10, 64)
+	if err != nil {
+		return 0, false, fmt.Errorf("memory.current %q: %w", currentRaw, err)
+	}
+	var file uint64
+	for _, key := range []string{"active_file", "inactive_file"} {
+		v, err := statValue(stat, key)
+		if err != nil {
+			return 0, false, err
+		}
+		file += v
+	}
+	used := current - min(file, current)
+	if used >= limit {
+		return 0, true, nil
+	}
+	return (limit - used) >> 20, true, nil
+}
+
+// SliceOOMKills returns oom_kill of the VM slice's memory.events: the
+// processes that the kernel OOM-killed in the slice and in its VM scopes.
+func (s Stats) SliceOOMKills() (uint64, error) {
+	if s.SliceDir == "" {
+		return 0, nil
+	}
+	raw, err := os.ReadFile(filepath.Join(s.SliceDir, "memory.events"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return statValue(string(raw), "oom_kill")
+}
+
+// statValue returns the value of key in a cgroup "key value" file.
+func statValue(body, key string) (uint64, error) {
+	for _, line := range strings.Split(body, "\n") {
+		k, v, ok := strings.Cut(line, " ")
+		if ok && k == key {
+			n, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+			if err != nil {
+				return 0, fmt.Errorf("%s %q: %w", key, v, err)
+			}
+			return n, nil
+		}
+	}
+	return 0, fmt.Errorf("no %s", key)
 }
 
 // MemInfo returns MemTotal and MemAvailable in MiB.

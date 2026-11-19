@@ -30,18 +30,10 @@ on:
   # is not evaluated for tag pushes, so the `v*.*.*` release trigger below still
   # fires regardless of changed files.
   pull_request:
-    paths:
-      - "backend/**"
-      # Connector tests do not run unit or external-dependency tests.
-      - "!backend/tests/unit/**"
-      - "!backend/tests/external_dependency_unit/**"
-      # Imported by backend/tests/daily/connectors/gmail/.
-      - "backend/tests/unit/onyx/connectors/utils.py"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/pr-python-connector-tests.yml"
-      - ".github/actions/build-backend-image/**"
-      - ".github/actions/login-ecr-pullthrough-cache/**"
+    # No `paths:` filter: a stacked tip must see every change in its stack, so
+    # the filters in the `changes` job decide. A draft skips the tests, so they
+    # run again when the draft state changes.
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches:
       - main
@@ -81,7 +73,64 @@ env:
   BITBUCKET_EMAIL: ${{ vars.BITBUCKET_EMAIL }}
 
 jobs:
+  changes:
+    # Skips the tests for an unrelated change, a draft PR, or a PR with an
+    # open, ready child PR (see .github/actions/stack-position).
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      skip_reason: ${{ steps.stack.outputs.skip_reason }}
+      stack_base: ${{ steps.stack.outputs.stack_base }}
+      relevant: ${{ github.event_name != 'pull_request' && 'true' || (steps.backend_src.outputs.backend == 'true' || steps.filter.outputs.relevant == 'true') && 'true' || 'false' }}
+    steps:
+      - name: Checkout stack position action
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions/stack-position
+      - name: Find the PR's place in a stack
+        id: stack
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/stack-position
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
+        id: backend_src
+        if: github.event_name == 'pull_request'
+        with:
+          # A stacked PR diffs against the base of its whole stack: without a
+          # token, paths-filter runs git diff from `base`. See stack-position.
+          token: ${{ steps.stack.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ steps.stack.outputs.stack_base }}
+          # `every`: connector tests do not run unit or external dependency tests.
+          predicate-quantifier: every
+          filters: |
+            backend:
+              - 'backend/**'
+              - '!backend/tests/unit/**'
+              - '!backend/tests/external_dependency_unit/**'
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          token: ${{ steps.stack.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ steps.stack.outputs.stack_base }}
+          filters: |
+            relevant:
+              # Imported by backend/tests/daily/connectors/gmail/.
+              - 'backend/tests/unit/onyx/connectors/utils.py'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/pr-python-connector-tests.yml'
+              - '.github/actions/build-backend-image/**'
+              - '.github/actions/stack-position/**'
+              - '.github/actions/login-ecr-pullthrough-cache/**'
+
   build-backend-image:
+    needs: changes
+    if: needs.changes.outputs.skip_reason == '' && needs.changes.outputs.relevant == 'true'
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     # See https://runs-on.com/runners/linux/
@@ -117,7 +166,7 @@ jobs:
           docker-no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' && 'true' || 'false' }}
 
   connectors-check:
-    needs: build-backend-image
+    needs: [changes, build-backend-image]
     # id-token scoped to this job only -- it's the sole job that exchanges OIDC for AWS
     # credentials (to fetch connector secrets); build-backend-image authenticates to ECR via
     # the runner instance role instead.
@@ -156,6 +205,10 @@ jobs:
         id: changes
         uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         with:
+          # A stacked PR diffs against the base of its whole stack (see the
+          # `changes` job).
+          token: ${{ needs.changes.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ needs.changes.outputs.stack_base }}
           filters: |
             hubspot:
               - 'backend/onyx/connectors/hubspot/**'

@@ -63,7 +63,10 @@ from onyx.db.models import (
     IntegrationOAuthClient,
     User,
 )
-from onyx.db.plugin import create_integration_plugin__no_commit
+from onyx.db.plugin import (
+    create_integration_plugin__no_commit,
+    set_plugin_preferences__no_commit,
+)
 from onyx.db.plugin_access import (
     UserPluginState,
     affected_user_ids_for_plugins,
@@ -79,6 +82,7 @@ from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
 from onyx.external_apps.url_glob import UrlGlob
 from onyx.integrations.connection_models import (
+    SIGN_IN_SETTINGS_CHANGED_REASON,
     ConnectionState,
     read_connection_secret,
     read_oauth_client,
@@ -86,6 +90,7 @@ from onyx.integrations.connection_models import (
 from onyx.integrations.connections import (
     IntegrationStatus,
     MissingHeaderValueError,
+    connect_with_fields__no_commit,
     credential_field_keys,
     has_placeholder,
     header_field_keys,
@@ -98,7 +103,11 @@ from onyx.integrations.connections import (
     sign_in_settings_for,
 )
 from onyx.integrations.craft import always_asks, craft_service_urls
-from onyx.integrations.kinds.mcp_server import fetch_mcp_actions, mcp_action_specs
+from onyx.integrations.kinds.mcp_server import (
+    check_mcp_credential_fields,
+    fetch_mcp_actions,
+    mcp_action_specs,
+)
 from onyx.integrations.models import (
     EffectivePolicy,
     IntegrationActionSpec,
@@ -388,16 +397,47 @@ def _validate_url_patterns(patterns: list[str]) -> None:
 
 
 def _credential_fields_json(
-    fields: list[CredentialField] | None, header_template: Mapping[str, str] | None
+    fields: list[CredentialField] | None,
+    header_template: Mapping[str, str] | None,
+    stored: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]] | None:
     if fields is not None:
-        return [field.model_dump() for field in fields]
+        stored = [field.model_dump() for field in fields]
     if not header_template:
-        return None
-    return [
-        {"key": key, "label": key.replace("_", " "), "secret": True}
+        return stored if fields is not None else None
+    kept = {field.get("key"): field for field in stored or []}
+    template_fields = [
+        kept.get(key) or {"key": key, "label": key.replace("_", " "), "secret": True}
         for key in header_field_keys(header_template)
-    ] or None
+    ]
+    if fields is not None:
+        listed = {field["key"] for field in stored or []}
+        return [
+            *(stored or []),
+            *(f for f in template_fields if f["key"] not in listed),
+        ]
+    return template_fields or None
+
+
+_TOKEN_PLACEHOLDERS = frozenset({"access_token", "refresh_token", "token_type"})
+
+
+def _check_template_fits(
+    auth_method: IntegrationAuthMethod | None,
+    header_template: Mapping[str, str] | None,
+) -> None:
+    """A header template may use only the placeholders the sign-in method
+    fills; an API key method fills the fields that the template names."""
+    if auth_method is IntegrationAuthMethod.API_KEY or not header_template:
+        return
+    allowed = _TOKEN_PLACEHOLDERS if auth_method is not None else frozenset()
+    unknown = sorted(set(header_field_keys(header_template)) - allowed)
+    if unknown:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This sign-in method cannot fill the header placeholders: "
+            + ", ".join(unknown),
+        )
 
 
 def _validate_sign_in(
@@ -539,9 +579,12 @@ def _host_values(org_credentials: Mapping[str, str]) -> dict[str, str]:
 
 def _mcp_target(
     integration_id: int, db_session: Session
-) -> tuple[str, MCPTransport | None] | None:
+) -> tuple[str, MCPTransport | None, dict[str, str] | None] | None:
     server = get_mcp_server_for_integration(integration_id, db_session)
-    return None if server is None else (server.server_url, server.transport)
+    integration = get_integration_by_id(integration_id, db_session)
+    if server is None or integration is None:
+        return None
+    return server.server_url, server.transport, integration.header_template
 
 
 @contextmanager
@@ -643,6 +686,7 @@ def create_integration__no_commit(
         None if request.auth_mode is IntegrationAuthMode.NONE else request.auth_method
     )
     header_template = request.header_template
+    _check_template_fits(auth_method, header_template)
     if (
         preset is not None
         and header_template is None
@@ -756,7 +800,7 @@ def create_integration__no_commit(
             db_session=db_session,
         )
 
-    create_integration_plugin__no_commit(
+    plugin = create_integration_plugin__no_commit(
         integration_id=integration.id,
         name=name,
         description=request.description or "",
@@ -764,6 +808,8 @@ def create_integration__no_commit(
         for_organization=request.for_organization,
         db_session=db_session,
     )
+    if not request.for_organization:
+        set_plugin_preferences__no_commit(user.id, [plugin.id], True, db_session)
 
     if mcp_actions is not None:
         replace_integration_actions__no_commit(
@@ -838,6 +884,28 @@ def _apply_config(
     return False
 
 
+def _updated_header_template(
+    integration: Integration,
+    request: IntegrationUpdate,
+    auth_method: IntegrationAuthMethod | None,
+) -> dict[str, str] | None:
+    if "header_template" in request.model_fields_set:
+        return (
+            keep_masked_values(
+                request.header_template, integration.header_template or {}
+            )
+            if request.header_template is not None
+            else None
+        )
+    if (
+        integration.auth_method is IntegrationAuthMethod.API_KEY
+        and auth_method is not IntegrationAuthMethod.API_KEY
+    ):
+        # The API key placeholders cannot be filled with another method.
+        return None
+    return integration.header_template
+
+
 def update_integration__no_commit(
     user: User,
     integration_id: int,
@@ -863,6 +931,7 @@ def update_integration__no_commit(
     before = sign_in_settings_for(
         integration, stored_client, sign_in_host(integration, db_session)
     )
+    fields_before = set(credential_field_keys(integration))
 
     if "name" in fields and request.name is not None:
         name = request.name.strip()
@@ -890,13 +959,10 @@ def update_integration__no_commit(
     )
     if auth_mode is IntegrationAuthMode.NONE:
         auth_method = None
-    header_template = integration.header_template
+    header_template = _updated_header_template(integration, request, auth_method)
     if "header_template" in fields:
-        header_template = (
-            keep_masked_values(request.header_template, header_template or {})
-            if request.header_template is not None
-            else None
-        )
+        _check_template_fits(auth_method, header_template)
+    header_template_changed = header_template != integration.header_template
     if auth_method is not integration.auth_method or fields & {
         "config",
         "header_template",
@@ -914,11 +980,13 @@ def update_integration__no_commit(
     integration.auth_mode = auth_mode
     integration.auth_method = auth_method
     integration.header_template = header_template
-    if "credential_fields" in fields or "header_template" in fields:
-        integration.credential_fields = (
-            _credential_fields_json(request.credential_fields, header_template)
-            if auth_method is IntegrationAuthMethod.API_KEY
-            else None
+    if auth_method is not IntegrationAuthMethod.API_KEY:
+        integration.credential_fields = None
+    elif "credential_fields" in fields or "header_template" in fields:
+        integration.credential_fields = _credential_fields_json(
+            request.credential_fields,
+            header_template,
+            None if "credential_fields" in fields else integration.credential_fields,
         )
 
     if auth_method is not IntegrationAuthMethod.OAUTH2:
@@ -939,7 +1007,7 @@ def update_integration__no_commit(
         needs_sync = _apply_config(
             integration, shape, request.config, request.oauth_client, db_session
         )
-    if shape is IntegrationShape.CUSTOM and "header_template" in fields:
+    if shape is IntegrationShape.CUSTOM and header_template_changed:
         app = get_external_app_for_integration(integration.id, db_session)
         if app is not None:
             app.auth_template = dict(header_template or {})
@@ -950,7 +1018,8 @@ def update_integration__no_commit(
         get_oauth_client(db_session, integration.id),
         sign_in_host(integration, db_session),
     )
-    if before != after:
+    # A new field leaves each saved connection without a value for it.
+    if before != after or not set(credential_field_keys(integration)) <= fields_before:
         mark_sign_in_settings_changed(integration.id, db_session)
     if needs_sync:
         sync_integration_actions__no_commit(integration, db_session)
@@ -1040,6 +1109,11 @@ def _setup_reason(
     return "Connect the account of the organization."
 
 
+_SIGN_IN_CHANGED_ADMIN_REASON = (
+    "The sign-in settings changed. Connect the account of the organization again."
+)
+
+
 def _organization_statuses(
     integrations: Collection[Integration], db_session: Session
 ) -> dict[int, IntegrationStatus]:
@@ -1056,6 +1130,11 @@ def _organization_statuses(
         None,
         db_session,
     )
+    for integration_id, status in statuses.items():
+        if status.reason == SIGN_IN_SETTINGS_CHANGED_REASON:
+            statuses[integration_id] = status.model_copy(
+                update={"reason": _SIGN_IN_CHANGED_ADMIN_REASON}
+            )
     for integration in integrations:
         if header_template_missing(integration):
             statuses[integration.id] = IntegrationStatus(
@@ -1318,13 +1397,30 @@ def _check_action_keys(
         )
 
 
+def save_connection_fields__no_commit(
+    integration: Integration,
+    user: User | None,
+    fields: Mapping[str, str],
+    db_session: Session,
+) -> None:
+    """Check the key with the server of an MCP integration, then save the
+    connection of ``user``, or of the organization when ``user`` is None.
+    The check runs before the save locks the integration row."""
+    check_mcp_credential_fields(
+        integration, fields, user.email if user is not None else None, db_session
+    )
+    connect_with_fields__no_commit(integration, user, fields, db_session)
+
+
 def set_admin_actions__no_commit(
     integration: Integration, request: IntegrationActionsUpdate, db_session: Session
 ) -> None:
     _check_action_keys(integration, request.actions, db_session)
-    values: dict[str, IntegrationActionPolicyValue | None] = {
-        DEFAULT_ACTION_KEY: _stored_value(request.default_policy)
-    }
+    # Only the fields that the request names change, so a save from a stale
+    # page does not undo a newer save of another action.
+    values: dict[str, IntegrationActionPolicyValue | None] = {}
+    if "default_policy" in request.model_fields_set:
+        values[DEFAULT_ACTION_KEY] = _stored_value(request.default_policy)
     values.update(
         {key: _stored_value(policy) for key, policy in request.actions.items()}
     )
@@ -1518,6 +1614,7 @@ def set_action_grants__no_commit(
     grants: Mapping[str, str | None],
     db_session: Session,
 ) -> None:
+    lock_integration__no_commit(integration.id, db_session)
     if not integration.users_can_save_always_allow:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -1535,6 +1632,12 @@ def set_action_grants__no_commit(
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 f"Your admin blocks {key}. You cannot save Always allow for it.",
+            )
+        if always_asks(integration.kind, key):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Craft asks for approval for each {key} request. "
+                "You cannot save Always allow for it.",
             )
         if admin_policies[key] is EffectivePolicy.ALLOW:
             raise OnyxError(

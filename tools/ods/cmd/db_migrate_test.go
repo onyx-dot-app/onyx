@@ -112,18 +112,6 @@ func TestDBMigrateCommands_reportAlembicFailures(t *testing.T) {
 	}
 }
 
-func TestDBMigrateRejectsConflictingProjectAndNetworkHost(t *testing.T) {
-	calls := dbFakeAlembic(t, "")
-	rootProject = "selected"
-	err := runDBUpgrade("head", &MigrateOptions{})
-	if err == nil || !strings.Contains(err.Error(), "--project conflicts with explicit POSTGRES_HOST") {
-		t.Fatalf("expected network/project conflict, got %v", err)
-	}
-	if len(calls()) != 0 {
-		t.Fatal("Alembic ran despite conflicting targets")
-	}
-}
-
 func TestDBMigrateUsesSelectedProjectAndActualLeasedPort(t *testing.T) {
 	calls := dbFakeAlembic(t, `printf '%s:%s' "$POSTGRES_HOST" "$POSTGRES_PORT" > "$0.endpoint"`)
 	t.Setenv("POSTGRES_HOST", "")

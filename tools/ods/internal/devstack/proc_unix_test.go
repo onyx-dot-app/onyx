@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -338,4 +339,35 @@ func TestRunServiceStartupInterruptHelper(t *testing.T) {
 		t.Fatalf("service launched after cancellation: %v", err)
 	}
 	fmt.Println("startup canceled")
+}
+
+// The agent is a copy of the test binary rather than of a system tool such as
+// sleep: a multicall coreutils (uutils) exits when its name is unknown.
+func TestAgentDirsFindsARunningAgent(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("reads /proc, which exists only on Linux")
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := filepath.Join(t.TempDir(), "claude")
+	if err := os.WriteFile(agent, data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	work := t.TempDir()
+	cmd := exec.Command(agent)
+	cmd.Dir = work
+	cmd.Env = append(os.Environ(), fakeServiceEnv+"=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	if dirs, err := AgentDirs(); err != nil || !slices.Contains(dirs, work) {
+		t.Fatalf("AgentDirs() = %v, want it to contain %s", dirs, work)
+	}
 }

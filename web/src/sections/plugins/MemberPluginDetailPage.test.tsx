@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from "@tests/setup/test-utils";
+import { toast } from "@opal/layouts";
 import MemberPluginDetailPage from "@/sections/plugins/MemberPluginDetailPage";
 import messages from "@/i18n/messages/en.json";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
@@ -416,7 +417,11 @@ test("only an organization-wide action manager publishes", async () => {
   ).toBeDisabled();
 });
 
-test("the owner publishes after the confirmation", async () => {
+test.each([
+  [{ plugin_id: LINEAR_PLUGIN_ID, name: "Linear-2" }, "Linear-2"],
+  // An older backend answers 204 with no body.
+  [null, "Linear"],
+])("the owner publishes after the confirmation (%o)", async (body, name) => {
   mockGlobalHolder = true;
   const fetchMock = overview(
     [
@@ -427,10 +432,10 @@ test("the owner publishes after the confirmation", async () => {
       }),
     ],
     {
-      [`POST /api/plugins/${LINEAR_PLUGIN_ID}/publish`]: () =>
-        new Response(null, { status: 204 }),
+      [`POST /api/plugins/${LINEAR_PLUGIN_ID}/publish`]: body,
     }
   );
+  const success = jest.spyOn(toast, "success");
   const u = user();
   await u.click(
     await screen.findByRole("button", { name: copy.detail.publish.label })
@@ -447,5 +452,10 @@ test("the owner publishes after the confirmation", async () => {
           init?.method === "POST"
       )
     ).toBe(true)
+  );
+  await waitFor(() =>
+    expect(success).toHaveBeenCalledWith(
+      copy.detail.publish.done.replace("{name}", name)
+    )
   );
 });

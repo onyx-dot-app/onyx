@@ -7,12 +7,10 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
     PluginInstallationPolicy,
-    SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.models import (
     Plugin__UserGroup,
-    Skill__UserGroup,
     User,
     User__UserGroup,
     UserGroup,
@@ -25,7 +23,7 @@ from onyx.db.plugin import (
     PluginGroupSetting,
     apply_plugin_access_change__no_commit,
 )
-from onyx.db.skill import SkillManagementPolicy, fetch_skill
+from onyx.db.skill import fetch_editable_skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from tests.external_dependency_unit.craft.db_helpers import (
@@ -132,9 +130,8 @@ def test_scoped_manager_edit_scope_checks_direct_user_shares(
 
     def editable() -> bool:
         return (
-            fetch_skill(
+            fetch_editable_skill(
                 skill.id,
-                policy=SkillManagementPolicy.EDIT,
                 user=manager,
                 db_session=db_session,
             )
@@ -151,12 +148,12 @@ def test_scoped_manager_edit_scope_checks_direct_user_shares(
     assert not editable()
 
 
-def test_not_available_writes_and_the_legacy_rows(
+def test_not_available_writes(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    """Not available is accepted. The legacy column gets AVAILABLE, and a
-    group row with only a setting gets no legacy share."""
+    """Not available is accepted as the company setting and as a group
+    setting with no share."""
     admin = make_user(db_session, is_admin=True)
     group = make_group(db_session)
     skill = make_skill(db_session, author_user_id=admin.id)
@@ -174,19 +171,11 @@ def test_not_available_writes_and_the_legacy_rows(
     ).raise_first_failure()
 
     db_session.refresh(skill)
-    assert skill.installation_policy == SkillInstallationPolicy.AVAILABLE
+    assert skill.installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
     row = _group_row(db_session, skill.id, group)
     assert row is not None
+    assert row.permission is None
     assert row.installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
-    assert (
-        db_session.scalar(
-            select(Skill__UserGroup).where(
-                Skill__UserGroup.skill_id == skill.id,
-                Skill__UserGroup.user_group_id == group.id,
-            )
-        )
-        is None
-    )
 
 
 def test_owner_removing_a_group_share_keeps_its_setting(

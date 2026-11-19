@@ -156,8 +156,7 @@ one commit (`backend/ee/onyx/db/community_downgrade.py`):
   already in flight can write some rows back; they grant nothing on a public pair.
 - `remove_custom_user_groups__no_commit` deletes the non-default groups directly,
   not through group sync. First it makes their shared agents, document sets, LLM
-  providers, MCP servers and plugins public. A plugin, with or without a skill
-  row, is published when it has a `plugin__user_group` row with a permission
+  providers, MCP servers and plugins public. A plugin is published when it has a `plugin__user_group` row with a permission
   for a removed group and no `NOT_AVAILABLE` setting; a name clash takes the
   next free name, and the log names each published plugin ([[skills]]). A
   plugin already in the Organization library as `NOT_AVAILABLE` stays so: its

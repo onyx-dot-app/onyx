@@ -6,7 +6,8 @@ from unittest.mock import MagicMock, patch
 
 from pydantic import JsonValue
 
-from onyx.agents.models import RunResult
+from onyx.agents.models import RunResult, RunStatus
+from onyx.agents.tool_execution import NO_TOOL_CAN_RUN_RESULT
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import ResponsePresenter
 from onyx.chat.renderer import ToolRenderer
@@ -34,6 +35,7 @@ from onyx.llm.models import (
     ReasoningEffort,
     ToolCall,
     ToolChoice,
+    ToolChoiceOptions,
     ToolResult,
     UserMessage,
 )
@@ -117,6 +119,7 @@ class ScriptedLLM(LitellmLLM):
         )
         self._steps = list(steps)
         self.prompts: list[list[ChatCompletionMessage]] = []
+        self.tool_choices: list[ToolChoice | None] = []
 
     @property
     def config(self) -> LLMConfig:
@@ -131,7 +134,7 @@ class ScriptedLLM(LitellmLLM):
         self,
         prompt: list[ChatCompletionMessage],
         tools: list[dict[str, JsonValue]] | None = None,  # noqa: ARG002
-        tool_choice: ToolChoice | None = None,  # noqa: ARG002
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict[str, JsonValue] | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,  # noqa: ARG002
@@ -141,6 +144,7 @@ class ScriptedLLM(LitellmLLM):
         manage_tool_strictness: bool = False,  # noqa: ARG002
     ) -> Iterator[ModelResponseStream]:
         self.prompts.append(prompt)
+        self.tool_choices.append(tool_choice)
         if not self._steps:
             raise AssertionError("LLM called more times than scripted")
         return iter(self._steps.pop(0))
@@ -159,7 +163,10 @@ class Run:
 
 
 def run_agent(
-    steps: list[list[ModelResponseStream]], *, is_reasoning_model: bool
+    steps: list[list[ModelResponseStream]],
+    *,
+    is_reasoning_model: bool,
+    max_steps: int | None = None,
 ) -> Run:
     llm = ScriptedLLM(steps)
     packets: list[Packet] = []
@@ -180,7 +187,7 @@ def run_agent(
             bash_tool=bash_tool,
         )
         run = feature.start(
-            max_steps=len(steps),
+            max_steps=max_steps or len(steps),
             messages=[UserMessage(content="How does chat work?")],
             parent_run_id="parent-run",
             parent_message_id="parent-message",
@@ -319,4 +326,28 @@ def test_final_reasoning_uses_parent_card_without_duplicate_answer_text() -> Non
         for packet in run.packets
         if isinstance(packet.obj, CodingAgentThinkingDelta)
     )
+    assert run.result.output.text == "The final answer."
+
+
+def test_denied_final_call_before_the_limit_takes_one_last_answer_step() -> None:
+    run = run_agent(
+        [generate_answer(), bash("late", "ls"), FINAL_ANSWER],
+        is_reasoning_model=True,
+        max_steps=10,
+    )
+
+    assert run.llm.tool_choices == [
+        ToolChoiceOptions.REQUIRED,
+        ToolChoiceOptions.NONE,
+        ToolChoiceOptions.NONE,
+    ]
+    denied = [m for m in run.llm.prompts[2] if isinstance(m, ToolMessage)]
+    assert [(m.tool_call_id, m.content) for m in denied][-1] == (
+        "late",
+        NO_TOOL_CAN_RUN_RESULT,
+    )
+    assert run.result.stop_reason == RunStatus.COMPLETE
+    assert run.result.steps == 3
+    # The answer is the third step's message.
+    assert (run.result.output.id or "").endswith(":2")
     assert run.result.output.text == "The final answer."

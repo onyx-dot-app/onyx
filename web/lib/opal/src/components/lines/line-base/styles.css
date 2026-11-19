@@ -1,0 +1,108 @@
+@reference "#reference.css";
+
+/* ── Line and Log ────────────────────────────────────────────────────────────
+   The status colours the icon (icons stroke with `currentColor`, so a `text-*`
+   colour sets it), and the heavy weight tints the line and its body. A row of
+   your own brings its own colours. An interactive line takes its hover and
+   press colours from `Interactive.Stateless` (`LineSurface`). */
+
+.opal-line {
+  @apply rounded-08;
+}
+
+/* The body starts under the content: past the line's padding (0.5rem), the
+   icon's column (1.25rem) and the gap (0.25rem). */
+.opal-line-body {
+  @apply ps-8 pe-2 pb-2;
+}
+
+/* Without the outer padding, the body keeps its place under the content. */
+.opal-line[data-opal-line-padding="0"] .opal-line-body {
+  @apply ps-7 pe-1 pb-1;
+}
+
+/* `content` pads only the start, to sit under the content, flush with the
+   row: a step's row hovers without a fill, so nothing needs a gap. */
+.opal-line .opal-line-body[data-opal-line-body-inset="content"] {
+  @apply pe-0 pb-0;
+}
+
+/* A step's row (a `Collapsible.Header` with `hover="subtle"`) toggles it:
+   on hover, the title and a default icon darken, with no fill. The colours
+   and timing are `Interactive`'s tertiary default: `text-03` at rest,
+   `text-04` on hover, over `--duration-interactive`, together. */
+.opal-line-title {
+  @apply min-w-0 text-text-03;
+}
+.opal-line-title,
+.opal-line .opal-line-icon {
+  transition: color var(--duration-interactive) ease-in-out;
+}
+.opal-line[data-opal-line-status="default"]
+  .opal-collapsible-header[data-hover="subtle"]:hover
+  :is(.opal-line-title, .opal-line-icon) {
+  @apply text-text-04;
+}
+
+/* Inside an interactive line, the body keeps its text selection and an
+   ordinary cursor: only the row toggles the line. */
+.opal-line .interactive .opal-line-body {
+  @apply cursor-auto select-text;
+}
+
+/* `flush` has no padding: a card's steps sit right under its header, inside
+   the card's own padding. */
+.opal-line .opal-line-body[data-opal-line-body-inset="flush"] {
+  @apply p-0;
+}
+
+/* A card that cannot fold yet keeps its header (see `Line`), disabled: no
+   toggle, and an ordinary cursor rather than a not-allowed one. */
+.opal-line[data-opal-line-flavour="card"]
+  .opal-collapsible-header[data-disabled] {
+  @apply cursor-auto;
+}
+
+/* ── Card flavour ────────────────────────────────────────────────────────────
+   A run card: 0.25rem of padding around the header and the body, 0.75rem
+   corners, and a neutral fill while filled. A folded card that its header
+   toggles fills on hover too. */
+.opal-line[data-opal-line-flavour="card"] {
+  @apply rounded-12 p-1 transition-colors duration-300;
+}
+.opal-line[data-opal-line-flavour="card"][data-opal-line-filled="true"],
+.opal-line[data-opal-line-flavour="card"][data-opal-line-clickable="true"]:hover {
+  @apply bg-background-tint-00;
+}
+
+.opal-line .opal-line-icon {
+  @apply shrink-0 text-text-03;
+}
+/* A status other than `default` colours the icon and the title with
+   `CONTENT_STATUS_COLORS` (as `Content`, `Badge` and `Tag` do), at rest and
+   on hover. `LineRoot` sets the colour as `--opal-line-status-fg`. */
+.opal-line:not([data-opal-line-status="default"]) .opal-line-icon,
+.opal-line:not([data-opal-line-status="default"]) .opal-line-title {
+  color: var(--opal-line-status-fg);
+}
+
+/* On hover, an error row's red deepens to the strongest danger step. The
+   other statuses have no step above -05, so they keep their colour. */
+.opal-line[data-opal-line-status="error"]
+  .opal-collapsible-header[data-hover="subtle"]:hover
+  :is(.opal-line-title, .opal-line-icon) {
+  color: var(--action-danger-06);
+}
+
+.opal-line[data-opal-line-weight="heavy"][data-opal-line-status="info"] {
+  @apply bg-status-info-00;
+}
+.opal-line[data-opal-line-weight="heavy"][data-opal-line-status="success"] {
+  @apply bg-status-success-00;
+}
+.opal-line[data-opal-line-weight="heavy"][data-opal-line-status="warning"] {
+  @apply bg-status-warning-00;
+}
+.opal-line[data-opal-line-weight="heavy"][data-opal-line-status="error"] {
+  @apply bg-status-error-00;
+}

@@ -58,48 +58,33 @@ func TestRunDBRestore_picksTheToolFromTheExtension(t *testing.T) {
 	}
 }
 
-func TestRunDBRestore_failsOnPgRestoreErrorsAndCleansUp(t *testing.T) {
-	binDir := dbSetup(t)
-	_, calls := dbFakeDocker(t, binDir, `if [ "$1" = exec ] && [ "$6" = pg_restore ]; then exit 1; fi`)
-	logs := dbCaptureLog(t)
-	input := filepath.Join(t.TempDir(), "backup.dump")
-	dbWriteSnapshot(t, input)
-
-	err := runDBRestore(input, &DBRestoreOptions{Yes: true})
-	if err == nil || !strings.Contains(err.Error(), "pg_restore") {
-		t.Fatalf("expected a pg_restore error, got %v", err)
-	}
-
-	if strings.Contains(logs.String(), "Restore completed successfully") {
-		t.Fatalf("failed restore reported success: %q", logs.String())
-	}
-	execs := dbDockerExecs(calls())
-	if last := execs[len(execs)-1]; !slices.Contains(last, "rm") {
-		t.Fatalf("expected the temporary file to be removed, got:\n%s", dbFormatCalls(execs))
-	}
-}
-
 func TestRunDBRestore_reportsFailures(t *testing.T) {
 	cases := []struct {
 		name      string
+		file      string
 		behaviour string
 		wantErr   string
 		wantExecs int
 	}{
-		{"copy fails", `if [ "$1" = cp ]; then exit 4; fi`, "Failed to copy file to container: exit status 4", 2},
-		{"psql fails", `if [ "$1" = exec ] && [ "$6" = psql ]; then exit 3; fi`, "Failed to restore from SQL file: exit status 3", 3},
+		{"copy fails", "backup.sql", `if [ "$1" = cp ]; then exit 4; fi`, "Failed to copy file to container: exit status 4", 2},
+		{"psql fails", "backup.sql", `if [ "$1" = exec ] && [ "$6" = psql ]; then exit 3; fi`, "Failed to restore from SQL file: exit status 3", 3},
+		{"pg_restore fails", "backup.dump", `if [ "$1" = exec ] && [ "$6" = pg_restore ]; then exit 1; fi`, "Failed to run pg_restore: exit status 1", 3},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			binDir := dbSetup(t)
 			_, calls := dbFakeDocker(t, binDir, c.behaviour)
-			input := filepath.Join(t.TempDir(), "backup.sql")
+			logs := dbCaptureLog(t)
+			input := filepath.Join(t.TempDir(), c.file)
 			dbWriteSnapshot(t, input)
 
 			err := runDBRestore(input, &DBRestoreOptions{Yes: true})
 
 			if err == nil || err.Error() != c.wantErr {
 				t.Fatalf("expected %q, got %v", c.wantErr, err)
+			}
+			if strings.Contains(logs.String(), "Restore completed successfully") {
+				t.Fatalf("failed restore reported success: %q", logs.String())
 			}
 			execs := dbDockerExecs(calls())
 			if len(execs) != c.wantExecs {

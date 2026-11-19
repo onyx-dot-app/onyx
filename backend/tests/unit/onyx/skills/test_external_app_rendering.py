@@ -7,13 +7,11 @@ from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
-from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
-from onyx.db.models import Skill
 from onyx.external_apps.providers.zendesk import ZendeskProvider
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
@@ -187,11 +185,10 @@ def test_static_and_rendered_files_share_source_exclusions(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
     monkeypatch.setattr("onyx.skills.built_in.BUILTIN_SKILLS_PATH", tmp_path)
-    skill = cast(Skill, SimpleNamespace(id=uuid4(), name="zendesk"))
     definition = BuiltInSkillDefinition(built_in_skill_id="zendesk")
 
     static: dict[str, bytes] = {}
-    _add_static_builtin(static, skill, definition)
+    _add_static_builtin(static, "zendesk", definition)
     assert static == {"zendesk/helper.py": b"print('ready')"}
 
     rendered = render_external_app_files(

@@ -1,0 +1,79 @@
+name: "Stack position"
+description: >-
+  Decides if a pull request skips the slow suites. A draft PR skips them until
+  it is ready for review. A PR with an open, ready child PR skips them, because
+  the stack tip tests every change below it. The merge queue accepts the
+  skipped PR only when a descendant's passing run contains its head (see
+  .github/actions/check-tested-base).
+outputs:
+  stack_base:
+    description: >-
+      For a PR whose base is the head branch of an open same-repository PR: the
+      commit where the stack leaves its root branch. Pass it as the base of
+      dorny/paths-filter, so the filters see every change in the stack and not
+      only this PR's change. Empty for a PR that is not stacked.
+    value: ${{ steps.position.outputs.stack_base }}
+  skip_reason:
+    description: "Why this PR skips the slow suites, or empty when it runs them"
+    value: ${{ steps.position.outputs.skip_reason }}
+runs:
+  using: "composite"
+  steps:
+    - name: Find the parent and child PRs
+      id: position
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+      # Read the PR from the API: a re-run reuses the original event, whose
+      # base and draft state can be stale.
+      run: |
+        set -euo pipefail
+        child=""
+        stack_base=""
+        pr=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefName,baseRefName,isDraft)
+        draft=$(jq -r .isDraft <<< "$pr")
+        if [[ "$SAME_REPO" == "true" ]]; then
+          HEAD_REF=$(jq -r .headRefName <<< "$pr")
+          BASE_REF=$(jq -r .baseRefName <<< "$pr")
+          # A draft child does not test this PR, so it does not count.
+          child=$(gh pr list --repo "$REPO" --base "$HEAD_REF" --state open \
+            --json number,isCrossRepository,isDraft \
+            --jq '[.[] | select(.isCrossRepository == false and .isDraft == false) | .number] | first // empty')
+          root=$(gh pr list --repo "$REPO" --head "$BASE_REF" --state open \
+            --json baseRefName,isCrossRepository \
+            --jq '[.[] | select(.isCrossRepository == false) | .baseRefName] | first // empty')
+          if [[ -n "$root" ]]; then
+            # Walk down the stack to its root branch, the base of its lowest PR.
+            # Read open PRs once: stacks can be dozens of PRs deep.
+            open_prs=$(gh pr list --repo "$REPO" --state open --limit 2000 \
+              --json headRefName,baseRefName,isCrossRepository)
+            for _ in $(seq 1 500); do
+              next=$(jq -r --arg ref "$root" \
+                '[.[] | select(.isCrossRepository == false and .headRefName == $ref) | .baseRefName] | first // empty' \
+                <<< "$open_prs")
+              [[ -n "$next" ]] || break
+              root="$next"
+            done
+            # GITHUB_SHA is the PR's merge commit, so this is the newest root
+            # branch commit that the stack contains.
+            stack_base=$(gh api "repos/${REPO}/compare/${root}...${GITHUB_SHA}?per_page=1" \
+              --jq .merge_base_commit.sha)
+          fi
+        fi
+        skip_reason=""
+        if [[ "$draft" == "true" ]]; then
+          skip_reason="This PR is a draft. The slow suites run when it is ready for review."
+        elif [[ -n "$child" ]]; then
+          skip_reason="PR #${child} is stacked on this PR. The stack tip runs the slow suites for this PR's changes."
+        fi
+        echo "child=${child} stack_base=${stack_base} draft=${draft}"
+        if [[ -n "$skip_reason" ]]; then
+          echo "::notice::${skip_reason}"
+        fi
+        {
+          echo "stack_base=${stack_base}"
+          echo "skip_reason=${skip_reason}"
+        } >> "$GITHUB_OUTPUT"

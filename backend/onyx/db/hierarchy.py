@@ -57,6 +57,23 @@ SOURCES_WITH_HIERARCHY_NODE_DOCUMENTS: set[DocumentSource] = {
 }
 
 
+def hierarchy_node_own_document_id() -> ColumnElement[str | None]:
+    """The document that a hierarchy node is, such as a Confluence page, or
+    NULL. The indexing links a node to its document only when both are in one
+    batch. A page that gains its node later (its first child) keeps
+    `document_id` NULL, so the raw id, which equals the document id for these
+    sources, finds the document too."""
+    return func.coalesce(
+        HierarchyNode.document_id,
+        case(
+            (
+                HierarchyNode.source.in_(SOURCES_WITH_HIERARCHY_NODE_DOCUMENTS),
+                HierarchyNode.raw_node_id,
+            ),
+        ),
+    )
+
+
 def _get_source_display_name(source: DocumentSource) -> str:
     """Get a human-readable display name for a source type."""
     return source.value.replace("_", " ").title()
@@ -1450,19 +1467,7 @@ def get_subtree_document_counts_for_cc_pair(
         .join(Document, Document.parent_hierarchy_node_id == subtree.c.node_id)
         .join(pair_document, and_(pair_document.id == Document.id, indexed_for_pair))
     )
-    # The indexing links a node to its document only when both are in one
-    # batch. A page that gains its node later (its first child) keeps
-    # document_id NULL, so the raw id, which equals the document id for these
-    # sources, finds the document too.
-    root_own_document_id = func.coalesce(
-        HierarchyNode.document_id,
-        case(
-            (
-                HierarchyNode.source.in_(SOURCES_WITH_HIERARCHY_NODE_DOCUMENTS),
-                HierarchyNode.raw_node_id,
-            ),
-        ),
-    )
+    root_own_document_id = hierarchy_node_own_document_id()
     root_documents = (
         select(HierarchyNode.id.label("root_id"))
         .join(

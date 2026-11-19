@@ -8,7 +8,8 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select
+from fastapi import Request
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DEFAULT_PERSONA_ID
@@ -16,11 +17,15 @@ from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
     MarketplaceKind,
+    Permission,
     PluginInstallationPolicy,
     SkillSharePermission,
 )
-from onyx.db.models import Marketplace, Persona, Plugin, PluginSkill, User
+from onyx.db.models import Marketplace, Persona, Plugin, PluginSkill, Skill, User
+from onyx.db.plugin_access import load_user_plugin_states
 from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.models import ActionSettings
+from onyx.integrations.policy import agent_plugin_settings
 from onyx.server.features.integrations import admin_api, api, plugins_api
 from onyx.server.features.integrations.models import (
     IntegrationCreate,
@@ -31,6 +36,7 @@ from onyx.server.features.integrations.models import (
     PluginUserShare,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.craft.db_helpers import make_skill
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     link_persona,
@@ -91,12 +97,17 @@ def no_craft_reload() -> Generator[None, None, None]:
 
 
 def _create(
-    user: User, db_session: Session, created: list[int], *, for_organization: bool
+    user: User,
+    db_session: Session,
+    created: list[int],
+    *,
+    for_organization: bool,
+    name: str | None = None,
 ) -> UUID:
     detail = admin_api.create_integration(
         IntegrationCreate(
             for_organization=for_organization,
-            name=f"weather-{uuid4().hex[:8]}",
+            name=name or f"weather-{uuid4().hex[:8]}",
             auth_mode=IntegrationAuthMode.SHARED,
             auth_method=IntegrationAuthMethod.API_KEY,
             header_template={"X-Api-Key": "{api_key}"},
@@ -176,6 +187,53 @@ def _persona(
 
 
 # Plugins an agent runs
+
+
+@pytest.mark.parametrize("default_agent", [False, True])
+@pytest.mark.parametrize("published_only", [False, True])
+def test_agent_state_filter_preserves_settings(
+    db_session: Session,
+    admin: User,
+    scoped: User,
+    created: list[int],
+    default_agent: bool,
+    published_only: bool,
+) -> None:
+    visible_id = _create(admin, db_session, created, for_organization=True)
+    private_id = _create(scoped, db_session, created, for_organization=False)
+    _create(admin, db_session, created, for_organization=True)
+    states = load_user_plugin_states([scoped.id], db_session)
+    if published_only:
+        states = [state for state in states if state.published]
+    persona_id = DEFAULT_PERSONA_ID if default_agent else 7
+    for links in (
+        {
+            visible_id: ActionSettings(),
+            private_id: ActionSettings(),
+            uuid4(): ActionSettings(),
+        },
+        {},
+    ):
+        if default_agent:
+            expected = {
+                state.plugin_id: links.get(state.plugin_id)
+                for state in states
+                if state.enabled
+            }
+        else:
+            visible = {state.plugin_id for state in states}
+            expected = {key: value for key, value in links.items() if key in visible}
+        with patch(
+            "onyx.integrations.policy.load_user_plugin_states",
+            wraps=load_user_plugin_states,
+        ) as load:
+            actual = agent_plugin_settings(
+                db_session, scoped.id, persona_id, links, published_only=published_only
+            )
+        assert actual == expected
+        assert load.call_args is not None
+        requested = load.call_args.kwargs.get("plugin_ids")
+        assert requested == (None if default_agent else list(links))
 
 
 def test_default_agent_runs_the_plugins_the_user_turned_on(
@@ -354,10 +412,22 @@ def test_install_setting_needs_an_organization_library_plugin(
 # Shares and publishing
 
 
+def _http_request(token_scopes: list[Permission] | None = None) -> Request:
+    request = Request({"type": "http"})
+    if token_scopes is not None:
+        request.state.token_scopes = token_scopes
+    return request
+
+
 def _share(
-    user: User, plugin_id: UUID, user_ids: list[UUID], db_session: Session
+    user: User,
+    plugin_id: UUID,
+    user_ids: list[UUID],
+    db_session: Session,
+    token_scopes: list[Permission] | None = None,
 ) -> None:
     plugins_api.share_plugin(
+        _http_request(token_scopes),
         plugin_id,
         PluginAccessUpdate(
             user_shares=[
@@ -382,7 +452,9 @@ def test_owner_shares_a_private_plugin(
     assert _enabled_in_member_list(member, plugin_id, db_session) is None
 
     _share(scoped, plugin_id, [member.id], db_session)
-    access = plugins_api.get_plugin_access(plugin_id, scoped, db_session)
+    access = plugins_api.get_plugin_access(
+        _http_request(), plugin_id, scoped, db_session
+    )
     assert [(share.user_id, share.email) for share in access.user_shares] == [
         (member.id, member.email)
     ]
@@ -396,6 +468,89 @@ def test_owner_shares_a_private_plugin(
 
     _share(scoped, plugin_id, [], db_session)
     assert _enabled_in_member_list(member, plugin_id, db_session) is None
+
+
+def test_a_basic_token_reaches_only_the_plugins_of_its_user(
+    db_session: Session,
+    admin: User,
+    scoped: User,
+    member: User,
+    created: list[int],
+) -> None:
+    plugin_id = _create(scoped, db_session, created, for_organization=False)
+    basic = [Permission.BASIC_ACCESS]
+
+    assert (
+        _status(
+            lambda: plugins_api.get_plugin_access(
+                _http_request(basic), plugin_id, admin, db_session
+            )
+        )
+        == 404
+    )
+    db_session.rollback()
+    assert (
+        _status(lambda: _share(admin, plugin_id, [member.id], db_session, basic)) == 404
+    )
+    db_session.rollback()
+    assert (
+        _status(
+            lambda: plugins_api.publish_plugin(
+                _http_request(basic), plugin_id, admin, db_session
+            )
+        )
+        == 404
+    )
+    db_session.rollback()
+
+    _share(scoped, plugin_id, [member.id], db_session, basic)
+    access = plugins_api.get_plugin_access(
+        _http_request(basic), plugin_id, scoped, db_session
+    )
+    assert [share.user_id for share in access.user_shares] == [member.id]
+
+    own_plugin_id = _create(admin, db_session, created, for_organization=False)
+    assert (
+        _status(
+            lambda: plugins_api.publish_plugin(
+                _http_request(basic), own_plugin_id, admin, db_session
+            )
+        )
+        == 403
+    )
+
+
+def test_publish_returns_the_new_name_and_refuses_the_name_of_a_skill(
+    db_session: Session, admin: User, created: list[int]
+) -> None:
+    name = f"weather-{uuid4().hex[:8]}"
+    _create(admin, db_session, created, for_organization=True, name=name)
+    plugin_id = _create(admin, db_session, created, for_organization=False, name=name)
+
+    published = plugins_api.publish_plugin(
+        _http_request(), plugin_id, admin, db_session
+    )
+    assert published.name == f"{name}-2"
+
+    skill = make_skill(db_session, name=f"skill-{uuid4().hex[:8]}", is_public=True)
+    db_session.commit()
+    try:
+        clashing = _create(
+            admin, db_session, created, for_organization=False, name=skill.name
+        )
+        assert (
+            _status(
+                lambda: plugins_api.publish_plugin(
+                    _http_request(), clashing, admin, db_session
+                )
+            )
+            == 409
+        )
+        db_session.rollback()
+    finally:
+        db_session.execute(delete(Plugin).where(Plugin.id == skill.id))
+        db_session.execute(delete(Skill).where(Skill.id == skill.id))
+        db_session.commit()
 
 
 def test_sharing_setting_off_stops_a_new_share(
@@ -420,18 +575,19 @@ def test_publish_needs_an_organization_wide_action_manager(
 ) -> None:
     plugin_id = _create(scoped, db_session, created, for_organization=False)
     publish = lambda user: plugins_api.publish_plugin(  # noqa: E731
-        plugin_id, user, db_session
+        _http_request(), plugin_id, user, db_session
     )
     assert _status(lambda: publish(scoped)) == 403
     db_session.rollback()
     assert _status(lambda: publish(member)) == 404
     db_session.rollback()
 
-    assert publish(admin).status_code == 204
+    published = publish(admin)
     db_session.expire_all()
     plugin = db_session.get(Plugin, plugin_id)
     assert plugin is not None
     assert plugin.published_version_id == plugin.current_version_id
+    assert (published.plugin_id, published.name) == (plugin_id, plugin.name)
     kind = db_session.scalar(
         select(Marketplace.kind).where(Marketplace.id == plugin.marketplace_id)
     )

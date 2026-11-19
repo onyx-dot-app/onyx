@@ -611,6 +611,7 @@
                   "developers/api_reference/user_management/activate_user_api",
                   "developers/api_reference/user_management/deactivate_user_api",
                   "developers/api_reference/user_management/delete_user",
+                  "developers/api_reference/user_management/transfer_private_plugins",
                   "developers/api_reference/user_management/list_all_accepted_users",
                   "developers/api_reference/user_management/list_minimal_user_groups",
                   "developers/api_reference/user_management/get_permission_registry"

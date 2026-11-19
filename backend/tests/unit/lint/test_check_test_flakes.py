@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from lint.check_test_flakes import check, playwright_findings, python_findings, scan
+from lint.check_test_flakes import check, python_findings
 
 
 def test_python_calls_and_markers() -> None:
@@ -29,31 +29,6 @@ p.skip(f"{dynamic_reason}")
         (12, "skip", True),
         (13, "skip", True),
         (14, "skip", False),
-    ]
-
-
-def test_playwright_calls_and_markers() -> None:
-    source = """
-// page.waitForTimeout(100)
-const sample = "test.skip()";
-await page.waitForTimeout(100); // test-flakes: allow exercise a timeout
-await page.waitForTimeout(100); // test-flakes: allow
-test.skip(!enabled, "Feature is disabled");
-test.skip("The title", async () => {});
-test.describe.fixme("Group title", () => {});
-test.fixme(); // test-flakes: allow tracked in issue #1234
-test.skip(!enabled, `${feature} is disabled`);
-test.skip(!enabled, `${dynamicReason}`);
-"""
-    assert list(playwright_findings(source)) == [
-        (4, "sleep", True),
-        (5, "sleep", False),
-        (6, "skip", True),
-        (7, "skip", False),
-        (8, "skip", False),
-        (9, "skip", True),
-        (10, "skip", True),
-        (11, "skip", False),
     ]
 
 
@@ -88,62 +63,4 @@ pytest.skip(get_reason())
         (4, "skip", False),
         (5, "skip", False),
         (6, "skip", False),
-    ]
-
-
-def test_playwright_test_import_aliases() -> None:
-    source = """
-import { test as pwTest } from "@playwright/test";
-import { test as other } from "./unrelated";
-pwTest.skip("Disabled case", async () => {});
-pwTest . describe . fixme("Disabled group", () => {});
-pwTest.fixme(!enabled, "Feature is disabled");
-other.skip();
-"""
-    assert list(playwright_findings(source)) == [
-        (4, "skip", False),
-        (5, "skip", False),
-        (6, "skip", True),
-    ]
-
-
-def test_playwright_extended_objects_and_fixture_imports(tmp_path: Path) -> None:
-    web_tests = tmp_path / "web/tests/e2e"
-    web_tests.mkdir(parents=True)
-    (web_tests / "fixtures.ts").write_text(
-        'import { test as base } from "@playwright/test";\n'
-        "export const test = base.extend<{ flag: boolean }>({});\n"
-        "export const worldTest = test.extend({});\n"
-        "export const unrelated = helper.extend({});\n"
-    )
-    (web_tests / "menu.spec.ts").write_text(
-        'import { test } from "@playwright/test";\n'
-        'import { worldTest as world, unrelated } from "./fixtures";\n'
-        'import { worldTest } from "@tests/e2e/fixtures";\n'
-        "const localTest = world.extend({});\n"
-        "test.skip();\n"
-        'world.skip("Disabled title", async () => {});\n'
-        'worldTest.describe.fixme("Disabled group", () => {});\n'
-        'localTest.fixme(!enabled, "Missing feature");\n'
-        "unrelated.skip();\n"
-    )
-    assert list(scan(tmp_path)) == [
-        ("web/tests/e2e/menu.spec.ts", (5, "skip", False)),
-        ("web/tests/e2e/menu.spec.ts", (6, "skip", False)),
-        ("web/tests/e2e/menu.spec.ts", (7, "skip", False)),
-        ("web/tests/e2e/menu.spec.ts", (8, "skip", True)),
-    ]
-
-
-def test_scan_flags_unresolved_plain_playwright_test(tmp_path: Path) -> None:
-    tests = tmp_path / "web/tests/e2e"
-    tests.mkdir(parents=True)
-    (tests / "fixtures.ts").write_text('export { test } from "@playwright/test";\n')
-    (tests / "example.spec.ts").write_text(
-        'import { test } from "./fixtures";\ntest.skip();\ntest.fixme();\n'
-    )
-
-    assert list(scan(tmp_path)) == [
-        ("web/tests/e2e/example.spec.ts", (2, "skip", False)),
-        ("web/tests/e2e/example.spec.ts", (3, "skip", False)),
     ]

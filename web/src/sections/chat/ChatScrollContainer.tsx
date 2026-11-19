@@ -11,6 +11,7 @@ import React, {
 } from "react";
 import { ScrollContainerProvider } from "@/sections/chat/ScrollContainerContext";
 import { cn } from "@opal/utils";
+import { CHAT_GUTTER } from "@/lib/chat/layout";
 
 // Size constants
 const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem
@@ -480,8 +481,8 @@ const ChatScrollContainer = React.memo(
             <div
               ref={contentWrapperRef}
               className={cn(
-                // px-2 sm:px-4 matches the input bar's horizontal padding.
-                "w-full flex-1 flex flex-col items-center px-2 sm:px-4"
+                "w-full flex-1 flex flex-col items-center",
+                CHAT_GUTTER
               )}
               data-scroll-ready={isScrollReady}
               style={{

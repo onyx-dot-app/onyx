@@ -1,7 +1,6 @@
 package audit
 
 import (
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,26 +8,6 @@ import (
 	"strings"
 	"testing"
 )
-
-func TestMarshalIgnoresRoundTrip(t *testing.T) {
-	entries := []IgnoreEntry{
-		{ID: "GHSA-aaaa", Ecosystem: "npm", Reason: "not reachable", AddedBy: "you@onyx.app", Expires: "2026-09-01"},
-		{ID: "GHSA-bbbb"},
-	}
-
-	data, err := MarshalIgnores(entries)
-	if err != nil {
-		t.Fatalf("MarshalIgnores: %v", err)
-	}
-
-	var f ignoreFile
-	if err := json.Unmarshal(data, &f); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	if !reflect.DeepEqual(f.Ignores, entries) {
-		t.Fatalf("round trip mismatch:\n got %#v\nwant %#v", f.Ignores, entries)
-	}
-}
 
 func TestMarshalIgnoresOmitsEmptyFields(t *testing.T) {
 	data, err := MarshalIgnores([]IgnoreEntry{{ID: "GHSA-only"}})

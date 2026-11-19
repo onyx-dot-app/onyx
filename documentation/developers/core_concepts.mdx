@@ -132,6 +132,10 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
     Its `output` is the final output, which replaces the preview. `session_id` is set while the command runs,
     and `error` is set when the call failed. A replayed call has no `exec_output_delta`
     - `apply_patch_start` (with `patch` and `tool_name`) and `apply_patch_end` show a file edit and the files it changed
+    - `publish_files_start` (with `files` and `description`) and `publish_files_end` show the files that the model
+    gave the user. Each file in `publish_files_end` has `file_id`, `name`, `title`, `path`, `size` and `mime_type`.
+    Download it from `/chat/file/{file_id}`. Files with the same `name` are versions of one file.
+    `error` is set when the call failed; then it published no file
     - A call that the user stopped, or that stopped with its code mode program, has no end packet. Stopping a
     command call also stops the command. A command that a Ctrl-C (`write_stdin` with `\u0003`)
     ended gets an `exec_end` whose `completion` is `canceled`

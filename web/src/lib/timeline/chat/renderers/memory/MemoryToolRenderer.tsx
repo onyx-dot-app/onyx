@@ -1,0 +1,179 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+import { MemoryToolPacket } from "@/app/app/services/streamingModels";
+import {
+  MessageRenderer,
+  RenderType,
+} from "@/app/app/message/messageComponents/types";
+import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+import { constructCurrentMemoryState } from "./memoryStateUtils";
+import { SvgMaximize2 } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
+import { Button, Text } from "@opal/components";
+import { Section } from "@opal/layouts";
+import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
+import { useCreateModal } from "@opal/components";
+
+/**
+ * MemoryToolRenderer - Renders memory tool execution steps
+ *
+ * States:
+ * - Loading (start, no delta): "Saving memory..." with BlinkingBar
+ * - Delta received: operation label + memory text
+ * - Complete (SectionEnd): "Memory saved" / "Memory updated" + memory text
+ * - No Access: "Memory tool disabled"
+ */
+export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
+  packets,
+  stopPacketSeen,
+  renderType,
+  children,
+}) => {
+  const t = useTranslations("chat.messages.timeline");
+  const memoryState = constructCurrentMemoryState(packets);
+  const {
+    hasStarted,
+    noAccess,
+    memoryText,
+    operation,
+    isComplete,
+    memoryId,
+    index,
+  } = memoryState;
+  const memoriesModal = useCreateModal();
+  const isHighlight = renderType === RenderType.HIGHLIGHT;
+
+  if (!hasStarted) {
+    return children([
+      {
+        icon: STEP_ICONS.edit,
+        status: t("memory.default.status"),
+        content: <div />,
+        supportsCollapsible: false,
+        timelineLayout: "timeline",
+      },
+    ]);
+  }
+
+  // No access case
+  if (noAccess) {
+    const content = (
+      <Text as="p" font="secondary-body" color="text-03">
+        {t("memory.disabled.text")}
+      </Text>
+    );
+
+    if (isHighlight) {
+      return children([
+        {
+          icon: null,
+          status: null,
+          supportsCollapsible: false,
+          timelineLayout: "content",
+          content: (
+            <div className="flex flex-col">
+              <div className="mb-1">
+                <Text as="p" color="text-02">
+                  {t("memory.default.status")}
+                </Text>
+              </div>
+              {content}
+            </div>
+          ),
+        },
+      ]);
+    }
+
+    return children([
+      {
+        icon: STEP_ICONS.edit,
+        status: t("memory.default.status"),
+        supportsCollapsible: false,
+        timelineLayout: "timeline",
+        content,
+      },
+    ]);
+  }
+
+  // Determine status text
+  const statusLabel = t("memory.updating.status");
+  const doneStatusLabel = t("memory.updated.status");
+
+  const memoryContent = (
+    <div className="flex flex-col">
+      <memoriesModal.Provider>
+        <MemoriesModal
+          initialTargetMemoryId={memoryId}
+          initialTargetIndex={index}
+          highlightOnOpen
+        />
+      </memoriesModal.Provider>
+      {memoryText ? (
+        // The memory, then a button that opens it among all memories.
+        <Section
+          flexDirection="row"
+          justifyContent="between"
+          alignItems="start"
+          gap={1}
+          height="fit"
+        >
+          <Text
+            as="p"
+            font="secondary-body"
+            color="text-03"
+            wordWrap="wrap-break-word"
+          >
+            {memoryText}
+          </Text>
+          <Button
+            prominence="internal"
+            size="sm"
+            icon={SvgMaximize2}
+            // Pressed while the memories it opened are showing.
+            interaction={memoriesModal.isOpen ? "active" : undefined}
+            tooltip={t("memory.viewMemoriesButton.tooltip")}
+            onClick={(e) => {
+              e.stopPropagation();
+              memoriesModal.toggle(true);
+            }}
+          />
+        </Section>
+      ) : (
+        !stopPacketSeen && <BlinkingBar />
+      )}
+    </div>
+  );
+
+  if (isHighlight) {
+    return children([
+      {
+        icon: null,
+        status: null,
+        supportsCollapsible: false,
+        timelineLayout: "content",
+        content: (
+          <div className="flex flex-col">
+            <div className="mb-1">
+              <Text as="p" color="text-02">
+                {statusLabel}
+              </Text>
+            </div>
+            {memoryContent}
+          </div>
+        ),
+      },
+    ]);
+  }
+
+  return children([
+    {
+      icon: STEP_ICONS.edit,
+      status: statusLabel,
+      doneStatus: doneStatusLabel,
+      supportsCollapsible: false,
+      timelineLayout: "timeline",
+      content: memoryContent,
+    },
+  ]);
+};

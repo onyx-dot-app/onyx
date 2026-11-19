@@ -14,9 +14,3 @@
 1 backend/tests/integration/connector_job_tests/onedrive/test_onedrive_full_acl_integration.py
 1 backend/tests/integration/tests/gateway_clients/conftest.py
 1 backend/tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py
-1 web/tests/e2e/admin/web-search/web_search_providers.spec.ts
-2 web/tests/e2e/auth/password_managements.spec.ts
-1 web/tests/e2e/chat/current_agent.spec.ts
-1 web/tests/e2e/chat/scroll_behavior.spec.ts
-1 web/tests/e2e/chat/welcome_page.spec.ts
-1 web/tests/e2e/connectors/federated_slack.spec.ts

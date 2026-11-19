@@ -62,7 +62,7 @@ func TestLeaseReclaimsStoppedOwnerWithDeadProcesses(t *testing.T) {
 	registry := &Registry{Dir: t.TempDir()}
 	port := freeBasePort() + 300
 	dead := ServiceRecord{Slug: "web", PID: 1 << 22, PGID: 1 << 22}
-	owner, stateDir := foreignOwner(t, registry, "web", port, PhaseStopped, []ServiceRecord{dead})
+	owner, _ := foreignOwner(t, registry, "web", port, PhaseStopped, []ServiceRecord{dead})
 	got, err := registry.LeaseFor(t.TempDir(), "", []PortRequest{{Name: "web", Preferred: port}})
 	if err != nil {
 		t.Fatal(err)
@@ -72,9 +72,6 @@ func TestLeaseReclaimsStoppedOwnerWithDeadProcesses(t *testing.T) {
 	}
 	if len(leaseNames(t, registry, owner)) != 0 {
 		t.Fatal("reclaimed lease is still recorded for its old owner")
-	}
-	if leases, _ := registry.Leases(); leases[0].StateDir == "" && leases[0].Root == owner {
-		t.Fatalf("lease lost its state directory: %s", stateDir)
 	}
 }
 

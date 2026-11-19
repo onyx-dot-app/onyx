@@ -217,10 +217,11 @@ Before any render or vision pass, run the deterministic layout linter — it cat
 python .opencode/skills/pptx/scripts/lint.py outputs/output.pptx
 ```
 
-- Exit 0 with `LINT_CLEAN` means no findings; nonzero means ERRORs exist.
+- Exit 0 with `LINT_CLEAN` means no findings. Exit 1 means ERRORs exist. Exit 2 means the linter did not run: for `ERROR_MISSING_DEPENDENCY`, run the install command on line 2, then run the linter again.
 - **Fix every ERROR** before moving on. Review each WARN and fix it unless the layout is genuinely intentional (e.g., a deliberate design overlap).
 - Re-run after each fix batch — it's instant, so lint until clean before spending time on rendering.
 - The linter checks contrast only for explicit solid colors; text over images/gradients is skipped and noted — verify those visually.
+- A shrink-to-fit frame (pptxgenjs `fit: "shrink"`) opens in PowerPoint at its stored scale, and LibreOffice previews shrink it anyway. The linter measures it at the stored scale, so fix an OVERFLOW there by shortening the text or setting a smaller font size.
 - **Content-dense decks** (analytical / consulting-style slides with intentionally tight margins) generate many advisory MARGIN warnings under the default profile. For those, lint with `--profile dense` (relaxes the margin warning from 0.5" to 0.25"); error-level checks are unchanged. Tight margins on a dense analytical slide are a deliberate style, not a defect — don't strip density to silence standard-profile MARGIN warnings.
 
 ### Content QA

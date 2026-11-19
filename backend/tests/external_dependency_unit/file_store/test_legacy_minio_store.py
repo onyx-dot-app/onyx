@@ -94,6 +94,27 @@ def test_delete_removes_the_object_from_both_stores(
     assert not object_exists(source, key)
 
 
+def test_a_failed_record_write_removes_the_object_from_both_stores(
+    stores: tuple[S3BackedFileStore, S3BackedFileStore],
+) -> None:
+    old_release, new_release = stores
+    file_id = str(uuid.uuid4())
+    key = new_release._get_s3_key(file_id)
+
+    # Postgres rejects NUL characters in text, so the record write fails.
+    with pytest.raises(ValueError, match="NUL"):
+        new_release.save_file(
+            content=BytesIO(b"never recorded"),
+            display_name="bad\x00name",
+            file_origin=FileOrigin.OTHER,
+            file_type="application/octet-stream",
+            file_id=file_id,
+        )
+
+    assert not object_exists(new_release._get_s3_client(), key)
+    assert not object_exists(old_release._get_s3_client(), key)
+
+
 def test_delete_removes_the_legacy_object_first(
     stores: tuple[S3BackedFileStore, S3BackedFileStore],
 ) -> None:

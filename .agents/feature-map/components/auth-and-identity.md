@@ -255,8 +255,10 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
 - **User deletion fails while the user owns private skills**
   (`db/users.py:delete_user_from_db__no_commit`). The delete first moves the
   user's private integrations to the Organization library as NOT_AVAILABLE,
-  with their shares, then refuses if "My uploads" still holds a plugin. The admin must transfer or delete those
-  first. Published plugins stay with no author ([[skills#plugin-tables]]).
+  with their shares, then refuses if "My uploads" still holds a plugin, and
+  the `CONFLICT` body lists them. The delete dialog transfers all of them to
+  one user through `POST /manage/admin/transfer-private-plugins`, then
+  deletes. Published plugins stay with no author ([[skills#plugin-tables]]).
 - **Anonymous access can turn itself off.** `auth/users.py` reads
   `anonymous_user_enabled` from the same cache key as the settings store, and
   the key expires ([[chat-preferences]] Known issues).
