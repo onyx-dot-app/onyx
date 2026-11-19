@@ -25,6 +25,7 @@ export function AgentViewer({ agentId, onClose }: AgentViewerProps) {
   // leave the listing looking like the click missed. Closing puts the user back
   // somewhere they can act, and clicking again retries.
   const failed = Boolean(error);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- closes the viewer when the SWR agent fetch fails
   useEffect(() => {
     if (failed) onClose();
   }, [failed, onClose]);

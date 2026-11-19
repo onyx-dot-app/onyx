@@ -79,6 +79,7 @@ export default function PdfPreview({
     { revision, refreshKey, isActive, onRefreshingChange }
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the shown blob in a ref for the fetcher that skips an unchanged refetch
   useEffect(() => {
     displayedBlobRef.current = blob ?? null;
   }, [blob]);

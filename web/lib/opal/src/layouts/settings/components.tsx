@@ -191,6 +191,7 @@ function SettingsHeader({
   const { setPageTitle } = useContext(SettingsPageContext);
   const titleText = toPlainString(title);
   // Before paint, so an error state on mount already has the page name.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- publishes the page title to SettingsPageContext before paint
   useLayoutEffect(() => {
     setPageTitle(titleText);
   }, [setPageTitle, titleText]);
@@ -214,6 +215,7 @@ function SettingsHeader({
   const hasActions = !!onCancel || (!!actions && actions.length > 0);
   const isSticky = hasActions;
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scroll listener on the page scroll container that shows the header shadow
   useEffect(() => {
     if (!isSticky) return;
 
@@ -233,6 +235,7 @@ function SettingsHeader({
   }, [isSticky]);
 
   // Sticky content in the body (e.g. a side panel) reads these to pin under the header and fit the visible height.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- publishes the header and scroll heights as CSS variables on the page scroll container
   useEffect(() => {
     const header = headerRef.current;
     const scrollContainer = document.getElementById(

@@ -18,6 +18,7 @@ export default function AccountsAccessPage() {
   // Only redirect after metadata has loaded to avoid redirecting during loading state
   const isAuthTypeLoaded = isMultiTenant !== null;
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- router redirect to general settings once auth type loads without access
   useEffect(() => {
     if (isAuthTypeLoaded && !hasAccess) {
       navigation.go("/app/settings/general", { replace: true });

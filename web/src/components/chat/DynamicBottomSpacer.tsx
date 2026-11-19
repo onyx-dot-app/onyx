@@ -248,6 +248,7 @@ const DynamicBottomSpacer = React.memo(
     /**
      * Main effect: detect streaming start/stop and anchor changes
      */
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- starts the scroll anchor animation on the next frame when a turn sent here starts streaming
     useEffect(() => {
       if (chatState === "loading") sentHereRef.current = true;
       else if (!isStreaming) sentHereRef.current = false;
@@ -278,6 +279,7 @@ const DynamicBottomSpacer = React.memo(
     /**
      * Reset when anchor is cleared
      */
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- stops the resize observer and clears the spacer when the anchor is cleared
     useEffect(() => {
       if (!anchorNodeId) {
         setHeight(0);
@@ -290,6 +292,7 @@ const DynamicBottomSpacer = React.memo(
 
     // The scroll container outlives the spacer (a chat switch remounts only
     // the spacer), so the shared height must not outlive the spacer's element.
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the shared spacer height ref when the spacer unmounts
     useEffect(
       () => () => {
         spacerHeightRef.current = 0;
@@ -300,6 +303,7 @@ const DynamicBottomSpacer = React.memo(
     /**
      * Cleanup on unmount
      */
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- stops the resize observer and clears the scroll container's smooth-scroll flag on unmount
     useEffect(() => {
       return () => {
         stopObserving();

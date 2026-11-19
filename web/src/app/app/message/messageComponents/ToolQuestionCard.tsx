@@ -137,6 +137,7 @@ function ToolQuestionCard({ question }: ToolQuestionCardProps) {
     setPage(next);
   }
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus to the new page after a page turn
   useEffect(() => {
     if (!pageTurned.current) return;
     pageTurned.current = false;

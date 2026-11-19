@@ -14,10 +14,12 @@ export function useVisibilityGatedInterval(
 ) {
   const callbackRef = useRef(callback);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest callback in a ref for the interval
   useEffect(() => {
     callbackRef.current = callback;
   }, [callback]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- interval that runs the callback while the tab is visible, and once on return
   useEffect(() => {
     if (!intervalMs) return;
 

@@ -91,6 +91,7 @@ export default function ConnectorsPage() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus to the search input on mount
   useEffect(() => {
     if (searchInputRef.current) {
       searchInputRef.current.focus();

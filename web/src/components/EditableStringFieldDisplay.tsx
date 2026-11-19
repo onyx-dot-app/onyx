@@ -26,12 +26,14 @@ export function EditableStringFieldDisplay({
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- focuses the input when editing starts
   useEffect(() => {
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
     }
   }, [isEditing]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- document mousedown listener that ends editing on an outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (

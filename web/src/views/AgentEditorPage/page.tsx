@@ -371,6 +371,7 @@ export function AgentDraftManager({
   >({ key: storageKey });
   const restoredRef = useRef(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- registers the draft clear function in the parent ref until unmount
   useEffect(() => {
     clearRef.current = clear;
     return () => {
@@ -378,12 +379,14 @@ export function AgentDraftManager({
     };
   }, [clear, clearRef]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- saves the form values to the browser draft store as they change
   useEffect(() => {
     if (loaded && dirty) save(values);
   }, [values, dirty, loaded, save]);
 
   // Restore once read. The !dirty guard avoids clobbering if the user typed
   // before the read landed.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- restores the draft from browser storage into the form once it is read
   useEffect(() => {
     if (!loaded || restoredRef.current) return;
     restoredRef.current = true;

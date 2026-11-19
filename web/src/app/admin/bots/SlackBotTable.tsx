@@ -30,6 +30,7 @@ function ClickableTableRow({
 }) {
   const navigation = useNavigation();
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- prefetches the bot page through the router
   useEffect(() => {
     navigation.prefetch(url);
   }, [navigation, url]);

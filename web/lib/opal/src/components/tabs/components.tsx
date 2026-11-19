@@ -147,6 +147,7 @@ function TabsList({
   const showScrollArrows =
     isPill && enableScrollArrows && (canScrollLeft || canScrollRight);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- measures the arrow and right-side widths with a ResizeObserver
   useEffect(() => {
     if (!isPill) {
       setRightOffset(0);
@@ -363,6 +364,7 @@ function TabsTrigger({
   // Only contained tabs have room for a description.
   const shownDescription = variant === "contained" ? description : undefined;
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- dev-only console warning when a non-contained tab gets a description
   useEffect(() => {
     if (
       process.env.NODE_ENV !== "production" &&

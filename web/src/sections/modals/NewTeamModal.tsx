@@ -47,6 +47,7 @@ export default function NewTeamModal() {
   const settingsLoaded = is_playground !== undefined;
   const isPlayground = is_playground === true;
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the new_team query param once settings load, then strips it from the URL
   useEffect(() => {
     const hasNewTeamParam = searchParams?.has("new_team");
     if (hasNewTeamParam && settingsLoaded) {

@@ -37,6 +37,7 @@ export default function PreviewSidebar({
     ? Math.max(minimumWidth, Math.min(320, layoutWidth * 0.4))
     : 320;
   const width = Math.max(minimumWidth, Math.min(maximumWidth, sidebarWidth));
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that tracks the preview layout width
   useEffect(() => {
     const layout = sidebarRef.current?.parentElement;
     if (!layout) return;

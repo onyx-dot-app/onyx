@@ -58,6 +58,7 @@ export function ScrollableTable({
   const wrapRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scroll listener and ResizeObserver that mark when the table overflows
   useEffect(() => {
     const el = scrollRef.current;
     const wrap = wrapRef.current;

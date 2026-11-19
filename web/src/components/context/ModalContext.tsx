@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useState } from "react";
 import NewTeamModal from "@/sections/modals/NewTeamModal";
 import NewTenantModal from "@/sections/modals/NewTenantModal";
 import { NewTenantInfo } from "@/lib/types";
@@ -31,26 +31,21 @@ export const ModalProvider: React.FC<{
 }> = ({ children }) => {
   const { user } = useUser();
   const [showNewTeamModal, setShowNewTeamModal] = useState(false);
+  const tenantInfo = user?.tenant_info;
   const [newTenantInfo, setNewTenantInfo] = useState<NewTenantInfo | null>(
-    null
+    tenantInfo?.new_tenant || null
   );
   const [invitationInfo, setInvitationInfo] = useState<NewTenantInfo | null>(
-    null
+    tenantInfo?.invitation || null
   );
 
-  // Sync modal states with user info — clear when backend no longer has the data
-  useEffect(() => {
-    if (user?.tenant_info?.new_tenant) {
-      setNewTenantInfo(user.tenant_info.new_tenant);
-    } else {
-      setNewTenantInfo(null);
-    }
-    if (user?.tenant_info?.invitation) {
-      setInvitationInfo(user.tenant_info.invitation);
-    } else {
-      setInvitationInfo(null);
-    }
-  }, [user?.tenant_info]);
+  // Follow the user's tenant info, and clear when the backend no longer has it.
+  const [syncedTenantInfo, setSyncedTenantInfo] = useState(tenantInfo);
+  if (syncedTenantInfo !== tenantInfo) {
+    setSyncedTenantInfo(tenantInfo);
+    setNewTenantInfo(tenantInfo?.new_tenant || null);
+    setInvitationInfo(tenantInfo?.invitation || null);
+  }
 
   // Render all application-wide modals
   const renderModals = () => {

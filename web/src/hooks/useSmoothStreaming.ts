@@ -23,6 +23,7 @@ export function useSmoothStreaming(): UseSmoothStreamingResult {
     typeof window === "undefined" ? DEFAULT_ENABLED : readCookie()
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the smooth streaming cookie and listens for its change event
   useEffect(() => {
     setEnabledState(readCookie());
     const handler = () => setEnabledState(readCookie());

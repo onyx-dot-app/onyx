@@ -267,10 +267,14 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
       null,
     [prices, defaultPrice, groups]
   );
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  useEffect(() => {
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => new Set(defaultProvider ? [defaultProvider] : [])
+  );
+  const [expandedFor, setExpandedFor] = useState(defaultProvider);
+  if (expandedFor !== defaultProvider) {
+    setExpandedFor(defaultProvider);
     if (defaultProvider) setExpanded(new Set([defaultProvider]));
-  }, [defaultProvider]);
+  }
 
   function toggle(provider: string) {
     setExpanded((prev) => {
@@ -449,6 +453,7 @@ export default function UsageSettings() {
   );
   const { data, error, isLoading } = useUserUsage(dateRange);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- logs each usage load error to the console
   useEffect(() => {
     if (error) console.error("Failed to load usage", error);
   }, [error]);

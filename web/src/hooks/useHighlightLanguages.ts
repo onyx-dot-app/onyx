@@ -14,6 +14,7 @@ export function useHighlightLanguages(
     null
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- loads the syntax highlighting grammar chunk once enabled
   useEffect(() => {
     if (!enabled || languages) return;
     let cancelled = false;

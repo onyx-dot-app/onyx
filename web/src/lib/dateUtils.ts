@@ -7,6 +7,7 @@ import { humanReadableFormatShort } from "@opal/time";
 export const useNightTime = () => {
   const [isNight, setIsNight] = useState(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- interval that rechecks the clock every minute for night time
   useEffect(() => {
     const checkNightTime = () => {
       const currentHour = new Date().getHours();

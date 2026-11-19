@@ -16,10 +16,12 @@ export default function useUnsavedChangesGuard({
 }: UnsavedChangesGuardOptions) {
   const navigation = useNavigation();
   const { registerGuard } = useUnsavedChangesNavigation();
-  const [confirmationOpen, setConfirmationOpen] = useState(false);
-  const pendingNavigation = useRef<(() => void) | null>(null);
+  const [pendingLeave, setPendingLeave] = useState<{
+    navigate: () => void;
+  } | null>(null);
   const onDiscardRef = useRef(onDiscard);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest onDiscard in a ref for discardAndLeave
   useEffect(() => {
     onDiscardRef.current = onDiscard;
   }, [onDiscard]);
@@ -30,36 +32,31 @@ export default function useUnsavedChangesGuard({
         navigate();
         return;
       }
-      pendingNavigation.current = navigate;
-      setConfirmationOpen(true);
+      setPendingLeave({ navigate });
     },
     [isDirty]
   );
 
   const cancelLeave = useCallback(() => {
-    pendingNavigation.current = null;
-    setConfirmationOpen(false);
+    setPendingLeave(null);
   }, []);
 
   const discardAndLeave = useCallback(() => {
-    const navigate = pendingNavigation.current;
-    pendingNavigation.current = null;
-    setConfirmationOpen(false);
+    setPendingLeave(null);
     onDiscardRef.current?.();
-    navigate?.();
-  }, []);
+    pendingLeave?.navigate();
+  }, [pendingLeave]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- registers the leave guard with the navigation provider while dirty
   useEffect(() => {
     if (!isDirty) return;
     return registerGuard(requestLeave);
   }, [isDirty, registerGuard, requestLeave]);
 
-  useEffect(() => {
-    if (isDirty) return;
-    pendingNavigation.current = null;
-    setConfirmationOpen(false);
-  }, [isDirty]);
+  // Saving or reverting the changes drops a pending leave.
+  if (!isDirty && pendingLeave !== null) setPendingLeave(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- beforeunload and capture click listeners that guard leaving while dirty
   useEffect(() => {
     if (!isDirty) return;
 
@@ -110,7 +107,7 @@ export default function useUnsavedChangesGuard({
   }, [isDirty, requestLeave, navigation]);
 
   return {
-    confirmationOpen,
+    confirmationOpen: pendingLeave !== null,
     requestLeave,
     cancelLeave,
     discardAndLeave,

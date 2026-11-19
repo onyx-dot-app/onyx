@@ -22,6 +22,7 @@ export function useVoicePlayback(): UseVoicePlaybackReturn {
   const { setManualTTSPlaying, isTTSMuted, registerManualTTSMuteHandler } =
     useVoiceMode();
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- registers the player's mute handler with the voice mode provider until unmount
   useEffect(() => {
     registerManualTTSMuteHandler((muted) => {
       playerRef.current?.setMuted(muted);

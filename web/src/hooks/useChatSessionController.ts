@@ -133,6 +133,7 @@ export default function useChatSessionController({
   );
 
   // Fetch chat messages for the chat session
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- loads the chat session from the server into the chat session store when the session id changes
   useEffect(() => {
     const priorChatSessionId = chatSessionIdRef.current;
     const loadedSessionId = loadedIdSessionRef.current;

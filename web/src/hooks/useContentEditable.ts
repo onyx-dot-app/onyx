@@ -121,10 +121,12 @@ export function useContentEditable({
   const [tilePopover, setTilePopover] = useState<PasteTileData | null>(null);
   const [pasteExpandHintVisible, setPasteExpandHintVisible] = useState(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest onContentChange in a ref for the DOM input handlers
   useEffect(() => {
     onContentChangeRef.current = onContentChange;
   }, [onContentChange]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the wrapper's computed vertical padding for the resize math
   useEffect(() => {
     if (wrapperRef.current) {
       const cs = getComputedStyle(wrapperRef.current);
@@ -133,11 +135,13 @@ export function useContentEditable({
     }
   }, [wrapperRef]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- focuses the editor on mount unless disabled
   useEffect(() => {
     if (disabled) return;
     ref.current?.focus();
   }, []);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- cancels the pending resize animation frame on unmount
   useEffect(() => {
     return () => {
       if (rafRef.current !== null) {
@@ -147,6 +151,7 @@ export function useContentEditable({
   }, []);
 
   // Track text selection to highlight tiles within the selection range.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- selectionchange listener that marks paste tiles inside the selection
   useEffect(() => {
     if (!pasteTilesEnabled) return;
 
@@ -373,12 +378,14 @@ export function useContentEditable({
   }, [syncFromDOM, resize]);
 
   const disabledRef = useRef(disabled);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest disabled flag in a ref for the native undo listeners
   useEffect(() => {
     disabledRef.current = disabled;
   }, [disabled]);
 
   // Undo/redo entry points and typed-edit tracking, as native listeners so
   // every consumer of the hook is covered.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- native beforeinput, keydown and mousedown listeners for undo, redo and edit tracking
   useEffect(() => {
     const el = ref.current;
     if (!el) return;

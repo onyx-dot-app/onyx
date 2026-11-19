@@ -167,12 +167,14 @@ function InputDatePicker({
   const popoverContentRef = React.useRef<HTMLDivElement>(null);
   const pendingCaretRef = usePendingCaret(segments);
 
+  // Key on the instant, not Date identity, so parent re-renders that
+  // recreate an equal Date don't clobber in-progress typing.
   const valueTime = value ? value.getTime() : null;
-  React.useEffect(() => {
+  const [syncedTime, setSyncedTime] = React.useState(valueTime);
+  if (!Object.is(valueTime, syncedTime)) {
+    setSyncedTime(valueTime);
     setSegments(toSegments(value));
-    // Key on the instant, not Date identity, so parent re-renders that
-    // recreate an equal Date don't clobber in-progress typing.
-  }, [valueTime]);
+  }
 
   function inRange(date: Date): boolean {
     const t = startOfDay(date).getTime();

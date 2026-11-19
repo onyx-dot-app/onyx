@@ -51,6 +51,7 @@ function MemoryItem({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus to the end of the textarea when asked
   useEffect(() => {
     if (shouldFocus && textareaRef.current) {
       const el = textareaRef.current;
@@ -60,6 +61,7 @@ function MemoryItem({
     }
   }, [shouldFocus, onFocused]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the card into view and runs the highlight timer
   useEffect(() => {
     if (!shouldHighlight) return;
 
@@ -185,6 +187,7 @@ export default function MemoriesModal({
     }
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- refreshes the user from the server on mount when no memories prop is given
   useEffect(() => {
     if (memoriesProp === undefined) {
       void refreshUser();
@@ -212,19 +215,28 @@ export default function MemoriesModal({
     null
   );
 
-  useEffect(() => {
+  const [syncedTarget, setSyncedTarget] = useState<{
+    id: typeof initialTargetMemoryId;
+    index: typeof initialTargetIndex;
+  } | null>(null);
+  if (
+    !syncedTarget ||
+    syncedTarget.id !== initialTargetMemoryId ||
+    syncedTarget.index !== initialTargetIndex
+  ) {
+    setSyncedTarget({ id: initialTargetMemoryId, index: initialTargetIndex });
     const targetId = resolveTargetMemoryId(
       initialTargetMemoryId,
       initialTargetIndex,
       effectiveMemories
     );
-    if (targetId == null) return;
-
-    setFocusMemoryId(targetId);
-    if (highlightOnOpen) {
-      setHighlightMemoryId(targetId);
+    if (targetId != null) {
+      setFocusMemoryId(targetId);
+      if (highlightOnOpen) {
+        setHighlightMemoryId(targetId);
+      }
     }
-  }, [initialTargetMemoryId, initialTargetIndex]);
+  }
 
   const {
     searchQuery,

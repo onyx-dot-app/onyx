@@ -100,6 +100,7 @@ const ChatButton = memo(
     });
 
     // Sync local name state when chatSession.name changes (e.g., after auto-naming)
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- interval that types out the auto-generated chat name
     useEffect(() => {
       const newName = chatSession.name || UNNAMED_CHAT;
       const oldName = displayName;

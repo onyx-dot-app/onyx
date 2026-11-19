@@ -280,6 +280,7 @@ export function useEntryPicker({
   // makes, so only a caret that left the place where the last input put it
   // ends the session. Text controls fire it at the element, so listen in the
   // capture phase.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- document selectionchange listener that ends the picker when the caret moves away
   useEffect(() => {
     if (!session.open) return;
     function handleSelectionChange() {

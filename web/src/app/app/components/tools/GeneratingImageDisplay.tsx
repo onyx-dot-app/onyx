@@ -6,6 +6,7 @@ export default function GeneratingImageDisplay({ isCompleted = false }) {
   const animationRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(Date.now());
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- requestAnimationFrame loop that advances the progress ring
   useEffect(() => {
     // Animation setup
     let lastUpdateTime = 0;
@@ -45,15 +46,7 @@ export default function GeneratingImageDisplay({ isCompleted = false }) {
     };
   }, [isCompleted]);
 
-  // Handle completion
-  useEffect(() => {
-    if (isCompleted) {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-      setProgress(100);
-    }
-  }, [isCompleted]);
+  const shownProgress = isCompleted ? 100 : progress;
 
   return (
     <div className="object-cover object-center border border-background-200 bg-background-100 items-center justify-center overflow-hidden flex rounded-lg w-96 h-96 transition-opacity duration-300 opacity-100">
@@ -72,7 +65,7 @@ export default function GeneratingImageDisplay({ isCompleted = false }) {
             className="text-text-800 transition-all duration-300"
             strokeWidth="8"
             strokeDasharray={276.46}
-            strokeDashoffset={276.46 * (1 - progress / 100)}
+            strokeDashoffset={276.46 * (1 - shownProgress / 100)}
             strokeLinecap="round"
             stroke="currentColor"
             fill="transparent"

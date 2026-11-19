@@ -72,6 +72,7 @@ function DecisionProviderCard({
 
   // A provider that fails to load closes its editor and says so, as on the
   // Language Models page.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- raises a toast, closes the editor, and drops the SWR cache entry when the provider fails to load
   useEffect(() => {
     if (!error || providerId === null) return;
     toast.error(

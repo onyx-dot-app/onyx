@@ -11,6 +11,7 @@ interface SpacerProps {
 
 function Spacer({ height }: SpacerProps) {
   const { spacerHeightRef } = useScrollContainer();
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- test double that writes the spacer height into the scroll container ref
   useLayoutEffect(() => {
     spacerHeightRef.current = height;
   }, [height, spacerHeightRef]);

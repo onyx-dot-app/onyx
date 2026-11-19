@@ -85,6 +85,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   } = useProjectsContext();
 
   // Show toast if any files failed
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- raises a toast for failed uploads and clears them from the projects context
   useEffect(() => {
     if (lastFailedFiles && lastFailedFiles.length > 0) {
       const names = lastFailedFiles.map((f) => f.name).join(", ");
@@ -172,6 +173,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Initialize message from URL input parameter (for Chrome extension)
   const initializedRef = useRef(false);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the user-prompt query param from window.location once on mount
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
@@ -223,6 +225,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Sign-in from this embedded page happens in another tab, so re-check the
   // session whenever the user comes back to this one.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- visibilitychange and focus listeners that recheck the session after sign-in in another tab
   useEffect(() => {
     if (user) return;
 
@@ -239,6 +242,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   }, [user, refreshUser]);
 
   // Listen for tab URL updates from the Chrome extension
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- message listener for tab URL updates from the Chrome extension
   useEffect(() => {
     if (!isSidePanel) return;
 

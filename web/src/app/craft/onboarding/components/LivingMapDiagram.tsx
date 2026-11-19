@@ -393,6 +393,7 @@ export default function LivingMapDiagram({
 
   // The terminal types itself out when the machine comes into focus; the
   // interval retires itself once the last step is shown.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- interval that types the terminal lines out while the machine stage shows
   useEffect(() => {
     if (stage !== "machine" || reduceMotion) {
       setVisibleLines(TERMINAL_STEPS);
@@ -408,6 +409,7 @@ export default function LivingMapDiagram({
     return () => clearInterval(timer);
   }, [stage, reduceMotion]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- interval that rotates the example prompt
   useEffect(() => {
     if (reduceMotion) return undefined;
     const timer = setInterval(() => {

@@ -46,13 +46,16 @@ export default function LivingMapModal({
   const [diving, setDiving] = useState(false);
   const diveTimer = useRef<number | null>(null);
 
-  useEffect(() => {
+  const [shown, setShown] = useState({ open, initialStage });
+  if (shown.open !== open || shown.initialStage !== initialStage) {
+    setShown({ open, initialStage });
     if (open) {
       setStageIdx(stageIndex(initialStage));
       setDiving(false);
     }
-  }, [open, initialStage]);
+  }
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the dive timer on unmount
   useEffect(
     () => () => {
       if (diveTimer.current !== null) window.clearTimeout(diveTimer.current);

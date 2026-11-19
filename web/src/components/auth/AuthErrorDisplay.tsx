@@ -12,6 +12,7 @@ export default function AuthErrorDisplay({
   const t = useTranslations("auth.errorDisplay");
   const error = searchParams?.error;
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- raises a toast for the auth error query param
   useEffect(() => {
     if (error) {
       toast.error(

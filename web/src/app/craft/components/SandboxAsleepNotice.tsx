@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { SvgMoon } from "@opal/icons";
@@ -22,14 +22,11 @@ export default function SandboxAsleepNotice() {
   const isAsleep = status === "sleeping" || status === "terminated";
 
   const [dismissed, setDismissed] = useState(false);
-
-  useEffect(() => {
-    if (!isAsleep) setDismissed(false);
-  }, [isAsleep]);
-
-  useEffect(() => {
-    setDismissed(false);
-  }, [sessionId]);
+  const [seen, setSeen] = useState({ isAsleep, sessionId });
+  if (seen.isAsleep !== isAsleep || seen.sessionId !== sessionId) {
+    setSeen({ isAsleep, sessionId });
+    if (!isAsleep || seen.sessionId !== sessionId) setDismissed(false);
+  }
 
   if (!session || !sessionId || !isAsleep || dismissed) return null;
 

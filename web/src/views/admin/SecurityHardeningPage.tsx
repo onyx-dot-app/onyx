@@ -108,9 +108,15 @@ function JwtTextRow({
   // Commit only text the user typed this focus. A frozen unedited field must
   // not overwrite a value that moved underneath it (another tab, env change).
   const dirty = useRef(false);
-  useEffect(() => {
+  const [synced, setSynced] = useState({ value, revision, focused });
+  if (
+    synced.value !== value ||
+    synced.revision !== revision ||
+    synced.focused !== focused
+  ) {
+    setSynced({ value, revision, focused });
     if (!focused) setText(value);
-  }, [value, revision, focused]);
+  }
 
   if (pinned) {
     // An input promises editability. A pinned value is display-only.

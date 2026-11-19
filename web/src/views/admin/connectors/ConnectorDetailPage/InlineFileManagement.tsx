@@ -1,7 +1,7 @@
 "use client";
 
 import { IconLoader } from "@opal/loaders";
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Pagination, Text } from "@opal/components";
 import {
@@ -76,9 +76,7 @@ export default function InlineFileManagement({
   );
 
   // A save can shrink the list under an open page.
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+  if (page > totalPages) setPage(totalPages);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = event.target.files;

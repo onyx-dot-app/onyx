@@ -75,15 +75,6 @@ export const AppearanceThemeSettings = forwardRef<
   const customHelpLinkUrlInputRef = useRef<HTMLInputElement>(null);
   const systemAnnouncementHeaderInputRef = useRef<HTMLInputElement>(null);
   const systemAnnouncementContentInputRef = useRef<HTMLTextAreaElement>(null);
-  const prevShowFirstVisitNoticeRef = useRef<boolean>(
-    Boolean(values.show_first_visit_notice)
-  );
-  const prevEnableConsentScreenRef = useRef<boolean>(
-    Boolean(values.enable_consent_screen)
-  );
-  const prevSystemAnnouncementEnabledRef = useRef<boolean>(
-    Boolean(values.system_announcement_enabled)
-  );
   const [focusedPreviewTarget, setFocusedPreviewTarget] =
     useState<PreviewHighlightTarget | null>(null);
   const [hoveredPreviewTarget, setHoveredPreviewTarget] =
@@ -143,48 +134,6 @@ export const AppearanceThemeSettings = forwardRef<
     },
   }));
 
-  useEffect(() => {
-    const prev = prevShowFirstVisitNoticeRef.current;
-    const next = Boolean(values.show_first_visit_notice);
-
-    // When enabling the toggle, autofocus the "Notice Header" input.
-    if (!prev && next) {
-      requestAnimationFrame(() => {
-        noticeHeaderInputRef.current?.focus();
-      });
-    }
-
-    prevShowFirstVisitNoticeRef.current = next;
-  }, [values.show_first_visit_notice]);
-
-  useEffect(() => {
-    const prev = prevEnableConsentScreenRef.current;
-    const next = Boolean(values.enable_consent_screen);
-
-    // When enabling the toggle, autofocus the "Notice Consent Prompt" input.
-    if (!prev && next) {
-      requestAnimationFrame(() => {
-        consentPromptTextAreaRef.current?.focus();
-      });
-    }
-
-    prevEnableConsentScreenRef.current = next;
-  }, [values.enable_consent_screen]);
-
-  useEffect(() => {
-    const prev = prevSystemAnnouncementEnabledRef.current;
-    const next = Boolean(values.system_announcement_enabled);
-
-    // When enabling the toggle, autofocus the "Notice Header" input.
-    if (!prev && next) {
-      requestAnimationFrame(() => {
-        systemAnnouncementHeaderInputRef.current?.focus();
-      });
-    }
-
-    prevSystemAnnouncementEnabledRef.current = next;
-  }, [values.system_announcement_enabled]);
-
   const handleLogoEdit = () => {
     fileInputRef.current?.click();
   };
@@ -211,6 +160,7 @@ export const AppearanceThemeSettings = forwardRef<
   }, [selectedLogo]);
 
   // Clean up the blob URL when selectedLogo changes or component unmounts
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- revokes the logo blob URL when it changes or on unmount
   useEffect(() => {
     return () => {
       if (logoObjectUrl) {
@@ -590,9 +540,14 @@ export const AppearanceThemeSettings = forwardRef<
                 aria-label={t("firstVisit.label")}
                 data-label="first-visit-notice-toggle"
                 checked={values.show_first_visit_notice}
-                onCheckedChange={(checked) =>
-                  setFieldValue("show_first_visit_notice", checked)
-                }
+                onCheckedChange={(checked) => {
+                  setFieldValue("show_first_visit_notice", checked);
+                  if (checked) {
+                    requestAnimationFrame(() =>
+                      noticeHeaderInputRef.current?.focus()
+                    );
+                  }
+                }}
               />
             </FormField.Control>
           </div>
@@ -670,9 +625,14 @@ export const AppearanceThemeSettings = forwardRef<
                     aria-label={t("consent.label")}
                     data-label="require-consent-toggle"
                     checked={values.enable_consent_screen}
-                    onCheckedChange={(checked) =>
-                      setFieldValue("enable_consent_screen", checked)
-                    }
+                    onCheckedChange={(checked) => {
+                      setFieldValue("enable_consent_screen", checked);
+                      if (checked) {
+                        requestAnimationFrame(() =>
+                          consentPromptTextAreaRef.current?.focus()
+                        );
+                      }
+                    }}
                   />
                 </FormField.Control>
               </div>
@@ -727,9 +687,14 @@ export const AppearanceThemeSettings = forwardRef<
                 aria-label={t("announcement.label")}
                 data-label="system-announcement-toggle"
                 checked={values.system_announcement_enabled}
-                onCheckedChange={(checked) =>
-                  setFieldValue("system_announcement_enabled", checked)
-                }
+                onCheckedChange={(checked) => {
+                  setFieldValue("system_announcement_enabled", checked);
+                  if (checked) {
+                    requestAnimationFrame(() =>
+                      systemAnnouncementHeaderInputRef.current?.focus()
+                    );
+                  }
+                }}
               />
             </FormField.Control>
           </div>

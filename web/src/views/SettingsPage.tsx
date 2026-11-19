@@ -594,6 +594,7 @@ function GeneralSettings() {
   const initialRoleRef = useRef(personalizationValues.role);
 
   // Update refs when personalization values change from external source
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the last saved name and role in refs that the blur handlers compare against
   useEffect(() => {
     initialNameRef.current = personalizationValues.name;
     initialRoleRef.current = personalizationValues.role;
@@ -931,6 +932,7 @@ function PromptShortcuts() {
   }, [promptShortcuts, isLoading, error]);
 
   // Show error popup if fetch fails
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- raises an error toast when the shortcuts fail to load
   useEffect(() => {
     if (!error) return;
     toast.error(t("promptShortcuts.toasts.loadFailed"));
@@ -1209,13 +1211,15 @@ function ChatPreferencesSettings() {
   } = useUserPersonalization(user, updateUserPersonalization, {
     onError: () => toast.error(t("chats.toasts.saveFailed")),
   });
-  const [draftVoicePlaybackSpeed, setDraftVoicePlaybackSpeed] = useState(
-    user?.preferences.voice_playback_speed ?? 1
-  );
-
-  useEffect(() => {
-    setDraftVoicePlaybackSpeed(user?.preferences.voice_playback_speed ?? 1);
-  }, [user?.preferences.voice_playback_speed]);
+  const voicePlaybackSpeed = user?.preferences.voice_playback_speed ?? 1;
+  const [draftVoicePlaybackSpeed, setDraftVoicePlaybackSpeed] =
+    useState(voicePlaybackSpeed);
+  const [syncedVoicePlaybackSpeed, setSyncedVoicePlaybackSpeed] =
+    useState(voicePlaybackSpeed);
+  if (syncedVoicePlaybackSpeed !== voicePlaybackSpeed) {
+    setSyncedVoicePlaybackSpeed(voicePlaybackSpeed);
+    setDraftVoicePlaybackSpeed(voicePlaybackSpeed);
+  }
 
   const saveVoiceSettings = useCallback(
     async (settings: {
@@ -1254,15 +1258,22 @@ function ChatPreferencesSettings() {
     return stop >= 0 ? stop : UNSET_REASONING_STOP;
   });
 
-  useEffect(() => {
+  const [syncedTemperatureDefault, setSyncedTemperatureDefault] = useState(
+    userTemperatureDefault
+  );
+  if (syncedTemperatureDefault !== userTemperatureDefault) {
+    setSyncedTemperatureDefault(userTemperatureDefault);
     if (userTemperatureDefault != null) {
       setDraftTemperature(userTemperatureDefault);
     }
-  }, [userTemperatureDefault]);
-  useEffect(() => {
+  }
+  const [syncedEffortDefault, setSyncedEffortDefault] =
+    useState(userEffortDefault);
+  if (syncedEffortDefault !== userEffortDefault) {
+    setSyncedEffortDefault(userEffortDefault);
     const stop = reasoningStopIndex(userEffortDefault);
     if (stop >= 0) setDraftEffortStop(stop);
-  }, [userEffortDefault]);
+  }
 
   const saveTemperatureDefault = useCallback(
     async (value: number): Promise<void> => {
@@ -1772,6 +1783,7 @@ function GatewayAccessSection({
   const { llmProviders } = useLanguageModels();
   const [gatewayUrl, setGatewayUrl] = useState("");
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads window.location.origin after mount, which the server render cannot know
   useEffect(() => {
     setGatewayUrl(`${window.location.origin}/api/gateway/v1`);
   }, []);
@@ -2074,12 +2086,14 @@ function AccountsAccessSettings() {
   } = useFilter(pats, (pat) => `${pat.name} ${pat.token_display}`);
 
   // Show error popup if SWR fetch fails
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- raises an error toast when the API keys fail to load
   useEffect(() => {
     if (error) {
       toast.error(t("apiKeys.toasts.loadFailed"));
     }
   }, [error, t]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- raises an error toast when the key scopes fail to load
   useEffect(() => {
     if (scopeOptionsError) {
       toast.error(t("apiKeys.toasts.loadPermissionsFailed"));

@@ -20,6 +20,7 @@ export function FullImageModal({
   const t = useTranslations("chat.files");
 
   // pre-fetch image
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- prefetches the full-size image into the browser cache
   useEffect(() => {
     const img = new Image();
     img.src = buildImgUrl(fileId);

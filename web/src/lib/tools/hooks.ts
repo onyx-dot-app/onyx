@@ -869,6 +869,7 @@ export function useToolConfiguration(
 
   // Storage is only reachable on the client, so the first paint shows neutral
   // and this corrects it.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the stored tool configuration from storage after hydration
   useEffect(() => {
     if (key !== null && isChatKey(key)) return;
     // Kept only until it is read: a chat that does not exist yet keeps
@@ -882,6 +883,7 @@ export function useToolConfiguration(
 
   // A configuration handed to the chat a send just created becomes that
   // chat's edits, which its composer then saves.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves a handed-off configuration into the chat session store
   useEffect(() => {
     if (
       key === null ||
@@ -1174,6 +1176,7 @@ export function useToolConfiguration(
 
   // Edits in an existing chat are saved on the server at once, which decides
   // whether the chat keeps them. Only a signed-in user saves.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- saves tool option edits to the server for an existing chat
   useEffect(() => {
     if (chatSessionId === null || !signedIn || optionsEdits === undefined) {
       return;

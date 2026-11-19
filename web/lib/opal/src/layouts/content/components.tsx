@@ -398,6 +398,7 @@ function Content({
   const lineHeight = FONT_LINE_HEIGHT[font];
 
   // Move focus to the edit input as soon as editing starts.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus to the title input when editing starts
   useEffect(() => {
     if (editing) inputRef.current?.focus();
   }, [editing]);

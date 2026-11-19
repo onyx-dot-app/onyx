@@ -132,6 +132,7 @@ export default function useChatSearchOptimistic(
     );
   }, [chatSessions, projects]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- debounce timer that publishes the search query after DEBOUNCE_MS
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(searchQuery), DEBOUNCE_MS);
     return () => clearTimeout(timer);
@@ -195,6 +196,7 @@ export default function useChatSearchOptimistic(
     await setSize(size + 1);
   }, [enabled, isValidating, hasMore, setSize, size]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- IntersectionObserver that loads the next page when the sentinel scrolls into view
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel || !enabled) return;

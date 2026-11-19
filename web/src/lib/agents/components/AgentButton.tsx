@@ -27,6 +27,7 @@ function SortableItem({ id, children }: SortableItemProps) {
   // the drop navigated. Remember that a drag happened and swallow that one
   // click; the flag clears on the next press, which leaves plain clicks alone.
   const dragged = useRef(false);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- records a dnd-kit drag in a ref that the next click handler reads
   useEffect(() => {
     if (isDragging) dragged.current = true;
   }, [isDragging]);

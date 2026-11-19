@@ -80,11 +80,13 @@ export default function GroupsCell({
   }, [groups]);
 
   // Reset to measurement phase when groups change
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- restarts the DOM measurement pass before paint when the groups change
   useLayoutEffect(() => {
     setVisibleCount(null);
   }, [groups]);
 
   // Measure after the "show all" render
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- measures the rendered tags in the DOM before paint to count how many fit
   useLayoutEffect(() => {
     if (visibleCount !== null) return;
     computeVisibleCount();
@@ -95,6 +97,7 @@ export default function GroupsCell({
   // visible tags) don't cause an infinite render loop.
   const lastWidthRef = useRef(0);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that measures the cell again when its width changes
   useEffect(() => {
     const node = containerRef.current;
     if (!node) return;

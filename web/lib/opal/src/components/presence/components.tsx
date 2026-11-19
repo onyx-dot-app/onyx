@@ -153,6 +153,7 @@ function PresenceRoot({
     onExited?.();
   }
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reports a skipped exit to onExited after commit, since render detects the skip and cannot call the parent
   useEffect(() => {
     if (!skippedExit) return;
     setSkippedExit(false);
@@ -161,9 +162,11 @@ function PresenceRoot({
 
   // The collapse never stalls when `transitionend` does not arrive.
   const finishExitRef = useRef(finishExit);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest finishExit in a ref for the collapse fallback timer
   useLayoutEffect(() => {
     finishExitRef.current = finishExit;
   });
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- fallback timer that finishes the collapse when transitionend does not arrive
   useEffect(() => {
     if (phase !== "collapsing") return;
     const fallback = window.setTimeout(
@@ -290,11 +293,13 @@ function PresenceSwap({
 
   // Keep the leaving snapshot current whenever `children` is on screen (every
   // phase but the exit, which shows `outgoing`).
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- snapshots the children on screen into a ref so the exit animation can show them after they change
   useLayoutEffect(() => {
     if (phase !== "exiting") shownChildrenRef.current = children;
   });
 
   // Track the content's size on `axis`, so the box animates to every new size.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that tracks the content size so the box animates to it
   useLayoutEffect(() => {
     const content = contentRef.current;
     if (!content) return;
@@ -310,9 +315,11 @@ function PresenceSwap({
   // and never stall if `transitionend` does not arrive. Runs once per phase
   // change, against the size the box had when the resize began.
   const sizeRef = useRef(size);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the measured size in a ref for the resize phase to compare against
   useLayoutEffect(() => {
     sizeRef.current = size;
   }, [size]);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- measures the content and starts a fallback timer so the resize never stalls without transitionend
   useLayoutEffect(() => {
     if (phase !== "resizing") return;
     const content = contentRef.current;

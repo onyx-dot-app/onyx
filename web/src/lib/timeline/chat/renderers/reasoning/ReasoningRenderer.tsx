@@ -116,6 +116,7 @@ export const ReasoningRenderer: MessageRenderer<
   const completionHandledRef = useRef(false);
 
   // Track when reasoning starts
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- records the wall-clock time when reasoning packets first arrive
   useEffect(() => {
     if ((hasStart || hasEnd) && reasoningStartTime === null) {
       setReasoningStartTime(Date.now());
@@ -123,6 +124,7 @@ export const ReasoningRenderer: MessageRenderer<
   }, [hasStart, hasEnd, reasoningStartTime]);
 
   // Handle reasoning completion with minimum duration
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- minimum-duration timer that reports reasoning completion to the timeline
   useEffect(() => {
     if (
       !hasEnd ||

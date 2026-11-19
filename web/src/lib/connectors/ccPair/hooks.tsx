@@ -388,6 +388,7 @@ export function useActivityItems(
     pollMs
   );
   const { mutate, items } = pages;
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- registers the activity feed in the module registry until unmount
   useEffect(() => {
     const feed: ActivityFeed = {
       ccPairId,
@@ -456,14 +457,21 @@ export function useHeldOpenRun(sections: ActivitySectionState[]) {
       ? undefined
       : sections.find((state) => state.section === held.section);
   const heldTotal = heldState?.total;
-  useEffect(() => {
-    if (latest === undefined || heldTotal === undefined) return;
-    setHeld((current) =>
-      current === null || activityKey(current.item) !== activityKey(latest)
-        ? current
-        : { ...current, item: latest, total: heldTotal }
-    );
-  }, [latest, heldTotal]);
+  const [syncedFrom, setSyncedFrom] = useState<{
+    latest?: ActivityItem;
+    heldTotal?: number;
+  }>({});
+  if (syncedFrom.latest !== latest || syncedFrom.heldTotal !== heldTotal) {
+    setSyncedFrom({ latest, heldTotal });
+    if (
+      latest !== undefined &&
+      heldTotal !== undefined &&
+      held !== null &&
+      activityKey(held.item) === activityKey(latest)
+    ) {
+      setHeld({ ...held, item: latest, total: heldTotal });
+    }
+  }
   // Gone from the loaded pages: newer runs that grew the section may have pushed it onto a page not loaded, so it keeps its last counts. Otherwise its last open error closed.
   const pushedPast =
     held !== null &&
@@ -534,6 +542,7 @@ export function useLoadMorePages<Item>(
     { refreshInterval: pollMs, keepPreviousData: true }
   );
   const firstKey = getKey(0);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- resets the SWR infinite page count to one when the first page key changes
   useEffect(() => {
     void setSize(1);
   }, [firstKey, setSize]);
@@ -667,6 +676,7 @@ export function useConnectorChoices(q: string): ConnectorChoices {
       errorHandlingFetcher,
       { keepPreviousData: true }
     );
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- resets the SWR infinite page count to one when the query changes
   useEffect(() => {
     void setSize(1);
   }, [q, setSize]);
@@ -966,6 +976,7 @@ export function useActivityPanelOpen(scope: ActivityScope): ActivityPanelOpen {
   const key = panelOpenKey(scope);
   // Read after mount: the server renders without storage, so a first render that read it would not hydrate.
   const [choice, setChoice] = useState<boolean | null>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the saved panel choice from localStorage after hydration
   useEffect(() => {
     setChoice(readPanelChoice(key));
   }, [key]);
@@ -977,9 +988,7 @@ export function useActivityPanelOpen(scope: ActivityScope): ActivityPanelOpen {
     ALL_ACTIVITY,
     byDefault === null && choice === null
   );
-  useEffect(() => {
-    if (count !== null && byDefault === null) setByDefault(count > 0);
-  }, [count, byDefault]);
+  if (count !== null && byDefault === null) setByDefault(count > 0);
   function setOpen(open: boolean) {
     setChoice(open);
     try {

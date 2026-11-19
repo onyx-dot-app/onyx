@@ -55,6 +55,7 @@ function OutputsScope(props: OutputsTabProps & { userId: string | undefined }) {
       createOutputThumbnailCache(128, 16 * 1024 * 1024, props.userId);
     return { cache, provider: cache.createProvider() };
   });
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- retains the module thumbnail cache for this user while mounted
   useLayoutEffect(() => {
     retainOutputThumbnailCache(props.userId, cache);
   }, [cache, props.userId]);
@@ -124,6 +125,7 @@ function OutputsBrowser({
   if (snapshot !== undefined && (liveInventory !== null || terminal))
     setSnapshot(undefined);
   const inventory = terminal ? null : (liveInventory ?? snapshot ?? null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- activates and reconciles the session in the module thumbnail cache
   useLayoutEffect(() => {
     cache.activateSession(sessionId);
     if (sessionId) {
@@ -133,6 +135,7 @@ function OutputsBrowser({
     }
     return () => cache.activateSession(null);
   }, [cache, sessionId, liveInventory, status, terminal]);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- saves or clears the output inventory snapshot in browser storage
   useEffect(() => {
     if (!userId || !sessionId) return;
     if (terminal) clearOutputInventorySnapshot(userId, sessionId);

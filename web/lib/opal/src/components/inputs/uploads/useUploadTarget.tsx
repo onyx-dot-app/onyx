@@ -65,6 +65,7 @@ export default function useUploadTarget({
   const pickerOpenRef = useRef<boolean>(false);
   // The latest focus target, kept current after each commit.
   const focusTargetRef = useRef(focusTarget);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest focus callback for the native picker cancel and focus listeners
   useEffect(() => {
     focusTargetRef.current = focusTarget;
   });
@@ -103,6 +104,7 @@ export default function useUploadTarget({
   const pasteRef = useRef<(event: ClipboardEvent) => void>(() => {});
   // Kept current in a layout effect, so a paste right after a commit never
   // sees the previous files.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest paste handler for the document paste listener
   useLayoutEffect(() => {
     pasteRef.current = (event) => {
       const root = rootRef.current;
@@ -121,6 +123,7 @@ export default function useUploadTarget({
       onPasteText(text);
     };
   });
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- subscribes to document paste events while mounted
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => pasteRef.current(event);
     document.addEventListener("paste", onPaste);
@@ -138,6 +141,7 @@ export default function useUploadTarget({
     pickerOpenRef.current = false;
     focusTargetRef.current();
   }
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- listens for the native file picker cancel event
   useEffect(() => {
     const input = fileInputRef.current;
     if (!input) return;

@@ -27,6 +27,7 @@ export default function SuggestedPrompts({
   );
 
   // Collapse the expanded panel when the user clicks anywhere outside it.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- document mousedown listener that collapses the panel on an outside click
   useEffect(() => {
     if (expandedId === null) return;
     function handleOutsideClick(event: MouseEvent) {

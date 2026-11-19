@@ -29,6 +29,7 @@ const DEFAULT_BROWSER_INFO: BrowserInfo = {
 export default function useBrowserInfo(): BrowserInfo {
   const [browserInfo, setBrowserInfo] =
     useState<BrowserInfo>(DEFAULT_BROWSER_INFO);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads navigator.userAgent after hydration
   useEffect(() => {
     const userAgent = window.navigator.userAgent;
 

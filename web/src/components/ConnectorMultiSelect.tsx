@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useTranslations } from "next-intl";
 import { ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
@@ -52,11 +52,14 @@ export const ConnectorMultiSelect = ({
   const allConnectorsSelected =
     connectors.length > 0 && unselectedConnectors.length === 0;
 
-  useEffect(() => {
-    if (allConnectorsSelected) {
-      setSearchQuery("");
-    }
-  }, [allConnectorsSelected, selectedIds]);
+  const [synced, setSynced] = useState({ selectedIds, allConnectorsSelected });
+  if (
+    synced.selectedIds !== selectedIds ||
+    synced.allConnectorsSelected !== allConnectorsSelected
+  ) {
+    setSynced({ selectedIds, allConnectorsSelected });
+    if (allConnectorsSelected) setSearchQuery("");
+  }
 
   const selectConnector = (connectorId: number) => {
     onChange([...selectedIds, connectorId]);

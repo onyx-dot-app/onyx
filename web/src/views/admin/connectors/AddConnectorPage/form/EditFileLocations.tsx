@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { useField } from "formik";
 import { useTranslations } from "next-intl";
 import { Button, Card, Pagination, Text } from "@opal/components";
@@ -66,9 +66,7 @@ export default function EditFileLocations({
   );
 
   // Removing files can shrink the list under an open page.
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+  if (page > totalPages) setPage(totalPages);
 
   const setList = (next: ConnectorFileList) => {
     void locationsHelpers.setValue(next.fileIds);

@@ -111,6 +111,7 @@ export default function BuildMessageList({
         turns.set(message.turn_index, message.id);
     return turns;
   }, [messages]);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the message list DOM to the bottom as messages stream in while auto-scroll is on
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (autoScrollEnabled && container) {

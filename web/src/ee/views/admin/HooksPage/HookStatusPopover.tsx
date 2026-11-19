@@ -102,12 +102,14 @@ export default function HookStatusPopover({
     )
     .slice(0, 3);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the close timer on unmount
   useEffect(() => {
     return () => {
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     };
   }, []);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- logs the execution log fetch error to the console
   useEffect(() => {
     if (error) {
       console.error(

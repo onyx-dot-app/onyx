@@ -65,6 +65,7 @@ export function IncognitoProvider({ children }: IncognitoProviderProps) {
   // remount the hook. Revalidating per navigation picks up admin changes to
   // the availability setting or group flags without a hard refresh.
   const pathname = usePathname();
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- revalidates incognito availability from the server on each route change
   useEffect(() => {
     void revalidateAvailability();
   }, [pathname, revalidateAvailability]);
@@ -80,6 +81,7 @@ export function IncognitoProvider({ children }: IncognitoProviderProps) {
   }, [incognitoLocked, incognitoEnabled]);
 
   const incognitoEnabledRef = useRef(false);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest incognito flag in a ref that context consumers read at event time
   useEffect(() => {
     incognitoEnabledRef.current = incognitoEnabled;
   }, [incognitoEnabled]);

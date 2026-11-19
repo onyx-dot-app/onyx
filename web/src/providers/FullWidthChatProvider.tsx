@@ -35,6 +35,7 @@ export function FullWidthChatProvider({
 }: FullWidthChatProviderProps) {
   const [fullWidthChat, setFullWidthChat] = useState(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the saved full-width choice from localStorage after hydration
   useEffect(() => {
     try {
       setFullWidthChat(localStorage.getItem(STORAGE_KEY) === "true");

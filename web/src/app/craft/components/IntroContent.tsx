@@ -19,6 +19,7 @@ export default function BuildModeIntroContent({
 }: BuildModeIntroContentProps) {
   const t = useTranslations("craft.intro");
   // Track when user sees the craft intro
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- sends the saw-intro analytics event on mount
   useEffect(() => {
     track(AnalyticsEvent.SAW_CRAFT_INTRO);
   }, []);

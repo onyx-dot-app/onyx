@@ -673,6 +673,7 @@ export function useResetChecksOnCredentialChange({
   const stale: boolean = !!session && session.credentialKey !== credentialKey;
   const staleRunId: string | null = stale ? (session?.runId ?? null) : null;
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- cancels the stale server check run and replaces the SWR check session when the credential changes
   useEffect(() => {
     if (!stale) return;
     if (staleRunId !== null) {
@@ -803,6 +804,7 @@ export function useConnectorCheckPlan(
  */
 export function useResetConnectorChecks(source: ConfigurableSources): void {
   const { mutate } = useSWRConfig();
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the SWR check session cache entry for the source on mount
   useEffect(() => {
     void mutate(SWR_KEYS.connectorCheckSession(source), undefined, {
       revalidate: false,
@@ -912,6 +914,7 @@ export function useConnectorChecksAutoRun({
   refresh,
 }: Pick<UseConnectorChecksResult, "needsRun" | "formKey" | "refresh">): void {
   const startedFor = useRef<string | null>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- document focusout listener that starts the checks once typing stops
   useEffect(() => {
     if (!needsRun) return;
     const run = () => {

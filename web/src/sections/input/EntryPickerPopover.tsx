@@ -54,18 +54,24 @@ function EntryPickerPopover({
 
   const flatEntries = useMemo(() => flattenSections(sections), [sections]);
 
-  useEffect(() => {
+  // Opening or a new query highlights the first row again.
+  const [selectionFor, setSelectionFor] = useState({ open, query });
+  if (selectionFor.open !== open || selectionFor.query !== query) {
+    setSelectionFor({ open, query });
     setSelectedIndex(0);
-  }, [open, query]);
+  }
 
   // SWR may revalidate while open and shrink the row count; clamp so Enter
   // doesn't silently fall back to a different row than the one highlighted.
-  useEffect(() => {
+  const [clampedFor, setClampedFor] = useState(flatEntries.length);
+  if (clampedFor !== flatEntries.length) {
+    setClampedFor(flatEntries.length);
     setSelectedIndex((i) =>
       flatEntries.length === 0 ? 0 : Math.min(i, flatEntries.length - 1)
     );
-  }, [flatEntries.length]);
+  }
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the highlighted row DOM node into view
   useEffect(() => {
     if (!open) return;
     const container = scrollContainerRef.current;
@@ -76,6 +82,7 @@ function EntryPickerPopover({
     row?.scrollIntoView({ block: "nearest" });
   }, [open, selectedIndex]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- document keydown listener that moves and picks the highlighted row
   useEffect(() => {
     if (!open) return;
 

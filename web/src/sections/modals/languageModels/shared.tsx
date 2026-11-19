@@ -455,6 +455,7 @@ export function RefetchButton({ onRefetch }: RefetchButtonProps) {
   const abortRef = useRef<AbortController | null>(null);
   const [isFetching, setIsFetching] = useState(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- aborts the in-flight model fetch on unmount
   useEffect(() => {
     return () => abortRef.current?.abort();
   }, []);
@@ -775,17 +776,17 @@ export function ModelSelectionField({
   const [layout, setLayout] = useState<ModelListLayout | null>(null);
   // Models the admin types in stay where they appear; a refetch re-sorts.
   const [typedNames, setTypedNames] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    if (models.length === 0) return;
-    const known = new Set(layout?.order);
-    if (
-      layout === null ||
+  const knownModelNames = new Set(layout?.order);
+  if (
+    models.length > 0 &&
+    (layout === null ||
       layout.sortedByName !== models.some((m) => hasModelMetadata(m)) ||
-      models.some((m) => !known.has(m.name) && !typedNames.has(m.name))
-    ) {
-      setLayout(foldedLayout(models));
-    }
-  }, [models, layout, typedNames]);
+      models.some(
+        (m) => !knownModelNames.has(m.name) && !typedNames.has(m.name)
+      ))
+  ) {
+    setLayout(foldedLayout(models));
+  }
 
   const addModel =
     onAddModel &&
@@ -1115,6 +1116,7 @@ function ModalWrapperInner({
   // A provider with thousands of models saves in seconds, not instantly, so
   // a long-running submit says so instead of looking stuck.
   const [saveIsSlow, setSaveIsSlow] = useState(false);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- timer that shows the slow-save notice after SLOW_SAVE_NOTICE_MS
   useEffect(() => {
     if (!isSubmitting) {
       setSaveIsSlow(false);

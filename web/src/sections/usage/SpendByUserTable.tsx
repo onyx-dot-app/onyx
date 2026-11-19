@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   InputSingleComboBox,
@@ -208,13 +208,8 @@ export default function SpendByUserTable({
     [users]
   );
 
-  useEffect(() => {
-    if (model !== ALL && !models.includes(model)) setModel(ALL);
-  }, [model, models]);
-
-  useEffect(() => {
-    if (flow !== ALL && !flows.includes(flow)) setFlow(ALL);
-  }, [flow, flows]);
+  if (model !== ALL && !models.includes(model)) setModel(ALL);
+  if (flow !== ALL && !flows.includes(flow)) setFlow(ALL);
 
   // Filtered manually: Table's built-in global filter matches any column, so numeric queries would match token counts too.
   const rows = useMemo(() => {

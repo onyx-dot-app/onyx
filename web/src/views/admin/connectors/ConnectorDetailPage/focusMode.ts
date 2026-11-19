@@ -14,6 +14,7 @@ export function useFocusedRow<K extends string | number>(
   useEffect(() => {
     onFocusChange?.(openKey !== null);
   }, [openKey, onFocusChange]);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- tells the parent the list lost focus when this list unmounts
   useEffect(() => () => onFocusChange?.(false), [onFocusChange]);
 
   const setOpen = useCallback((key: K, open: boolean) => {

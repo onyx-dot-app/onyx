@@ -82,6 +82,7 @@ function MicrophoneButton({
   const messagePrefixRef = useRef("");
   const currentMessageRef = useRef(currentMessage);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest message in a ref for the auto-listen timer
   useEffect(() => {
     currentMessageRef.current = currentMessage;
   }, [currentMessage]);
@@ -130,6 +131,7 @@ function MicrophoneButton({
   });
 
   // Expose stopRecording to parent
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- publishes stopRecording on the parent's imperative ref
   useEffect(() => {
     if (stopRecordingRef) {
       stopRecordingRef.current = stopRecording;
@@ -137,6 +139,7 @@ function MicrophoneButton({
   }, [stopRecording, stopRecordingRef]);
 
   // Expose setMuted to parent
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- publishes setMuted on the parent's imperative ref
   useEffect(() => {
     if (setMutedRef) {
       setMutedRef.current = setMuted;
@@ -144,21 +147,25 @@ function MicrophoneButton({
   }, [setMuted, setMutedRef]);
 
   // Notify parent when mute state changes
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reports the voice recorder's mute state to the parent
   useEffect(() => {
     onMuteChange?.(isMuted);
   }, [isMuted, onMuteChange]);
 
   // Forward audio level to parent for waveform visualization
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- forwards the voice recorder's audio level to the parent waveform
   useEffect(() => {
     onAudioLevel?.(audioLevel);
   }, [audioLevel, onAudioLevel]);
 
   // Notify parent when recording state changes
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reports the voice recorder's recording state to the parent
   useEffect(() => {
     onRecordingChange?.(isRecording);
   }, [isRecording, onRecordingChange]);
 
   // Update input with live transcript as user speaks (appending to existing text)
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- pushes the speech recognizer's live transcript into the message input
   useEffect(() => {
     if (
       isRecording &&
@@ -223,6 +230,7 @@ function MicrophoneButton({
   // Small cooldown reduces playback bleed being re-captured by the microphone.
   // IMPORTANT: Only trigger auto-listen if TTS was actually playing audio,
   // not just loading. This prevents auto-listen from triggering when TTS fails.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- cooldown timer that restarts the microphone after TTS playback ends
   useEffect(() => {
     if (autoListenCooldownTimerRef.current) {
       clearTimeout(autoListenCooldownTimerRef.current);
@@ -289,6 +297,7 @@ function MicrophoneButton({
   ]);
 
   // New sessions must start with an explicit manual mic press.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the auto-listen and transcript flags that the recorder callbacks read when a new session starts
   useEffect(() => {
     if (isNewSession) {
       hasManualRecordStartRef.current = false;
@@ -296,12 +305,14 @@ function MicrophoneButton({
     }
   }, [isNewSession]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- re-enables transcript updates once the voice recorder stops
   useEffect(() => {
     if (!isRecording) {
       suppressTranscriptUpdatesRef.current = false;
     }
   }, [isRecording]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the auto-listen cooldown timer on unmount
   useEffect(() => {
     return () => {
       if (autoListenCooldownTimerRef.current) {
@@ -311,6 +322,7 @@ function MicrophoneButton({
     };
   }, []);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- shows a toast for each voice recorder error
   useEffect(() => {
     if (error) {
       console.error("Voice recorder error:", error);

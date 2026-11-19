@@ -467,23 +467,16 @@ export default function SourceHierarchyBrowser({
 
   // Populate selectedDocumentDetails for any documents that are already selected
   // but don't have their details stored (e.g., when editing an existing agent)
-  useEffect(() => {
-    if (documents.length === 0) return;
-
-    const missingDetails = documents.filter(
-      (doc) =>
-        selectedDocumentIds.includes(doc.id) &&
-        !selectedDocumentDetails.has(doc.id)
-    );
-
-    if (missingDetails.length > 0) {
-      setSelectedDocumentDetails((prev) => {
-        const updated = new Map(prev);
-        missingDetails.forEach((doc) => updated.set(doc.id, doc));
-        return updated;
-      });
-    }
-  }, [documents, selectedDocumentIds, selectedDocumentDetails]);
+  const missingDetails = documents.filter(
+    (doc) =>
+      selectedDocumentIds.includes(doc.id) &&
+      !selectedDocumentDetails.has(doc.id)
+  );
+  if (missingDetails.length > 0) {
+    const updated = new Map(selectedDocumentDetails);
+    missingDetails.forEach((doc) => updated.set(doc.id, doc));
+    setSelectedDocumentDetails(updated);
+  }
 
   // Get child folders of the current path
   const childFolders = useMemo(() => {
@@ -614,14 +607,17 @@ export default function SourceHierarchyBrowser({
     onSelectionCountChange?.(source, currentSourceSelectedCount);
   }, [source, currentSourceSelectedCount, onSelectionCountChange]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest path in a ref for the view-selected toggle handler
   useEffect(() => {
     pathRef.current = path;
   }, [path]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest saved path in a ref for the view-selected toggle handler
   useEffect(() => {
     savedPathRef.current = savedPath;
   }, [savedPath]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest view-selected flag in a ref for the toggle handler
   useEffect(() => {
     viewSelectedOnlyRef.current = viewSelectedOnly;
   }, [viewSelectedOnly]);

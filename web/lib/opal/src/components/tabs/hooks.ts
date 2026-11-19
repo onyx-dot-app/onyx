@@ -60,6 +60,7 @@ export function useTabIndicator(
   });
   const [measured, setMeasured] = useState(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- measures the active tab DOM rect and tracks resizes to place the indicator
   useEffect(() => {
     const list = listRef.current;
     const origin = originRef.current;
@@ -163,6 +164,7 @@ export function useHorizontalScroll(
     setCanScrollRight(fromLeft < maxScroll - SCROLL_TOLERANCE_PX);
   }, [containerRef]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- tracks container scroll, resize and child mutations to show the scroll arrows
   useEffect(() => {
     if (!enabled) return;
     const container = containerRef.current;

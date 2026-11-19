@@ -326,6 +326,7 @@ export default function BuildModeIntroBackground(
   }, [redistributeParticles]);
 
   // Effect to reinitialize particles when particle count changes
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- rebuilds the canvas particle set when the count or canvas size changes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -337,6 +338,7 @@ export default function BuildModeIntroBackground(
   }, [particleCount, initializeParticles, canvasSize]);
 
   // Effect to update particle properties when they change
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- updates the canvas particles' opacity and speed in place for the animation loop
   useEffect(() => {
     particlesRef.current.forEach((particle) => {
       particle.baseOpacity = particleOpacity;
@@ -353,6 +355,7 @@ export default function BuildModeIntroBackground(
     });
   }, [particleOpacity, movementSpeed]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- window mousemove and resize listeners and a ResizeObserver that size the canvas
   useEffect(() => {
     resizeCanvas();
 
@@ -385,6 +388,7 @@ export default function BuildModeIntroBackground(
     };
   }, [handleMouseMove, resizeCanvas]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- runs the canvas animation frame loop
   useEffect(() => {
     animate();
 

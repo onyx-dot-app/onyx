@@ -16,6 +16,7 @@ export function DesktopOAuthHandoff() {
   const t = useTranslations("common.oauthCallback.desktopHandoff");
   const [returnUrl, setReturnUrl] = useState<string | null>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the OAuth return URL from window.location and loads it on mount
   useEffect(() => {
     const url = desktopOAuthReturnUrl(new URL(window.location.href));
     setReturnUrl(url);

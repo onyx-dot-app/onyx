@@ -19,6 +19,7 @@ function Page() {
   // until it does.
   const [restarting, setRestarting] = useState(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- claims the one-time SSO restart and sends the router back to login
   useEffect(() => {
     if (!isStale || restartStarted.current) return;
     if (claimSsoRestart()) {

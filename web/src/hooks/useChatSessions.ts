@@ -220,6 +220,7 @@ export default function useChatSessions(): UseChatSessionsOutput {
 
   // Clean up pending sessions that now appear in fetched data
   // (they now have messages and the server returns them)
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- removes pending sessions from the pending session store once the server lists them
   useEffect(() => {
     const fetchedIds = new Set(allFetchedSessions.map((s) => s.id));
     pendingSessions.forEach((pending) => {

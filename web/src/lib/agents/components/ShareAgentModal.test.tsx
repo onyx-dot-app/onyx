@@ -89,6 +89,7 @@ jest.mock("@/lib/agents/hooks", () => ({
 function ModalHarness(props: ShareAgentModalProps) {
   const modal = useCreateModal();
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- test harness that opens the modal store on mount
   useEffect(() => {
     modal.toggle(true);
   }, [modal]);

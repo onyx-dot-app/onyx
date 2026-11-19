@@ -188,6 +188,7 @@ function TagField({
     [rootRef]
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus into the field on mount when focusOnMount is set
   useEffect(() => {
     if (focusOnMount) focusField();
     // Mount only: later prop changes must not steal focus back.
@@ -197,6 +198,7 @@ function TagField({
   // Past `maxRows` that row is below the fold, so follow it. Removals keep
   // the scroll position: the chip the user is looking at must not move.
   const prevTagCount = useRef(tags.length);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the chip list to the newest chip after the DOM grows
   useEffect(() => {
     const grew = tags.length > prevTagCount.current;
     prevTagCount.current = tags.length;

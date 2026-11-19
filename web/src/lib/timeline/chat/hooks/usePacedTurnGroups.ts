@@ -160,6 +160,7 @@ export function usePacedTurnGroups(
     setRevealTrigger((t) => t + 1);
   }, []);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the pacing timer and resets pacing state when the message node changes
   useEffect(() => {
     if (!hasNodeChanged) {
       return;
@@ -174,6 +175,7 @@ export function usePacedTurnGroups(
     prevFinalAnswerComingRef.current = finalAnswerComing;
   }, [finalAnswerComing, hasNodeChanged, resetState]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- pacing timer that reveals the next pending step
   useEffect(() => {
     const state = stateRef.current;
 
@@ -402,6 +404,7 @@ export function usePacedTurnGroups(
     hasNodeChanged,
   ]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- remembers the last paced groups for the next render to compare against
   useEffect(() => {
     prevPacedRef.current = pacedTurnGroups;
   }, [pacedTurnGroups]);

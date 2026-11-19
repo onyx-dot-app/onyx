@@ -80,6 +80,7 @@ export function OpenSearchResourceBanner(): ReactElement | null {
   const { data, error } = useOpenSearchResourceHealth();
   const detailsModal = useCreateModal();
   const hasIssues: boolean = !!data?.issues.length;
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- closes the details modal store when the user or the issue state changes
   useEffect(() => {
     detailsModal.toggle(false);
   }, [user?.id, hasIssues, detailsModal.toggle]);
@@ -137,6 +138,7 @@ export function OpenSearchResourcePopup(): ReactElement | null {
     result: Promise<ResourcePopupResponse>;
   } | null>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- claims the resource warning popup from the server once per user
   useEffect(() => {
     setWarning(null);
     if (!userId) {

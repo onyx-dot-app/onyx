@@ -116,11 +116,13 @@ export function DirectoryTree({
   useEffect(() => {
     onStatusChange(path, status);
   }, [path, status, onStatusChange]);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- removes this folder's entry from the parent status registry on unmount or path change
   useEffect(
     () => () => onStatusChange(path, undefined),
     [path, onStatusChange]
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- prunes expanded paths in the build session store that the loaded listing no longer has
   useEffect(() => {
     if (!listingActive || !isCurrentGeneration || !data || isLoading || error)
       return;

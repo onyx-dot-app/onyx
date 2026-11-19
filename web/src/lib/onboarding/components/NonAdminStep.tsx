@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useTranslations } from "next-intl";
 import { IconContainer, InputTypeIn, SelectCard } from "@opal/components";
 import { updateUserPersonalization } from "@/lib/users/svc";
@@ -22,12 +22,10 @@ export default function NonAdminStep() {
   const [savedName, setSavedName] = useState("");
 
   // Initialize name from user if available
-  useEffect(() => {
-    if (user?.personalization?.name && !savedName) {
-      setSavedName(user.personalization.name);
-      setIsEditing(false);
-    }
-  }, [user?.personalization?.name, savedName]);
+  if (user?.personalization?.name && !savedName) {
+    setSavedName(user.personalization.name);
+    setIsEditing(false);
+  }
 
   const containerClasses = cn(
     "flex items-center justify-between w-full p-3 bg-background-tint-00 rounded-16 border border-border-01 mb-4"

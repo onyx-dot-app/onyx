@@ -142,13 +142,18 @@ export default function UserLibraryModal({
   // Reset transient state when the modal closes, so a drag interrupted by a
   // close doesn't leave the overlay stuck and a stale search doesn't hide
   // files on reopen.
-  useEffect(() => {
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (!open) {
-      dragDepth.current = 0;
       setIsDragging(false);
       setSearchQuery("");
       setActionError(null);
     }
+  }
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- resets the DOM dragenter counter when the modal closes mid-drag
+  useEffect(() => {
+    if (!open) dragDepth.current = 0;
   }, [open]);
 
   const toggleFolder = useCallback((path: string) => {

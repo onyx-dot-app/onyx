@@ -43,10 +43,12 @@ export function useEscapeInterrupt({
   // Held in a ref so the listener doesn't tear down on onInterrupt identity churn.
   const onInterruptRef = useRef(onInterrupt);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest onInterrupt in a ref for the window keydown listener
   useEffect(() => {
     onInterruptRef.current = onInterrupt;
   }, [onInterrupt]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- window keydown listeners that interrupt on Escape
   useEffect(() => {
     if (!enabled) return;
 

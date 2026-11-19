@@ -13,6 +13,7 @@ export default function EditFederatedConnectorPage(props: {
   const t = useTranslations("admin.federated");
   const [params, setParams] = useState<{ id: string } | null>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- resolves the Next.js route params promise
   useEffect(() => {
     props.params.then(setParams);
   }, [props.params]);

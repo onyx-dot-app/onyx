@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Text,
@@ -233,11 +233,15 @@ export default function FilePickerPopover({
     openRecentFilesModal: () => recentFilesModal.toggle(true),
   });
 
-  useEffect(() => {
+  const [syncedRecentFiles, setSyncedRecentFiles] = useState<
+    ProjectFile[] | null
+  >(null);
+  if (syncedRecentFiles !== allRecentFiles) {
+    setSyncedRecentFiles(allRecentFiles);
     setRecentFilesSnapshot(
       allRecentFiles.slice().filter((f) => !deletedFileIds.includes(f.id))
     );
-  }, [allRecentFiles]);
+  }
 
   const handleDeleteFile = (file: ProjectFile) => {
     const lastStatus = file.status;

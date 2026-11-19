@@ -38,10 +38,12 @@ function PasteTilePopover({
     });
   }, [tileElement]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus to the textarea on open
   useEffect(() => {
     textareaRef.current?.focus();
   }, []);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- document keydown listener that dismisses on Escape
   useEffect(() => {
     function handleEscape(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -53,6 +55,7 @@ function PasteTilePopover({
     return () => document.removeEventListener("keydown", handleEscape);
   }, [onDismiss]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- window resize and scroll listeners that reposition the popover
   useEffect(() => {
     window.addEventListener("resize", updateRect);
     document.addEventListener("scroll", updateRect, true);

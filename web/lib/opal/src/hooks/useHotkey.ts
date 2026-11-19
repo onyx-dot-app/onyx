@@ -94,10 +94,12 @@ export default function useHotkey(
 ): void {
   // The latest handler, so an inline callback does not rebind the listener.
   const handlerRef = useRef(handler);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- latest handler in a ref, so the document keydown listener calls it without rebinding
   useEffect(() => {
     handlerRef.current = handler;
   });
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- document keydown listener that fires the handler for the hotkey
   useEffect(() => {
     if (!enabled) return;
     const parsed = parseHotkey(hotkey);

@@ -2,13 +2,7 @@
 
 import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
 import {
@@ -278,10 +272,12 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
     }
   );
 
-  useEffect(() => {
+  const [pagedTaskId, setPagedTaskId] = useState(taskId);
+  if (pagedTaskId !== taskId) {
+    setPagedTaskId(taskId);
     setOlderPages([]);
     setOlderNextCursor(null);
-  }, [taskId]);
+  }
 
   const loadMoreCursor =
     olderPages.length > 0 ? olderNextCursor : (data?.next_cursor ?? null);

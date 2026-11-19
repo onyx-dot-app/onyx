@@ -506,12 +506,14 @@ export function useVoiceRecorder(
   const autoStopOnSilenceRef = useRef(options?.autoStopOnSilence ?? true); // Default to true
 
   // Keep callback ref in sync
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest transcript callback and silence option in refs that the recognizer callbacks read
   useEffect(() => {
     onFinalTranscriptRef.current = options?.onFinalTranscript;
     autoStopOnSilenceRef.current = options?.autoStopOnSilence ?? true;
   }, [options?.onFinalTranscript, options?.autoStopOnSilence]);
 
   // Cleanup on unmount
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- stops the recording session and its media resources on unmount
   useEffect(() => {
     isMountedRef.current = true;
     return () => {

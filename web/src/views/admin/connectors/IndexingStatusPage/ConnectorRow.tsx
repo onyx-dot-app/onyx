@@ -125,6 +125,7 @@ export default function ConnectorRow({
   useEffect(() => {
     onFocusChange(ccPairId, focused);
   }, [ccPairId, focused, onFocusChange]);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- tells the parent the row lost focus when it unmounts
   useEffect(
     () => () => onFocusChange(ccPairId, false),
     [ccPairId, onFocusChange]

@@ -934,6 +934,7 @@ export default function IndexSettingsPage() {
   // When a migration finishes, the fast poll on the current settings stops in
   // the same render — revalidate once so the new model shows as current.
   const wasReindexingRef = useRef(false);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- revalidates the SWR search settings once when a migration finishes
   useEffect(() => {
     if (wasReindexingRef.current && !isReindexing) {
       mutate(SWR_KEYS.currentSearchSettings);
@@ -1075,9 +1076,9 @@ export default function IndexSettingsPage() {
   // cached list can't pass as ready. Later 30s polls leave this true, so Apply doesn't
   // flicker between enabled and disabled.
   const [statusesSettled, setStatusesSettled] = useState(false);
-  useEffect(() => {
-    if (!isLoadingStatuses && !isValidatingStatuses) setStatusesSettled(true);
-  }, [isLoadingStatuses, isValidatingStatuses]);
+  if (!statusesSettled && !isLoadingStatuses && !isValidatingStatuses) {
+    setStatusesSettled(true);
+  }
   // An empty won't-port set before the statuses arrive is a false empty, and submitting on
   // it skips the consent modal only to be rejected by the server's drift check.
   const connectorStatusesReady = statusesSettled && !statusesError;

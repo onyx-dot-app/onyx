@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import {
@@ -186,16 +186,12 @@ export default function SystemUsagePanel({ timeRange }: SystemUsagePanelProps) {
       ).sort(),
     [records]
   );
-  useEffect(() => {
-    if (usage && model !== ALL_FILTER && !models.includes(model)) {
-      setModel(ALL_FILTER);
-    }
-  }, [usage, model, models]);
-  useEffect(() => {
-    if (usage && provider !== ALL_FILTER && !providers.includes(provider)) {
-      setProvider(ALL_FILTER);
-    }
-  }, [usage, provider, providers]);
+  if (usage && model !== ALL_FILTER && !models.includes(model)) {
+    setModel(ALL_FILTER);
+  }
+  if (usage && provider !== ALL_FILTER && !providers.includes(provider)) {
+    setProvider(ALL_FILTER);
+  }
   const rows = useMemo(
     () =>
       (usage?.categories ?? []).flatMap((category) => {

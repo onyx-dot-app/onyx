@@ -255,6 +255,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
   });
 
   // 4. Call useDraggableRows (conditional — disabled in server-side mode)
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- dev-only console warning when serverSide and draggable are both set
   useEffect(() => {
     if (process.env.NODE_ENV !== "production" && serverSide && draggable) {
       console.warn(

@@ -29,6 +29,7 @@ export default function useIndexAttemptStageMetrics(indexAttemptId: number) {
   );
 
   // The stage details show a generic load error, so log the payload for debugging.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- logs the stage metrics load error to the console
   useEffect(() => {
     if (error) {
       console.error(

@@ -116,6 +116,7 @@ export default function ProviderSignInButton({
     [provider.authorizeUrl, nextUrl, t, navigation]
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- starts the provider sign-in redirect once when autoStart is set
   useEffect(() => {
     if (!autoStart || autoStarted.current) return;
     autoStarted.current = true;

@@ -33,6 +33,7 @@ function OAuthCallbackPageContent() {
 
   const connector = pathname.split("/")[3];
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- sends the OAuth callback code and state from the URL to the server on load
   useEffect(() => {
     const onFirstLoad = async () => {
       // Examples

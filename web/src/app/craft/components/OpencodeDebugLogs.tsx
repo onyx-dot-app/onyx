@@ -117,6 +117,7 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
   // Refs mirror the state inside the SSE reader's hot loop without
   // forcing it to re-bind on every state change.
   const followRef = useRef<boolean>(follow);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps follow in a ref that the SSE reader loop reads
   useEffect(() => {
     followRef.current = follow;
   }, [follow]);
@@ -139,6 +140,7 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
   }, []);
 
   // Connect on open, abort on close.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- opens the debug log SSE stream while the panel is open and aborts it on close
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
@@ -217,6 +219,7 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
   }, [open, appendLine, t]);
 
   // Auto-scroll to bottom when follow=true and lines change.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the log DOM to the bottom as lines arrive while follow is on
   useEffect(() => {
     if (!follow) return;
     const el = scrollRef.current;
@@ -263,6 +266,7 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
     }
   }, [filteredLines]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the copy-feedback timer on unmount
   useEffect(() => {
     return () => {
       if (copyResetRef.current) clearTimeout(copyResetRef.current);

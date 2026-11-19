@@ -31,6 +31,7 @@ function IntegrationOAuthCallbackContent() {
   // The code is single-use: a second POST (Strict Mode, a remount) fails.
   const started = useRef(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- exchanges the single-use OAuth code with the server once on mount
   useEffect(() => {
     if (started.current) return;
     started.current = true;

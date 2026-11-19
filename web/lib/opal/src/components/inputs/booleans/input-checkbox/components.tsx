@@ -56,6 +56,7 @@ function InputCheckbox({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Merge refs
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- forwards the input DOM node to the caller's ref and clears it on unmount
   useEffect(() => {
     if (ref) {
       if (typeof ref === "function") {
@@ -81,6 +82,7 @@ function InputCheckbox({
   const checked = isControlled ? controlledChecked : uncontrolledChecked;
 
   // Set indeterminate state on the DOM element
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- sets the DOM-only indeterminate property on the checkbox input
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.indeterminate = indeterminate;

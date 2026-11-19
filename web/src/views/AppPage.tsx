@@ -199,6 +199,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // An explicit agent pick supersedes project context — the two cannot both
   // scope a new chat. This used to ride on the agent-selection callback, but
   // it is a URL concern, so it is stated against the URL.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- router replace that drops the project param when the URL also picks an agent
   useEffect(() => {
     const params = new URLSearchParams(searchParams?.toString() || "");
     if (
@@ -262,6 +263,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   });
 
   // Show toast if any files failed in ProjectsContext reconciliation
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- shows a toast for files the projects context failed to upload, then clears them
   useEffect(() => {
     if (lastFailedFiles && lastFailedFiles.length > 0) {
       const names = lastFailedFiles.map((f) => f.name).join(", ");
@@ -281,10 +283,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
 
-  // Reset scroll button when session changes
-  useEffect(() => {
+  const [scrollButtonSessionId, setScrollButtonSessionId] =
+    useState(currentChatSessionId);
+  if (scrollButtonSessionId !== currentChatSessionId) {
+    setScrollButtonSessionId(currentChatSessionId);
     setShowScrollButton(false);
-  }, [currentChatSessionId]);
+  }
 
   const handleScrollToBottom = useCallback(() => {
     scrollContainerRef.current?.scrollToBottom();
@@ -338,6 +342,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // fresh chat or straight into another one. Only the id changing tells us
   // this happened, since incognito sessions never enter the sessions list.
   const prevSessionIdForIncognito = useRef(currentChatSessionId);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ends the server incognito session when the chat session id changes
   useEffect(() => {
     const previous = prevSessionIdForIncognito.current;
     prevSessionIdForIncognito.current = currentChatSessionId;
@@ -358,6 +363,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   // Best-effort teardown when the tab closes over a live incognito session.
   // sendBeacon survives unload where fetch would be cancelled.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- pagehide listener that ends the incognito session with sendBeacon
   useEffect(() => {
     if (!incognitoEnabled || !currentChatSessionId) return;
     const sessionId = currentChatSessionId;
@@ -723,6 +729,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const [onboardingBottomRowPx, setOnboardingBottomRowPx] = useState<
     number | null
   >(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- measures the bottom row DOM height while onboarding shows
   useLayoutEffect(() => {
     if (!onboardingVisible) {
       setOnboardingBottomRowPx(null);

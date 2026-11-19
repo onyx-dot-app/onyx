@@ -150,6 +150,7 @@ function ChatPanelContent({
   const shouldStreamScheduledRun = scheduledRunContext?.status === "RUNNING";
   const scheduledRunId = scheduledRunContext?.run_id;
   const viewedScheduledRunRevision = useRef<string | null>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- marks a finished scheduled run as viewed on the server once it is displayed
   useEffect(() => {
     if (
       !scheduledRunContext ||
@@ -314,11 +315,13 @@ function ChatPanelContent({
   } = useUploadFilesContext();
 
   // URL sessions identify drafts; provisional sessions provide upload destinations.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- points the upload pipeline at the session that owns new attachments
   useEffect(() => {
     const activeSession = existingSessionId ?? preProvisionedSessionId ?? null;
     setActiveSession(activeSession, { draftId: existingSessionId ?? null });
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- streams the running scheduled run's events from the server and aborts on change
   useEffect(() => {
     if (!scheduledSessionId || !scheduledRunId || !shouldStreamScheduledRun)
       return;
@@ -342,6 +345,7 @@ function ChatPanelContent({
     mutateScheduledRunContext,
   ]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- starts turn settlement in the build session store once a scheduled run stops
   useEffect(() => {
     if (
       !scheduledSessionId ||
@@ -372,7 +376,15 @@ function ChatPanelContent({
   // Scroll detection for auto-scroll "magnet"
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
-  const prevScrollTopRef = useRef(0);
+  // Each session change starts a new scroll epoch, so a stored offset from an
+  // earlier visit to the same session is never reused.
+  const [scrollSession, setScrollSession] = useState({ sessionId, epoch: 0 });
+  if (scrollSession.sessionId !== sessionId) {
+    setScrollSession({ sessionId, epoch: scrollSession.epoch + 1 });
+    setIsAtBottom(true);
+  }
+  const scrollEpoch = scrollSession.epoch;
+  const prevScrollRef = useRef({ epoch: scrollEpoch, top: 0 });
 
   // Check if user is at bottom of scroll container
   const checkIfAtBottom = useCallback(() => {
@@ -394,7 +406,8 @@ function ChatPanelContent({
     if (!container) return;
 
     const currentScrollTop = container.scrollTop;
-    const prevScrollTop = prevScrollTopRef.current;
+    const prevScroll = prevScrollRef.current;
+    const prevScrollTop = prevScroll.epoch === scrollEpoch ? prevScroll.top : 0;
     const wasAtBottom = checkIfAtBottom();
 
     // Detect if user scrolled up (scrollTop decreased)
@@ -412,8 +425,8 @@ function ChatPanelContent({
     }
     // If scrollTop increased but we're still at bottom, it's content growth - do nothing
 
-    prevScrollTopRef.current = currentScrollTop;
-  }, [checkIfAtBottom]);
+    prevScrollRef.current = { epoch: scrollEpoch, top: currentScrollTop };
+  }, [checkIfAtBottom, scrollEpoch]);
 
   // Scroll to bottom and resume auto-scroll
   const scrollToBottom = useCallback(() => {
@@ -431,12 +444,6 @@ function ChatPanelContent({
       setIsAtBottom(true);
     });
   }, [reduceMotion]);
-
-  // Reset scroll state when session changes
-  useEffect(() => {
-    setIsAtBottom(true);
-    prevScrollTopRef.current = 0;
-  }, [sessionId]);
 
   const sendMessage = useCallback(
     async (

@@ -66,6 +66,7 @@ function OAuthCallbackPageContent({ config }: OAuthCallbackPageProps) {
   const errorDescription = searchParams.get("error_description");
 
   // Auto-redirect for success cases (with countdown)
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- countdown interval and redirect timer after a successful OAuth callback
   useEffect(() => {
     if (!isSuccess) return;
 
@@ -93,6 +94,7 @@ function OAuthCallbackPageContent({ config }: OAuthCallbackPageProps) {
     config.defaultRedirectPath,
   ]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- exchanges the OAuth callback code with the server once and shows the result
   useEffect(() => {
     if (hasProcessedRef.current) return;
     hasProcessedRef.current = true;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { SvgUsers, SvgLogOut } from "@opal/icons";
@@ -76,13 +76,12 @@ export default function EditServiceAccountModal({
     initialMemberGroupIds
   );
 
-  useEffect(() => {
-    if (editedGroupIds === null) {
-      setBaselineGroupIds((prev) =>
-        setsAreEqual(prev, initialMemberGroupIds) ? prev : initialMemberGroupIds
-      );
-    }
-  }, [initialMemberGroupIds, editedGroupIds]);
+  if (
+    editedGroupIds === null &&
+    !setsAreEqual(baselineGroupIds, initialMemberGroupIds)
+  ) {
+    setBaselineGroupIds(initialMemberGroupIds);
+  }
 
   const memberGroupIds = editedGroupIds ?? initialMemberGroupIds;
 

@@ -106,6 +106,7 @@ export function useOutputCards(sessionId: string | null) {
 
 /** Saves panel UI preferences independently of workspace layout. */
 export function useOutputPanelPersistence() {
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- subscribes to the build session store and saves panel preferences to storage
   useEffect(() => {
     for (const [id, session] of useBuildSessionStore.getState().sessions)
       saveOutputPanelPreferences(id, session);
@@ -215,6 +216,7 @@ export function useFilePreview<T>(
     }
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the lifecycle in a ref that async validation reads
   useLayoutEffect(() => {
     lifecycle.current = { identity, isActive, error };
     return () => {
@@ -239,6 +241,7 @@ export function useFilePreview<T>(
           pendingValidation.current = null;
       });
   });
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- validates the workspace against the server when it becomes active
   useEffect(() => {
     if (isActive) validate();
   }, [identity, isActive]);
@@ -352,6 +355,7 @@ export function useWorkspaceListing<T>(
       Date.now() - result.readAt < WORKSPACE_LISTING_FRESHNESS_MS;
     if (!fresh) void mutate().catch(() => undefined);
   });
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- validates the listing against the server and aborts the request on change or unmount
   useEffect(() => {
     if (isActive) validate();
     return () => {
@@ -360,6 +364,7 @@ export function useWorkspaceListing<T>(
       setRequestPending(false);
     };
   }, [cacheKey, isActive, refreshGeneration, mutate]);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- revalidates the listing from the server when the panel becomes visible
   useEffect(() => {
     if (isVisible && isActive) validate();
   }, [isVisible, isActive]);
@@ -422,6 +427,7 @@ export function useOutputWebapps({
   );
   const webappRevision = session?.webappNeedsRefresh ?? 0;
   const pendingWebappValidation = useRef<{ identity: string } | null>(null);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- refreshes the webapp list from the server when the browser panel opens
   useEffect(() => {
     if (!isOpen || !hasBrowser || !canQuery) return;
     const identity = JSON.stringify([userId, sessionId, webappRevision]);

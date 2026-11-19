@@ -62,6 +62,7 @@ export default function SetupCard({
   const mountedRef = useRef(true);
   const resolvingRef = useRef(false);
   const autoResolvedRef = useRef(false);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- tracks mount so async resolve skips updates after unmount
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -105,6 +106,7 @@ export default function SetupCard({
     [requestId, mutate, t]
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- resolves the setup request on the server once the app reports it is connected
   useEffect(() => {
     if (!userApp?.authenticated || decision !== null || autoResolvedRef.current)
       return;

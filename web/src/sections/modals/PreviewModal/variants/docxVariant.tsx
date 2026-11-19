@@ -40,10 +40,12 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const onLoadRef = useRef(onLoad);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest onLoad in a ref for the async document load
   useEffect(() => {
     onLoadRef.current = onLoad;
   }, [onLoad]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- fetches the document and renders it into the shadow DOM
   useEffect(() => {
     let cancelled = false;
     async function loadDocument() {

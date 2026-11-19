@@ -126,6 +126,7 @@ const CraftInputBar = memo(
         [userId, save]
       );
       const restoredKeyRef = useRef<string | null>(null);
+      // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- restores the saved draft into the input bar's imperative message API once storage loads
       useEffect(() => {
         if (!userId) {
           restoredKeyRef.current = null;

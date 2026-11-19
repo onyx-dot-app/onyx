@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { useIncognito } from "@/providers/IncognitoProvider";
 
@@ -33,28 +33,29 @@ export default function useDeepResearchToggle({
 }: UseDeepResearchToggleProps) {
   const [deepResearchEnabled, setDeepResearchEnabled] = useState(false);
   const { incognitoEnabled } = useIncognito();
-  const previousChatSessionId = useRef<string | null>(chatSessionId);
+  const { preferredToolId } = toolConfiguration;
 
-  // Reset when switching chat sessions, but preserve when going from null to a new session
-  useEffect(() => {
-    const previousId = previousChatSessionId.current;
-    previousChatSessionId.current = chatSessionId;
-
-    // Only reset if we're switching between actual sessions (not from null to a new session)
-    if (previousId !== null && previousId !== chatSessionId) {
+  // Reset when switching between existing chat sessions (not from null to a
+  // new session), when the agent changes, or when a preferred tool is picked.
+  const [synced, setSynced] = useState({
+    chatSessionId,
+    agentId,
+    preferredToolId,
+  });
+  if (
+    synced.chatSessionId !== chatSessionId ||
+    synced.agentId !== agentId ||
+    synced.preferredToolId !== preferredToolId
+  ) {
+    setSynced({ chatSessionId, agentId, preferredToolId });
+    const switchedSession =
+      synced.chatSessionId !== null && synced.chatSessionId !== chatSessionId;
+    const pickedTool =
+      synced.preferredToolId !== preferredToolId && preferredToolId !== null;
+    if (switchedSession || synced.agentId !== agentId || pickedTool) {
       setDeepResearchEnabled(false);
     }
-  }, [chatSessionId]);
-
-  // Reset when switching assistants
-  useEffect(() => {
-    setDeepResearchEnabled(false);
-  }, [agentId]);
-
-  useEffect(() => {
-    if (toolConfiguration.preferredToolId !== null)
-      setDeepResearchEnabled(false);
-  }, [toolConfiguration.preferredToolId]);
+  }
 
   const toggleDeepResearch = useCallback(() => {
     if (!deepResearchEnabled) toolConfiguration.clearPreferredTool();

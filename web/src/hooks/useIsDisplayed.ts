@@ -12,6 +12,7 @@ export default function useIsDisplayed<T extends HTMLElement>(): [
 ] {
   const [node, setNode] = useState<T | null>(null);
   const [displayed, setDisplayed] = useState(true);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that tracks whether the node is display none
   useEffect(() => {
     if (node === null) return;
     const measure = () =>

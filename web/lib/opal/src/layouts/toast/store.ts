@@ -320,6 +320,7 @@ export function useErrorToast(
 ) {
   // Read at click time, so an unstable callback does not re-raise the toast.
   const onRetryRef = useRef(retry?.onRetry);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest onRetry in a ref so the toast action calls the current callback
   useEffect(() => {
     onRetryRef.current = retry?.onRetry;
   });
@@ -327,6 +328,7 @@ export function useErrorToast(
   const hasError = error != null && error !== false;
   // Each error raises the toast. One already shown is replaced in place, so
   // a retry that fails again leaves it standing rather than replaying it.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- raises the error toast in the module toast store for each new error
   useEffect(() => {
     if (!hasError) return;
     addToast({
@@ -346,6 +348,7 @@ export function useErrorToast(
   }, [error, hasError, id, message, retryLabel]);
   // Removed only when the error clears or the caller unmounts, never
   // between two errors.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- removes the error toast from the toast store when the error clears or the caller unmounts
   useEffect(() => {
     if (!hasError) return;
     return () => closeToast(id);
@@ -370,6 +373,7 @@ interface ToastFromQueryMessages {
  */
 export function useToastFromQuery(messages: ToastFromQueryMessages) {
   const navigation = useNavigation();
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the message query param on mount, raises its toast, and strips the param from the URL
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const messageValue = searchParams.get("message");

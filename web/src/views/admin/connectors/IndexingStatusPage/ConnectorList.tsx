@@ -1,7 +1,7 @@
 "use client";
 
 import { useNavigation } from "@opal/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR from "swr";
 import {
@@ -174,9 +174,7 @@ export default function ConnectorList({
   const totalItems = data?.total_items ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
   // Polling can shrink the list under an open page.
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+  if (page > totalPages) setPage(totalPages);
   const filtered = status !== null || search !== "";
   const indexingCount = data?.status_counts.indexing ?? 0;
   const syncingCount = data?.status_counts.syncing ?? 0;

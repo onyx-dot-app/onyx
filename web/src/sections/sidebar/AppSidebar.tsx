@@ -145,10 +145,12 @@ function RecentsSection({
 
   // Layout effect: an already-scheduled observer callback must not see the
   // previous page's loadMore after commit.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest onLoadMore in a ref for the IntersectionObserver callback
   useLayoutEffect(() => {
     onLoadMoreRef.current = onLoadMore;
   }, [onLoadMore]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- IntersectionObserver that loads more chats when the sentinel scrolls into view
   useEffect(() => {
     if (!hasMore || isLoadingMore) return;
 
@@ -293,7 +295,7 @@ export default function AppSidebar() {
   // State for intro animation overlay
   const [showIntroAnimation, setShowIntroAnimation] = useState(false);
   // Track if auto-trigger has fired (prevents race condition during dismiss)
-  const hasAutoTriggeredRef = useRef(false);
+  const [hasAutoTriggered, setHasAutoTriggered] = useState(false);
 
   // Auto-show intro once when there's an undismissed notification
   // Don't show if tenant/invitation modal is open (e.g., "join existing team" modal)
@@ -303,23 +305,16 @@ export default function AppSidebar() {
     PHFeatureFlag.CRAFT_ANIMATION_DISABLED
   );
   const hasTenantModal = !!(newTenantInfo || invitationInfo);
-  useEffect(() => {
-    if (
-      isOnyxCraftEnabled &&
-      buildModeNotification &&
-      !hasAutoTriggeredRef.current &&
-      !hasTenantModal &&
-      !isCraftAnimationDisabled
-    ) {
-      hasAutoTriggeredRef.current = true;
-      setShowIntroAnimation(true);
-    }
-  }, [
-    buildModeNotification,
-    isOnyxCraftEnabled,
-    hasTenantModal,
-    isCraftAnimationDisabled,
-  ]);
+  if (
+    isOnyxCraftEnabled &&
+    buildModeNotification &&
+    !hasAutoTriggered &&
+    !hasTenantModal &&
+    !isCraftAnimationDisabled
+  ) {
+    setHasAutoTriggered(true);
+    setShowIntroAnimation(true);
+  }
 
   // Dismiss the build mode notification
   const dismissBuildModeNotification = useCallback(async () => {

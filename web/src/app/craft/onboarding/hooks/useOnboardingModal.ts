@@ -34,6 +34,7 @@ export function useOnboardingModal(): OnboardingModalController {
 
   // Auto-open the intro once (until dismissed). LLM setup lives inline on the
   // welcome page, so the intro is not conditioned on provider state.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the onboarding-seen flag from localStorage once the user loads
   useEffect(() => {
     if (hasInitialized || !user) return;
     setIntroOpen(!getCraftOnboardingSeen(user.id));

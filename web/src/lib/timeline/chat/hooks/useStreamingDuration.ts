@@ -24,6 +24,7 @@ export function useStreamingDuration(
   // Stop the timer when backend duration is available
   const shouldRunTimer = isStreaming && backendDuration === undefined;
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- requestAnimationFrame loop that counts the streaming seconds
   useEffect(() => {
     if (!shouldRunTimer || !startTime) {
       // Don't reset when stopping - preserve last calculated value

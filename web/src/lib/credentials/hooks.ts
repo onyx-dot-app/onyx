@@ -423,6 +423,7 @@ export function useSavedDraftCredential(
  */
 export function useResetSavedDraftCredential(source: ValidSources): void {
   const { mutate: mutateKey } = useSWRConfig();
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the SWR draft credential cache entry for the source on mount
   useEffect(() => {
     void mutateKey(SWR_KEYS.connectorDraftCredential(source), undefined, {
       revalidate: false,

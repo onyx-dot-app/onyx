@@ -107,6 +107,7 @@ function StickyBoxItem({
     [active, stick]
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- IntersectionObserver that reports when the box sticks to its scroll container
   useEffect(() => {
     const element = rootRef.current;
     if (!element || !active || !shadow) {

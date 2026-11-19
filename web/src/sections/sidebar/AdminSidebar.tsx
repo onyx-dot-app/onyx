@@ -52,6 +52,7 @@ export default function AdminSidebar() {
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusSearch, setFocusSearch] = useState(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- moves DOM focus to the search input once the sidebar unfolds
   useEffect(() => {
     if (focusSearch && !folded && searchRef.current) {
       searchRef.current.focus();

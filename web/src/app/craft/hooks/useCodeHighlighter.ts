@@ -17,6 +17,7 @@ type HighlightFn = (
 export function useCodeHighlighter(enabled: boolean): HighlightFn | null {
   const [highlight, setHighlight] = useState<HighlightFn | null>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- lazy-loads the code highlighter module once highlighting is enabled
   useEffect(() => {
     if (!enabled || highlight) return;
     let cancelled = false;

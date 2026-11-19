@@ -194,15 +194,18 @@ export default function LimitCard({
 
   // A change to the stored limits replaces the draft; a refetch that only
   // moves usage keeps unsaved edits.
-  const signature = cardSignature(card);
-  useEffect(() => {
-    setDraft(newDraft());
-    setOpenModelRows(new Set());
-  }, [signature]);
-  useEffect(() => {
-    setDraft((prev) => withSavedFrom(prev, card));
-  }, [card]);
+  const [loadedCard, setLoadedCard] = useState(card);
+  if (loadedCard !== card) {
+    setLoadedCard(card);
+    if (cardSignature(loadedCard) !== cardSignature(card)) {
+      setDraft(withSavedFrom(newDraft(), card));
+      setOpenModelRows(new Set());
+    } else {
+      setDraft((prev) => withSavedFrom(prev, card));
+    }
+  }
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- scrolls the card into view and opens it when the page asks to reveal it
   useEffect(() => {
     if (revealKey === undefined) return;
     setExpanded(true);

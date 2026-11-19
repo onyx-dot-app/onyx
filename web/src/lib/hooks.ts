@@ -86,6 +86,7 @@ export const useConnectorIndexingStatusWithPagination = (
 
   //ref to maintain the current source pages for the main request
   const sourcePagesRef = useRef(sourcePages);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest source pages in a ref that the SWR fetcher reads
   useLayoutEffect(() => {
     sourcePagesRef.current = sourcePages;
   }, [sourcePages]);
@@ -119,11 +120,11 @@ export const useConnectorIndexingStatusWithPagination = (
   );
 
   // Update merged data when main data changes
-  useEffect(() => {
-    if (data) {
-      setMergedData(data);
-    }
-  }, [data]);
+  const [mergedFrom, setMergedFrom] = useState<typeof data>(undefined);
+  if (data !== mergedFrom) {
+    setMergedFrom(data);
+    if (data) setMergedData(data);
+  }
 
   // Function to handle page changes for a specific source
   const handlePageChange = useCallback(
@@ -473,26 +474,22 @@ export function useLlmManager(
     modelName: "",
   });
 
-  // Track the previous assistant ID to detect when it changes
-  const prevAgentIdRef = useRef<number | undefined>(undefined);
-
   // Reset manual override when switching to a different assistant
-  useEffect(() => {
-    if (
-      activeAgent?.id !== undefined &&
-      prevAgentIdRef.current !== undefined &&
-      activeAgent.id !== prevAgentIdRef.current
-    ) {
-      // User switched to a different assistant - reset manual override
+  const activeAgentId = activeAgent?.id;
+  const [prevAgentId, setPrevAgentId] = useState<number | undefined>(undefined);
+  if (activeAgentId !== prevAgentId) {
+    setPrevAgentId(activeAgentId);
+    if (activeAgentId !== undefined && prevAgentId !== undefined) {
       setUserHasManuallyOverriddenLLM(false);
     }
-    prevAgentIdRef.current = activeAgent?.id;
-  }, [activeAgent?.id]);
+  }
 
   // Clear manual override when arriving at a *different* existing session
   // from any previously-seen defined session. Tracks only the last
   // *defined* session id so a round-trip through new-chat (A → undefined
   // → B) still resets, while A → undefined (new-chat) preserves it.
+  // Runs after commit, with the chatSession sync below, so the temperature
+  // effect never sees the next session's model under the previous session.
   const prevDefinedSessionIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     const nextId = currentChatSession?.id;
@@ -792,6 +789,7 @@ export function useLlmManager(
     chatSessionId: chatSession?.id ?? null,
   };
   const latestSelectionRef = useRef(latestSelection);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest model selection in a ref that the queued override writes read
   useLayoutEffect(() => {
     latestSelectionRef.current = latestSelection;
   });

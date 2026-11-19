@@ -23,6 +23,7 @@ import { useEffect } from "react";
 export function InstantSSRAutoRefresh() {
   const navigation = useNavigation();
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- asks the router to refresh the server-rendered page on mount
   useEffect(() => {
     navigation.refresh();
   }, [navigation]);

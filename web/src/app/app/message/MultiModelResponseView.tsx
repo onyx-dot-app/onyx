@@ -136,6 +136,7 @@ export default function MultiModelResponseView({
   // Declared after the sync effect so its mount run still sees false and
   // skips the scroll for a preference that was already set at mount.
   const mountedRef = useRef(false);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- marks the mount so the preference effect skips scrolling for a value set at mount
   useEffect(() => {
     mountedRef.current = true;
   }, []);
@@ -188,6 +189,7 @@ export default function MultiModelResponseView({
     []
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that tracks the root width
   useLayoutEffect(() => {
     if (!rootEl) return;
     const ro = new ResizeObserver(([entry]) => {
@@ -205,6 +207,7 @@ export default function MultiModelResponseView({
     new Set()
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- measures which panel DOM nodes overflow the preferred panel height
   useLayoutEffect(() => {
     if (preferredPanelHeight == null || preferredIndex === null) return;
     const next = new Set<number>();
@@ -219,6 +222,7 @@ export default function MultiModelResponseView({
     });
   }, [preferredPanelHeight, preferredIndex, hiddenPanels, responses]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that tracks the carousel track width
   useLayoutEffect(() => {
     if (!trackContainerEl) return;
     const ro = new ResizeObserver(([entry]) => {
@@ -229,6 +233,7 @@ export default function MultiModelResponseView({
     return () => ro.disconnect();
   }, [trackContainerEl]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- ResizeObserver that tracks the preferred panel height
   useLayoutEffect(() => {
     if (!preferredPanelEl) {
       setPreferredPanelHeight(null);
@@ -242,6 +247,7 @@ export default function MultiModelResponseView({
     return () => ro.disconnect();
   }, [preferredPanelEl]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the deselect timer on unmount
   useEffect(() => {
     return () => {
       if (deselectTimeoutRef.current !== null) {
@@ -521,6 +527,7 @@ export default function MultiModelResponseView({
       ? "carousel"
       : "row";
   const layoutKindRef = useRef(layoutKind);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- runs a Web Animations fade on the root DOM node when the layout kind changes
   useEffect(() => {
     if (layoutKindRef.current === layoutKind) return;
     layoutKindRef.current = layoutKind;
@@ -535,6 +542,7 @@ export default function MultiModelResponseView({
   // Trigger the slide-out animation one frame after a preferred panel is selected.
   // Uses isActivelySelected (not showSelectionMode) so re-selecting after a
   // deselect still triggers the animation.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- waits one animation frame so the slide-out transition starts from the mounted layout
   useEffect(() => {
     if (!isActivelySelected) {
       // Don't reset selectionEntered here — handleDeselectPreferred manages it
@@ -580,6 +588,7 @@ export default function MultiModelResponseView({
     !hiddenPanels.has(currentCarouselResponse.modelIndex)
       ? (currentCarouselResponse.messageId ?? null)
       : null;
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- publishes the visible carousel response to the chat session store until unmount
   useEffect(() => {
     if (readOnly || parentNodeId == null || !showNarrowCarousel) return;
     if (currentCarouselMessageId != null) {

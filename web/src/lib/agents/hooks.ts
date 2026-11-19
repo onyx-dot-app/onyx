@@ -120,6 +120,8 @@ export function useAdminAgents(
 
 // ── Pinned agents ─────────────────────────────────────────────────────────────
 
+const NO_PINNED_AGENTS: MinimalAgent[] = [];
+
 /**
  * The agents pinned to the sidebar, and the writes that reorder or toggle them.
  *
@@ -141,7 +143,7 @@ export function usePinnedAgents() {
   );
 
   const serverPinnedAgents = useMemo(() => {
-    if (agents.length === 0) return [];
+    if (agents.length === 0) return NO_PINNED_AGENTS;
     const pinnedIds = user?.preferences.pinned_assistants ?? [];
     return pinnedIds
       .map((id) => agents.find((agent) => agent.id === id))
@@ -152,12 +154,27 @@ export function usePinnedAgents() {
   // local list can be empty although the user has pins.
   const [hasSyncedPins, setHasSyncedPins] = useState(false);
 
-  useEffect(() => {
+  const [syncedFrom, setSyncedFrom] = useState<{
+    pins: MinimalAgent[];
+    agentCount: number;
+    resolution: typeof userResolution;
+  } | null>(null);
+  if (
+    syncedFrom === null ||
+    syncedFrom.pins !== serverPinnedAgents ||
+    syncedFrom.agentCount !== agents.length ||
+    syncedFrom.resolution !== userResolution
+  ) {
+    setSyncedFrom({
+      pins: serverPinnedAgents,
+      agentCount: agents.length,
+      resolution: userResolution,
+    });
     if (agents.length > 0) {
       setLocalPinnedAgents(serverPinnedAgents);
       if (userResolution !== "loading") setHasSyncedPins(true);
     }
-  }, [serverPinnedAgents, agents.length, userResolution]);
+  }
 
   const togglePinnedAgent = useCallback(
     async (agent: MinimalAgent, shouldPin: boolean) => {
@@ -435,6 +452,7 @@ export function useDefaultAssistantConfiguration() {
   const [isSaving, setIsSaving] = useState(false);
   const pendingSaves = useRef(0);
   const isMounted = useRef(false);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- tracks mount in a ref so async save callbacks skip state updates after unmount
   useEffect(() => {
     isMounted.current = true;
     return () => {

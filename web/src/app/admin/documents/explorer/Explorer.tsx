@@ -163,6 +163,7 @@ export function Explorer({
     ]
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- debounce timer that searches 300ms after the query or filters change, and mirrors the query into the URL
   useEffect(() => {
     if (timeoutId !== null) {
       clearTimeout(timeoutId);

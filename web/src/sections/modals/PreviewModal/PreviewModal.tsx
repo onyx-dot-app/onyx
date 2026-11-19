@@ -167,6 +167,7 @@ export default function PreviewModal({
     fetchFile();
   }, [fetchFile]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- revokes the file's blob URL when it changes or the modal unmounts
   useEffect(() => {
     return () => {
       if (fileUrl.startsWith("blob:")) window.URL.revokeObjectURL(fileUrl);

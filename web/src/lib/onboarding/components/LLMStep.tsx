@@ -96,6 +96,7 @@ const LLMStep = memo(
         editModal.toggle(true);
       }
     };
+    // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- raises a toast and closes the edit modal when the provider settings fetch fails
     useEffect(() => {
       if (!editingProviderFailed) return;
       toast.error(t("llmStep.providerCard.settingsLoadError"));

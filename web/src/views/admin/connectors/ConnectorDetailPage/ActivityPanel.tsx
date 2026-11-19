@@ -607,6 +607,7 @@ export default function ActivityPanel({
   const reportFocusedPair = useEffectEvent((ccPairId: number | null) =>
     links.onFocusPair?.(ccPairId)
   );
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- tells the page which pair this panel focuses, and clears it on unmount
   useEffect(() => {
     if (focusedPairId === null) return;
     reportFocusedPair(focusedPairId);
@@ -614,6 +615,7 @@ export default function ActivityPanel({
   }, [focusedPairId]);
   const { failures: openFailures, errors: openErrors } = open;
   const rangeSet = range !== null;
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- pages the polled failure and error feeds until the focused run loads, then drops a chart span that hides it
   useEffect(() => {
     if (focusAttemptId === null || focusListed) return;
     // Pages only once the reset above shows the unnarrowed sections, or the page lands on a feed about to start over.

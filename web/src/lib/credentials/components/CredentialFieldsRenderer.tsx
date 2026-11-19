@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import {
   InputSingleUpload,
   InputPasswordTypeIn,
@@ -252,9 +252,11 @@ export function CredentialFileField({
   // kept to show; a cleared or reset field drops it.
   const [pickedFile, setPickedFile] = useState<File | null>(null);
   const hasValue: boolean = field.value !== null && field.value !== "";
-  useEffect(() => {
+  const [hadValue, setHadValue] = useState(hasValue);
+  if (hadValue !== hasValue) {
+    setHadValue(hasValue);
     if (!hasValue) setPickedFile(null);
-  }, [hasValue]);
+  }
   const shownFile: File | null =
     field.value instanceof TypedFile
       ? field.value.file

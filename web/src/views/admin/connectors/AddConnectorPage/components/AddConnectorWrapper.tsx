@@ -390,6 +390,7 @@ export function AddConnectorForm({ connector, edit }: AddConnectorFormProps) {
   const timeoutErrorHappenedRef = useRef<boolean>(false);
   const connectorIdRef = useRef<number | null>(null);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the request refs on unmount so a late response sees no connector
   useEffect(() => {
     return () => {
       // Cleanup refs when component unmounts

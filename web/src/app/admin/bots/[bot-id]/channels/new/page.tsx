@@ -99,6 +99,7 @@ export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
     ? parseInt(slack_bot_id_raw as string, 10)
     : null;
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- redirects to the bot list through the router when the URL has no valid bot id
   useEffect(() => {
     if (!slack_bot_id || isNaN(slack_bot_id)) {
       navigation.go("/admin/bots", { replace: true });

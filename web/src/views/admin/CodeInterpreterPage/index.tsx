@@ -217,6 +217,7 @@ export default function CodeInterpreterPage() {
   const hasError = !!status && status !== "healthy";
   const isConnectionLost = status === "connection_lost";
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- clears the pending close timer on unmount
   useEffect(
     () => () => {
       if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);

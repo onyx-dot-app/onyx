@@ -1,7 +1,7 @@
 "use client";
 
 import { PageLoader } from "@opal/loaders";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { useLabelBadge } from "@/lib/badges/components";
 import useSWR from "swr";
@@ -395,24 +395,26 @@ export default function ImageGenerationContent() {
   const hasReplacements = replacementGroups.length > 0;
 
   // Auto-select first replacement when modal opens
-  useEffect(() => {
+  const [shownDisconnectProvider, setShownDisconnectProvider] =
+    useState(disconnectProvider);
+  if (shownDisconnectProvider !== disconnectProvider) {
+    setShownDisconnectProvider(disconnectProvider);
     if (needsReplacement && !replacementProviderId && hasReplacements) {
       const firstOption = replacementGroups[0]?.options[0];
       if (firstOption) setReplacementProviderId(firstOption.value);
     }
-  }, [disconnectProvider]);
+  }
 
   // Follow the live default while the confirm is open, so a default that
   // changes meanwhile still asks for a replacement. Closing freezes it, so the
   // copy holds while the card fades out.
-  useEffect(() => {
-    if (!disconnectModal.isOpen || !disconnectProvider) return;
+  if (disconnectModal.isOpen && disconnectProvider) {
     const isDefault =
       defaultConfig?.image_provider_id === disconnectProvider.image_provider_id;
     if (isDefault !== disconnectProvider.isDefault) {
       setDisconnectProvider({ ...disconnectProvider, isDefault });
     }
-  }, [disconnectModal.isOpen, disconnectProvider, defaultConfig]);
+  }
 
   if (configError) {
     return (

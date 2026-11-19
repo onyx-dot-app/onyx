@@ -28,6 +28,7 @@ interface PHProviderProps {
 }
 
 export function PHProvider({ children }: PHProviderProps) {
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- initializes PostHog with the build-time key once
   useEffect(() => {
     // Build-time key (Onyx Cloud); otherwise PostHogRuntimeInitializer handles it.
     const buildTimeKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;

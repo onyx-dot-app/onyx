@@ -146,6 +146,7 @@ export default function NotificationsPopover({
 
   // Layout effect: an already-scheduled observer callback must not see the
   // previous page's loadMore after commit.
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest loadMore in a ref that the IntersectionObserver callback reads
   useLayoutEffect(() => {
     loadMoreRef.current = loadMore;
   }, [loadMore]);
@@ -259,6 +260,7 @@ export default function NotificationsPopover({
     }
   }, [newNotifications, pinnedAnnouncement]);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- IntersectionObserver that loads more notifications when the sentinel scrolls into view
   useEffect(() => {
     if (!hasMore || isLoadingMore) return;
 

@@ -5,7 +5,7 @@ import {
   FolderIconProvider,
 } from "@/lib/projects/components/ProjectFolderButton";
 import CreateProjectModal from "@/lib/projects/components/CreateProjectModal";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -58,9 +58,11 @@ function ProjectPopoverRow({
   // hand sticks. The project you are inside needs nothing here: navigating
   // closes the popover, so unfolding on the way out would show nobody
   // anything.
-  useEffect(() => {
+  const [wasChatMatched, setWasChatMatched] = useState(false);
+  if (wasChatMatched !== match.chatMatched) {
+    setWasChatMatched(match.chatMatched);
     if (match.chatMatched) setOpen(true);
-  }, [match.chatMatched]);
+  }
 
   function handleClick() {
     // Navigation closes the popover on its own, but re-selecting the project
@@ -141,7 +143,11 @@ export function FoldedProjectsPopover() {
 
   // Any navigation means the popover has done its job. Folding a project's
   // chats never touches the URL, so the folder icon leaves the popover open.
-  useEffect(() => setOpen(false), [appPosition]);
+  const [openedAt, setOpenedAt] = useState(appPosition);
+  if (openedAt !== appPosition) {
+    setOpenedAt(appPosition);
+    setOpen(false);
+  }
 
   function handleNewProject() {
     // The modal traps focus, so the popover has to go first.

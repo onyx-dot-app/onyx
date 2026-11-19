@@ -24,6 +24,7 @@ function CustomToolAuthCard({ toolName, toolId }: CustomToolAuthCardProps) {
   const navigation = useNavigation();
   const { tools } = useAvailableTools();
   const { mutate } = useSWRConfig();
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- revalidates the integrations SWR cache when the auth card mounts
   useEffect(() => {
     void mutate(SWR_KEYS.integrations);
   }, [mutate]);

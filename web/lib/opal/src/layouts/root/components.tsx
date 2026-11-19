@@ -48,6 +48,7 @@ export function SidebarStateProvider({
   const [folded, setFoldedInternal] = useState(defaultFolded);
 
   const onFoldedChangeRef = useRef(onFoldedChange);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest onFoldedChange in a ref so setFolded stays stable
   useEffect(() => {
     onFoldedChangeRef.current = onFoldedChange;
   }, [onFoldedChange]);
@@ -156,6 +157,7 @@ export const RootLayoutRightPanelSlotContext =
 function RootLayoutRightPanel({ children }: RootLayoutPanelProps) {
   const setSlot = useContext(RootLayoutRightPanelSlotContext);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- registers the panel in the root layout's right-panel slot until unmount
   useLayoutEffect(() => {
     if (!setSlot) return;
     const content = <RootLayoutPanel>{children}</RootLayoutPanel>;

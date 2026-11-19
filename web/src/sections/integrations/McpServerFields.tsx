@@ -43,10 +43,12 @@ export default function McpServerFields({
   const [probe, setProbe] = useState<ProbeState>({ kind: "idle" });
   const url = normalizedUrl(serverUrl);
   const onProbedRef = useRef(onProbed);
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- keeps the latest onProbed in a ref for the probe timer
   useEffect(() => {
     onProbedRef.current = onProbed;
   });
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- debounce timer that probes the MCP server URL over a stream
   useEffect(() => {
     if (!url) {
       setProbe({ kind: "idle" });

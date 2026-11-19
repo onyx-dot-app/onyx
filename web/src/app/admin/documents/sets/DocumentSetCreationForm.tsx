@@ -22,7 +22,7 @@ import { Button } from "@opal/components";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { ConnectorMultiSelect } from "@/components/ConnectorMultiSelect";
@@ -50,12 +50,6 @@ export const DocumentSetCreationForm = ({
     Permission.MANAGE_DOCUMENT_SETS
   );
   const { data: federatedConnectors } = useFederatedConnectors();
-
-  useEffect(() => {
-    if (existingDocumentSet?.is_public) {
-      return;
-    }
-  }, [existingDocumentSet?.is_public]);
 
   return (
     <div className="max-w-full mx-auto">

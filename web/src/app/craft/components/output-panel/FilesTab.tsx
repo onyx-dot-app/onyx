@@ -115,6 +115,7 @@ function WorkspaceBrowser({
     isActive && isLoading,
     searchQuery.trim() ? undefined : onRefreshingChange
   );
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- restores the file list DOM scroll position after loading ends
   useEffect(() => {
     if (!isLoading) restoreScroll();
   }, [isLoading, restoreScroll]);
@@ -125,6 +126,7 @@ function WorkspaceBrowser({
     },
     [saveScroll]
   );
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- saves the file list DOM scroll position when the tab is hidden
   useEffect(() => {
     if (!isActive) saveScroll();
   }, [isActive, saveScroll]);

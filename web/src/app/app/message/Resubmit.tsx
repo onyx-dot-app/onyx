@@ -75,6 +75,7 @@ function RateLimitBanner({
     [details.reset_at, details.retry_after_seconds]
   );
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- interval that ticks the rate-limit countdown
   useEffect(() => {
     if (resetMs === null) return;
 

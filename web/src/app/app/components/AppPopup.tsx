@@ -37,6 +37,7 @@ export function AppPopup() {
   const [showConsentError, setShowConsentError] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- reads the completed-flow flag from localStorage after hydration
   useEffect(() => {
     setCompletedFlow(
       localStorage.getItem(ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED) === "true"

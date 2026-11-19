@@ -39,6 +39,7 @@ export function useCaptcha() {
 
   const isCaptchaEnabled = Boolean(RECAPTCHA_SITE_KEY);
 
+  // oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- loads the reCAPTCHA script into the document and waits for it to be ready
   useEffect(() => {
     if (!isCaptchaEnabled) {
       return;
