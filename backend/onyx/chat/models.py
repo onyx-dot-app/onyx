@@ -10,14 +10,10 @@ from pydantic import (
     ConfigDict,
     Field,
     JsonValue,
-    ModelWrapValidatorHandler,
     PlainSerializer,
-    SerializerFunctionWrapHandler,
     TypeAdapter,
     field_serializer,
     field_validator,
-    model_serializer,
-    model_validator,
 )
 
 from onyx.agents.models import (
@@ -262,36 +258,6 @@ class MessageRendering(BaseModel):
     citation_documents: dict[int, str] = Field(default_factory=dict)
     document_ids: list[str] = Field(default_factory=list)
     pre_answer_seconds: float | None = None
-
-    @model_validator(mode="wrap")
-    @classmethod
-    def decode_saved(
-        cls, value: object, handler: ModelWrapValidatorHandler["MessageRendering"]
-    ) -> "MessageRendering":
-        if isinstance(value, dict):
-            if cls is MessageRendering and isinstance(value.get("think_tool"), str):
-                return LegacyToolRendering.model_validate(value)
-            if value.get("text_as_thinking") is True:
-                value = {**value, "mode": PresentationMode.RESEARCH}
-        return handler(value)
-
-    @model_serializer(mode="wrap")
-    def encode_saved(
-        self, handler: SerializerFunctionWrapHandler
-    ) -> dict[str, JsonValue]:
-        data = handler(self)
-        # Older API replicas must still be able to replay new research steps.
-        if self.mode == PresentationMode.RESEARCH:
-            data.update(mode="answer", text_as_thinking=True)
-        if isinstance(self, LegacyToolRendering):
-            data["think_tool"] = self.think_tool
-        return data
-
-
-class LegacyToolRendering(MessageRendering):
-    """Display settings from a saved step that used a tool for reasoning."""
-
-    think_tool: str = "think_tool"
 
 
 class ResponseRecord(BaseModel):

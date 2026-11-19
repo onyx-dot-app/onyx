@@ -100,7 +100,7 @@ def _script_deep_research(mock_llm: MockLLMScript) -> None:
             ],
             conditions=RequestConditions(
                 offers=[SearchTool.NAME],
-                does_not_offer=[RESEARCH_AGENT_TOOL_NAME, "think_tool"],
+                does_not_offer=[RESEARCH_AGENT_TOOL_NAME],
             ),
         ),
         Reply(

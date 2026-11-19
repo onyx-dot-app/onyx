@@ -72,7 +72,6 @@ def _script_deep_research(mock_llm: MockLLMScript) -> None:
         ),
         conditions=RequestConditions(
             offers=[RESEARCH_AGENT_TOOL_NAME],
-            does_not_offer=["think_tool"],
             tool_choice="required",
         ),
     )
@@ -86,7 +85,7 @@ def _script_deep_research(mock_llm: MockLLMScript) -> None:
         ),
         conditions=RequestConditions(
             offers=[GENERATE_REPORT_TOOL_NAME],
-            does_not_offer=[RESEARCH_AGENT_TOOL_NAME, "think_tool"],
+            does_not_offer=[RESEARCH_AGENT_TOOL_NAME],
             tool_choice="required",
         ),
     )

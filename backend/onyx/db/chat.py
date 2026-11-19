@@ -41,7 +41,6 @@ from onyx.chat.models import (
     ResponseAncestry,
     SessionAncestor,
 )
-from onyx.chat.response import historical_message_for_display
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
@@ -1355,7 +1354,7 @@ def get_chat_message_reasoning(chat_message: ChatMessage) -> str | None:
         )
         if rendering.mode not in (PresentationMode.ANSWER, PresentationMode.RESEARCH):
             continue
-        message = historical_message_for_display(item.message, rendering)
+        message = item.message
         if rendering.mode == PresentationMode.RESEARCH:
             return "".join(
                 block.text

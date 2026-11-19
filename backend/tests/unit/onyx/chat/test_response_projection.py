@@ -134,29 +134,6 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
     ).is_clarification
 
 
-def test_reprojecting_an_old_research_step_preserves_its_reasoning() -> None:
-    message = AssistantMessage(
-        id="research-step",
-        content=[
-            ToolCall(
-                id="old-call",
-                name="think_tool",
-                arguments={"reasoning": "Look for evidence."},
-            )
-        ],
-        metadata=ResearchMessageMetadata.model_validate(
-            {"phase": "research", "is_reasoning_model": False}
-        ),
-    )
-    snapshot = RunState(
-        run_id="research",
-        status=RunStatus.RUNNING,
-        steps=[StepRecord(message=message, generation_status=ExecutionStatus.COMPLETE)],
-    )
-    projected = project_response(snapshot, tool_ids={})
-    assert projected.reasoning == "Look for evidence."
-
-
 def test_snapshot_does_not_wait_for_slow_stream_observer() -> None:
     updating = threading.Event()
     finish_update = threading.Event()

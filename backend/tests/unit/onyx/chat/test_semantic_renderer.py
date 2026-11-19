@@ -697,76 +697,6 @@ def test_invalid_tool_arguments_replay_the_error_and_later_answer(
     )
 
 
-@pytest.mark.parametrize("reasoning", ["Reasoning", []])
-def test_replay_reads_historical_research_reasoning(reasoning: str | list[str]) -> None:
-    response = ResponseRecord(
-        run_id="r",
-        status=RunStatus.COMPLETE,
-        steps=[
-            StepRecord(
-                message=AssistantMessage(
-                    id="m",
-                    content=[
-                        ToolCall(
-                            id="think",
-                            name="think_tool",
-                            arguments={"reasoning": reasoning},
-                        )
-                    ],
-                ),
-                generation_status=ExecutionStatus.COMPLETE,
-            ),
-        ],
-    )
-    packets = replay_response(
-        response,
-        {},
-        {
-            "m": MessageRendering.model_validate(
-                {"mode": "answer", "text_as_thinking": True, "think_tool": "think_tool"}
-            )
-        },
-        {},
-    )
-    assert not any(isinstance(p.obj, CustomToolStart) for p in packets)
-    assert any(p.obj.type == "reasoning_delta" for p in packets) == bool(reasoning)
-
-
-def test_research_replay_keeps_a_rejected_call_out_of_reasoning() -> None:
-    call = ToolCall(
-        id="rejected", name="think_tool", arguments={"reasoning": "discarded"}
-    )
-    response = ResponseRecord(
-        run_id="r",
-        status=RunStatus.COMPLETE,
-        steps=[
-            StepRecord(
-                message=AssistantMessage(id="m", content=[call]),
-                generation_status=ExecutionStatus.COMPLETE,
-                tools={
-                    call.id: ToolExecutionRecord(
-                        status=ExecutionStatus.ERROR,
-                        result=ToolResultMessage(
-                            tool_call_id=call.id,
-                            tool_name=call.name,
-                            content="Unknown tool",
-                            is_error=True,
-                        ),
-                    )
-                },
-            )
-        ],
-    )
-    saved = MessageRendering(mode=PresentationMode.RESEARCH).model_dump(mode="json")
-    assert saved["mode"] == "answer" and saved["text_as_thinking"] is True
-    assert "think_tool" not in saved
-    settings = MessageRendering.model_validate(saved)
-    assert settings.mode == PresentationMode.RESEARCH
-    packets = replay_response(response, {}, {"m": settings}, {})
-    assert any(isinstance(p.obj, CustomToolStart) for p in packets)
-    assert not any(isinstance(p.obj, ReasoningDelta) for p in packets)
-
-
 @pytest.mark.parametrize("status", [RunStatus.ERROR, RunStatus.CANCELLED])
 def test_interrupted_answer_citations_belong_to_the_selected_text(
     status: RunStatus,
@@ -811,54 +741,16 @@ def test_interrupted_answer_citations_belong_to_the_selected_text(
     assert response.citation_info == []
 
 
-def test_coding_child_replay_without_saved_settings_preserves_reasoning() -> None:
-    message = AssistantMessage(
-        id="old",
-        content=[
-            ToolCall(id="t", name="think_tool", arguments={"reasoning": "Inspect"})
-        ],
-    )
-    response = ResponseRecord(
-        run_id="child",
-        parent_run_id="root",
-        status=RunStatus.COMPLETE,
-        steps=[StepRecord(message=message, generation_status=ExecutionStatus.COMPLETE)],
-    )
-    packets = replay_response(
-        response,
-        {},
-        {},
-        {},
-        parent=Placement(turn_index=0),
-        default_mode=PresentationMode.CODING_THINKING,
-    )
-    assert [
-        p.obj.content for p in packets if isinstance(p.obj, CodingAgentThinkingDelta)
-    ] == ["Inspect"]
-    assert not any(isinstance(p.obj, CustomToolStart) for p in packets)
-
-
-@pytest.mark.parametrize(
-    ("live", "tool_thinking"), [(True, False), (False, False), (False, True)]
-)
+@pytest.mark.parametrize("live", [True, False])
 @pytest.mark.parametrize(
     "mode", [PresentationMode.CODING_THINKING, PresentationMode.CODING_ANSWER]
 )
 def test_coding_thinking_uses_coding_packets(
-    live: bool, tool_thinking: bool, mode: PresentationMode
+    live: bool, mode: PresentationMode
 ) -> None:
-    settings = MessageRendering.model_validate(
-        {"mode": mode, "think_tool": "think_tool"} if tool_thinking else {"mode": mode}
-    )
+    settings = MessageRendering(mode=mode)
     message = AssistantMessage(
-        id="m",
-        content=[
-            ToolCall(
-                id="t", name="think_tool", arguments={"reasoning": "Inspect the code"}
-            )
-            if tool_thinking
-            else ThinkingContent(text="Inspect the code")
-        ],
+        id="m", content=[ThinkingContent(text="Inspect the code")]
     )
     parent = Placement(turn_index=3, tab_index=1)
     if live:

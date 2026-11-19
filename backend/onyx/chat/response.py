@@ -12,19 +12,13 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.chat.models import (
-    ChatMessageMetadata,
-    LegacyToolRendering,
-    MessageRendering,
-    ResponseRecord,
-)
+from onyx.chat.models import ChatMessageMetadata, MessageRendering, ResponseRecord
 from onyx.chat.tool_results import restored_result_details, saved_result_details
 from onyx.context.search.models import SearchDoc
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import (
     AssistantMessage,
     Message,
-    ThinkingContent,
     ToolCall,
     ToolResultMessage,
 )
@@ -44,24 +38,6 @@ def tool_arguments_for_display(call: ToolCall) -> dict[str, JsonValue]:
     except ValueError:
         logger.debug("Interrupted tool arguments cannot be displayed", exc_info=True)
         return call.arguments
-
-
-def historical_message_for_display(
-    message: AssistantMessage, settings: MessageRendering
-) -> AssistantMessage:
-    """Read the former research and coding control call as display-only reasoning."""
-    if not isinstance(settings, LegacyToolRendering):
-        return message
-
-    content = []
-    for block in message.content:
-        if isinstance(block, ToolCall) and block.name == settings.think_tool:
-            reasoning = tool_arguments_for_display(block).get("reasoning")
-            block = ThinkingContent(
-                text=reasoning if isinstance(reasoning, str) else ""
-            )
-        content.append(block)
-    return message.model_copy(update={"content": content})
 
 
 def response_record(

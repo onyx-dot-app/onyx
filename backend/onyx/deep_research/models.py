@@ -33,8 +33,6 @@ class ResearchPhase(str, Enum):
 class ResearchMessageMetadata(BaseModel):
     """Research phase and source references attached to a generated message."""
 
-    # Older research checkpoints set this to false when the reasoning tool was enabled.
-    is_reasoning_model: bool | None = True
     phase: ResearchPhase
     is_intermediate: bool = False
     sources: dict[int, SearchDoc] = Field(default_factory=dict)

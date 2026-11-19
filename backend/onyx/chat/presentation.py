@@ -35,7 +35,6 @@ from onyx.chat.models import (
     ChatMessageMetadata,
     ChatResponseSnapshot,
     CitationMode,
-    LegacyToolRendering,
     MessageRendering,
     PresentationMode,
     ResponseRecord,
@@ -55,11 +54,7 @@ from onyx.chat.renderer import (
     question_resolved,
     tool_renderer,
 )
-from onyx.chat.response import (
-    historical_message_for_display,
-    response_record,
-    tool_arguments_for_display,
-)
+from onyx.chat.response import response_record, tool_arguments_for_display
 from onyx.chat.tool_approvals import ended_answer
 from onyx.chat.tool_questions import question_answer
 from onyx.chat.tool_results import (
@@ -233,13 +228,6 @@ def _tool_record(
     )
 
 
-def _default_rendering(mode: PresentationMode) -> MessageRendering:
-    # Current coding steps always supply their own rendering metadata.
-    if mode == PresentationMode.CODING_THINKING:
-        return LegacyToolRendering(mode=mode)
-    return MessageRendering(mode=mode)
-
-
 def message_presentation(
     metadata: BaseModel | None,
     *,
@@ -248,8 +236,8 @@ def message_presentation(
     """Resolve feature metadata into display settings retained for history replay."""
     if isinstance(metadata, MessageRendering):
         return metadata.model_copy(deep=True)
-    presentation = _default_rendering(
-        PresentationMode.CODING_THINKING
+    presentation = MessageRendering(
+        mode=PresentationMode.CODING_THINKING
         if parent_tool_name == CODING_AGENT_TOOL_NAME
         else PresentationMode.ANSWER,
     )
@@ -271,11 +259,6 @@ def message_presentation(
             presentation.mode = PresentationMode.PLAN
         elif metadata.phase == ResearchPhase.RESEARCH:
             presentation.mode = PresentationMode.RESEARCH
-            if metadata.is_reasoning_model is False:
-                return LegacyToolRendering(
-                    mode=PresentationMode.RESEARCH,
-                    pre_answer_seconds=metadata.elapsed_seconds,
-                )
         elif metadata.phase == ResearchPhase.REPORT:
             presentation.mode = (
                 PresentationMode.REPORT
@@ -390,7 +373,7 @@ def _project_response_display(
                 ResponseLayout(),
             )
             is_answer = step_index == node.answer_step_index
-            renderer.complete(historical_message_for_display(message, setting))
+            renderer.complete(message)
             if not is_answer and snapshot.status == RunStatus.COMPLETE:
                 continue
             response = response.model_copy(
@@ -627,9 +610,8 @@ def replay_response(
         packets.extend(user_message_packets(step.input_messages, layout, parent))
         message = step.message
         message_id = _message_identity(message)
-        setting = settings.get(message_id) or _default_rendering(default_mode)
+        setting = settings.get(message_id) or MessageRendering(mode=default_mode)
         renderer = MessageRenderer(setting, documents, layout, parent)
-        message = historical_message_for_display(message, setting)
         packets.extend(renderer.complete(message))
         calls = [call for call in message.tool_calls if call.name not in HIDDEN_TOOLS]
         if not calls:
