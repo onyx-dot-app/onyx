@@ -1,11 +1,9 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { Badge, Button, Tabs } from "@opal/components";
-import { SettingsLayouts } from "@opal/layouts";
-import { SvgArrowLeft } from "@opal/icons";
+import { Badge } from "@opal/components";
+import { SvgPlug } from "@opal/icons";
 import { useNavigation, useSearchParams } from "@opal/navigation";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { isNotFoundError } from "@/lib/fetcher";
 import { useAdminIntegration } from "@/lib/integrations/hooks";
 import {
@@ -13,6 +11,10 @@ import {
   parseIntegrationTab,
   type IntegrationDetailTab,
 } from "@/lib/integrations/utils";
+import CustomizeDetailLayout, {
+  BackLink,
+  type DetailTab,
+} from "@/sections/customize/CustomizeDetailLayout";
 import { useIntegrationLabels } from "@/sections/integrations/integrationLabels";
 import IntegrationOverviewTab from "@/sections/integrations/IntegrationOverviewTab";
 import IntegrationConfigurationTab from "@/sections/integrations/IntegrationConfigurationTab";
@@ -29,7 +31,6 @@ export default function IntegrationDetailPage({
   const navigation = useNavigation();
   const searchParams = useSearchParams();
   const labels = useIntegrationLabels();
-  const tab = parseIntegrationTab(searchParams.get("tab"));
   const { data, error, isLoading, mutate } = useAdminIntegration(integrationId);
 
   function selectTab(next: IntegrationDetailTab) {
@@ -41,9 +42,51 @@ export default function IntegrationDetailPage({
 
   const status = data ? labels.status(data) : null;
 
+  const tabs: DetailTab<IntegrationDetailTab>[] | null = data
+    ? [
+        {
+          value: "overview",
+          label: t("tabs.overview"),
+          keepMounted: true,
+          content: (
+            <IntegrationOverviewTab
+              integration={data}
+              onChanged={() => void mutate()}
+            />
+          ),
+        },
+        {
+          value: "configuration",
+          label: t("tabs.configuration"),
+          keepMounted: true,
+          content: (
+            <IntegrationConfigurationTab
+              key={`${data.id}:${data.auth_mode}:${data.auth_method ?? ""}`}
+              integration={data}
+              onChanged={() => void mutate()}
+            />
+          ),
+        },
+        {
+          value: "actions",
+          label: t("tabs.actions"),
+          keepMounted: true,
+          content: (
+            <IntegrationActionsTab
+              integration={data}
+              onOpenConfiguration={() => selectTab("configuration")}
+            />
+          ),
+        },
+      ]
+    : null;
+
   return (
-    <SettingsLayouts.Root
-      width="lg"
+    <CustomizeDetailLayout
+      back={<BackLink to="/admin/integrations" label={t("back")} />}
+      icon={SvgPlug}
+      title={data?.name ?? t("title")}
+      description={data ? labels.shape(data) : undefined}
       loading={isLoading}
       error={
         error
@@ -52,60 +95,12 @@ export default function IntegrationDetailPage({
             : t("loadFailed")
           : false
       }
-    >
-      <SettingsLayouts.Header
-        title={data?.name ?? t("title")}
-        description={data ? labels.shape(data) : undefined}
-        stackActionsOnMobile
-        actions={[
-          <Button
-            key="back"
-            prominence="secondary"
-            icon={SvgArrowLeft}
-            onClick={() => navigation.go(ADMIN_ROUTES.INTEGRATIONS.path)}
-          >
-            {t("back")}
-          </Button>,
-          ...(status ? [<Badge key="status" size={6} {...status} />] : []),
-        ]}
-      />
-      <SettingsLayouts.Body>
-        {data && (
-          <Tabs
-            value={tab}
-            onValueChange={(value) => selectTab(parseIntegrationTab(value))}
-            variant="contained"
-            gap={6}
-          >
-            <Tabs.List>
-              <Tabs.Trigger value="overview">{t("tabs.overview")}</Tabs.Trigger>
-              <Tabs.Trigger value="configuration">
-                {t("tabs.configuration")}
-              </Tabs.Trigger>
-              <Tabs.Trigger value="actions">{t("tabs.actions")}</Tabs.Trigger>
-            </Tabs.List>
-            <Tabs.Content value="overview" keepMounted>
-              <IntegrationOverviewTab
-                integration={data}
-                onChanged={() => void mutate()}
-              />
-            </Tabs.Content>
-            <Tabs.Content value="configuration" keepMounted>
-              <IntegrationConfigurationTab
-                key={`${data.id}:${data.auth_mode}:${data.auth_method ?? ""}`}
-                integration={data}
-                onChanged={() => void mutate()}
-              />
-            </Tabs.Content>
-            <Tabs.Content value="actions" keepMounted>
-              <IntegrationActionsTab
-                integration={data}
-                onOpenConfiguration={() => selectTab("configuration")}
-              />
-            </Tabs.Content>
-          </Tabs>
-        )}
-      </SettingsLayouts.Body>
-    </SettingsLayouts.Root>
+      tabs={tabs}
+      tab={parseIntegrationTab(searchParams.get("tab"))}
+      onTabChange={selectTab}
+      actions={
+        status ? [<Badge key="status" size={6} {...status} />] : undefined
+      }
+    />
   );
 }

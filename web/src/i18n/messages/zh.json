@@ -16799,9 +16799,6 @@
       }
     },
     "page": {
-      "browse": {
-        "title": "选择技能"
-      },
       "createMenu": {
         "github": {
           "description": "从仓库导入一个或多个技能。",

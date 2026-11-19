@@ -16799,9 +16799,6 @@
       }
     },
     "page": {
-      "browse": {
-        "title": "Selecionar habilidades"
-      },
       "createMenu": {
         "github": {
           "description": "Importe uma ou mais habilidades de um repositório.",

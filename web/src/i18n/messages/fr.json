@@ -16799,9 +16799,6 @@
       }
     },
     "page": {
-      "browse": {
-        "title": "Sélectionner des compétences"
-      },
       "createMenu": {
         "github": {
           "description": "Importez une ou plusieurs compétences depuis un dépôt.",

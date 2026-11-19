@@ -360,8 +360,41 @@ export default function AdminSkillsPage() {
                 wrap
                 gap={2}
                 height="auto"
-                alignItems="stretch"
+                alignItems="center"
               >
+                {selectableItems.length > 0 && (
+                  <Section
+                    flexDirection="row"
+                    width="auto"
+                    height="auto"
+                    gap={2}
+                    className="shrink-0 ms-2"
+                  >
+                    <InputCheckbox
+                      aria-label={bulkCopy("selectAll")}
+                      checked={selectedItems.length === selectableItems.length}
+                      indeterminate={
+                        selectedItems.length > 0 &&
+                        selectedItems.length < selectableItems.length
+                      }
+                      disabled={bulkBusy}
+                      onCheckedChange={(checked) =>
+                        setSelectedIds(
+                          new Set(
+                            checked
+                              ? selectableItems.map((item) => item.id)
+                              : []
+                          )
+                        )
+                      }
+                    />
+                    {selectedItems.length > 0 && (
+                      <Text font="secondary-body" color="text-03">
+                        {bulkCopy("selected", { count: selectedItems.length })}
+                      </Text>
+                    )}
+                  </Section>
+                )}
                 <Section
                   height="auto"
                   alignItems="stretch"
@@ -414,6 +447,62 @@ export default function AdminSkillsPage() {
                     />
                   </Section>
                 )}
+                {selectedItems.length > 0 && (
+                  <Section
+                    flexDirection="row"
+                    width="auto"
+                    height="auto"
+                    gap={2}
+                    className="shrink-0"
+                  >
+                    <Button
+                      prominence="secondary"
+                      icon={SvgShare}
+                      disabled={bulkLocked || !canManageSelected}
+                      onClick={() => setBulkSharingOpen(true)}
+                    >
+                      {bulkCopy("share")}
+                    </Button>
+                    <Dropdown align="end" disabled={bulkLocked}>
+                      <Dropdown.Trigger asChild>
+                        <Button
+                          prominence="tertiary"
+                          icon={SvgMoreHorizontal}
+                          aria-label={bulkCopy("moreActions")}
+                          tooltip={bulkCopy("moreActions")}
+                          disabled={bulkLocked}
+                        />
+                      </Dropdown.Trigger>
+                      <Dropdown.Data
+                        label={bulkCopy("moreActions")}
+                        items={[
+                          { kind: "group", items: bulkToggleActions },
+                          {
+                            kind: "group",
+                            items: [
+                              {
+                                kind: "action",
+                                id: "delete",
+                                icon: SvgTrash,
+                                title: bulkCopy("delete"),
+                                danger: true,
+                                disabled:
+                                  selectedItems.length === 0 ||
+                                  selectedItems.some(
+                                    (item) => !item.can_delete
+                                  ),
+                                onSelect: () => {
+                                  setBulkDeleteTargets(selectedItems);
+                                  bulkDeleteModal.toggle(true);
+                                },
+                              },
+                            ],
+                          },
+                        ]}
+                      />
+                    </Dropdown>
+                  </Section>
+                )}
               </Section>
             )}
             {visibleItems.length === 0 ? (
@@ -435,138 +524,34 @@ export default function AdminSkillsPage() {
             ) : (
               <>
                 {selectableItems.length > 0 ? (
-                  <>
-                    <Section height="auto" gap={2} alignItems="stretch">
-                      <Section
-                        role="group"
-                        aria-label={t("page.browse.title")}
-                        flexDirection="row"
-                        justifyContent="between"
-                        height={2.25}
-                        gap={2}
-                      >
-                        <Section
-                          flexDirection="row"
-                          justifyContent="start"
-                          width="auto"
-                          height="auto"
-                          gap={2}
-                          className="shrink-0"
-                        >
-                          <InputCheckbox
-                            aria-label={bulkCopy("selectAll")}
-                            checked={
-                              selectedItems.length === selectableItems.length
-                            }
-                            indeterminate={
-                              selectedItems.length > 0 &&
-                              selectedItems.length < selectableItems.length
-                            }
-                            disabled={bulkBusy}
-                            onCheckedChange={(checked) =>
-                              setSelectedIds(
-                                new Set(
-                                  checked
-                                    ? selectableItems.map((item) => item.id)
-                                    : []
-                                )
-                              )
-                            }
-                          />
-                          <Text font="secondary-body" color="text-03">
-                            {selectedItems.length > 0
-                              ? bulkCopy("selected", {
-                                  count: selectedItems.length,
-                                })
-                              : t("page.browse.title")}
-                          </Text>
-                        </Section>
-                        {selectedItems.length > 0 && (
-                          <Section
-                            flexDirection="row"
-                            width="auto"
-                            height="full"
-                            gap={2}
-                            justifyContent="start"
-                            className="min-w-0 overflow-x-auto"
-                          >
-                            <Button
-                              prominence="secondary"
-                              icon={SvgShare}
-                              disabled={bulkLocked || !canManageSelected}
-                              onClick={() => setBulkSharingOpen(true)}
-                            >
-                              {bulkCopy("share")}
-                            </Button>
-                            <Dropdown align="end" disabled={bulkLocked}>
-                              <Dropdown.Trigger asChild>
-                                <Button
-                                  prominence="tertiary"
-                                  icon={SvgMoreHorizontal}
-                                  aria-label={bulkCopy("moreActions")}
-                                  tooltip={bulkCopy("moreActions")}
-                                  disabled={bulkLocked}
-                                />
-                              </Dropdown.Trigger>
-                              <Dropdown.Data
-                                label={bulkCopy("moreActions")}
-                                items={[
-                                  { kind: "group", items: bulkToggleActions },
-                                  {
-                                    kind: "group",
-                                    items: [
-                                      {
-                                        kind: "action",
-                                        id: "delete",
-                                        icon: SvgTrash,
-                                        title: bulkCopy("delete"),
-                                        danger: true,
-                                        disabled:
-                                          selectedItems.length === 0 ||
-                                          selectedItems.some(
-                                            (item) => !item.can_delete
-                                          ),
-                                        onSelect: () => {
-                                          setBulkDeleteTargets(selectedItems);
-                                          bulkDeleteModal.toggle(true);
-                                        },
-                                      },
-                                    ],
-                                  },
-                                ]}
-                              />
-                            </Dropdown>
-                          </Section>
-                        )}
-                      </Section>
-                      <AdminSkillsTable
-                        skills={selectableItems}
-                        selectedIds={selectedIds}
-                        onSelectedChange={(id, checked) =>
-                          setSelectedIds((current) => {
-                            const next = new Set(current);
-                            if (checked) next.add(id);
-                            else next.delete(id);
-                            return next;
-                          })
-                        }
-                        busy={bulkBusy}
-                        isPending={enablement.isPending}
-                        enabledOf={enablement.enabledOf}
-                        onEnabledChange={(skill, enabled) =>
-                          void enablement.setEnabled(skill, enabled)
-                        }
-                        onOpen={(skill) =>
-                          navigation.go(adminSkillHref(skill.id))
-                        }
-                        onShare={setShareTarget}
-                        onDelete={(skill) => {
-                          setDeleteTarget(skill);
-                          deleteModal.toggle(true);
-                        }}
-                      />
-                    </Section>
-                  </>
+                  <Section height="auto" alignItems="stretch">
+                    <AdminSkillsTable
+                      skills={selectableItems}
+                      selectedIds={selectedIds}
+                      onSelectedChange={(id, checked) =>
+                        setSelectedIds((current) => {
+                          const next = new Set(current);
+                          if (checked) next.add(id);
+                          else next.delete(id);
+                          return next;
+                        })
+                      }
+                      busy={bulkBusy}
+                      isPending={enablement.isPending}
+                      enabledOf={enablement.enabledOf}
+                      onEnabledChange={(skill, enabled) =>
+                        void enablement.setEnabled(skill, enabled)
+                      }
+                      onOpen={(skill) =>
+                        navigation.go(adminSkillHref(skill.id))
+                      }
+                      onShare={setShareTarget}
+                      onDelete={(skill) => {
+                        setDeleteTarget(skill);
+                        deleteModal.toggle(true);
+                      }}
+                    />
+                  </Section>
                 ) : !searchQuery.trim() ? (
                   <IllustrationContent
                     illustration={SvgNoResult}

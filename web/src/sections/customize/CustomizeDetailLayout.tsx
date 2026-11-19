@@ -30,6 +30,8 @@ export interface DetailTab<T extends string> {
   value: T;
   label: string | RichStr;
   content: ReactNode;
+  /** Keep the tab's state, such as unsaved edits, while another tab shows. */
+  keepMounted?: boolean;
 }
 
 interface CustomizeDetailLayoutProps<T extends string> {
@@ -107,7 +109,11 @@ export default function CustomizeDetailLayout<T extends string>({
               ))}
             </Tabs.List>
             {tabs.map((candidate) => (
-              <Tabs.Content key={candidate.value} value={candidate.value}>
+              <Tabs.Content
+                key={candidate.value}
+                value={candidate.value}
+                keepMounted={candidate.keepMounted}
+              >
                 {candidate.content}
               </Tabs.Content>
             ))}

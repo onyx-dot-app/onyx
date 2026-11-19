@@ -16799,9 +16799,6 @@
       }
     },
     "page": {
-      "browse": {
-        "title": "スキルを選択"
-      },
       "createMenu": {
         "github": {
           "description": "リポジトリから1つ以上のスキルをインポートします。",

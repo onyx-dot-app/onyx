@@ -16799,9 +16799,6 @@
       }
     },
     "page": {
-      "browse": {
-        "title": "Skills auswählen"
-      },
       "createMenu": {
         "github": {
           "description": "Importieren Sie einen oder mehrere Skills aus einem Repository.",

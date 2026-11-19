@@ -16799,9 +16799,6 @@
       }
     },
     "page": {
-      "browse": {
-        "title": "스킬 선택"
-      },
       "createMenu": {
         "github": {
           "description": "저장소에서 하나 이상의 스킬을 가져오세요.",
