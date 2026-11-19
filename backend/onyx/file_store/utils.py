@@ -1,17 +1,23 @@
 import base64
 from collections.abc import Callable
 from io import BytesIO
-from typing import Any, cast
-from uuid import UUID
+from typing import cast
+from uuid import UUID, uuid4
 
 import requests
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS, WEB_DOMAIN
-from onyx.configs.constants import CHAT_SESSION_ID_FILE_METADATA_KEY, FileOrigin
+from onyx.configs.constants import (
+    CHAT_OUTPUT_FILE_ORIGINS,
+    CHAT_SESSION_ID_FILE_METADATA_KEY,
+    FileOrigin,
+)
 from onyx.db.models import UserFile
 from onyx.db.projects import get_project_user_files_by_file_ids
 from onyx.db.user_file import get_user_file_by_id
+from onyx.file_processing.file_types import guess_mime_type
+from onyx.file_store.constants import CHAT_ARTIFACT_FILE_PREFIX
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import (
     ChatFileType,
@@ -228,42 +234,60 @@ def validate_user_files_ownership(
     return current_user_files
 
 
-def chat_image_gen_metadata(chat_session_id: UUID) -> dict[str, Any]:
-    """Stamp the owning chat session onto a generated file.
+def chat_output_file_type(file_name: str) -> str:
+    """The MIME type of a chat output file, from its name."""
+    return guess_mime_type(file_name) or "application/octet-stream"
 
-    `access.py:user_can_access_chat_file` scopes a `CHAT_IMAGE_GEN` file to the
-    users who may read this session. Only rows written before stamping existed
-    lack it; new writes must always carry it.
-    """
-    return {CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat_session_id)}
+
+def save_chat_output_file(
+    content: bytes,
+    *,
+    display_name: str,
+    file_type: str,
+    file_origin: FileOrigin,
+    chat_session_id: UUID,
+) -> str:
+    """Save a file that a chat produced for its readers, stamped with the
+    chat session: `access.py:user_can_access_chat_file` gives a stamped file
+    of a `CHAT_OUTPUT_FILE_ORIGINS` origin to the users who may read that
+    session. Only `CHAT_IMAGE_GEN` rows written before stamping existed lack
+    the stamp. A `CHAT_ARTIFACT` file gets an ID under
+    `CHAT_ARTIFACT_FILE_PREFIX` and the chat session, by which the chat delete
+    deletes it. Returns the file ID."""
+    if file_origin not in CHAT_OUTPUT_FILE_ORIGINS:
+        raise ValueError(f"{file_origin} is not a chat output origin")
+    return get_default_file_store().save_file(
+        content=BytesIO(content),
+        display_name=display_name,
+        file_origin=file_origin,
+        file_type=file_type,
+        file_metadata={CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat_session_id)},
+        file_id=f"{CHAT_ARTIFACT_FILE_PREFIX}{chat_session_id}-{uuid4().hex}"
+        if file_origin == FileOrigin.CHAT_ARTIFACT
+        else None,
+    )
 
 
 def save_file_from_url(url: str, chat_session_id: UUID) -> str:
     response = requests.get(url, timeout=(10, REQUEST_TIMEOUT_SECONDS))
     response.raise_for_status()
-
-    file_io = BytesIO(response.content)
-    file_store = get_default_file_store()
-    file_id = file_store.save_file(
-        content=file_io,
+    return save_chat_output_file(
+        response.content,
         display_name="GeneratedImage",
-        file_origin=FileOrigin.CHAT_IMAGE_GEN,
         file_type="image/png;base64",
-        file_metadata=chat_image_gen_metadata(chat_session_id),
+        file_origin=FileOrigin.CHAT_IMAGE_GEN,
+        chat_session_id=chat_session_id,
     )
-    return file_id
 
 
 def save_file_from_base64(base64_string: str, chat_session_id: UUID) -> str:
-    file_store = get_default_file_store()
-    file_id = file_store.save_file(
-        content=BytesIO(base64.b64decode(base64_string)),
+    return save_chat_output_file(
+        base64.b64decode(base64_string),
         display_name="GeneratedImage",
-        file_origin=FileOrigin.CHAT_IMAGE_GEN,
         file_type=get_image_type(base64_string),
-        file_metadata=chat_image_gen_metadata(chat_session_id),
+        file_origin=FileOrigin.CHAT_IMAGE_GEN,
+        chat_session_id=chat_session_id,
     )
-    return file_id
 
 
 def save_file(

@@ -114,9 +114,16 @@ does them ([[indexing-pipeline]]).
 
 **Generated files.** The image tool (through
 `file_store/utils.py:save_files`) and the Python tool save blobs with
-`FileOrigin.CHAT_IMAGE_GEN` and the session stamp from
-`file_store/utils.py:chat_image_gen_metadata`. They get a `FileRecord` but no
-`UserFile`. The chat shows them through `/chat/file/{file_id}`.
+`FileOrigin.CHAT_IMAGE_GEN` and the session stamp, through
+`file_store/utils.py:save_chat_output_file`. The sandbox tool
+`publish_files` saves files from the user's VM with `FileOrigin.CHAT_ARTIFACT`
+and the stamp of the root chat session
+(`tools/tool_implementations/sandbox/sandbox_tools.py:PublishFilesTool`). They
+get a `FileRecord` but no `UserFile`. The chat shows them through
+`/chat/file/{file_id}`. A published file has an ID under
+`CHAT_ARTIFACT_FILE_PREFIX` and the root chat session ID, by which a chat
+delete deletes it, also when its response never saved; a saved response also
+lists it in `ChatMessage.files` ([[chat-persistence]]).
 
 **Serving.** `server/query_and_chat/chat_backend.py:fetch_chat_file` resolves
 the id, calls `backend/onyx/access/access.py:user_can_access_chat_file`, and
@@ -133,18 +140,25 @@ preview.
 1. `read-check-404` **Every read checks the acting user, and denial is a
    404.** `backend/onyx/access/access.py:user_can_access_chat_file` admits, in order: the file owner;
    readers of an agent the file is attached to; readers of a session whose
-   `ChatMessage.files` lists it; readers of the session stamped on a generated
-   file; and the document ACL for connector files. A new kind of file must fit
+   `ChatMessage.files` lists it; readers of the session stamped on a chat
+   output file (`configs/constants.py:CHAT_OUTPUT_FILE_ORIGINS`: generated
+   images and published files); and the document ACL for connector files. A new kind of file must fit
    one of these branches, or nobody can read it.
    `FileStore.presign_download` checks no user: a caller that hands a URL to
    anyone else must authorize first.
-2. `generated-file-session-stamp` **Every generated file must carry the
-   session stamp.** A `CHAT_IMAGE_GEN` file with no `chat_session_id` in
-   `file_metadata` is open to every signed-in user
-   (`backend/onyx/access/access.py:_user_can_access_chat_image_gen_file`). Files written before stamping
-   depend on this, so the open branch must stay. A new writer that forgets the
-   stamp creates an open file, and nothing fails. Use
-   `file_store/utils.py:chat_image_gen_metadata`.
+2. `generated-file-session-stamp` **Every chat output file must carry the
+   session stamp, and only chat output files are shared by it.** On a
+   `CHAT_OUTPUT_FILE_ORIGINS` origin (`CHAT_IMAGE_GEN`, `CHAT_ARTIFACT`), a
+   `chat_session_id` in `file_metadata` gives the file to every reader of
+   that session: its owner, and everyone while it is shared as `PUBLIC`. On
+   any other origin the stamp grants nothing. A `CHAT_IMAGE_GEN` file with no
+   stamp is open to every signed-in user
+   (`backend/onyx/access/access.py:user_can_access_chat_file`). Files written
+   before stamping depend on this, so the open branch must stay. A new writer
+   that forgets the stamp creates an open file, and nothing fails. Save
+   through `file_store/utils.py:save_chat_output_file`, which stamps the file
+   and accepts only these origins. A new kind of chat output that every
+   reader of the chat may download needs its origin in the set.
 3. `say-which-id` **Say which id you mean.** A new route or tool that accepts
    "a file id" must state whether it is a blob id or a `UserFile.id`. Pass a
    `UserFile.id` to `FileStore.read_file` and you get "not found" for a file
@@ -281,9 +295,9 @@ preview.
   in `OnyxFileExtensions`. Then check the upload branch in
   `categorize_uploaded_files` ([[#upload-rejects-indexing-does-not]]).
 - `add-generated-file-writer` **Add a generated-file writer.** Copy `file_store/utils.py:save_file_from_base64`:
-  save through `FileStore.save_file` with `FileOrigin.CHAT_IMAGE_GEN` and
-  `chat_image_gen_metadata` ([[#generated-file-session-stamp]]). List the
-  current writers with `git grep -n "FileOrigin.CHAT_IMAGE_GEN" backend/onyx`.
+  save through `file_store/utils.py:save_chat_output_file` with a
+  `CHAT_OUTPUT_FILE_ORIGINS` origin ([[#generated-file-session-stamp]]). List
+  the current writers with `git grep -n "save_chat_output_file(" backend/onyx`.
 - `add-storage-backend` **Add a storage backend.** Copy `file_store/gcs_file_store.py`. List the
   current backends in `file_store/file_store.py:get_default_file_store`.
   Implement every `FileStore` method, write the record through

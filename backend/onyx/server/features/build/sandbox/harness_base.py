@@ -135,13 +135,21 @@ def session_relative_path(ref: HarnessSandboxRef, path: str) -> str:
             return ""
         if not normalized.startswith(root + "/"):
             raise SandboxPathError(
-                f"{path!r} is outside the session directory {root}; use "
+                f"{path!r} is outside the working directory {root}; use "
                 "exec_command elsewhere"
             )
         return normalized[len(root) + 1 :]
     if normalized == ".." or normalized.startswith("../"):
-        raise SandboxPathError(f"{path!r} leaves the session directory")
+        raise SandboxPathError(f"{path!r} leaves the working directory")
     return "" if normalized == "." else normalized
+
+
+def onyx_vm_path(path: str) -> str | None:
+    """`path` normalized when it is an absolute path under
+    ONYX_VM_FILES_ROOT, the only place outside the session directories that
+    file calls reach; else None."""
+    normalized = posixpath.normpath(path)
+    return normalized if normalized.startswith(ONYX_VM_FILES_ROOT + "/") else None
 
 
 class HarnessSandbox(abc.ABC):
@@ -177,19 +185,23 @@ class HarnessSandbox(abc.ABC):
     ) -> Generator[ExecEvent]:
         """Write to a running command, or poll it with empty chars."""
 
-    # Files: only what exec_command cannot do well. view_image needs exact
+    # Files: only what exec_command cannot do well. publish_files needs exact
     # bytes (exec output is text), and apply_patch needs exact writes of any
     # content (no shell quoting) and typed path facts. Paths are relative to
-    # the session directory, or absolute inside it; only write_onyx_file
-    # takes an absolute path under ONYX_VM_FILES_ROOT instead. Write data is
+    # the session directory, or absolute inside it; read_file also takes,
+    # and write_onyx_file only takes, an absolute path under
+    # ONYX_VM_FILES_ROOT (onyx_vm_path). Write data is
     # bytes, or a seekable binary file (for example a file store temp file)
     # that is streamed whole, from its start, in chunks.
 
     @abc.abstractmethod
     def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
-        """Follows links inside the session directory. Raises
-        SandboxFileNotFoundError for a missing file and
-        SandboxFileTooLargeError over max_bytes."""
+        """Read a regular file in the session directory, or under
+        ONYX_VM_FILES_ROOT; links are followed only inside that root. Raises
+        SandboxPathError for another path, SandboxFileNotFoundError for a
+        missing file, SandboxFileTooLargeError over max_bytes, and
+        HarnessSandboxError for a path that is not a regular file or that a
+        link takes out of its root."""
 
     @abc.abstractmethod
     def write_file(
@@ -223,12 +235,6 @@ class HarnessSandbox(abc.ABC):
     def delete_file(self, ref: HarnessSandboxRef, path: str) -> bool:
         """Delete a file or a link (not a directory). False when nothing was
         at the path."""
-
-    @abc.abstractmethod
-    def publish_artifact(
-        self, ref: HarnessSandboxRef, path: str, *, display_name: str | None = None
-    ) -> str:
-        """Copy a session file to the file store. Returns the file ID."""
 
     @abc.abstractmethod
     def touch(self, ref: HarnessSandboxRef) -> None:

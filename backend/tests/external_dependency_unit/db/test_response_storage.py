@@ -203,6 +203,8 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.sandbox.models import PublishedFile, PublishedFiles
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import PublishFilesTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.utils.threadpool_concurrency import start_thread_future
@@ -1158,6 +1160,56 @@ def test_tool_result_details_round_trip_without_legacy_output(
     assert tool.legacy_response == ""
     assert tool.tool_call_response == result.content
     assert tool.generated_images is None
+
+
+def test_a_repeated_save_lists_each_published_file_once(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    published = PublishedFile(
+        file_id=f"chat-artifact-{conversation.id}-{uuid4().hex}",
+        name="report.md",
+        path="/home/sandbox/report.md",
+        size=9,
+        mime_type="text/markdown",
+    )
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="call", name=PublishFilesTool.NAME, arguments={})]
+            ),
+            ToolResultMessage(
+                tool_call_id="call",
+                tool_name=PublishFilesTool.NAME,
+                content="Published.",
+                details=PublishedFiles(files=[published]),
+            ),
+            AssistantMessage(content=[TextContent(text="Answer")]),
+        ],
+    )
+    record.answer_step_index = 1
+    projected = project_response(
+        response_snapshot(record), tool_ids={PublishFilesTool.NAME: None}
+    )
+    # The checkpoint contract lets an initial execution repeat its terminal save.
+    for _ in range(2):
+        save_chat_turn(
+            message_text=projected.answer or "",
+            reasoning_tokens=projected.reasoning,
+            tool_calls=projected.tool_calls,
+            citation_to_doc=projected.citation_to_doc,
+            all_search_docs=projected.all_search_docs,
+            db_session=db_session,
+            assistant_message=response,
+            response_record=projected.response,
+            presentation=projected.presentation,
+        )
+    db_session.expire_all()
+    stored = db_session.get(ChatMessage, response.id)
+    assert stored is not None
+    assert [file["id"] for file in stored.files or []] == [published.file_id]
 
 
 def test_suspended_search_result_restores_after_database_round_trip(

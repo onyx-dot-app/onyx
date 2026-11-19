@@ -137,3 +137,56 @@ class ApplyPatchResult(BaseModel):
 
     type: Literal["apply_patch"] = "apply_patch"
     files: list[ApplyPatchFileChange]
+
+
+# Largest file that publish_files copies to the file store.
+PUBLISH_FILES_MAX_BYTES = 100 << 20
+# Most files that one publish_files call publishes.
+PUBLISH_FILES_MAX_FILES = 20
+
+
+class PublishFileArgument(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(
+        description="Path of the file in the VM: relative to the working "
+        "directory, or absolute."
+    )
+    title: str | None = Field(
+        default=None,
+        description="A short title for the user. Defaults to the file name.",
+    )
+
+
+class PublishFilesArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    files: list[PublishFileArgument] = Field(
+        min_length=1,
+        max_length=PUBLISH_FILES_MAX_FILES,
+        description="The files to give the user.",
+    )
+    description: str | None = Field(
+        default=None, description="One sentence about the files, for the user."
+    )
+
+
+class PublishedFile(BaseModel):
+    """A file that publish_files copied from the VM to the file store."""
+
+    file_id: str
+    # The file name, which the download keeps. Publishes of one name are
+    # versions of one file.
+    name: str
+    title: str | None = None
+    # Absolute and normalized.
+    path: str
+    size: int
+    mime_type: str
+
+
+class PublishedFiles(BaseModel):
+    """Saved details of a publish_files call."""
+
+    type: Literal["published_files"] = "published_files"
+    files: list[PublishedFile]

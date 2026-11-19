@@ -33,8 +33,11 @@ from onyx.server.query_and_chat.streaming_models import (
     MemoryToolNoAccess,
     OverallStop,
     PacketException,
+    PublishFilesEnd,
+    PublishFilesStart,
     ReasoningDelta,
     SearchToolDocumentsDelta,
+    SectionEnd,
 )
 from onyx.tools.models import (
     ChatFile,
@@ -45,6 +48,7 @@ from onyx.tools.models import (
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import PublishFilesTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
@@ -297,6 +301,30 @@ def test_image_failure_renders_error_at_tool_placement(display_error: bool) -> N
             str(errors[0].obj.exception)
             == "The image request was rejected by the content policy."
         )
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [{}, {"files": "report.csv"}, {"files": [{"name": "report.csv"}]}],
+)
+def test_a_publish_with_invalid_arguments_renders_an_empty_publish_card(
+    arguments: dict[str, JsonValue],
+) -> None:
+    call = ModelToolCall(id="publish", name=PublishFilesTool.NAME, arguments=arguments)
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        tool_name=call.name,
+        content="Invalid tool arguments: files: Field required",
+        is_error=True,
+    )
+
+    packets = ToolRenderer(call, Placement(turn_index=0)).complete(result)
+
+    assert [packet.obj for packet in packets] == [
+        PublishFilesStart(),
+        PublishFilesEnd(error="Invalid tool arguments: files: Field required"),
+        SectionEnd(),
+    ]
 
 
 def test_memory_failure_does_not_claim_access_was_denied() -> None:

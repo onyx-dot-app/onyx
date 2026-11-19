@@ -128,7 +128,7 @@ def test_code_mode_citations_stream_save_reload_and_continue(
     with (
         patch("onyx.chat.files.get_default_file_store", return_value=file_store),
         patch(
-            "onyx.tools.tool_implementations.python.python_tool.get_default_file_store",
+            "onyx.file_store.utils.get_default_file_store",
             return_value=file_store,
         ),
         use_mock_search_pipeline([DocumentSource.GOOGLE_DRIVE]) as internal,

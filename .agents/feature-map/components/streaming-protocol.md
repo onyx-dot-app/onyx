@@ -235,7 +235,20 @@ names the file tool, which titles the call (`toolDisplayHelpers.getToolName`, as
 that the model got (cut to its token budget), which replaces the streamed
 preview; `session_id` is set while the command runs, and `error` (with no
 output) when the call failed. A replayed call sends the start and `exec_end`
-only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A sandbox call that
+only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A `publish_files`
+call starts with `publish_files_start`: `files`, the `{path, title}` entries
+as the model wrote them, and `description` (`files` is empty when the
+arguments are not valid, so the card still shows). It ends with
+`publish_files_end`:
+`files`, one `PublishedFile` per entry in the same order, or `error` and no
+files when the call published none (it publishes all or none). A
+`PublishedFile` has `file_id` (download it from `/chat/file/{file_id}`),
+`name` (the file name, which the download keeps, and the version key: files
+of one `name` are versions of one file, and each publish gives a new
+`file_id`), `title` (null when the model gave none), `path` (absolute and
+normalized in the VM, for display only), `size` in bytes and `mime_type`. Live and replay send the same two packets. The chat's
+published files are the `publish_files_end` packets of its responses: the
+packet is the only record that a client lists them from. A sandbox call that
 a Stop ended has no end packet; the client shows it as stopped. So does any
 nested call that its program left unfinished (state `unfinished`,
 `CodeModeRenderer._complete_child`). An `exec_end` with `completion`
@@ -488,6 +501,9 @@ its background task end ([[#pure-asgi-middleware]]).
 
 ## Known issues
 
+- No client knows `publish_files_start` and `publish_files_end` yet, so the
+  web, mobile, widget and CLI clients show nothing for a `publish_files` call
+  ([[#unknown-packet-renders-nothing]]).
 - The web enum keeps `MESSAGE_END`. The mobile enum keeps `MESSAGE_END` and
   `TOP_LEVEL_BRANCHING`. The backend sends neither. Mobile drops
   `top_level_branching` so that it can talk to older servers. The

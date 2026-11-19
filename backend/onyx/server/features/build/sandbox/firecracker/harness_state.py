@@ -10,9 +10,8 @@
 - Session saves (no TTL): per chat session, the committed archive in the
   file store. A new save is committed before the old file is deleted.
 - Last attempt (no TTL): an agent never creates a stopped attempt again.
-- Saved sessions and artifacts (no TTL): per sandbox, the chat sessions
-  with a committed save and the published artifact file IDs. A purge
-  deletes their files.
+- Saved sessions (no TTL): per sandbox, the chat sessions with a committed
+  save. A purge deletes their files.
 - Wanted (expires): when a call last asked for the sandbox. A stop that
   saves gives way to it (cancel on resume).
 - Purge marks (expire): a deleted session or sandbox. A save in progress
@@ -47,7 +46,6 @@ SESSION_INSTANCES_PREFIX = "sandbox_fc:session_instances:"
 SESSION_SAVE_PREFIX = "sandbox_fc:session_save:"
 LAST_ATTEMPT_PREFIX = "sandbox_fc:last_attempt:"
 SAVED_SESSIONS_PREFIX = "sandbox_fc:saved_sessions:"
-ARTIFACTS_PREFIX = "sandbox_fc:artifacts:"
 WANTED_PREFIX = "sandbox_fc:wanted:"
 PURGED_SESSION_PREFIX = "sandbox_fc:purged_session:"
 PURGED_SANDBOX_PREFIX = "sandbox_fc:purged_sandbox:"
@@ -57,7 +55,7 @@ PURGE_MARK_SECONDS = 24 * 3600
 _RETENTION_MARK = "retention"
 WANTED_SECONDS = 600
 # Per-sandbox records that a sandbox purge deletes at its end (the
-# saved-session and artifact indexes empty as their files go).
+# saved-session index empties as its files go).
 SANDBOX_STATE_PREFIXES = (
     EXEC_SESSIONS_PREFIX,
     ACTIVITY_PREFIX,
@@ -303,10 +301,6 @@ def clear_retention_mark(cache: CacheBackend, session_id: UUID) -> None:
     cache.delete_if_value(
         PURGED_SESSION_PREFIX + str(session_id), _RETENTION_MARK.encode()
     )
-
-
-def is_sandbox_purged(cache: CacheBackend, sandbox_id: UUID) -> bool:
-    return cache.get(PURGED_SANDBOX_PREFIX + str(sandbox_id)) is not None
 
 
 def is_purged(cache: CacheBackend, sandbox_id: UUID, session_id: UUID) -> bool:

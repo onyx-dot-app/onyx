@@ -1202,6 +1202,16 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             key = self._followed(context, key)
             data = self.agent.files.get(key)
             if data is None:
+                below = "" if key[2] in ("", ".") else key[2].rstrip("/") + "/"
+                if any(
+                    k[:2] == key[:2] and k[2].startswith(below)
+                    for k in self.agent.files
+                ):
+                    abort_daemon(
+                        context,
+                        SandboxDaemonErrorReason.INVALID_ARGUMENT,
+                        f"{path} is not a regular file",
+                    )
                 abort_daemon(context, SandboxDaemonErrorReason.FILE_NOT_FOUND, path)
                 raise AssertionError("unreachable")
             mode = self.agent.file_modes.get(key, 0o644)

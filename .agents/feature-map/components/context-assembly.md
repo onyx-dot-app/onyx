@@ -369,6 +369,10 @@ counts what is sent, not the stored token counts.
   Full results remain available while the runtime manages the context budget.
 - **Attached files stay where they were attached.** User attachments remain
   beside their question; project files and images remain in the preamble.
+  Only user attachments enter the prompt as text, so turn preparation
+  extracts text only for the files of user messages
+  (`chat/process_message.py:prepare_chat_turn`, `text_file_ids`). Files of
+  assistant messages, such as published files, reach tools as bytes only.
   Changes to project content, configuration, image limits, or a compaction
   checkpoint can intentionally invalidate cache prefixes.
 

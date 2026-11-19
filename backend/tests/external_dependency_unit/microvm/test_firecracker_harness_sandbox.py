@@ -71,10 +71,6 @@ from onyx.server.features.build.sandbox.models import (
     ExecOutputDelta,
     HarnessSandboxRef,
 )
-from shared_configs.contextvars import (
-    CURRENT_TENANT_ID_CONTEXTVAR,
-    get_current_tenant_id,
-)
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
     AddNode,
@@ -855,48 +851,38 @@ def test_file_paths_outside_the_session_directory_are_refused(path: str) -> None
         session_relative_path(ref, path)
 
 
-@pytest.mark.usefixtures("db_session", "initialize_file_store", "node")
-def test_publish_artifact_copies_a_session_file_to_the_file_store(
-    sandbox: FirecrackerHarnessSandbox,
-    new_ref: NewRef,
-) -> None:
-    ref = new_ref()
-    sandbox.write_file(ref, "out/report.csv", b"a,b\n1,2\n")
-
-    file_id = sandbox.publish_artifact(ref, "out/report.csv")
-    store = get_default_file_store()
-    try:
-        record = store.read_file_record(file_id)
-        assert record.display_name == "report.csv"
-        assert record.file_type == "text/csv"
-        assert store.read_file(file_id).read() == b"a,b\n1,2\n"
-    finally:
-        store.delete_file(file_id)
-
-
 @pytest.mark.usefixtures("node")
-def test_publish_artifact_saves_under_the_sandbox_tenant(
-    monkeypatch: pytest.MonkeyPatch,
+def test_read_file_reads_the_session_and_the_onyx_root_and_only_regular_files(
     sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
     new_ref: NewRef,
 ) -> None:
     ref = new_ref()
-    sandbox.write_file(ref, "a.txt", b"x")
-    seen: list[str] = []
+    sandbox.write_file(ref, "out/report.csv", b"a,b\n")
+    chart = f"{ONYX_VM_FILES_ROOT}/out/chart.svg"
+    sandbox.write_onyx_file(ref, chart, b"<svg/>")
+    node.agent.files[(str(ref.sandbox_id), "", "/tmp/elsewhere.svg")] = b"<svg/>"
 
-    class Store:
-        def save_file(self, **_kwargs: object) -> str:
-            seen.append(get_current_tenant_id())
-            return "file-1"
-
-    monkeypatch.setattr(harness_sandbox, "get_default_file_store", Store)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set("another_tenant")
-    try:
-        assert sandbox.publish_artifact(ref, "a.txt") == "file-1"
-        assert get_current_tenant_id() == "another_tenant"
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-    assert seen == [TENANT_ID]
+    assert sandbox.read_file(ref, chart, max_bytes=10) == b"<svg/>"
+    assert (
+        sandbox.read_file(
+            ref, f"{session_workspace(ref.session_id)}/out/report.csv", max_bytes=10
+        )
+        == b"a,b\n"
+    )
+    # Other absolute paths, and other sessions' directories, are refused.
+    for path in (
+        "/tmp/elsewhere.svg",
+        f"{session_workspace(_session_ref(ref).session_id)}/out/report.csv",
+        "../x",
+    ):
+        with pytest.raises(SandboxPathError, match="copy the file into the working"):
+            sandbox.read_file(ref, path, max_bytes=10)
+    for directory in ("out", f"{ONYX_VM_FILES_ROOT}/out"):
+        with pytest.raises(HarnessSandboxError, match="not a regular file"):
+            sandbox.read_file(ref, directory, max_bytes=10)
+    with pytest.raises(SandboxFileNotFoundError):
+        sandbox.read_file(ref, f"{ONYX_VM_FILES_ROOT}/missing.svg", max_bytes=10)
 
 
 @pytest.mark.usefixtures("db_session", "initialize_file_store")
