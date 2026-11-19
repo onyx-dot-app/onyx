@@ -1,25 +1,30 @@
 # Onyx Desktop v2 (preview)
 
-A native macOS app for Onyx, built with Tauri 2.12. It lives beside `desktop/`, which keeps
-shipping unchanged and stays the default desktop app. v2 has its own bundle ID
+A native desktop app for Onyx, built with Tauri 2.12. macOS is the main platform. Windows and
+Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It lives beside
+`desktop/`, which keeps shipping unchanged and stays the default desktop app. v2 has its own bundle ID
 (`app.onyx.desktop.v2`) and name ("Onyx v2"), so both apps can be installed at the same time.
 
 ## What it does
 
 - Native onboarding: enter a server URL. The app checks `GET /api/version`.
 - Native sign-in with email and password through `POST /api/auth/mobile/login`. Release builds
-  keep the session token in the macOS keychain (service `app.onyx.desktop.v2`, one entry per
-  server). Debug builds keep it in `~/Library/Application Support/app.onyx.desktop.v2/
-  dev-session-tokens.json` (mode 600): an unsigned dev build gets a new code signature on every
-  rebuild, and macOS would ask for your password each time.
+  keep the session token in the OS credential store (service `app.onyx.desktop.v2`, one entry per
+  server): the macOS keychain, Windows Credential Manager, or the Linux Secret Service (GNOME
+  Keyring, KWallet). macOS debug builds keep it in `~/Library/Application Support/
+  app.onyx.desktop.v2/dev-session-tokens.json` (mode 600): an unsigned dev build gets a new code
+  signature on every rebuild, and macOS would ask for your password each time.
 - The main window shows the server's own web UI. The shell sets the session cookie in the
   window before the first page load, so the web login page never shows. On macOS the cookie
   is built natively as a host-only, HttpOnly cookie (`src-tauri/src/macos_cookies.rs`):
   wry's `set_cookie` always adds `Domain` and writes `Secure=FALSE`, and WebKit reads any
   `Secure` key as secure, so such a cookie never reaches an `http://` server.
-- Link policy, in Rust: same-origin pages stay in the app; other `http(s)`, `mailto:` and
-  `tel:` links open in the system browser; other schemes are blocked. Downloads open the
-  native save panel. `alert()`, `confirm()` and `prompt()` show native dialogs.
+- Link policy, in Rust: same-origin pages and `blob:` URLs stay in the app; other `http(s)`,
+  `mailto:` and `tel:` links open in the system browser; other schemes (also `data:`, a
+  `blob:` URL from another site, and every `about:` page except `about:blank` and
+  `about:srcdoc`) are blocked. Popups and the SSO sign-in window can also load other HTTPS
+  sites, for OAuth consent and identity providers. Downloads open the native save panel.
+  `alert()`, `confirm()` and `prompt()` show native dialogs.
 - Tray icon, standard macOS menus (with Edit), and a Preferences window (`Cmd+,`) for the
   server and sign-out.
 - Native main window chrome: overlay title bar, the sidebar runs to the top with
@@ -62,6 +67,8 @@ sprite sheets in `public/aonyx/` are played faster than the pack's timing.
 
 ## Keyboard shortcuts
 
+On macOS. For Windows and Linux, see [Windows and Linux](#windows-and-linux).
+
 | Shortcut | Action |
 |---|---|
 | `Cmd+Shift+Space` (global, configurable) | Show or hide the launcher |
@@ -77,21 +84,34 @@ sprite sheets in `public/aonyx/` are played faster than the pack's timing.
 
 ## Security boundary
 
-- Only the bundled windows (onboarding, login, preferences, launcher)
+- Only the bundled windows (onboarding, login, preferences, launcher, aonyx)
   can call app commands. Every app command needs an explicit permission (`build.rs` app
-  manifest), and the capability in `src-tauri/capabilities/local.json` grants them to those
-  windows only. The remote main window gets no app command.
+  manifest). Each window has its own capability in `src-tauri/capabilities/` (file name =
+  window label) that grants only the commands its page uses. The remote main window gets no
+  app command.
 - The main window gets just two built-in window permissions, on the configured server's origin
   only: start dragging and title-bar zoom (for its drag regions).
 - Local windows have a strict CSP (`script-src 'self'`, `connect-src` limited to IPC). The
   Vite plugin adds it as a `<meta>` tag, so it also applies in `bun run dev`; production
   builds also send it as a header (`tauri.conf.json`).
-- Local windows never call the server. All HTTP goes through Rust with the bearer token.
+- Local windows never call the server. All HTTP goes through Rust with the bearer token. The
+  Rust client follows a redirect only on the server's origin (scheme, host and port), so a
+  password or an SSO code never goes to another host or over plain HTTP.
 
 ## Run it
 
-Prerequisites: Rust 1.90+, Bun 1.3+, Xcode Command Line Tools (full Xcode is not needed),
-and a dependency install in `web/` (`desktop-v2` builds Opal from `web/lib/opal/src`).
+Prerequisites: Rust 1.90+, Bun 1.3+, and a dependency install in `web/` (`desktop-v2` builds
+Opal from `web/lib/opal/src`). Also, per platform:
+
+- macOS: Xcode Command Line Tools (full Xcode is not needed).
+- Windows: Microsoft C++ Build Tools ("Desktop development with C++") and the WebView2 runtime
+  (included in Windows 10 and 11).
+- Linux (Debian or Ubuntu):
+
+  ```bash
+  sudo apt-get install build-essential file libayatana-appindicator3-dev libdbus-1-dev \
+    libgtk-3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev libxdo-dev patchelf pkg-config
+  ```
 
 ```bash
 cd desktop-v2
@@ -119,18 +139,73 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - On pull requests that touch `desktop-v2/`, CI runs the checks and builds an unsigned
   universal (Apple silicon and Intel) DMG as a workflow artifact for reviewers. macOS blocks
   an unsigned app on first launch: right-click it, choose **Open**, then **Open** again.
-- Run the workflow by hand with a version (for example `0.2.0`) to publish a signed and
-  notarized universal DMG, its update archive and `latest.json`. They go to a GitHub
+- The same pull requests also run the checks on Windows and Linux, and build unsigned x64
+  installers as artifacts: NSIS (`.exe`) and MSI on Windows, AppImage and `.deb` on Linux.
+  These installers are not signed. They are for review only, not for customers. Each one has
+  a GitHub build provenance attestation (`gh attestation verify <file> --repo
+  onyx-dot-app/onyx`). Pull requests from forks get no installer artifacts.
+- Run the workflow by hand on `main` with a version (for example `0.2.0`) to publish a signed
+  and notarized universal DMG, its update archive and `latest.json`. They go to a GitHub
   pre-release tagged `desktop-v2-v<version>`, which is never marked as the latest release, so
-  v1's downloads and auto-update are not affected.
+  v1's downloads and auto-update are not affected. Releases are macOS only for now. The job
+  gets the signing secrets only after the JavaScript build, and only in its signing step.
+
+## Windows and Linux
+
+To build installers locally (unsigned, in `src-tauri/target/release/bundle/`):
+
+```bash
+bun run tauri build --bundles nsis,msi      # Windows
+bun run tauri build --bundles appimage,deb  # Linux
+```
+
+How the app differs from macOS:
+
+- The launcher shortcut is `Ctrl+Alt+Space` by default (`Ctrl+Shift+Space` often switches the
+  input language). The launcher is a borderless, always-on-top window with no taskbar entry. It
+  takes focus when it shows and hides when you click away or press `Esc`. In the launcher,
+  `Ctrl+Enter` opens the chat in the window and `Ctrl+N` starts a new chat.
+- The main window keeps the native title bar and has its own menu bar: **File** (New Chat
+  `Ctrl+N`, Open Launcher, Preferences `Ctrl+,`, Close Window `Ctrl+W`, Quit `Ctrl+Q`), **View**
+  (Reload `Ctrl+R`, Back `Alt+Left`, Forward `Alt+Right`, zoom `Ctrl+0`/`Ctrl+=`/`Ctrl+-`, Full
+  Screen `F11`) and **Help** (About). Other windows have no menu bar.
+- No auto-update: the update feed has macOS builds only, so the app does not check for updates
+  and has no **Check for Updates…** item. Install a new version by hand.
+- The session cookie goes in through wry's cookie API. WebView2 and WebKitGTK show `alert()`,
+  `confirm()` and `prompt()` themselves; other native dialogs use `rfd`.
+- Windows installers install for all users (NSIS `perMachine`, and MSI) into Program Files, so
+  a standard user cannot replace the app's files. They need administrator rights. They contain the
+  WebView2 offline installer, so they also work on a computer with no internet access. The
+  installers register `onyx://` sign-in links for all users. Debug builds register them for
+  the current user at launch.
+- On Linux the app registers `onyx://` at launch (the `.deb` also registers it), so AppImage
+  builds get sign-in links too. This needs `xdg-mime`.
+
+Linux needs some desktop services:
+
+- **Secret Service**, to keep you signed in: GNOME Keyring, KWallet or another provider must
+  run and be unlocked in your session. Minimal window managers, VDI and SSH sessions often have
+  none. Then sign-in fails with a message that names the Secret Service.
+- **Global shortcut**: the launcher shortcut uses X11 key grabs. In a Wayland session (the
+  default on Ubuntu 22.04+, Fedora and RHEL 9) the shortcut works only while an X11 (XWayland)
+  app has focus, and with no XWayland it never works. Preferences shows a notice then. Open the
+  launcher from the tray icon instead. Preferences also shows a notice when another app holds
+  the shortcut.
+- **Tray icon**: it needs a tray host (`libayatana-appindicator3-1`). Stock GNOME shows no
+  tray icon without the AppIndicator extension (`gnome-shell-extension-appindicator`, on by
+  default on Ubuntu).
+- The launcher's transparent corners need a compositing window manager.
 
 ## Auto-update
 
-`src-tauri/src/updater.rs`: the app checks the feed 15 seconds after launch
+macOS only (`updater::SUPPORTED`). `src-tauri/src/updater.rs`: the app checks the feed 15 seconds after launch
 and every 6 hours, downloads a newer version in the background, then changes **Check for
 Updates…** (app menu and tray) to **Restart to Update (vX)**. It does not restart on its own.
 Every download is verified against `plugins.updater.pubkey` in `tauri.conf.json` before it is
 installed; a build that was changed after signing, or signed with another key, is rejected.
+The plugin installs only a version newer than the running one. `requireSignedVersion` makes it
+also check the version in the signature, so a changed feed cannot offer an old signed build
+under a new version number.
 
 - The feed (`plugins.updater.endpoints`) must be HTTPS. It points at a feed that does not exist
   yet, so checks fail quietly until the feed is set up.
@@ -173,6 +248,9 @@ need the physical mouse or keyboard).
 - Browser SSO needs a server with the native-app sign-in pass-through in its web OAuth
   callback. v1 also registers the `onyx://` scheme; with both apps installed, macOS sends the
   sign-in link to whichever app registered it last.
-- macOS only for now. The code builds on other platforms, but the launcher panel, native
-  cookies and dialogs are macOS-specific.
+- Windows and Linux are a preview: no signed builds, no auto-update feed, and no QA harness
+  input (it posts AppKit events). Aonyx is a plain always-on-top window there, so clicking it
+  can take focus from the app you are in.
+- On Windows, if the launcher opens while another app holds the foreground lock, Windows can
+  refuse it focus. Click the launcher once to type.
 - The shell-side React and Opal dependencies resolve from `web/node_modules`.

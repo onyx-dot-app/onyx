@@ -1,5 +1,5 @@
-//! Commands for the bundled local windows. The capability in capabilities/local.json
-//! limits them to those windows; the remote main window cannot call any of them.
+//! Commands for the bundled local windows. Each window's capability in capabilities/
+//! grants only the commands its page uses; the remote main window cannot call any of them.
 
 use serde::Serialize;
 use tauri::ipc::Channel;
@@ -25,6 +25,8 @@ pub struct Prefs {
     server_url: Option<String>,
     hotkey: String,
     signed_in: bool,
+    /// Set when the launcher shortcut may not work.
+    shortcut_notice: Option<String>,
 }
 
 #[tauri::command]
@@ -91,14 +93,16 @@ pub async fn login(
 }
 
 #[tauri::command]
-pub fn get_prefs(state: State<'_, AppState>) -> Prefs {
+pub fn get_prefs(app: AppHandle, state: State<'_, AppState>) -> Prefs {
     let config = state.config.get();
     let signed_in = config
         .server_url
         .as_deref()
         .is_some_and(|server| state.token(server).is_some());
+    let hotkey = config.hotkey();
     Prefs {
-        hotkey: config.hotkey(),
+        shortcut_notice: shortcut::notice(&app, &hotkey),
+        hotkey,
         server_url: config.server_url,
         signed_in,
     }
@@ -243,16 +247,11 @@ pub async fn open_external(
     // A page on the signed-in server opens in the Onyx window, which has the
     // session; the browser would show the web sign-in page instead.
     if let (Some(base), Ok((server, token))) = (&base, state.session()) {
+        // The parsed URL, not its path: a path such as `//host/x` joined to
+        // the server again names another host.
         if parsed.origin() == base.origin() {
-            let mut path = parsed.path().to_string();
-            if let Some(query) = parsed.query() {
-                path = format!("{path}?{query}");
-            }
-            if let Some(fragment) = parsed.fragment() {
-                path = format!("{path}#{fragment}");
-            }
             windows::hide_launcher(&app);
-            return main_window::open(&app, &server, &token, &path).await;
+            return main_window::open_url(&app, &server, &token, parsed).await;
         }
     }
     main_window::open_external(&app, parsed.as_str());

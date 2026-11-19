@@ -51,8 +51,9 @@ This component holds the desktop shell, the widget, the Chrome extension, and
 the framed pages and framed sign-in path in the web app that only these clients
 need. Each client has a README with its build and design notes.
 
-It also holds desktop v2 (`desktop-v2/`), a preview native macOS app that
-installs beside v1 and is not the default. It signs in through
+It also holds desktop v2 (`desktop-v2/`), a preview native app that
+installs beside v1 and is not the default. It is built for macOS, and as
+unsigned CI previews for Windows and Linux; only macOS has a release. It signs in through
 `/api/auth/mobile/login`, hands the token to the remote web UI as the session
 cookie, and gives IPC only to its bundled windows. It has its own CI build
 and release; v1's release does not build it. Its launcher panel (global

@@ -5,6 +5,7 @@ mod api;
 mod ask;
 mod commands;
 mod config;
+mod dialog;
 mod launcher;
 #[cfg(target_os = "macos")]
 mod macos_cookies;
@@ -52,6 +53,8 @@ fn main() {
 
             let handle = app.handle();
 
+            // Windows and Linux: the main window gets its own menu (main_window.rs).
+            #[cfg(target_os = "macos")]
             app.set_menu(menu::build(handle)?)?;
             app.on_menu_event(|app, event| menu::handle(app, event.id().as_ref()));
             menu::build_tray(handle)?;
@@ -64,6 +67,13 @@ fn main() {
 
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
+                // The NSIS and MSI installers register onyx:// for all users;
+                // a per-user entry would override it. AppImage and dev builds
+                // need it at runtime.
+                #[cfg(any(target_os = "linux", all(target_os = "windows", debug_assertions)))]
+                if let Err(e) = app.deep_link().register_all() {
+                    log::warn!("could not register onyx:// links: {e}");
+                }
                 let link_app = handle.clone();
                 app.deep_link().on_open_url(move |event| {
                     for url in event.urls() {
@@ -73,7 +83,9 @@ fn main() {
             }
 
             main_window::spawn_session_renewal(handle);
-            updater::spawn_background_checks(handle);
+            if updater::SUPPORTED {
+                updater::spawn_background_checks(handle);
+            }
             qa::start(handle);
             Ok(())
         })
