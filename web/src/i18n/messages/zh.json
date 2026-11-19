@@ -13381,14 +13381,6 @@
           "ariaLabel": "预览 {name}"
         }
       }
-    },
-    "suggestedQuestions": {
-      "preparing": {
-        "text": "正在根据您的文档准备问题…"
-      },
-      "noDocuments": {
-        "text": "添加数据源即可获得有关您文档的问题。"
-      }
     }
   },
   "common": {

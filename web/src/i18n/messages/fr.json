@@ -13381,14 +13381,6 @@
           "ariaLabel": "Aperçu de {name}"
         }
       }
-    },
-    "suggestedQuestions": {
-      "preparing": {
-        "text": "Préparation de questions à partir de vos documents…"
-      },
-      "noDocuments": {
-        "text": "Ajoutez une source pour obtenir des questions sur vos documents."
-      }
     }
   },
   "common": {

@@ -1,4 +1,3 @@
-import englishMessages from "@/i18n/messages/en.json";
 import { AnalyticsEvent } from "@/lib/analytics/utils";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import type { PersonSuggestions } from "@/lib/suggestedQuestions/types";
@@ -12,7 +11,6 @@ interface MockAgent {
 
 let mockAgent: MockAgent | null = null;
 let mockSuggestions: PersonSuggestions | undefined;
-let mockIsLoading = false;
 const mockMutate = jest.fn();
 const mockTrack = jest.fn();
 const mockMarkUsed = jest.fn((_id: string) => Promise.resolve());
@@ -24,7 +22,6 @@ jest.mock("@/lib/agents/hooks", () => ({
 jest.mock("@/lib/suggestedQuestions/hooks", () => ({
   useSuggestedQuestions: () => ({
     suggestions: mockSuggestions,
-    isLoading: mockIsLoading,
     mutate: mockMutate,
   }),
 }));
@@ -38,8 +35,6 @@ jest.mock("@/lib/analytics/utils", () => ({
   track: (...args: unknown[]) => mockTrack(...args),
 }));
 
-const copy = englishMessages.chat.suggestedQuestions;
-
 function suggestions(
   state: PersonSuggestions["state"],
   questions: PersonSuggestions["questions"] = []
@@ -50,7 +45,6 @@ function suggestions(
 beforeEach(() => {
   mockAgent = { id: DEFAULT_AGENT_ID, starter_messages: null };
   mockSuggestions = undefined;
-  mockIsLoading = false;
   jest.clearAllMocks();
 });
 
@@ -145,29 +139,17 @@ describe("suggested questions on the default agent", () => {
     expect(mockMutate).not.toHaveBeenCalled();
   });
 
-  test("shows the preparing line while the first request is pending", () => {
-    mockIsLoading = true;
-    render(<Suggestions onChat={jest.fn()} />);
+  test.each(["preparing", "no_documents", "ready"] as const)(
+    "shows nothing without questions (%s)",
+    (state) => {
+      mockSuggestions = suggestions(state);
+      const { container } = render(<Suggestions onChat={jest.fn()} />);
 
-    expect(screen.getByText(copy.preparing.text)).toBeInTheDocument();
-  });
+      expect(container).toBeEmptyDOMElement();
+    }
+  );
 
-  test("shows one line while questions are being prepared", () => {
-    mockSuggestions = suggestions("preparing");
-    render(<Suggestions onChat={jest.fn()} />);
-
-    expect(screen.getByText(copy.preparing.text)).toBeInTheDocument();
-  });
-
-  test("shows one line when the person has no documents yet", () => {
-    mockSuggestions = suggestions("no_documents");
-    render(<Suggestions onChat={jest.fn()} />);
-
-    expect(screen.getByText(copy.noDocuments.text)).toBeInTheDocument();
-  });
-
-  test("shows nothing when ready with no questions", () => {
-    mockSuggestions = suggestions("ready");
+  test("shows nothing while the first request is pending", () => {
     const { container } = render(<Suggestions onChat={jest.fn()} />);
 
     expect(container).toBeEmptyDOMElement();
