@@ -102,9 +102,11 @@
   list, so Save retries only the rest. There is no file
   content endpoint, so only SKILL.md shows text. `SkillEditorPage` only
   creates a skill (`/app/customize/skills/new`), in the same files-and-SKILL.md
-  card (`web/src/sections/customize/SkillBundleEditor.tsx`). Create sends the
-  first added upload with `POST /skills/custom/editor`, then each other upload
-  and each removal as a new version. A SKILL.md bundle replaces the text and
+  card (`web/src/sections/customize/SkillBundleEditor.tsx`). Create merges every
+  added upload, without the removed files, into one ZIP
+  (`lib/skills/bundleUpload.ts:mergeSkillFilesUploads`) and sends it with the
+  sharing in one `POST /skills/custom/editor`, so the first version holds
+  every file. A SKILL.md bundle replaces the text and
   the files after a confirmation.
   The skill comes from `GET /skills`; only owners and editors read
   `/skills/custom/{id}/edit` (it is 404 for a viewer), and a viewer reads the

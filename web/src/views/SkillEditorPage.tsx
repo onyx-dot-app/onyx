@@ -1,7 +1,7 @@
 "use client";
 
 import { useNavigation } from "@opal/navigation";
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { Button, Tooltip, useCreateModal } from "@opal/components";
@@ -18,12 +18,11 @@ import {
   createCustomSkillFromEditor,
   inspectSkillBundle,
   isSkillNameConflict,
-  removeUserSkillFile,
-  updateSkillShares,
-  uploadUserSkillFiles,
 } from "@/lib/skills/api";
-import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
-import type { SkillShareUpdatePayload } from "@/lib/skills/api";
+import {
+  mergeSkillFilesUploads,
+  type PreparedSkillFilesUpload,
+} from "@/lib/skills/bundleUpload";
 import {
   discardSkillCreationDraft,
   getSkillCreationDraft,
@@ -59,15 +58,6 @@ const EMPTY_SKILL_MD = composeSkillMarkdown({
   description: "",
   instructions: "",
 });
-
-interface CreatedSkill {
-  id: string;
-  name: string;
-  versionId: string | null;
-  /** Sharing held back until the last file step, so a publish or a review
-   * request takes the final version. */
-  shareLater: SkillShareUpdatePayload | null;
-}
 
 interface SkillEditorPageProps {
   draftId?: string;
@@ -126,10 +116,6 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
   const [conflictingSkillName, setConflictingSkillName] = useState<
     string | null
   >(null);
-  // Set once the skill exists; the files that are left go to it.
-  const [created, setCreated] = useState<CreatedSkill | null>(null);
-  // The paths that the new skill holds from the uploads sent so far.
-  const sent = useRef<Set<string>>(new Set());
 
   const parsed = parseSkillMarkdown(text);
   const name = parsed.ok ? parsed.name : "";
@@ -222,86 +208,44 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
     event?.preventDefault();
     if (!parsed.ok || (!canCreate && !createDisabled)) return;
     setIsSaving(true);
-    // An upload whose files were all removed is not sent.
-    let pending = uploads.filter((upload) =>
-      uploadPaths(upload).some((path) => !removed.has(path))
-    );
-    let skill = created;
     try {
-      if (!skill) {
-        const [first, ...rest] = pending;
-        const sharing = creationSharing
-          ? serializeSkillSharing(creationSharing, canManageOrgSkills)
-          : undefined;
-        const laterSteps =
-          rest.length > 0 ||
-          (first !== undefined &&
-            uploadPaths(first).some((path) => removed.has(path)));
-        const made = await createCustomSkillFromEditor(
-          {
-            name: parsed.name,
-            description: parsed.description,
-            instructions_markdown: parsed.instructions,
-            auto_enable: !createDisabled,
-            sharing: laterSteps ? undefined : sharing,
-          },
-          first?.file
-        );
-        skill = {
-          id: made.id,
-          name: made.name,
-          versionId: made.current_version_id,
-          shareLater: laterSteps ? (sharing ?? null) : null,
-        };
-        setCreated(skill);
-        nameConflictModal.toggle(false);
-        if (draftId) discardSkillCreationDraft(draftId);
-        if (first) uploadPaths(first).forEach((path) => sent.current.add(path));
-        pending = rest;
-        setUploads(rest);
-      }
-      // Each finished step leaves the pending lists, so a retry sends only
-      // the rest to the skill that now exists.
-      for (const upload of pending) {
-        const updated = await uploadUserSkillFiles(
-          skill.id,
-          upload.file,
-          skill.versionId
-        );
-        skill = { ...skill, versionId: updated.current_version_id };
-        setCreated(skill);
-        uploadPaths(upload).forEach((path) => sent.current.add(path));
-        setUploads((current) => current.filter((item) => item !== upload));
-      }
-      for (const path of removed) {
-        if (!sent.current.has(path)) continue;
-        const updated = await removeUserSkillFile(
-          skill.id,
-          path,
-          skill.versionId
-        );
-        skill = { ...skill, versionId: updated.current_version_id };
-        setCreated(skill);
-        sent.current.delete(path);
-        setRemoved(
-          (current) => new Set([...current].filter((item) => item !== path))
-        );
-      }
-      if (skill.shareLater) {
-        await updateSkillShares(skill.id, skill.shareLater);
-        skill = { ...skill, shareLater: null };
-        setCreated(skill);
-      }
+      // One upload with every file that is left, so the skill is created,
+      // shared and published as one version. An upload whose files were all
+      // removed (a ZIP lists as one row) is left out whole.
+      const live = uploads.filter((item) =>
+        uploadPaths(item).some((path) => !removed.has(path))
+      );
+      const [only] = live;
+      const upload =
+        live.length === 1 &&
+        only &&
+        !uploadPaths(only).some((path) => removed.has(path))
+          ? only.file
+          : await mergeSkillFilesUploads(live, removed);
+      const created = await createCustomSkillFromEditor(
+        {
+          name: parsed.name,
+          description: parsed.description,
+          instructions_markdown: parsed.instructions,
+          auto_enable: !createDisabled,
+          sharing: creationSharing
+            ? serializeSkillSharing(creationSharing, canManageOrgSkills)
+            : undefined,
+        },
+        upload
+      );
+      nameConflictModal.toggle(false);
+      if (draftId) discardSkillCreationDraft(draftId);
       // The skill page finds the new skill in the user's list; the other
       // lists refresh in the background.
       await mutate(SWR_KEYS.userSkills).catch(() => undefined);
       void refreshSkillListsChecked(mutate, cache).then((ok) => {
         if (!ok) toast.error(t("page.toasts.listRefreshFailed"));
       });
-      toast.success(t("editor.toasts.created", { name: skill.name }));
-      navigation.go(skillHref(skill.id), { replace: true });
+      toast.success(t("editor.toasts.created", { name: created.name }));
+      navigation.go(skillHref(created.id), { replace: true });
     } catch (err) {
-      if (!skill && !createDisabled && isSkillNameConflict(err)) {
+      if (!createDisabled && isSkillNameConflict(err)) {
         setConflictingSkillName(parsed.name);
         nameConflictModal.toggle(true);
         return;
@@ -354,7 +298,7 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
           <Section gap={4} alignItems="stretch" height="auto">
             <SkillBundleEditor
               files={files}
-              editing={created === null}
+              editing
               text={text}
               onTextChange={setText}
               preview={parsed.ok ? parsed.instructions : text}

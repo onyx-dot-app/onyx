@@ -17,7 +17,12 @@ import messages from "@/i18n/messages/en.json";
 
 const mockCreateCustomSkillFromEditor = jest.fn();
 const mockUploadUserSkillFiles = jest.fn();
-const mockUpdateSkillShares = jest.fn();
+const merged = new File(["zip"], "skill-files.zip");
+const mockMerge = jest.fn();
+jest.mock("@/lib/skills/bundleUpload", () => ({
+  ...jest.requireActual("@/lib/skills/bundleUpload"),
+  mergeSkillFilesUploads: (...args: unknown[]) => mockMerge(...args),
+}));
 const mockRouterReplace = jest.fn();
 const mockGetSkillCreationDraft = jest.fn();
 const mockDiscardSkillCreationDraft = jest.fn();
@@ -84,7 +89,6 @@ jest.mock("@/lib/skills/api", () => ({
     mockCreateCustomSkillFromEditor(...args),
   uploadUserSkillFiles: (...args: unknown[]) =>
     mockUploadUserSkillFiles(...args),
-  updateSkillShares: (...args: unknown[]) => mockUpdateSkillShares(...args),
 }));
 
 const mockPickedUploads: PreparedSkillFilesUpload[] = [];
@@ -107,7 +111,10 @@ describe("SkillEditorPage", () => {
   beforeEach(() => {
     mockCreateCustomSkillFromEditor.mockReset();
     mockUploadUserSkillFiles.mockReset();
-    mockUpdateSkillShares.mockReset();
+    mockMerge.mockReset();
+    mockMerge.mockImplementation(async (uploads: unknown[]) =>
+      uploads.length > 0 ? merged : undefined
+    );
     mockPickedUploads.length = 0;
     mockRouterReplace.mockReset();
     window.history.replaceState(null, "", "/");
@@ -228,120 +235,8 @@ describe("SkillEditorPage", () => {
     );
   });
 
-  it("sends the first added file with the new skill and adds the rest after it", async () => {
+  it("creates the skill with every added file and its sharing in one request", async () => {
     const user = setupUser();
-    const first = new File(["a"], "a.txt");
-    const second = new File(["b"], "b.txt");
-    mockPickedUploads.push(
-      {
-        file: first,
-        displayName: "a.txt",
-        entries: [{ path: "a.txt", size: 1 }],
-        containsSkillMd: false,
-      },
-      {
-        file: second,
-        displayName: "b.txt",
-        entries: [{ path: "b.txt", size: 1 }],
-        containsSkillMd: false,
-      }
-    );
-    mockCreateCustomSkillFromEditor.mockResolvedValue({
-      id: "created-id",
-      name: "report-writer",
-      current_version_id: "v1",
-    } as SkillEditableDetail);
-    mockUploadUserSkillFiles.mockResolvedValue({
-      id: "created-id",
-      current_version_id: "v2",
-    } as SkillEditableDetail);
-
-    render(<SkillEditorPage />);
-    await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: "Pick a file" }));
-    await user.click(screen.getByRole("button", { name: "Pick a file" }));
-    expect(screen.getByRole("button", { name: "a.txt" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "b.txt" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Create" }));
-
-    await waitFor(() =>
-      expect(mockRouterReplace).toHaveBeenCalledWith(
-        "/app/customize/skills/created-id"
-      )
-    );
-    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "report-writer" }),
-      first
-    );
-    expect(mockUploadUserSkillFiles).toHaveBeenCalledTimes(1);
-    expect(mockUploadUserSkillFiles).toHaveBeenCalledWith(
-      "created-id",
-      second,
-      "v1"
-    );
-  });
-
-  it("keeps the page when a file fails and sends only that file on retry", async () => {
-    const user = setupUser();
-    const first = new File(["a"], "a.txt");
-    const second = new File(["b"], "b.txt");
-    mockPickedUploads.push(
-      {
-        file: first,
-        displayName: "a.txt",
-        entries: [{ path: "a.txt", size: 1 }],
-        containsSkillMd: false,
-      },
-      {
-        file: second,
-        displayName: "b.txt",
-        entries: [{ path: "b.txt", size: 1 }],
-        containsSkillMd: false,
-      }
-    );
-    mockCreateCustomSkillFromEditor.mockResolvedValue({
-      id: "created-id",
-      name: "report-writer",
-      current_version_id: "v1",
-    } as SkillEditableDetail);
-    mockUploadUserSkillFiles
-      .mockRejectedValueOnce(new Error("Upload failed"))
-      .mockResolvedValueOnce({
-        id: "created-id",
-        current_version_id: "v2",
-      } as SkillEditableDetail);
-    jest.spyOn(console, "error").mockImplementation();
-
-    render(<SkillEditorPage />);
-    await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: "Pick a file" }));
-    await user.click(screen.getByRole("button", { name: "Pick a file" }));
-    await user.click(screen.getByRole("button", { name: "Create" }));
-    await waitFor(() => expect(mockUploadUserSkillFiles).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Create" })).toBeEnabled()
-    );
-    expect(mockRouterReplace).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: "Create" }));
-    await waitFor(() =>
-      expect(mockRouterReplace).toHaveBeenCalledWith(
-        "/app/customize/skills/created-id"
-      )
-    );
-    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledTimes(1);
-    expect(mockUploadUserSkillFiles).toHaveBeenCalledTimes(2);
-    expect(mockUploadUserSkillFiles).toHaveBeenLastCalledWith(
-      "created-id",
-      second,
-      "v1"
-    );
-  });
-
-  it("shares a skill with more files only after the last file is added", async () => {
-    const user = setupUser();
-    const calls: string[] = [];
-    const second = new File(["b"], "b.txt");
     mockPickedUploads.push(
       {
         file: new File(["a"], "a.txt"),
@@ -350,28 +245,16 @@ describe("SkillEditorPage", () => {
         containsSkillMd: false,
       },
       {
-        file: second,
+        file: new File(["b"], "b.txt"),
         displayName: "b.txt",
         entries: [{ path: "b.txt", size: 1 }],
         containsSkillMd: false,
       }
     );
-    mockCreateCustomSkillFromEditor.mockImplementation(async () => {
-      calls.push("create");
-      return {
-        id: "created-id",
-        name: "report-writer",
-        current_version_id: "v1",
-      } as SkillEditableDetail;
-    });
-    mockUploadUserSkillFiles.mockImplementation(async () => {
-      calls.push("upload");
-      return { id: "created-id", current_version_id: "v2" };
-    });
-    mockUpdateSkillShares.mockImplementation(async () => {
-      calls.push("share");
-      return {};
-    });
+    mockCreateCustomSkillFromEditor.mockResolvedValue({
+      id: "created-id",
+      name: "report-writer",
+    } as SkillEditableDetail);
 
     render(<SkillEditorPage />);
     await fillRequiredFields(user);
@@ -388,15 +271,21 @@ describe("SkillEditorPage", () => {
         "/app/customize/skills/created-id"
       )
     );
-    expect(calls).toEqual(["create", "upload", "share"]);
+    expect(mockMerge).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({ displayName: "a.txt" }),
+        expect.objectContaining({ displayName: "b.txt" }),
+      ],
+      new Set()
+    );
+    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledTimes(1);
     expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
-      expect.objectContaining({ sharing: undefined }),
-      expect.any(File)
+      expect.objectContaining({
+        sharing: expect.objectContaining({ public_permission: "VIEWER" }),
+      }),
+      merged
     );
-    expect(mockUpdateSkillShares).toHaveBeenCalledWith(
-      "created-id",
-      expect.objectContaining({ public_permission: "VIEWER" })
-    );
+    expect(mockUploadUserSkillFiles).not.toHaveBeenCalled();
   });
 
   it("does not send an upload whose files were all removed", async () => {

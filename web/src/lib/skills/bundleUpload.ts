@@ -208,3 +208,67 @@ export async function prepareSkillFilesUpload(
     ),
   };
 }
+
+/** The supporting files in one upload, by their path in the skill. A SKILL.md
+ * bundle gives the files beside its SKILL.md, without SKILL.md itself. */
+async function supportingFilesOf(
+  upload: PreparedSkillFilesUpload
+): Promise<SkillDirectoryEntry[]> {
+  if (!isZipFile(upload.file)) {
+    if (isSkillMd(upload.file)) return [];
+    const path = upload.entries?.[0]?.path ?? upload.file.name;
+    return [{ file: upload.file, path }];
+  }
+  const { BlobReader, BlobWriter, ZipReader } = await import("@zip.js/zip.js");
+  const reader = new ZipReader(new BlobReader(upload.file));
+  try {
+    const entries = (await reader.getEntries()).filter(
+      (entry) => !entry.directory
+    );
+    // A bundle's files sit beside its SKILL.md, which may be in one folder.
+    const skillMd = upload.containsSkillMd
+      ? entries.find(
+          (entry) =>
+            entry.filename.split("/").at(-1)?.toLowerCase() === "skill.md"
+        )
+      : undefined;
+    const root = skillMd
+      ? skillMd.filename.slice(0, skillMd.filename.lastIndexOf("/") + 1)
+      : "";
+    const files: SkillDirectoryEntry[] = [];
+    for (const entry of entries) {
+      if (entry === skillMd || !entry.filename.startsWith(root)) continue;
+      const path = entry.filename.slice(root.length);
+      const basename = path.split("/").at(-1) ?? path;
+      if (IGNORED_FILE_NAMES.has(basename) || path.startsWith("__MACOSX/"))
+        continue;
+      const blob = await entry.getData(new BlobWriter());
+      files.push({
+        file: new File([blob], basename, {
+          lastModified: entry.lastModDate.getTime(),
+        }),
+        path,
+      });
+    }
+    return files;
+  } finally {
+    await reader.close();
+  }
+}
+
+/** One ZIP of every upload's supporting files, a later upload replacing an
+ * earlier file with the same path, without the removed paths. Undefined when
+ * no file is left. */
+export async function mergeSkillFilesUploads(
+  uploads: readonly PreparedSkillFilesUpload[],
+  removed: ReadonlySet<string>
+): Promise<File | undefined> {
+  const byPath = new Map<string, SkillDirectoryEntry>();
+  for (const upload of uploads)
+    for (const entry of await supportingFilesOf(upload))
+      byPath.set(entry.path, entry);
+  const kept = [...byPath.values()]
+    .filter((entry) => !removed.has(entry.path))
+    .sort((left, right) => left.path.localeCompare(right.path));
+  return kept.length > 0 ? packageFiles("skill-files.zip", kept) : undefined;
+}
