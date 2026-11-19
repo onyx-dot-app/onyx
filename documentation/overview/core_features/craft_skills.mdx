@@ -99,31 +99,32 @@ Every new Skill is personal and private. After you create it, Onyx opens its pag
 
 ### Start from scratch
 
-<Steps>
-  <Step title="Add the details">
-    Enter a name and describe when Craft should use the Skill. Onyx uses the name to create the Skill's identifier,
-    converting spaces and punctuation to hyphens when needed.
-  </Step>
+The creation page has the same editor as the **Contents** tab of a Skill: the file list beside `SKILL.md`.
 
-  <Step title="Write the instructions">
-    Describe the workflow Craft should follow, including important constraints, expected outputs, and checks.
+<Steps>
+  <Step title="Write SKILL.md">
+    `SKILL.md` starts with a block between `---` lines.
+    Enter the `name` and a `description` that says when Craft should use the Skill. Use lowercase letters, numbers,
+    and single hyphens in the name. Under the block, describe the workflow Craft should follow,
+    including important constraints, expected outputs, and checks.
   </Step>
 
   <Step title="Add supporting files">
-    Add references, examples, templates, scripts, or assets under **Supporting files**. You can select files or a ZIP,
-    or drag in a folder. Onyx unpacks ZIP files and preserves the directory structure.
+    Select **Add File** under the file list to add references, examples, templates, scripts, or assets.
+    You can select files or a ZIP, or drag files or a folder onto **Add File**.
+    Onyx unpacks ZIP files and keeps the directory structure. To remove a file, select it and select the trash icon.
   </Step>
 
   <Step title="Create the Skill">
-    Select **Create**. Onyx saves the instructions as `SKILL.md` and opens the Skill editor.
+    Select **Create**. Onyx creates the Skill and opens its page. If a file fails to upload after the Skill exists,
+    the page stays open. Select **Create** again to add the files that are left.
   </Step>
 </Steps>
 
 <Info>
-  If you already have a Skill,
-  use **Import skill** at the top of the creation page to fill in the form and add its files.
-  If you have already entered content, Onyx asks before replacing the name, description, instructions,
-  and supporting files with the imported Skill.
+  If you already have a Skill, add its `SKILL.md`, ZIP, or folder with **Add File**.
+  Onyx fills in `SKILL.md` and the file list from it. If you have already entered content,
+  Onyx asks before it replaces it.
 </Info>
 
 ### Upload an existing Skill

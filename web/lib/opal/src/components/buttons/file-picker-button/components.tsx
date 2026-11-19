@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useDropzone } from "react-dropzone";
 import type { DistributiveOmit } from "@opal/types";
 import {
   Button,
@@ -13,49 +13,42 @@ type FilePickerButtonProps = DistributiveOmit<
 > & {
   /** The accessible name of the file input, which tests also select it by. */
   inputLabel: string;
-  /** The picker's filter, as the HTML `accept` attribute. */
-  accept?: string;
   /** @default true */
   multiple?: boolean;
-  /** Receives the picked files. */
+  /** Receives the picked or dropped files. A dropped folder's files keep
+   * their folder path in `path`. */
   onFiles: (files: File[]) => void;
 };
 
-/** A Button that opens the file picker and hands the picked files to `onFiles`. */
+/** A Button that opens the file picker and takes files and folders dropped
+ * on it. */
 function FilePickerButton({
   inputLabel,
-  accept,
   multiple = true,
   onFiles,
   disabled,
   ...buttonProps
 }: FilePickerButtonProps) {
-  const input = useRef<HTMLInputElement>(null);
+  const { getRootProps, getInputProps, open } = useDropzone({
+    multiple,
+    disabled,
+    noClick: true,
+    noKeyboard: true,
+    onDropAccepted: (files) => {
+      if (files.length > 0) onFiles(files);
+    },
+  });
+
   return (
-    <>
-      <input
-        ref={input}
-        type="file"
-        aria-label={inputLabel}
-        accept={accept}
-        multiple={multiple}
-        disabled={disabled}
-        tabIndex={-1}
-        className="hidden"
-        onChange={(event) => {
-          const files = Array.from(event.target.files ?? []);
-          // Lets the same file be picked again.
-          event.target.value = "";
-          if (files.length > 0) onFiles(files);
-        }}
-      />
+    <div {...getRootProps({ className: "inline-flex" })}>
+      <input {...getInputProps({ "aria-label": inputLabel })} />
       <Button
         {...buttonProps}
         type="button"
         disabled={disabled}
-        onClick={() => input.current?.click()}
+        onClick={open}
       />
-    </>
+    </div>
   );
 }
 

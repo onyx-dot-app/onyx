@@ -19,9 +19,11 @@ import {
   inspectSkillBundle,
   isSkillNameConflict,
   removeUserSkillFile,
+  updateSkillShares,
   uploadUserSkillFiles,
 } from "@/lib/skills/api";
 import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
+import type { SkillShareUpdatePayload } from "@/lib/skills/api";
 import {
   discardSkillCreationDraft,
   getSkillCreationDraft,
@@ -62,6 +64,9 @@ interface CreatedSkill {
   id: string;
   name: string;
   versionId: string | null;
+  /** Sharing held back until the last file step, so a publish or a review
+   * request takes the final version. */
+  shareLater: SkillShareUpdatePayload | null;
 }
 
 interface SkillEditorPageProps {
@@ -225,15 +230,20 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
     try {
       if (!skill) {
         const [first, ...rest] = pending;
+        const sharing = creationSharing
+          ? serializeSkillSharing(creationSharing, canManageOrgSkills)
+          : undefined;
+        const laterSteps =
+          rest.length > 0 ||
+          (first !== undefined &&
+            uploadPaths(first).some((path) => removed.has(path)));
         const made = await createCustomSkillFromEditor(
           {
             name: parsed.name,
             description: parsed.description,
             instructions_markdown: parsed.instructions,
             auto_enable: !createDisabled,
-            sharing: creationSharing
-              ? serializeSkillSharing(creationSharing, canManageOrgSkills)
-              : undefined,
+            sharing: laterSteps ? undefined : sharing,
           },
           first?.file
         );
@@ -241,6 +251,7 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
           id: made.id,
           name: made.name,
           versionId: made.current_version_id,
+          shareLater: laterSteps ? (sharing ?? null) : null,
         };
         setCreated(skill);
         nameConflictModal.toggle(false);
@@ -275,6 +286,11 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
         setRemoved(
           (current) => new Set([...current].filter((item) => item !== path))
         );
+      }
+      if (skill.shareLater) {
+        await updateSkillShares(skill.id, skill.shareLater);
+        skill = { ...skill, shareLater: null };
+        setCreated(skill);
       }
       // The skill page finds the new skill in the user's list; the other
       // lists refresh in the background.

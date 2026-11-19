@@ -2,8 +2,9 @@
 
 **Import:** `import { FilePickerButton, type FilePickerButtonProps } from "@opal/components";`
 
-A `Button` that opens the file picker. It renders the hidden file input itself, so callers need no raw
-`<input>`. For a field that holds files, with drop and paste, use `InputSingleUpload` or
+A `Button` that opens the file picker and takes files and folders dropped on it. It renders the hidden
+file input itself, so callers need no raw `<input>`. A dropped folder's files keep their folder path in
+`path`. For a field that holds files, with drop and paste, use `InputSingleUpload` or
 `InputMultiUpload` instead.
 
 ## Props
@@ -13,9 +14,8 @@ Takes every `Button` prop except `onClick`, `href` and `type`, plus:
 | Prop         | Type                      | Default | Description                                                  |
 | ------------ | ------------------------- | ------- | ------------------------------------------------------------ |
 | `inputLabel` | `string`                  | —       | Accessible name of the file input; tests select it by this   |
-| `accept`     | `string`                  | —       | The picker's filter, as the HTML `accept` attribute          |
 | `multiple`   | `boolean`                 | `true`  | Whether several files can be picked                          |
-| `onFiles`    | `(files: File[]) => void` | —       | Receives the picked files                                    |
+| `onFiles`    | `(files: File[]) => void` | —       | Receives the picked or dropped files                         |
 
 ## Usage
 

@@ -17,6 +17,7 @@ import messages from "@/i18n/messages/en.json";
 
 const mockCreateCustomSkillFromEditor = jest.fn();
 const mockUploadUserSkillFiles = jest.fn();
+const mockUpdateSkillShares = jest.fn();
 const mockRouterReplace = jest.fn();
 const mockGetSkillCreationDraft = jest.fn();
 const mockDiscardSkillCreationDraft = jest.fn();
@@ -83,6 +84,7 @@ jest.mock("@/lib/skills/api", () => ({
     mockCreateCustomSkillFromEditor(...args),
   uploadUserSkillFiles: (...args: unknown[]) =>
     mockUploadUserSkillFiles(...args),
+  updateSkillShares: (...args: unknown[]) => mockUpdateSkillShares(...args),
 }));
 
 const mockPickedUploads: PreparedSkillFilesUpload[] = [];
@@ -105,6 +107,7 @@ describe("SkillEditorPage", () => {
   beforeEach(() => {
     mockCreateCustomSkillFromEditor.mockReset();
     mockUploadUserSkillFiles.mockReset();
+    mockUpdateSkillShares.mockReset();
     mockPickedUploads.length = 0;
     mockRouterReplace.mockReset();
     window.history.replaceState(null, "", "/");
@@ -332,6 +335,67 @@ describe("SkillEditorPage", () => {
       "created-id",
       second,
       "v1"
+    );
+  });
+
+  it("shares a skill with more files only after the last file is added", async () => {
+    const user = setupUser();
+    const calls: string[] = [];
+    const second = new File(["b"], "b.txt");
+    mockPickedUploads.push(
+      {
+        file: new File(["a"], "a.txt"),
+        displayName: "a.txt",
+        entries: [{ path: "a.txt", size: 1 }],
+        containsSkillMd: false,
+      },
+      {
+        file: second,
+        displayName: "b.txt",
+        entries: [{ path: "b.txt", size: 1 }],
+        containsSkillMd: false,
+      }
+    );
+    mockCreateCustomSkillFromEditor.mockImplementation(async () => {
+      calls.push("create");
+      return {
+        id: "created-id",
+        name: "report-writer",
+        current_version_id: "v1",
+      } as SkillEditableDetail;
+    });
+    mockUploadUserSkillFiles.mockImplementation(async () => {
+      calls.push("upload");
+      return { id: "created-id", current_version_id: "v2" };
+    });
+    mockUpdateSkillShares.mockImplementation(async () => {
+      calls.push("share");
+      return {};
+    });
+
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
+    await user.click(
+      screen.getByRole("button", { name: "Choose organization access" })
+    );
+    await user.click(screen.getByRole("button", { name: "Pick a file" }));
+    await user.click(screen.getByRole("button", { name: "Pick a file" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(mockRouterReplace).toHaveBeenCalledWith(
+        "/app/customize/skills/created-id"
+      )
+    );
+    expect(calls).toEqual(["create", "upload", "share"]);
+    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
+      expect.objectContaining({ sharing: undefined }),
+      expect.any(File)
+    );
+    expect(mockUpdateSkillShares).toHaveBeenCalledWith(
+      "created-id",
+      expect.objectContaining({ public_permission: "VIEWER" })
     );
   });
 
