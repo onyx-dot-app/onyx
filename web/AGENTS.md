@@ -79,6 +79,19 @@ refresh-components import that Opal replaces. Migrate a file to Opal when you ed
 - **Data fetching:** `useSWR`, on the client, inside the component that needs the data, with a
   loader while pending. Do not fetch at the top of the page and pass data down.
 
+## React effects
+
+Use effects only to sync with systems outside React, such as subscriptions, DOM nodes, timers, and
+focus. Derive values from props or state during render. Handle user actions in event handlers. To
+reset state when a prop changes, key the component on that prop. To keep an effect, state what it
+syncs with on the line above the call:
+
+```ts
+// oxlint-disable-next-line anti-slop/no-unreasoned-state-sync -- debounce timer that publishes the value after delayMs
+```
+
+The effect baseline in `.oxlintrc.json` only warns. Remove a file once it is clean. Never add one.
+
 ## Style
 
 - Absolute imports only: `@/` for `src/`, `@opal/` for Opal. No `../` paths.
