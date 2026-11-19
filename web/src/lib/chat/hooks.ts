@@ -707,8 +707,6 @@ export function useSendChatMessageFromURL({
     isLoading: sourcesLoading,
     settled: sourcesSettled,
   } = useAvailableSources();
-  const { documentSets, isLoading: documentSetsLoading } = useDocumentSets();
-  const { tags, isLoading: tagsLoading } = useTags();
 
   const configuredSources = useMemo(
     () => getConfiguredSources(availableSources),
@@ -725,6 +723,40 @@ export function useSendChatMessageFromURL({
       query === null ? null : window.location.pathname;
     setQueuedQueryState(query);
   }, []);
+
+  // What the queued query asks for. Names that match nothing available are
+  // dropped later, so a stale or hand-typed link narrows the search rather
+  // than failing it. URLSearchParams already percent-decoded the value;
+  // decoding again would corrupt names and throw on a legitimate literal
+  // like "100%".
+  const queuedRequest = useMemo(() => {
+    const params = new URLSearchParams(queuedQuery ?? "");
+    const namesIn = (param: string): string[] =>
+      params.get(param)?.split(",") ?? [];
+    const from = new Date(params.get("from") ?? "");
+    const to = new Date(params.get("to") ?? "");
+    return {
+      message: params.get(SEARCH_PARAM_NAMES.USER_PROMPT),
+      sources: namesIn("sources"),
+      documentSets: namesIn("documentSets"),
+      tags: namesIn("tags"),
+      skills: namesIn(SEARCH_PARAM_NAMES.SKILLS),
+      // A search sends only the start of a range.
+      rangeFrom:
+        !isNaN(from.getTime()) && !isNaN(to.getTime())
+          ? from.toISOString()
+          : null,
+    };
+  }, [queuedQuery]);
+
+  // Sets and tags are fetched only for a queued query that names them.
+  const { documentSets, isLoading: documentSetsLoading } = useDocumentSets(
+    queuedRequest.documentSets.length > 0
+  );
+  const { tags, isLoading: tagsLoading } = useTags(
+    queuedRequest.tags.length > 0
+  );
+
   const [pendingMessage, setPendingMessage] = useState<ComposedMessage | null>(
     null
   );
@@ -773,32 +805,14 @@ export function useSendChatMessageFromURL({
     // chat, so processing earlier would scope nothing and persist nothing.
     if (!toolConfiguration.ready) return;
 
-    const params = new URLSearchParams(queuedQuery);
-    const message = params.get(SEARCH_PARAM_NAMES.USER_PROMPT);
-
-    // Names that match nothing available are dropped, so a stale or
-    // hand-typed link narrows the search rather than failing it.
-    // URLSearchParams already percent-decoded the value; decoding again
-    // would corrupt names and throw on a legitimate literal like "100%".
-    const namesIn = (param: string): string[] =>
-      params.get(param)?.split(",") ?? [];
-
-    const sourceNames = namesIn("sources");
-    const docSetNames = namesIn("documentSets");
-    const tagValues = namesIn("tags");
-
     if (
-      (sourceNames.length > 0 && sourcesLoading) ||
-      (docSetNames.length > 0 && documentSetsLoading) ||
-      (tagValues.length > 0 && tagsLoading)
+      (queuedRequest.sources.length > 0 && sourcesLoading) ||
+      (queuedRequest.documentSets.length > 0 && documentSetsLoading) ||
+      (queuedRequest.tags.length > 0 && tagsLoading)
     ) {
       return;
     }
     setQueuedQuery(null);
-
-    const from = new Date(params.get("from") ?? "");
-    const to = new Date(params.get("to") ?? "");
-    const hasRange = !isNaN(from.getTime()) && !isNaN(to.getTime());
 
     // Only the dimensions the URL names are written; the rest keep what the
     // chat already holds — an agent-viewer hand-off arrives with picks this
@@ -807,41 +821,47 @@ export function useSendChatMessageFromURL({
     // scope, where one wide send does not.
     toolConfiguration.setFilters((current) => ({
       selectedSources:
-        sourceNames.length > 0 && sourcesSettled
+        queuedRequest.sources.length > 0 && sourcesSettled
           ? normalizeSourceSelection(
               configuredSources
-                .filter((source) => sourceNames.includes(source.internalName))
+                .filter((source) =>
+                  queuedRequest.sources.includes(source.internalName)
+                )
                 .map((source) => source.uniqueKey),
               configuredSources.map((source) => source.uniqueKey)
             )
           : current.selectedSources,
       documentSets:
-        docSetNames.length > 0
+        queuedRequest.documentSets.length > 0
           ? documentSets
               .map((ds) => ds.name)
-              .filter((name) => docSetNames.includes(name))
+              .filter((name) => queuedRequest.documentSets.includes(name))
           : current.documentSets,
       tags:
-        tagValues.length > 0
-          ? tags.filter((tag) => tagValues.includes(tag.tag_value))
+        queuedRequest.tags.length > 0
+          ? tags.filter((tag) => queuedRequest.tags.includes(tag.tag_value))
           : current.tags,
-      // A search sends only the start of a range.
-      timeRange: hasRange ? { from: from.toISOString() } : current.timeRange,
+      timeRange:
+        queuedRequest.rangeFrom !== null
+          ? { from: queuedRequest.rangeFrom }
+          : current.timeRange,
     }));
 
     // Dropped before the replace so a refresh does not resend.
+    const params = new URLSearchParams(queuedQuery);
     params.delete(SEARCH_PARAM_NAMES.SEND_ON_LOAD);
     navigation.go(`?${params.toString()}`, { replace: true, scroll: false });
 
-    if (message)
+    if (queuedRequest.message)
       setPendingMessage({
-        message,
-        mentions: namesIn(SEARCH_PARAM_NAMES.SKILLS).map(
+        message: queuedRequest.message,
+        mentions: queuedRequest.skills.map(
           (name): Mention => ({ type: "skill", name })
         ),
       });
   }, [
     queuedQuery,
+    queuedRequest,
     sourcesLoading,
     sourcesSettled,
     documentSetsLoading,
