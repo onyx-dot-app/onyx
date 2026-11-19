@@ -141,7 +141,8 @@ func floorPercent(percent, step float64) float64 {
 	if step < 0.1 {
 		step = 0.1
 	}
-	// Work in tenths so a step such as 0.1 has no binary rounding error.
+	// Work in tenths so a step such as 0.1 has no binary rounding error. The
+	// percent itself is not rounded: a floor above it would fail the same run.
 	tenths := math.Round(step * 10)
-	return math.Floor(math.Round(percent*1e6)/1e6*10/tenths) * tenths / 10
+	return math.Floor(percent*10/tenths) * tenths / 10
 }

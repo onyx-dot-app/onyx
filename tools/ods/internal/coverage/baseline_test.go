@@ -23,6 +23,8 @@ func TestNewBaseline_isSelfConsistent(t *testing.T) {
 		"cmd":            {2, 3},
 		"internal/audit": {1, 7},
 		"internal/empty": {0, 0},
+		// 29/50 computes as 57.99999999999999%, just under 58.
+		"internal/typed": {29, 50},
 	})
 
 	for _, kind := range []Kind{GoTests, TypeScript} {
