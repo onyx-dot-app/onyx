@@ -173,7 +173,9 @@ class PersonaUpsertRequest(BaseModel):
     # integration.
     tool_ids: list[int]
     # The plugins of the agent with their action settings. None keeps the
-    # current links.
+    # current links, except the links of plugins that hold an OpenAPI tool or
+    # an old MCP tool: tool_ids replaces those, so a link that tool_ids does
+    # not select is removed.
     plugins: list[PersonaPluginLink] | None = None
     remove_image: bool | None = None
     uploaded_image_id: str | None = None  # New field for uploaded image

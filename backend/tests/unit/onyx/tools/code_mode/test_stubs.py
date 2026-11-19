@@ -26,6 +26,10 @@ from onyx.tools.tool_implementations.code_mode.stubs import (
     tool_arguments,
 )
 from onyx.tools.tool_implementations.code_mode.tool_search import MAX_TOOL_SEARCH_LIMIT
+from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
+from onyx.tools.tool_implementations.custom.openapi_parsing import (
+    openapi_to_method_specs,
+)
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
@@ -637,6 +641,199 @@ def test_tool_search_matches_words_in_any_script() -> None:
     assert index is not None
     assert [match.name for match in index.search("заявки", 8)] == ["ticket_lookup"]
     assert [match.name for match in index.search("prüfen", 8)] == ["billing_lookup"]
+
+
+def test_tool_search_matches_argument_names_and_nested_descriptions() -> None:
+    tools = [
+        FakeTool(
+            "assign_ticket",
+            _unused,
+            description="Give a ticket to someone.",
+            exposure=CodeModeExposure.DEFERRED,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "assignee": {"type": "string"},
+                    "labels": {
+                        "type": "array",
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "color": {
+                                            "type": "string",
+                                            "description": "Hex swatch shown in the board.",
+                                        }
+                                    },
+                                },
+                                {"type": "null"},
+                            ]
+                        },
+                    },
+                },
+            },
+        ),
+        FakeTool(
+            "get_assignee",
+            _unused,
+            description="Look up the person a ticket is given to.",
+            exposure=CodeModeExposure.DEFERRED,
+        ),
+        FakeTool("send_email", _unused, exposure=CodeModeExposure.DEFERRED),
+    ]
+    index = build_tool_stubs(tools).tool_index
+    assert index is not None
+
+    assert [match.name for match in index.search("swatch", 8)] == ["assign_ticket"]
+    # Here the name match ranks above the match on an argument name.
+    assert [match.name for match in index.search("assignee", 8)] == [
+        "get_assignee",
+        "assign_ticket",
+    ]
+
+
+def test_tool_search_ranks_a_name_match_with_a_large_schema_first() -> None:
+    tools = [
+        FakeTool(
+            "get_issue",
+            _unused,
+            description="Read one record.",
+            exposure=CodeModeExposure.DEFERRED,
+            parameters={
+                "type": "object",
+                "properties": {
+                    f"field_{index}": {
+                        "type": "string",
+                        "description": f"Filter value number {index} for the lookup.",
+                    }
+                    for index in range(50)
+                },
+            },
+        ),
+        FakeTool(
+            "add_label",
+            _unused,
+            description="Tag a record.",
+            exposure=CodeModeExposure.DEFERRED,
+            parameters={
+                "type": "object",
+                "properties": {"issue_number": {"type": "integer"}},
+            },
+        ),
+    ]
+    index = build_tool_stubs(tools).tool_index
+    assert index is not None
+
+    assert [match.name for match in index.search("issue", 8)] == [
+        "get_issue",
+        "add_label",
+    ]
+
+
+def test_tool_search_ranks_a_full_parameter_match_above_a_filler_word_match() -> None:
+    tools = [
+        FakeTool(
+            "open_page",
+            _unused,
+            description="Open the page.",
+            exposure=CodeModeExposure.DEFERRED,
+        ),
+        FakeTool(
+            "page_oncall",
+            _unused,
+            description="Notify someone on call.",
+            exposure=CodeModeExposure.DEFERRED,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "urgency": {"type": "string"},
+                    "severity": {"type": "string"},
+                },
+            },
+        ),
+    ]
+    index = build_tool_stubs(tools).tool_index
+    assert index is not None
+
+    assert [match.name for match in index.search("the urgency severity", 8)][0] == (
+        "page_oncall"
+    )
+
+
+def test_tool_search_skips_schema_data() -> None:
+    tools = [
+        FakeTool(
+            "set_animal",
+            _unused,
+            exposure=CodeModeExposure.DEFERRED,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "object",
+                        "default": {"description": "zebra"},
+                        "examples": [{"description": "giraffe"}],
+                        "enum": [{"properties": {"okapi": {}}}],
+                    },
+                    "default": {"type": "string", "description": "Fallback lemur."},
+                },
+            },
+        ),
+        FakeTool("archive", _unused, exposure=CodeModeExposure.DEFERRED),
+    ]
+    index = build_tool_stubs(tools).tool_index
+    assert index is not None
+
+    assert index.search("zebra giraffe okapi", 8) == []
+    # A property named like a data keyword is still a schema.
+    assert [match.name for match in index.search("lemur", 8)] == ["set_animal"]
+
+
+def test_tool_search_matches_the_namespace_of_any_deferred_tool() -> None:
+    tools = [
+        FakeTool(
+            "refund",
+            _unused,
+            exposure=CodeModeExposure.DEFERRED,
+            namespace="billing",
+        ),
+        FakeTool("archive", _unused, exposure=CodeModeExposure.DEFERRED),
+    ]
+    index = build_tool_stubs(tools).tool_index
+    assert index is not None
+
+    assert [match.name for match in index.search("billing", 8)] == ["billing__refund"]
+
+
+def test_tool_search_matches_openapi_query_parameter_descriptions() -> None:
+    [method] = openapi_to_method_specs(
+        {
+            "openapi": "3.0.0",
+            "info": {"title": "t", "description": "d", "version": "1.0.0"},
+            "servers": [{"url": "http://x"}],
+            "paths": {
+                "/incidents": {
+                    "get": {
+                        "summary": "List incidents",
+                        "operationId": "listIncidents",
+                        "parameters": [
+                            {
+                                "name": "sev",
+                                "in": "query",
+                                "description": "Severity bucket of the outage.",
+                                "schema": {"type": "string"},
+                            }
+                        ],
+                    }
+                }
+            },
+        }
+    )
+    tool = CustomTool(integration_id=1, method_spec=method, base_url="http://x")
+    stubs = build_tool_stubs([tool])
+
+    assert "sev: Severity bucket of the outage." in stubs.functions[tool.name].stub
 
 
 def test_mcp_output_schema_types_the_result() -> None:

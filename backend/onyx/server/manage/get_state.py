@@ -20,7 +20,11 @@ from onyx.configs.constants import (
 )
 from onyx.db.auth import get_user_count
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
-from onyx.db.sso_provider import fetch_sso_providers, sso_authorize_path
+from onyx.db.sso_provider import (
+    fetch_sso_providers,
+    sso_authorize_path,
+    sso_supports_native_app,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, onyx_error_to_json_response
 from onyx.server.manage.models import (
@@ -79,6 +83,7 @@ def _fetch_sso_provider_options() -> list[SSOProviderOption]:
                     display_name=provider.display_name,
                     provider_type=provider.provider_type,
                     authorize_url=sso_authorize_path(provider),
+                    native_app_sso=sso_supports_native_app(provider),
                 )
                 for provider in fetch_sso_providers(db_session, enabled_only=True)
             ]
@@ -248,10 +253,9 @@ def get_version() -> VersionResponse:
     return VersionResponse(backend_version=__version__)
 
 
-# The document index image the docker compose deployment runs. Keep in sync
-# with the `opensearch` service in
-# deployment/docker_compose/docker-compose.template.yml.
+# Keep these images in sync with deployment/docker_compose/docker-compose.template.yml.
 DOCUMENT_INDEX_IMAGE = "opensearchproject/opensearch:3.6.0"
+NGINX_IMAGE = "nginx:1.30.7-alpine"
 
 
 _DOCKERHUB_REPOS = (
@@ -340,19 +344,19 @@ def _fetch_versions() -> AllVersions:
             onyx=latest_stable_version,
             relational_db="postgres:15.2-alpine",
             index=DOCUMENT_INDEX_IMAGE,
-            nginx="nginx:1.25.5-alpine",
+            nginx=NGINX_IMAGE,
         ),
         dev=ContainerVersions(
             onyx=latest_dev_version,
             relational_db="postgres:15.2-alpine",
             index=DOCUMENT_INDEX_IMAGE,
-            nginx="nginx:1.25.5-alpine",
+            nginx=NGINX_IMAGE,
         ),
         migration=ContainerVersions(
             onyx="airgapped-intfloat-nomic-migration",
             relational_db="postgres:15.2-alpine",
             index=DOCUMENT_INDEX_IMAGE,
-            nginx="nginx:1.25.5-alpine",
+            nginx=NGINX_IMAGE,
         ),
     )
 

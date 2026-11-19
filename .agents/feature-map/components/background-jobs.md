@@ -120,6 +120,16 @@ between the two steps. Without the lock, a prune that an API call starts during
 the reset is failed before its fence exists, or runs with no fence. Do not split
 the function or drop the lock.
 
+**Explicit prune requests.** The manual prune route and file removals commit
+`prune_requested_at` before dispatch. Connector edits use the same field. The
+beat sends the request again after a lost task or failure, even without
+`prune_freq`. Under the pair lock, the dispatcher counts the prune records since
+the request. After three, it clears the request and keeps the failed records in
+the run history. A dispatch whose fence write or task send fails deletes its
+record and resets the fence, so it is not an attempt. Request and record
+timestamps use `clock_timestamp()`, because an open beat transaction can predate
+a new request. Scheduled pruning without a request keeps its retry behavior.
+
 **Pruning without a slim listing.** A connector with no slim listing is
 pruned by a full load or poll
 (`background/celery/celery_utils.py:extract_ids_from_runnable_connector`). It
@@ -202,11 +212,10 @@ on `task_revoked`, by the same prefixes, because an expired task never reaches
 
 1. `send-expires` **Give each new send `expires=`.** The backend AGENTS file
    requires it, and `backend/lint/check_celery_task_expires.py` fails a
-   commit that omits it. Ten sends carry `# celery-expires: allow (<reason>)`
+   commit that omits it. Nine sends carry `# celery-expires: allow (<reason>)`
    on purpose, because an expiry drops work that nothing sends again: the
-   docfetching and docprocessing sends, the prune generator (a manual prune),
-   and the four jobs a user starts once (targeted reindex, query history
-   export, usage report, eval run). An expired per-document sync task of a
+   docfetching and docprocessing sends, and the four jobs a user starts once
+   (targeted reindex, query history export, usage report, eval run). An expired per-document sync task of a
    document set or user group leaves its taskset through `task_revoked`, so
    the set would count as synced. A worker enforces `expires` when it takes
    the task; nothing removes an expired task from a queue with no worker. Do

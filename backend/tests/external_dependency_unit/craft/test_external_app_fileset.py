@@ -43,7 +43,6 @@ def _slack_skill(db_session: Session) -> Skill:
     return reset_built_in_skill_row(
         db_session,
         built_in_skill_id=_SLACK_ID,
-        is_public=True,
     )
 
 
@@ -130,9 +129,7 @@ def test_zendesk_push_and_preview_share_account_and_action_policy(
     db_session: Session,
     test_user: User,
 ) -> None:
-    skill = reset_built_in_skill_row(
-        db_session, built_in_skill_id="zendesk", is_public=True
-    )
+    skill = reset_built_in_skill_row(db_session, built_in_skill_id="zendesk")
     app = make_external_app(
         db_session,
         skill=skill,

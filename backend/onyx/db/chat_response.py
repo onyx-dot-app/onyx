@@ -311,15 +311,34 @@ def save_chat_turn(
 
     assistant_message.citations = citation_number_to_search_doc_id or None
 
-    # Preserve referenced generated files for subsequent turns. Unreferenced
-    # files remain intermediate artifacts.
-    if sanitized_message_text:
-        referenced = _extract_referenced_file_descriptors(
-            tool_calls, sanitized_message_text
-        )
-        if referenced:
-            existing_files = assistant_message.files or []
-            assistant_message.files = existing_files + referenced
+    # Preserve referenced generated files for subsequent turns; unreferenced
+    # ones remain intermediate artifacts. Published files are files of the
+    # message; the chat delete finds them by their ID prefix
+    # (CHAT_ARTIFACT_FILE_PREFIX) either way. A terminal save can repeat, so
+    # a file already listed is not added again.
+    attached = [
+        *(
+            _extract_referenced_file_descriptors(tool_calls, sanitized_message_text)
+            if sanitized_message_text
+            else []
+        ),
+        *(
+            FileDescriptor(
+                id=file.file_id,
+                type=mime_type_to_chat_file_type(file.mime_type),
+                name=file.name,
+            )
+            for tool_call_info in tool_calls
+            for file in tool_call_info.published_files or []
+        ),
+    ]
+    existing_files = assistant_message.files or []
+    listed = {file["id"] for file in existing_files}
+    new_files = list(
+        {file["id"]: file for file in attached if file["id"] not in listed}.values()
+    )
+    if new_files:
+        assistant_message.files = existing_files + new_files
 
     db_session.commit()
 

@@ -187,7 +187,10 @@ opensearch:
   # Java heap should be ~50% of memory limit.
   # See https://opster.com/guides/opensearch/opensearch-basics/opensearch-heap-size-usage-and-jvm-garbage-collection/
   # Xms is the starting size, Xmx is the maximum size. These should be the same.
-  opensearchJavaOpts: "-Xmx4g -Xms4g"
+  # -XX:-UseBASE64Intrinsics turns off the JVM's native Base64 decoder
+  # (Java4Shell, CVE-2026-114938). Keep it when you change the heap, until the
+  # OpenSearch image ships a fixed JDK.
+  opensearchJavaOpts: "-Xmx4g -Xms4g -XX:-UseBASE64Intrinsics"
 
 persistent:
   storageClassName: ""
@@ -458,7 +461,7 @@ nginx:
     # The ingress-nginx subchart doesn't auto-detect our custom ConfigMap changes.
     # Workaround: Helm upgrade will restart if the following annotation value changes.
     podAnnotations:
-      onyx.app/nginx-config-version: "11"
+      onyx.app/nginx-config-version: "12"
 
     # Propagate DOMAIN into nginx so server_name continues to use the same env var
     extraEnvs:
@@ -466,6 +469,8 @@ nginx:
         value: localhost
 
     config:
+      # Mitigate CVE-2026-123007 and CVE-2026-123633 in the retired controller.
+      use-http2: "false"
       # Hide the nginx version in Server headers/error pages. Set via the
       # controller's supported knob — do NOT put `server_tokens` in the
       # http-snippet files: ingress-nginx already emits the directive in the
@@ -2120,6 +2125,13 @@ craft:
     # containerd, the host agent and the system. 0: no limit (the agent
     # removes a limit of an earlier start).
     sliceMemoryPercent: 85
+    # Admission charge of a starting VM (--starting-mem-divisor, 1 to 16): its
+    # guest memory (8 GiB) divided by this value. Running VMs count at what
+    # they use. 2 lets twice as many VMs start at once. If many VMs then use
+    # all their memory, the kernel kills a VM in the slice
+    # (sliceMemoryPercent; alert CraftFcVMOOMKills). Set 1 to count each
+    # starting VM at its full size.
+    startingMemDivisor: 2
     # Comma-separated DNS or URI SANs; the client certificate must have one.
     # Empty = the client certificate name with chart-made certificates, or
     # any certificate that the client CA (tls ca.crt) signed with existingSecret.

@@ -35,6 +35,11 @@ import { StreamItem, ToolCallState } from "@/app/craft/types/displayTypes";
 import { genId } from "@/app/craft/utils/streamItemHelpers";
 import { parsePacket } from "@/app/craft/utils/parsePacket";
 import {
+  craftChildSessionId,
+  craftPacketToEvents,
+} from "@/lib/timeline/craft/events";
+import { cancelIncomingRunningCalls } from "@/lib/timeline/craft/stop";
+import {
   classifySubagentEvent,
   toolCallStateFromProgress,
   toolCallStateFromStart,
@@ -177,6 +182,12 @@ export function useBuildStreaming({
   );
   const cancelLatestInFlightToolCallStreamItem = useBuildSessionStore(
     (state) => state.cancelLatestInFlightToolCallStreamItem
+  );
+  const appendTimelineEvents = useBuildSessionStore(
+    (state) => state.appendTimelineEvents
+  );
+  const appendSubagentTimelineEvents = useBuildSessionStore(
+    (state) => state.appendSubagentTimelineEvents
   );
   const upsertTodoListStreamItem = useBuildSessionStore(
     (state) => state.upsertTodoListStreamItem
@@ -414,6 +425,38 @@ export function useBuildStreaming({
           if (currentTurnId !== options.expectedTurnId) {
             return;
           }
+        }
+
+        // The timeline receives the same packets, with the same rules: a
+        // completion for another turn is ignored, an error is dropped while
+        // a Stop is in flight, and a call still running then is cancelled.
+        const otherTurnCompleted =
+          parsed.type === "turn_completed" &&
+          (parsed.turn.session_id !== sessionId ||
+            parsed.turn.turn_id !== options.expectedTurnId);
+        const stopping = Boolean(
+          useBuildSessionStore.getState().sessions.get(sessionId)
+            ?.isInterrupting
+        );
+        const childSessionId = craftChildSessionId(rawPacket);
+        if (childSessionId) {
+          appendSubagentTimelineEvents(
+            sessionId,
+            childSessionId,
+            craftPacketToEvents(rawPacket, {
+              subagentSessionId: childSessionId,
+            })
+          );
+        }
+        if (!otherTurnCompleted && !(stopping && parsed.type === "error")) {
+          const events = craftPacketToEvents(rawPacket);
+          const previous =
+            useBuildSessionStore.getState().sessions.get(sessionId)
+              ?.timelineEvents ?? [];
+          appendTimelineEvents(sessionId, [
+            ...events,
+            ...(stopping ? cancelIncomingRunningCalls(previous, events) : []),
+          ]);
         }
 
         switch (parsed.type) {
@@ -825,10 +868,20 @@ export function useBuildStreaming({
                 message_metadata: {
                   streamItems: savedStreamItems,
                 },
+                timelineEvents: session.timelineEvents.filter(
+                  (event) =>
+                    !(
+                      event.type === "ext" &&
+                      event.notification.method === "_onyx/connect_app_request"
+                    )
+                ),
               });
             }
 
-            updateSessionData(sessionId, { streamItems: [] });
+            updateSessionData(sessionId, {
+              streamItems: [],
+              timelineEvents: [],
+            });
             if (parsed.type === "turn_completed")
               options.onTurnCompleted?.(parsed.turn);
             else options.onPromptResponse?.();
@@ -909,6 +962,8 @@ export function useBuildStreaming({
       updateLastStreamingThinking,
       updateToolCallStreamItem,
       cancelLatestInFlightToolCallStreamItem,
+      appendTimelineEvents,
+      appendSubagentTimelineEvents,
       upsertTodoListStreamItem,
       addArtifactToSession,
       appendMessageToSession,
@@ -1215,6 +1270,9 @@ export function useBuildStreaming({
             content: err.message,
             rateLimit: err.details,
           });
+          appendTimelineEvents(sessionId, [
+            { type: "error", message: err.message, rateLimit: err.details },
+          ]);
           updateSessionData(sessionId, {
             status: "active",
             error: err.message,
@@ -1252,6 +1310,7 @@ export function useBuildStreaming({
       updateSessionData,
       appendStreamItem,
       appendMessageToSession,
+      appendTimelineEvents,
       clearStreamItems,
       streamTurnEvents,
       requestStop,

@@ -65,6 +65,7 @@ from onyx.prompts.tool_prompts import (
     INTERNAL_SEARCH_GUIDANCE,
     MEMORY_GUIDANCE,
     OPEN_URLS_GUIDANCE,
+    POSTGRES_QUERY_GUIDANCE,
     PYTHON_TOOL_GUIDANCE,
     TOOL_DESCRIPTION_SEARCH_GUIDANCE,
     TOOL_SECTION_HEADER,
@@ -93,6 +94,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     SandboxTool,
@@ -512,6 +514,7 @@ def build_system_prompt(
             GENERATE_IMAGE_GUIDANCE.format(name=ImageGenerationTool.NAME),
             MEMORY_GUIDANCE.format(name=MemoryTool.NAME),
             CODE_MODE_GUIDANCE,
+            POSTGRES_QUERY_GUIDANCE.format(name=PostgresTool.NAME),
         ]
         sandbox_section = sandbox_guidance(
             all_guidance_sandbox_tools, str, code_mode=True
@@ -540,6 +543,7 @@ def build_system_prompt(
             (t for t in tools if isinstance(t, ImageGenerationTool)), None
         )
         memory_tool = next((t for t in tools if isinstance(t, MemoryTool)), None)
+        postgres_tool = next((t for t in tools if isinstance(t, PostgresTool)), None)
 
         if web_search_tool is not None or search_tool is not None:
             tool_guidance_sections.append(TOOL_DESCRIPTION_SEARCH_GUIDANCE)
@@ -568,6 +572,7 @@ def build_system_prompt(
             (PYTHON_TOOL_GUIDANCE, python_tool),
             (GENERATE_IMAGE_GUIDANCE, image_tool),
             (MEMORY_GUIDANCE, memory_tool),
+            (POSTGRES_QUERY_GUIDANCE, postgres_tool),
         ):
             if tool is not None:
                 tool_guidance_sections.append(

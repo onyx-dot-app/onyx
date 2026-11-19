@@ -17,6 +17,8 @@ from onyx.tools.tool_implementations.question.models import (
 from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchFileChange,
     FileToolName,
+    PublishedFile,
+    PublishFileArgument,
 )
 
 
@@ -82,6 +84,9 @@ class StreamingType(Enum):
     MEMORY_TOOL_DELTA = "memory_tool_delta"
     MEMORY_TOOL_NO_ACCESS = "memory_tool_no_access"
 
+    POSTGRES_TOOL_START = "postgres_tool_start"
+    POSTGRES_TOOL_DOCUMENTS = "postgres_tool_documents"
+
     DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
     DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta"
     RESEARCH_AGENT_START = "research_agent_start"
@@ -105,6 +110,8 @@ class StreamingType(Enum):
     EXEC_END = "exec_end"
     APPLY_PATCH_START = "apply_patch_start"
     APPLY_PATCH_END = "apply_patch_end"
+    PUBLISH_FILES_START = "publish_files_start"
+    PUBLISH_FILES_END = "publish_files_end"
 
 
 class BaseObj(BaseModel):
@@ -392,6 +399,23 @@ class MemoryToolNoAccess(BaseObj):
 
 
 ################################################
+# Postgres Tool Packets
+################################################
+class PostgresToolStart(BaseObj):
+    type: Literal["postgres_tool_start"] = StreamingType.POSTGRES_TOOL_START.value
+
+    # The call's arguments, for the step's query summary.
+    query: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class PostgresToolDocuments(BaseObj):
+    type: Literal["postgres_tool_documents"] = (
+        StreamingType.POSTGRES_TOOL_DOCUMENTS.value
+    )
+    documents: list[SearchDoc]
+
+
+################################################
 # Deep Research Packets
 ################################################
 class DeepResearchPlanStart(BaseObj):
@@ -562,6 +586,22 @@ class ApplyPatchEnd(BaseObj):
     error: str | None = None
 
 
+# The files that a publish_files call asks for, as the model wrote them.
+class PublishFilesStart(BaseObj):
+    type: Literal["publish_files_start"] = StreamingType.PUBLISH_FILES_START.value
+    # Empty when the arguments are not valid, for example cut off.
+    files: list[PublishFileArgument] = []
+    description: str | None = None
+
+
+class PublishFilesEnd(BaseObj):
+    type: Literal["publish_files_end"] = StreamingType.PUBLISH_FILES_END.value
+    # In the order of the start's files; each downloads from /chat/file/{file_id}.
+    files: list[PublishedFile] = []
+    # Set when the call failed; it published no file then.
+    error: str | None = None
+
+
 # A tool call waits for the user's decision; placed with the call's tool packets.
 class ToolApprovalRequest(BaseObj):
     type: Literal["tool_approval_request"] = StreamingType.TOOL_APPROVAL_REQUEST.value
@@ -656,6 +696,8 @@ PacketObj = Union[
     MemoryToolStart,
     MemoryToolDelta,
     MemoryToolNoAccess,
+    PostgresToolStart,
+    PostgresToolDocuments,
     # Reasoning Packets
     ReasoningStart,
     ReasoningDelta,
@@ -688,6 +730,8 @@ PacketObj = Union[
     ExecEnd,
     ApplyPatchStart,
     ApplyPatchEnd,
+    PublishFilesStart,
+    PublishFilesEnd,
 ]
 
 

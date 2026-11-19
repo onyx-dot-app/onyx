@@ -178,6 +178,13 @@ Saved steps retain both advertised declarations and execution permissions. Resto
 Return `True` to continue or `False` to finish. Without this callback, the agent continues after tool calls
 unless all results request termination. It stops after a final answer.
 A continuation request at the step limit produces `LIMIT`; it does not prepare or execute another step.
+The runtime decides the outcome of a step that declares tools and allows none; `after_step` still runs for it.
+A call on that step does not run. It gets the error result `NO_TOOL_CAN_RUN_RESULT`, which asks for the final answer, and shows as a tool error.
+If the step has calls, with or without text, the run takes one extra step.
+The runtime resets the step limit so that the extra step is the run's last step.
+Agents that answer on their last step therefore prepare it the same way.
+This can go past `max_steps`, or lower the limit when the step came before it. A run takes at most one extra step.
+A step without calls ends the run `COMPLETE` with its text as the answer. A step without calls or non-blank text fails the run.
 Raise from `after_step` when output validation fails. The run retains the completed output and records the failure.
 
 Both callbacks run on the execution thread. Request assembly and compaction use that thread too.
@@ -198,7 +205,7 @@ Each model call receives a separate context copy. Compaction applies its own tra
 `PreparedStep.stall_timeout_s` overrides the stream's idle timeout; `None` uses the agent's setting.
 Generation options remain part of `PreparedStep`, since tool choice and token limits can change between steps.
 The executor enforces step permissions, `NONE`, and `NamedToolChoice` before tool approval or execution.
-Other tool definitions can remain in the request for cache reuse.
+Other tool definitions remain in the request for cache reuse; the LLM adapter sends `AUTO` where a provider cannot take `NONE`.
 Explicit calls recovered from model text follow the same permission checks as native calls.
 A forbidden call returns a tool error so the model can retry; generation alone does not authorize execution.
 

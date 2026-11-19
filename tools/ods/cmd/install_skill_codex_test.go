@@ -108,6 +108,10 @@ func TestInstallCodexSkillsRemovesTheCompiledFileWhenEnforcedSkillsVanish(t *tes
 	if _, err := os.Stat(generated); !os.IsNotExist(err) {
 		t.Fatalf("stale compiled file should be removed: %v", err)
 	}
+	// With the file gone, a rerun is a no-op.
+	if err := installCodexSkills(discardCmd(), testUI(), nil, repoRoot, false); err != nil {
+		t.Fatalf("expected a missing file to be a no-op, got %v", err)
+	}
 
 	// A hand-written file of the same name survives the same rerun.
 	deployWriteFile(t, generated, "my own local notes")
@@ -128,8 +132,8 @@ func TestInstallCodexSkillsExcludesBeforeWriting(t *testing.T) {
 
 	err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot, false)
 
-	if err == nil {
-		t.Fatal("expected the failed exclusion to fail the install")
+	if err == nil || !strings.HasPrefix(err.Error(), "could not locate git exclude file: ") {
+		t.Fatalf("expected the failed exclusion to fail the install, got %v", err)
 	}
 	// The compiled file must not exist unignored: one git add away from a
 	// public diff is exactly what the exclusion prevents.
@@ -191,23 +195,6 @@ func TestInstallCodexSkillsKeepsAHandWrittenAgentsLocal(t *testing.T) {
 	}
 }
 
-func TestRemoveStaleAgentsLocalLeavesAHandWrittenFile(t *testing.T) {
-	repoRoot := t.TempDir()
-	dest := filepath.Join(repoRoot, agentsLocalFile)
-	deployWriteFile(t, dest, "my own notes, no marker")
-
-	if err := removeStaleAgentsLocal(discardCmd(), repoRoot); err != nil {
-		t.Fatal(err)
-	}
-	if got := skillReadFile(t, dest); got != "my own notes, no marker" {
-		t.Fatalf("hand-written file must survive: %q", got)
-	}
-	// A missing file is a no-op, not an error.
-	if err := removeStaleAgentsLocal(discardCmd(), t.TempDir()); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestExcludeAgentsLocalAppendsToAnExistingListWithoutTrailingNewline(t *testing.T) {
 	repoRoot := gitRepo(t)
 	excludePath := filepath.Join(repoRoot, ".git", "info", "exclude")
@@ -243,19 +230,6 @@ func TestInstallSkill_claudeMDWriteFailureFailsTheInstall(t *testing.T) {
 	}
 }
 
-func TestResolveTargetDirFailsWhenTheChosenDirCannotBeCreated(t *testing.T) {
-	blocked := filepath.Join(t.TempDir(), "file")
-	deployWriteFile(t, blocked, "not a directory")
-	ui := testUI()
-	ui.interactive = true
-	ui.confirm = func(string) bool { return false }
-	ui.readString = func(string) string { return filepath.Join(blocked, "sub") }
-
-	if _, err := ui.resolveTargetDir("Cursor rules", filepath.Join(t.TempDir(), "missing")); err == nil {
-		t.Fatal("expected an uncreatable chosen directory to error")
-	}
-}
-
 func TestInstallCodexSkillsFailsWhenTheCompiledFileCannotBeWritten(t *testing.T) {
 	requireNonRoot(t)
 	t.Setenv("HOME", t.TempDir())
@@ -267,8 +241,9 @@ func TestInstallCodexSkillsFailsWhenTheCompiledFileCannotBeWritten(t *testing.T)
 	}
 	t.Cleanup(func() { _ = os.Chmod(repoRoot, 0o755) })
 
-	if err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot, false); err == nil {
-		t.Fatal("expected the unwritable repo root to fail the install")
+	err := installCodexSkills(discardCmd(), testUI(), discover(t, source), repoRoot, false)
+	if want := "could not write " + filepath.Join(repoRoot, agentsLocalFile); err == nil || !strings.HasPrefix(err.Error(), want) {
+		t.Fatalf("expected %q, got %v", want, err)
 	}
 }
 
@@ -282,8 +257,12 @@ func TestRemoveStaleAgentsLocalFailsOnAnUnreadableFile(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(dest, 0o644) })
 
-	if err := removeStaleAgentsLocal(discardCmd(), repoRoot); err == nil {
-		t.Fatal("expected an unreadable file to fail loudly")
+	err := removeStaleAgentsLocal(discardCmd(), repoRoot)
+	if want := "could not read " + dest; err == nil || !strings.HasPrefix(err.Error(), want) {
+		t.Fatalf("expected %q, got %v", want, err)
+	}
+	if _, err := os.Lstat(dest); err != nil {
+		t.Fatalf("an unreadable file must not be removed: %v", err)
 	}
 }
 

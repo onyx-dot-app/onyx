@@ -10,7 +10,7 @@ import (
 func TestNewBaseline_roundsFloorsDown(t *testing.T) {
 	// 2/3 is 66.66...%, which must not become a 66.7% floor the same run
 	// would then fail against.
-	baseline := NewBaseline(profileOf(map[string][2]int{"cmd": {2, 3}}))
+	baseline := NewBaseline(profileOf(map[string][2]int{"cmd": {2, 3}}), TypeScript)
 
 	if got := baseline.Packages["cmd"]; got != 66.6 {
 		t.Fatalf("expected a 66.6 floor, got %v", got)
@@ -23,18 +23,25 @@ func TestNewBaseline_isSelfConsistent(t *testing.T) {
 		"cmd":            {2, 3},
 		"internal/audit": {1, 7},
 		"internal/empty": {0, 0},
+		// 29/50 computes as 57.99999999999999%, just under 58.
+		"internal/typed": {29, 50},
 	})
 
-	report := Compare(profile, NewBaseline(profile).Reference(), 0)
+	for _, kind := range []Kind{GoTests, TypeScript} {
+		report := Compare(profile, NewBaseline(profile, kind).Reference(), 0)
 
-	if got := len(report.Regressions()); got != 0 {
-		t.Fatalf("a fresh baseline must not fail its own run, got %d regressions", got)
+		if got := len(report.Regressions()); got != 0 {
+			t.Fatalf("%s: a fresh baseline must not fail its own run, got %d regressions", kind.Name, got)
+		}
+		if report.Changed() {
+			t.Fatalf("%s: a fresh baseline must match its own run, got %+v", kind.Name, report.Packages)
+		}
 	}
 }
 
 func TestBaseline_saveAndLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), BaselineFile)
-	original := NewBaseline(profileOf(map[string][2]int{"cmd": {1, 4}, "internal/audit": {1, 2}}))
+	original := NewBaseline(profileOf(map[string][2]int{"cmd": {1, 4}, "internal/audit": {1, 2}}), GoTests)
 
 	if err := original.Save(path, GoTests); err != nil {
 		t.Fatalf("failed to save the baseline: %v", err)
@@ -44,7 +51,21 @@ func TestBaseline_saveAndLoadRoundTrip(t *testing.T) {
 		t.Fatalf("failed to load the baseline: %v", err)
 	}
 
-	if loaded.Total != original.Total {
+	// A baseline that reorders between runs would show up as a diff on every
+	// update, so a second save must be byte-identical.
+	again := filepath.Join(t.TempDir(), BaselineFile)
+	if err := original.Save(again, GoTests); err != nil {
+		t.Fatalf("failed to save the baseline: %v", err)
+	}
+	data := readFile(t, path)
+	if data != readFile(t, again) {
+		t.Fatal("expected two saves of the same baseline to be byte-identical")
+	}
+	if !strings.HasPrefix(data, "# Minimum statement coverage") {
+		t.Fatalf("expected the explanatory header, got:\n%s", data)
+	}
+
+	if loaded.Total != original.Total || loaded.Step != original.Step {
 		t.Fatalf("expected total %v, got %v", original.Total, loaded.Total)
 	}
 	if len(loaded.Packages) != len(original.Packages) {
@@ -57,35 +78,9 @@ func TestBaseline_saveAndLoadRoundTrip(t *testing.T) {
 	}
 }
 
-func TestBaseline_saveIsDeterministic(t *testing.T) {
-	dir := t.TempDir()
-	baseline := NewBaseline(profileOf(map[string][2]int{
-		"cmd": {1, 4}, "internal/audit": {1, 2}, "internal/tui": {3, 4},
-	}))
-
-	first := filepath.Join(dir, "first.yaml")
-	second := filepath.Join(dir, "second.yaml")
-	if err := baseline.Save(first, GoTests); err != nil {
-		t.Fatalf("failed to save the baseline: %v", err)
-	}
-	if err := baseline.Save(second, GoTests); err != nil {
-		t.Fatalf("failed to save the baseline: %v", err)
-	}
-
-	// A baseline that reorders between runs would show up as a diff on every
-	// update, so key order has to be stable.
-	firstData := readFile(t, first)
-	if firstData != readFile(t, second) {
-		t.Fatal("expected two saves of the same baseline to be byte-identical")
-	}
-	if !strings.Contains(firstData, "# Minimum statement coverage") {
-		t.Fatalf("expected the explanatory header, got:\n%s", firstData)
-	}
-}
-
 func TestBaseline_saveUsesTheKindHeader(t *testing.T) {
 	path := filepath.Join(t.TempDir(), TypeBaselineFile)
-	baseline := NewBaseline(profileOf(map[string][2]int{"src/app": {1, 2}}))
+	baseline := NewBaseline(profileOf(map[string][2]int{"src/app": {1, 2}}), TypeScript)
 
 	if err := baseline.Save(path, TypeScript); err != nil {
 		t.Fatalf("failed to save the baseline: %v", err)
@@ -177,5 +172,35 @@ func TestBaseline_saveFailsUnderAFile(t *testing.T) {
 	err := baseline.Save(path, GoTests)
 	if err == nil || !strings.HasPrefix(err.Error(), "write "+path+": ") {
 		t.Fatalf("expected a write error naming %s, got %v", path, err)
+	}
+}
+
+func TestNewBaseline_goFloorsRoundDownToFivePercentAndSkipZero(t *testing.T) {
+	// 889/1000 is 88.9%, 999/1000 is 99.9%, 4/100 is 4%, 0/7 is 0%.
+	baseline := NewBaseline(profileOf(map[string][2]int{
+		"cmd": {889, 1000}, "internal/docker": {999, 1000}, "internal/low": {4, 100}, "odsaudit": {0, 7},
+	}), GoTests)
+
+	want := map[string]float64{"cmd": 85, "internal/docker": 95}
+	if len(baseline.Packages) != len(want) {
+		t.Fatalf("expected floors %v, got %v", want, baseline.Packages)
+	}
+	for name, floor := range want {
+		if got := baseline.Packages[name]; got != floor {
+			t.Fatalf("expected a %v floor for %s, got %v", floor, name, got)
+		}
+	}
+	if baseline.Step != 5 {
+		t.Fatalf("expected step 5, got %v", baseline.Step)
+	}
+}
+
+func TestLoadBaseline_rejectsANegativeStep(t *testing.T) {
+	path := filepath.Join(t.TempDir(), BaselineFile)
+	if err := os.WriteFile(path, []byte("total: 50\nstep: -5\npackages:\n  cmd: 50\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadBaseline(path); err == nil || !strings.Contains(err.Error(), "step") {
+		t.Fatalf("expected a step error, got %v", err)
 	}
 }

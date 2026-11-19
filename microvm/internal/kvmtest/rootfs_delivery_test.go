@@ -29,7 +29,11 @@ const (
 	rdNode = `node -e 'fetch("https://registry.npmjs.org/").then(r=>r.text()).then(t=>console.log(t.trim())).catch(e=>{console.log(String(e.cause||e));process.exit(1)})' 2>&1; echo "rc=$?"`
 	rdNSS  = `certutil -L -d sql:/home/sandbox/.pki/nssdb 2>&1 | grep -c craft-egress-ca; stat -c 'owner=%U' /home/sandbox/.pki/nssdb/cert9.db`
 	// The default root drive runs commands as the sandbox user, not root.
-	rdUser = `echo "uid=$(id -u) gid=$(id -g) home=$HOME user=$USER"; touch ws-probe && echo ws-ok; touch /tmp/probe && echo tmp-ok; touch /usr/local/share/ca-certificates/probe 2>/dev/null || echo ca-store-denied; pwd`
+	// The sandbox user owns the Onyx directories in /tmp (a tmpfs).
+	rdUser = `echo "uid=$(id -u) gid=$(id -g) home=$HOME user=$USER"; touch ws-probe && echo ws-ok; touch /tmp/probe && echo tmp-ok; touch /usr/local/share/ca-certificates/probe 2>/dev/null || echo ca-store-denied; pwd
+grep ' /tmp ' /proc/mounts | cut -d' ' -f3
+stat -c '%u:%g %a' /tmp/onyx /tmp/onyx/tool-results /tmp/onyx/search-files /tmp/onyx/artifacts | sort | uniq -c | sed 's/^ *//'
+for d in tool-results search-files artifacts; do touch /tmp/onyx/$d/p && rm /tmp/onyx/$d/p && echo $d-ok; done`
 )
 
 // TestRootfsDeliveryKVM checks rootfs delivery through the agent binary: the root
@@ -187,7 +191,8 @@ func TestRootfsDeliveryKVM(t *testing.T) {
 		t.Fatalf("command user: %v", err)
 	}
 	ur, err := ptCollect(r)
-	want := fmt.Sprintf("uid=1000 gid=1000 home=/home/sandbox user=sandbox\nws-ok\ntmp-ok\nca-store-denied\n/home/onyx/workspaces/%s\n", sessionID)
+	want := fmt.Sprintf("uid=1000 gid=1000 home=/home/sandbox user=sandbox\nws-ok\ntmp-ok\nca-store-denied\n/home/onyx/workspaces/%s\n"+
+		"tmpfs\n4 1000:1000 755\ntool-results-ok\nsearch-files-ok\nartifacts-ok\n", sessionID)
 	if err != nil || ur.stdout != want {
 		t.Errorf("command user: got %q %v, want %q (stderr %q)", ur.stdout, err, want, ur.stderr)
 	}

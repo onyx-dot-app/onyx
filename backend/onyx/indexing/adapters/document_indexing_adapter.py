@@ -66,7 +66,11 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         self.connector_id = connector_id
         self.credential_id = credential_id
         self.tenant_id = tenant_id
-        self.index_attempt_metadata = index_attempt_metadata
+        self._index_attempt_metadata = index_attempt_metadata
+
+    @property
+    def index_attempt_metadata(self) -> IndexAttemptMetadata:
+        return self._index_attempt_metadata
 
     def prepare(
         self,

@@ -16,8 +16,6 @@ from pydantic import SecretStr
 
 from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
-from onyx.configs.constants import FileOrigin
-from onyx.file_store.file_store import get_default_file_store
 from onyx.microvm import placement, registry
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
 from onyx.microvm.daemon_client import (
@@ -170,7 +168,6 @@ def ref(
         harness_state.SESSION_INSTANCES_PREFIX,
         harness_state.LAST_ATTEMPT_PREFIX,
         harness_state.SAVED_SESSIONS_PREFIX,
-        harness_state.ARTIFACTS_PREFIX,
         harness_state.WANTED_PREFIX,
         harness_state.PURGED_SANDBOX_PREFIX,
     ):
@@ -796,11 +793,6 @@ def _wait(running: dict[UUID, Future[None]], key: UUID) -> None:
         pending.result(timeout=30)
 
 
-def _has_artifact(file_id: str) -> bool:
-    return get_default_file_store().has_file(file_id, FileOrigin.OTHER, "text/plain")
-
-
-@pytest.mark.usefixtures("db_session", "initialize_file_store")
 def test_session_purge_deletes_its_save_and_directory_and_keeps_the_rest(
     tenant_cache: CacheBackend,
     make_sandbox: MakeSandbox,
@@ -811,43 +803,35 @@ def test_session_purge_deletes_its_save_and_directory_and_keeps_the_rest(
 ) -> None:
     sandbox = make_sandbox()
     sandbox.write_file(ref, "src/a.py", b"a")
-    sandbox.write_file(ref, "out/report.txt", b"report")
     sandbox.write_file(other_ref, "src/b.py", b"b")
-    artifact = sandbox.publish_artifact(ref, "out/report.txt")
-    try:
-        assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
-        saved = harness_state.get_session_save(tenant_cache, ref.session_id)
-        assert saved is not None and saved.file_id is not None
-        assert sorted(
-            harness_state.get_ids(
-                tenant_cache, harness_state.SAVED_SESSIONS_PREFIX, ref.sandbox_id
-            )
-        ) == sorted([str(ref.session_id), str(other_ref.session_id)])
-        # Restore both sessions on a new VM, then delete one.
-        sandbox.read_file(ref, "src/a.py", max_bytes=10)
-        sandbox.read_file(other_ref, "src/b.py", max_bytes=10)
-
-        sandbox.purge_session(
-            tenant_id=TENANT_ID, sandbox_id=ref.sandbox_id, session_id=ref.session_id
-        )
-
-        assert harness_state.get_session_save(tenant_cache, ref.session_id) is None
-        assert saved.file_id in store.deleted
-        assert saved.file_id not in node.agent.objects
-        assert _session_files(node, ref) == {}
-        assert _session_files(node, other_ref) == {"src/b.py": b"b"}
-        assert _has_artifact(artifact)
-        assert harness_state.get_session_save(tenant_cache, other_ref.session_id)
-        assert harness_state.get_ids(
+    assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
+    saved = harness_state.get_session_save(tenant_cache, ref.session_id)
+    assert saved is not None and saved.file_id is not None
+    assert sorted(
+        harness_state.get_ids(
             tenant_cache, harness_state.SAVED_SESSIONS_PREFIX, ref.sandbox_id
-        ) == [str(other_ref.session_id)]
+        )
+    ) == sorted([str(ref.session_id), str(other_ref.session_id)])
+    # Restore both sessions on a new VM, then delete one.
+    sandbox.read_file(ref, "src/a.py", max_bytes=10)
+    sandbox.read_file(other_ref, "src/b.py", max_bytes=10)
 
-    finally:
-        get_default_file_store().delete_file(artifact, error_on_missing=False)
+    sandbox.purge_session(
+        tenant_id=TENANT_ID, sandbox_id=ref.sandbox_id, session_id=ref.session_id
+    )
+
+    assert harness_state.get_session_save(tenant_cache, ref.session_id) is None
+    assert saved.file_id in store.deleted
+    assert saved.file_id not in node.agent.objects
+    assert _session_files(node, ref) == {}
+    assert _session_files(node, other_ref) == {"src/b.py": b"b"}
+    assert harness_state.get_session_save(tenant_cache, other_ref.session_id)
+    assert harness_state.get_ids(
+        tenant_cache, harness_state.SAVED_SESSIONS_PREFIX, ref.sandbox_id
+    ) == [str(other_ref.session_id)]
 
 
-@pytest.mark.usefixtures("db_session", "initialize_file_store")
-def test_sandbox_purge_stops_the_vm_and_deletes_every_save_and_artifact(
+def test_sandbox_purge_stops_the_vm_and_deletes_every_save(
     tenant_cache: CacheBackend,
     make_sandbox: MakeSandbox,
     node: RunningFakeAgent,
@@ -863,10 +847,8 @@ def test_sandbox_purge_stops_the_vm_and_deletes_every_save_and_artifact(
         harness_state.get_session_save(tenant_cache, r.session_id)
         for r in (ref, other_ref)
     ]
-    # A running VM again, with an artifact.
+    # A running VM again.
     sandbox.write_file(ref, "out/report.txt", b"report")
-    artifact = sandbox.publish_artifact(ref, "out/report.txt")
-    assert _has_artifact(artifact)
     placed = get_sandbox_placement(tenant_cache, ref.sandbox_id)
     assert placed is not None
 
@@ -881,10 +863,8 @@ def test_sandbox_purge_stops_the_vm_and_deletes_every_save_and_artifact(
         assert save is not None and save.file_id in store.deleted
     for r in (ref, other_ref):
         assert harness_state.get_session_save(tenant_cache, r.session_id) is None
-    assert not _has_artifact(artifact)
     for prefix in (
         harness_state.SAVED_SESSIONS_PREFIX,
-        harness_state.ARTIFACTS_PREFIX,
         *harness_state.SANDBOX_STATE_PREFIXES,
     ):
         assert tenant_cache.get(prefix + str(ref.sandbox_id)) is None
@@ -1071,35 +1051,3 @@ def test_purges_reach_records_and_saves_that_the_indexes_miss(
     )
     assert other.file_id in store.deleted
     assert harness_state.get_session_save(tenant_cache, other_ref.session_id) is None
-
-
-@pytest.mark.usefixtures("db_session", "initialize_file_store", "node")
-def test_an_artifact_published_during_a_sandbox_purge_is_deleted(
-    tenant_cache: CacheBackend,
-    make_sandbox: MakeSandbox,
-    ref: HarnessSandboxRef,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sandbox = make_sandbox()
-    sandbox.write_file(ref, "out/report.txt", b"report")
-    indexed: list[str] = []
-    real_add_id = harness_state.add_id
-
-    def add_id_then_purge(
-        cache: CacheBackend, prefix: str, sandbox_id: UUID, item: str
-    ) -> None:
-        real_add_id(cache, prefix, sandbox_id, item)
-        indexed.append(item)
-        # The purge read the artifact index before this publish ended.
-        harness_state.mark_purged(tenant_cache, sandbox_id=ref.sandbox_id)
-
-    monkeypatch.setattr(harness_sandbox, "add_id", add_id_then_purge)
-    with pytest.raises(HarnessSandboxError):
-        sandbox.publish_artifact(ref, "out/report.txt")
-    assert indexed and not _has_artifact(indexed[0])
-    assert (
-        harness_state.get_ids(
-            tenant_cache, harness_state.ARTIFACTS_PREFIX, ref.sandbox_id
-        )
-        == []
-    )

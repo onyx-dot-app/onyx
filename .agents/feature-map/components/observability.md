@@ -118,6 +118,13 @@ function span per tool call, with `ToolInvocation.trace_metadata` as the span's
 `code_mode_cell` span, the parent of its nested tool spans
 ([[code-execution]]).
 
+**Indexing attribution.** An enrichment batch opens a metadata-only root after prepare selects documents
+for indexing and there is no active trace. Retries share that batch root. Filter batch roots by `tenant_id` and `attempt_id`
+to follow a connector indexing attempt across workers. `batch_num` identifies
+the batch and `request_id` distinguishes executions. Other indexing paths may
+have no connector attempt. Braintrust generation spans carry their own
+`metadata.flow` at start, including when a worker never reports completion.
+
 **Usage and cost.** `UserUsageTracingProcessor` takes each generation span with
 token usage, and each image generation span. It prices the span with `llm/cost.py:compute_cost_cents`, and upserts additive
 rows in `user_usage` from a background drain thread. A span with

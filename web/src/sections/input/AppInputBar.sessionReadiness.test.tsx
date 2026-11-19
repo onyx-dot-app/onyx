@@ -397,6 +397,74 @@ test("a send before the tool options load waits for them and then sends", async 
   );
 });
 
+test("a held send is dropped when the chat changes before the tool options load", async () => {
+  const user = setupUser();
+  const inputProps = props("input");
+  const notLoaded = {
+    ...inputProps,
+    toolConfiguration: {
+      optionsLoaded: false,
+    } as AppInputBarProps["toolConfiguration"],
+  };
+  const { rerender } = render(<ChatInput {...notLoaded} />);
+  await user.click(screen.getByRole("textbox", { name: "Message input" }));
+  await user.keyboard("{Enter}");
+  expect(inputProps.onSubmit).not.toHaveBeenCalled();
+
+  mockChatId = "other";
+  const otherChat = props("input");
+  rerender(<ChatInput {...otherChat} />);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(otherChat.onSubmit).not.toHaveBeenCalled();
+  expect(inputProps.onSubmit).not.toHaveBeenCalled();
+});
+
+test("a held send waits for pending files after the tool options load", async () => {
+  const user = setupUser();
+  const inputProps = props("input");
+  const notLoaded = {
+    ...inputProps,
+    toolConfiguration: {
+      optionsLoaded: false,
+    } as AppInputBarProps["toolConfiguration"],
+  };
+  const { rerender } = render(<ChatInput {...notLoaded} />);
+  await user.click(screen.getByRole("textbox", { name: "Message input" }));
+  await user.keyboard("{Enter}");
+  const file: ProjectFile = {
+    id: "file-1",
+    name: "notes.txt",
+    project_id: null,
+    user_id: null,
+    file_id: "file-1",
+    created_at: "2026-11-17T00:00:00Z",
+    status: UserFileStatus.PROCESSING,
+    file_type: "text/plain",
+    last_accessed_at: "2026-11-17T00:00:00Z",
+    chat_file_type: ChatFileType.PLAIN_TEXT,
+    token_count: 1,
+    chunk_count: 1,
+  };
+  mockMessageFiles = [file];
+  rerender(<ChatInput {...inputProps} />);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(inputProps.onSubmit).not.toHaveBeenCalled();
+
+  mockMessageFiles = [{ ...file, status: UserFileStatus.COMPLETED }];
+  rerender(<ChatInput {...inputProps} disabled />);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(inputProps.onSubmit).not.toHaveBeenCalled();
+
+  rerender(<ChatInput {...inputProps} />);
+  await waitFor(() => expect(inputProps.onSubmit).toHaveBeenCalledTimes(1));
+});
+
 test("unconfirmed completion offers a retry and never submits the draft or queue", async () => {
   const user = setupUser();
   const inputProps = props("unconfirmed");

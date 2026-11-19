@@ -58,6 +58,7 @@ from onyx.db.connector_credential_pair import (
     verify_user_can_manage_all_cc_pairs,
     verify_user_has_access_to_cc_pair,
 )
+from onyx.db.connector_edit_requests import request_prune__no_commit
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.document import (
     get_document_counts_for_cc_pairs,
@@ -1177,14 +1178,14 @@ def prune_cc_pair(
         cc_pair.credential_id,
         cc_pair.connector.name,
     )
+    request_prune__no_commit(db_session, cc_pair.id)
+    db_session.commit()
+
     payload_id = try_creating_prune_generator_task(
         client_app, cc_pair, db_session, r, tenant_id
     )
     if not payload_id:
-        raise OnyxError(
-            OnyxErrorCode.INTERNAL_ERROR,
-            "Pruning task creation failed.",
-        )
+        return StatusResponse(success=True, message="Pruning request queued.")
 
     logger.info("Pruning queued: cc_pair=%s id=%s", cc_pair.id, payload_id)
 

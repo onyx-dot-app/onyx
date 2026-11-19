@@ -90,6 +90,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.question.models import (
     QuestionArguments,
@@ -97,6 +98,7 @@ from onyx.tools.tool_implementations.question.models import (
 )
 from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchResult,
+    PublishedFiles,
     SandboxExecResult,
     WriteStdinArguments,
 )
@@ -105,6 +107,7 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ApplyPatchTool,
     EditTool,
     ExecCommandTool,
+    PublishFilesTool,
     WriteStdinTool,
     WriteTool,
 )
@@ -728,10 +731,24 @@ class ToolRenderer:
                     tool_name=WriteTool.NAME,
                 )
             ]
+        elif name == PublishFilesTool.NAME:
+            # Invalid or interrupted arguments still show the publish card.
+            try:
+                start = packets.PublishFilesStart.model_validate(
+                    {
+                        "files": args.get("files", []),
+                        "description": args.get("description"),
+                    }
+                )
+            except ValidationError:
+                start = packets.PublishFilesStart()
+            objects = [start]
         elif name == FileReaderTool.NAME:
             objects = [packets.FileReaderStart()]
         elif name == MemoryTool.NAME:
             objects = [packets.MemoryToolStart()]
+        elif name == PostgresTool.NAME:
+            objects = [packets.PostgresToolStart(query=args)]
         elif name == ImageGenerationTool.NAME:
             objects = [packets.ImageGenerationToolStart()]
         elif name == RESEARCH_AGENT_TOOL_NAME:
@@ -749,6 +766,38 @@ class ToolRenderer:
             ]
         return objects
 
+    def _search_docs_objects(
+        self, details: SearchDocsResponse
+    ) -> list[packets.PacketObj]:
+        docs = (
+            details.displayed_docs
+            if details.displayed_docs is not None
+            else details.search_docs
+        )
+        new_docs = [doc for doc in docs if doc.document_id not in self._documents]
+        self._documents.update(doc.document_id for doc in docs)
+        if self.call.name == OpenURLTool.NAME:
+            return [packets.OpenUrlDocuments(documents=new_docs)] if new_docs else []
+        if self.call.name == PostgresTool.NAME:
+            return (
+                [packets.PostgresToolDocuments(documents=new_docs)] if new_docs else []
+            )
+        objects: list[packets.PacketObj] = []
+        queries = [query for query in details.queries if query not in self._queries]
+        self._queries.update(queries)
+        if queries:
+            objects.append(packets.SearchToolQueriesDelta(queries=queries))
+        objects.append(
+            packets.SearchToolFilterDelta(
+                sources=details.sources,
+                time_filter_start=details.time_filter_start,
+                time_filter_end=details.time_filter_end,
+            )
+        )
+        if new_docs:
+            objects.append(packets.SearchToolDocumentsDelta(documents=new_docs))
+        return objects
+
     def update(
         self, details: BaseModel | None, content: str = ""
     ) -> list[packets.Packet]:
@@ -763,7 +812,8 @@ class ToolRenderer:
         """Render result details; content already rendered is skipped."""
         objects: list[packets.PacketObj] = []
         if isinstance(
-            details, (SandboxOutputDelta, SandboxExecResult, ApplyPatchResult)
+            details,
+            (SandboxOutputDelta, SandboxExecResult, ApplyPatchResult, PublishedFiles),
         ):
             return self._sandbox_packets(details)
         if isinstance(details, PythonExecutionDelta):
@@ -777,32 +827,7 @@ class ToolRenderer:
                 )
             ]
         if isinstance(details, SearchDocsResponse):
-            docs = (
-                details.displayed_docs
-                if details.displayed_docs is not None
-                else details.search_docs
-            )
-            new_docs = [doc for doc in docs if doc.document_id not in self._documents]
-            self._documents.update(doc.document_id for doc in docs)
-            if self.call.name == OpenURLTool.NAME:
-                if new_docs:
-                    objects.append(packets.OpenUrlDocuments(documents=new_docs))
-            else:
-                queries = [
-                    query for query in details.queries if query not in self._queries
-                ]
-                self._queries.update(queries)
-                if queries:
-                    objects.append(packets.SearchToolQueriesDelta(queries=queries))
-                objects.append(
-                    packets.SearchToolFilterDelta(
-                        sources=details.sources,
-                        time_filter_start=details.time_filter_start,
-                        time_filter_end=details.time_filter_end,
-                    )
-                )
-                if new_docs:
-                    objects.append(packets.SearchToolDocumentsDelta(documents=new_docs))
+            objects.extend(self._search_docs_objects(details))
         elif details is not None and details == self._last_details:
             return []
         elif isinstance(details, FileReadResult):
@@ -917,6 +942,7 @@ class ToolRenderer:
             OpenURLTool.NAME,
             ImageGenerationTool.NAME,
             MemoryTool.NAME,
+            PostgresTool.NAME,
         }:
             objects.append(
                 packets.CustomToolDelta(
@@ -930,7 +956,11 @@ class ToolRenderer:
         return [packets.Packet(placement=self.placement, obj=obj) for obj in objects]
 
     def _sandbox_packets(
-        self, details: SandboxOutputDelta | SandboxExecResult | ApplyPatchResult
+        self,
+        details: SandboxOutputDelta
+        | SandboxExecResult
+        | ApplyPatchResult
+        | PublishedFiles,
     ) -> list[packets.Packet]:
         """Every output delta renders; a result renders once."""
         if isinstance(details, SandboxOutputDelta):
@@ -940,6 +970,9 @@ class ToolRenderer:
         elif isinstance(details, ApplyPatchResult):
             self._last_details = details
             obj = packets.ApplyPatchEnd(files=details.files)
+        elif isinstance(details, PublishedFiles):
+            self._last_details = details
+            obj = packets.PublishFilesEnd(files=details.files)
         else:
             self._last_details = details
             obj = packets.ExecEnd(
@@ -993,7 +1026,8 @@ class ToolRenderer:
             and result.is_error
             and not isinstance(result.details, (SandboxExecResult, ApplyPatchResult))
         ):
-            # A failed sandbox call has no process result or file changes.
+            # A failed sandbox call has no process result, file changes or
+            # published files.
             if self.call.name in EXEC_TOOL_NAMES:
                 return [
                     packets.Packet(
@@ -1006,6 +1040,13 @@ class ToolRenderer:
                     packets.Packet(
                         placement=self.placement,
                         obj=packets.ApplyPatchEnd(error=result.text),
+                    )
+                ]
+            if self.call.name == PublishFilesTool.NAME:
+                return [
+                    packets.Packet(
+                        placement=self.placement,
+                        obj=packets.PublishFilesEnd(error=result.text),
                     )
                 ]
         if result is not None:

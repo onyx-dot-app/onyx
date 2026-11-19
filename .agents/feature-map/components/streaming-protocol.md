@@ -129,6 +129,19 @@ model column. It is `None` on packets that no `Emitter` tagged, such as
 heartbeats. `chat/renderer.py:ResponseLayout.next_section` hands out turn and
 sub-turn indexes.
 
+**The v2 wire.** A client that sends `protocol_version=2` gets the same
+stream as ACP updates (`backend/onyx/server/query_and_chat/acp_stream.py:ChatAcpTranslator`).
+Text and reasoning become message and thought chunks. A tool's start packet
+opens a `tool_call`, later packets at its placement are updates that carry the
+v1 packet in `_meta.onyx.packet`, and `section_end` closes it, `failed` when an
+error or a result reported failure. `stop` closes the calls still open
+before its `_onyx/stop` notification: `failed` when the user stopped (with
+`cancelled`) or a deadline cut them off (`timed_out`), otherwise `completed`.
+A stream that ends on an error closes them as `failed` before its
+`_onyx/error` notification.
+`message_start` and every packet outside a call go out as `_onyx/<type>`
+notifications, so no v1 data is lost. v1 stays the default.
+
 **Packet families.**
 `backend/onyx/server/query_and_chat/streaming_models.py:StreamingType` holds every type string, and `PacketObj` is the union that `Packet.obj` is
 validated against. Families are control (`stop`, `section_end`, `error`,
@@ -235,7 +248,20 @@ names the file tool, which titles the call (`toolDisplayHelpers.getToolName`, as
 that the model got (cut to its token budget), which replaces the streamed
 preview; `session_id` is set while the command runs, and `error` (with no
 output) when the call failed. A replayed call sends the start and `exec_end`
-only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A sandbox call that
+only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A `publish_files`
+call starts with `publish_files_start`: `files`, the `{path, title}` entries
+as the model wrote them, and `description` (`files` is empty when the
+arguments are not valid, so the card still shows). It ends with
+`publish_files_end`:
+`files`, one `PublishedFile` per entry in the same order, or `error` and no
+files when the call published none (it publishes all or none). A
+`PublishedFile` has `file_id` (download it from `/chat/file/{file_id}`),
+`name` (the file name, which the download keeps, and the version key: files
+of one `name` are versions of one file, and each publish gives a new
+`file_id`), `title` (null when the model gave none), `path` (absolute and
+normalized in the VM, for display only), `size` in bytes and `mime_type`. Live and replay send the same two packets. The chat's
+published files are the `publish_files_end` packets of its responses: the
+packet is the only record that a client lists them from. A sandbox call that
 a Stop ended has no end packet; the client shows it as stopped. So does any
 nested call that its program left unfinished (state `unfinished`,
 `CodeModeRenderer._complete_child`). An `exec_end` with `completion`
@@ -488,6 +514,9 @@ its background task end ([[#pure-asgi-middleware]]).
 
 ## Known issues
 
+- Only the web client knows `publish_files_start` and `publish_files_end`, so
+  the mobile, widget and CLI clients show nothing for a `publish_files` call
+  ([[#unknown-packet-renders-nothing]]).
 - The web enum keeps `MESSAGE_END`. The mobile enum keeps `MESSAGE_END` and
   `TOP_LEVEL_BRANCHING`. The backend sends neither. Mobile drops
   `top_level_branching` so that it can talk to older servers. The

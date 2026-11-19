@@ -197,7 +197,7 @@ func (s *Store) spool(ctx context.Context, root *os.Root, dir string, size int64
 	if err := f.Chmod(mode); err != nil {
 		return "", "", err
 	}
-	if err := s.own(root, tmp); err != nil {
+	if err := s.ownFile(f, tmp); err != nil {
 		return "", "", err
 	}
 	if err := f.Close(); err != nil {

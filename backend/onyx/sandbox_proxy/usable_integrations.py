@@ -84,20 +84,15 @@ def load_match_targets(
 ) -> tuple[IntegrationMatchTarget, ...]:
     """One query for each kind table, for each enabled integration or for only
     ``only_integration_id``. An integration with an unusable URL matches
-    nothing; one with settings that do not parse gets a ``load_error``."""
+    nothing; one with settings or a URL that do not parse gets a
+    ``load_error``."""
     targets: list[IntegrationMatchTarget] = []
     for integration_id, server_url in list_enabled_mcp_server_urls(
         db_session, only_integration_id
     ):
-        endpoint = parse_target(integration_id, server_url)
-        if endpoint is not None:
-            targets.append(
-                IntegrationMatchTarget(
-                    integration_id=integration_id,
-                    kind=IntegrationKind.MCP,
-                    endpoint=endpoint,
-                )
-            )
+        target = mcp_match_target(integration_id, server_url)
+        if target is not None:
+            targets.append(target)
     for integration_id, schema in list_enabled_openapi_schemas(
         db_session, only_integration_id
     ):
@@ -111,6 +106,20 @@ def load_match_targets(
         )
     )
     return tuple(targets)
+
+
+def mcp_match_target(
+    integration_id: int, server_url: str
+) -> IntegrationMatchTarget | None:
+    try:
+        endpoint = parse_target(integration_id, server_url)
+    except ValueError as e:
+        return _broken_target(integration_id, IntegrationKind.MCP, _bad_url(e))
+    if endpoint is None:
+        return None
+    return IntegrationMatchTarget(
+        integration_id=integration_id, kind=IntegrationKind.MCP, endpoint=endpoint
+    )
 
 
 def app_match_target(integration_id: int, app: ExternalApp) -> IntegrationMatchTarget:
@@ -137,7 +146,10 @@ def openapi_match_target(
         base_url = openapi_to_url(schema)
     except ValueError as e:
         return _broken_api_target(integration_id, str(e))
-    endpoint = parse_target(integration_id, base_url)
+    try:
+        endpoint = parse_target(integration_id, base_url)
+    except ValueError as e:
+        return _broken_api_target(integration_id, _bad_url(e))
     if endpoint is None:
         return None
     return IntegrationMatchTarget(
@@ -145,7 +157,17 @@ def openapi_match_target(
     )
 
 
+def _bad_url(error: ValueError) -> str:
+    return f"The integration URL is not valid: {error}"
+
+
 def _broken_api_target(integration_id: int, error: str) -> IntegrationMatchTarget:
+    return _broken_target(integration_id, IntegrationKind.API, error)
+
+
+def _broken_target(
+    integration_id: int, kind: IntegrationKind, error: str
+) -> IntegrationMatchTarget:
     return IntegrationMatchTarget(
-        integration_id=integration_id, kind=IntegrationKind.API, load_error=error
+        integration_id=integration_id, kind=kind, load_error=error
     )

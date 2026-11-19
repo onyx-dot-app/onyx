@@ -1132,13 +1132,13 @@ def test_a_program_finds_a_deferred_mcp_function_with_tool_search(
     )
     assert final_answer(send(chat_session.id, user, llm, "Say hi.")) == "Found it."
 
-    # MCP functions are deferred: the description names the server, not the stub.
+    # MCP functions are deferred: the description names their group, not the stub.
     [description] = [
         tool["function"]["description"]
         for tool in llm.requests[0]["tools"]
         if tool["function"]["name"] == "execute_code"
     ]
-    assert f"the MCP server `{namespace}`" in description
+    assert f"the tool group `{namespace}`" in description
     assert f"{namespace}__hello" not in description
 
     text = last_tool_text(llm, "find")

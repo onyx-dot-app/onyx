@@ -156,3 +156,31 @@ def test_batch_with_one_unknown_method_fails_closed() -> None:
         )
     )
     assert result.kind is McpRpcKind.UNCLASSIFIABLE
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b'{"method":"ping","Method":"tools/call","params":{"name":"delete_repo"}}',
+        b'{"method":"ping","method":"tools/call","params":{"name":"delete_repo"}}',
+        b'{"method":"tools/call","params":{"name":"read_file","Name":"delete_repo"}}',
+        b'{"method":"tools/call","params":{"name":"delete_repo","name":"read_file"}}',
+        b'{"method":"ping","params":{},"Params":{"name":"delete_repo"}}',
+        '{"method":"ping","params":{},"paramſ":{"name":"delete_repo"}}'.encode(),
+    ],
+)
+def test_keys_that_differ_only_in_case_fail_closed(body: bytes) -> None:
+    """A server that matches keys without case, or reads the first of two
+    equal keys, runs a different call from the one the gate classified."""
+    assert (
+        classify_mcp_request(_request("POST", body)).kind is McpRpcKind.UNCLASSIFIABLE
+    )
+
+
+def test_tool_arguments_keep_keys_that_differ_only_in_case() -> None:
+    body = _body(
+        _rpc("tools/call", params={"name": "search", "arguments": {"q": 1, "Q": 2}})
+    )
+    result = classify_mcp_request(_request("POST", body))
+    assert result.kind is McpRpcKind.TOOL_CALL
+    assert result.tool_names == ("search",)

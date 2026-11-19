@@ -22,19 +22,17 @@ from onyx.configs.constants import (
     NO_AUTH_PLACEHOLDER_USER_EMAIL,
     SLACK_SERVICE_ACCOUNT_EMAIL,
 )
-from onyx.db.enums import AccountType, MarketplaceKind, Permission
+from onyx.db.enums import AccountType, Permission
 from onyx.db.models import (
     ChatMessage,
     ChatSession,
     DocumentSet,
     DocumentSet__User,
-    Marketplace,
     MCPServer,
     OAuthAccount,
     PermissionGrant,
     Persona,
     Persona__User,
-    Plugin,
     SamlAccount,
     ScimUserMapping,
     User,
@@ -981,24 +979,27 @@ def delete_user_from_db__no_commit(
     db_session: Session,
 ) -> None:
     # onyx.db.plugin imports this module through onyx.db.user_group.
-    from onyx.db.plugin import release_private_integrations__no_commit
+    from onyx.db.plugin import (
+        private_plugins_blocking_user_delete,
+        release_private_integrations__no_commit,
+    )
 
     release_private_integrations__no_commit(user_to_delete.id, db_session)
     # A private plugin lives in its owner's "My uploads". Published plugins stay
     # in the Organization library with no author.
-    if (
-        db_session.scalar(
-            select(Plugin.id)
-            .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-            .where(
-                Marketplace.kind == MarketplaceKind.USER_UPLOADS,
-                Marketplace.owner_user_id == user_to_delete.id,
-            )
-            .limit(1)
+    blocking = db_session.scalars(
+        private_plugins_blocking_user_delete(user_to_delete.id)
+    ).all()
+    if blocking:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            _PRIVATE_SKILLS_BLOCK_DELETE,
+            extra={
+                "private_plugins": [
+                    {"id": str(plugin.id), "name": plugin.name} for plugin in blocking
+                ]
+            },
         )
-        is not None
-    ):
-        raise OnyxError(OnyxErrorCode.CONFLICT, _PRIVATE_SKILLS_BLOCK_DELETE)
     for oauth_account in user_to_delete.oauth_accounts:
         db_session.delete(oauth_account)
 
@@ -1035,7 +1036,6 @@ def delete_user_from_db__no_commit(
         # A private plugin added after the check above.
         if not (
             is_check_violation(exc, "ck_private_plugin_has_owner")
-            or is_check_violation(exc, "ck_private_skill_has_owner")
             or is_fk_violation(exc, "plugin_marketplace_id_fkey")
         ):
             raise

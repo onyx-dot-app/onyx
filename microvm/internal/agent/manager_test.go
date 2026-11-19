@@ -89,6 +89,9 @@ type fakeStats struct {
 	freeDisk uint64
 	memErr   error
 	diskErr  error
+	// sliceRoomMiB is the VM slice room; 0 is no slice limit.
+	sliceRoomMiB uint64
+	sliceErr     error
 	// onDisk runs once, inside the next admission check (the disk check
 	// runs before the Manager takes its lock).
 	onDisk func()
@@ -102,6 +105,10 @@ func (s *fakeStats) MemInfo() (uint64, uint64, error) {
 	}
 	return 64 << 10, s.availMiB, s.memErr
 }
+func (s *fakeStats) SliceRoomMiB() (uint64, bool, error) {
+	return s.sliceRoomMiB, s.sliceRoomMiB > 0, s.sliceErr
+}
+func (s *fakeStats) SliceOOMKills() (uint64, error) { return 0, nil }
 func (s *fakeStats) DiskFreeBytes() (uint64, error) {
 	if h := s.onDisk; h != nil {
 		s.onDisk = nil

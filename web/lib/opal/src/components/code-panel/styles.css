@@ -1,0 +1,120 @@
+@reference "#reference.css";
+
+/* ── CodePanel ───────────────────────────────────────────────────────────────
+   A bordered panel for code. Each part after the first draws a divider above
+   itself. Code is always LTR. */
+
+/* Always 0.5rem corners: concentric with a run card (0.75rem corners, 0.25rem
+   padding) around a step's body. The children are clipped to them. */
+.opal-code-panel {
+  @apply w-full overflow-hidden rounded-08 border-[0.5px] border-border-01;
+  @apply bg-background-tint-00;
+  direction: ltr;
+}
+
+.opal-code-panel > :not(:first-child) {
+  @apply border-t-[0.5px] border-border-01;
+}
+
+/* Title row: the same fill as the gutter. */
+.opal-code-panel-header {
+  @apply px-2 py-0.5 bg-background-tint-01;
+}
+
+.opal-code-panel-title {
+  @apply min-w-0 flex-1;
+}
+
+/* Lines */
+.opal-code-panel-lines {
+  @apply max-h-96 overflow-auto;
+}
+
+.opal-code-panel-lines table {
+  @apply w-full border-collapse;
+}
+
+.opal-code-panel-lines tr {
+  @apply align-baseline;
+}
+
+/* 0.1875rem above and below each line. */
+.opal-code-panel-number,
+.opal-code-panel-marker,
+.opal-code-panel-code {
+  @apply py-0.75;
+}
+
+.opal-code-panel-lines tr[data-kind="added"] {
+  @apply bg-status-success-01;
+}
+
+.opal-code-panel-lines tr[data-kind="removed"] {
+  @apply bg-status-error-01;
+}
+
+.opal-code-panel-number {
+  @apply w-px select-none whitespace-nowrap ps-2 pe-1 text-end align-baseline;
+  @apply bg-background-tint-01 font-secondary-mono text-text-02;
+}
+
+.opal-code-panel-marker {
+  @apply w-px select-none ps-2 font-secondary-mono text-text-03;
+}
+
+.opal-code-panel-lines tr[data-kind="added"] .opal-code-panel-marker {
+  @apply text-status-success-05;
+}
+
+.opal-code-panel-lines tr[data-kind="removed"] .opal-code-panel-marker {
+  @apply text-status-error-05;
+}
+
+.opal-code-panel-code {
+  @apply px-2 whitespace-pre-wrap wrap-break-word;
+  @apply font-secondary-mono text-text-04;
+}
+
+.opal-code-panel-note {
+  @apply px-2 py-0.5 text-center italic bg-background-tint-02;
+  @apply font-secondary-mono text-text-02;
+}
+
+/* Copy button on hover, for lines without a header. */
+.opal-code-panel-copyable {
+  @apply relative;
+}
+
+.opal-code-panel-copy {
+  @apply absolute top-1 end-1;
+}
+
+/* Two sets of lines, side by side. */
+.opal-code-panel-columns {
+  @apply grid max-h-96 grid-cols-2 divide-x divide-border-01 overflow-auto;
+}
+
+/* The columns scroll together, so the lines inside them do not scroll. */
+.opal-code-panel-columns .opal-code-panel-lines {
+  @apply max-h-none overflow-visible;
+}
+
+/* Output */
+.opal-code-panel-output {
+  @apply max-h-72 overflow-auto px-2 py-1 bg-background-tint-00;
+  @apply whitespace-pre-wrap wrap-break-word;
+}
+
+.opal-code-panel-output[data-error="true"] {
+  @apply bg-status-error-01;
+}
+
+/* Content: anything that is not code or output. */
+.opal-code-panel-content {
+  @apply px-2 py-1;
+}
+
+/* Footer */
+.opal-code-panel-footer {
+  @apply px-2 py-0.5 bg-background-tint-00;
+}

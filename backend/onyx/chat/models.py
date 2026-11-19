@@ -93,6 +93,7 @@ from onyx.tools.tool_implementations.question.models import (
     ToolQuestion,
     ToolQuestionAnswer,
 )
+from onyx.tools.tool_implementations.sandbox.models import PublishedFile
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 
@@ -616,6 +617,9 @@ class ToolCallResponse(BaseModel):
     tool_result: str
     search_docs: list[SearchDoc] | None = None
     generated_images: list[GeneratedImage] | None = None
+    # Files that publish_files gave the user; each downloads from
+    # /chat/file/{file_id}.
+    published_files: list[PublishedFile] | None = None
     # Reasoning that led to the tool call
     pre_reasoning: str | None = None
 

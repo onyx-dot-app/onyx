@@ -458,7 +458,9 @@ def _rank(
     infos: list[tuple[RegisteredNode, NodeInfo]],
     refusals: list[NodeRefusal],
 ) -> list[tuple[RegisteredNode, NodeInfo]]:
-    """Nodes that can hold the VM, most free memory first."""
+    """Nodes that can hold the VM, most free memory first. The host agent
+    owns memory admission: a node without room refuses Create with
+    CAPACITY_MEMORY, and placement tries the next node."""
     eligible: list[tuple[RegisteredNode, NodeInfo]] = []
     for node, info in infos:
         template = info.template(request.template)
@@ -468,17 +470,6 @@ def _rank(
                     node_id=node.node_id,
                     reason=HostAgentErrorReason.TEMPLATE_MISSING.value,
                     detail=f"template {request.template} is not on the node",
-                )
-            )
-        elif info.mem_available_mib < template.mem_mib:
-            refusals.append(
-                NodeRefusal(
-                    node_id=node.node_id,
-                    reason=HostAgentErrorReason.CAPACITY_MEMORY.value,
-                    detail=(
-                        f"{info.mem_available_mib} MiB free, "
-                        f"the VM needs {template.mem_mib} MiB"
-                    ),
                 )
             )
         elif info.max_vms and info.vm_slots_used >= info.max_vms:

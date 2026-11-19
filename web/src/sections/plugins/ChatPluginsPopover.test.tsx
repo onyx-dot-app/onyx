@@ -54,6 +54,7 @@ const catalog: AgentChatPlugins = {
     {
       pluginId: LINEAR_PLUGIN_ID,
       name: "Linear",
+      required: false,
       integrations: [
         makeMemberIntegration({
           status: {
@@ -66,6 +67,7 @@ const catalog: AgentChatPlugins = {
     {
       pluginId: REPORTS_PLUGIN_ID,
       name: "Reports",
+      required: false,
       integrations: [makeMemberIntegration({ id: 2, name: "Reports API" })],
     },
   ],
@@ -105,6 +107,32 @@ test("a plugin that needs sign-in keeps its switch, and Connect turns it on", as
     true
   );
   expect(onConnect).toHaveBeenCalledWith(catalog.plugins[1]);
+});
+
+test("a Required plugin shows on and its switch is locked", async () => {
+  const configuration = handle([LINEAR_PLUGIN_ID]);
+  const u = user();
+  render(
+    <ChatPluginsPopover
+      agentId={8}
+      toolConfiguration={configuration}
+      catalog={{
+        ...catalog,
+        plugins: [{ ...catalog.plugins[0]!, required: true }],
+      }}
+      onConnect={jest.fn()}
+      onBrowse={jest.fn()}
+    />
+  );
+  await u.click(screen.getByRole("button", { name: copy.trigger.label }));
+  const toggle = await screen.findByRole("switch", {
+    name: "Use Linear with this agent",
+  });
+  expect(toggle).toBeChecked();
+  expect(toggle).toHaveAttribute("aria-disabled", "true");
+  expect(
+    screen.getByText(messages.plugins.member.detail.switch.required)
+  ).toBeVisible();
 });
 
 test("says when the agent has no plugins with integrations", async () => {

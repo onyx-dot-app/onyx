@@ -512,6 +512,7 @@ spec:
             - --dial-max-streams={{ $agent.dialMaxStreams | default 64 | int64 }}
             - --max-vms={{ (hasKey $agent "maxVms" | ternary $agent.maxVms 60) | int64 }}
             - --slice-memory-percent={{ $slicePercent }}
+            - --starting-mem-divisor={{ (hasKey $agent "startingMemDivisor" | ternary $agent.startingMemDivisor 2) | int64 }}
             {{- with $allowedSans }}
             - --client-allowed-sans={{ . }}
             {{- end }}

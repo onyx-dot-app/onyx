@@ -15,6 +15,7 @@ from onyx.file_store.models import (
 )
 from onyx.integrations.models import ActionSettings, ApprovalMode
 from onyx.tools.constants import FILE_READER_MAX_CHARS
+from onyx.tools.tool_implementations.sandbox.models import PublishedFile
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
 
@@ -382,6 +383,8 @@ class ToolCallInfo(BaseModel):
     generated_files: list[PythonExecutionFile] | None = None
     # File-store ids of blobs custom tools saved during the call.
     generated_file_ids: list[str] | None = None
+    # Files that publish_files copied from the sandbox during the call.
+    published_files: list[PublishedFile] | None = None
 
     @property
     def execution_key(self) -> tuple[str, str]:

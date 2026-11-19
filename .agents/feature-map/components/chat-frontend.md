@@ -64,7 +64,7 @@
   card then becomes a one-line record of the outcome, or of "No longer
   waiting" when the server returns 409 or 404. The record shows in the region
   until the resolution packet arrives; from then on the reply's timeline
-  shows it next to its tool call (`AgentMessage`, `orderRecordsByTurn`), and
+  shows it next to its tool call (`AgentMessage:buildSectionSegments`), and
   a reload replays it there. While the turn waits, its stream ends with
   `stop(awaiting_user)` and the chat goes idle. That stop pauses the
   answer: `processPackets` does not count it. No stop changes a card: the
@@ -185,6 +185,13 @@
   answer gets its own part. If the stream drops while the run continues, the
   chat attaches again and later output, such as an approval card, still
   appears.
+- **The model publishes files from its sandbox.** Each published file shows
+  as a download card after the answer, with its title (else its file name),
+  type and size. A click opens the file preview; HTML shows as source, never
+  as a rendered page. A later publish of a file with the same name in the
+  same answer adds a card marked as an updated version. The timeline step lists the
+  files that the call asked for and how it ended. Shared chats show the same
+  cards.
 - **A user rates, copies or shares an answer.** Copy turns markdown tables into
   tab-separated text so a spreadsheet keeps the columns. Each answer table
   also has its own copy button, which writes HTML with links and full source
@@ -344,11 +351,16 @@ that arrive first do not decide the kind. `buildGroupsFromKeys` drops a group wi
 `CONTENT_PACKET_TYPES_SET`. Citation and stop packets update state instead of
 making their own step. Generated images accumulate across tool steps, unique
 by file ID, and render once above the answer as soon as they arrive. Later tool
-calls do not hide them. An image call does not mark the
+calls do not hide them. Published files work the same way: each
+`publish_files_end` adds its files, unique by file ID, to
+`ProcessorState.publishedFiles` with a version per file name, and
+`AgentMessage` shows them after the answer of their section
+(`sections/chat/PublishedFileCards.tsx`, which opens `PreviewModal` and
+downloads from `/api/chat/file/{file_id}`). An image call does not mark the
 answer as final; later search or image calls can continue the timeline.
 
 A group closes on its own parent-level `SECTION_END` or `ERROR`
-(`app/app/message/messageComponents/timeline/packetHelpers.ts:isGroupEndPacket`,
+(`lib/timeline/chat/packetHelpers.ts:isGroupEndPacket`,
 shared by `isToolComplete` and the packet processor); a new `turn_index` or a
 stop packet adds a parent-level `SECTION_END` to each open group. A stop
 packet also ends each open nested call, because no packet follows it. A code
@@ -363,13 +375,13 @@ carry the parent's key plus `sub_turn_index`, so they join the parent group,
 and their `SECTION_END` or `ERROR` does not close it. A nested `MESSAGE_START`
 does not start the answer.
 The packet processor splits each group once
-(`app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:buildGroupsFromKeys`).
+(`lib/timeline/chat/hooks/packetProcessor.ts:buildGroupsFromKeys`).
 `GroupedPacket.packets` holds only the group's own packets. The step-kind checks
-in `app/app/message/messageComponents/timeline/packetHelpers.ts`,
+in `lib/timeline/chat/packetHelpers.ts`,
 `findRenderer`, the header, and `isToolComplete` read only these, so a research
 step with a nested search is a research step, not a search step.
 `GroupedPacket.nestedCalls` holds the nested calls, made with
-`app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
+`lib/timeline/chat/packetHelpers.ts:nestedCallSnapshot`.
 Each `NestedCall` holds one call's packets placed at parent level, so the tool's
 own renderer reads it as a direct call. The snapshot reuses the object of each
 unchanged call, so memoized renderers of finished calls do not redraw.
@@ -398,12 +410,12 @@ The mobile app copies the group end and step-kind rules in
 
 **Code mode steps.** Code mode runs behind the scenes: the timeline shows the
 tool calls a program makes, not the program.
-`app/app/message/messageComponents/timeline/transformers.ts:expandCodeModeSteps`
+`lib/timeline/chat/transformers.ts:expandCodeModeSteps`
 turns each nested call of an `execute_code` or `wait_code` group into its own
 step, drawn by that tool's renderer as a direct call would be. The packet
 processor adds each nested packet to its call as the packet arrives, and after
 each processed batch builds `GroupedPacket.nestedCalls` for each group with
-`app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
+`lib/timeline/chat/packetHelpers.ts:nestedCallSnapshot`.
 It reuses the `NestedCall` object of each unchanged call, and
 `expandCodeModeSteps` reuses the step it made for that object, so memoized
 renderers of finished calls do not redraw. A call is its cell and
@@ -416,13 +428,17 @@ shows no step. `expandCodeModeSteps` returns the steps and `codeModeWorking`
 in one pass: a program runs from `code_mode_start` until a `code_mode_delta`
 reports a status, and a running program whose cell has no running call sets
 it. A yield (status `running`) ends the program's turn: the model acts next.
-`useTimelineUIState` takes `codeModeWorking`, so the header reads "Working"
-even when the last turn group is parallel.
+`useTimelineHeader` takes `codeModeWorking`, so the run header reads
+"Working" while the program runs between calls.
 The header names a step's activity from its own first packet; nested packets
 do not decide it. `TransformedStep.groupKey` keeps the packet group of a step,
 so pacing still knows restored steps. The expanded timeline renders one list
 keyed by step (a parallel group by its first step), not by position, because a
-cell's new call can move later steps into another turn group. Concurrent calls of one program show as
+cell's new call can move later steps into another turn group. The rail
+primitives, `StepContainer` and that list (`TimelineSteps`) live in
+`web/src/lib/timeline/`, which Craft shares ([[craft-frontend]]).
+`web/src/lib/timeline/chat/transformers.ts:groupStepsByTurn` gives every
+step its own group, in turn order. Concurrent calls of one program show as
 sequential steps, not parallel tabs: on replay the backend emits each call's
 packets one after another, and the saved calls have no start or end order, so
 the client cannot tell which calls overlapped. Mobile mirrors these transforms
@@ -586,7 +602,7 @@ up its own branding.
 
 1. `packet-list-append-only` **A message's packet list grows by appending,
    or is replaced.**
-   `app/app/message/messageComponents/timeline/hooks/usePacketProcessor.ts:usePacketProcessor`
+   `lib/timeline/chat/hooks/usePacketProcessor.ts:usePacketProcessor`
    processes only the packets past `nextPacketIndex`. It starts again when the
    `nodeId` changes, the list gets shorter, or the packet at the last processed
    index is a different object, as after a replay or a reload. So append to the
@@ -597,7 +613,7 @@ up its own branding.
    [[streaming-protocol]] lists the hand-mirrored places, including
    `findRenderer`. The web client keeps more hand-written sets that switch on
    `PacketType`, such as `app/app/services/packetUtils.ts:isToolPacket` and
-   `app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:CONTENT_PACKET_TYPES_SET`.
+   `lib/timeline/chat/hooks/packetProcessor.ts:CONTENT_PACKET_TYPES_SET`.
    To find all of them, run
    `git grep -l 'PacketType.FILE_READER_START' web/src`. Run it again for a
    type that behaves like the new one. Add the new type where a similar type

@@ -6,7 +6,8 @@ slow and unreliable at catching:
     BOUNDS    shape partially or fully off the slide canvas
     MARGIN    text content closer than the profile margin (0.5" standard /
               0.25" dense) to a slide edge
-    OVERFLOW  estimated text height/width exceeds its box (PIL font metrics)
+    OVERFLOW  text height/width exceeds its box (power-pptx text measurement,
+              with sizes inherited from the layout, master, and theme)
     OVERLAP   two text frames intersect, or text spills past its container
     CONTRAST  explicit text color vs. resolved solid background below WCAG-ish
               thresholds (image/theme backgrounds are skipped, not guessed)
@@ -15,35 +16,44 @@ slow and unreliable at catching:
 Precision over recall: thresholds are lenient and intentional-overlap
 patterns (text over pictures, shape-in-shape containment, full-bleed
 backgrounds) are allowlisted. Rotated shapes and group internals are skipped
-for geometric checks.
+for the geometric checks other than OVERFLOW, which measures every text frame.
 
 Output protocol (stdout):
-    Line 1: status — LINT_CLEAN, LINT_ISSUES <n_errors> <n_warnings>, or ERROR_NOT_FOUND
+    Line 1: status — LINT_CLEAN, LINT_ISSUES <n_errors> <n_warnings>, ERROR_NOT_FOUND,
+            or ERROR_MISSING_DEPENDENCY <package> (line 2 gives the install command)
     Lines 2+: one finding per line:
         slide N | shape "Name" (id=K) | SEVERITY CHECK | detail | text: "snippet"
 
-Exit code: 1 if any ERROR finding, 0 otherwise (2 on usage error).
+Exit code: 1 if any ERROR finding, 0 otherwise (2 on usage error or a missing
+dependency).
 
 Usage:
     python lint.py /path/to/file.pptx [--profile {standard,dense}]
 """
 
-import shutil
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import ImageFont
-from pptx import Presentation
-from pptx.enum.dml import MSO_COLOR_TYPE, MSO_FILL
-from pptx.enum.shapes import MSO_SHAPE_TYPE
-from pptx.enum.text import MSO_AUTO_SIZE
-from pptx.shapes.base import BaseShape
-from pptx.util import Emu
+try:
+    from power_pptx import Presentation
+    from power_pptx.enum.dml import MSO_COLOR_TYPE, MSO_FILL
+    from power_pptx.enum.shapes import MSO_SHAPE_TYPE
+    from power_pptx.enum.text import MSO_AUTO_SIZE
+    from power_pptx.lint import TextOverflow, lint_slide
+    from power_pptx.shapes.base import BaseShape
+    from power_pptx.slide import Slide
+    from power_pptx.text.fonts import find_font_file, register_font_family
+    from power_pptx.util import Emu
+except ModuleNotFoundError as e:
+    if e.name != "power_pptx":
+        raise
+    # A sandbox started from an older image runs this script without power-pptx.
+    print("ERROR_MISSING_DEPENDENCY power-pptx")
+    print("Run `pip install power-pptx==2.15.0`, then run lint.py again.")
+    sys.exit(2)
 
 EMU_PER_INCH = 914400
-EMU_PER_PT = 12700
 
 # --- Thresholds (lenient by design) ---
 MARGIN_MIN_EMU_BY_PROFILE = {
@@ -55,8 +65,33 @@ DEFAULT_PROFILE = "standard"
 FULL_BLEED_FRACTION = 0.9  # shape covering >=90% of a slide dimension is exempt
 BOUNDS_OVERSHOOT_EMU = int(0.1 * EMU_PER_INCH)  # ignore bleed smaller than this
 BOUNDS_ERROR_FRACTION = 0.35  # >35% of shape area off-slide is an ERROR
-OVERFLOW_WARN_RATIO = 1.1  # est. content > 110% of box height
+OVERFLOW_WARN_RATIO = 1.1  # measured text > 110% of the frame
 OVERFLOW_ERROR_RATIO = 1.35
+# Metric-compatible fonts the sandbox installs in place of Office fonts. Text is
+# measured with the stand-in when the Office font itself is not installed.
+METRIC_STAND_INS = {
+    "Calibri": "Carlito",
+    "Cambria": "Caladea",
+    "Arial": "Liberation Sans",
+    "Helvetica": "Liberation Sans",
+    "Times New Roman": "Liberation Serif",
+    "Courier New": "Liberation Mono",
+}
+# Every power-pptx lint rule except TextOverflow. Disabled rules are not run.
+POWER_PPTX_OTHER_RULES = (
+    "InvalidGeometry",
+    "LayerOrderViolation",
+    "LowContrast",
+    "MasterPlaceholderCollision",
+    "MinFontSize",
+    "OffGridDrift",
+    "OffSlide",
+    "OffSlideShadow",
+    "RaggedEdge",
+    "ShapeCollision",
+    "ShapeCollisionShadow",
+    "ZOrderAnomaly",
+)
 OVERLAP_MIN_DIM_EMU = int(0.1 * EMU_PER_INCH)
 OVERLAP_MIN_AREA_FRACTION = 0.15  # of the smaller shape
 CONTAINER_SPILL_EMU = int(0.1 * EMU_PER_INCH)
@@ -64,8 +99,6 @@ CONTRAST_ERROR_RATIO = 2.5
 CONTRAST_WARN_RATIO = 3.5  # slides are mostly large text; WCAG AA-large is 3:1
 FOOTER_MAX_HEIGHT_EMU = int(0.4 * EMU_PER_INCH)
 FOOTER_ZONE_FRACTION = 0.85  # shapes starting in the bottom 15% are footers
-LINE_SPACING_FACTOR = 1.2
-MEASURE_SCALE = 4  # render fonts at 4x pt size for sub-pixel width precision
 
 # Fonts installed (or metric-substituted) in the sandbox image, per SKILL.md.
 KNOWN_FONTS = {
@@ -200,177 +233,6 @@ def _is_line(shape) -> bool:
     return shape.shape_type == MSO_SHAPE_TYPE.LINE
 
 
-# --- Font measurement -------------------------------------------------------
-
-_font_file_cache: dict[tuple[str, bool], str | None] = {}
-_font_cache: dict[tuple[str, bool, int], ImageFont.ImageFont] = {}
-_HAS_FC_MATCH = shutil.which("fc-match") is not None
-
-
-def _find_font_file(family: str, bold: bool) -> str | None:
-    key = (family.lower(), bold)
-    if key in _font_file_cache:
-        return _font_file_cache[key]
-    path: str | None = None
-    if _HAS_FC_MATCH:
-        pattern = f"{family}:weight={'bold' if bold else 'regular'}"
-        try:
-            result = subprocess.run(
-                ["fc-match", "-f", "%{file}", pattern],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                path = result.stdout.strip()
-        except (OSError, subprocess.SubprocessError):
-            path = None
-    _font_file_cache[key] = path
-    return path
-
-
-def _load_font(family: str, size_pt: float, bold: bool) -> ImageFont.ImageFont:
-    px = max(int(round(size_pt * MEASURE_SCALE)), 4)
-    key = (family.lower(), bold, px)
-    cached = _font_cache.get(key)
-    if cached is not None:
-        return cached
-    font: ImageFont.ImageFont | None = None
-    path = _find_font_file(family, bold)
-    if path:
-        try:
-            font = ImageFont.truetype(path, px)
-        except OSError:
-            font = None
-    if font is None:
-        try:
-            font = ImageFont.load_default(px)  # scalable since Pillow 10.1
-        except TypeError:
-            font = ImageFont.load_default()
-    _font_cache[key] = font
-    return font
-
-
-def _text_width_pt(text: str, font: ImageFont.ImageFont, size_pt: float) -> float:
-    try:
-        return float(font.getlength(text)) / MEASURE_SCALE
-    except AttributeError:
-        # Bitmap fallback font: approximate with an average glyph width.
-        return len(text) * size_pt * 0.55
-
-
-# --- Paragraph layout estimation --------------------------------------------
-
-
-def _run_size_pt(run, para) -> float | None:
-    size = run.font.size
-    if size is None:
-        size = para.font.size
-    return float(size.pt) if size is not None else None
-
-
-def _para_font(para) -> tuple[str, float, bool] | None:
-    """Dominant (family, size_pt, bold) for a paragraph.
-
-    Returns None when no run carries an explicit size — inherited sizes
-    (theme/master/layout) are not resolved, and guessing produces false
-    overflow findings.
-    """
-    family = "Inter"
-    size_pt = 0.0
-    bold = False
-    for run in para.runs:
-        rs = _run_size_pt(run, para)
-        if rs is not None and rs > size_pt:
-            size_pt = rs
-            family = run.font.name or para.font.name or family
-            bold = bool(run.font.bold)
-    if size_pt == 0.0:
-        pf = para.font
-        if pf.size is None:
-            return None
-        size_pt = float(pf.size.pt)
-        family = pf.name or family
-        bold = bool(pf.bold)
-    return family, size_pt, bold
-
-
-def _wrap_line_count(
-    text: str, usable_w_pt: float, font: ImageFont.ImageFont, size_pt: float
-) -> int:
-    if not text.strip():
-        return 1
-    lines = 0
-    space_w = _text_width_pt(" ", font, size_pt)
-    # Hard line breaks (a:br) surface as "\v" in python-pptx paragraph text.
-    for hard_line in text.replace("\v", "\n").split("\n"):
-        lines += 1
-        current = 0.0
-        for word in hard_line.split():
-            w = _text_width_pt(word, font, size_pt)
-            # a single over-wide word char-wraps; don't explode
-            w = min(w, usable_w_pt)
-            if current > 0 and current + space_w + w > usable_w_pt:
-                lines += 1
-                current = w
-            else:
-                current = current + (space_w if current > 0 else 0.0) + w
-    return lines
-
-
-def _estimate_text_extent(shape, box: Box) -> tuple[float, float, float, float] | None:
-    """Return (est_height_emu, avail_height_emu, max_line_w_pt, usable_w_pt).
-
-    Returns None when any paragraph's font size can't be resolved from
-    explicit run/paragraph properties — the estimate would be a guess.
-    """
-    tf = shape.text_frame
-    usable_w_emu = box.width - int(tf.margin_left or 0) - int(tf.margin_right or 0)
-    avail_h_emu = box.height - int(tf.margin_top or 0) - int(tf.margin_bottom or 0)
-    usable_w_pt = max(usable_w_emu / EMU_PER_PT, 1.0)
-    wrap = tf.word_wrap is not False  # None (inherit) treated as wrapping
-
-    est_h_pt = 0.0
-    max_line_w_pt = 0.0
-    min_line_h_pt: float | None = None
-    for para in tf.paragraphs:
-        # para.text includes hard line breaks (a:br) as "\v", unlike para.runs.
-        text = para.text
-        if not text.strip():
-            continue  # blank spacer paragraph at unknown size — ignore
-        para_font = _para_font(para)
-        if para_font is None:
-            return None
-        family, size_pt, bold = para_font
-        font = _load_font(family, size_pt, bold)
-        if wrap:
-            lines = _wrap_line_count(text, usable_w_pt, font, size_pt)
-        else:
-            hard_lines = text.replace("\v", "\n").split("\n")
-            lines = len(hard_lines)
-            max_line_w_pt = max(
-                max_line_w_pt,
-                max(_text_width_pt(ln, font, size_pt) for ln in hard_lines),
-            )
-        line_h = size_pt * LINE_SPACING_FACTOR
-        spacing = para.line_spacing
-        if isinstance(spacing, float):
-            line_h = size_pt * LINE_SPACING_FACTOR * spacing
-        elif spacing is not None:  # Length
-            line_h = float(spacing.pt)
-        est_h_pt += lines * line_h
-        min_line_h_pt = line_h if min_line_h_pt is None else min(min_line_h_pt, line_h)
-        if para.space_before is not None:
-            est_h_pt += float(para.space_before.pt)
-        if para.space_after is not None:
-            est_h_pt += float(para.space_after.pt)
-    if min_line_h_pt is not None and avail_h_emu < 0.9 * min_line_h_pt * EMU_PER_PT:
-        # Box can't even fit one line: an intentional anchor/label pattern
-        # where text deliberately renders past the box, not a layout bug.
-        return None
-    return est_h_pt * EMU_PER_PT, float(avail_h_emu), max_line_w_pt, usable_w_pt
-
-
 # --- Color / contrast helpers ------------------------------------------------
 
 
@@ -405,10 +267,12 @@ def _solid_fill_rgb(shape) -> tuple[int, int, int] | None:
 
 def _fill_state(shape) -> str:
     """Classify a shape's fill: "solid_rgb", "none", or "unresolvable"."""
+    if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+        return "unresolvable"  # children could paint anything
     try:
         fill = shape.fill
     except (AttributeError, TypeError, ValueError):
-        return "unresolvable"  # groups etc. — children could paint anything
+        return "unresolvable"
     try:
         fill_type = fill.type
     except (AttributeError, TypeError, ValueError):
@@ -549,44 +413,45 @@ def check_margins(
     return findings
 
 
-def check_overflow(slide_no: int, shapes: list[tuple[BaseShape, Box]]) -> list[Finding]:
+def check_overflow(slide_no: int, slide: Slide) -> list[Finding]:
     findings: list[Finding] = []
-    for shape, box in shapes:
-        if not getattr(shape, "has_text_frame", False):  # ods: ignore[getattr]
+    try:
+        report = lint_slide(slide, disable=POWER_PPTX_OTHER_RULES)
+    except Exception as e:
+        # Report the gap, so that a failed measurement never reads as clean.
+        findings.append(
+            Finding(
+                slide_no,
+                "",
+                0,
+                "WARN",
+                "OVERFLOW",
+                f"text was not measured ({e!r}); check this slide visually",
+            )
+        )
+        return findings
+    for issue in report.issues:
+        if not isinstance(issue, TextOverflow) or issue.row is not None:
             continue
-        tf = shape.text_frame
-        if not tf.text.strip():
+        # Only grow-to-fit frames are skipped: PowerPoint grows the box. A
+        # shrink-to-fit frame is measured at its stored fontScale, because
+        # PowerPoint opens the deck at that scale and shrinks the text again
+        # only when the user edits it.
+        if issue.auto_size == "SHAPE_TO_FIT_TEXT":
             continue
-        if tf.auto_size in (
-            MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE,
-            MSO_AUTO_SIZE.SHAPE_TO_FIT_TEXT,
-        ):
-            continue  # PowerPoint will shrink text / grow the box
-        extent = _estimate_text_extent(shape, box)
-        if extent is None:
-            continue  # inherited font sizes — estimate would be a guess
-        est_h, avail_h, max_line_w_pt, usable_w_pt = extent
-        if avail_h <= 0:
+        if issue.ratio <= OVERFLOW_WARN_RATIO:
             continue
-        if tf.word_wrap is False:
-            if max_line_w_pt > 1.1 * usable_w_pt:
-                findings.append(
-                    Finding(
-                        slide_no,
-                        shape.name,
-                        shape.shape_id,
-                        "WARN",
-                        "OVERFLOW",
-                        f"no-wrap text est. {max_line_w_pt:.0f}pt wide in "
-                        f"{usable_w_pt:.0f}pt box",
-                        tf.text,
-                    )
-                )
-            continue
-        ratio = est_h / avail_h
-        if ratio <= OVERFLOW_WARN_RATIO:
-            continue
-        severity = "ERROR" if ratio > OVERFLOW_ERROR_RATIO else "WARN"
+        shape = issue.shapes[0]
+        severity = "ERROR" if issue.ratio > OVERFLOW_ERROR_RATIO else "WARN"
+        if issue.dimension == "width":
+            detail = f"no-wrap text needs {issue.ratio:.0%} of the box width"
+        else:
+            detail = (
+                f"text needs {issue.ratio:.0%} of the box height "
+                f"({issue.overflow_pt:.0f}pt too tall)"
+            )
+        if issue.estimated:
+            detail += ", estimated with fallback metrics for a missing font"
         findings.append(
             Finding(
                 slide_no,
@@ -594,9 +459,8 @@ def check_overflow(slide_no: int, shapes: list[tuple[BaseShape, Box]]) -> list[F
                 shape.shape_id,
                 severity,
                 "OVERFLOW",
-                f'est. text height {est_h / EMU_PER_INCH:.2f}" in '
-                f'{avail_h / EMU_PER_INCH:.2f}" box ({ratio:.0%})',
-                tf.text,
+                detail,
+                shape.text_frame.text,
             )
         )
     return findings
@@ -817,6 +681,30 @@ def lint_presentation(prs, profile: str = DEFAULT_PROFILE) -> tuple[list[Finding
     slide_w = int(prs.slide_width or Emu(int(10 * EMU_PER_INCH)))
     slide_h = int(prs.slide_height or Emu(int(7.5 * EMU_PER_INCH)))
 
+    # Registering a family clears power-pptx's font index, so look every
+    # file up before registering any.
+    stand_in_files = {
+        office_font: [
+            find_font_file(stand_in, bold=bold, italic=italic)
+            for bold, italic in (
+                (False, False),
+                (True, False),
+                (False, True),
+                (True, True),
+            )
+        ]
+        for office_font, stand_in in METRIC_STAND_INS.items()
+        if find_font_file(office_font) is None
+    }
+    for office_font, (regular, bold, italic, bold_italic) in stand_in_files.items():
+        if regular:
+            register_font_family(
+                office_font,
+                regular=regular,
+                bold=bold,
+                italic=italic,
+                bold_italic=bold_italic,
+            )
     findings: list[Finding] = []
     total_skipped = 0
     for slide_no, slide in enumerate(prs.slides, start=1):
@@ -833,7 +721,7 @@ def lint_presentation(prs, profile: str = DEFAULT_PROFILE) -> tuple[list[Finding
                 slide_no, shapes, slide_w, slide_h, margin_min_emu, margin_nominal_in
             )
         )
-        findings.extend(check_overflow(slide_no, shapes))
+        findings.extend(check_overflow(slide_no, slide))
         findings.extend(check_overlap(slide_no, shapes, slide_w, slide_h))
         contrast_findings, skipped = check_contrast(slide_no, slide, shapes)
         findings.extend(contrast_findings)

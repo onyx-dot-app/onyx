@@ -11,7 +11,7 @@ from onyx.db.enums import (
     SkillAccessLevel,
     SkillSharePermission,
 )
-from onyx.db.models import Skill, User
+from onyx.db.models import Plugin, Skill, User
 from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
 )
@@ -22,7 +22,12 @@ from onyx.db.plugin_access import (
     plugin_ids_in_managed_scope,
 )
 from onyx.db.scoped_permissions import fetch_managed_group_ids
-from onyx.db.skill import SkillUserState, may_delete_skill, skill_user_states
+from onyx.db.skill import (
+    SkillUserState,
+    StoredSkill,
+    may_delete_skill,
+    skill_user_states,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.models import (
@@ -47,25 +52,16 @@ logger = setup_logger()
 
 
 def user_permission_for_skill(
-    skill: Skill,
-    access: PluginAccess | None,
+    access: PluginAccess,
     user: User,
     user_group_ids: set[int],
     in_managed_scope: bool = False,
 ) -> SkillAccessLevel | None:
-    """Read-side mirror of ``_is_editable_by_user``; the two must agree or the UI
-    offers actions the write path rejects. ``access`` holds the plugin grants of
-    a custom skill; ``in_managed_scope`` is ``plugin_in_managed_scope`` for a
-    group manager. There is no organization-wide edit."""
-    if not skill.is_custom:
-        return SkillAccessLevel.VIEWER
-    if access is None:
-        return (
-            SkillAccessLevel.EDITOR
-            if has_global_permission(user, Permission.MANAGE_PLUGINS)
-            else None
-        )
-
+    """Read-side mirror of ``onyx.db.skill.fetch_editable_skill``; the two must
+    agree or the UI offers actions the write path rejects. ``access`` holds the
+    plugin grants of a custom skill; ``in_managed_scope`` is
+    ``plugin_in_managed_scope`` for a group manager. There is no
+    organization-wide edit."""
     if access.author_user_id == user.id:
         return SkillAccessLevel.OWNER
 
@@ -88,6 +84,13 @@ def user_permission_for_skill(
     return None
 
 
+def _access_of(plugin: Plugin, plugin_access: dict[UUID, PluginAccess]) -> PluginAccess:
+    access = plugin_access.get(plugin.id)
+    if access is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    return access
+
+
 def _managed_scope(
     user: User, skill_ids: Iterable[UUID], db_session: Session
 ) -> tuple[set[int], set[UUID]]:
@@ -104,15 +107,13 @@ def _managed_scope(
 
 
 def _group_summaries(
-    access: PluginAccess | None,
+    access: PluginAccess,
     user_permission: SkillAccessLevel | None,
     managed_user_group_ids: set[int] | None,
 ) -> list[SkillGroupSummary]:
     """The group rows the caller may see: every row for a user who may edit
     the skill (the rule of the share details), else the rows of the groups a
     scoped manager manages."""
-    if access is None:
-        return []
     can_edit = user_permission in (SkillAccessLevel.OWNER, SkillAccessLevel.EDITOR)
     managed = managed_user_group_ids or set()
     return [
@@ -128,7 +129,7 @@ def _group_summaries(
 
 
 def skill_response_for_user(
-    skill: Skill,
+    skill: StoredSkill,
     user: User,
     db_session: Session,
     *,
@@ -144,8 +145,8 @@ def skill_response_for_user(
     so the edit base; by default the plugin's current version."""
     if state is None:
         state = skill_user_states(user, [skill.id], db_session)[skill.id]
-    if skill.built_in_skill_id is not None:
-        definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
+    if isinstance(skill, Skill):
+        definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id or "")
         if definition is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
         return SkillResponse.from_builtin(
@@ -164,11 +165,11 @@ def skill_response_for_user(
         )
     if plugin_access is None:
         plugin_access = load_plugin_access([skill.id], user.id, db_session)
-    access = plugin_access.get(skill.id)
-    if shown_version_id is None and access is not None:
+    access = _access_of(skill, plugin_access)
+    if shown_version_id is None:
         shown_version_id = access.current_version_id
     user_permission = user_permission_for_skill(
-        skill, access, user, user_group_ids, skill.id in managed_scope_ids
+        access, user, user_group_ids, skill.id in managed_scope_ids
     )
     return SkillResponse.from_custom(
         skill,
@@ -179,15 +180,15 @@ def skill_response_for_user(
         user_permission=user_permission,
         can_delete=user_permission in (SkillAccessLevel.OWNER, SkillAccessLevel.EDITOR)
         and may_delete_skill(
-            published=access is not None and access.published,
-            required_for_anyone=access is not None and access.required_for_anyone,
+            published=access.published,
+            required_for_anyone=access.required_for_anyone,
             user=user,
         ),
         include_share_details=include_share_details,
         # Edit access from managed scope alone shows only the managed groups.
         group_summaries=_group_summaries(
             access,
-            user_permission_for_skill(skill, access, user, user_group_ids),
+            user_permission_for_skill(access, user, user_group_ids),
             managed_user_group_ids,
         ),
         current_version_id=shown_version_id,
@@ -195,34 +196,31 @@ def skill_response_for_user(
 
 
 def skills_list_response_for_user(
-    rows: list[Skill],
+    rows: list[StoredSkill],
     user: User,
     db_session: Session,
 ) -> SkillsList:
     builtins: list[SkillResponse] = []
     customs: list[SkillResponse] = []
+    custom_ids = [skill.id for skill in rows if isinstance(skill, Plugin)]
     user_group_ids = get_user_group_ids_for_user(db_session, user.id)
     managed_user_group_ids, managed_scope_ids = _managed_scope(
-        user, (skill.id for skill in rows if skill.is_custom), db_session
+        user, custom_ids, db_session
     )
     states = skill_user_states(user, (skill.id for skill in rows), db_session)
-    plugin_access = load_plugin_access(
-        (skill.id for skill in rows if skill.is_custom), user.id, db_session
-    )
+    plugin_access = load_plugin_access(custom_ids, user.id, db_session)
     for skill in rows:
-        if (
-            skill.built_in_skill_id is not None
-            and skill.built_in_skill_id not in BUILT_IN_SKILLS
-        ):
-            logger.warning(
-                "Skill row %s references unknown built-in %s; hiding from listing",
-                skill.name,
-                skill.built_in_skill_id,
-            )
-            continue
-        # An app built-in the user does not get.
-        if skill.built_in_skill_id is not None and not states[skill.id].enabled:
-            continue
+        if isinstance(skill, Skill):
+            if skill.built_in_skill_id not in BUILT_IN_SKILLS:
+                logger.warning(
+                    "Skill row %s references unknown built-in %s; hiding from listing",
+                    skill.name,
+                    skill.built_in_skill_id,
+                )
+                continue
+            # An app built-in the user does not get.
+            if not states[skill.id].enabled:
+                continue
 
         response = skill_response_for_user(
             skill,
@@ -234,18 +232,18 @@ def skills_list_response_for_user(
             managed_scope_ids=managed_scope_ids,
             plugin_access=plugin_access,
         )
-        (customs if skill.is_custom else builtins).append(response)
+        (customs if isinstance(skill, Plugin) else builtins).append(response)
 
     return SkillsList(builtins=builtins, customs=customs)
 
 
 def skill_preview_response(
-    skill: Skill,
+    skill: StoredSkill,
     user: User,
     db_session: Session,
 ) -> SkillPreviewResponse:
-    if skill.built_in_skill_id is not None:
-        definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
+    if isinstance(skill, Skill):
+        definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id or "")
         if definition is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
         app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
@@ -264,9 +262,7 @@ def skill_preview_response(
             instructions_markdown=instructions,
         )
 
-    access = load_plugin_access([skill.id], user.id, db_session).get(skill.id)
-    if access is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill has no plugin version.")
+    access = _access_of(skill, load_plugin_access([skill.id], user.id, db_session))
     return SkillPreviewResponse.from_custom(
         skill,
         access,

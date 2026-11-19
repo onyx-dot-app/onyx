@@ -19,7 +19,6 @@ from onyx.db.models import (
     Plugin__Integration,
     Plugin__User,
     PluginVersion,
-    Skill,
     User,
 )
 from onyx.db.plugin import (
@@ -27,15 +26,14 @@ from onyx.db.plugin import (
     PluginAccessChange,
     PluginUserGrant,
     apply_plugin_access_change__no_commit,
-    create_skill_plugin__no_commit,
     get_or_create_user_uploads__no_commit,
-    legacy_skill_version_content,
     publish_plugin__no_commit,
 )
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.craft.db_helpers import make_skill
 
 
 def _private_integration_plugin(db_session: Session, owner: User) -> Plugin:
@@ -77,21 +75,7 @@ def _private_integration_plugin(db_session: Session, owner: User) -> Plugin:
 
 
 def _skill(db_session: Session, name: str, author: User) -> UUID:
-    skill_id = uuid4()
-    skill = Skill(
-        id=skill_id,
-        name=name,
-        description="",
-        bundle_file_id=f"plugins-{skill_id.hex}",
-        bundle_sha256="0" * 64,
-        author_user_id=author.id,
-    )
-    db_session.add(skill)
-    db_session.flush()
-    create_skill_plugin__no_commit(
-        skill, legacy_skill_version_content(skill), None, db_session
-    )
-    return skill_id
+    return make_skill(db_session, name=name, author_user_id=author.id).id
 
 
 @pytest.mark.usefixtures("tenant_context")

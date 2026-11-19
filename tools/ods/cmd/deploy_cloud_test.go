@@ -3,10 +3,6 @@ package cmd
 // Command states for deployCloud. Tag computation and validation are tested
 // in internal/release; these tests pin the command-level flow.
 //
-//	E1 dry run                               -> prints tag, creates nothing,
-//	                                            returns no pushed tag           TestDeployCloud_dryRunCreatesNothing
-//	E2 real run                              -> tag on origin at origin/main,
-//	                                            tag name returned               TestDeployCloud_tagsOriginMainHead
 //	E3 push rejected by origin               -> local tag rolled back,
 //	                                            returns no pushed tag           TestDeployCloud_pushFailureRollsBackLocalTag
 //	E4 counter tag only on origin            -> fetched, counter continues,
@@ -15,9 +11,10 @@ package cmd
 //	E6 --attach with malformed or empty tag  -> rejected before any gh work     TestDeployCloud_attachRejectsMalformedTag
 //	E7 --attach with a cut-flow flag         -> rejected before any gh work     TestDeployCloud_attachRejectsCutFlowFlags
 //	E8 --attach with a valid tag             -> watches the tag, cuts nothing   TestDeployCloud_attachWatchesWithoutCutting
-//	E9 real run, with and without --no-watch -> pushes, then announces or
-//	                                            watches the tag's pipeline;
-//	                                            a dry run watches nothing       TestDeployCloud_pushThenAnnounceOrWatch
+//	E9 real run, with and without --no-watch -> pushes origin/main, then
+//	                                            announces or watches the tag's
+//	                                            pipeline; a dry run prints the
+//	                                            tag and creates nothing         TestDeployCloud_pushThenAnnounceOrWatch
 
 import (
 	"io"
@@ -27,45 +24,6 @@ import (
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
 )
-
-func TestDeployCloud_dryRunCreatesNothing(t *testing.T) {
-	// Precondition.
-	repo := gittest.SetupReleaseBranchRepo(t)
-
-	// Under test.
-	tag, err := deployCloud(&DeployCloudOptions{Ref: "origin/main", DryRun: true, Yes: true})
-
-	// Postcondition.
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if tag != "" {
-		t.Errorf("dry run must return no pushed tag, got %q", tag)
-	}
-	if gittest.TagExists(repo.Work, "v4.6.0-cloud.0") || gittest.TagExists(repo.Origin, "v4.6.0-cloud.0") {
-		t.Error("dry run must not create the tag")
-	}
-}
-
-func TestDeployCloud_tagsOriginMainHead(t *testing.T) {
-	// Precondition.
-	repo := gittest.SetupReleaseBranchRepo(t)
-
-	// Under test.
-	tag, err := deployCloud(&DeployCloudOptions{Ref: "origin/main", Yes: true})
-
-	// Postcondition.
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if tag != "v4.6.0-cloud.0" {
-		t.Errorf("expected pushed tag v4.6.0-cloud.0, got %q", tag)
-	}
-	taggedSHA := gittest.Git(t, repo.Origin, "rev-parse", "refs/tags/v4.6.0-cloud.0^{commit}")
-	if taggedSHA != repo.PostCutSHA {
-		t.Errorf("expected origin tag at %s, got %s", repo.PostCutSHA, taggedSHA)
-	}
-}
 
 func TestDeployCloud_fetchesRemoteOnlyCounterTags(t *testing.T) {
 	// Precondition.
@@ -251,6 +209,13 @@ func TestDeployCloud_pushThenAnnounceOrWatch(t *testing.T) {
 			}
 			if pushed := gittest.TagExists(repo.Origin, tag); pushed != c.wantPushed {
 				t.Errorf("expected %s on origin: %v, got %v", tag, c.wantPushed, pushed)
+			}
+			if c.wantPushed {
+				if sha := gittest.Git(t, repo.Origin, "rev-parse", "refs/tags/"+tag+"^{commit}"); sha != repo.PostCutSHA {
+					t.Errorf("expected origin tag at %s, got %s", repo.PostCutSHA, sha)
+				}
+			} else if gittest.TagExists(repo.Work, tag) {
+				t.Errorf("dry run must not create %s locally", tag)
 			}
 			if got := out.printed(t); got != c.wantStdout {
 				t.Errorf("expected stdout %q, got %q", c.wantStdout, got)

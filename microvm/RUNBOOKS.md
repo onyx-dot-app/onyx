@@ -323,8 +323,45 @@ Compare "Guest memory allocated vs node memory" on the dashboard. When "in use" 
 - Drain the node (see "Drain a node") if one node stays full and others have space.
 - Stop VMs that the api_server does not know (see "Purge data").
 
-**Escalate** when VMs on the node are OOM-killed (`EXITED` in `agent List`, OOM in the node
-kernel log), or when host processes other than VMs use the memory.
+**Escalate** when VMs on the node are OOM-killed (`CraftFcVMOOMKills`), or when host processes
+other than VMs use the memory.
+
+### CraftFcVMOOMKills
+
+**Meaning.** The kernel OOM-killed a Firecracker process on one node in the last 15 minutes. That VM
+stopped (`EXITED`). One of three limits was hit: the VM's own scope limit (guest memory + overhead), the
+VM slice limit (`--slice-memory-percent`), or the node's memory (a node-wide OOM).
+
+**Check.**
+
+```bash
+agent NodeInfo   # mem_available_mib, mem_starting_mib
+agent List       # EXITED VMs
+# On the node:
+dmesg | grep 'oom-kill:'
+cat /sys/fs/cgroup/fcvms.slice/memory.events.local /sys/fs/cgroup/fcvms.slice/memory.max
+```
+
+The VM scope is gone after the kill, so read the kernel's `oom-kill:` line:
+
+- `constraint=CONSTRAINT_MEMCG` with `oom_memcg=/fcvms.slice/fcvm-<id>.scope`: the VM's own limit.
+- `constraint=CONSTRAINT_MEMCG` with `oom_memcg=/fcvms.slice`: the slice limit.
+- `constraint=CONSTRAINT_NONE`: the node ran out of memory.
+
+The kernel counts `oom_kill` in the cgroup of the killed process, so the slice's `oom_kill` does not
+tell which limit was hit. `oom` in the slice's `memory.events.local` counts the times that the slice
+itself reached its limit.
+
+**Fix.**
+
+- Slice limit: set `craft.hostAgent.startingMemDivisor` lower (1 counts each starting VM at its full
+  memory), lower `craft.hostAgent.maxVms`, or add nodes.
+- One VM over its own limit: the workload needs more memory than the VM has. Raise the template memory
+  (`--template-mem-mib`) only after a measurement.
+- Node-wide: something outside the slice uses the memory, or the slice limit is too high for the node.
+  Check `kubectl top node` and lower `craft.hostAgent.sliceMemoryPercent`.
+
+**Escalate** when kills continue after the divisor is 1, or when no VM was near its limit.
 
 ### CraftFcTemplateUnusable
 

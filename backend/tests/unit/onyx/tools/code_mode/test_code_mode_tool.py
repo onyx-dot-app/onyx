@@ -573,6 +573,24 @@ def test_preferences_name_a_tool_as_its_program_function() -> None:
     assert tool.operation_names(CapabilityEntry(tool_id=8)) == []
 
 
+def test_description_names_deferred_tool_groups_for_any_tool() -> None:
+    description = (
+        _make_tool(
+            FakeTool(
+                "refund",
+                echo,
+                exposure=CodeModeExposure.DEFERRED,
+                namespace="billing",
+            ),
+            FakeTool("archive", echo, exposure=CodeModeExposure.DEFERRED),
+        )
+        .tool_definition()
+        .description
+    )
+    assert "those of the tool group `billing`, other tools." in description
+    assert "MCP" not in description
+
+
 def test_without_deferred_functions_there_is_no_tool_search() -> None:
     tool = _make_tool()
     assert "tool_search" not in tool.tool_definition().description

@@ -9,23 +9,19 @@ durable cache records (`harness_state`), so any API pod can serve
 a user's sandbox keeps (Onyx delete hooks call them through `purge`).
 """
 
-import mimetypes
-import posixpath
 import random
 import secrets
 import time
 from collections.abc import Generator, Sequence
-from io import BytesIO
+from typing import IO
 from uuid import UUID
 
 import grpc
 
 from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
-from onyx.configs.constants import FileOrigin
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.cancellation import CancellationSignal, current_cancellation
 from onyx.microvm.agent_client import (
     HostAgentClientFactory,
@@ -89,19 +85,16 @@ from onyx.server.features.build.sandbox.exec_output import (
     ExecOutputBuffer,
 )
 from onyx.server.features.build.sandbox.firecracker.harness_state import (
-    ARTIFACTS_PREFIX,
     EXEC_SESSIONS_PREFIX,
     SANDBOX_STATE_PREFIXES,
     SAVED_SESSIONS_PREFIX,
     SESSION_INSTANCES_PREFIX,
-    add_id,
     forget_session_on_instances,
     get_exec_session,
     get_ids,
     get_session_save,
     has_marks,
     has_session_records,
-    is_sandbox_purged,
     last_attempt,
     mark_purged,
     mark_session_on_instance,
@@ -109,7 +102,6 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     put_exec_session,
     record_attempt,
     remove_exec_session,
-    remove_id,
     sessions_on_instance,
     set_mark,
 )
@@ -133,6 +125,7 @@ from onyx.server.features.build.sandbox.firecracker.session_saves import (
 from onyx.server.features.build.sandbox.harness_base import (
     EXEC_DEFAULT_ENV,
     INTERRUPT_CHAR,
+    ONYX_VM_FILES_ROOT,
     ExecCapReachedError,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
@@ -141,6 +134,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     SandboxFileNotFoundError,
     SandboxFileTooLargeError,
     SandboxPathError,
+    onyx_vm_path,
     session_relative_path,
     session_workspace,
 )
@@ -169,8 +163,6 @@ WAKE_RETRY_SECONDS = 10.0
 TURN_LEASE_SECONDS = 15 * 60.0
 # A parked approval keeps the sandbox busy for at most this long.
 APPROVAL_PARK_SECONDS = 24 * 3600.0
-# Largest session file that publish_artifact copies to the file store.
-PUBLISH_MAX_BYTES = 100 << 20
 # One Init per VM instance across API pods: a second Init resets egress
 # connections that a command of the first may already use.
 _INIT_LOCK_PREFIX = "sandbox_fc_harness_init:"
@@ -836,19 +828,39 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             )
         return True
 
-    # Files (paths relative to the session directory)
+    # Files (paths relative to the session directory; read_file and
+    # write_onyx_file also take paths under ONYX_VM_FILES_ROOT)
 
     def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
-        rel = session_relative_path(ref, path)
-        _, daemon = self._session_vm(ref)
+        onyx_path = onyx_vm_path(path)
+        if onyx_path is not None:
+            # With no session ID the daemon reads the path in its onyx root,
+            # and no session is restored.
+            session_id, target = "", onyx_path
+            daemon = sandbox_daemon(self._client_factory, self._place(ref))
+        else:
+            try:
+                target = session_relative_path(ref, path)
+            except SandboxPathError as e:
+                raise SandboxPathError(
+                    f"{path!r} is not in the working directory or under "
+                    f"{ONYX_VM_FILES_ROOT}; copy the file into the working "
+                    "directory first"
+                ) from e
+            session_id = str(ref.session_id)
+            _, daemon = self._session_vm(ref)
         # Dropping the chunk iterator unread cancels the stream.
         try:
             info, chunks = daemon.read_file(
-                session_id=str(ref.session_id), path=rel, length=max_bytes + 1
+                session_id=session_id, path=target, length=max_bytes + 1
             )
         except SandboxDaemonError as e:
             if e.reason is SandboxDaemonErrorReason.FILE_NOT_FOUND:
                 raise SandboxFileNotFoundError(path) from e
+            if e.reason is SandboxDaemonErrorReason.INVALID_ARGUMENT:
+                # Not a regular file, a link out of its root, or a denied
+                # path; the daemon's message names the path.
+                raise HarnessSandboxError(e.message) from e
             raise
         data = b"" if info.size > max_bytes else b"".join(chunks)
         if info.size > max_bytes or len(data) > max_bytes:
@@ -858,7 +870,12 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         return data
 
     def write_file(
-        self, ref: HarnessSandboxRef, path: str, data: bytes, *, mode: int = 0o644
+        self,
+        ref: HarnessSandboxRef,
+        path: str,
+        data: bytes | IO[bytes],
+        *,
+        mode: int = 0o644,
     ) -> None:
         rel = session_relative_path(ref, path)
         if not rel:
@@ -871,6 +888,18 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             )
         self._session_vm(ref)[1].write_file(
             session_id=str(ref.session_id), path=rel, data=data, mode=mode
+        )
+
+    def write_onyx_file(
+        self, ref: HarnessSandboxRef, path: str, data: bytes | IO[bytes]
+    ) -> None:
+        normalized = onyx_vm_path(path)
+        if normalized is None:
+            raise SandboxPathError(f"{path!r} is not under {ONYX_VM_FILES_ROOT}/")
+        # With no session ID the daemon takes the absolute path, and no
+        # session is restored.
+        sandbox_daemon(self._client_factory, self._place(ref)).write_file(
+            session_id="", path=normalized, data=data
         )
 
     def stat_files(
@@ -932,45 +961,6 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             session_id=str(ref.session_id), path=rel
         )
 
-    def publish_artifact(
-        self, ref: HarnessSandboxRef, path: str, *, display_name: str | None = None
-    ) -> str:
-        rel = session_relative_path(ref, path)
-        data = self.read_file(ref, rel, max_bytes=PUBLISH_MAX_BYTES)
-        name = display_name or posixpath.basename(rel)
-        # The file store keys and records the file under the context tenant.
-        with tenant_scope(ref.tenant_id):
-            file_id = get_default_file_store().save_file(
-                content=BytesIO(data),
-                display_name=name,
-                file_origin=FileOrigin.OTHER,
-                file_type=mimetypes.guess_type(name)[0] or "application/octet-stream",
-                file_metadata={
-                    "source": "craft_sandbox",
-                    "session_id": str(ref.session_id),
-                    "path": rel,
-                },
-            )
-        # A session delete keeps artifacts; a sandbox purge deletes them.
-        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
-        try:
-            add_id(tenant_cache, ARTIFACTS_PREFIX, ref.sandbox_id, file_id)
-        except Exception:
-            # The file is saved; only a later sandbox purge misses it.
-            logger.warning(
-                "sandbox_fc_artifact_index_failed sandbox=%s file=%s",
-                ref.sandbox_id,
-                file_id,
-                exc_info=True,
-            )
-        # A sandbox purge that read the index before this publish ended.
-        if is_sandbox_purged(tenant_cache, ref.sandbox_id):
-            with tenant_scope(ref.tenant_id):
-                get_default_file_store().delete_file(file_id, error_on_missing=False)
-            remove_id(tenant_cache, ARTIFACTS_PREFIX, ref.sandbox_id, file_id)
-            raise HarnessSandboxError("The sandbox was deleted.")
-        return file_id
-
     # Purge (delete hooks). Each step runs even when an earlier one failed;
     # the call raises at the end if any step failed.
 
@@ -983,9 +973,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         retention: bool = False,
     ) -> None:
         """Delete a chat session's save, its directory on the running VM and
-        its exec records. Its published artifacts stay. A session that never
-        used the sandbox costs a few cache reads. `retention`: see
-        `mark_purged`."""
+        its exec records. A session that never used the sandbox costs a few
+        cache reads. `retention`: see `mark_purged`."""
         tenant_cache = get_cache_backend(tenant_id=tenant_id)
         mark_purged(tenant_cache, session_id=session_id, retention=retention)
         # A session gets a directory only on a VM instance that records it;
@@ -1065,8 +1054,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         session_ids: list[UUID] | None = None,
     ) -> None:
         """Stop the sandbox's VM (the agent deletes its disk) and delete
-        every save, artifact and record of the sandbox. `session_ids` adds
-        sessions that the saved-session index may not name."""
+        every save and record of the sandbox. `session_ids` adds sessions
+        that the saved-session index may not name."""
         tenant_cache = get_cache_backend(tenant_id=tenant_id)
         mark_purged(tenant_cache, sandbox_id=sandbox_id)
         # A stop that saves the sandbox now gives way to the purge.
@@ -1090,17 +1079,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     )
                 except Exception as e:
                     errors.append(e)
-            for file_id in get_ids(tenant_cache, ARTIFACTS_PREFIX, sandbox_id):
-                try:
-                    get_default_file_store().delete_file(
-                        file_id, error_on_missing=False
-                    )
-                    remove_id(tenant_cache, ARTIFACTS_PREFIX, sandbox_id, file_id)
-                except Exception as e:
-                    errors.append(e)
         clear_sandbox_reservation(tenant_cache, sandbox_id)
         clear_sandbox_daemon_key(tenant_cache, sandbox_id)
-        # The saved-session and artifact indexes keep what failed, for a retry.
+        # The saved-session index keeps what failed, for a retry.
         for prefix in SANDBOX_STATE_PREFIXES:
             tenant_cache.delete(prefix + str(sandbox_id))
         _raise_first(errors, f"sandbox {sandbox_id}")

@@ -37,6 +37,7 @@ _ALERTS = [
     "CraftFcSessionTransferFailures",
     "CraftFcRelayErrors",
     "CraftFcNodeMemoryLow",
+    "CraftFcVMOOMKills",
     "CraftFcTemplateUnusable",
 ]
 

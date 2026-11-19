@@ -11,6 +11,8 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 export interface ChatPluginEntry {
   pluginId: string;
   name: string;
+  /** The admin made the plugin Required: the member cannot turn it off. */
+  required: boolean;
   integrations: MemberIntegration[];
 }
 
@@ -63,6 +65,7 @@ export function useAgentChatPlugins(
           byPlugin.set(ref.plugin_id, {
             pluginId: ref.plugin_id,
             name: ref.plugin_name,
+            required: ref.installation_policy === "REQUIRED",
             integrations: [integration],
           });
       }

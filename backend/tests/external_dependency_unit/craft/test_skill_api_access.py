@@ -17,11 +17,11 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
+    PluginInstallationPolicy,
     SkillAccessLevel,
-    SkillInstallationPolicy,
     SkillSharePermission,
 )
-from onyx.db.models import PluginVersion, Skill, User, UserSkillPreference
+from onyx.db.models import PluginVersion, Skill, User, UserPluginPreference
 from onyx.db.skill import (
     set_skill_enabled_for_user,
     set_skill_installation_policy,
@@ -192,8 +192,8 @@ def test_preference_commit_succeeds_when_sandbox_push_fails(
     )
 
     preference = db_session.get(
-        UserSkillPreference,
-        {"user_id": user.id, "skill_id": skill.id},
+        UserPluginPreference,
+        {"user_id": user.id, "plugin_id": skill.id},
     )
     assert response.enabled is True
     assert preference is not None
@@ -383,15 +383,22 @@ def test_remove_file_rejects_empty_path_before_reading_bundle(
     read_bundle.assert_not_called()
 
 
-@pytest.mark.parametrize("policy", list(SkillInstallationPolicy))
+@pytest.mark.parametrize(
+    "policy",
+    [
+        PluginInstallationPolicy.AVAILABLE,
+        PluginInstallationPolicy.DEFAULT,
+        PluginInstallationPolicy.REQUIRED,
+    ],
+)
 def test_admin_can_set_installation_policy(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
-    policy: SkillInstallationPolicy,
+    policy: PluginInstallationPolicy,
 ) -> None:
     admin = make_user(db_session, is_admin=True)
     skill = make_skill(db_session, is_public=True)
-    set_skill_installation_policy(skill, SkillInstallationPolicy.REQUIRED, db_session)
+    set_skill_installation_policy(skill, PluginInstallationPolicy.REQUIRED, db_session)
     push = MagicMock()
     monkeypatch.setattr("onyx.server.features.skill.api.push_skills_and_commit", push)
     response = share_current_user_skill(
@@ -401,8 +408,8 @@ def test_admin_can_set_installation_policy(
         db_session=db_session,
     )
     assert response.installation_policy == policy
-    assert response.enabled == (policy != SkillInstallationPolicy.AVAILABLE)
-    assert response.can_toggle == (policy != SkillInstallationPolicy.REQUIRED)
+    assert response.enabled == (policy != PluginInstallationPolicy.AVAILABLE)
+    assert response.can_toggle == (policy != PluginInstallationPolicy.REQUIRED)
     push.assert_called_once()
 
 
@@ -412,7 +419,7 @@ def test_skill_owner_cannot_change_installation_policy(db_session: Session) -> N
     with pytest.raises(OnyxError) as error:
         share_current_user_skill(
             skill.id,
-            SkillShareRequest(installation_policy=SkillInstallationPolicy.REQUIRED),
+            SkillShareRequest(installation_policy=PluginInstallationPolicy.REQUIRED),
             user=owner,
             db_session=db_session,
         )
@@ -424,7 +431,7 @@ def test_required_skill_owner_cannot_delete_but_can_change_audience(
 ) -> None:
     owner = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=False, author_user_id=owner.id)
-    set_skill_installation_policy(skill, SkillInstallationPolicy.REQUIRED, db_session)
+    set_skill_installation_policy(skill, PluginInstallationPolicy.REQUIRED, db_session)
     with pytest.raises(OnyxError):
         delete_current_user_skill(skill.id, user=owner, db_session=db_session)
     response = patch_current_user_skill(
@@ -434,7 +441,7 @@ def test_required_skill_owner_cannot_delete_but_can_change_audience(
         db_session=db_session,
     )
     assert response.public_permission == SkillSharePermission.VIEWER
-    assert response.installation_policy == SkillInstallationPolicy.REQUIRED
+    assert response.installation_policy == PluginInstallationPolicy.REQUIRED
 
 
 @pytest.mark.parametrize("is_admin", [False, True])
@@ -547,12 +554,12 @@ def test_required_creation_preserves_same_name_personal_preference(
         db_session=db_session,
     )
     assert response.enabled
-    assert db_session.get(UserSkillPreference, (owner.id, response.id)) is None
-    personal_preference = db_session.get(UserSkillPreference, (owner.id, personal.id))
+    assert db_session.get(UserPluginPreference, (owner.id, response.id)) is None
+    personal_preference = db_session.get(UserPluginPreference, (owner.id, personal.id))
     assert personal_preference is not None and personal_preference.enabled
     share_current_user_skill(
         response.id,
-        SkillShareRequest(installation_policy=SkillInstallationPolicy.DEFAULT),
+        SkillShareRequest(installation_policy=PluginInstallationPolicy.DEFAULT),
         user=owner,
         db_session=db_session,
     )
@@ -571,7 +578,7 @@ def test_sharing_without_policy_preserves_existing_policy(
 ) -> None:
     owner = make_user(db_session, is_admin=is_admin, standard_account=not is_admin)
     skill = make_skill(db_session, author_user_id=owner.id)
-    set_skill_installation_policy(skill, SkillInstallationPolicy.REQUIRED, db_session)
+    set_skill_installation_policy(skill, PluginInstallationPolicy.REQUIRED, db_session)
     monkeypatch.setattr("onyx.skills.push.push_skills_for_users", MagicMock())
     response = share_current_user_skill(
         skill.id,
@@ -579,9 +586,9 @@ def test_sharing_without_policy_preserves_existing_policy(
         user=owner,
         db_session=db_session,
     )
-    assert response.installation_policy == SkillInstallationPolicy.REQUIRED
+    assert response.installation_policy == PluginInstallationPolicy.REQUIRED
     db_session.refresh(skill)
-    assert skill.installation_policy == SkillInstallationPolicy.REQUIRED
+    assert skill.installation_policy == PluginInstallationPolicy.REQUIRED
 
 
 def test_sharing_policy_is_unchanged_when_missing_and_default_when_null() -> None:
@@ -607,7 +614,7 @@ def test_built_in_skill_response_reports_available_policy(
     response = SkillResponse.from_builtin(
         skill, definition, db_session, enabled=True, can_toggle=True
     )
-    assert response.installation_policy == SkillInstallationPolicy.AVAILABLE
+    assert response.installation_policy == PluginInstallationPolicy.AVAILABLE
 
 
 def test_creation_response_includes_saved_group_shares(
@@ -697,7 +704,7 @@ def test_adding_an_unchanged_file_to_a_version_without_a_file_list_adds_none(
         user=owner,
         db_session=db_session,
     )
-    # A version copied from a legacy skill row has no file list.
+    # A version backfilled from an old skill row has no file list.
     db_session.execute(
         update(PluginVersion)
         .where(PluginVersion.plugin_id == created.id)

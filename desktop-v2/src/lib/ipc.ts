@@ -30,6 +30,10 @@ export interface Citation {
 export type AskEvent =
   | { kind: "session"; chatSessionId: string }
   | { kind: "delta"; text: string }
+  // What the answer is doing while no text streams.
+  | { kind: "status"; text: string }
+  // The text so far was narration before a tool step; the answer restarts.
+  | { kind: "restart"; text: string }
   | { kind: "citations"; docs: Citation[] }
   | { kind: "needsApproval"; tool: string | null }
   | { kind: "done" }
@@ -43,22 +47,25 @@ export const saveServer = (url: string): Promise<void> =>
 
 export interface SsoOption {
   label: string;
-  // The built-in Google sign-in in the system browser; otherwise the server's
-  // login page in an app window.
+  // Sign-in in the system browser; otherwise the server's login page in an
+  // app window.
   browser: boolean;
+  // The provider row the button starts; null for the legacy Google sign-in.
+  provider: string | null;
 }
 
 export interface AuthMethods {
   password: boolean;
   sso: SsoOption[];
-  browserSso: boolean;
 }
 
 export const getAuthMethods = (): Promise<AuthMethods> => invoke("get_auth_methods");
 
 /** "browser": continue in the system browser; "window": the in-app fallback opened. */
-export const signInWithSso = (browser: boolean): Promise<"browser" | "window"> =>
-  invoke("sign_in_with_sso", { browser });
+export const signInWithSso = (
+  browser: boolean,
+  provider: string | null = null
+): Promise<"browser" | "window"> => invoke("sign_in_with_sso", { browser, provider });
 
 export const login = (email: string, password: string): Promise<void> =>
   invoke("login", { email, password });
@@ -72,13 +79,15 @@ export const changeServer = (): Promise<void> => invoke("change_server");
 
 export const signOut = (): Promise<void> => invoke("sign_out");
 
+/** `chatSessionId` continues that chat with a follow-up; null starts a new one. */
 export function ask(
   question: string,
+  chatSessionId: string | null,
   onEvent: (event: AskEvent) => void
 ): Promise<void> {
   const channel = new Channel<AskEvent>();
   channel.onmessage = onEvent;
-  return invoke("ask", { question, onEvent: channel });
+  return invoke("ask", { question, chatSessionId, onEvent: channel });
 }
 
 export const search = (query: string): Promise<SearchHit[]> =>

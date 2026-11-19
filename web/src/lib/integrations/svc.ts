@@ -13,6 +13,7 @@ import type {
   MemberPluginState,
   PluginAccessUpdate,
   PluginAccessView,
+  PluginPublishResponse,
 } from "@/lib/integrations/types";
 
 type RequestBody =
@@ -207,7 +208,11 @@ export async function updatePluginAccess(
   return res.json();
 }
 
-/** Moves a private plugin to the Organization library. */
-export async function publishPlugin(pluginId: string): Promise<void> {
-  await request(`${SWR_KEYS.plugin(pluginId)}/publish`, "POST");
+/** Moves a private plugin to the Organization library. An older backend
+ * answers 204 with no body, so the result is then null. */
+export async function publishPlugin(
+  pluginId: string
+): Promise<PluginPublishResponse | null> {
+  const res = await request(`${SWR_KEYS.plugin(pluginId)}/publish`, "POST");
+  return res.status === 204 ? null : res.json();
 }

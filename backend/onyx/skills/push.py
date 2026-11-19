@@ -13,7 +13,8 @@ from onyx.configs.constants import (
     OnyxCeleryQueues,
     OnyxCeleryTask,
 )
-from onyx.db.models import Skill, User
+from onyx.db.models import Plugin, User
+from onyx.db.plugin_access import affected_user_ids_for_plugins
 from onyx.db.sandbox import (
     get_sandbox_user_map,
     lock_sandbox_skills_states,
@@ -22,7 +23,6 @@ from onyx.db.sandbox import (
 from onyx.db.skill import (
     RuntimeSkill,
     SkillValidityUpdate,
-    affected_user_ids_for_skill,
     list_runtime_skills_for_user,
     persist_skill_validity,
 )
@@ -125,7 +125,7 @@ class UserSkillsPayload(BaseModel):
 
 
 def _add_static_builtin(
-    files: FileSet, skill: Skill, definition: BuiltInSkillDefinition
+    files: FileSet, name: str, definition: BuiltInSkillDefinition
 ) -> None:
     source_dir = definition.source_dir
     for path in iter_builtin_skill_files(source_dir):
@@ -133,7 +133,7 @@ def _add_static_builtin(
         if path.suffix == TEMPLATE_SUFFIX:
             continue
         rel = path.relative_to(source_dir)
-        files[f"{skill.name}/{rel.as_posix()}"] = path.read_bytes()
+        files[f"{name}/{rel.as_posix()}"] = path.read_bytes()
 
 
 def _render_template(
@@ -146,12 +146,12 @@ def _render_template(
     """Overwrite ``{name}/SKILL.md`` with a per-user rendering. company-search
     and external-app built-ins have renderers; any other templated built-in logs
     a warning and ships the static siblings as-is."""
-    skill = runtime_skill.skill
+    name = runtime_skill.name
     if definition.built_in_skill_id == COMPANY_SEARCH.built_in_skill_id:
         rendered = render_company_search_skill(
             db_session, user, definition.source_dir.parent
         )
-        files[f"{skill.name}/SKILL.md"] = rendered.encode("utf-8")
+        files[f"{name}/SKILL.md"] = rendered.encode("utf-8")
         return
 
     app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
@@ -159,8 +159,8 @@ def _render_template(
         rendered = render_external_app_files(
             db_session, runtime_skill.external_app_id, app_type, definition.source_dir
         )
-        for name, content in rendered.items():
-            files[f"{skill.name}/{name}"] = content.encode("utf-8")
+        for path, content in rendered.items():
+            files[f"{name}/{path}"] = content.encode("utf-8")
         return
 
     logger.warning(
@@ -210,7 +210,6 @@ def _load_custom_bundle(
 ) -> bytes | None:
     """The bundle of the plugin version the user runs, or None when it is
     invalid, fails lazy validation or cannot be read."""
-    skill = runtime_skill.skill
     version = runtime_skill.version
     if version is None or version.is_valid is False:
         return None
@@ -221,14 +220,14 @@ def _load_custom_bundle(
         if validation.is_valid is not None:
             validity_updates.append(
                 SkillValidityUpdate(
-                    skill_id=skill.id,
+                    skill_id=runtime_skill.id,
                     bundle_file_id=version.bundle_file_id,
                     is_valid=validation.is_valid,
                 )
             )
         if validation.normalized_bundle is None:
             logger.warning(
-                "Skipping unvalidated skill %s: %s", skill.id, validation.detail
+                "Skipping unvalidated skill %s: %s", runtime_skill.id, validation.detail
             )
         return validation.normalized_bundle
     if version.bundle_file_id is None:
@@ -238,7 +237,7 @@ def _load_custom_bundle(
             version.bundle_file_id, file_store
         ).content
     except Exception as exc:
-        logger.warning("Skipping unreadable valid skill %s: %s", skill.id, exc)
+        logger.warning("Skipping unreadable valid skill %s: %s", runtime_skill.id, exc)
         return None
 
 
@@ -277,12 +276,12 @@ def _assemble_skills(
             return False
         logger.info(
             "Skill %s did not fit the run-time skill limit (%s)",
-            runtime_skill.skill.id,
+            runtime_skill.id,
             reason,
         )
         omissions.append(
             SkillOmission(
-                plugin_id=runtime_skill.skill.id,
+                plugin_id=runtime_skill.id,
                 name=runtime_skill.name,
                 bytes=usage.bytes,
                 files=usage.files,
@@ -292,16 +291,15 @@ def _assemble_skills(
         return True
 
     for runtime_skill in skills:
-        skill = runtime_skill.skill
         name = runtime_skill.name
         if name in seen_names:
             logger.warning(
-                "Skipping skill %s: another skill is named '%s'", skill.id, name
+                "Skipping skill %s: another skill is named '%s'", runtime_skill.id, name
             )
             continue
         skill_files: FileSet = {}
         size = SkillUsage()
-        if skill.built_in_skill_id is None:
+        if runtime_skill.built_in_skill_id is None:
             if runtime_skill.usage is not None and left_out(
                 runtime_skill, runtime_skill.usage
             ):
@@ -330,20 +328,20 @@ def _assemble_skills(
             except Exception:
                 logger.warning(
                     "Failed to unpack bundle for skill %s, skipping",
-                    skill.id,
+                    runtime_skill.id,
                     exc_info=True,
                 )
                 continue
         else:
-            definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
+            definition = BUILT_IN_SKILLS.get(runtime_skill.built_in_skill_id)
             if definition is None:
                 logger.warning(
                     "Skill row %s references unknown built-in %s; skipping",
-                    skill.name,
-                    skill.built_in_skill_id,
+                    name,
+                    runtime_skill.built_in_skill_id,
                 )
                 continue
-            _add_static_builtin(skill_files, skill, definition)
+            _add_static_builtin(skill_files, name, definition)
             if definition.has_template:
                 _render_template(
                     skill_files, runtime_skill, definition, db_session, user
@@ -414,9 +412,9 @@ def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     return build_user_skills_payload(user, db_session).files
 
 
-def push_skill_to_affected_sandboxes(skill: Skill, db_session: Session) -> None:
+def push_skill_to_affected_sandboxes(skill: Plugin, db_session: Session) -> None:
     """Resolve affected users for *skill* and push updated filesets."""
-    user_ids = affected_user_ids_for_skill(skill, db_session)
+    user_ids = affected_user_ids_for_plugins([skill.id], db_session)
     push_skills_for_users(user_ids, db_session)
 
 

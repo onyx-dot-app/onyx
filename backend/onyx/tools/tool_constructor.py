@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
+from onyx.configs.chat_configs import DISABLE_POSTGRES_QUERY_TOOL
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
@@ -37,6 +38,8 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 )
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
+from onyx.tools.tool_implementations.postgres.scope import build_document_scope
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -134,6 +137,40 @@ def should_disable_open_url_web_fetch(
         tool.in_code_tool_id == WebSearchTool.__name__
         and not tool_options.allows_tool(tool.id)
         for tool in persona_tools
+    )
+
+
+def postgres_query_tool_for_turn(
+    tools: list[Tool],
+    user: User,
+    configuration: PersonaToolConfiguration,
+    search_tool_config: SearchToolConfig | None,
+    custom_tool_config: CustomToolConfig | None,
+) -> PostgresTool | None:
+    """The postgres_query tool for a turn that has internal search, scoped to
+    the same knowledge; None without search or when the deployment turns the
+    tool off."""
+    if DISABLE_POSTGRES_QUERY_TOOL or not any(
+        isinstance(tool, SearchTool) for tool in tools
+    ):
+        return None
+    return PostgresTool(
+        user=user,
+        current_chat_session_id=(
+            custom_tool_config.chat_session_id if custom_tool_config else None
+        ),
+        scope=build_document_scope(
+            persona_search=configuration.search,
+            user_selected_filters=(
+                search_tool_config.user_selected_filters if search_tool_config else None
+            ),
+            project_id_filter=(
+                search_tool_config.project_id_filter if search_tool_config else None
+            ),
+            persona_id_filter=(
+                search_tool_config.persona_id_filter if search_tool_config else None
+            ),
+        ),
     )
 
 
@@ -373,6 +410,12 @@ def _construct_tools_impl(
             logger.warning(
                 "MemoryTool not found in the database. Run the latest alembic migration to seed it."
             )
+
+    postgres_tool = postgres_query_tool_for_turn(
+        tools, user, configuration, search_tool_config, custom_tool_config
+    )
+    if postgres_tool is not None:
+        tools.append(postgres_tool)
 
     custom_tool_config = custom_tool_config or CustomToolConfig()
     integration_tools = build_integration_chat_tools(

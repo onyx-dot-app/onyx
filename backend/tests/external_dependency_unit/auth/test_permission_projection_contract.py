@@ -73,7 +73,7 @@ from onyx.db.models import (
     Persona__Tool,
     Persona__User,
     Persona__UserGroup,
-    Skill,
+    Plugin,
     Tool,
     User,
     User__UserGroup,
@@ -90,8 +90,7 @@ from onyx.db.persona import (
     is_persona_editable_by_user,
     persona_edit_within_scope,
 )
-from onyx.db.plugin import create_skill_plugin__no_commit, legacy_skill_version_content
-from onyx.db.skill import get_group_ids_for_skill, replace_skill_shares
+from onyx.db.skill import get_group_ids_for_skill, is_published, replace_skill_shares
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.credential import (
     assert_credential_share_within_scope,
@@ -109,6 +108,7 @@ from onyx.server.features.persona.api import (
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.manage.administrative import create_deletion_attempt_for_connector_id
 from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.craft.db_helpers import make_skill
 
 
 def _guard_raises(
@@ -938,21 +938,13 @@ def _link_persona_tool(db_session: Session, persona: Persona, tool: Tool) -> Non
 
 def _make_skill(
     db_session: Session, *, is_public: bool, groups: list[UserGroup]
-) -> Skill:
-    skill = Skill(
-        id=uuid4(),
+) -> Plugin:
+    skill = make_skill(
+        db_session,
         name=f"contract skill {uuid4().hex[:8]}",
+        is_public=is_public,
         author_user_id=create_test_user(db_session, f"skill-owner-{uuid4().hex}").id,
         description="contract",
-        # custom skills need a bundle source (ck_skill_definition_source)
-        bundle_file_id=f"proj-bundle-{uuid4().hex}",
-        bundle_sha256="0" * 64,
-        public_permission=SkillSharePermission.VIEWER if is_public else None,
-    )
-    db_session.add(skill)
-    db_session.flush()
-    create_skill_plugin__no_commit(
-        skill, legacy_skill_version_content(skill), None, db_session
     )
     replace_skill_shares(
         skill=skill,
@@ -982,6 +974,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
 
     skill = _make_skill(db_session, is_public=False, groups=[managed])
     group_ids = get_group_ids_for_skill(skill.id, db_session)
+    is_non_public = not is_published(skill, db_session)
 
     for actor in (in_scope, out_scope, admin):
         edit_enforced = not _guard_raises(
@@ -991,7 +984,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
             permission=Permission.MANAGE_PLUGINS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
-            is_non_public=skill.public_permission is None,
+            is_non_public=is_non_public,
         )
         # publish drives the same guard with the requested public state
         publish_enforced = not _guard_raises(
@@ -1009,7 +1002,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
             permission=Permission.MANAGE_PLUGINS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
-            is_non_public=skill.public_permission is None,
+            is_non_public=is_non_public,
         )
         assert can_edit == edit_enforced, actor.email
         is_full_admin = has_global_permission(actor, Permission.FULL_ADMIN_PANEL_ACCESS)
@@ -1032,7 +1025,7 @@ def test_skill_projection_matches_gates(db_session: Session) -> None:
             permission=Permission.MANAGE_PLUGINS,
             current_group_ids=group_ids,
             requested_group_ids=group_ids,
-            is_non_public=skill.public_permission is None,
+            is_non_public=is_non_public,
         ),
         is_full_admin=has_global_permission(
             in_scope, Permission.FULL_ADMIN_PANEL_ACCESS

@@ -126,7 +126,7 @@ SCOPED_MANAGER_PERMISSIONS: frozenset[Permission] = frozenset(
         Permission.ADD_AGENTS,
         Permission.MANAGE_USER_GROUPS,
         Permission.MANAGE_ACTIONS,  # scoped via manages_integration
-        Permission.MANAGE_PLUGINS,  # scoped via Skill__UserGroup at GATE 2
+        Permission.MANAGE_PLUGINS,  # scoped via Plugin__UserGroup at GATE 2
     }
 )
 

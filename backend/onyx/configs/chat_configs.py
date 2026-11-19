@@ -124,3 +124,8 @@ CHAT_EXECUTION_TIMEOUT_S = 3600
 
 # Offer chat tools as Python functions inside `execute_code` instead of directly.
 CODE_MODE_ENABLED = os.environ.get("CODE_MODE_ENABLED", "false").lower() == "true"
+# "true" removes the postgres_query tool, which every turn with internal search
+# otherwise gets.
+DISABLE_POSTGRES_QUERY_TOOL = (
+    os.environ.get("DISABLE_POSTGRES_QUERY_TOOL", "false").lower() == "true"
+)

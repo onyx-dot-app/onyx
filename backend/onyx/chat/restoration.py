@@ -228,7 +228,6 @@ def persist_checkpoint_files(
                 display_name=file.filename,
                 file_origin=FileOrigin.OTHER,
                 file_type="application/octet-stream",
-                file_metadata={"chat_session_id": str(session_id)},
                 file_id=file_id,
             )
         file.file_id = file_id

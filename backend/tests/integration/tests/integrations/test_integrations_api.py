@@ -273,32 +273,39 @@ def test_persona_plugins_and_legacy_custom_tool_ids(
     )
     response.raise_for_status()
     persona_id = response.json()["id"]
-    persona = client.get(
-        f"{API_SERVER_URL}/persona/{persona_id}", headers=admin_user.headers
-    ).json()
-    assert [link["plugin_id"] for link in persona["plugins"]] == [plugin_id]
+    try:
+        persona = client.get(
+            f"{API_SERVER_URL}/persona/{persona_id}", headers=admin_user.headers
+        ).json()
+        assert [link["plugin_id"] for link in persona["plugins"]] == [plugin_id]
 
-    body = _persona_body(
-        [],
-        [
-            {
-                "plugin_id": plugin_id,
-                "action_settings": {
-                    "default": "inherit",
-                    "actions": {"set_alert": "blocked"},
-                },
-            }
-        ],
-    )
-    client.patch(
-        f"{API_SERVER_URL}/persona/{persona_id}", json=body, headers=admin_user.headers
-    ).raise_for_status()
-    persona = client.get(
-        f"{API_SERVER_URL}/persona/{persona_id}", headers=admin_user.headers
-    ).json()
-    assert persona["plugins"][0]["action_settings"]["actions"] == {
-        "set_alert": "blocked"
-    }
+        body = _persona_body(
+            [],
+            [
+                {
+                    "plugin_id": plugin_id,
+                    "action_settings": {
+                        "default": "inherit",
+                        "actions": {"set_alert": "blocked"},
+                    },
+                }
+            ],
+        )
+        client.patch(
+            f"{API_SERVER_URL}/persona/{persona_id}",
+            json=body,
+            headers=admin_user.headers,
+        ).raise_for_status()
+        persona = client.get(
+            f"{API_SERVER_URL}/persona/{persona_id}", headers=admin_user.headers
+        ).json()
+        assert persona["plugins"][0]["action_settings"]["actions"] == {
+            "set_alert": "blocked"
+        }
+    finally:
+        client.delete(
+            f"{API_SERVER_URL}/persona/{persona_id}", headers=admin_user.headers
+        ).raise_for_status()
 
 
 TOOL_SNAPSHOT_KEYS = {
@@ -325,6 +332,45 @@ TOOL_SNAPSHOT_KEYS = {
     # Added for chat plugin toggles; new fields keep old callers working.
     "plugin_ids",
 }
+
+
+def test_agent_hides_the_tools_of_a_plugin_the_viewer_cannot_see(
+    admin_user: DATestUser, basic_user: DATestUser, created: list[int]
+) -> None:
+    detail = IntegrationManager.create(
+        _openapi_body(for_organization=False), admin_user
+    )
+    created.append(detail.id)
+    plugin_id = str(detail.plugins[0].plugin_id)
+    response = client.post(
+        f"{API_SERVER_URL}/persona",
+        json={**_persona_body([], [{"plugin_id": plugin_id}]), "is_public": True},
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 200, response.text
+    persona_url = f"{API_SERVER_URL}/persona/{response.json()['id']}"
+    try:
+
+        def custom_tools(user: DATestUser) -> list[dict[str, Any]]:
+            persona = client.get(persona_url, headers=user.headers)
+            assert persona.status_code == 200, persona.text
+            return [
+                tool
+                for tool in persona.json()["tools"]
+                if tool["in_code_tool_id"] is None
+            ]
+
+        assert [tool["plugin_ids"] for tool in custom_tools(admin_user)] == [
+            [plugin_id]
+        ]
+        hidden = custom_tools(basic_user)
+        assert [tool["plugin_ids"] for tool in hidden] == [[plugin_id]]
+        assert hidden[0]["definition"] is None
+        assert hidden[0]["custom_headers"] is None
+        assert hidden[0]["user_id"] is None
+        assert custom_tools(admin_user)[0]["definition"] is not None
+    finally:
+        client.delete(persona_url, headers=admin_user.headers)
 
 
 def test_public_tool_aliases_keep_their_shapes(
@@ -488,7 +534,8 @@ def test_owner_shares_and_publishes_a_private_plugin(
     published = client.post(
         f"{API_SERVER_URL}/plugins/{plugin_id}/publish", headers=admin_user.headers
     )
-    assert published.status_code == 204, published.text
+    assert published.status_code == 200, published.text
+    assert published.json()["plugin_id"] == str(plugin_id)
     assert IntegrationManager.get_admin(detail.id, admin_user).plugins[0].scope == (
         "organization"
     )

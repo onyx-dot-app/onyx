@@ -769,6 +769,14 @@ def prepare_chat_turn(
                 for message in chat_history
                 for descriptor in message.files or []
             }
+            # Only user attachments enter the prompt as text; tools reach the
+            # files of assistant messages, such as published files.
+            text_file_ids: set[str] = {
+                descriptor["id"]
+                for message in chat_history
+                if message.message_type == MessageType.USER
+                for descriptor in message.files or []
+            }
             chat_session_id = chat_session.id
             project_id = chat_session.project_id
             incognito_record_mode = chat_session.incognito_record_mode
@@ -823,7 +831,6 @@ def prepare_chat_turn(
         # File loading can be slow; release the preparation DB session first.
         admission.refresh()
         # Temporary history already owns earlier attachment text. Only new inputs need extraction.
-        text_file_ids: set[str] | None = None
         if not record_mode_persists_content(incognito_record_mode):
             text_file_ids = (
                 {descriptor["id"] for descriptor in new_msg_req.file_descriptors}
@@ -1576,6 +1583,7 @@ def gather_stream_full(
             tool_result=tc.tool_call_response,
             search_docs=tc.search_docs,
             generated_images=tc.generated_images,
+            published_files=tc.published_files,
             pre_reasoning=tc.reasoning_tokens,
         )
         for tc in snapshot.tool_calls
