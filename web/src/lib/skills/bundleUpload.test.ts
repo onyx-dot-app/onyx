@@ -184,7 +184,7 @@ describe("merging skill file uploads", () => {
     return out;
   }
 
-  it("joins files, ZIPs and a bundle's files under its SKILL.md folder", async () => {
+  it("joins files, ZIPs and a bundle, with the bundle's SKILL.md at the root", async () => {
     const bundle = await zipFile({
       "my-skill/SKILL.md": "---\nname: my-skill\n---",
       "my-skill/references/guide.md": "guide",
@@ -210,10 +210,20 @@ describe("merging skill file uploads", () => {
     );
 
     expect(await contents(merged)).toEqual({
+      "SKILL.md": "---\nname: my-skill\n---",
       "references/guide.md": "guide",
       "scripts/run.sh": "run",
       "template.md": "new template",
     });
+  });
+
+  it("stops before unpacking a ZIP past the server's file limit", async () => {
+    const many: Record<string, string> = {};
+    for (let index = 0; index <= 5_000; index += 1) many[`f${index}.md`] = "";
+    const upload = await prepareSkillFilesUpload([await zipFile(many)]);
+    await expect(mergeSkillFilesUploads([upload], new Set())).rejects.toThrow(
+      "more than 5,000 files"
+    );
   });
 
   it("gives no upload when every file was removed", async () => {
