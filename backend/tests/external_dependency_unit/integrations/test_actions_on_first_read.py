@@ -3,19 +3,26 @@ read of its actions writes them, so the admin and chat see them at once."""
 
 from collections.abc import Generator
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import (
+    get_session_with_current_tenant,
+    get_session_with_tenant,
+)
 from onyx.db.integration import lock_integration__no_commit
 from onyx.db.models import IntegrationAction, Tool, User
 from onyx.integrations.actions import integration_actions
 from onyx.integrations.chat_tools import build_integration_chat_tools
 from onyx.integrations.models import ActionSettings, ApprovalMode
+from onyx.integrations.service import agent_catalog
 from onyx.server.features.integrations import admin_api
 from onyx.tools.models import IntegrationChatRequest, IntegrationLinkConfiguration
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
@@ -170,3 +177,39 @@ def test_a_spec_with_no_actions_gives_none(
         )
         == 0
     )
+
+
+def test_the_agent_catalog_lists_the_actions(
+    db_session: Session, member: User, created: list[int]
+) -> None:
+    integration_id = _migrated_openapi(db_session, created, ORDERS_SPEC)
+
+    with get_session_with_current_tenant() as request_session:
+        catalog = agent_catalog(member, request_session)
+
+    [option] = [option for option in catalog if option.id == integration_id]
+    assert sorted(action.key for action in option.actions) == [
+        "createOrder",
+        "listOrders",
+    ]
+
+
+def test_a_reader_with_no_tenant_context_writes_on_its_session_tenant(
+    db_session: Session, created: list[int]
+) -> None:
+    """The sandbox proxy opens a session for a tenant and sets no tenant
+    context, which a multi-tenant lookup refuses."""
+    integration_id = _migrated_openapi(db_session, created, ORDERS_SPEC)
+
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(None)
+    try:
+        with (
+            patch("shared_configs.contextvars.MULTI_TENANT", True),
+            get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as proxy_session,
+        ):
+            actions = integration_actions(integration_id, proxy_session)
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+    assert sorted(a.key for a in actions) == ["createOrder", "listOrders"]
+    assert _stored_keys(db_session, integration_id) == ["createOrder", "listOrders"]

@@ -34,7 +34,6 @@ from onyx.db.integration import (
     get_mcp_server_for_integration,
     get_openapi_tool_for_integration,
     insert_integration__no_commit,
-    list_action_summaries,
     list_external_apps_by_integration,
     list_integrations,
     list_integrations_by_ids,
@@ -76,7 +75,11 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
 from onyx.external_apps.url_glob import UrlGlob
-from onyx.integrations.actions import count_actions, integration_actions
+from onyx.integrations.actions import (
+    count_actions,
+    integration_actions,
+    integration_actions_by_id,
+)
 from onyx.integrations.connection_models import (
     SIGN_IN_SETTINGS_CHANGED_REASON,
     ConnectionState,
@@ -1669,7 +1672,7 @@ def agent_catalog(user: User, db_session: Session) -> list[AgentIntegrationOptio
     ]
     integration_ids = [integration.id for integration in integrations]
     shapes = _shapes(integrations, _external_apps(integrations, db_session))
-    actions = list_action_summaries(integration_ids, db_session)
+    actions = integration_actions_by_id(integration_ids, db_session)
     admin_rows = list_admin_policy_rows(db_session, integration_ids)
     return [
         AgentIntegrationOption(

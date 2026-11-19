@@ -5,7 +5,7 @@ from urllib.parse import unquote
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_beside
 from onyx.db.enums import (
     ActionPolicy,
     ExternalAppType,
@@ -389,12 +389,14 @@ def sync_integration_actions__no_commit(
         )
 
 
-def _write_actions(integration_id: int) -> list[IntegrationActionSpec] | None:
-    """Writes the rows in a short session of its own, so a read path holds no
-    row lock. None when the rows are saved. When another transaction holds
-    the integration lock, which can be the caller's own, the specs come back
-    unsaved."""
-    with get_session_with_current_tenant() as db_session:
+def _write_actions(
+    integration_id: int, caller_session: Session
+) -> list[IntegrationActionSpec] | None:
+    """Writes the rows in a short session of its own on the caller's tenant,
+    so a read path holds no row lock. None when the rows are saved. When
+    another transaction holds the integration lock, which can be the
+    caller's own, the specs come back unsaved."""
+    with get_session_beside(caller_session) as db_session:
         if not try_lock_integration__no_commit(integration_id, db_session):
             db_session.rollback()
             integration = get_integration_by_id(integration_id, db_session)
@@ -419,7 +421,7 @@ def api_integration_actions(
     if stored:
         return stored
     try:
-        unsaved = _write_actions(integration_id)
+        unsaved = _write_actions(integration_id, db_session)
     except OnyxError as error:
         logger.warning(
             "Integration %s: the API settings give no actions: %s",

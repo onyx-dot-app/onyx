@@ -5,7 +5,7 @@ from uuid import UUID
 from psycopg2.errors import LockNotAvailable
 from sqlalchemy import ColumnElement, Select, and_, delete, func, select, update
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import InstrumentedAttribute, Session, load_only
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.db.enums import (
     ExternalAppType,
@@ -281,35 +281,6 @@ def list_openapi_tools_by_integration(
         .tuples()
         .all()
     )
-
-
-def list_action_summaries(
-    integration_ids: Collection[int], db_session: Session
-) -> dict[int, list[IntegrationAction]]:
-    """The actions of each integration with only the columns a view shows,
-    in action order."""
-    actions: dict[int, list[IntegrationAction]] = {
-        integration_id: [] for integration_id in integration_ids
-    }
-    if not integration_ids:
-        return actions
-    for action in db_session.scalars(
-        select(IntegrationAction)
-        .options(
-            load_only(
-                IntegrationAction.integration_id,
-                IntegrationAction.key,
-                IntegrationAction.display_name,
-                IntegrationAction.description,
-                IntegrationAction.read_only,
-                IntegrationAction.default_policy,
-            )
-        )
-        .where(IntegrationAction.integration_id.in_(integration_ids))
-        .order_by(IntegrationAction.id)
-    ):
-        actions[action.integration_id].append(action)
-    return actions
 
 
 def list_external_apps_by_integration(
