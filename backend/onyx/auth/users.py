@@ -90,6 +90,7 @@ from onyx.auth.session_tokens import (
     build_session_token_value,
     build_session_tombstone_value,
     classify_session_token_value,
+    clear_unrecognized_session_cookie,
     compute_session_expires_at,
     cookie_transport,
     may_be_session_token,
@@ -2632,12 +2633,14 @@ async def current_limited_user(
 
 
 async def current_chat_accessible_user(
+    response: Response,
     user: User | None = Depends(optional_user),
 ) -> AsyncGenerator[User, None]:
     tenant_id = get_current_tenant_id()
-    user = await double_check_user(
-        user, allow_anonymous_access=anonymous_user_enabled(tenant_id=tenant_id)
-    )
+    allow_anonymous_access = anonymous_user_enabled(tenant_id=tenant_id)
+    if user is None and allow_anonymous_access:
+        clear_unrecognized_session_cookie(response)
+    user = await double_check_user(user, allow_anonymous_access=allow_anonymous_access)
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
     try:
         yield user

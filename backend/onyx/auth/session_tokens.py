@@ -12,6 +12,10 @@ pre-upgrade logical expiry, so deploying this format signs nobody out.
 bearer transport and legitimately miss in Redis), so the classification is
 stashed in a request-scoped ContextVar and turned into a reasoned ``OnyxError``
 only where authentication has conclusively failed for the request.
+
+A rejected token with no or an unreadable Redis value also expires the cookie.
+Accepted race: a late 403 from a stale in-flight request can clear a cookie that
+another tab just set; the window is one round trip and the user logs in again.
 """
 
 from contextvars import ContextVar
@@ -43,6 +47,21 @@ cookie_transport = CookieTransport(
     cookie_secure=WEB_DOMAIN.startswith("https"),
     cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
 )
+
+# The logout Set-Cookie value. A missing (NOT_FOUND) or unreadable (MALFORMED)
+# token can never be accepted, so its rejection also expires the cookie and the
+# browser stops presenting it. Expired and terminated cookies stay for the grace
+# window so other tabs can still name the reason.
+_clear_cookie_response = Response()
+_clear_cookie_response.delete_cookie(
+    cookie_transport.cookie_name,
+    path=cookie_transport.cookie_path,
+    domain=cookie_transport.cookie_domain,
+    secure=cookie_transport.cookie_secure,
+    httponly=cookie_transport.cookie_httponly,
+    samesite=cookie_transport.cookie_samesite,
+)
+CLEAR_SESSION_COOKIE_HEADER = _clear_cookie_response.headers["set-cookie"]
 
 
 class SessionTokenValue(BaseModel):
@@ -234,17 +253,26 @@ def build_session_rejection_error() -> OnyxError | None:
         )
 
     error_code = _REASON_TO_ERROR_CODE[rejection.reason]
-    # No stored value can ever accept an unrecognized token, so the response
-    # also expires the cookie (the logout Set-Cookie) and the browser stops
-    # presenting it. Expired and terminated cookies stay for the grace window
-    # so other tabs can still name the reason.
-    headers = (
-        {
-            "set-cookie": cookie_transport._set_logout_cookie(Response()).headers[
-                "set-cookie"
-            ]
-        }
-        if error_code == OnyxErrorCode.SESSION_UNRECOGNIZED
-        else None
+    return OnyxError(
+        error_code,
+        _REASON_TO_DETAIL[rejection.reason],
+        headers=(
+            {"set-cookie": CLEAR_SESSION_COOKIE_HEADER}
+            if error_code == OnyxErrorCode.SESSION_UNRECOGNIZED
+            else None
+        ),
     )
-    return OnyxError(error_code, _REASON_TO_DETAIL[rejection.reason], headers=headers)
+
+
+def clear_unrecognized_session_cookie(response: Response) -> None:
+    """
+    Expires the session cookie when this request presented an unrecognized
+    token, for paths that fall back to the anonymous user instead of raising.
+    """
+    rejection = _SESSION_REJECTION.get()
+    if (
+        rejection is not None
+        and _REASON_TO_ERROR_CODE[rejection.reason]
+        == OnyxErrorCode.SESSION_UNRECOGNIZED
+    ):
+        response.headers.append("set-cookie", CLEAR_SESSION_COOKIE_HEADER)
