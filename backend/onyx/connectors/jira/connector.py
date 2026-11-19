@@ -175,6 +175,7 @@ def build_jql_query(
     jql_query: str | None,
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
+    extra_jql_filter: str | None = None,
 ) -> str:
     """JQL for the configured project/query plus the poll window.
 
@@ -183,20 +184,35 @@ def build_jql_query(
     https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
     """
     time_jql: str = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
-    return scope_jql(project_key=project_key, jql_query=jql_query, clause=time_jql)
+    return scope_jql(
+        project_key=project_key,
+        jql_query=jql_query,
+        clause=time_jql,
+        extra_jql_filter=extra_jql_filter,
+    )
 
 
-def scope_jql(*, project_key: str | None, jql_query: str | None, clause: str) -> str:
+def scope_jql(
+    *,
+    project_key: str | None,
+    jql_query: str | None,
+    clause: str,
+    extra_jql_filter: str | None = None,
+) -> str:
     """JQL that limits ``clause`` to the configured project or query."""
+    parts: list[str] = []
     # If custom JQL query is provided, use it and combine with the clause
     if jql_query:
-        return f"({jql_query}) AND {clause}"
+        parts.append(f"({jql_query})")
+    elif project_key:
+        # Otherwise, use project key if provided. Quote it to handle reserved words.
+        parts.append(f'project = "{project_key}"')
 
-    # Otherwise, use project key if provided. Quote it to handle reserved words.
-    if project_key:
-        return f'project = "{project_key}" AND {clause}'
+    if extra_jql_filter:
+        parts.append(extra_jql_filter)
 
-    return clause
+    parts.append(clause)
+    return " AND ".join(parts)
 
 
 def _handle_jira_search_error(e: JiraApiError, jql: str) -> None:
@@ -352,6 +368,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    source: DocumentSource = DocumentSource.JIRA,
 ) -> Document | None:
     issue_key: str = _issue_key(issue)
     issue_labels: list[str] = get_issue_field(issue, _FIELD_LABELS) or []
@@ -442,7 +459,7 @@ def process_jira_issue(
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
-        source=DocumentSource.JIRA,
+        source=source,
         semantic_identifier=f"{issue_key}: {summary}",
         title=f"{issue_key} {summary}",
         doc_updated_at=time_str_to_utc(get_issue_field(issue, _FIELD_UPDATED)),
@@ -472,6 +489,7 @@ class JiraConnector(
     SlimConnectorWithPermSync,
     Resolver,
 ):
+    source: DocumentSource = DocumentSource.JIRA
     slim_listing_honors_indexing_start = True
 
     def __init__(
@@ -649,6 +667,9 @@ class JiraConnector(
         )
         return None
 
+    def _extra_jql_filter(self) -> str | None:
+        return None
+
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
@@ -657,6 +678,7 @@ class JiraConnector(
             jql_query=self.jql_query,
             start=start,
             end=end,
+            extra_jql_filter=self._extra_jql_filter(),
         )
 
     def load_from_checkpoint(
@@ -810,6 +832,7 @@ class JiraConnector(
             comment_email_blacklist=self.comment_email_blacklist,
             labels_to_skip=self.labels_to_skip,
             parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+            source=self.source,
         ):
             # Add permission information to the document if requested
             if include_permissions:
@@ -852,6 +875,7 @@ class JiraConnector(
                     project_key=self.jira_project,
                     jql_query=self.jql_query,
                     clause=keys_jql,
+                    extra_jql_filter=self._extra_jql_filter(),
                 )
             )
         )
