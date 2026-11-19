@@ -115,7 +115,12 @@ def chat(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         lambda _s, _u, _g, ids, _censored: set(ids),
     )
     set_(ranking, "get_session_with_current_tenant", MagicMock())
-    set_(ranking, "has_visible_documents", lambda *_a: state["has_documents"])
+
+    def has_documents(_s: Any, _u: Any, _g: Any, censored: Any) -> bool:
+        state["empty_check_censored"] = censored
+        return state["has_documents"]
+
+    set_(ranking, "has_visible_documents", has_documents)
 
     def pool_refresh(_t: str, reason: RefreshReason, requester_id: Any) -> bool:
         state["pool_requests"].append((reason, requester_id))
@@ -172,6 +177,8 @@ def test_no_top_up_when_there_is_nothing_new_to_write_about(
 
     assert chat["topups"] == [] and chat["requested"] == []
     assert result.state == SuggestionsState.NO_DOCUMENTS
+    # The empty check uses the same read-time rules as the pick.
+    assert chat["empty_check_censored"] == set()
 
 
 def test_enough_questions_asks_for_nothing(chat: dict[str, Any], person: User) -> None:

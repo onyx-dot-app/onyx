@@ -403,6 +403,22 @@ def test_topup_stops_before_any_model_call(
     assert run["private_saved"] == {}
 
 
+def test_questions_the_person_may_not_open_do_not_count_toward_enough(
+    run: dict[str, Any], person: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    questions = [_question(f"mine-{n}") for n in range(tasks.SQ_PRIVATE_REFILL_AT + 1)]
+    run["records"][person.id] = UserRecord(questions=questions)
+    monkeypatch.setattr(
+        tasks,
+        "get_visible_document_ids",
+        lambda _s, _u, _g, ids, _c: set(ids) - {"mine-0"},
+    )
+
+    _topup(person)
+
+    assert run["private_saved"] == {person.id: ["new"]}
+
+
 def test_used_questions_do_not_count_toward_enough(
     run: dict[str, Any], person: User
 ) -> None:
