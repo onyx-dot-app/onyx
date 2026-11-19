@@ -187,7 +187,7 @@ jobs:
           fi
           marker="<!-- docs-preview -->"
           comment="$marker
-          **Docs Preview** (Mintlify)
+          <img src='https://github.com/mintlify.png?size=40' width='16' height='16' alt='Mintlify'> **Docs Preview**
 
           | Status | Preview | Commit | Updated |
           | --- | --- | --- | --- |
