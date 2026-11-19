@@ -41,7 +41,7 @@
   search tool is still worth a call, and with strict retrieval nudges one when
   a question turn ends on the prefetch alone.
   `extensions/agent-plugin/README.md` is the user-facing description.
-- **A user exports that plugin for claude.ai.** The Connect AI tools section
+- **A user exports that plugin for claude.ai.** The Connect AI Tools section
   of Accounts & Access in user settings
   (`sections/oauth-provider/ConnectAiTools.tsx`) has a Download button, which
   gets a zip from

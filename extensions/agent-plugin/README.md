@@ -36,7 +36,7 @@ Organizations can require the plugin on every machine through managed settings. 
 
 ## Export from Onyx
 
-An Onyx user can download this plugin with the deployment's address set: **Settings → Accounts & Access → Connect AI tools**, then **Download**. That zip is for a host that takes no install options, such as claude.ai chat. The MCP server in it has a fixed URL and signs in through OAuth, and the token option is only for the prefetch.
+An Onyx user can download this plugin with the deployment's address set: **Settings → Accounts & Access → Connect AI Tools**, then **Download**. That zip is for a host that takes no install options, such as claude.ai chat. The MCP server in it has a fixed URL and signs in through OAuth, and the token option is only for the prefetch.
 
 The backend reads this folder. Its image is built from `backend/` alone, so a build passes the folder as the `agent-plugin` build context (`--build-context agent-plugin=extensions/agent-plugin`, or `additional_contexts` in Compose). An image built without it has no plugin files, and the export is off.
 

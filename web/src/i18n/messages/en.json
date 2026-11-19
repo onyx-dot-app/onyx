@@ -20,7 +20,7 @@
       "retry": "Try again"
     },
     "connectTools": {
-      "title": "Connect AI tools",
+      "title": "Connect AI Tools",
       "description": "Use this Onyx deployment in Claude, ChatGPT, Codex and other MCP clients. Each person signs in with their own Onyx account.",
       "guides": "Setup guides",
       "mcpUrl": {
@@ -28,7 +28,7 @@
         "copy": "Copy"
       },
       "plugin": {
-        "title": "Onyx plugin",
+        "title": "Onyx Plugin",
         "description": "For Claude. The Onyx MCP server is built in.",
         "download": "Download"
       },
