@@ -1,7 +1,10 @@
 import type { ComponentProps } from "react";
 import type ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import type SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
-import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
+import {
+  SkillMergeLimitError,
+  type PreparedSkillFilesUpload,
+} from "@/lib/skills/bundleUpload";
 import {
   act,
   deferred,
@@ -286,6 +289,38 @@ describe("SkillEditorPage", () => {
       merged
     );
     expect(mockUploadUserSkillFiles).not.toHaveBeenCalled();
+  });
+
+  it("says in the user's language when the files pass the skill limit", async () => {
+    const user = setupUser();
+    const toastError = jest.spyOn(toast, "error");
+    jest.spyOn(console, "error").mockImplementation();
+    mockPickedUploads.push({
+      file: new File(["a"], "a.txt"),
+      displayName: "a.txt",
+      entries: [{ path: "a.txt", size: 1 }],
+      containsSkillMd: false,
+    });
+    mockMerge.mockRejectedValue(new SkillMergeLimitError("files", 5_000));
+
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Pick a file" }));
+    mockPickedUploads.push({
+      file: new File(["b"], "b.txt"),
+      displayName: "b.txt",
+      entries: [{ path: "b.txt", size: 1 }],
+      containsSkillMd: false,
+    });
+    await user.click(screen.getByRole("button", { name: "Pick a file" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        "A skill can hold up to 5,000 files. Remove some files, then select Create."
+      )
+    );
+    expect(mockCreateCustomSkillFromEditor).not.toHaveBeenCalled();
   });
 
   it("does not send an upload whose files were all removed", async () => {

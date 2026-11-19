@@ -16476,7 +16476,8 @@
         "deleted": "Deleted \"{name}\"",
         "inspectFailed": "Failed to inspect skill bundle",
         "saveFailed": "Failed to save skill",
-        "saved": "Saved \"{name}\""
+        "saved": "Saved \"{name}\"",
+        "mergeLimit": "{limit, select, files {A skill can hold up to {max, number} files. Remove some files, then select Create.} other {A skill can hold up to {max, number} MB of files. Remove some files, then select Create.}}"
       },
       "creationAccess": {
         "title": "Access"

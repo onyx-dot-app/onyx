@@ -214,6 +214,18 @@ export async function prepareSkillFilesUpload(
 const MERGE_MAX_BYTES = 500 * 1024 * 1024;
 const MERGE_MAX_FILES = 5_000;
 
+/** A merge past one of the limits; the page words it in the user's language. */
+export class SkillMergeLimitError extends Error {
+  constructor(
+    readonly limit: "files" | "bytes",
+    readonly max: number
+  ) {
+    super(`The skill files are past the ${limit} limit of ${max}.`);
+  }
+}
+
+export const SKILL_MERGE_MAX_MB = MERGE_MAX_BYTES / (1024 * 1024);
+
 class MergeBudget {
   private bytes = 0;
   private files = 0;
@@ -222,11 +234,9 @@ class MergeBudget {
     this.bytes += bytes;
     this.files += 1;
     if (this.files > MERGE_MAX_FILES)
-      throw new Error(
-        `The skill has more than ${MERGE_MAX_FILES.toLocaleString()} files.`
-      );
+      throw new SkillMergeLimitError("files", MERGE_MAX_FILES);
     if (this.bytes > MERGE_MAX_BYTES)
-      throw new Error("The skill files are larger than 500 MB unpacked.");
+      throw new SkillMergeLimitError("bytes", SKILL_MERGE_MAX_MB);
   }
 }
 

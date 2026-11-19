@@ -21,6 +21,7 @@ import {
 } from "@/lib/skills/api";
 import {
   mergeSkillFilesUploads,
+  SkillMergeLimitError,
   type PreparedSkillFilesUpload,
 } from "@/lib/skills/bundleUpload";
 import {
@@ -251,7 +252,11 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
         return;
       }
       console.error("Failed to save skill", err);
-      toast.error(describeError(err, t("editor.toasts.saveFailed")));
+      toast.error(
+        err instanceof SkillMergeLimitError
+          ? t("editor.toasts.mergeLimit", { limit: err.limit, max: err.max })
+          : describeError(err, t("editor.toasts.saveFailed"))
+      );
     } finally {
       setIsSaving(false);
     }

@@ -16476,7 +16476,8 @@
         "deleted": "« {name} » supprimée",
         "inspectFailed": "Échec de l'inspection du paquet de compétence",
         "saveFailed": "Échec de l'enregistrement de la compétence",
-        "saved": "« {name} » enregistrée"
+        "saved": "« {name} » enregistrée",
+        "mergeLimit": "{limit, select, files {Une compétence peut contenir jusqu’à {max, number} fichiers. Retirez des fichiers, puis sélectionnez Créer.} other {Une compétence peut contenir jusqu’à {max, number} Mo de fichiers. Retirez des fichiers, puis sélectionnez Créer.}}"
       },
       "creationAccess": {
         "title": "Accès"

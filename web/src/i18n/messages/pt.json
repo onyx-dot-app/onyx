@@ -16476,7 +16476,8 @@
         "deleted": "\"{name}\" excluída",
         "inspectFailed": "Falha ao inspecionar o pacote da habilidade",
         "saveFailed": "Falha ao salvar a habilidade",
-        "saved": "\"{name}\" salva"
+        "saved": "\"{name}\" salva",
+        "mergeLimit": "{limit, select, files {Uma habilidade pode ter até {max, number} arquivos. Remova alguns arquivos e selecione Criar.} other {Uma habilidade pode ter até {max, number} MB de arquivos. Remova alguns arquivos e selecione Criar.}}"
       },
       "creationAccess": {
         "title": "Acesso"

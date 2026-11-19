@@ -221,9 +221,9 @@ describe("merging skill file uploads", () => {
     const many: Record<string, string> = {};
     for (let index = 0; index <= 5_000; index += 1) many[`f${index}.md`] = "";
     const upload = await prepareSkillFilesUpload([await zipFile(many)]);
-    await expect(mergeSkillFilesUploads([upload], new Set())).rejects.toThrow(
-      "more than 5,000 files"
-    );
+    await expect(
+      mergeSkillFilesUploads([upload], new Set())
+    ).rejects.toMatchObject({ limit: "files", max: 5_000 });
   });
 
   it("gives no upload when every file was removed", async () => {

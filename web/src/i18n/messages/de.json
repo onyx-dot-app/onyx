@@ -16476,7 +16476,8 @@
         "deleted": "„{name}“ gelöscht",
         "inspectFailed": "Skill-Paket konnte nicht geprüft werden",
         "saveFailed": "Skill konnte nicht gespeichert werden",
-        "saved": "„{name}“ gespeichert"
+        "saved": "„{name}“ gespeichert",
+        "mergeLimit": "{limit, select, files {Ein Skill kann bis zu {max, number} Dateien enthalten. Entfernen Sie einige Dateien und wählen Sie dann „Erstellen“.} other {Ein Skill kann bis zu {max, number} MB an Dateien enthalten. Entfernen Sie einige Dateien und wählen Sie dann „Erstellen“.}}"
       },
       "creationAccess": {
         "title": "Zugriff"

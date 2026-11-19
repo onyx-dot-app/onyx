@@ -16476,7 +16476,8 @@
         "deleted": "「{name}」を削除しました",
         "inspectFailed": "スキルバンドルの検査に失敗しました",
         "saveFailed": "スキルの保存に失敗しました",
-        "saved": "「{name}」を保存しました"
+        "saved": "「{name}」を保存しました",
+        "mergeLimit": "{limit, select, files {スキルに含められるファイルは最大 {max, number} 個です。ファイルをいくつか削除してから「作成」を選択してください。} other {スキルに含められるファイルは最大 {max, number} MB です。ファイルをいくつか削除してから「作成」を選択してください。}}"
       },
       "creationAccess": {
         "title": "アクセス権"

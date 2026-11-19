@@ -16476,7 +16476,8 @@
         "deleted": "已删除“{name}”",
         "inspectFailed": "检查技能包失败",
         "saveFailed": "保存技能失败",
-        "saved": "已保存“{name}”"
+        "saved": "已保存“{name}”",
+        "mergeLimit": "{limit, select, files {一个技能最多可包含 {max, number} 个文件。请移除部分文件，然后选择“创建”。} other {一个技能的文件最多可达 {max, number} MB。请移除部分文件，然后选择“创建”。}}"
       },
       "creationAccess": {
         "title": "访问权限"
