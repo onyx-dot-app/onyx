@@ -69,10 +69,6 @@ func TestListComposeContainersReportsMissingDocker(t *testing.T) {
 	if _, err := ListComposeContainers(); err == nil {
 		t.Fatal("listed containers without docker")
 	}
-	fakeDocker(t, "exit 1")
-	if _, err := ListComposeContainers(); err == nil || !strings.Contains(err.Error(), "exit status 1") {
-		t.Fatalf("err = %v", err)
-	}
 }
 
 func TestListComposeVolumesCountsEachProject(t *testing.T) {

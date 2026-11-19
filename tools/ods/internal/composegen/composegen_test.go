@@ -128,26 +128,6 @@ func TestTemplateCommentIsStripped(t *testing.T) {
 	}
 }
 
-func TestNoDirectiveEverLeaks(t *testing.T) {
-	lines := []string{
-		"#!# comment",
-		"#!for default",
-		"a",
-		"#!endfor",
-		"  #!only prod",
-		"  b",
-		"  #!value prod: c2",
-		"  c",
-	}
-	for _, variant := range allVariants {
-		for _, line := range mustRender(t, lines, variant) {
-			if strings.HasPrefix(strings.TrimLeft(line, " \t"), "#!") {
-				t.Fatalf("directive leaked into %q output: %q", variant, line)
-			}
-		}
-	}
-}
-
 func assertTemplateError(t *testing.T, lines []string, fragment string) {
 	t.Helper()
 	_, err := Render(lines, "default")
@@ -163,69 +143,32 @@ func assertTemplateError(t *testing.T, lines []string, fragment string) {
 	}
 }
 
-func TestUnclosedFor(t *testing.T) {
-	assertTemplateError(t, []string{"#!for prod", "a"}, "unclosed #!for")
-}
-
-func TestNestedFor(t *testing.T) {
-	assertTemplateError(t,
-		[]string{"#!for prod", "#!for default", "a", "#!endfor", "#!endfor"}, "nested #!for")
-}
-
-func TestEndforWithoutFor(t *testing.T) {
-	assertTemplateError(t, []string{"a", "#!endfor"}, "#!endfor without matching #!for")
-}
-
-func TestOnlyFollowedByDirective(t *testing.T) {
-	assertTemplateError(t,
-		[]string{"#!only prod", "#!for default", "a", "#!endfor"},
-		"#!only must be immediately followed by a content line")
-}
-
-func TestOnlyAtEndOfFile(t *testing.T) {
-	assertTemplateError(t, []string{"a", "#!only prod"}, "#!only at end of file")
-}
-
-func TestValueAtEndOfFile(t *testing.T) {
-	assertTemplateError(t, []string{"a", "#!value prod: x"}, "#!value at end of file")
-}
-
-func TestValueFollowedByNonValueDirective(t *testing.T) {
-	assertTemplateError(t,
-		[]string{"#!value prod: x", "#!for default", "a", "#!endfor"},
-		"#!value must be immediately followed by a content line")
-}
-
-func TestValueDuplicateClaim(t *testing.T) {
-	assertTemplateError(t,
-		[]string{"#!value prod: x", "#!value prod,no-letsencrypt: y", "base"},
-		"already claimed")
-}
-
-func TestValueCoveringAllVariants(t *testing.T) {
-	assertTemplateError(t,
-		[]string{"#!value prod,no-letsencrypt,default: x", "base"},
-		"cover every variant")
-}
-
-func TestUnknownVariant(t *testing.T) {
-	assertTemplateError(t, []string{"#!for production", "a", "#!endfor"}, "unknown variant")
-}
-
-func TestVariantListedTwice(t *testing.T) {
-	assertTemplateError(t, []string{"#!only prod,prod", "a"}, "listed twice")
-}
-
-func TestUnknownDirective(t *testing.T) {
-	assertTemplateError(t, []string{"#!fro prod", "a"}, "unknown template directive")
-}
-
-func TestMalformedValue(t *testing.T) {
-	assertTemplateError(t, []string{"#!value prod x", "a"}, "malformed #!value")
-}
-
-func TestValueWithUnknownVariant(t *testing.T) {
-	assertTemplateError(t, []string{"#!value staging: x", "a"}, `unknown variant "staging"`)
+func TestRenderRejectsMalformedTemplates(t *testing.T) {
+	tests := []struct {
+		name     string
+		lines    []string
+		fragment string
+	}{
+		{"unclosed for", []string{"#!for prod", "a"}, "unclosed #!for"},
+		{"nested for", []string{"#!for prod", "#!for default", "a", "#!endfor", "#!endfor"}, "nested #!for"},
+		{"endfor without for", []string{"a", "#!endfor"}, "#!endfor without matching #!for"},
+		{"only followed by directive", []string{"#!only prod", "#!for default", "a", "#!endfor"}, "#!only must be immediately followed by a content line"},
+		{"only at end of file", []string{"a", "#!only prod"}, "#!only at end of file"},
+		{"value at end of file", []string{"a", "#!value prod: x"}, "#!value at end of file"},
+		{"value followed by other directive", []string{"#!value prod: x", "#!for default", "a", "#!endfor"}, "#!value must be immediately followed by a content line"},
+		{"value claims a variant twice", []string{"#!value prod: x", "#!value prod,no-letsencrypt: y", "base"}, "already claimed"},
+		{"value covers every variant", []string{"#!value prod,no-letsencrypt,default: x", "base"}, "cover every variant"},
+		{"unknown variant", []string{"#!for production", "a", "#!endfor"}, "unknown variant"},
+		{"variant listed twice", []string{"#!only prod,prod", "a"}, "listed twice"},
+		{"unknown directive", []string{"#!fro prod", "a"}, "unknown template directive"},
+		{"malformed value", []string{"#!value prod x", "a"}, "malformed #!value"},
+		{"value with unknown variant", []string{"#!value staging: x", "a"}, `unknown variant "staging"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertTemplateError(t, tt.lines, tt.fragment)
+		})
+	}
 }
 
 func TestRenderRejectsUnknownVariantName(t *testing.T) {

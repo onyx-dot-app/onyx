@@ -104,7 +104,7 @@ func TestDownProjectRefusesLiveWorktreeWithoutForce(t *testing.T) {
 	}
 }
 
-func TestStopProjectKeepsInfrastructure(t *testing.T) {
+func TestStopProjectStopsServicesAndKeepsInfrastructure(t *testing.T) {
 	stack, api := isolatedLinkedStack(t, "stop-data")
 	if err := os.RemoveAll(stack.Root); err != nil {
 		t.Fatal(err)
@@ -117,6 +117,9 @@ func TestStopProjectKeepsInfrastructure(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(stack.StateDir, stateFileName)); err != nil {
 		t.Fatal(err)
+	}
+	if got := leaseNames(t, stack.Registry, stack.Root); got["api"] != 0 {
+		t.Fatalf("stop --project kept application leases: %v", got)
 	}
 }
 
@@ -139,19 +142,6 @@ func TestCleanupRowKeepsContainersOfAnotherOwner(t *testing.T) {
 	}
 	if _, err := os.Stat(ownerPath(stack.Registry, stack.Project)); err != nil {
 		t.Fatalf("a secondary state removed the owner record: %v", err)
-	}
-}
-
-func TestStopProjectReleasesApplicationLeases(t *testing.T) {
-	stack, _ := isolatedLinkedStack(t, "stop-leases")
-	if err := os.RemoveAll(stack.Root); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := StopProject(context.Background(), stack.Registry, stack.Project, ProjectOptions{StopTimeout: testOptions().StopTimeout, LockWait: time.Second, Discover: discoverWith(nil)}); err != nil {
-		t.Fatal(err)
-	}
-	if got := leaseNames(t, stack.Registry, stack.Root); got["api"] != 0 {
-		t.Fatalf("stop --project kept application leases: %v", got)
 	}
 }
 
