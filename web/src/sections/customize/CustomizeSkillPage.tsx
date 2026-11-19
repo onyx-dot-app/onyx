@@ -116,8 +116,24 @@ export default function CustomizeSkillPage({
     skill.can_toggle &&
     skill.published_version_number !== null;
 
-  async function refresh(): Promise<void> {
-    await Promise.all([detail.mutate(), refreshSkillLists(mutate)]);
+  /** Whether the newest detail loaded. SWR's revalidating `mutate` keeps
+   * the cached detail when the request fails, so read it here instead. */
+  async function refresh(): Promise<boolean> {
+    const lists = refreshSkillLists(mutate);
+    if (!canEdit) {
+      await lists;
+      return true;
+    }
+    try {
+      const fresh = await errorHandlingFetcher<SkillEditableDetail>(
+        SWR_KEYS.editableSkill(skillId)
+      );
+      await Promise.all([detail.mutate(fresh, { revalidate: false }), lists]);
+      return true;
+    } catch {
+      await lists;
+      return false;
+    }
   }
 
   function setEditing(next: boolean): void {

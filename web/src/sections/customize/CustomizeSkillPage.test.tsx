@@ -336,6 +336,7 @@ test("Reload drops the staged file changes with the text", async () => {
 });
 
 test("a failed refresh keeps the page and the editor", async () => {
+  const toastError = jest.spyOn(toast, "error");
   let reads = 0;
   ownerRoutes({
     "/api/skills/custom/custom-1/edit": () => {
@@ -369,6 +370,17 @@ test("a failed refresh keeps the page and the editor", async () => {
   await waitFor(() => expect(reads).toBeGreaterThan(1));
   expect(screen.queryByText(copy.loadFailed)).not.toBeInTheDocument();
   expect(screen.getByRole("tab", { name: /^Contents/ })).toBeVisible();
+  await waitFor(() =>
+    expect(toastError).toHaveBeenCalledWith(copy.contents.reloadFailed)
+  );
+  expect(
+    screen.getByRole("textbox", { name: copy.contents.editorLabel })
+  ).toHaveValue(
+    '---\nname: "report-writer"\ndescription: "Mine."\n---\n\nWrite it.'
+  );
+  expect(
+    screen.getByText(messages.skills.editor.staleVersion.title)
+  ).toBeVisible();
 });
 
 test("a retry after a failed step sends only the steps left", async () => {

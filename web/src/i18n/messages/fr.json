@@ -17336,7 +17336,8 @@
           "skillMd": "Modifiez SKILL.md dans l’éditeur. Ajoutez ici uniquement des fichiers complémentaires."
         },
         "loadFailed": "Impossible de charger le contenu de cette compétence.",
-        "retry": "Réessayer"
+        "retry": "Réessayer",
+        "reloadFailed": "Impossible de charger la version la plus récente. Vos modifications sont conservées. Réessayez Recharger."
       },
       "required": {
         "label": "Obligatoire",

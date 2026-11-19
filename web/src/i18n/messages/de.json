@@ -17336,7 +17336,8 @@
           "skillMd": "Bearbeiten Sie SKILL.md im Editor. Fügen Sie hier nur zusätzliche Dateien hinzu."
         },
         "loadFailed": "Der Inhalt dieses Skills konnte nicht geladen werden.",
-        "retry": "Erneut versuchen"
+        "retry": "Erneut versuchen",
+        "reloadFailed": "Die neueste Version konnte nicht geladen werden. Ihre Änderungen bleiben erhalten. Versuchen Sie erneut „Neu laden“."
       },
       "required": {
         "label": "Erforderlich",
