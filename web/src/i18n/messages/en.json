@@ -12491,6 +12491,9 @@
           },
           "editingFiles": {
             "label": "Editing files"
+          },
+          "publishingFiles": {
+            "label": "Publishing files"
           }
         },
         "internalSearch": {
@@ -12676,7 +12679,8 @@
           "terminal": "Terminal",
           "applyPatch": "Apply Patch",
           "editFile": "Edit File",
-          "writeFile": "Write File"
+          "writeFile": "Write File",
+          "publishFiles": "Publish Files"
         },
         "webSearch": {
           "searching": {
@@ -12722,6 +12726,14 @@
           },
           "stopped": {
             "status": "Stopped"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, one {Published # file} other {Published # files}}"
+            },
+            "failed": {
+              "status": "Publish failed"
+            }
           }
         }
       },
@@ -13363,6 +13375,16 @@
     "readiness": {
       "stopFailed": "Could not stop the response. Try again.",
       "checkFailed": "Could not confirm that the response finished. Check again before sending another message."
+    },
+    "publishedFiles": {
+      "card": {
+        "updated": {
+          "description": "Updated version · {details}"
+        },
+        "preview": {
+          "ariaLabel": "Preview {name}"
+        }
+      }
     }
   },
   "common": {

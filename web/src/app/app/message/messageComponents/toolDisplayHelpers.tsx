@@ -27,6 +27,7 @@ import {
   SvgWrench,
   SvgEdit,
   SvgServer,
+  SvgFiles,
 } from "@opal/icons";
 
 /**
@@ -108,6 +109,8 @@ export function getToolName(packets: Packet[], t: TimelineTranslate): string {
       return t(
         FILE_TOOL_TITLES[(firstPacket.obj as ApplyPatchStart).tool_name]
       );
+    case PacketType.PUBLISH_FILES_START:
+      return t("toolNames.publishFiles");
     case PacketType.FETCH_TOOL_START:
       return t("toolNames.openUrls");
     case PacketType.CUSTOM_TOOL_START: {
@@ -153,6 +156,8 @@ export function getToolIcon(packets: Packet[]): IconFunctionComponent {
       return SvgTerminal;
     case PacketType.APPLY_PATCH_START:
       return SvgEdit;
+    case PacketType.PUBLISH_FILES_START:
+      return SvgFiles;
     case PacketType.FETCH_TOOL_START:
       return SvgLink;
     case PacketType.CUSTOM_TOOL_START:

@@ -58,6 +58,8 @@ function stepHeaderText(
       return t("header.runningCommand.label");
     case PacketType.APPLY_PATCH_START:
       return t("header.editingFiles.label");
+    case PacketType.PUBLISH_FILES_START:
+      return t("header.publishingFiles.label");
     case PacketType.CUSTOM_TOOL_START: {
       const toolName = (firstPacket.obj as CustomToolStart).display_name;
       return toolName

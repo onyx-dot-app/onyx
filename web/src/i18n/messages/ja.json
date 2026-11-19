@@ -12491,6 +12491,9 @@
           },
           "editingFiles": {
             "label": "ファイルを編集中"
+          },
+          "publishingFiles": {
+            "label": "ファイルを公開しています"
           }
         },
         "internalSearch": {
@@ -12676,7 +12679,8 @@
           "terminal": "ターミナル",
           "applyPatch": "パッチを適用",
           "editFile": "ファイルを編集",
-          "writeFile": "ファイルを書き込む"
+          "writeFile": "ファイルを書き込む",
+          "publishFiles": "ファイルを公開"
         },
         "webSearch": {
           "searching": {
@@ -12722,6 +12726,14 @@
           },
           "stopped": {
             "status": "停止しました"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, other {# 件のファイルを公開しました}}"
+            },
+            "failed": {
+              "status": "公開に失敗しました"
+            }
           }
         }
       },
@@ -13363,6 +13375,16 @@
     "readiness": {
       "stopFailed": "応答を停止できませんでした。もう一度お試しください。",
       "checkFailed": "応答の完了を確認できませんでした。次のメッセージを送信する前に、もう一度確認してください。"
+    },
+    "publishedFiles": {
+      "card": {
+        "updated": {
+          "description": "更新版 · {details}"
+        },
+        "preview": {
+          "ariaLabel": "{name} をプレビュー"
+        }
+      }
     }
   },
   "common": {

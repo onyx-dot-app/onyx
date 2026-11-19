@@ -12491,6 +12491,9 @@
           },
           "editingFiles": {
             "label": "جارٍ تعديل الملفات"
+          },
+          "publishingFiles": {
+            "label": "جارٍ نشر الملفات"
           }
         },
         "internalSearch": {
@@ -12676,7 +12679,8 @@
           "terminal": "الطرفية",
           "applyPatch": "تطبيق التصحيح",
           "editFile": "تعديل ملف",
-          "writeFile": "كتابة ملف"
+          "writeFile": "كتابة ملف",
+          "publishFiles": "نشر الملفات"
         },
         "webSearch": {
           "searching": {
@@ -12722,6 +12726,14 @@
           },
           "stopped": {
             "status": "تم الإيقاف"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, zero {لم يُنشر أي ملف} one {نُشر ملف واحد} two {نُشر ملفان} few {نُشرت # ملفات} many {نُشر # ملفًا} other {نُشر # ملف}}"
+            },
+            "failed": {
+              "status": "فشل النشر"
+            }
           }
         }
       },
@@ -13363,6 +13375,16 @@
     "readiness": {
       "stopFailed": "تعذر إيقاف الرد. حاول مرة أخرى.",
       "checkFailed": "تعذر التأكد من انتهاء الرد. تحقق مجددًا قبل إرسال رسالة أخرى."
+    },
+    "publishedFiles": {
+      "card": {
+        "updated": {
+          "description": "نسخة محدّثة · {details}"
+        },
+        "preview": {
+          "ariaLabel": "معاينة {name}"
+        }
+      }
     }
   },
   "common": {

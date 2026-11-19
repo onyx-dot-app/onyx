@@ -12491,6 +12491,9 @@
           },
           "editingFiles": {
             "label": "파일 편집 중"
+          },
+          "publishingFiles": {
+            "label": "파일 게시 중"
           }
         },
         "internalSearch": {
@@ -12676,7 +12679,8 @@
           "terminal": "터미널",
           "applyPatch": "패치 적용",
           "editFile": "파일 편집",
-          "writeFile": "파일 쓰기"
+          "writeFile": "파일 쓰기",
+          "publishFiles": "파일 게시"
         },
         "webSearch": {
           "searching": {
@@ -12722,6 +12726,14 @@
           },
           "stopped": {
             "status": "중지됨"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, other {파일 #개 게시됨}}"
+            },
+            "failed": {
+              "status": "게시 실패"
+            }
           }
         }
       },
@@ -13363,6 +13375,16 @@
     "readiness": {
       "stopFailed": "응답을 중지하지 못했습니다. 다시 시도하세요.",
       "checkFailed": "응답이 완료되었는지 확인하지 못했습니다. 다른 메시지를 보내기 전에 다시 확인하세요."
+    },
+    "publishedFiles": {
+      "card": {
+        "updated": {
+          "description": "업데이트된 버전 · {details}"
+        },
+        "preview": {
+          "ariaLabel": "{name} 미리 보기"
+        }
+      }
     }
   },
   "common": {

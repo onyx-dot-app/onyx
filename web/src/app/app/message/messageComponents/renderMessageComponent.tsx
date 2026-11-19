@@ -27,6 +27,7 @@ import { ReasoningRenderer } from "@/lib/timeline/chat/renderers/reasoning/Reaso
 import CustomToolRenderer from "@/app/app/message/messageComponents/renderers/CustomToolRenderer";
 import { ExecToolRenderer } from "@/lib/timeline/chat/renderers/sandbox/ExecToolRenderer";
 import { ApplyPatchToolRenderer } from "@/lib/timeline/chat/renderers/sandbox/ApplyPatchToolRenderer";
+import { PublishFilesToolRenderer } from "@/lib/timeline/chat/renderers/sandbox/PublishFilesToolRenderer";
 import { FileReaderToolRenderer } from "@/lib/timeline/chat/renderers/filereader/FileReaderToolRenderer";
 import { FetchToolRenderer } from "@/lib/timeline/chat/renderers/fetch/FetchToolRenderer";
 import { MemoryToolRenderer } from "@/lib/timeline/chat/renderers/memory/MemoryToolRenderer";
@@ -90,6 +91,10 @@ function isExecToolPacket(packet: Packet) {
 
 function isApplyPatchToolPacket(packet: Packet) {
   return packet.obj.type === PacketType.APPLY_PATCH_START;
+}
+
+function isPublishFilesToolPacket(packet: Packet) {
+  return packet.obj.type === PacketType.PUBLISH_FILES_START;
 }
 
 function isFetchToolPacket(packet: Packet) {
@@ -171,6 +176,9 @@ export function findRenderer(
   }
   if (packets.some(isApplyPatchToolPacket)) {
     return ApplyPatchToolRenderer;
+  }
+  if (packets.some(isPublishFilesToolPacket)) {
+    return PublishFilesToolRenderer;
   }
   if (packets.some(isCustomToolPacket)) {
     return CustomToolRenderer;

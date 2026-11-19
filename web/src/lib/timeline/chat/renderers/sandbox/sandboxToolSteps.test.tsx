@@ -655,3 +655,110 @@ test("a code mode call that its cell's end cut off shows as stopped", async () =
     view.unmount();
   }
 });
+
+test("published files show in the timeline and as download cards after the answer", async () => {
+  const first = at({ turn_index: 0, tab_index: 0 });
+  const again = at({ turn_index: 1, tab_index: 0 });
+  const failed = at({ turn_index: 2, tab_index: 0 });
+  const report = (file_id: string, title: string | null) => ({
+    file_id,
+    name: "report.csv",
+    title,
+    path: "/home/onyx/workspaces/abc/out/report.csv",
+    size: 2048,
+    mime_type: "text/csv",
+  });
+  const view = render(
+    renderMessage([
+      first({
+        type: PacketType.PUBLISH_FILES_START,
+        files: [{ path: "out/report.csv", title: "Q3 report" }],
+        description: "The quarterly numbers",
+      }),
+      first({
+        type: PacketType.PUBLISH_FILES_END,
+        files: [report("file-1", "Q3 report")],
+        error: null,
+      }),
+      first(sectionEnd),
+      again({
+        type: PacketType.PUBLISH_FILES_START,
+        files: [{ path: "out/report.csv", title: null }],
+        description: null,
+      }),
+      again({
+        type: PacketType.PUBLISH_FILES_END,
+        files: [report("file-2", null)],
+        error: null,
+      }),
+      again(sectionEnd),
+      failed({
+        type: PacketType.PUBLISH_FILES_START,
+        files: [{ path: "missing.pdf", title: null }],
+        description: null,
+      }),
+      failed({
+        type: PacketType.PUBLISH_FILES_END,
+        files: [],
+        error: "missing.pdf is not a file",
+      }),
+      failed(sectionEnd),
+      ...answer(3),
+    ])
+  );
+  try {
+    const cards = await screen.findAllByRole("button", {
+      name: "Preview report.csv",
+    });
+    expect(cards).toHaveLength(2);
+    expect(screen.getByText("Q3 report")).toBeInTheDocument();
+    expect(screen.getByText(/^Updated version · CSV/)).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole("link", { name: "Download" })
+        .map((link) => link.getAttribute("href"))
+    ).toEqual(["/api/chat/file/file-1", "/api/chat/file/file-2"]);
+
+    await expandTimeline();
+    expect(screen.getAllByText("Published 1 file")).toHaveLength(2);
+    expect(screen.getByText("The quarterly numbers")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("/home/onyx/workspaces/abc/out/report.csv")
+    ).toHaveLength(2);
+    expect(screen.getByText("Publish failed")).toBeInTheDocument();
+    expect(screen.getByText("missing.pdf is not a file")).toBeInTheDocument();
+    expect(screen.getByText("missing.pdf")).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a publish_files call with invalid arguments still shows its step and error", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      call({
+        type: PacketType.PUBLISH_FILES_START,
+        files: [],
+        description: null,
+      }),
+      call({
+        type: PacketType.PUBLISH_FILES_END,
+        files: [],
+        error: "files: field required",
+      }),
+      call(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(screen.getByText("Publish failed")).toBeInTheDocument();
+    expect(screen.getByText("files: field required")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Preview / })
+    ).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
