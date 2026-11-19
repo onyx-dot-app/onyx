@@ -6,7 +6,7 @@ import { Button, MessageCard } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { useNavigation } from "@opal/navigation";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
-import { CRAFT_SKILLS_PATH } from "@/app/craft/v1/constants";
+import { customizeTabHref } from "@/lib/customize/paths";
 import { useFormatBytes } from "@/hooks/useFormatBytes";
 
 interface SkillRuntimeNoticeProps {
@@ -54,7 +54,7 @@ export default function SkillRuntimeNotice({
             </Button>
             <Button
               prominence="secondary"
-              {...navigation.linkTo(CRAFT_SKILLS_PATH)}
+              {...navigation.linkTo(customizeTabHref("skills"))}
             >
               {t("manage")}
             </Button>

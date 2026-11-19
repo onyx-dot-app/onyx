@@ -22,6 +22,10 @@ Tailwind uses. So `gap={2}` is the same distance as `gap-2`.
 | `padding`        | `Spacing`                                   | `0`        | Padding, as a spacing step (`N / 4` rem)              |
 | `wrap`           | `boolean`                                   | `false`    | Enables `flex-wrap`                                   |
 | `wrapGap`        | `Spacing`                                   | `gap`      | Gap between wrapped lines: the row gap in a row Section, the column gap in a column Section |
+| `grow`           | `number`                                    | —          | As a flex child, its share of the free space. With `grow` or `basis`, the content can shrink below its own width |
+| `shrink`         | `boolean`                                   | `true`     | As a flex child, `false` keeps it from shrinking      |
+| `basis`          | `number`                                    | —          | As a flex child, its starting size in rem             |
+| `minHeight`      | `number`                                    | —          | Minimum height in rem                                 |
 | `dbg`            | `boolean`                                   | `false`    | Adds a red debug border                               |
 | `className`      | `string`                                    | —          | Additional classes                                    |
 | `ref`            | `Ref<HTMLDivElement>`                       | —          | Forwarded ref                                         |

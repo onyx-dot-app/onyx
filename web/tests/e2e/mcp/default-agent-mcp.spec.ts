@@ -9,7 +9,7 @@ import {
 import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
 import { AdminIntegrationDetailPage } from "@tests/e2e/pages/AdminIntegrationDetailPage";
 import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
-import { MemberPluginsPage } from "@tests/e2e/pages/MemberPluginsPage";
+import { CustomizePage } from "@tests/e2e/pages/CustomizePage";
 import { MemberPluginDetailPage } from "@tests/e2e/pages/MemberPluginDetailPage";
 import {
   expectMcpToolInvoked,
@@ -145,9 +145,8 @@ test.describe("Default Agent MCP Integration", () => {
   }) => {
     await page.context().clearCookies();
     await apiLogin(page, basicUserEmail, basicUserPassword);
-    const plugins = new MemberPluginsPage(page);
-    await plugins.goto();
-    await plugins.filter("Integrations");
+    const plugins = new CustomizePage(page);
+    await plugins.goto("Plugins");
     await plugins.search(serverName);
     await plugins.openPlugin(serverName);
 

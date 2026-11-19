@@ -9,7 +9,7 @@ Each user connects their own account. Craft then calls the application's API as 
 
 Craft can only reach content that the connected account can access in the application.
 
-Admins add Craft Apps in **Admin Panel → Integrations**. Users connect their accounts in **Plugins** in Craft or Chat.
+Admins add Craft Apps in **Admin Panel → Integrations**. Users connect their accounts in **Customize** in Craft or Chat.
 
 <Note>
   Craft Apps work only in [Craft](/overview/core_features/craft). Main Chat does not support them.
@@ -66,7 +66,7 @@ A [custom App](#custom-apps) gives Craft credentials and network access for any 
   </Step>
 
   <Step title="Add the App">
-    Go to **Admin Panel → Integrations**, click **Add**, then select **App**. Select the **Preset**,
+    Go to **Admin Panel → Integrations**, click **Add**, then select **App**. Under **Start From**, select the App,
     follow its **Setup instructions**, and enter the account settings, such as the client ID and client secret.
     Onyx does not ask for a user's access token. Each user signs in later. Click **Add**.
   </Step>
@@ -234,7 +234,7 @@ A custom App gives Craft credentials and network access for the API. It does not
 
 <Steps>
   <Step title="Set the URL patterns">
-    Go to **Admin Panel → Integrations**, click **Add**, then select **Custom app**.
+    Go to **Admin Panel → Integrations**, click **Add**, then select **App**. Keep **Custom app** under **Start From**.
     Enter a **Name** and the **URL Patterns**, one pattern on each line.
     The proxy injects credentials only into requests that match these patterns.
   </Step>

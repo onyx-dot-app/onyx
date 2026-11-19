@@ -9,10 +9,19 @@
 
 ## User experience
 
-- **A Craft user** opens the skills library and sees built-in skills and the
-  custom skills they can see: their own, shared with them, or published to the
-  organization. The Admin Panel lists custom skills only. They preview a
-  skill's instructions, and turn custom skills on or off.
+- **A user** opens Customize → Skills (`/app/customize/skills`,
+  `sections/customize/CustomizeSkillsPage.tsx`; Craft is not needed, and
+  `/craft/v1/skills*` redirect here with their query). The groups are Created by
+  you (owner is the user), From your organization (published), Shared with you,
+  and Built-in, which shows only with Craft on, as `list_chat_skills` leaves
+  built-ins out of chat (`lib/customize/skills.ts:groupSkills`). A row has the
+  tag Disabled, Required, Pending review or Unpublished changes, the date, Turn
+  on, and a menu (Turn on/off, Share, Remove). Add has Upload skill, Create a
+  skill (`/app/customize/skills/new`) and Import from GitHub. A custom skill
+  opens at `/app/customize/skills/[id]`; a built-in opens a preview. A custom
+  skill's icon is a themed glyph picked from its name and description
+  (`sections/customize/skillIcon.tsx`). The Admin Panel lists custom skills
+  only.
 - **Built-in skills** are always on. A built-in that depends on an unavailable
   service, such as image generation with no provider or the browser with
   `ENABLE_BROWSER` off, is hidden. The built-in skill of a preset app, such
@@ -48,24 +57,25 @@
   (`db/skill.py:may_delete_skill`); the UI shows Delete from `can_delete`.
   `required_for_user` (the setting for the caller is REQUIRED, from the company
   or a group) shows the Required badge.
-- **Admin skill policies** on Admin Panel → Craft → Preferences: Skill
+- **Admin skill policies** on Admin Panel → Skills, which shows whether
+  or not Craft is on: Skill
   Publishing ([[#publishing-review]]), **Default Access** (the Organization
   library default for published skills with no own setting: Available,
   Installed by default or Not available; never Required) and **Sharing** (off:
   only organization-wide managers add user or group shares).
-- **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
-  support selection of custom skills, bulk access and installation changes,
+- **Bulk management.** **Admin Panel → Skills** supports selection of custom skills, bulk access and installation changes,
   personal enable/disable, and confirmed deletion. Admins see all manageable
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items
   stay selected. Search and group filter changes clear selection.
   `SkillResponse.group_summaries` lists the `plugin__user_group` rows (group,
   permission or none, setting) to a caller who may edit the skill, and to a
-  scoped manager only the rows of their groups. Custom cards show them as a
-  groups line, and the list has a group filter built from them.
-  Custom cards show Personal, Shared, or Organization access from
-  `public_permission` and the server's `is_personal`; share-detail arrays can
-  be hidden, so empty arrays do not mean a skill is personal.
+  scoped manager only the rows of their groups. The admin table shows them in
+  the Audience column, and the list has a group filter built from them.
+  The Audience column shows the install setting of a published skill, else
+  "Only the owner" or "Shared with people or groups" from `public_permission`
+  and the server's `is_personal`; share-detail arrays can be hidden, so empty
+  arrays do not mean a skill is personal.
 - **Skill limit notices.** A refused write of the user's own (413
   `SKILL_LIMIT_EXCEEDED`) shows the limit where the user made the change
   (`web/src/lib/skills/hooks.ts:useSkillLimitCopy`). Bulk and import rows
@@ -77,11 +87,41 @@
   only. It waits while the session is stale. The admin Skills page shows
   `SkillLimitUsersBanner` (`web/src/sections/skills/`) when
   `GET /skills/users-over-limit` lists users: the first 10, then a count.
-- **Skill dialog.** Owners and editors open custom cards in a single
-  Details/Sharing dialog. Share actions open its Sharing tab directly. Draft
-  sharing edits survive tab switches. Other recipients and built-in skills
-  keep a preview-only dialog. The sharing endpoint requires EDIT; do not
-  require that endpoint for a VIEW-only preview.
+- **Skill page.** A custom skill opens at `/app/customize/skills/[id]`
+  (`sections/customize/CustomizeSkillPage.tsx`): a header with the owner, the
+  current and published versions, Copy link, Share, a menu (Edit, Remove) and
+  the switch, or Add for a published skill the user has not turned on; tabs
+  Overview, Contents and Versions (owners and editors only). Contents
+  (`web/src/sections/customize/SkillContentsTab.tsx`) shows the files beside a viewer; Edit, or `?edit=1`,
+  edits SKILL.md as text (frontmatter `name` and `description`, then the
+  instructions) and stages added and removed files. Save Version sends a PATCH,
+  then each upload, then each removal, each with the version the step before
+  made as `base_version_id`, so one save can make several versions. The first
+  base is the version the edit started from, so a newer save by someone else
+  is refused (stale notice with Reload). A finished step leaves the staged
+  list, so Save retries only the rest. There is no file
+  content endpoint, so only SKILL.md shows text. `SkillEditorPage` only
+  creates a skill (`/app/customize/skills/new`), in the same files-and-SKILL.md
+  card (`web/src/sections/customize/SkillBundleEditor.tsx`). Create merges every
+  added upload, without the removed files, into one ZIP
+  (`lib/skills/bundleUpload.ts:mergeSkillFilesUploads`) and sends it with the
+  sharing in one `POST /skills/custom/editor`, so the first version holds
+  every file. A SKILL.md bundle replaces the text and
+  the files after a confirmation.
+  The skill comes from `GET /skills`; only owners and editors read
+  `/skills/custom/{id}/edit` (it is 404 for a viewer), and a viewer reads the
+  instructions and the supporting file list from `/skills/{id}/preview`. `ShareSkillModal` holds only the
+  share settings. Admin Panel → Skills (`views/SkillsPage.tsx`,
+  `sections/skills/AdminSkillsTable.tsx`) is an inventory table (Name, Source,
+  Version, Audience with the group names, switch, row menu with Share and
+  Delete) above which the bulk toolbar and a publish request banner stay (its
+  Review opens the requests in a dialog, and a request's Review swaps it for
+  the review dialog); a row opens
+  the same skill page at `/admin/skills/[id]` with a back link to the
+  inventory. The skill, integration and plugin pages share
+  `sections/customize/CustomizeDetailLayout.tsx` (back link, header, underline
+  tabs, and `DetailOverview`: the description beside a card of `KeyValue`
+  facts). Built-in skills keep a preview-only dialog.
 - **Access at import.** GitHub import and multiple-ZIP upload accept one set
   of sharing settings for the selection. The single-skill editor accepts
   sharing before creation. These use the same sharing checks as later edits.
@@ -99,7 +139,7 @@
   the message is accepted is not applied. Built-in skills
   do not reach chat, because they need the Craft sandbox. Chat cannot open a skill's other files or run its scripts.
   In the chat input, `@` at the start of a word opens a picker of these
-  skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/skills/chat`),
+  skills, with a **Manage skills** row that opens Customize → Skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/skills/chat`),
   filtered by name prefix without case. A row shows the skill's short
   description when it has one, else its description. A skill change in the
   library, the skill editor, a plugin's Skills tab or a Craft app connection
@@ -695,7 +735,10 @@ the app from the same rule
     the edit gets 409 `PLUGIN_VERSION_STALE`. Skill responses return the plugin's
     `current_version_id`, read with the name and description; the editor
     returns the id of the version whose content it read, so the editor's base
-    always matches its fields. Routes no longer delete the
+    always matches its fields. An editor write (the PATCH, a file upload or
+    removal) returns the version it made, or its base when nothing changed,
+    not a later read: a save by someone else in between would otherwise
+    become the base of the next chained write and skip its stale check. Routes no longer delete the
     previous bundle, because older versions still point at it
     ([[#bundle-retention]]). Each new version stores `plugin_skill.skill_md`
     ([[#bundle-size-limits]]). `skills/metadata.py:frontmatter_for_jsonb`
@@ -735,8 +778,8 @@ the app from the same rule
     `created_at`, and the admin approves or denies from a view of the version
     preview. The web hook `usePublishAction` mirrors the setting for the
     share dialog and the Versions tab.
-    The **Skill Publishing** card on Admin Panel → Craft → Preferences
-    (`web/src/views/admin/CraftPreferencesPage/SkillPublishingCard.tsx`) also
+    The **Skill Publishing** card on Admin Panel → Skills
+    (`web/src/sections/skills/SkillPublishingCard.tsx`) also
     holds **Default Access**, saved with
     `PUT /skills/organization-library/default-access`, and **Sharing**, saved
     as `plugin_sharing`.

@@ -1,5 +1,6 @@
 import { PointerEventsCheckLevel } from "@testing-library/user-event";
 import {
+  act,
   render,
   screen,
   setupUser,
@@ -46,7 +47,7 @@ jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ user: { email: "me@example.com" } }),
 }));
 
-const RETURN_PATH = `/app/plugins/${LINEAR_PLUGIN_ID}?tab=integrations`;
+const RETURN_PATH = `/app/customize/plugins/${LINEAR_PLUGIN_ID}?tab=integrations`;
 const AUTHORIZATION_URL = "https://linear.app/oauth/authorize?state=attempt-1";
 
 function user() {
@@ -80,21 +81,25 @@ afterEach(() => {
 test("shows only the tabs with content", async () => {
   open([makeMemberIntegration()]);
   expect(
-    await screen.findByRole("tab", { name: copy.detail.tabs.integrations })
+    await screen.findByRole("tab", { name: "Integrations · 1" })
   ).toHaveAttribute("aria-selected", "true");
   expect(
     screen.getByRole("tab", { name: copy.detail.tabs.overview })
   ).toBeInTheDocument();
   expect(
-    screen.queryByRole("tab", { name: copy.detail.tabs.skills })
+    screen.queryByRole("tab", { name: /^Skills/ })
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("tab", { name: copy.detail.tabs.versions })
   ).not.toBeInTheDocument();
 });
 
-test("a skill plugin shows its skills and versions", async () => {
-  window.history.replaceState(null, "", `/app/plugins/${LINEAR_PLUGIN_ID}`);
+test("a plugin that is one skill opens the skill page", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    `/app/customize/plugins/${LINEAR_PLUGIN_ID}`
+  );
   mockFetch({
     "/api/skills": {
       builtins: [],
@@ -109,15 +114,61 @@ test("a skill plugin shows its skills and versions", async () => {
     "/api/integrations": [],
   });
   render(<MemberPluginDetailPage pluginId={LINEAR_PLUGIN_ID} />);
+  await waitFor(() =>
+    expect(window.location.pathname).toBe(
+      `/app/customize/skills/${LINEAR_PLUGIN_ID}`
+    )
+  );
   expect(
-    await screen.findByRole("tab", { name: copy.detail.tabs.skills })
-  ).toBeInTheDocument();
-  expect(
-    screen.getByRole("tab", { name: copy.detail.tabs.versions })
-  ).toBeInTheDocument();
-  expect(
-    screen.queryByRole("tab", { name: copy.detail.tabs.integrations })
+    screen.queryByRole("tab", { name: /^Skills/ })
   ).not.toBeInTheDocument();
+});
+
+test("a one-skill plugin waits for the integrations before it opens the skill", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    `/app/customize/plugins/${LINEAR_PLUGIN_ID}`
+  );
+  let releaseSkills: (list: unknown) => void = () => undefined;
+  let releaseIntegrations: (list: MemberIntegration[]) => void = () =>
+    undefined;
+  const fetchMock = mockFetch({
+    "/api/skills": () =>
+      new Promise((resolve) => {
+        releaseSkills = resolve;
+      }),
+    "/api/integrations": () =>
+      new Promise<MemberIntegration[]>((resolve) => {
+        releaseIntegrations = resolve;
+      }),
+  });
+  render(<MemberPluginDetailPage pluginId={LINEAR_PLUGIN_ID} />);
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+  await act(async () =>
+    releaseSkills({
+      builtins: [],
+      customs: [
+        customFixture({
+          id: LINEAR_PLUGIN_ID,
+          name: "report-writer",
+          user_permission: "OWNER",
+        }),
+      ],
+    })
+  );
+  expect(window.location.pathname).toBe(
+    `/app/customize/plugins/${LINEAR_PLUGIN_ID}`
+  );
+
+  await act(async () => releaseIntegrations([makeMemberIntegration()]));
+  expect(
+    await screen.findByRole("tab", { name: /^Integrations/ })
+  ).toBeInTheDocument();
+  expect(window.location.pathname).toBe(
+    `/app/customize/plugins/${LINEAR_PLUGIN_ID}`
+  );
 });
 
 test("shows each of the four statuses with its action", async () => {
@@ -308,7 +359,11 @@ function withPlugin(
 
 function overview(integrations: MemberIntegration[], extra = {}) {
   const fetchMock = open(integrations, extra);
-  window.history.replaceState(null, "", `/app/plugins/${LINEAR_PLUGIN_ID}`);
+  window.history.replaceState(
+    null,
+    "",
+    `/app/customize/plugins/${LINEAR_PLUGIN_ID}`
+  );
   return fetchMock;
 }
 

@@ -2,7 +2,7 @@
 
 import type { RichStr } from "@opal/types";
 import { IconLoader } from "@opal/loaders";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, CompactMarkdown, MessageCard, Text } from "@opal/components";
@@ -46,6 +46,24 @@ export function SkillInstructionsPanel({
   const t = useTranslations("skills.modals");
   const [instructionsDisplayMode, setInstructionsDisplayMode] =
     useState<InstructionsDisplayMode>("rendered");
+  const contentBox = useRef<HTMLDivElement>(null);
+  // The two modes have different heights. Keep the box at the tallest height
+  // seen (in rem) for these instructions, so a toggle does not move the
+  // content below it or resize a modal.
+  const [held, setHeld] = useState<{ text: string; rem: number } | null>(null);
+  const minHeight = held?.text === instructionsMarkdown ? held.rem : undefined;
+
+  function changeDisplayMode(mode: InstructionsDisplayMode) {
+    const box = contentBox.current;
+    if (box) {
+      const rootPx = parseFloat(
+        getComputedStyle(document.documentElement).fontSize
+      );
+      setHeld({ text: instructionsMarkdown, rem: box.offsetHeight / rootPx });
+    }
+    setInstructionsDisplayMode(mode);
+  }
+
   return (
     <Section gap={1} height="auto" alignItems="stretch">
       <Section
@@ -59,11 +77,14 @@ export function SkillInstructionsPanel({
         </Text>
         <InstructionsDisplayModeToggle
           value={instructionsDisplayMode}
-          onChange={setInstructionsDisplayMode}
+          onChange={changeDisplayMode}
         />
       </Section>
       <Section
+        ref={contentBox}
         height="auto"
+        minHeight={minHeight}
+        justifyContent="start"
         padding={3}
         gap={0}
         alignItems="stretch"

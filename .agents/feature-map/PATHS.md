@@ -280,7 +280,7 @@ covers new files that match it.
 | `web/src/sections/Suggestions.tsx` | chat-frontend |
 | `web/src/lib/richInputTile.ts`, `web/src/lib/contentEditable.ts` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
-| `web/src/app/app/plugins/` | plugins, chat-frontend |
+| `web/src/app/app/customize/`, `web/src/sections/customize/`, `web/src/lib/customize/` | plugins, skills, chat-frontend |
 | `web/src/app/app/settings/llm-gateway/` | llm-gateway |
 | `web/src/app/app/settings/usage/` | observability |
 | `web/src/views/SettingsPage.tsx` | chat-preferences |
@@ -310,10 +310,9 @@ covers new files that match it.
 | `web/src/lib/docx/`, `web/src/lib/csv.ts` | chat-frontend, craft-frontend |
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
 | `web/src/app/craft/v1/apps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |
-| `web/src/app/craft/v1/plugins/` | craft-external-apps, plugins |
-| `web/src/app/craft/v1/skills/`, `web/src/app/craft/components/SkillsStaleNotice.tsx`, `web/src/app/craft/components/SkillRuntimeNotice.tsx` | skills |
+| `web/src/app/craft/components/SkillsStaleNotice.tsx`, `web/src/app/craft/components/SkillRuntimeNotice.tsx` | skills |
 | `web/src/app/admin/skills/` | skills |
-| `web/src/views/SkillsPage.tsx`, `web/src/views/SkillEditorPage.tsx`, `web/src/sections/skills/`, `web/src/sections/modals/skills/`, `web/src/sections/cards/SkillCard.tsx`, `web/src/hooks/useUserSkills.ts`, `web/src/lib/skills/`, `web/src/sections/modals/SkillPreviewModal.tsx` | skills |
+| `web/src/views/SkillsPage.tsx`, `web/src/views/SkillEditorPage.tsx`, `web/src/sections/skills/`, `web/src/sections/modals/skills/`, `web/src/hooks/useUserSkills.ts`, `web/src/lib/skills/`, `web/src/sections/modals/SkillPreviewModal.tsx` | skills |
 
 ## Frontend: admin and platform
 
@@ -349,7 +348,7 @@ covers new files that match it.
 | `web/src/app/admin/llm-gateway/`, `web/src/views/admin/LLMGatewayPage/` | llm-gateway |
 | `web/src/app/admin/voice/`, `web/src/views/admin/VoicePage/`, `web/src/lib/voice/` | voice |
 | `web/src/app/admin/plugins/`, `web/src/app/admin/integrations/` | plugins |
-| `web/src/sections/integrations/`, `web/src/lib/integrations/`, `web/src/sections/oauth/IntegrationOAuthCallback.tsx`, `web/src/app/app/plugins/` | plugins |
+| `web/src/sections/integrations/`, `web/src/lib/integrations/`, `web/src/sections/oauth/IntegrationOAuthCallback.tsx` | plugins |
 | `web/src/sections/plugins/`, `web/src/lib/plugins/` | plugins |
 | `web/src/sections/actions/`, `web/src/lib/mcp/`, `web/src/app/mcp/oauth/` | plugins, mcp-and-custom-tools |
 | `web/src/app/mcp/[[...path]]/` | mcp-server |

@@ -580,7 +580,7 @@ test.describe("Permission gating: MANAGE_ACTIONS", () => {
       await integrations.expectIntegrationVisible(mcpName);
       await integrations.openAdd("MCP server");
       await expect(integrations.serverUrlInput).toBeVisible();
-      await integrations.closeAddDialog();
+      await integrations.cancelAdd();
 
       await page.context().clearCookies();
       await loginAs(page, "admin");

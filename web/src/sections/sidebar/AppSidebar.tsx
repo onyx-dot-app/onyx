@@ -74,7 +74,7 @@ import { useCreateModal } from "@opal/components";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
   SvgDevKit,
-  SvgPlug,
+  SvgSliders,
   SvgEditBig,
   SvgFolderPlus,
   SvgMoreHorizontal,
@@ -95,6 +95,7 @@ import { AccountPopover } from "@/lib/app/components";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
+import { CUSTOMIZE_PATH } from "@/lib/customize/paths";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -682,11 +683,11 @@ export default function AppSidebar() {
             </div>
           )}
           <SidebarTab
-            icon={SvgPlug}
-            {...navigation.linkTo("/app/plugins", { scroll: false })}
-            selected={activeSidebarTab.isPlugins()}
+            icon={SvgSliders}
+            {...navigation.linkTo(CUSTOMIZE_PATH, { scroll: false })}
+            selected={activeSidebarTab.isCustomize()}
           >
-            {t("appSidebar.plugins.label")}
+            {t("appSidebar.customize.label")}
           </SidebarTab>
           {/* Folded, the body's sections collapse into the header, in the
               unfolded order: Agents, then Projects. */}

@@ -285,6 +285,7 @@ def test_editor_and_preview_make_no_file_store_read_for_stored_content(
     ]
     assert edit.current_version_id == published_skill.current_version_id
     assert preview.instructions_markdown == "Instructions two"
+    assert preview.files == edit.files
 
 
 def test_editor_and_preview_open_the_bundle_of_a_backfilled_version(
@@ -347,3 +348,51 @@ def test_file_store_spy_records_reads(file_store_reads: list[str]) -> None:
     with pytest.raises(FileRecordNotFoundError):
         get_default_file_store().read_file("does-not-exist")
     assert file_store_reads == ["does-not-exist"]
+
+
+def test_a_file_edit_reports_its_own_version_when_another_save_follows(
+    published_skill: _PublishedSkill,
+    db_session: Session,
+    bundle_ids: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Another editor can save between a file edit's commit and its response.
+    The response still names the edit's own version, so the next chained edit
+    gets a stale-version error instead of overwriting that save."""
+    from onyx.server.features.skill import api as skill_api
+
+    name = published_skill.skill.name
+    edit_version: list[UUID] = []
+
+    def save_by_someone_else(*_args: Any, **_kwargs: Any) -> None:
+        edit_version.append(_current_version_id(published_skill.skill.id, db_session))
+        other = ingest_skill_bundle(
+            _bundle(name, "three"),
+            f"{name}.zip",
+            get_default_file_store(),
+            expected_name=name,
+        )
+        bundle_ids.append(other.bundle_file_id)
+        replace_skill_bundle(
+            skill=published_skill.skill,
+            ingested=other,
+            base_version_id=None,
+            user=published_skill.author,
+            skip_if_unchanged=False,
+            db_session=db_session,
+        )
+
+    monkeypatch.setattr(
+        skill_api, "push_skill_to_affected_sandboxes", save_by_someone_else
+    )
+    response = skill_api.remove_current_user_skill_file(
+        published_skill.skill.id,
+        path="notes.md",
+        base_version_id=published_skill.current_version_id,
+        user=published_skill.author,
+        db_session=db_session,
+    )
+
+    latest = _current_version_id(published_skill.skill.id, db_session)
+    assert edit_version and response.current_version_id == edit_version[0]
+    assert latest != edit_version[0]

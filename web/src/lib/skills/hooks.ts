@@ -6,7 +6,7 @@ import {
   useState,
   type SyntheticEvent,
 } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig, type KeyedMutator } from "swr";
 import {
   errorHandlingFetcher,
   FetchError,
@@ -28,7 +28,14 @@ import {
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useFormatBytes } from "@/hooks/useFormatBytes";
 import { useTranslations } from "next-intl";
-import type { SelectOption } from "@opal/components";
+import {
+  useCreateModal,
+  type ModalCreationInterface,
+  type SelectOption,
+} from "@opal/components";
+import { toast } from "@opal/layouts";
+import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
+import { refreshSkillListsChecked } from "@/lib/skills/cache";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
@@ -40,7 +47,12 @@ import {
   type InheritOption,
 } from "@/lib/skills/installationPolicy";
 import { skillLimitOf } from "@/lib/skills/limits";
-import type { ChatSkill, SkillInstallationPolicy } from "@/lib/skills/types";
+import type {
+  ChatSkill,
+  Skill,
+  SkillInstallationPolicy,
+  SkillsList,
+} from "@/lib/skills/types";
 
 export type PublishAction = "publish" | "review" | "off";
 
@@ -407,4 +419,155 @@ export function useSkillLimitCopy(): SkillLimitCopy {
     [t, formatBytes]
   );
   return { describeError };
+}
+
+export interface SkillToggleTarget {
+  id: string;
+  name: string;
+  enabled: boolean;
+}
+
+export interface SkillEnablement {
+  setEnabled: (
+    item: SkillToggleTarget,
+    enabled: boolean,
+    replaceConflict?: boolean
+  ) => Promise<void>;
+  isPending: (id: string) => boolean;
+  /** The state to show: an in-flight change wins over the loaded one. */
+  enabledOf: (item: SkillToggleTarget) => boolean;
+  /** A skill whose name another enabled skill holds, waiting for a confirm. */
+  switchTarget: SkillToggleTarget | null;
+  switchModal: ModalCreationInterface;
+}
+
+/** Turns skills on and off. Only one enabled skill holds a name, so turning
+ * on a skill whose name is taken asks first, then replaces the other one. */
+export function useSkillEnablement(
+  items: readonly SkillToggleTarget[],
+  refresh: KeyedMutator<SkillsList>
+): SkillEnablement {
+  const t = useTranslations("skills");
+  const { describeError } = useSkillLimitCopy();
+  const { mutate, cache } = useSWRConfig();
+  const switchModal = useCreateModal();
+  const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
+  const [optimistic, setOptimistic] = useState<ReadonlyMap<string, boolean>>(
+    new Map()
+  );
+  const [switchTarget, setSwitchTarget] = useState<SkillToggleTarget | null>(
+    null
+  );
+
+  function askToSwitch(item: SkillToggleTarget) {
+    setSwitchTarget(item);
+    switchModal.toggle(true);
+  }
+
+  async function setEnabled(
+    item: SkillToggleTarget,
+    enabled: boolean,
+    replaceConflict = false
+  ): Promise<void> {
+    if (
+      enabled &&
+      !replaceConflict &&
+      items.some(
+        (candidate) =>
+          candidate.id !== item.id &&
+          candidate.name === item.name &&
+          candidate.enabled
+      )
+    ) {
+      askToSwitch(item);
+      return;
+    }
+    const affected =
+      enabled && replaceConflict
+        ? items.filter(
+            (candidate) =>
+              candidate.id === item.id ||
+              (candidate.name === item.name && candidate.enabled)
+          )
+        : [item];
+    const affectedIds = new Set(affected.map(({ id }) => id));
+    setPending((current) => new Set([...current, ...affectedIds]));
+    setOptimistic((current) => {
+      const next = new Map(current);
+      if (enabled)
+        affected.forEach((candidate) =>
+          next.set(candidate.id, candidate.id === item.id)
+        );
+      else next.set(item.id, false);
+      return next;
+    });
+    try {
+      const updated = await setSkillEnabled(item.id, enabled, replaceConflict);
+      if (replaceConflict) switchModal.toggle(false);
+      await refresh(
+        (current) => {
+          if (!current) return current;
+          const apply = (skill: Skill): Skill =>
+            skill.id === updated.id
+              ? updated
+              : enabled && skill.name === updated.name
+                ? { ...skill, enabled: false }
+                : skill;
+          return {
+            builtins: current.builtins.map(apply),
+            customs: current.customs.map(apply),
+          };
+        },
+        { revalidate: false }
+      );
+      void refreshSkillListsChecked(mutate, cache).then((ok) => {
+        if (!ok)
+          toast.error(t("page.toasts.refreshFailed", { name: item.name }));
+      });
+    } catch (error) {
+      if (enabled && !replaceConflict && isSkillNameConflict(error)) {
+        askToSwitch(item);
+        return;
+      }
+      toast.error(
+        describeError(
+          error,
+          t(
+            enabled ? "page.toasts.enableFailed" : "page.toasts.disableFailed",
+            { name: item.name }
+          )
+        )
+      );
+    } finally {
+      setOptimistic((current) => {
+        const next = new Map(current);
+        affectedIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      setPending((current) => {
+        const next = new Set(current);
+        affectedIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+  }
+
+  return {
+    setEnabled,
+    isPending: (id) => pending.has(id),
+    enabledOf: (item) => optimistic.get(item.id) ?? item.enabled,
+    switchTarget,
+    switchModal,
+  };
+}
+
+/** Refreshes the skill lists after a change, and reports a failed refresh. */
+export function useRefreshSkillLists(): () => void {
+  const t = useTranslations("skills");
+  const { mutate, cache } = useSWRConfig();
+  return () => {
+    void refreshSkillListsChecked(mutate, cache).then((ok) => {
+      if (!ok) toast.error(t("page.toasts.listRefreshFailed"));
+    });
+  };
 }

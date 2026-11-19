@@ -10366,10 +10366,9 @@
     },
     "plugins": {
       "title": "插件",
-      "description": "插件为用户提供技能和集成。此页面显示包含集成的插件。",
+      "description": "插件将人们一起开启的技能和集成打包在一起。此列表显示包含集成的插件。请在技能页面管理技能。",
       "search": "搜索插件",
       "loadFailed": "无法加载插件。",
-      "manageIntegrations": "管理集成",
       "columns": {
         "name": "插件",
         "library": "库",
@@ -10378,7 +10377,7 @@
       },
       "library": {
         "organization": "组织库",
-        "personal": "{owner} 的“我的上传”"
+        "personal": "个人上传"
       },
       "installationSelect": "{name} 的安装设置",
       "installationSaved": "{name} 现在为 {policy}。",
@@ -10387,6 +10386,13 @@
       "empty": {
         "title": "没有包含集成的插件",
         "description": "添加集成后，Onyx 会创建一个包含它的插件。"
+      },
+      "contents": "{count, plural, other {# 个集成}}",
+      "filters": {
+        "label": "库",
+        "all": "所有库",
+        "organization": "组织库",
+        "personal": "个人上传"
       }
     },
     "integrations": {
@@ -10398,31 +10404,27 @@
       "add": {
         "label": "添加",
         "title": "添加集成",
-        "description": "选择集成类型。",
+        "description": "连接一项服务，让人们可以在聊天和 Craft 中使用它。Onyx 会将每个集成放入各自的插件中。",
         "created": "已添加 {name}。",
         "createFailed": "无法添加集成。",
-        "formTitle": {
-          "mcp_server": "添加 MCP 服务器",
-          "openapi": "添加 OpenAPI 应用",
-          "preset": "从预设添加应用",
-          "custom": "添加自定义应用"
-        },
-        "kindDescription": {
-          "mcp_server": "通过 URL 连接远程 MCP 服务器。",
-          "openapi": "根据 OpenAPI 架构创建操作。",
-          "preset": "连接内置应用，例如 GitHub 或 Slack。",
-          "custom": "允许 Craft 调用与 URL 模式匹配的 HTTP 服务。"
-        },
         "openapi": {
-          "title": "添加 OpenAPI 应用"
+          "title": "添加 OpenAPI 应用",
+          "schema": {
+            "title": "架构",
+            "description": "添加定义操作的 OpenAPI 架构。",
+            "added": "{count, plural, other {该架构有 # 个路径。}}",
+            "required": "请添加架构。",
+            "add": "添加架构",
+            "edit": "编辑架构"
+          }
         },
         "preset": {
-          "title": "预设",
-          "placeholder": "选择预设",
-          "required": "请选择预设。",
+          "title": "起点",
           "loadFailed": "无法加载预设。",
           "instructions": "设置说明",
-          "credentialRequired": "请填写此值。"
+          "credentialRequired": "请填写此值。",
+          "description": "预设会填写内置应用的名称和登录方式。选择“自定义应用”可设置任意 HTTP 服务。",
+          "custom": "自定义应用"
         },
         "name": {
           "title": "名称",
@@ -10468,13 +10470,35 @@
           "personalDescription": "Onyx 会将集成放入“我的上传”中的一个插件。您之后可以共享该插件。",
           "organizationDescription": "Onyx 会将集成放入组织库中的一个插件。"
         },
-        "back": "返回",
         "submit": "添加",
-        "adding": "正在添加…"
+        "adding": "正在添加…",
+        "cancel": "取消",
+        "type": {
+          "title": "类型",
+          "description": "选择 Onyx 连接该服务的方式。",
+          "mcp_server": {
+            "title": "MCP 服务器",
+            "description": "通过 URL 连接远程 MCP 服务器。"
+          },
+          "openapi": {
+            "title": "OpenAPI 应用",
+            "description": "根据 OpenAPI 架构创建操作。"
+          },
+          "app": {
+            "title": "应用",
+            "description": "从 GitHub 等预设或自定义应用开始。"
+          }
+        },
+        "details": {
+          "title": "详细信息"
+        },
+        "signIn": {
+          "title": "登录"
+        }
       },
       "filters": {
         "label": "集成类型",
-        "all": "全部",
+        "all": "所有类型",
         "mcp": "MCP 服务器",
         "api": "应用"
       },
@@ -10502,7 +10526,8 @@
         "none": "不在任何插件中",
         "many": "{count, plural, one {# 个插件} other {# 个插件}}",
         "organization": "{plugin}（组织库）",
-        "personal": "{plugin}（{owner} 的“我的上传”）"
+        "personal": "{plugin}（{owner}）",
+        "personalOwner": "个人上传"
       },
       "status": {
         "needsSetup": "需要设置",
@@ -10585,18 +10610,13 @@
           "needsSetupDefault": "请在“配置”选项卡中完成登录设置。",
           "plugins": {
             "title": "插件",
-            "description": "用户通过这些插件使用此集成。",
-            "organization": "{policy, select, REQUIRED {组织库，必需} DEFAULT {组织库，默认开启} AVAILABLE {组织库，可用} NOT_AVAILABLE {组织库，不可用} other {组织库}}",
-            "personal": "{owner} 的“我的上传”",
-            "manage": "管理插件"
+            "organization": "{policy, select, REQUIRED {组织库，必需} DEFAULT {组织库，默认开启} AVAILABLE {组织库，可用} NOT_AVAILABLE {组织库，不可用} other {组织库}}"
           },
           "enabled": {
             "title": "已启用",
             "description": "关闭后，任何智能体或用户都无法使用此集成。"
           },
           "delete": {
-            "title": "删除集成",
-            "description": "从每个插件中移除此集成，并删除其连接和操作设置。",
             "label": "删除",
             "confirmTitle": "删除 {name}？",
             "confirmDescription": "Onyx 会从每个插件中移除此集成，并删除其连接和操作设置。此操作无法撤销。",
@@ -10610,8 +10630,14 @@
             "nameRequired": "请为集成命名。",
             "description": "描述",
             "save": "保存",
-            "saved": "已保存名称和描述。"
-          }
+            "saved": "已保存名称和描述。",
+            "edit": "编辑详细信息",
+            "title": "编辑详细信息",
+            "cancel": "取消",
+            "saveFailed": "无法保存名称和描述。"
+          },
+          "description": "描述",
+          "menu": "更多操作"
         },
         "configuration": {
           "readOnly": "您可以查看此集成，但无法更改。",
@@ -11633,50 +11659,11 @@
       }
     },
     "skill": {
-      "edit": {
-        "tooltip": "编辑技能"
-      },
-      "invalid": {
-        "description": "删除此无效技能，然后创建一个新技能。"
-      },
       "tags": {
-        "builtin": {
-          "label": "内置"
-        },
-        "invalid": {
-          "label": "无效"
-        },
-        "personal": {
-          "label": "个人"
-        },
-        "required": {
-          "tooltip": "你的组织管理员要求你拥有此技能。"
-        },
-        "unavailable": {
-          "label": "不可用 - 点击了解更多"
-        },
-        "shared": {
-          "label": "共享"
-        },
-        "organization": {
-          "label": "组织"
-        },
         "unpublished": {
           "label": "未发布的更改",
           "tooltip": "组织仍在使用版本 {number}。"
         }
-      },
-      "toggle": {
-        "disable": {
-          "ariaLabel": "禁用 {name}"
-        },
-        "enable": {
-          "ariaLabel": "启用 {name}"
-        }
-      },
-      "tooltips": {
-        "invalid": "此技能无效。请删除它并创建新技能。",
-        "unavailable": "技能当前不可用。点击查看详情。"
       }
     }
   },
@@ -12014,6 +12001,9 @@
         },
         "skillsGroup": {
           "label": "技能"
+        },
+        "manageSkills": {
+          "label": "管理技能"
         }
       },
       "inputChip": {
@@ -14646,15 +14636,12 @@
         "empty": "开始构建吧！会话历史将显示在这里。",
         "title": "会话"
       },
-      "skills": {
-        "label": "技能"
-      },
       "toast": {
         "deleteFailed": "删除会话失败",
         "deleted": "已删除\"{title}\"。"
       },
-      "plugins": {
-        "label": "插件"
+      "customize": {
+        "label": "自定义"
       }
     },
     "skillsStale": {
@@ -15633,7 +15620,9 @@
       "sort": "排序",
       "sortBy": "排序依据",
       "sortingOrder": "排序方向",
-      "viewSelected": "查看已选"
+      "viewSelected": "查看已选",
+      "selectAll": "全选",
+      "selectRow": "选择行"
     },
     "tabs": {
       "scrollLeft": "向左滚动标签",
@@ -16309,8 +16298,8 @@
       "searchChats": {
         "label": "搜索对话"
       },
-      "plugins": {
-        "label": "插件"
+      "customize": {
+        "label": "自定义"
       }
     },
     "chatButton": {
@@ -16431,12 +16420,7 @@
         "importSubmit": {
           "label": "导入技能"
         },
-        "importTitle": "导入此技能？",
-        "replaceBody": "此上传必须使用相同的技能名称。继续操作会用上传的包替换描述、说明和文件。",
-        "replaceSubmit": {
-          "label": "替换内容"
-        },
-        "replaceTitle": "替换技能内容？"
+        "importTitle": "导入此技能？"
       },
       "delete": {
         "button": {
@@ -16450,68 +16434,21 @@
         "label": "删除",
         "pendingLabel": "正在删除..."
       },
-      "details": {
-        "description": "定义 Craft 应在何时以及如何使用此技能。",
-        "descriptionField": {
-          "description": "描述何时应使用此技能。",
-          "placeholder": "此技能有什么用途？",
-          "title": "描述"
-        },
-        "name": {
-          "createDescription": "使用小写字母、数字和单个连字符。",
-          "lockedDescription": "技能名称创建后无法更改。",
-          "placeholder": "为您的技能命名",
-          "title": "名称"
-        },
-        "title": "详情"
-      },
       "files": {
-        "busyLabel": "正在上传...",
-        "description": "添加此技能使用的参考资料、脚本、资源或其他文件。ZIP 文件会自动解压。",
-        "input": {
-          "ariaLabel": "添加支持文件"
-        },
-        "pendingUpload": {
-          "emptyMessage": "此上传的文件将在您创建技能后显示。"
-        },
-        "title": "支持文件"
-      },
-      "filesTooltip": {
-        "noPermission": "您没有更新此技能文件的权限。",
-        "saveFirst": "更新技能文件前请先保存详情更改。",
-        "updating": "正在更新技能文件..."
+        "addedOnCreate": "“创建”会将此文件添加到技能中。"
       },
       "header": {
         "createDescription": "构建个人技能",
         "createTitle": "创建技能",
-        "editDescription": "更新技能详情和文件",
         "editTitle": "编辑技能",
         "save": {
-          "label": "保存",
-          "pendingLabel": "正在保存..."
-        }
-      },
-      "import": {
-        "busyLabel": "正在导入...",
-        "button": {
-          "label": "导入技能"
+          "label": "创建",
+          "pendingLabel": "正在创建..."
         },
-        "description": "导入 SKILL.md、ZIP 或技能文件夹以预填表单并包含其文件。",
-        "input": {
-          "ariaLabel": "导入现有技能"
-        },
-        "prompt": "选择 SKILL.md 或 ZIP，或将技能文件夹拖放到此处。",
-        "title": "已有技能？"
-      },
-      "instructions": {
-        "description": "编写此技能为 Craft 添加的行为和工作流程。",
-        "emptyFallback": "暂无说明。",
-        "placeholder": "编写技能说明。",
-        "title": "说明"
+        "cancel": "取消"
       },
       "loadError": {
-        "description": "此技能可能不存在、是内置技能，或您的账户无法编辑。",
-        "title": "技能不可用"
+        "description": "此技能可能不存在、是内置技能，或您的账户无法编辑。"
       },
       "management": {
         "sharing": {
@@ -16521,12 +16458,9 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "保存前请添加描述。",
         "missingInstructions": "保存前请添加说明。",
         "missingName": "保存前请添加名称。",
         "noChanges": "尚未进行任何更改。",
-        "noPermission": "您没有编辑此技能详情的权限。",
-        "savingChanges": "正在保存更改...",
         "savingSkill": "正在保存技能..."
       },
       "staleVersion": {
@@ -16540,14 +16474,10 @@
         "created": "已创建“{name}”",
         "deleteFailed": "删除技能失败",
         "deleted": "已删除“{name}”",
-        "fileRemoveFailed": "移除技能文件失败",
-        "fileRemoved": "已移除“{path}”",
-        "filesUpdateFailed": "更新技能文件失败",
-        "filesUpdated": "已更新“{name}”的文件",
-        "importMissingSkillMd": "请导入 SKILL.md、ZIP 或包含 SKILL.md 的文件夹。",
         "inspectFailed": "检查技能包失败",
         "saveFailed": "保存技能失败",
-        "saved": "已保存“{name}”"
+        "saved": "已保存“{name}”",
+        "mergeLimit": "{limit, select, files {一个技能最多可包含 {max, number} 个文件。请移除部分文件，然后选择“创建”。} other {一个技能的文件最多可达 {max, number} MB。请移除部分文件，然后选择“创建”。}}"
       },
       "creationAccess": {
         "title": "访问权限"
@@ -16821,11 +16751,7 @@
           "ariaLabel": "恢复版本 {number}",
           "successToast": "已将版本 {number} 恢复为版本 {newNumber}。",
           "unchangedToast": "版本 {number} 的文件与当前版本相同。",
-          "failedToast": "无法恢复此版本。",
-          "unsavedChanges": {
-            "title": "请先保存更改",
-            "description": "在恢复版本之前，请保存或放弃编辑器中的更改。"
-          }
+          "failedToast": "无法恢复此版本。"
         },
         "loadError": {
           "title": "无法加载版本",
@@ -16851,12 +16777,6 @@
       }
     },
     "page": {
-      "browse": {
-        "title": "选择技能"
-      },
-      "countSeparator": {
-        "label": "{count, plural, one {技能} other {技能}}"
-      },
       "createMenu": {
         "github": {
           "description": "从仓库导入一个或多个技能。",
@@ -16886,7 +16806,6 @@
         }
       },
       "header": {
-        "description": "您的 Craft 智能体可调用的能力包。此页面显示内置技能、与您共享的技能以及您的个人技能。",
         "title": "技能"
       },
       "loadError": {
@@ -16911,10 +16830,8 @@
       "toasts": {
         "disableFailed": "停用 {name} 失败",
         "enableFailed": "启用 {name} 失败",
-        "refreshFailed": "{name} 已更新，但技能列表无法刷新。"
-      },
-      "builtins": {
-        "title": "内置技能（{count, number}）"
+        "refreshFailed": "{name} 已更新，但技能列表无法刷新。",
+        "listRefreshFailed": "技能列表无法刷新。请重新加载页面以查看更改。"
       }
     },
     "sections": {
@@ -16932,26 +16849,12 @@
           "label": "拖放文件或点击上传"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "暂无支持文件。"
-        },
-        "remove": {
-          "label": "移除 {name}"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "添加文件"
-        },
         "input": {
           "ariaLabel": "添加技能文件"
         },
         "preparing": {
           "label": "正在准备…"
-        },
-        "prompt": {
-          "description": "选择文件或 ZIP，也可以将文件夹拖放到这里。"
         }
       },
       "instructionsToggle": {
@@ -16978,7 +16881,6 @@
     },
     "bulk": {
       "adminDescription": "管理整个组织的技能和访问权限。",
-      "selectAll": "选择所有可见的自定义技能",
       "selected": "{count, plural, one {已选择 # 项} other {已选择 # 项}}",
       "share": "分享",
       "enable": "为我启用",
@@ -17028,6 +16930,10 @@
       "version": {
         "firstPublish": "v{number} · 首次发布",
         "update": "v{number} · 从 v{published} 更新"
+      },
+      "banner": {
+        "title": "{count, plural, other {# 个技能等待发布}}",
+        "review": "审核"
       }
     },
     "installationPolicy": {
@@ -17036,11 +16942,11 @@
         "description": "已安装且始终开启。成员无法关闭。"
       },
       "DEFAULT": {
-        "label": "默认安装",
+        "label": "已安装",
         "description": "为每位成员安装。成员可以关闭。"
       },
       "AVAILABLE": {
-        "label": "可供安装",
+        "label": "可用",
         "description": "成员可以找到它，并按需开启。"
       },
       "NOT_AVAILABLE": {
@@ -17069,6 +16975,25 @@
         "user": "{email}：{size}，{files, plural, other {# 个文件}}，{notLoaded, plural, other {# 个技能未加载}}",
         "more": "另有 {count, number} 人。"
       }
+    },
+    "adminTable": {
+      "label": "自定义技能",
+      "columns": {
+        "name": "名称",
+        "source": "来源",
+        "version": "版本",
+        "audience": "受众"
+      },
+      "organizationLibrary": "组织库",
+      "noOwner": "无所有者",
+      "version": "v{current}{published, select, none {} other { · v{published} 已上线}}",
+      "private": "仅所有者",
+      "shared": "与用户或群组共享",
+      "open": "打开 {name}",
+      "menu": "{name} 的更多操作",
+      "share": "共享",
+      "delete": "删除",
+      "select": "选择 {name}"
     }
   },
   "opensearchHealth": {
@@ -17086,46 +17011,10 @@
   },
   "plugins": {
     "member": {
-      "title": "插件",
-      "description": "可在聊天和智能体中使用的技能和集成。",
-      "filters": {
-        "label": "插件类型",
-        "all": {
-          "label": "全部"
-        },
-        "skills": {
-          "label": "技能"
-        },
-        "integrations": {
-          "label": "集成"
-        }
-      },
       "sections": {
         "organization": "组织库",
         "mine": "我的上传",
         "shared": "与你共享"
-      },
-      "row": {
-        "skillCount": "{count, plural, other {# 个技能}}",
-        "integrationCount": "{count, plural, other {# 个集成}}",
-        "needsConnection": "{count, plural, other {# 个需要登录}}",
-        "open": {
-          "label": "打开 {name}"
-        }
-      },
-      "state": {
-        "loading": "正在加载插件",
-        "loadFailed": "部分插件无法加载。",
-        "emptyTitle": "暂无插件",
-        "emptyDescription": "请让管理员添加插件。",
-        "noResultsTitle": "没有匹配的插件",
-        "noResultsDescription": "请尝试其他名称或筛选条件。",
-        "retry": {
-          "label": "重试"
-        },
-        "clear": {
-          "label": "显示所有插件"
-        }
       },
       "detail": {
         "title": "插件",
@@ -17142,14 +17031,12 @@
           "location": "位置",
           "owner": "所有者",
           "skills": "技能",
-          "integrations": "集成"
+          "integrations": "集成",
+          "description": "描述"
         },
         "skills": {
           "off": "已关闭",
           "invalid": "无效"
-        },
-        "back": {
-          "label": "插件"
         },
         "switch": {
           "title": "使用此插件",
@@ -17215,7 +17102,9 @@
         },
         "retry": {
           "label": "重试"
-        }
+        },
+        "readOnlyTitle": "操作",
+        "readOnlyDescription": "管理员设置每个操作的运行方式。"
       },
       "oauthCallback": {
         "processing": "正在连接你的账户…",
@@ -17231,12 +17120,6 @@
       },
       "search": {
         "placeholder": "搜索插件"
-      },
-      "addIntegration": {
-        "label": "添加集成"
-      },
-      "manage": {
-        "label": "管理插件"
       },
       "share": {
         "title": "共享 {name}",
@@ -17293,5 +17176,202 @@
   },
   "integrations": {
     "connectionState": "{state, select, connected {已连接} not_connected {未连接} needs_reconnect {需要重新连接} not_set_up {未设置} other {未知}}"
+  },
+  "customize": {
+    "title": "自定义",
+    "tabs": {
+      "label": "自定义分区",
+      "skills": "技能",
+      "integrations": "集成",
+      "plugins": "插件"
+    },
+    "skills": {
+      "loadFailed": "无法加载你的技能。",
+      "filter": {
+        "label": "筛选",
+        "all": "所有技能",
+        "on": "已开启",
+        "off": "已关闭"
+      },
+      "sort": {
+        "label": "排序",
+        "updated": "最近更新",
+        "name": "名称"
+      },
+      "add": {
+        "label": "添加",
+        "upload": "上传技能",
+        "create": "创建技能",
+        "github": "从 GitHub 导入"
+      },
+      "groups": {
+        "mine": "由你创建",
+        "organization": "来自你的组织",
+        "shared": "与你共享",
+        "builtin": "内置"
+      },
+      "source": {
+        "mine": "由你",
+        "organization": "来自你的组织",
+        "sharedBy": "由 {email} 共享",
+        "shared": "与你共享",
+        "builtin": "内置"
+      },
+      "subtitle": "{source} · {description}",
+      "tag": {
+        "off": "已停用",
+        "required": "必需",
+        "pending": "待审核",
+        "invalid": "无效"
+      },
+      "open": "打开 {name}",
+      "menu": {
+        "label": "{name} 的更多操作",
+        "turnOn": "开启",
+        "turnOff": "关闭",
+        "share": "共享",
+        "remove": "移除"
+      },
+      "empty": {
+        "title": "还没有技能",
+        "description": "创建或上传技能，教助手完成一项任务。"
+      },
+      "noMatches": {
+        "title": "没有匹配的技能",
+        "description": "请尝试其他搜索或筛选条件。",
+        "clear": "显示所有技能"
+      }
+    },
+    "integrations": {
+      "title": "集成",
+      "loadFailed": "无法加载你的集成。",
+      "columns": {
+        "name": "集成",
+        "type": "类型",
+        "authorization": "授权",
+        "status": "状态"
+      },
+      "status": {
+        "connected": "已连接"
+      },
+      "add": {
+        "label": "添加",
+        "integration": "添加集成",
+        "manage": "管理集成"
+      },
+      "open": "打开 {name}",
+      "empty": {
+        "title": "还没有集成",
+        "description": "请让管理员添加集成。"
+      },
+      "noMatches": {
+        "title": "没有匹配的集成",
+        "description": "请尝试其他搜索。"
+      }
+    },
+    "plugins": {
+      "contents": "{skills, plural, =0 {} one {1 个技能} other {{skills} 个技能}}{both, select, yes { · } other {}}{integrations, plural, =0 {} one {1 个集成} other {{integrations} 个集成}}",
+      "needsSignIn": "{count, plural, other {# 个需要登录}}",
+      "loadFailed": "无法加载你的插件。",
+      "switchFailed": "无法更改插件。",
+      "filter": {
+        "all": "所有插件"
+      },
+      "empty": {
+        "title": "还没有插件",
+        "description": "创建技能或添加集成。每一个都是一个插件。"
+      },
+      "noMatches": {
+        "title": "没有匹配的插件",
+        "clear": "显示所有插件"
+      },
+      "intro": "插件将你一起开启的技能和集成打包在一起。你添加的每个技能和集成都位于各自的插件中。"
+    },
+    "skillPage": {
+      "title": "技能",
+      "back": "技能",
+      "meta": "{owner} · v{version}{published, select, none {} other { · v{published} 已对你的组织上线}} · 更新于 {updated}",
+      "ownerYou": "由你",
+      "ownerEmail": "由 {email}",
+      "ownerYouTitle": "你",
+      "fromOrganization": "来自组织库",
+      "copyLink": "复制链接",
+      "share": "共享",
+      "menu": "更多",
+      "edit": "编辑",
+      "remove": "移除",
+      "add": "添加",
+      "switch": "使用 {name}",
+      "loadFailed": "你无法使用此技能。",
+      "tabs": {
+        "overview": "概览",
+        "contents": "内容",
+        "versions": "版本",
+        "contentsCount": "内容 · {count}"
+      },
+      "overview": {
+        "description": "描述",
+        "noDescription": "没有描述。",
+        "createdBy": "创建者",
+        "access": "访问权限",
+        "accessValue": "{access, select, personal {仅你} private {仅所有者} shared {与用户或群组共享} other {组织库}}",
+        "tools": "集成和操作",
+        "instructionsOnly": "仅为代理添加说明"
+      },
+      "backAdmin": "技能清单",
+      "contents": {
+        "version": "{name} v{version} · 当前",
+        "edit": "编辑",
+        "cancel": "取消",
+        "saveVersion": "保存版本",
+        "saving": "正在保存…",
+        "addFile": "添加文件",
+        "removeFile": "移除 {name}",
+        "editorLabel": "SKILL.md",
+        "noPreview": "Onyx 仅显示 SKILL.md 的文本。此文件是技能的一部分。",
+        "addedFile": "“保存版本”会将此文件添加到技能中。",
+        "errors": {
+          "frontmatter": "SKILL.md 必须以包含名称和描述的 --- 块开头。",
+          "description": "请在 SKILL.md 的 --- 块中添加描述。",
+          "name": "名称必须保持为“{name}”。",
+          "skillMd": "请在编辑器中编辑 SKILL.md。此处仅添加支持文件。"
+        },
+        "loadFailed": "无法加载此技能的内容。",
+        "retry": "重试",
+        "reloadFailed": "无法加载最新版本。你的更改已保留。请再次尝试重新加载。"
+      },
+      "required": {
+        "label": "必需",
+        "tooltip": "你的管理员要求使用此技能，因此你无法将其关闭。"
+      }
+    },
+    "integrationPage": {
+      "title": "集成",
+      "back": "集成",
+      "loadFailed": "你无法使用此集成。",
+      "tabs": {
+        "overview": "概览",
+        "configuration": "配置",
+        "actions": "操作"
+      },
+      "overview": {
+        "description": "描述",
+        "noDescription": "没有描述。",
+        "type": "类型",
+        "signIn": "登录",
+        "url": "服务器 URL",
+        "plugins": "所属插件"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {你与此集成的连接。只有你使用它。} shared {此集成的账户。所有有权访问的人都使用它。} other {此集成无需登录。}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "技能 · {count}",
+        "integrations": "集成 · {count}"
+      }
+    },
+    "search": "搜索"
   }
 }

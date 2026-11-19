@@ -8,7 +8,7 @@
 # `ods type-coverage typescript --update`.
 #
 # Generated file: do not edit by hand.
-total: 99
+total: 99.1
 packages:
   .: 100
   src: 99.5
@@ -16,8 +16,8 @@ packages:
   src/app/admin: 96.9
   src/app/anonymous: 100
   src/app/api: 100
-  src/app/app: 98.8
-  src/app/auth: 98.8
+  src/app/app: 98.9
+  src/app/auth: 98.9
   src/app/components: 100
   src/app/config: 100
   src/app/connector: 100
@@ -63,7 +63,7 @@ packages:
   src/lib/analytics: 99.4
   src/lib/app: 99.9
   src/lib/approvals: 100
-  src/lib/auth: 98.3
+  src/lib/auth: 98.4
   src/lib/badges: 100
   src/lib/banner: 99.3
   src/lib/billing: 100
@@ -73,13 +73,14 @@ packages:
   src/lib/connectors: 99.1
   src/lib/constants: 100
   src/lib/credentials: 98.9
+  src/lib/customize: 100
   src/lib/docx: 100
   src/lib/extension: 100
   src/lib/hierarchy: 100
   src/lib/hooks: 95.9
   src/lib/integrations: 100
   src/lib/languageModels: 99.1
-  src/lib/mcp: 98.8
+  src/lib/mcp: 99.3
   src/lib/multiModel: 100
   src/lib/navigation: 100
   src/lib/notifications: 99.3
@@ -90,18 +91,19 @@ packages:
   src/lib/permissions: 100
   src/lib/plugins: 100
   src/lib/projects: 99.7
+  src/lib/sandbox: 100
   src/lib/scheduledTasks: 100
   src/lib/search: 99.2
   src/lib/searchFilters: 98.4
   src/lib/searchSettings: 99.6
   src/lib/settings: 96.9
   src/lib/sidebar: 100
-  src/lib/skills: 98.6
+  src/lib/skills: 98.7
   src/lib/spendingLimits: 100
   src/lib/sso: 99.2
   src/lib/tiers: 100
-  src/lib/timeline: 99.4
-  src/lib/tools: 99.1
+  src/lib/timeline: 99.5
+  src/lib/tools: 99.6
   src/lib/tracing: 96.9
   src/lib/usage: 97.9
   src/lib/users: 99.1
@@ -123,11 +125,12 @@ packages:
   src/sections: 100
   src/sections/actions: 98.6
   src/sections/admin: 100
-  src/sections/agents: 99.8
+  src/sections/agents: 99.9
   src/sections/approvals: 99.1
   src/sections/banners: 99.1
   src/sections/cards: 100
   src/sections/chat: 99.8
+  src/sections/customize: 99.8
   src/sections/document-sidebar: 99.5
   src/sections/input: 99.9
   src/sections/integrations: 100
@@ -139,10 +142,10 @@ packages:
   src/sections/plugins: 99.9
   src/sections/settings: 100
   src/sections/sidebar: 99.1
-  src/sections/skills: 99.9
+  src/sections/skills: 99.7
   src/sections/usage: 99.6
   src/views: 99.6
-  src/views/AgentEditorPage: 99.1
+  src/views/AgentEditorPage: 99.4
   src/views/AgentsCatalogPage: 99.1
   src/views/admin: 98.8
   types: 100

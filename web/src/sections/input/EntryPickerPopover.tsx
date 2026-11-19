@@ -18,6 +18,7 @@ import {
   type PickerSections,
 } from "@/lib/skills/picker";
 import { pickerEntryIcon } from "@/lib/skills/pickerIcons";
+import { SvgSettings } from "@opal/icons";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 
 interface EntryPickerPopoverProps {
@@ -36,6 +37,8 @@ interface EntryPickerPopoverProps {
   onDismiss: () => void;
   /** The character that opened the picker; skill rows show it before the name. */
   trigger: string;
+  /** A last row that opens the page where the user manages skills. */
+  onManageSkills?: () => void;
 }
 
 function EntryPickerPopover({
@@ -47,6 +50,7 @@ function EntryPickerPopover({
   onEscape,
   onDismiss,
   trigger,
+  onManageSkills,
 }: EntryPickerPopoverProps) {
   const t = useTranslations("chat.input");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -60,11 +64,13 @@ function EntryPickerPopover({
 
   // SWR may revalidate while open and shrink the row count; clamp so Enter
   // doesn't silently fall back to a different row than the one highlighted.
+  // The Manage skills footer takes the index after the last entry.
+  const rowCount = flatEntries.length + (onManageSkills ? 1 : 0);
+  const footerIndex = onManageSkills ? flatEntries.length : null;
+
   useEffect(() => {
-    setSelectedIndex((i) =>
-      flatEntries.length === 0 ? 0 : Math.min(i, flatEntries.length - 1)
-    );
-  }, [flatEntries.length]);
+    setSelectedIndex((i) => (rowCount === 0 ? 0 : Math.min(i, rowCount - 1)));
+  }, [rowCount]);
 
   useEffect(() => {
     if (!open) return;
@@ -85,16 +91,19 @@ function EntryPickerPopover({
       if (e.key === "ArrowDown") {
         e.preventDefault();
         e.stopPropagation();
-        setSelectedIndex((i) => (i + 1) % flatEntries.length);
+        setSelectedIndex((i) => (i + 1) % rowCount);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         e.stopPropagation();
-        setSelectedIndex(
-          (i) => (i - 1 + flatEntries.length) % flatEntries.length
-        );
+        setSelectedIndex((i) => (i - 1 + rowCount) % rowCount);
       } else if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
         e.stopPropagation();
+        if (selectedIndex === footerIndex && onManageSkills) {
+          onDismiss();
+          onManageSkills();
+          return;
+        }
         const entry = flatEntries[selectedIndex] ?? flatEntries[0];
         if (entry) onSelect(entry);
       } else if (e.key === "Escape") {
@@ -106,7 +115,17 @@ function EntryPickerPopover({
 
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [open, flatEntries, selectedIndex, onSelect, onEscape]);
+  }, [
+    open,
+    flatEntries,
+    rowCount,
+    footerIndex,
+    selectedIndex,
+    onSelect,
+    onEscape,
+    onDismiss,
+    onManageSkills,
+  ]);
 
   if (!anchorRect) return null;
 
@@ -145,7 +164,28 @@ function EntryPickerPopover({
         data-testid="skill-picker-popover"
         aria-label={t("entryPickerPopover.content.ariaLabel")}
       >
-        <Popover.Menu scrollContainerRef={scrollContainerRef}>
+        <Popover.Menu
+          scrollContainerRef={scrollContainerRef}
+          footer={
+            onManageSkills ? (
+              <LineItemButton
+                icon={SvgSettings}
+                title={t("entryPickerPopover.manageSkills.label")}
+                state={selectedIndex === footerIndex ? "selected" : "empty"}
+                selectVariant="select-heavy"
+                data-row-index={footerIndex ?? undefined}
+                onMouseEnter={() => {
+                  if (footerIndex !== null) setSelectedIndex(footerIndex);
+                }}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  onDismiss();
+                  onManageSkills();
+                }}
+              />
+            ) : undefined
+          }
+        >
           {buildMenuChildren({
             sections,
             selectedIndex,

@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useNavigation } from "@opal/navigation";
 import { useAvailableTools } from "@/lib/tools/hooks";
-import { memberPluginHref } from "@/lib/plugins/directory";
+import { pluginHref } from "@/lib/customize/paths";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { SvgArrowExchange } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
@@ -40,7 +40,7 @@ function CustomToolAuthCard({ toolName, toolId }: CustomToolAuthCardProps) {
         <Button
           prominence="primary"
           icon={SvgArrowExchange}
-          {...navigation.linkTo(memberPluginHref(pluginId, "integrations"))}
+          {...navigation.linkTo(pluginHref(pluginId, "integrations"))}
         >
           {t("customToolAuth.connectButton.label")}
         </Button>

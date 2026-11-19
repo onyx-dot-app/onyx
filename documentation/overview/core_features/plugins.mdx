@@ -13,8 +13,8 @@ A plugin holds skills, integrations, or both. An integration is an MCP server or
 Your admin adds plugins to the Organization library. You connect your account to each integration that needs it.
 
 <Note>
-  In Onyx 5.0, MCP and OpenAPI actions became plugins. Find them in **Plugins** in the sidebar,
-  and in Chat under **Actions → Plugins**. Craft Apps moved from **Craft → Apps** to **Plugins** in the Craft sidebar.
+  In Onyx 5.0, MCP and OpenAPI actions became plugins. Find them in **Customize** in the sidebar,
+  and in Chat under **Actions → Plugins**. Craft Apps moved from **Craft → Apps** to **Customize**.
 </Note>
 
 ## Plugin types
@@ -39,21 +39,29 @@ Plugins and [connectors](/overview/core_features/connectors) give agents differe
 
 ## Find a plugin
 
-Select **Plugins** in the Chat sidebar or the Craft sidebar. The page shows each plugin that you can use,
-in three groups:
+Select **Customize** in the Chat sidebar or the Craft sidebar. Customize has three tabs: **Skills**,
+**Integrations** and **Plugins**. It opens on **Skills**.
+A plugin packages skills and integrations that you turn on together.
+Each skill and each integration that you add comes in its own plugin.
+The **Plugins** tab shows each plugin that you can use, in three groups:
 
 | Group | Plugins |
 | --- | --- |
-| **Organization library** | The plugins that your admin published for the organization |
-| **My uploads** | The plugins that you added |
+| **Created by you** | The plugins that you added, also after you publish them |
+| **From your organization** | The plugins that your admin published for the organization |
 | **Shared with you** | The plugins that other people added and shared with you |
 
-Use **All**, **Skills**, or **Integrations** to filter the list, or search by name.
-A plugin that has an integration you must sign in to shows how many need sign-in.
+Each row shows how many skills and integrations the plugin holds.
+A plugin that has an integration you must sign in to shows how many need sign-in. Search by name,
+or use the filter to show only the plugins that are on or off.
 
-<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugins_directory.webp" alt="The Plugins page with the Integrations filter on, with three plugins in the Organization library"/>
+The **Skills** tab lists each skill, and the **Integrations** tab lists each integration with its status.
+A skill or an integration also shows in the **Plugins** tab, in the plugin that holds it.
 
-Click a plugin to open it. The plugin page has these tabs. A tab with nothing to show does not appear.
+<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugins_directory.webp" alt="The Plugins tab of Customize, with its description and plugins in the Created by you and From your organization groups"/>
+
+Click a plugin to open it. A plugin that holds only one skill opens that skill. The plugin page has these tabs.
+A tab with nothing to show does not appear.
 
 | Tab | What it shows |
 | --- | --- |
@@ -64,20 +72,24 @@ Click a plugin to open it. The plugin page has these tabs. A tab with nothing to
 
 ### Turn a plugin on or off
 
-The **Overview** tab has the **Use this plugin** switch. The default agent uses only the plugins that you turn on.
-A custom agent uses each of its plugins that you can see, with the switch on or off.
+The plugin page has the **Use this plugin** switch in its header. In the **Plugins** tab,
+a plugin that is off shows **Turn on**, and the row menu has **Turn on** or **Turn off**.
+The default agent uses only the plugins that you turn on. A custom agent uses each of its plugins that you can see,
+with the switch on or off.
 
 | Install setting | The switch |
 | --- | --- |
 | **Required** | Always on. You cannot turn it off. |
-| **Installed by default** | On until you turn it off. |
-| **Available to install** | Off until you turn it on. |
+| **Installed** | On until you turn it off. |
+| **Available** | Off until you turn it on. |
 
 An admin sets the install setting of each plugin in the Organization library.
 
 ## Connect an integration
 
-Open the plugin and select the **Integrations** tab. Each integration shows one status:
+Select **Customize → Integrations**. Each integration shows one status. Click an integration to open its page,
+with the tabs **Overview** (the type, the sign-in, and the plugins that hold it), **Configuration** (your connection)
+and **Actions** (how each action runs). The **Integrations** tab of a plugin page shows the same status:
 
 | Status | What you see | Who fixes it |
 | --- | --- | --- |
@@ -86,7 +98,7 @@ Open the plugin and select the **Integrations** tab. Each integration shows one 
 | **Needs reconnect** | The reason, for example a change to the sign-in settings, and **Reconnect** | You |
 | **Not set up** | **Ask your admin** | An admin, or the owner of a personal integration |
 
-<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugin_mcp_detail.webp" alt="The Integrations tab of the DeepWiki plugin with a connected integration and its actions set to Allow, Ask, and Blocked"/>
+<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugin_mcp_detail.webp" alt="The Integrations tab of the Weather API plugin with a connected integration, one action set to Allow and one set to Ask with its Always allow switch"/>
 
 To connect:
 
@@ -102,9 +114,10 @@ An integration that is not connected gives the agent no actions until you connec
 ### Always allow an action
 
 Your admin sets each action of an integration to **Allow**, **Ask**, or **Blocked**.
-An action set to **Ask** asks for your approval in chat. If your admin lets users save it,
-the **Integrations** tab lists the actions of each integration. Turn on **Always allow** for an action that asks,
-and it runs with no prompt. An action set to **Blocked** never runs.
+An action set to **Ask** asks for your approval in chat.
+The **Actions** tab of the integration page lists each action with its setting. If your admin lets users save it,
+turn on **Always allow** for an action that asks, and it runs with no prompt. Some actions always ask,
+and their switch stays off with the reason. An action set to **Blocked** never runs.
 
 ### Disconnect
 
@@ -113,13 +126,14 @@ The plugin stays available to you.
 
 ## Add your own integration
 
-If you have the manage actions permission, click **Add Integration** on the Plugins page. Choose the type,
-then fill in the form. Onyx puts the integration in a new plugin in **My uploads** and turns the plugin on for you.
+If you have the manage actions permission, click **Add → Add integration** in **Customize**.
+Onyx opens the **Add an Integration** page. Choose the type, fill in the details, then click **Add**.
+Onyx puts the integration in a new plugin under **Created by you** and turns the plugin on for you.
 Only you can use it until you share the plugin.
 
 ### Share or publish your plugin
 
-Open a plugin in **My uploads** that holds only integrations:
+Open a plugin under **Created by you** that holds only integrations:
 
 - Click **Share** to give people and groups access. If an integration uses one account for everybody,
   each person with access uses the account that you connected. The dialog tells you so.
