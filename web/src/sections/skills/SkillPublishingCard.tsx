@@ -112,7 +112,7 @@ export default function SkillPublishingCard() {
 
   return (
     <Card border="solid" rounding={4}>
-      <Section alignItems="stretch" gap={1}>
+      <Section alignItems="stretch">
         <InputHorizontal
           title={t("title")}
           description={descriptions[policy]}

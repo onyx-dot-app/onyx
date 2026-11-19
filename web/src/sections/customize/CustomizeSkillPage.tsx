@@ -19,8 +19,8 @@ import { SvgEdit, SvgMoreHorizontal, SvgShare, SvgTrash } from "@opal/icons";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import useUserSkills from "@/hooks/useUserSkills";
 import {
+  adminSkillHref,
   customizeTabHref,
-  skillEditHref,
   skillHref,
 } from "@/lib/customize/paths";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -57,12 +57,15 @@ function parseTab(value: string | null): SkillPageTab {
 
 interface CustomizeSkillPageProps {
   skillId: string;
+  /** The list the back link returns to. */
+  from?: "customize" | "admin";
 }
 
 /** One custom skill: Overview, Contents and Versions. Edit opens the editor
  * on the same route with `?edit=1`. */
 export default function CustomizeSkillPage({
   skillId,
+  from = "customize",
 }: CustomizeSkillPageProps) {
   const t = useTranslations("customize.skillPage");
   const skillCopy = useTranslations("skills");
@@ -98,6 +101,10 @@ export default function CustomizeSkillPage({
   const editing = canEdit && searchParams.get("edit") === "1";
   const unsaved = useUnsavedChangesGuard({ isDirty: editing && contentsDirty });
   const tab = editing ? "contents" : parseTab(searchParams.get("tab"));
+  const listHref =
+    from === "admin" ? "/admin/skills" : customizeTabHref("skills");
+  const pageHref =
+    from === "admin" ? adminSkillHref(skillId) : skillHref(skillId);
   const mine = skill !== undefined && skill.owner?.id === user?.id;
   const enabled = listed
     ? enablement.enabledOf(listed)
@@ -130,10 +137,10 @@ export default function CustomizeSkillPage({
   }
 
   function setEditing(next: boolean): void {
-    navigation.go(
-      next ? skillEditHref(skillId) : `${skillHref(skillId)}?tab=contents`,
-      { replace: true, scroll: false }
-    );
+    navigation.go(next ? `${pageHref}?edit=1` : `${pageHref}?tab=contents`, {
+      replace: true,
+      scroll: false,
+    });
   }
 
   async function setEnabled(next: boolean): Promise<void> {
@@ -149,7 +156,7 @@ export default function CustomizeSkillPage({
       await deleteUserSkill(skill.id);
       refreshLists();
       toast.success(skillCopy("editor.toasts.deleted", { name: skill.name }));
-      navigation.go(customizeTabHref("skills"), { replace: true });
+      navigation.go(listHref, { replace: true });
     } catch (failure) {
       toast.error(
         failure instanceof Error
@@ -187,7 +194,7 @@ export default function CustomizeSkillPage({
                 id: "edit",
                 icon: SvgEdit,
                 title: t("edit"),
-                onSelect: () => navigation.go(skillEditHref(skill.id)),
+                onSelect: () => setEditing(true),
               },
             ]
           : []),
@@ -302,7 +309,13 @@ export default function CustomizeSkillPage({
 
   return (
     <CustomizeDetailLayout
-      back={<BackLink to={customizeTabHref("skills")} label={t("back")} />}
+      back={
+        from === "admin" ? (
+          <BackLink to="/admin/skills" label={t("backAdmin")} />
+        ) : (
+          <BackLink to={customizeTabHref("skills")} label={t("back")} />
+        )
+      }
       icon={skill ? skillIcon(skill) : undefined}
       title={skill?.name ?? t("title")}
       description={meta}
@@ -333,9 +346,7 @@ export default function CustomizeSkillPage({
       onTabChange={(next) =>
         unsaved.requestLeave(() =>
           navigation.go(
-            next === "overview"
-              ? skillHref(skillId)
-              : `${skillHref(skillId)}?tab=${next}`,
+            next === "overview" ? pageHref : `${pageHref}?tab=${next}`,
             { replace: true, scroll: false }
           )
         )

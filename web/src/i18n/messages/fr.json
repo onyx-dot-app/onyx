@@ -10366,10 +10366,9 @@
     },
     "plugins": {
       "title": "Extensions",
-      "description": "Les extensions fournissent des compétences et des intégrations aux utilisateurs. Cette page affiche les extensions qui contiennent des intégrations.",
+      "description": "Une extension regroupe des compétences et des intégrations que les personnes activent ensemble. Cette liste affiche les extensions qui contiennent des intégrations. Gérez les compétences sur la page Compétences.",
       "search": "Rechercher des extensions",
       "loadFailed": "Impossible de charger les extensions.",
-      "manageIntegrations": "Gérer les intégrations",
       "columns": {
         "name": "Extension",
         "library": "Bibliothèque",
@@ -10378,7 +10377,7 @@
       },
       "library": {
         "organization": "Bibliothèque de l’organisation",
-        "personal": "Mes importations de {owner}"
+        "personal": "Importation personnelle"
       },
       "installationSelect": "Paramètre d'installation de {name}",
       "installationSaved": "{name} est maintenant {policy}.",
@@ -10387,6 +10386,13 @@
       "empty": {
         "title": "Aucune extension avec des intégrations",
         "description": "Ajoutez une intégration. Onyx crée une extension qui la contient."
+      },
+      "contents": "{count, plural, one {# intégration} other {# intégrations}}",
+      "filters": {
+        "label": "Bibliothèque",
+        "all": "Toutes les bibliothèques",
+        "organization": "Bibliothèque de l’organisation",
+        "personal": "Importations personnelles"
       }
     },
     "integrations": {
@@ -10398,31 +10404,27 @@
       "add": {
         "label": "Ajouter",
         "title": "Ajouter une intégration",
-        "description": "Choisissez le type d’intégration.",
+        "description": "Connectez un service pour que les personnes puissent l’utiliser dans le chat et dans Craft. Onyx place chaque intégration dans sa propre extension.",
         "created": "{name} a été ajoutée.",
         "createFailed": "Impossible d’ajouter l’intégration.",
-        "formTitle": {
-          "mcp_server": "Ajouter un serveur MCP",
-          "openapi": "Ajouter une application OpenAPI",
-          "preset": "Ajouter une application à partir d’un modèle",
-          "custom": "Ajouter une application personnalisée"
-        },
-        "kindDescription": {
-          "mcp_server": "Connectez un serveur MCP distant à l’aide de son URL.",
-          "openapi": "Créez des actions à partir d’un schéma OpenAPI.",
-          "preset": "Connectez une application intégrée, comme GitHub ou Slack.",
-          "custom": "Permettez à Craft d’appeler un service HTTP qui correspond à des modèles d’URL."
-        },
         "openapi": {
-          "title": "Ajouter une application OpenAPI"
+          "title": "Ajouter une application OpenAPI",
+          "schema": {
+            "title": "Schéma",
+            "description": "Ajoutez le schéma OpenAPI qui définit les actions.",
+            "added": "{count, plural, one {Le schéma contient # chemin.} other {Le schéma contient # chemins.}}",
+            "required": "Ajoutez un schéma.",
+            "add": "Ajouter un schéma",
+            "edit": "Modifier le schéma"
+          }
         },
         "preset": {
-          "title": "Modèle",
-          "placeholder": "Choisir un modèle",
-          "required": "Choisissez un modèle.",
+          "title": "Point de départ",
           "loadFailed": "Impossible de charger les modèles.",
           "instructions": "Instructions de configuration",
-          "credentialRequired": "Saisissez cette valeur."
+          "credentialRequired": "Saisissez cette valeur.",
+          "description": "Un modèle remplit le nom et la connexion d’une application intégrée. Choisissez Application personnalisée pour configurer n’importe quel service HTTP.",
+          "custom": "Application personnalisée"
         },
         "name": {
           "title": "Nom",
@@ -10468,13 +10470,35 @@
           "personalDescription": "Onyx place l’intégration dans une extension de vos Mes importations. Vous pourrez partager l’extension plus tard.",
           "organizationDescription": "Onyx place l’intégration dans une extension de la Bibliothèque de l’organisation."
         },
-        "back": "Retour",
         "submit": "Ajouter",
-        "adding": "Ajout…"
+        "adding": "Ajout…",
+        "cancel": "Annuler",
+        "type": {
+          "title": "Type",
+          "description": "Choisissez comment Onyx se connecte au service.",
+          "mcp_server": {
+            "title": "Serveur MCP",
+            "description": "Connectez un serveur MCP distant par son URL."
+          },
+          "openapi": {
+            "title": "Application OpenAPI",
+            "description": "Créez des actions à partir d’un schéma OpenAPI."
+          },
+          "app": {
+            "title": "Application",
+            "description": "Partez d’un modèle, comme GitHub, ou d’une application personnalisée."
+          }
+        },
+        "details": {
+          "title": "Détails"
+        },
+        "signIn": {
+          "title": "Connexion"
+        }
       },
       "filters": {
         "label": "Type d’intégration",
-        "all": "Toutes",
+        "all": "Tous les types",
         "mcp": "Serveurs MCP",
         "api": "Applications"
       },
@@ -10502,7 +10526,8 @@
         "none": "Dans aucune extension",
         "many": "{count, plural, one {# extension} other {# extensions}}",
         "organization": "{plugin} (Bibliothèque de l’organisation)",
-        "personal": "{plugin} (Mes importations de {owner})"
+        "personal": "{plugin} ({owner})",
+        "personalOwner": "importation personnelle"
       },
       "status": {
         "needsSetup": "Configuration requise",
@@ -10585,18 +10610,13 @@
           "needsSetupDefault": "Terminez les paramètres de connexion dans l’onglet Configuration.",
           "plugins": {
             "title": "Extensions",
-            "description": "Les utilisateurs obtiennent cette intégration grâce à ces extensions.",
-            "organization": "{policy, select, REQUIRED {Bibliothèque de l’organisation, obligatoire} DEFAULT {Bibliothèque de l’organisation, activée par défaut} AVAILABLE {Bibliothèque de l’organisation, disponible} NOT_AVAILABLE {Bibliothèque de l’organisation, non disponible} other {Bibliothèque de l’organisation}}",
-            "personal": "Mes importations de {owner}",
-            "manage": "Gérer les extensions"
+            "organization": "{policy, select, REQUIRED {Bibliothèque de l’organisation, obligatoire} DEFAULT {Bibliothèque de l’organisation, activée par défaut} AVAILABLE {Bibliothèque de l’organisation, disponible} NOT_AVAILABLE {Bibliothèque de l’organisation, non disponible} other {Bibliothèque de l’organisation}}"
           },
           "enabled": {
             "title": "Activée",
             "description": "Si ce paramètre est désactivé, aucun agent ni utilisateur ne peut utiliser l’intégration."
           },
           "delete": {
-            "title": "Supprimer l’intégration",
-            "description": "Retire l’intégration de chaque extension et supprime ses connexions et les paramètres de ses actions.",
             "label": "Supprimer",
             "confirmTitle": "Supprimer {name} ?",
             "confirmDescription": "Onyx retire l’intégration de chaque extension et supprime ses connexions et les paramètres de ses actions. Cette opération est irréversible.",
@@ -10610,8 +10630,14 @@
             "nameRequired": "Donnez un nom à l'intégration.",
             "description": "Description",
             "save": "Enregistrer",
-            "saved": "Nom et description enregistrés."
-          }
+            "saved": "Nom et description enregistrés.",
+            "edit": "Modifier les détails",
+            "title": "Modifier les détails",
+            "cancel": "Annuler",
+            "saveFailed": "Impossible d’enregistrer le nom et la description."
+          },
+          "description": "Description",
+          "menu": "Plus d’actions"
         },
         "configuration": {
           "readOnly": "Vous pouvez voir cette intégration, mais pas la modifier.",
@@ -11633,50 +11659,11 @@
       }
     },
     "skill": {
-      "edit": {
-        "tooltip": "Modifier la compétence"
-      },
-      "invalid": {
-        "description": "Supprimez cette compétence non valide et créez-en une nouvelle."
-      },
       "tags": {
-        "builtin": {
-          "label": "Intégrée"
-        },
-        "invalid": {
-          "label": "Non valide"
-        },
-        "personal": {
-          "label": "Personnelle"
-        },
-        "required": {
-          "tooltip": "L’administrateur de votre organisation exige que vous disposiez de cette compétence."
-        },
-        "unavailable": {
-          "label": "Indisponible - cliquez pour en savoir plus"
-        },
-        "shared": {
-          "label": "Partagée"
-        },
-        "organization": {
-          "label": "Organisation"
-        },
         "unpublished": {
           "label": "Modifications non publiées",
           "tooltip": "L'organisation utilise encore la version {number}."
         }
-      },
-      "toggle": {
-        "disable": {
-          "ariaLabel": "Désactiver {name}"
-        },
-        "enable": {
-          "ariaLabel": "Activer {name}"
-        }
-      },
-      "tooltips": {
-        "invalid": "Cette compétence n'est pas valide. Supprimez-la et créez une nouvelle compétence.",
-        "unavailable": "La compétence est actuellement indisponible. Cliquez pour voir les détails."
       }
     }
   },
@@ -15633,7 +15620,9 @@
       "sort": "Trier",
       "sortBy": "Trier par",
       "sortingOrder": "Sens du tri",
-      "viewSelected": "Voir la sélection"
+      "viewSelected": "Voir la sélection",
+      "selectAll": "Tout sélectionner",
+      "selectRow": "Sélectionner la ligne"
     },
     "tabs": {
       "scrollLeft": "Faire défiler les onglets vers la gauche",
@@ -16445,60 +16434,18 @@
         "label": "Supprimer",
         "pendingLabel": "Suppression..."
       },
-      "details": {
-        "description": "Définissez quand et comment l’agent doit utiliser cette compétence.",
-        "descriptionField": {
-          "description": "Décrivez quand cette compétence doit être utilisée.",
-          "placeholder": "À quoi sert cette compétence ?",
-          "title": "Description"
-        },
-        "name": {
-          "createDescription": "Utilisez des lettres minuscules, des chiffres et des traits d'union simples.",
-          "placeholder": "Nommez votre compétence",
-          "title": "Nom"
-        },
-        "title": "Détails"
-      },
       "files": {
-        "busyLabel": "Téléversement...",
-        "description": "Ajoutez des références, scripts, ressources ou autres fichiers utilisés par cette compétence. Les fichiers ZIP sont décompressés automatiquement.",
-        "input": {
-          "ariaLabel": "Ajouter des fichiers annexes"
-        },
-        "pendingUpload": {
-          "emptyMessage": "Les fichiers de ce téléversement apparaîtront après la création de la compétence."
-        },
-        "title": "Fichiers annexes"
-      },
-      "filesTooltip": {
-        "updating": "Mise à jour des fichiers de la compétence..."
+        "addedOnCreate": "Créer ajoute ce fichier à la compétence."
       },
       "header": {
         "createDescription": "Créez une compétence personnelle",
         "createTitle": "Créer une compétence",
         "editTitle": "Modifier la compétence",
         "save": {
-          "label": "Enregistrer",
-          "pendingLabel": "Enregistrement..."
-        }
-      },
-      "import": {
-        "busyLabel": "Importation...",
-        "button": {
-          "label": "Importer une compétence"
+          "label": "Créer",
+          "pendingLabel": "Création..."
         },
-        "description": "Importez un SKILL.md, un ZIP ou un dossier de compétence pour préremplir le formulaire et inclure ses fichiers.",
-        "input": {
-          "ariaLabel": "Importer une compétence existante"
-        },
-        "prompt": "Choisissez un SKILL.md ou un ZIP, ou déposez un dossier de compétence ici.",
-        "title": "Vous avez déjà une compétence ?"
-      },
-      "instructions": {
-        "description": "Décrivez le comportement et le flux de travail que cette compétence ajoute à l’agent.",
-        "emptyFallback": "Pas encore d'instructions.",
-        "placeholder": "Rédigez les instructions de la compétence.",
-        "title": "Instructions"
+        "cancel": "Annuler"
       },
       "loadError": {
         "description": "Cette compétence n'existe peut-être pas, est peut-être intégrée ou n'est peut-être pas modifiable avec votre compte."
@@ -16511,27 +16458,26 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "Ajoutez une description avant d'enregistrer.",
         "missingInstructions": "Ajoutez des instructions avant d'enregistrer.",
         "missingName": "Ajoutez un nom avant d'enregistrer.",
         "noChanges": "Aucune modification n'a été apportée.",
         "savingSkill": "Enregistrement de la compétence..."
       },
       "staleVersion": {
+        "description": "Quelqu’un a enregistré une version plus récente. Rechargez pour l’obtenir. Vos modifications non enregistrées seront perdues.",
         "reload": {
           "label": "Recharger"
         },
-        "title": "Cette compétence a changé depuis son ouverture",
-        "description": "Quelqu’un a enregistré une version plus récente. Rechargez pour l’obtenir. Vos modifications non enregistrées seront perdues."
+        "title": "Cette compétence a changé depuis son ouverture"
       },
       "toasts": {
         "created": "« {name} » créée",
         "deleteFailed": "Échec de la suppression de la compétence",
         "deleted": "« {name} » supprimée",
-        "importMissingSkillMd": "Importez un SKILL.md, un ZIP ou un dossier contenant SKILL.md.",
         "inspectFailed": "Échec de l'inspection du paquet de compétence",
         "saveFailed": "Échec de l'enregistrement de la compétence",
-        "saved": "« {name} » enregistrée"
+        "saved": "« {name} » enregistrée",
+        "mergeLimit": "{limit, select, files {Une compétence peut contenir jusqu’à {max, number} fichiers. Retirez des fichiers, puis sélectionnez Créer.} other {Une compétence peut contenir jusqu’à {max, number} Mo de fichiers. Retirez des fichiers, puis sélectionnez Créer.}}"
       },
       "creationAccess": {
         "title": "Accès"
@@ -16831,12 +16777,6 @@
       }
     },
     "page": {
-      "browse": {
-        "title": "Sélectionner des compétences"
-      },
-      "countSeparator": {
-        "label": "{count, plural, one {Compétence} other {Compétences}}"
-      },
       "createMenu": {
         "github": {
           "description": "Importez une ou plusieurs compétences depuis un dépôt.",
@@ -16866,7 +16806,6 @@
         }
       },
       "header": {
-        "description": "Ensembles de capacités que votre agent Craft peut mobiliser. Cette page présente les compétences intégrées, celles partagées avec vous et vos compétences personnelles.",
         "title": "Compétences"
       },
       "loadError": {
@@ -16893,9 +16832,6 @@
         "enableFailed": "Échec de l'activation de {name}",
         "refreshFailed": "{name} a été mise à jour, mais la liste des compétences n'a pas pu être actualisée.",
         "listRefreshFailed": "La liste des compétences n'a pas pu être actualisée. Rechargez la page pour voir la modification."
-      },
-      "builtins": {
-        "title": "Compétences intégrées ({count, number})"
       }
     },
     "sections": {
@@ -16913,26 +16849,12 @@
           "label": "Glissez-déposez ou cliquez pour téléverser"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "Aucun fichier joint pour l'instant."
-        },
-        "remove": {
-          "label": "Retirer {name}"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "Ajouter des fichiers"
-        },
         "input": {
           "ariaLabel": "Ajouter des fichiers de compétence"
         },
         "preparing": {
           "label": "Préparation..."
-        },
-        "prompt": {
-          "description": "Choisissez des fichiers ou un ZIP, ou déposez un dossier ici."
         }
       },
       "instructionsToggle": {
@@ -16959,7 +16881,6 @@
     },
     "bulk": {
       "adminDescription": "Gérez les compétences et les accès dans votre organisation.",
-      "selectAll": "Sélectionner toutes les compétences personnalisées visibles",
       "selected": "{count, plural, one {# sélectionnée} other {# sélectionnées}}",
       "share": "Partager",
       "enable": "Activer pour moi",
@@ -17009,6 +16930,10 @@
       "version": {
         "firstPublish": "v{number} · Première publication",
         "update": "v{number} · Mise à jour depuis v{published}"
+      },
+      "banner": {
+        "title": "{count, plural, one {# compétence attend d’être publiée} other {# compétences attendent d’être publiées}}",
+        "review": "Examiner"
       }
     },
     "installationPolicy": {
@@ -17017,11 +16942,11 @@
         "description": "Installé et toujours actif. Les membres ne peuvent pas le désactiver."
       },
       "DEFAULT": {
-        "label": "Installé par défaut",
+        "label": "Installé",
         "description": "Installé pour chaque membre. Les membres peuvent le désactiver."
       },
       "AVAILABLE": {
-        "label": "Disponible à l’installation",
+        "label": "Disponible",
         "description": "Les membres le trouvent et l'activent s'ils le souhaitent."
       },
       "NOT_AVAILABLE": {
@@ -17050,6 +16975,25 @@
         "user": "{email} : {size}, {files, plural, one {# fichier} other {# fichiers}}, {notLoaded, plural, one {# skill non chargé} other {# skills non chargés}}",
         "more": "Et {count, number} de plus."
       }
+    },
+    "adminTable": {
+      "label": "Compétences personnalisées",
+      "columns": {
+        "name": "Nom",
+        "source": "Source",
+        "version": "Version",
+        "audience": "Audience"
+      },
+      "organizationLibrary": "Bibliothèque de l’organisation",
+      "noOwner": "Aucun propriétaire",
+      "version": "v{current}{published, select, none {} other { · v{published} en ligne}}",
+      "private": "Le propriétaire seul",
+      "shared": "Partagée avec des personnes ou des groupes",
+      "open": "Ouvrir {name}",
+      "menu": "Plus d’options pour {name}",
+      "share": "Partager",
+      "delete": "Supprimer",
+      "select": "Sélectionner {name}"
     }
   },
   "opensearchHealth": {
@@ -17340,7 +17284,8 @@
       "noMatches": {
         "title": "Aucun plugin correspondant",
         "clear": "Afficher tous les plugins"
-      }
+      },
+      "intro": "Un plugin regroupe des compétences et des intégrations que vous activez ensemble. Chaque compétence et chaque intégration que vous ajoutez vient dans son propre plugin."
     },
     "skillPage": {
       "title": "Compétence",
@@ -17373,6 +17318,7 @@
         "tools": "Intégrations et actions",
         "instructionsOnly": "Ajoute seulement des instructions pour l’agent"
       },
+      "backAdmin": "Inventaire des compétences",
       "contents": {
         "version": "{name} v{version} · actuelle",
         "edit": "Modifier",

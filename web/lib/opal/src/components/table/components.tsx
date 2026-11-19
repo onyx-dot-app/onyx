@@ -28,6 +28,7 @@ import { SortingPopover } from "@opal/components/table/ColumnSortabilityPopover"
 import type { WidthConfig } from "@opal/components/table/hooks/useColumnWidths";
 import type { ColumnDef } from "@tanstack/react-table";
 import { cn } from "@opal/utils";
+import { useOpalStrings } from "@opal/strings";
 import { resolveColumn } from "@opal/components/table/columns";
 import type {
   DataTableProps as BaseDataTableProps,
@@ -165,6 +166,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
     emptyState,
     header = true,
   } = props;
+  const strings = useOpalStrings();
 
   const footerConfig: DataTableFooterConfig | undefined =
     footer === true ? {} : footer || undefined;
@@ -408,6 +410,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
                           <QualifierContainer key={header.id} type="head">
                             {isMultiSelect && (
                               <InputCheckbox
+                                aria-label={strings.selectAll}
                                 checked={isAllRowsSelected}
                                 indeterminate={
                                   !isAllRowsSelected && selectedCount > 0
@@ -587,6 +590,7 @@ export function Table<TData>(props: DataTableProps<TData>) {
                               icon={qDef.getContent?.(row.original)}
                               imageSrc={qDef.getImageSrc?.(row.original)}
                               imageAlt={qDef.getImageAlt?.(row.original)}
+                              selectLabel={qDef.getSelectLabel?.(row.original)}
                               background={qDef.background}
                               avatar={qDef.avatar}
                               selectable={showQualifierCheckbox}

@@ -12,6 +12,12 @@ export {
   type ButtonProps,
 } from "@opal/components/buttons/button/components";
 
+/* FilePickerButton */
+export {
+  FilePickerButton,
+  type FilePickerButtonProps,
+} from "@opal/components/buttons/file-picker-button/components";
+
 /* FoldButton */
 export {
   FoldButton,
@@ -195,6 +201,13 @@ export {
   type DividerProps,
   type DividerSpacing,
 } from "@opal/components/divider/components";
+
+/* Icon tints */
+export {
+  tintedIcon,
+  ICON_TINTS,
+  type IconTint,
+} from "@opal/components/icon-container/tint";
 
 /* IconContainer */
 export {

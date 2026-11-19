@@ -15,7 +15,7 @@
  *
  *   2. A computed `variant` resolving to `"disabled"`. Opal's Card now has a
  *      `disabled` prop, so these read as `disabled={…}` alongside
- *      `border="solid"`. SkillCard, both discord-bot pages.
+ *      `border="solid"`. Both discord-bot pages.
  *
  *   3. Passing a `className`, which Opal's Card takes none of by design. These
  *      need a decision before they can move anywhere:

@@ -11,19 +11,22 @@ import {
   type TableColumn,
 } from "@opal/components";
 import {
+  Content,
   IllustrationContent,
   Section,
   SettingsLayouts,
+  Toolbar,
   toast,
 } from "@opal/layouts";
 import { SvgUnPlugged } from "@opal/illustrations";
+import { SvgPlug } from "@opal/icons";
 import { useNavigation } from "@opal/navigation";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useAdminIntegrations } from "@/lib/integrations/hooks";
 import { setPluginInstallationPolicy } from "@/lib/integrations/svc";
 import type {
   AdminPluginEntry,
   InstallationPolicy,
+  IntegrationPluginRef,
 } from "@/lib/integrations/types";
 import {
   integrationDetailHref,
@@ -37,6 +40,13 @@ import {
 import { INSTALLATION_POLICIES } from "@/lib/skills/installationPolicy";
 import { Permission } from "@/lib/types";
 
+type LibraryFilter = "all" | IntegrationPluginRef["scope"];
+const LIBRARY_FILTERS: readonly LibraryFilter[] = [
+  "all",
+  "organization",
+  "personal",
+];
+
 export default function AdminPluginsPage() {
   const t = useTranslations("admin.plugins");
   const locale = useLocale();
@@ -46,15 +56,18 @@ export default function AdminPluginsPage() {
   const policyCopy = useInstallationPolicyCopy();
   const policyOptions = usePolicyOptions();
   const [query, setQuery] = useState("");
+  const [library, setLibrary] = useState<LibraryFilter>("all");
   const [savingPluginIds, setSavingPluginIds] = useState<ReadonlySet<string>>(
     new Set()
   );
   const search = query.trim().toLocaleLowerCase();
-  const entries = pluginsFromIntegrations(data ?? [], locale).filter((entry) =>
-    [entry.plugin.plugin_name, ...entry.integrations.map((i) => i.name)]
-      .join(" ")
-      .toLocaleLowerCase()
-      .includes(search)
+  const entries = pluginsFromIntegrations(data ?? [], locale).filter(
+    (entry) =>
+      (library === "all" || entry.plugin.scope === library) &&
+      [entry.plugin.plugin_name, ...entry.integrations.map((i) => i.name)]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(search)
   );
 
   async function saveInstallationPolicy(
@@ -96,21 +109,25 @@ export default function AdminPluginsPage() {
       title: t("columns.name"),
       width: { weight: 26 },
       cell: (row) => (
-        <Text font="main-ui-action" color="text-04" maxLines={1}>
-          {row.plugin.plugin_name}
-        </Text>
+        <Content
+          icon={SvgPlug}
+          title={row.plugin.plugin_name}
+          description={t("contents", { count: row.integrations.length })}
+          titleMaxLines={1}
+          descriptionMaxLines={1}
+        />
       ),
     },
     {
       kind: "display",
       id: "library",
       title: t("columns.library"),
-      width: { weight: 24 },
+      width: { weight: 20 },
       cell: (row) => (
-        <Text font="main-ui-body" color="text-03" maxLines={1}>
+        <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
           {row.plugin.scope === "organization"
             ? t("library.organization")
-            : t("library.personal", { owner: row.plugin.owner_email ?? "" })}
+            : (row.plugin.owner_email ?? t("library.personal"))}
         </Text>
       ),
     },
@@ -124,7 +141,7 @@ export default function AdminPluginsPage() {
         // Only an Organization library plugin has an install setting.
         if (row.plugin.scope !== "organization" || policy === null)
           return (
-            <Text font="main-ui-body" color="text-03" maxLines={1}>
+            <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
               {"\u2014"}
             </Text>
           );
@@ -153,7 +170,7 @@ export default function AdminPluginsPage() {
       kind: "display",
       id: "integrations",
       title: t("columns.integrations"),
-      width: { weight: 34 },
+      width: { weight: 32 },
       cell: (row) => (
         <Section
           flexDirection="row"
@@ -187,30 +204,39 @@ export default function AdminPluginsPage() {
       error={error ? t("loadFailed") : false}
     >
       <SettingsLayouts.Header
+        icon={SvgPlug}
         title={t("title")}
         description={t("description")}
-        stackActionsOnMobile
-        actions={[
-          <Button
-            key="integrations"
-            prominence="secondary"
-            onClick={() => navigation.go(ADMIN_ROUTES.INTEGRATIONS.path)}
-          >
-            {t("manageIntegrations")}
-          </Button>,
-        ]}
-      >
-        <Section width="auto" height="auto" alignItems="start">
-          <InputTypeIn
-            icon="search"
-            aria-label={t("search")}
-            placeholder={t("search")}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </Section>
-      </SettingsLayouts.Header>
+      />
       <SettingsLayouts.Body>
+        <Toolbar
+          search={
+            <InputTypeIn
+              icon="search"
+              aria-label={t("search")}
+              placeholder={t("search")}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          }
+          filters={[
+            <InputSingleSelect
+              key="filter"
+              placeholder={t("filters.label")}
+              value={library}
+              defaultOption="all"
+              options={LIBRARY_FILTERS.map((value) => ({
+                value,
+                title: t(`filters.${value}`),
+              }))}
+              onValueChange={(value) =>
+                setLibrary(
+                  LIBRARY_FILTERS.find((option) => option === value) ?? "all"
+                )
+              }
+            />,
+          ]}
+        />
         <Table
           label={t("title")}
           items={entries}

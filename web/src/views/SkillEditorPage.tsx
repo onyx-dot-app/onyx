@@ -4,22 +4,12 @@ import { useNavigation } from "@opal/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import {
-  Button,
-  Card,
-  CompactMarkdown,
-  Divider,
-  InputTextArea,
-  InputTypeIn,
-  Tooltip,
-  useCreateModal,
-} from "@opal/components";
+import { Button, Tooltip, useCreateModal } from "@opal/components";
 import { SvgAlertTriangle, SvgBlocks } from "@opal/icons";
 import {
-  Content,
-  InputVertical,
-  SettingsLayouts,
+  ConfirmationModalLayout,
   Section,
+  SettingsLayouts,
   toast,
 } from "@opal/layouts";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -29,15 +19,21 @@ import {
   inspectSkillBundle,
   isSkillNameConflict,
 } from "@/lib/skills/api";
-import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
+import {
+  mergeSkillFilesUploads,
+  SkillMergeLimitError,
+  type PreparedSkillFilesUpload,
+} from "@/lib/skills/bundleUpload";
 import {
   discardSkillCreationDraft,
   getSkillCreationDraft,
 } from "@/lib/skills/creationDraft";
+import {
+  composeSkillMarkdown,
+  parseSkillMarkdown,
+} from "@/lib/customize/skillMarkdown";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
-import InstructionsDisplayModeToggle, {
-  type InstructionsDisplayMode,
-} from "@/sections/skills/InstructionsDisplayModeToggle";
+import { type InstructionsDisplayMode } from "@/sections/skills/InstructionsDisplayModeToggle";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import SkillSharingSummary from "@/sections/skills/SkillSharingSummary";
 import {
@@ -47,22 +43,33 @@ import {
 } from "@/lib/skills/sharing";
 import SkillNameConflictModal from "@/sections/modals/skills/SkillNameConflictModal";
 import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
-import SkillFileTree from "@/sections/skills/SkillFileTree";
-import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
-import { ConfirmationModalLayout } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useSkillLimitCopy } from "@/lib/skills/hooks";
 import { customizeTabHref, skillHref } from "@/lib/customize/paths";
+import { BackLink } from "@/sections/customize/CustomizeDetailLayout";
+import SkillBundleEditor, {
+  bundleFiles,
+  uploadPaths,
+} from "@/sections/customize/SkillBundleEditor";
+
+const EMPTY_SKILL_MD = composeSkillMarkdown({
+  name: "",
+  description: "",
+  instructions: "",
+});
 
 interface SkillEditorPageProps {
   draftId?: string;
 }
 
-/** Creates a skill. An existing skill is edited in place on its Contents tab. */
+/** Creates a skill in the same files-and-SKILL.md editor as the Contents tab
+ * of a skill. An existing skill is edited in place on that tab. */
 export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
   const t = useTranslations("skills");
+  const contentsCopy = useTranslations("customize.skillPage.contents");
+  const tabCopy = useTranslations("customize.tabs");
   const { describeError } = useSkillLimitCopy();
   const navigation = useNavigation();
   const { user } = useUser();
@@ -75,17 +82,44 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
   );
   const { mutate, cache } = useSWRConfig();
 
-  const [name, setName] = useState(creationDraft?.contents.name ?? "");
-  const [description, setDescription] = useState(
-    creationDraft?.contents.description ?? ""
+  const [text, setText] = useState(() =>
+    creationDraft
+      ? composeSkillMarkdown({
+          name: creationDraft.contents.name,
+          description: creationDraft.contents.description,
+          instructions: creationDraft.contents.instructions_markdown,
+        })
+      : EMPTY_SKILL_MD
   );
-  const [instructionsMarkdown, setInstructionsMarkdown] = useState(
-    creationDraft?.contents.instructions_markdown ?? ""
+  // The first upload goes with the new skill; the rest are added after it.
+  const [uploads, setUploads] = useState<PreparedSkillFilesUpload[]>(() =>
+    creationDraft
+      ? [
+          {
+            ...creationDraft.upload,
+            entries: creationDraft.contents.files,
+          },
+        ]
+      : []
   );
-  const [instructionsDisplayMode, setInstructionsDisplayMode] =
-    useState<InstructionsDisplayMode>("raw");
+  const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
+  const [mode, setMode] = useState<InstructionsDisplayMode>("raw");
   const [creationSharing, setCreationSharing] =
     useState<SkillSharingDraft | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const confirmUploadModal = useCreateModal();
+  const nameConflictModal = useCreateModal();
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPreparingFiles, setIsPreparingFiles] = useState(false);
+  const [isUploadingFiles, setIsUploadingFiles] = useState(false);
+  const [bundleToConfirm, setBundleToConfirm] =
+    useState<PreparedSkillFilesUpload | null>(null);
+  const [conflictingSkillName, setConflictingSkillName] = useState<
+    string | null
+  >(null);
+
+  const parsed = parseSkillMarkdown(text);
+  const name = parsed.ok ? parsed.name : "";
   const sharingDraft: SkillSharingDraft = {
     ...emptySkillSharingDraft(
       name || t("editor.header.createTitle"),
@@ -94,50 +128,77 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
     ...creationSharing,
     name: name || t("editor.header.createTitle"),
   };
-  const [shareOpen, setShareOpen] = useState(false);
-  const confirmUploadModal = useCreateModal();
-  const nameConflictModal = useCreateModal();
-  const [isSaving, setIsSaving] = useState(false);
-  const [isPreparingFiles, setIsPreparingFiles] = useState(false);
-  const [isUploadingFiles, setIsUploadingFiles] = useState(false);
-  const [pendingFilesUpload, setPendingFilesUpload] =
-    useState<PreparedSkillFilesUpload | null>(creationDraft?.upload ?? null);
-  const [filesUploadToConfirm, setFilesUploadToConfirm] =
-    useState<PreparedSkillFilesUpload | null>(null);
-  const [conflictingSkillName, setConflictingSkillName] = useState<
-    string | null
-  >(null);
 
-  const isDirty = Boolean(
-    name ||
-    description ||
-    instructionsMarkdown ||
-    pendingFilesUpload ||
-    creationSharing
-  );
-
+  const isDirty =
+    text !== EMPTY_SKILL_MD ||
+    uploads.length > 0 ||
+    removed.size > 0 ||
+    creationSharing !== null;
   const unsavedChanges = useUnsavedChangesGuard({
     isDirty,
     onDiscard: draftId ? () => discardSkillCreationDraft(draftId) : undefined,
   });
 
-  // A bundle upload rewrites name/description/instructions from SKILL.md, so
-  // lock the fields while one is in flight.
-  const fieldsLocked = isPreparingFiles || isUploadingFiles || isSaving;
+  // An inspected SKILL.md bundle replaces the text, so lock it meanwhile.
+  const busy = isPreparingFiles || isUploadingFiles || isSaving;
 
-  const canSave =
-    !isPreparingFiles &&
-    !isUploadingFiles &&
-    isDirty &&
-    !!name.trim() &&
-    !!description.trim() &&
-    !!instructionsMarkdown.trim() &&
-    !isSaving;
+  const createTooltip = isSaving
+    ? t("editor.saveTooltip.savingSkill")
+    : !parsed.ok
+      ? contentsCopy(`errors.${parsed.error}`)
+      : !parsed.name
+        ? t("editor.saveTooltip.missingName")
+        : !parsed.instructions
+          ? t("editor.saveTooltip.missingInstructions")
+          : undefined;
+  const canCreate = !busy && createTooltip === undefined;
+
+  const files = bundleFiles([], uploads, removed);
 
   function handleCancel() {
-    if (isSaving || isPreparingFiles || isUploadingFiles) return;
+    if (busy) return;
     unsavedChanges.requestLeave(() =>
       navigation.go(customizeTabHref("skills"))
+    );
+  }
+
+  async function applyBundle(upload: PreparedSkillFilesUpload) {
+    setIsUploadingFiles(true);
+    try {
+      const bundle = await inspectSkillBundle(upload.file);
+      setText(
+        composeSkillMarkdown({
+          name: bundle.name,
+          description: bundle.description,
+          instructions: bundle.instructions_markdown,
+        })
+      );
+      setUploads([{ ...upload, entries: bundle.files }]);
+      setRemoved(new Set());
+    } catch (err) {
+      console.error("Failed to inspect skill bundle", err);
+      toast.error(
+        err instanceof Error ? err.message : t("editor.toasts.inspectFailed")
+      );
+    } finally {
+      setIsUploadingFiles(false);
+    }
+  }
+
+  function handleAdd(upload: PreparedSkillFilesUpload) {
+    if (upload.containsSkillMd) {
+      if (isDirty) {
+        setBundleToConfirm(upload);
+        confirmUploadModal.toggle(true);
+      } else {
+        void applyBundle(upload);
+      }
+      return;
+    }
+    setUploads((current) => [...current, upload]);
+    const paths = new Set(uploadPaths(upload));
+    setRemoved(
+      (current) => new Set([...current].filter((path) => !paths.has(path)))
     );
   }
 
@@ -146,20 +207,33 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
     createDisabled = false
   ) {
     event?.preventDefault();
-    if (!canSave) return;
+    if (!parsed.ok || (!canCreate && !createDisabled)) return;
     setIsSaving(true);
     try {
+      // One upload with every file that is left, so the skill is created,
+      // shared and published as one version. An upload whose files were all
+      // removed (a ZIP lists as one row) is left out whole.
+      const live = uploads.filter((item) =>
+        uploadPaths(item).some((path) => !removed.has(path))
+      );
+      const [only] = live;
+      const upload =
+        live.length === 1 &&
+        only &&
+        !uploadPaths(only).some((path) => removed.has(path))
+          ? only.file
+          : await mergeSkillFilesUploads(live, removed);
       const created = await createCustomSkillFromEditor(
         {
-          name,
-          description,
-          instructions_markdown: instructionsMarkdown,
+          name: parsed.name,
+          description: parsed.description,
+          instructions_markdown: parsed.instructions,
           auto_enable: !createDisabled,
           sharing: creationSharing
             ? serializeSkillSharing(creationSharing, canManageOrgSkills)
             : undefined,
         },
-        pendingFilesUpload?.file
+        upload
       );
       nameConflictModal.toggle(false);
       if (draftId) discardSkillCreationDraft(draftId);
@@ -173,71 +247,20 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
       navigation.go(skillHref(created.id), { replace: true });
     } catch (err) {
       if (!createDisabled && isSkillNameConflict(err)) {
-        setConflictingSkillName(name.trim());
+        setConflictingSkillName(parsed.name);
         nameConflictModal.toggle(true);
         return;
       }
       console.error("Failed to save skill", err);
-      toast.error(describeError(err, t("editor.toasts.saveFailed")));
+      toast.error(
+        err instanceof SkillMergeLimitError
+          ? t("editor.toasts.mergeLimit", { limit: err.limit, max: err.max })
+          : describeError(err, t("editor.toasts.saveFailed"))
+      );
     } finally {
       setIsSaving(false);
     }
   }
-
-  async function applyFilesUpload(upload: PreparedSkillFilesUpload) {
-    if (!upload.containsSkillMd) {
-      setPendingFilesUpload(upload);
-      return;
-    }
-    setIsUploadingFiles(true);
-    try {
-      const bundle = await inspectSkillBundle(upload.file);
-      setName(bundle.name);
-      setDescription(bundle.description);
-      setInstructionsMarkdown(bundle.instructions_markdown);
-      setPendingFilesUpload({ ...upload, entries: bundle.files });
-    } catch (err) {
-      console.error("Failed to inspect skill bundle", err);
-      toast.error(
-        err instanceof Error ? err.message : t("editor.toasts.inspectFailed")
-      );
-    } finally {
-      setIsUploadingFiles(false);
-    }
-  }
-
-  function handleFilesSelected(upload: PreparedSkillFilesUpload) {
-    if (upload.containsSkillMd && isDirty) {
-      setFilesUploadToConfirm(upload);
-      confirmUploadModal.toggle(true);
-      return;
-    }
-    void applyFilesUpload(upload);
-  }
-
-  function handleImportSelected(upload: PreparedSkillFilesUpload) {
-    if (!upload.containsSkillMd) {
-      toast.error(t("editor.toasts.importMissingSkillMd"));
-      return;
-    }
-    handleFilesSelected(upload);
-  }
-
-  const saveTooltip = isSaving
-    ? t("editor.saveTooltip.savingSkill")
-    : !name.trim()
-      ? t("editor.saveTooltip.missingName")
-      : !description.trim()
-        ? t("editor.saveTooltip.missingDescription")
-        : !instructionsMarkdown.trim()
-          ? t("editor.saveTooltip.missingInstructions")
-          : undefined;
-
-  const filesUploadDisabled = fieldsLocked;
-  const filesUploadTooltip = isUploadingFiles
-    ? t("editor.filesTooltip.updating")
-    : undefined;
-  const displayedFiles = pendingFilesUpload?.entries ?? [];
 
   return (
     <form
@@ -245,192 +268,64 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
       data-testid="SkillEditorPage/container"
       onSubmit={handleSave}
     >
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root width="lg">
         <SettingsLayouts.Header
+          back={
+            <BackLink
+              to={customizeTabHref("skills")}
+              label={tabCopy("skills")}
+            />
+          }
           icon={SvgBlocks}
-          title={t("editor.header.createTitle")}
+          title={name || t("editor.header.createTitle")}
           description={t("editor.header.createDescription")}
-          cancel={handleCancel}
+          stackActionsOnMobile
           actions={[
-            <Tooltip key="save" tooltip={saveTooltip} side="bottom">
-              <Button disabled={!canSave} type="submit">
+            <Button
+              key="cancel"
+              type="button"
+              prominence="secondary"
+              onClick={handleCancel}
+            >
+              {t("editor.header.cancel")}
+            </Button>,
+            <Tooltip key="save" tooltip={createTooltip} side="bottom">
+              <Button disabled={!canCreate} type="submit">
                 {isSaving
                   ? t("editor.header.save.pendingLabel")
                   : t("editor.header.save.label")}
               </Button>
             </Tooltip>,
           ]}
-          divider
         />
 
         <SettingsLayouts.Body>
-          <>
-            {!creationDraft && (
-              <>
-                <Section gap={2} alignItems="stretch" height="auto">
-                  <Card border="solid" rounding={4} padding={2}>
-                    <Section gap={2} alignItems="stretch" height="auto">
-                      <Content
-                        font="main-content-emphasis"
-                        title={t("editor.import.title")}
-                        description={t("editor.import.description")}
-                      />
-                      <SkillFilesPicker
-                        disabled={filesUploadDisabled}
-                        busyLabel={
-                          isUploadingFiles
-                            ? t("editor.import.busyLabel")
-                            : undefined
-                        }
-                        buttonLabel={t("editor.import.button.label")}
-                        inputLabel={t("editor.import.input.ariaLabel")}
-                        prompt={t("editor.import.prompt")}
-                        onChange={handleImportSelected}
-                        onError={(message) => toast.error(message)}
-                        onPreparingChange={setIsPreparingFiles}
-                      />
-                    </Section>
-                  </Card>
-                </Section>
-
-                <Divider paddingParallel={0} paddingPerpendicular={0} />
-              </>
-            )}
-
+          <Section gap={4} alignItems="stretch" height="auto">
+            <SkillBundleEditor
+              files={files}
+              editing
+              text={text}
+              onTextChange={setText}
+              preview={parsed.ok ? parsed.instructions : text}
+              mode={mode}
+              onModeChange={setMode}
+              busy={busy}
+              onAdd={handleAdd}
+              onRemove={(path) =>
+                setRemoved((current) => new Set([...current, path]))
+              }
+              onPreparingChange={setIsPreparingFiles}
+              addedFileNote={t("editor.files.addedOnCreate")}
+            />
             <SkillSharingSummary
               title={t("editor.creationAccess.title")}
               draft={sharingDraft}
               count={1}
               configureLabel={t("editor.management.sharing.edit.label")}
-              disabled={fieldsLocked}
+              disabled={busy}
               onConfigure={() => setShareOpen(true)}
             />
-
-            <Section alignItems="stretch">
-              <Content
-                font="main-content-emphasis"
-                title={t("editor.details.title")}
-                description={t("editor.details.description")}
-              />
-              <InputVertical
-                withLabel="name"
-                title={t("editor.details.name.title")}
-                disabled={fieldsLocked}
-                description={t("editor.details.name.createDescription")}
-              >
-                <InputTypeIn
-                  id="name"
-                  name="name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder={t("editor.details.name.placeholder")}
-                  variant={fieldsLocked ? "disabled" : "primary"}
-                />
-              </InputVertical>
-
-              <InputVertical
-                withLabel="description"
-                title={t("editor.details.descriptionField.title")}
-                description={t("editor.details.descriptionField.description")}
-              >
-                <InputTextArea
-                  id="description"
-                  name="description"
-                  rows={2}
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  placeholder={t("editor.details.descriptionField.placeholder")}
-                  autoResize
-                  maxRows={8}
-                  variant={fieldsLocked ? "disabled" : "primary"}
-                />
-              </InputVertical>
-            </Section>
-
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
-
-            <Section alignItems="stretch">
-              <Section
-                height="auto"
-                flexDirection="row"
-                alignItems="start"
-                justifyContent="between"
-                gap={2}
-              >
-                <Content
-                  font="main-content-emphasis"
-                  title={t("editor.instructions.title")}
-                  description={t("editor.instructions.description")}
-                />
-                <InstructionsDisplayModeToggle
-                  value={instructionsDisplayMode}
-                  onChange={setInstructionsDisplayMode}
-                />
-              </Section>
-
-              <Card border="solid" rounding={4} padding={2}>
-                {instructionsDisplayMode === "raw" ? (
-                  <InputTextArea
-                    id="instructions_markdown"
-                    name="instructions_markdown"
-                    rows={10}
-                    value={instructionsMarkdown}
-                    onChange={(event) =>
-                      setInstructionsMarkdown(event.target.value)
-                    }
-                    placeholder={t("editor.instructions.placeholder")}
-                    variant={fieldsLocked ? "disabled" : "internal"}
-                  />
-                ) : (
-                  <div className="min-h-[34rem] max-h-[70dvh] overflow-y-auto overflow-x-hidden rounded-08 bg-background-neutral-00 p-2">
-                    <CompactMarkdown>
-                      {instructionsMarkdown ||
-                        t("editor.instructions.emptyFallback")}
-                    </CompactMarkdown>
-                  </div>
-                )}
-              </Card>
-            </Section>
-
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
-
-            <Section gap={2} alignItems="stretch" height="auto">
-              <Content
-                font="main-content-emphasis"
-                title={t("editor.files.title")}
-                description={t("editor.files.description")}
-              />
-              <Card border="solid" rounding={4}>
-                <SkillFileTree
-                  files={displayedFiles}
-                  emptyMessage={
-                    pendingFilesUpload?.entries === null
-                      ? t("editor.files.pendingUpload.emptyMessage")
-                      : undefined
-                  }
-                />
-                <div className="border-t border-border-01 p-2">
-                  <Tooltip tooltip={filesUploadTooltip} side="bottom">
-                    <div>
-                      <SkillFilesPicker
-                        value={pendingFilesUpload}
-                        disabled={filesUploadDisabled}
-                        inputLabel={t("editor.files.input.ariaLabel")}
-                        busyLabel={
-                          isUploadingFiles
-                            ? t("editor.files.busyLabel")
-                            : undefined
-                        }
-                        onChange={handleFilesSelected}
-                        onError={(message) => toast.error(message)}
-                        onPreparingChange={setIsPreparingFiles}
-                      />
-                    </div>
-                  </Tooltip>
-                </div>
-              </Card>
-            </Section>
-          </>
+          </Section>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
 
@@ -443,7 +338,7 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
       />
 
       <confirmUploadModal.Provider>
-        {filesUploadToConfirm && (
+        {bundleToConfirm && (
           <ConfirmationModalLayout
             icon={SvgAlertTriangle}
             title={t("editor.confirmUpload.importTitle")}
@@ -452,9 +347,9 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
               <Button
                 type="button"
                 onClick={() => {
-                  const upload = filesUploadToConfirm;
+                  const upload = bundleToConfirm;
                   confirmUploadModal.toggle(false);
-                  void applyFilesUpload(upload);
+                  void applyBundle(upload);
                 }}
               >
                 {t("editor.confirmUpload.importSubmit.label")}

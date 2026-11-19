@@ -45,13 +45,13 @@ export class CustomizePage {
     ).toBeVisible();
   }
 
-  /** Opens Customize from the app sidebar; it lands on the Plugins tab. */
+  /** Opens Customize from the app sidebar; it lands on the Skills tab. */
   async openFromSidebar(): Promise<void> {
     await this.page.goto("/app");
     await this.page
       .getByRole("link", { name: "Customize", exact: true })
       .click();
-    await expect(this.page).toHaveURL(/\/app\/customize\/plugins$/);
+    await expect(this.page).toHaveURL(/\/app\/customize\/skills$/);
   }
 
   async expectSkillInGroup(name: string, group: string): Promise<void> {
@@ -104,7 +104,7 @@ export class CustomizePage {
     await this.page.getByRole("button", { name: "Add", exact: true }).click();
   }
 
-  /** Adds a personal MCP server from the Add menu of the Integrations tab
+  /** Adds a personal MCP server from the Add page of the Integrations tab
    * ("For me" only) and returns the new integration and its plugin. The page
    * then shows the integration on its Configuration tab. */
   async addMcpServer(details: {
@@ -117,24 +117,23 @@ export class CustomizePage {
     await this.page
       .getByRole("menuitem", { name: "Add integration", exact: true })
       .click();
-    const dialog = this.page.getByRole("dialog");
-    await dialog
-      .getByRole("button", { name: "MCP server", exact: true })
-      .click();
-    await dialog
+    await expect(this.page).toHaveURL(/\/app\/customize\/integrations\/new$/);
+    const addPage = new AdminIntegrationsPage(this.page);
+    const form = addPage.addForm;
+    await form.getByRole("radio", { name: "MCP Server", exact: true }).click();
+    await form
       .getByRole("textbox", { name: "Name", exact: true })
       .fill(details.name);
-    await dialog
+    await form
       .getByRole("textbox", { name: "Server URL", exact: true })
       .fill(details.url);
     await expect(
-      dialog.getByRole("combobox", { name: "Owner", exact: true })
+      form.getByRole("combobox", { name: "Owner", exact: true })
     ).toHaveCount(0);
     if (details.oauth) {
-      const addForm = new AdminIntegrationsPage(this.page);
-      await addForm.expectOAuthProbe();
+      await addPage.expectOAuthProbe();
       if (details.oauth.client) {
-        await addForm.fillOAuthClient(
+        await addPage.fillOAuthClient(
           details.oauth.client.clientId,
           details.oauth.client.clientSecret
         );
@@ -145,7 +144,7 @@ export class CustomizePage {
         new URL(candidate.url()).pathname === "/api/admin/integrations" &&
         candidate.request().method() === "POST"
     );
-    await dialog.getByRole("button", { name: "Add", exact: true }).click();
+    await form.getByRole("button", { name: "Add", exact: true }).click();
     const created = await response;
     expect(created.ok(), await created.text()).toBeTruthy();
     const body: { id: number; plugins: { plugin_id: string }[] } =

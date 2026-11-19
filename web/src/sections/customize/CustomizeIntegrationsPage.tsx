@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import {
   Button,
   Dropdown,
+  IconContainer,
   Table,
   Text,
   type TableColumn,
@@ -14,14 +15,17 @@ import { SvgCheck, SvgPlug, SvgPlus, SvgSettings } from "@opal/icons";
 import { SvgUnPlugged } from "@opal/illustrations";
 import { useScreenSize } from "@opal/hooks";
 import { useNavigation } from "@opal/navigation";
-import { customizeTabHref, integrationHref } from "@/lib/customize/paths";
+import {
+  customizeTabHref,
+  integrationHref,
+  NEW_INTEGRATION_PATH,
+} from "@/lib/customize/paths";
 import { useMemberIntegrations } from "@/lib/integrations/hooks";
 import type { MemberIntegration } from "@/lib/integrations/types";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import CustomizeLayout from "@/sections/customize/CustomizeLayout";
 import { CustomizeEmpty } from "@/sections/customize/CustomizeList";
-import AddIntegrationModal from "@/sections/integrations/AddIntegrationModal";
 import { useIntegrationLabels } from "@/sections/integrations/integrationLabels";
 import IntegrationConnectButton from "@/sections/plugins/IntegrationConnectButton";
 
@@ -42,7 +46,7 @@ function IntegrationStatusCell({ integration }: IntegrationStatusCellProps) {
         height="auto"
         aria-label={t("status.connected")}
       >
-        <SvgCheck size={16} className="stroke-text-03" />
+        <IconContainer icon={SvgCheck} />
       </Section>
     );
   return (
@@ -59,13 +63,12 @@ export default function CustomizeIntegrationsPage() {
   const navigation = useNavigation();
   const labels = useIntegrationLabels();
   const { isMobile } = useScreenSize();
-  const { data, error, isLoading, mutate } = useMemberIntegrations();
+  const { data, error, isLoading } = useMemberIntegrations();
   const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_ACTIONS
   );
   const canAdd = isGlobalHolder || isScopedManager;
   const [query, setQuery] = useState("");
-  const [adding, setAdding] = useState(false);
 
   const integrations = [...(data ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name, locale, { sensitivity: "base" })
@@ -142,7 +145,7 @@ export default function CustomizeIntegrationsPage() {
             id: "add",
             icon: SvgPlug,
             title: t("add.integration"),
-            onSelect: () => setAdding(true),
+            onSelect: () => navigation.go(NEW_INTEGRATION_PATH),
           },
           {
             kind: "action",
@@ -187,19 +190,6 @@ export default function CustomizeIntegrationsPage() {
               description={t("noMatches.description")}
             />
           }
-        />
-      )}
-      {adding && (
-        <AddIntegrationModal
-          canChooseOrganization={false}
-          onClose={() => setAdding(false)}
-          onCreated={(created) => {
-            setAdding(false);
-            // The integration page reads the new integration from the list.
-            void mutate().finally(() =>
-              navigation.go(integrationHref(created.id, "configuration"))
-            );
-          }}
         />
       )}
     </CustomizeLayout>

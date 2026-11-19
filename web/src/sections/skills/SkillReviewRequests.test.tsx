@@ -31,6 +31,13 @@ jest.mock("@opal/layouts", () => ({
   },
 }));
 
+/** Opens the requests from the banner. */
+async function openRequests() {
+  await setupUser().click(
+    await screen.findByRole("button", { name: /^Review$/ })
+  );
+}
+
 function request(
   overrides: Partial<SkillReviewRequest> = {}
 ): SkillReviewRequest {
@@ -81,8 +88,12 @@ describe("SkillReviewRequests", () => {
 
   it("lists each pending request with its version and author", async () => {
     render(<SkillReviewRequests onReviewed={jest.fn()} />);
+    await openRequests();
 
     expect(await screen.findByText("report-writer")).toBeVisible();
+    expect(
+      screen.getByText("2 skills are waiting to be published")
+    ).toBeVisible();
     expect(screen.getByText("v1 · First publish")).toBeVisible();
     expect(screen.getByText("v3 · Update from v2")).toBeVisible();
     expect(screen.getAllByText("author@example.com")).toHaveLength(2);
@@ -92,6 +103,7 @@ describe("SkillReviewRequests", () => {
   it("opens a review with the version content before any decision", async () => {
     const user = setupUser();
     render(<SkillReviewRequests onReviewed={jest.fn()} />);
+    await openRequests();
 
     await user.click(
       await screen.findByRole("button", { name: "Review weekly-report" })
@@ -114,6 +126,7 @@ describe("SkillReviewRequests", () => {
     const user = setupUser();
     const onReviewed = jest.fn();
     render(<SkillReviewRequests onReviewed={onReviewed} />);
+    await openRequests();
 
     await user.click(
       await screen.findByRole("button", { name: "Review weekly-report" })
@@ -134,7 +147,9 @@ describe("SkillReviewRequests", () => {
     );
     expect(onReviewed).toHaveBeenCalledTimes(1);
     await waitFor(() =>
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole("dialog", { name: /^weekly-report/ })
+      ).not.toBeInTheDocument()
     );
   });
 
@@ -145,6 +160,7 @@ describe("SkillReviewRequests", () => {
       throw new Error("boom");
     });
     render(<SkillReviewRequests onReviewed={jest.fn()} />);
+    await openRequests();
 
     await user.click(
       await screen.findByRole("button", { name: "Review report-writer" })
@@ -167,6 +183,7 @@ describe("SkillReviewRequests", () => {
     );
     const onReviewed = jest.fn();
     render(<SkillReviewRequests onReviewed={onReviewed} />);
+    await openRequests();
 
     await user.click(
       await screen.findByRole("button", { name: "Review report-writer" })
@@ -187,6 +204,7 @@ describe("SkillReviewRequests", () => {
   it("denies a request from the review", async () => {
     const user = setupUser();
     render(<SkillReviewRequests onReviewed={jest.fn()} />);
+    await openRequests();
 
     await user.click(
       await screen.findByRole("button", { name: "Review report-writer" })

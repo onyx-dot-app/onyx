@@ -64,12 +64,12 @@ function detail(over: Partial<CustomSkill>): SkillEditableDetail {
   };
 }
 
-function open(skill: SkillEditableDetail, search = "") {
-  window.history.replaceState(
-    null,
-    "",
-    `/app/customize/skills/custom-1${search}`
-  );
+function open(
+  skill: SkillEditableDetail,
+  url = "/app/customize/skills/custom-1",
+  from?: "admin"
+) {
+  window.history.replaceState(null, "", url);
   const fetchMock = mockFetch({
     "/api/skills/custom/custom-1/edit": skill,
     "/api/skills/custom-1/preview": {
@@ -107,7 +107,7 @@ function open(skill: SkillEditableDetail, search = "") {
       current_version_number: 3,
     },
   });
-  render(<CustomizeSkillPage skillId="custom-1" />);
+  render(<CustomizeSkillPage skillId="custom-1" from={from} />);
   return fetchMock;
 }
 
@@ -166,7 +166,7 @@ test("a viewer who opens a Versions link sees Overview", async () => {
       user_permission: "VIEWER",
       owner: { id: "other", email: "other@example.com" },
     }),
-    "?tab=versions"
+    "/app/customize/skills/custom-1?tab=versions"
   );
   expect(
     await screen.findByRole("tab", { name: copy.tabs.overview })
@@ -507,6 +507,24 @@ test("a renamed skill in SKILL.md is refused before any save", async () => {
   expect(
     fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")
   ).toBe(false);
+});
+
+test("an admin who changes tabs stays on the admin skill page", async () => {
+  open(
+    detail({
+      user_permission: "OWNER",
+      owner: { id: "user-me", email: "me@example.com" },
+    }),
+    "/admin/skills/custom-1",
+    "admin"
+  );
+  const user = setupUser();
+  await user.click(await screen.findByRole("tab", { name: /^Contents/ }));
+  await waitFor(() =>
+    expect(window.location.pathname + window.location.search).toBe(
+      "/admin/skills/custom-1?tab=contents"
+    )
+  );
 });
 
 test("a failed preview keeps the Overview and shows the error in Contents", async () => {

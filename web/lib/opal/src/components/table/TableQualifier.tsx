@@ -6,6 +6,7 @@ import { useTableSize } from "@opal/components/table/TableSizeContext";
 import type { IconFunctionComponent } from "@opal/types";
 import type { QualifierContentType } from "@opal/components/table/types";
 import { InputCheckbox } from "@opal/components";
+import { useOpalStrings } from "@opal/strings";
 
 interface TableQualifierProps {
   /** Content type displayed in the qualifier */
@@ -18,6 +19,8 @@ interface TableQualifierProps {
   selected?: boolean;
   /** Called when the checkbox is toggled */
   onSelectChange?: (selected: boolean) => void;
+  /** The selection checkbox label. @default "Select row" */
+  selectLabel?: string;
   /** Icon component to render (for "icon" content). */
   icon?: IconFunctionComponent;
   /** Image source URL (for "image" content). */
@@ -51,6 +54,7 @@ function TableQualifier({
   selectable = false,
   selected = false,
   onSelectChange,
+  selectLabel,
   icon: Icon,
   imageSrc,
   imageAlt = "",
@@ -58,6 +62,7 @@ function TableQualifier({
   avatar = false,
 }: TableQualifierProps) {
   const resolvedSize = useTableSize();
+  const strings = useOpalStrings();
   const iconSize = avatar ? AVATAR_SIZES[resolvedSize] : ICON_SIZE;
   const overlayStyles = getOverlayStyles(selected, disabled);
 
@@ -129,6 +134,7 @@ function TableQualifier({
           )}
         >
           <InputCheckbox
+            aria-label={selectLabel ?? strings.selectRow}
             checked={selected}
             onCheckedChange={onSelectChange}
             disabled={disabled}

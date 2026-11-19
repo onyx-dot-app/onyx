@@ -1,5 +1,5 @@
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
-import SkillPublishingCard from "@/views/admin/CraftPreferencesPage/SkillPublishingCard";
+import SkillPublishingCard from "@/sections/skills/SkillPublishingCard";
 import { PluginPublishingPolicy } from "@/lib/settings/types";
 import type { OrganizationLibraryDefaultPolicy } from "@/lib/skills/types";
 
@@ -78,7 +78,7 @@ describe("SkillPublishingCard", () => {
     expect(
       screen.queryByRole("combobox", { name: "Default Access" })
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("Available to install")).not.toBeInTheDocument();
+    expect(screen.queryByText("Available")).not.toBeInTheDocument();
   });
 
   it("describes the saved setting", () => {

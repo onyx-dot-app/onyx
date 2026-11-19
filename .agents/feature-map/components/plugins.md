@@ -16,9 +16,10 @@ Group or user restriction needs EE.
 - **An admin** opens the Agents & Plugins sidebar section. Admin >
   Integrations (`/admin/integrations`) lists the MCP servers and apps from
   `GET /admin/integrations`, with Name, Type, Sign-in, Access and Status, a
-  kind filter, search and "Needs setup". "Add" asks for the kind (MCP server,
-  OpenAPI app, app from a preset, custom app; the last two only with Craft),
-  then posts the kind's form to `POST /admin/integrations`. Only a global
+  type filter, search and "Needs setup". "Add" opens `/admin/integrations/new`
+  (`/app/customize/integrations/new` from Customize): MCP Server, OpenAPI App
+  or App (only with Craft; Start From is a preset or Custom app), then posts
+  to `POST /admin/integrations`. Only a global
   action manager sees "For the organization"; everyone else adds "For me".
   Admin > Plugins (`/admin/plugins`) lists the plugins that hold integrations,
   built from the `plugins` refs of that list
@@ -40,8 +41,8 @@ Group or user restriction needs EE.
   If sign-in fails or is cancelled, the tools stay off.
 - **A member** opens Customize (`/app/customize`, sidebar "Customize"; `/app/plugins`,
   `/app/plugins/[id]` and `/craft/v1/plugins` redirect here with their query in
-  `web/next.config.js`). It has three path tabs: Plugins (`/app/customize/plugins`,
-  first), Skills and Integrations. Plugins lists each plugin of
+  `web/next.config.js`). It has three path tabs: Skills (first, and where
+  `/app/customize` opens), Integrations and Plugins (`/app/customize/plugins`). Plugins lists each plugin of
   `lib/plugins/directory.ts:memberPluginEntries` in the groups Created by you
   (the user's own, published or not), From your organization and Shared with you
   (`lib/customize/plugins.ts:groupPlugins`), with its skill and integration
@@ -101,10 +102,13 @@ Its neighbours own:
 
 **Admin flow.** `web/src/sections/integrations/IntegrationsPage.tsx` lists
 integrations. `web/src/lib/integrations/hooks.ts`, `web/src/lib/integrations/svc.ts`
-and `web/src/lib/integrations/types.ts` follow the integration API. The add dialog
-(`sections/integrations/AddIntegrationModal.tsx`) probes an MCP URL
-through `POST /admin/mcp/probe` to suggest the sign-in, and uses
-`AddOpenAPIActionModal` as the schema step. The Actions tab
+and `web/src/lib/integrations/types.ts` follow the integration API. The add page
+(`sections/integrations/AddIntegrationPage.tsx`, at `/admin/integrations/new`
+and `/app/customize/integrations/new`) probes an MCP URL
+through `POST /admin/mcp/probe` to suggest the sign-in, and opens
+`AddOpenAPIActionModal` for the schema. Its App type is the `preset` and
+`custom` shapes: a preset fills the name and sign-in, and "Custom app" sends
+`custom`. The Actions tab
 (`sections/integrations/IntegrationActionsTab.tsx`) is built from
 `PolicyEditor` and `PolicyToggle`, which take the API values
 `allow|ask|blocked`.
@@ -282,8 +286,9 @@ only the configuration of a chat that does not exist yet.
 - `integration-kind-form` **An add form for a new integration kind.** Add the
   shape to `IntegrationShape` in `web/src/lib/integrations/types.ts`, its
   `config` to `IntegrationConfig`, and a branch in
-  `web/src/sections/integrations/AddIntegrationModal.tsx:config`. Add its label under
-  `admin.integrations.shape` in all nine locales.
+  `web/src/sections/integrations/AddIntegrationPage.tsx:config`. Add its label under
+  `admin.integrations.shape` in all nine locales, and its icon to
+  `INTEGRATION_SHAPE_ICONS` in `web/src/sections/integrations/integrationLabels.ts`.
 - `mcp-auth-type-ui` **The UI for a new MCP auth type.** Add the admin sign-in
   fields in `web/src/sections/integrations/signIn.ts`, the method to
   `connectAction` in `web/src/lib/integrations/connect.ts`, and a branch in

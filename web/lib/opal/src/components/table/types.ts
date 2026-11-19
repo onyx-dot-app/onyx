@@ -54,6 +54,8 @@ export interface TableQualifierColumn<TData> {
   imageSrc?: (row: TData) => string;
   /** The row's image alt text, for `content: "image"`. @default "" */
   imageAlt?: (row: TData) => string;
+  /** The row's selection checkbox label. @default "Select row" */
+  selectLabel?: (row: TData) => string;
   /** A tinted tile behind the icon or image. @default false */
   background?: boolean;
   /**
@@ -176,6 +178,8 @@ export interface OnyxQualifierColumn<TData> extends OnyxColumnBase<TData> {
   getImageSrc?: (row: TData) => string;
   /** Return the image alt text for a row (for "image" content). @default "" */
   getImageAlt?: (row: TData) => string;
+  /** Return the selection checkbox label for a row. */
+  getSelectLabel?: (row: TData) => string;
   /** Show a tinted background container behind the content. @default false */
   background?: boolean;
   /** The icon is an avatar, drawn larger. @default false */

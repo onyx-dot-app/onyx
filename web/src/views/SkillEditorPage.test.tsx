@@ -1,5 +1,10 @@
 import type { ComponentProps } from "react";
 import type ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import type SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
+import {
+  SkillMergeLimitError,
+  type PreparedSkillFilesUpload,
+} from "@/lib/skills/bundleUpload";
 import {
   act,
   deferred,
@@ -14,6 +19,13 @@ import { toast } from "@opal/layouts";
 import messages from "@/i18n/messages/en.json";
 
 const mockCreateCustomSkillFromEditor = jest.fn();
+const mockUploadUserSkillFiles = jest.fn();
+const merged = new File(["zip"], "skill-files.zip");
+const mockMerge = jest.fn();
+jest.mock("@/lib/skills/bundleUpload", () => ({
+  ...jest.requireActual("@/lib/skills/bundleUpload"),
+  mergeSkillFilesUploads: (...args: unknown[]) => mockMerge(...args),
+}));
 const mockRouterReplace = jest.fn();
 const mockGetSkillCreationDraft = jest.fn();
 const mockDiscardSkillCreationDraft = jest.fn();
@@ -22,17 +34,11 @@ const mockRefreshSkill = jest.fn();
 const mockUseSWR = jest.fn();
 
 async function fillRequiredFields(user: ReturnType<typeof setupUser>) {
-  await user.type(
-    screen.getByPlaceholderText("Name your skill"),
-    "report-writer"
-  );
-  await user.type(
-    screen.getByPlaceholderText("What does this skill help with?"),
-    "Writes reports"
-  );
-  await user.type(
-    screen.getByPlaceholderText("Write the skill instructions."),
-    "Write the requested report."
+  const editor = screen.getByRole("textbox", { name: "SKILL.md" });
+  await user.clear(editor);
+  await user.click(editor);
+  await user.paste(
+    '---\nname: "report-writer"\ndescription: "Writes reports"\n---\n\nWrite the requested report.'
   );
 }
 
@@ -84,16 +90,35 @@ jest.mock("@/lib/skills/api", () => ({
   ...jest.requireActual("@/lib/skills/api"),
   createCustomSkillFromEditor: (...args: unknown[]) =>
     mockCreateCustomSkillFromEditor(...args),
+  uploadUserSkillFiles: (...args: unknown[]) =>
+    mockUploadUserSkillFiles(...args),
 }));
 
+const mockPickedUploads: PreparedSkillFilesUpload[] = [];
 jest.mock("@/sections/skills/SkillFilesPicker", () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: ComponentProps<typeof SkillFilesPicker>) => (
+    <button
+      type="button"
+      onClick={() => {
+        const next = mockPickedUploads.shift();
+        if (next) props.onChange(next);
+      }}
+    >
+      Pick a file
+    </button>
+  ),
 }));
 
 describe("SkillEditorPage", () => {
   beforeEach(() => {
     mockCreateCustomSkillFromEditor.mockReset();
+    mockUploadUserSkillFiles.mockReset();
+    mockMerge.mockReset();
+    mockMerge.mockImplementation(async (uploads: unknown[]) =>
+      uploads.length > 0 ? merged : undefined
+    );
+    mockPickedUploads.length = 0;
     mockRouterReplace.mockReset();
     window.history.replaceState(null, "", "/");
     mockGetSkillCreationDraft.mockReset();
@@ -124,7 +149,7 @@ describe("SkillEditorPage", () => {
       screen.getByRole("button", { name: "Choose organization access" })
     );
     expect(mockCreateCustomSkillFromEditor).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
     expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
       expect.objectContaining({
         sharing: {
@@ -149,7 +174,7 @@ describe("SkillEditorPage", () => {
 
     render(<SkillEditorPage />);
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() =>
       expect(mockRouterReplace).toHaveBeenCalledWith(
@@ -163,7 +188,7 @@ describe("SkillEditorPage", () => {
     toastError.mockRestore();
   });
 
-  it("prefills an uploaded draft without creating it until Save", async () => {
+  it("prefills an uploaded draft without creating it until Create", async () => {
     const user = setupUser();
     const upload = new File(["bundle"], "report-writer.zip");
     mockGetSkillCreationDraft.mockReturnValue({
@@ -189,17 +214,12 @@ describe("SkillEditorPage", () => {
 
     render(<SkillEditorPage draftId="draft-id" />);
 
-    expect(screen.getByDisplayValue("report-writer")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Writes reports")).toBeInTheDocument();
-    expect(
-      screen.getByDisplayValue("Write the requested report.")
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText("Have an existing skill?")
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "SKILL.md" })).toHaveValue(
+      '---\nname: "report-writer"\ndescription: "Writes reports"\n---\n\nWrite the requested report.'
+    );
     expect(mockCreateCustomSkillFromEditor).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() =>
       expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
@@ -218,12 +238,131 @@ describe("SkillEditorPage", () => {
     );
   });
 
+  it("creates the skill with every added file and its sharing in one request", async () => {
+    const user = setupUser();
+    mockPickedUploads.push(
+      {
+        file: new File(["a"], "a.txt"),
+        displayName: "a.txt",
+        entries: [{ path: "a.txt", size: 1 }],
+        containsSkillMd: false,
+      },
+      {
+        file: new File(["b"], "b.txt"),
+        displayName: "b.txt",
+        entries: [{ path: "b.txt", size: 1 }],
+        containsSkillMd: false,
+      }
+    );
+    mockCreateCustomSkillFromEditor.mockResolvedValue({
+      id: "created-id",
+      name: "report-writer",
+    } as SkillEditableDetail);
+
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
+    await user.click(
+      screen.getByRole("button", { name: "Choose organization access" })
+    );
+    await user.click(screen.getByRole("button", { name: "Pick a file" }));
+    await user.click(screen.getByRole("button", { name: "Pick a file" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(mockRouterReplace).toHaveBeenCalledWith(
+        "/app/customize/skills/created-id"
+      )
+    );
+    expect(mockMerge).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({ displayName: "a.txt" }),
+        expect.objectContaining({ displayName: "b.txt" }),
+      ],
+      new Set()
+    );
+    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledTimes(1);
+    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sharing: expect.objectContaining({ public_permission: "VIEWER" }),
+      }),
+      merged
+    );
+    expect(mockUploadUserSkillFiles).not.toHaveBeenCalled();
+  });
+
+  it("says in the user's language when the files pass the skill limit", async () => {
+    const user = setupUser();
+    const toastError = jest.spyOn(toast, "error");
+    jest.spyOn(console, "error").mockImplementation();
+    mockPickedUploads.push({
+      file: new File(["a"], "a.txt"),
+      displayName: "a.txt",
+      entries: [{ path: "a.txt", size: 1 }],
+      containsSkillMd: false,
+    });
+    mockMerge.mockRejectedValue(new SkillMergeLimitError("files", 5_000));
+
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Pick a file" }));
+    mockPickedUploads.push({
+      file: new File(["b"], "b.txt"),
+      displayName: "b.txt",
+      entries: [{ path: "b.txt", size: 1 }],
+      containsSkillMd: false,
+    });
+    await user.click(screen.getByRole("button", { name: "Pick a file" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(
+        "A skill can hold up to 5,000 files. Remove some files, then select Create."
+      )
+    );
+    expect(mockCreateCustomSkillFromEditor).not.toHaveBeenCalled();
+  });
+
+  it("does not send an upload whose files were all removed", async () => {
+    const user = setupUser();
+    mockPickedUploads.push({
+      file: new File(["zip"], "references.zip"),
+      displayName: "references.zip",
+      entries: null,
+      containsSkillMd: false,
+    });
+    mockCreateCustomSkillFromEditor.mockResolvedValue({
+      id: "created-id",
+      name: "report-writer",
+      current_version_id: "v1",
+    } as SkillEditableDetail);
+
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Pick a file" }));
+    await user.click(screen.getByRole("button", { name: "references.zip" }));
+    await user.click(
+      screen.getByRole("button", { name: "Remove references.zip" })
+    );
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "report-writer" }),
+        undefined
+      )
+    );
+    expect(mockUploadUserSkillFiles).not.toHaveBeenCalled();
+  });
+
   it("confirms before canceling a create page with unsaved changes", async () => {
     const user = setupUser();
     render(<SkillEditorPage />);
 
-    expect(screen.getByText("Have an existing skill?")).toBeInTheDocument();
-    await user.type(screen.getByPlaceholderText("Name your skill"), "draft");
+    await user.type(
+      screen.getByRole("textbox", { name: "SKILL.md" }),
+      "Draft notes"
+    );
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
@@ -233,7 +372,9 @@ describe("SkillEditorPage", () => {
     expect(
       screen.queryByText("Discard unsaved changes?")
     ).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("draft")).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "SKILL.md" })
+    ).toHaveDisplayValue(/Draft notes/);
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
@@ -256,7 +397,7 @@ describe("SkillEditorPage", () => {
 
     render(<SkillEditorPage />);
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(
       await screen.findByText("Create another “report-writer” skill?")
@@ -304,7 +445,7 @@ describe("SkillEditorPage", () => {
 
     render(<SkillEditorPage />);
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
     await user.click(
       await screen.findByRole("button", { name: "Create anyway" })
     );

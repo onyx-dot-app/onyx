@@ -1,17 +1,16 @@
 import { expect, test } from "@playwright/test";
+import { SkillsLibraryPage } from "@tests/e2e/pages/SkillsLibraryPage";
 
-test("SKILL.md populates the create form after confirmation", async ({
+test("SKILL.md populates the create editor after confirmation", async ({
   page,
 }) => {
-  await page.goto("/app/customize/skills/new");
+  const skills = new SkillsLibraryPage(page);
+  await skills.openCreatePage();
+  await skills.skillMdEditor.fill(
+    '---\nname: "typed-title"\ndescription: "Typed description"\n---\n\nTyped instructions'
+  );
 
-  await page.locator('input[name="name"]').fill("Typed title");
-  await page.locator('textarea[name="description"]').fill("Typed description");
-  await page
-    .locator('textarea[name="instructions_markdown"]')
-    .fill("Typed instructions");
-
-  await page.getByLabel("Import existing skill").setInputFiles({
+  await skills.addSkillFiles({
     name: "SKILL.md",
     mimeType: "text/markdown",
     buffer: Buffer.from(
@@ -22,21 +21,9 @@ test("SKILL.md populates the create form after confirmation", async ({
         "Uploaded instructions\n"
     ),
   });
+  await skills.confirmSkillImport();
 
-  const confirmation = page
-    .getByRole("dialog")
-    .filter({ hasText: "Import this skill?" });
-  await expect(confirmation).toBeVisible();
-  await confirmation.getByRole("button", { name: "Import skill" }).click();
-
-  await expect(page.locator('input[name="slug"]')).toHaveCount(0);
-  await expect(page.locator('input[name="name"]')).toHaveValue(
-    "uploaded-skill"
+  await expect(skills.skillMdEditor).toHaveValue(
+    /^---\nname: "uploaded-skill"\ndescription: "Uploaded description"\n---\n\nUploaded instructions\s*$/
   );
-  await expect(page.locator('textarea[name="description"]')).toHaveValue(
-    "Uploaded description"
-  );
-  await expect(
-    page.locator('textarea[name="instructions_markdown"]')
-  ).toHaveValue("Uploaded instructions");
 });

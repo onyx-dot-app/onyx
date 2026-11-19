@@ -95,7 +95,7 @@ describe("ShareSkillModal", () => {
       screen.queryByPlaceholderText("Add users, groups, and accounts")
     ).not.toBeInTheDocument();
     expect(screen.getByText("Ownership")).toBeInTheDocument();
-    await pickCompanySetting(/^Installed by default/);
+    await pickCompanySetting(/^Installed/);
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
@@ -518,7 +518,7 @@ describe("ShareSkillModal", () => {
     expect(
       await screen.findByRole("combobox", { name: "Installation" })
     ).toHaveValue("Default access (Not available)");
-    await pickCompanySetting(/^Available to install/);
+    await pickCompanySetting(/^Available/);
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith(
@@ -592,7 +592,7 @@ describe("ShareSkillModal", () => {
     const design = await screen.findByRole("combobox", {
       name: "Setting for Design",
     });
-    expect(design).toHaveValue("Organization setting (Available to install)");
+    expect(design).toHaveValue("Organization setting (Available)");
     expect(
       screen.getByRole("combobox", { name: "Setting for Ops" })
     ).toHaveValue("Required");
@@ -613,9 +613,7 @@ describe("ShareSkillModal", () => {
     fireEvent.click(
       screen.getByRole("combobox", { name: "Setting for Sales" })
     );
-    fireEvent.click(
-      screen.getByRole("option", { name: /^Installed by default/ })
-    );
+    fireEvent.click(screen.getByRole("option", { name: /^Installed/ }));
 
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(mockUpdateSkillShares).toHaveBeenCalled());

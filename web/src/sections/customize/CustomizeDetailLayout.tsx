@@ -30,6 +30,8 @@ export interface DetailTab<T extends string> {
   value: T;
   label: string | RichStr;
   content: ReactNode;
+  /** Keep the tab's state, such as unsaved edits, while another tab shows. */
+  keepMounted?: boolean;
 }
 
 interface CustomizeDetailLayoutProps<T extends string> {
@@ -107,7 +109,11 @@ export default function CustomizeDetailLayout<T extends string>({
               ))}
             </Tabs.List>
             {tabs.map((candidate) => (
-              <Tabs.Content key={candidate.value} value={candidate.value}>
+              <Tabs.Content
+                key={candidate.value}
+                value={candidate.value}
+                keepMounted={candidate.keepMounted}
+              >
                 {candidate.content}
               </Tabs.Content>
             ))}
@@ -140,24 +146,15 @@ export function DetailOverview({
 }: DetailOverviewProps) {
   return (
     <Section flexDirection="row" alignItems="start" height="auto" gap={6} wrap>
-      <Section
-        gap={1}
-        alignItems="stretch"
-        height="auto"
-        className="min-w-0 flex-1 basis-80"
-      >
-        <Text font="secondary-body" color="text-03">
+      <Section gap={1} alignItems="stretch" height="auto" grow={3} basis={20}>
+        <Text as="p" font="secondary-body" color="text-03">
           {descriptionLabel}
         </Text>
-        <Text font="main-content-body" color="text-04">
+        <Text as="p" font="main-content-body" color="text-04">
           {description}
         </Text>
       </Section>
-      <Section
-        width="auto"
-        height="auto"
-        className="max-sm:basis-full sm:min-w-72"
-      >
+      <Section height="auto" alignItems="stretch" grow={1} basis={18}>
         <Card padding={4}>
           <Section gap={3} alignItems="stretch" height="auto">
             {facts.map((fact, index) => (

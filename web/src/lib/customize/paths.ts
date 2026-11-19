@@ -1,4 +1,4 @@
-export const CUSTOMIZE_TABS = ["plugins", "skills", "integrations"] as const;
+export const CUSTOMIZE_TABS = ["skills", "integrations", "plugins"] as const;
 
 export type CustomizeTab = (typeof CUSTOMIZE_TABS)[number];
 
@@ -12,6 +12,10 @@ export function customizeTabHref(
 
 export function skillHref(skillId: string): `/app/customize/skills/${string}` {
   return `/app/customize/skills/${skillId}`;
+}
+
+export function adminSkillHref(skillId: string): `/admin/skills/${string}` {
+  return `/admin/skills/${skillId}`;
 }
 
 export function skillEditHref(
@@ -55,3 +59,5 @@ export function integrationHref(
     ? `/app/customize/integrations/${integrationId}?tab=${tab}`
     : `/app/customize/integrations/${integrationId}`;
 }
+
+export const NEW_INTEGRATION_PATH = "/app/customize/integrations/new";
