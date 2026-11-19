@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import { sendMessage, startNewChat } from "@tests/e2e/utils/chatActions";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
 
 /**
  * Helper to toggle auto-scroll setting via the settings panel
@@ -245,6 +246,8 @@ test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
     // Now scroll up to verify previous messages are accessible
     const scrollContainer = getScrollContainer(page);
     await scrollContainer.evaluate((el: HTMLElement) => {
+      // The chat treats a scroll as the user's only after scroll input.
+      el.dispatchEvent(new WheelEvent("wheel"));
       el.scrollTo({ top: 0, behavior: "instant" });
     });
 
@@ -282,5 +285,67 @@ test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
         { timeout: 10_000 }
       )
       .toBeLessThan(10);
+  });
+});
+
+/**
+ * Each chat keeps its scroll position while the page lives. Opening it again
+ * from the sidebar returns to that position.
+ */
+test.describe("Scroll position memory", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.context().clearCookies();
+    await loginAsRandomUser(page);
+    await page.goto("/app");
+    await Promise.all([
+      page.getByText("Agents").first().waitFor(),
+      page.getByText("Projects").first().waitFor(),
+    ]);
+  });
+
+  /** Sends two turns, then leaves for a new chat with one turn. */
+  async function leaveChat(
+    page: Page,
+    chat: ChatPage,
+    before: () => Promise<void>
+  ) {
+    await sendMessage(page, "First message of the chat to return to");
+    await sendMessage(page, "Second message of the chat to return to");
+    const sessionId = new URL(page.url()).searchParams.get("chatId");
+    if (!sessionId) throw new Error("The chat has no session id");
+    await before();
+    await startNewChat(page);
+    await sendMessage(page, "A message in another chat");
+    await chat.openFromSidebar(sessionId);
+  }
+
+  test("a sent turn reopens with its message at the top", async ({ page }) => {
+    const chat = new ChatPage(page);
+    await leaveChat(page, chat, async () => {});
+    await expect.poll(() => chat.latestHumanMessageOffset()).toBeLessThan(40);
+  });
+
+  test("a chat left at its end reopens at its end", async ({ page }) => {
+    const chat = new ChatPage(page);
+    await leaveChat(page, chat, () => chat.scrollTo("bottom"));
+    await expect
+      .poll(async () => {
+        const { scrollTop, maxScrollTop } = await chat.scrollMetrics();
+        return maxScrollTop - scrollTop;
+      })
+      .toBeLessThanOrEqual(1);
+  });
+
+  test("a chat left mid-way reopens at the same spot", async ({ page }) => {
+    const chat = new ChatPage(page);
+    let leftAt = 0;
+    await leaveChat(page, chat, async () => {
+      const { maxScrollTop } = await chat.scrollMetrics();
+      leftAt = Math.floor(maxScrollTop / 2);
+      await chat.scrollToTop(leftAt);
+    });
+    await expect
+      .poll(async () => (await chat.scrollMetrics()).scrollTop)
+      .toBeCloseTo(leftAt, -1);
   });
 });

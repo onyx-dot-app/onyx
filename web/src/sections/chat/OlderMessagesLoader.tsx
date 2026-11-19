@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { ChatMessageLoader } from "@opal/loaders";
 import { cn } from "@opal/utils";
-import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
+import { useOptionalChatScroll } from "@/lib/chatScroll/components";
 import {
   useChatSessionStore,
   useIsLoadingOlderMessages,
@@ -19,16 +19,14 @@ export interface OlderMessagesLoaderProps {
 /**
  * A message skeleton above the loaded messages of a paged chat. When it
  * comes within the rows' overscan margin of the viewport, it loads the next page of
- * older messages.
- *
- * It sets `overflow-anchor: none`, so the browser's scroll anchoring keeps
- * the loaded messages, not the skeleton, still when a page is added above.
+ * older messages. The scroll view keeps the loaded messages still when a
+ * page is added above.
  */
 export default function OlderMessagesLoader({
   className,
 }: OlderMessagesLoaderProps) {
   const t = useTranslations("chat.app");
-  const observeNearViewport = useOptionalScrollContainer()?.observeNearViewport;
+  const observeNearViewport = useOptionalChatScroll()?.observeNearViewport;
   const loaderRef = useRef<HTMLDivElement>(null);
   const isLoading = useIsLoadingOlderMessages();
 
@@ -50,7 +48,7 @@ export default function OlderMessagesLoader({
       ref={loaderRef}
       role="status"
       aria-label={t("olderMessagesLoader.ariaLabel")}
-      className={cn("w-full self-center [overflow-anchor:none]", className)}
+      className={cn("w-full self-center", className)}
     >
       <Section gap={12} height="fit">
         <ChatMessageLoader orientation="end" />

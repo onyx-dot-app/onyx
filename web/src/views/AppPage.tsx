@@ -62,6 +62,7 @@ import {
   useCurrentIsStreamDraining,
 } from "@/app/app/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
+import { messageRowId } from "@/lib/chat/rowIds";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/sections/chat/ChatScrollContainer";
@@ -372,16 +373,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // Determine anchor: second-to-last message (last user message before current response)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
   const anchorNodeId = anchorMessage?.nodeId;
-  const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
+  const anchorId = anchorMessage ? messageRowId(anchorMessage) : undefined;
+  // The last row changes when a turn starts.
+  const lastMessage = messageHistory.at(-1);
+  const turnKey = lastMessage ? messageRowId(lastMessage) : undefined;
 
-  // Auto-scroll preference from user settings. Pause while the
-  // typewriter is running its post-finish adaptive drain — the user is
+  // The auto-scroll setting decides whether a streaming reply is followed.
+  // With nothing running, growth is only layout settling (an action row,
+  // a card growing in), so a view at the end always keeps to it. Pause
+  // while the typewriter runs its post-finish adaptive drain — the user is
   // reading at that point and a scroll yank as the typewriter speeds up
   // is jarring.
   const autoScrollPreference = user?.preferences?.auto_scroll !== false;
   const isStreamDraining = useCurrentIsStreamDraining();
-  const autoScrollEnabled = autoScrollPreference && !isStreamDraining;
-  const isStreaming = currentChatState === "streaming";
+  const autoScrollEnabled =
+    !isStreamDraining && (autoScrollPreference || currentChatState === "input");
 
   const multiModel = useMultiModelChat(llmManager);
 
@@ -445,7 +451,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }, [multiModel.selectedModels]);
 
   const {
-    onSubmit,
+    onSubmit: submitMessage,
     stopGenerating,
     handleMessageSpecificFileUpload,
     availableContextTokens,
@@ -460,6 +466,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     resetInputBar,
     restoreInputBar,
   });
+
+  // Every send starts a turn: the scroll view animates its anchor to the top.
+  const onSubmit = useCallback(
+    (...args: Parameters<typeof submitMessage>) => {
+      scrollContainerRef.current?.startTurn();
+      return submitMessage(...args);
+    },
+    [submitMessage]
+  );
 
   const { onMessageSelection, sessionFetchError, queue } =
     useChatSessionController({
@@ -879,9 +894,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <ChatScrollContainer
                         ref={scrollContainerRef}
                         sessionId={storeSessionId ?? undefined}
-                        anchorSelector={anchorSelector}
+                        anchorId={anchorId}
+                        turnKey={turnKey}
                         autoScroll={autoScrollEnabled}
-                        isStreaming={isStreaming}
                         onScrollButtonVisibilityChange={setShowScrollButton}
                         fullWidth={fullWidthActive}
                       >
