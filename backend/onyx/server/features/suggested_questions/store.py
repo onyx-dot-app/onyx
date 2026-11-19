@@ -186,18 +186,6 @@ def save_private_questions(
     _update_user_record(user_id, merge)
 
 
-def load_private_shelves(db_session: Session) -> dict[UUID, list[PoolQuestion]]:
-    """Every person's private shelf that holds questions, in one query."""
-    users = get_all_users(db_session, include_api_key_users=False)
-    stored = load_user_record_values(db_session, [user.id for user in users])
-    shelves: dict[UUID, list[PoolQuestion]] = {}
-    for user_id, value in stored.items():
-        questions = UserRecord.model_validate(value).questions
-        if questions:
-            shelves[user_id] = questions
-    return shelves
-
-
 def get_recently_active_users(db_session: Session, now: datetime) -> list[User]:
     """People the pool should cover: those who opened the chat in the last
     SQ_ACTIVE_DAYS days, and those who have never opened it, who are most

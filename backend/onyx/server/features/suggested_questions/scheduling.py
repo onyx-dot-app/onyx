@@ -1,7 +1,7 @@
 """When suggested-questions runs happen.
 
-Indexing, deletion and chat call the request functions. They never raise, so
-they cannot break those paths; the task send is a normal broker publish, as
+Indexing and chat call the request functions. They never raise, so they
+cannot break those paths; the task send is a normal broker publish, as
 in Onyx's other request paths. A request is sent only when the run rules allow
 it now, so the queue never carries a task that would just return. The task
 checks the same rules again under the pool lock, for requests that raced.
@@ -13,7 +13,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CacheBackend, CacheLockAcquisitionError
+from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import (
     OnyxCeleryPriority,
     OnyxCeleryQueues,
@@ -24,7 +24,6 @@ from onyx.db.suggested_questions import count_candidate_documents
 from onyx.server.features.suggested_questions.config import (
     SQ_MAX_POOL_RUNS_PER_DAY,
     SQ_MIN_CANDIDATE_DOCS,
-    SQ_POOL_LOCK_WAIT_S,
     SQ_POOL_RUN_GAP_MIN,
     SQ_RUN_WINDOW_HOURS,
     SQ_TASK_EXPIRES_S,
@@ -39,12 +38,7 @@ from onyx.server.features.suggested_questions.models import (
     UserRecord,
 )
 from onyx.server.features.suggested_questions.store import (
-    get_live_document_ids,
     load_pool,
-    load_private_shelves,
-    pool_lock,
-    save_pool,
-    save_private_questions,
 )
 from onyx.server.settings.models import ApplicationStatus
 from onyx.server.settings.store import load_settings
@@ -150,51 +144,6 @@ def release_pool_flag(tenant_id: str) -> None:
 def release_topup_flag(tenant_id: str, user_id: UUID) -> None:
     """Called by the top-up task when it starts, like release_pool_flag."""
     get_cache_backend(tenant_id=tenant_id).delete(_TOPUP_QUEUED_KEY.format(user_id))
-
-
-def drop_orphaned_questions() -> None:
-    """Remove questions whose document was deleted from the shared shelf and
-    from every private shelf. It asks for no run: the next chat open of a
-    person who is now short does. If a run holds the pool, leave it: the run's
-    save step drops them too."""
-    try:
-        if not is_enabled():
-            return
-        with pool_lock(SQ_POOL_LOCK_WAIT_S):
-            pool = load_pool(refresh_cache=True)
-            with get_session_with_current_tenant() as db_session:
-                shelves = load_private_shelves(db_session)
-                ids = (pool.document_ids if pool else set()) | {
-                    question.document_id
-                    for questions in shelves.values()
-                    for question in questions
-                }
-                if not ids:
-                    return
-                live = get_live_document_ids(db_session, list(ids))
-            shared_dropped = 0
-            if pool is not None:
-                kept = [q for q in pool.questions if q.document_id in live]
-                shared_dropped = len(pool.questions) - len(kept)
-                if shared_dropped:
-                    save_pool(pool.model_copy(update={"questions": kept}))
-            private_dropped = 0
-            now = datetime.now(UTC)
-            for user_id, questions in shelves.items():
-                gone = sum(q.document_id not in live for q in questions)
-                if gone:
-                    save_private_questions(user_id, [], live, now)
-                    private_dropped += gone
-        if shared_dropped or private_dropped:
-            logger.info(
-                "Suggested questions: dropped %d shared and %d private questions about deleted documents",
-                shared_dropped,
-                private_dropped,
-            )
-    except CacheLockAcquisitionError:
-        return
-    except Exception:
-        logger.exception("Suggested questions: could not drop deleted questions")
 
 
 def topup_allowed(record: UserRecord, now: datetime) -> bool:

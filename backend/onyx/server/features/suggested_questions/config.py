@@ -111,8 +111,6 @@ SQ_TASK_EXPIRES_S = 1800
 # held until released or the session closes. Celery time limits do not apply
 # in thread pools, so a run must keep its own time budget well below this.
 SQ_POOL_LOCK_HELD_S = 120.0
-# How long a deletion waits for a running pool run to finish with the pool.
-SQ_POOL_LOCK_WAIT_S = 5.0
 
 # A run's own time budget: Celery time limits do not apply in thread pools.
 # Each model call has its own timeout too.

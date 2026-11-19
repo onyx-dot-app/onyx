@@ -1,6 +1,5 @@
 import sys
 import types
-from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock
@@ -8,7 +7,6 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.configs.constants import DocumentSource, OnyxCeleryPriority
 from onyx.server.features.suggested_questions import scheduling
 from onyx.server.features.suggested_questions.models import (
@@ -257,91 +255,6 @@ def test_is_enabled_only_on_an_active_playground(
     )
 
     assert scheduling.is_enabled() is enabled
-
-
-@pytest.fixture
-def pool_store(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    state: dict[str, Any] = {
-        "pool": QuestionPool(questions=[_question("kept"), _question("deleted")]),
-        "saved": None,
-        "shelves": {},
-        "private_saves": [],
-    }
-    monkeypatch.setattr(scheduling, "is_enabled", lambda: True)
-    monkeypatch.setattr(scheduling, "pool_lock", lambda _wait: nullcontext())
-    monkeypatch.setattr(scheduling, "load_pool", lambda **_kw: state["pool"])
-    monkeypatch.setattr(scheduling, "save_pool", lambda pool: state.update(saved=pool))
-    monkeypatch.setattr(scheduling, "get_session_with_current_tenant", MagicMock())
-    monkeypatch.setattr(scheduling, "get_live_document_ids", lambda _s, _ids: {"kept"})
-    monkeypatch.setattr(scheduling, "load_private_shelves", lambda _s: state["shelves"])
-    monkeypatch.setattr(
-        scheduling,
-        "save_private_questions",
-        lambda user_id, added, live, _now: state["private_saves"].append(
-            (user_id, added, live)
-        ),
-    )
-    state["requests"] = MagicMock()
-    monkeypatch.setattr(scheduling, "request_pool_refresh", state["requests"])
-    return state
-
-
-def test_drop_orphaned_questions_saves_and_asks_for_no_run(
-    pool_store: dict[str, Any],
-) -> None:
-    scheduling.drop_orphaned_questions()
-
-    assert [q.document_id for q in pool_store["saved"].questions] == ["kept"]
-    # The next chat open of a person who is now short asks for a run.
-    pool_store["requests"].assert_not_called()
-
-
-def test_drop_orphaned_questions_changes_nothing_when_all_live(
-    pool_store: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(
-        scheduling, "get_live_document_ids", lambda _s, _ids: {"kept", "deleted"}
-    )
-
-    scheduling.drop_orphaned_questions()
-
-    assert pool_store["saved"] is None
-    pool_store["requests"].assert_not_called()
-
-
-def test_drop_orphaned_questions_cleans_private_shelves_too(
-    pool_store: dict[str, Any],
-) -> None:
-    alice, bob = uuid4(), uuid4()
-    pool_store["pool"] = QuestionPool(questions=[_question("kept")])
-    pool_store["shelves"] = {
-        alice: [_question("kept"), _question("deleted")],
-        bob: [_question("kept")],
-    }
-
-    scheduling.drop_orphaned_questions()
-
-    # Only Alice's shelf had a deleted document; the shared shelf is unchanged,
-    # so no pool run is asked for: Alice refills on her next chat open.
-    assert [(user, added) for user, added, _ in pool_store["private_saves"]] == [
-        (alice, [])
-    ]
-    assert pool_store["private_saves"][0][2] == {"kept"}
-    assert pool_store["saved"] is None
-    pool_store["requests"].assert_not_called()
-
-
-def test_drop_orphaned_questions_leaves_a_busy_pool(
-    pool_store: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def busy(_wait: float) -> Any:
-        raise CacheLockAcquisitionError("held by a run")
-
-    monkeypatch.setattr(scheduling, "pool_lock", busy)
-
-    scheduling.drop_orphaned_questions()
-
-    assert pool_store["saved"] is None
 
 
 def test_a_failed_send_removes_the_queued_flag(
