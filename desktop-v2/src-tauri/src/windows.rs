@@ -155,7 +155,7 @@ pub fn toggle_launcher(app: &AppHandle) {
 fn open_failed(app: &AppHandle, title: &str, error: &str) {
     let dialog = rfd::MessageDialog::new()
         .set_title(title)
-        .set_description(error)
+        .set_description(crate::dialog::text(error))
         .set_buttons(rfd::MessageButtons::OkCancelCustom(
             "Try Again".into(),
             "Sign In".into(),

@@ -3,6 +3,17 @@
 use rfd::{MessageDialog, MessageDialogResult};
 use tauri::AppHandle;
 
+/// Dialog text that may hold server or user text. On Linux, rfd passes the
+/// text to GTK as a printf format, so `%` must be escaped.
+pub fn text(s: impl Into<String>) -> String {
+    let s = s.into();
+    if cfg!(target_os = "linux") {
+        s.replace('%', "%%")
+    } else {
+        s
+    }
+}
+
 /// Shows `dialog`, then calls `then` with the choice on the main thread.
 ///
 /// AppKit dialogs must run on the main thread, so macOS shows it there. On
@@ -28,4 +39,17 @@ where
         let handle = app.clone();
         let _ = handle.run_on_main_thread(move || then(&app, choice));
     });
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn escapes_percent_only_on_linux() {
+        let escaped = super::text("100% of %s");
+        if cfg!(target_os = "linux") {
+            assert_eq!(escaped, "100%% of %%s");
+        } else {
+            assert_eq!(escaped, "100% of %s");
+        }
+    }
 }

@@ -192,7 +192,7 @@ pub fn on_menu(app: &AppHandle) {
 fn show_message(app: &AppHandle, title: &str, detail: &str) {
     let dialog = rfd::MessageDialog::new()
         .set_title(title)
-        .set_description(detail)
+        .set_description(crate::dialog::text(detail))
         .set_buttons(rfd::MessageButtons::Ok);
     crate::dialog::show(app, dialog, |_, _| {});
 }
@@ -200,9 +200,9 @@ fn show_message(app: &AppHandle, title: &str, detail: &str) {
 fn offer_restart(app: &AppHandle, version: &str) {
     let dialog = rfd::MessageDialog::new()
         .set_title("An update is ready")
-        .set_description(format!(
+        .set_description(crate::dialog::text(format!(
             "Onyx {version} has been downloaded. Restart now to finish updating?"
-        ))
+        )))
         .set_buttons(rfd::MessageButtons::OkCancelCustom(
             "Restart Now".into(),
             "Later".into(),
