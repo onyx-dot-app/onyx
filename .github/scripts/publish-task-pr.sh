@@ -43,7 +43,16 @@ if [ -n "$existing" ] && git diff --quiet "$lease" HEAD -- "${files[@]}" \
   echo "PR #$existing already has this output."
   notify=false
 else
-  git push --force-with-lease="refs/heads/$BRANCH:$lease" origin "HEAD:refs/heads/$BRANCH"
+  # PUSH_TOKEN replaces the checkout credential for this push only.
+  if [ -n "${PUSH_TOKEN:-}" ]; then
+    auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 -w0)"
+    GIT_CONFIG_COUNT=2 \
+      GIT_CONFIG_KEY_0=http.https://github.com/.extraheader GIT_CONFIG_VALUE_0='' \
+      GIT_CONFIG_KEY_1=http.https://github.com/.extraheader GIT_CONFIG_VALUE_1="$auth" \
+      git push --force-with-lease="refs/heads/$BRANCH:$lease" origin "HEAD:refs/heads/$BRANCH"
+  else
+    git push --force-with-lease="refs/heads/$BRANCH:$lease" origin "HEAD:refs/heads/$BRANCH"
+  fi
 fi
 body="$(mktemp)"
 trap 'rm -f "$body"' EXIT
