@@ -152,7 +152,6 @@ from onyx.server.query_and_chat.token_limit import (
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.skills.chat import accept_picked_skills, render_skills_catalog
 from onyx.tools.constants import (
-    CODING_AGENT_TOOL_ID,
     FILE_READER_TOOL_ID,
     SEARCH_TOOL_ID,
 )
@@ -531,23 +530,6 @@ def prepare_chat_turn(
                         OnyxErrorCode.BAD_REQUEST,
                         "Deep research requires a model with at least 50,000 input tokens",
                     )
-            preferred_tool = (
-                new_msg_req.tool_options.preferred if new_msg_req.tool_options else None
-            )
-            if (
-                chat_session.incognito_record_mode is not None
-                and isinstance(preferred_tool, CapabilityEntry)
-                and any(
-                    tool.id == preferred_tool.tool_id
-                    and tool.in_code_tool_id == CODING_AGENT_TOOL_ID
-                    for tool in chat_session.persona.tools
-                )
-            ):
-                # Incognito offers no coding agent; reject before the question is saved.
-                raise OnyxError(
-                    OnyxErrorCode.BAD_REQUEST,
-                    "The Coding Agent is not available in incognito. Start a normal chat to use it.",
-                )
             # One sandbox serves one user, and anonymous visitors share one
             # user. Incognito cleanup does not reach the sandbox's files. Two
             # models must not change one session directory at once. Bots
@@ -884,6 +866,9 @@ def prepare_chat_turn(
         admission.refresh()
         search_params = determine_search_params(persona_id, project_id, extracted_files)
         # Inline project context replaces retrieval for this request.
+        preferred_tool = (
+            new_msg_req.tool_options.preferred if new_msg_req.tool_options else None
+        )
         if (
             search_params.search_usage == SearchToolUsage.DISABLED
             and isinstance(preferred_tool, CapabilityEntry)

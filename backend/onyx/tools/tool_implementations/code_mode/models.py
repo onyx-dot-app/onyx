@@ -16,7 +16,6 @@ from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
-    LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
     ToolExecutionError,
@@ -35,7 +34,6 @@ CodeModeCallDetails = Annotated[
     | CustomToolCallSummary
     | FinalImageGenerationResponse
     | FileReadResult
-    | LlmBashExecutionResult
     | LlmPythonExecutionResult
     | MemoryUpdated
     | ToolExecutionError

@@ -737,10 +737,6 @@ class Run:
         """Call once owned work finishes; callbacks must not block."""
         self._idle.add_done_callback(lambda _future: callback())
 
-    def add_done_callback(self, callback: Callable[[], None]) -> None:
-        """Notify after terminal output or release; cleanup can still be running."""
-        self._completed.add_done_callback(lambda _future: callback())
-
     @property
     def is_done(self) -> bool:
         """Whether execution has completed or released ownership."""

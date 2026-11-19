@@ -138,7 +138,6 @@ export const AgentTimeline = memo(function AgentTimeline({
     lastTurnGroup,
     lastStep,
     lastStepIsResearchAgent,
-    lastStepIsCodingAgent,
     lastStepSupportsCollapsedStreaming,
   } = useTimelineMetrics(turnGroups, userStopped);
 
@@ -243,10 +242,9 @@ export const AgentTimeline = memo(function AgentTimeline({
 
   const collapsedRenderTypeOverride = useMemo(() => {
     if (lastStepIsResearchAgent) return RenderType.HIGHLIGHT;
-    if (lastStepIsCodingAgent) return RenderType.HIGHLIGHT;
     if (lastStepIsSearchTool) return RenderType.INLINE;
     return RenderType.COMPACT;
-  }, [lastStepIsResearchAgent, lastStepIsCodingAgent, lastStepIsSearchTool]);
+  }, [lastStepIsResearchAgent, lastStepIsSearchTool]);
 
   if (uiState === TimelineUIState.EMPTY) {
     return (

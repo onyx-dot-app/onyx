@@ -5,15 +5,18 @@ import { NextRequest } from "next/server";
 export const POST = async (request: NextRequest) => {
   // Proxies logout to the backend /auth/logout endpoint.
   // Needed since env variables don't work well on the client-side
-  const response = await logoutSS(request.headers);
-
-  if (response && !response.ok) {
-    return new Response(response.body, { status: response?.status });
+  let response: Response | null = null;
+  try {
+    response = await logoutSS(request.headers);
+  } catch (error) {
+    console.error("Backend logout request failed", error);
   }
 
-  // Always clear the auth cookie on logout. This is critical for the JWT
-  // auth backend where destroy_token is a no-op (stateless), but is also
-  // the correct thing to do for Redis/Postgres backends — the server-side
+  // Always clear the auth cookie, including when the backend logout fails or
+  // cannot be reached (for example on a session it no longer recognizes, or
+  // while the API server is down). This is critical for
+  // the JWT auth backend where destroy_token is a no-op (stateless), but is
+  // also the correct thing to do for Redis/Postgres backends — the server-side
   // Set-Cookie from FastAPI never reaches the browser since logoutSS is a
   // server-to-server fetch.
   const cookiesToDelete = [SERVER_SIDE_ONLY__AUTH_COOKIE_NAME];
@@ -34,6 +37,10 @@ export const POST = async (request: NextRequest) => {
         .join("; ")}`
     );
   });
+
+  if (response && !response.ok) {
+    return new Response(response.body, { status: response.status, headers });
+  }
 
   return new Response(null, {
     status: 204,

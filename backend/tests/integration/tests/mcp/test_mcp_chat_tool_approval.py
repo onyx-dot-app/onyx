@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from onyx.agents.models import RunStatus
 from onyx.cache.factory import get_cache_backend
-from onyx.chat.models import ChatFullResponse
+from onyx.chat.models import ChatFullResponse, ResponseCheckpoint
 from onyx.chat.process_message import run_chat_turn
 from onyx.chat.run_store import RESUME_FAILED_MESSAGE, ownerless_response_ids
 from onyx.configs.constants import DISCORD_SERVICE_API_KEY_NAME
@@ -884,12 +884,14 @@ def test_a_waiting_chat_blocks_new_messages_and_its_wait_is_not_thought_time(
     assert first_answer["processing_duration_seconds"] < total_seconds - held_seconds
 
 
+@pytest.mark.parametrize("incompatibility", ["history_digest", "unknown_payload"])
 def test_a_response_that_cannot_continue_fails_once_and_frees_the_chat(
     connected_mcp_server: ConnectedMCPServer,
     new_chat: NewChat,
     admin_user: DATestUser,
     mock_llm: MockLLMScript,
     streaming_api: str,
+    incompatibility: str,
 ) -> None:
     """A continuation that fails before its run starts ends the response as
     failed, with its saved state; nothing tries it again, and the chat
@@ -914,8 +916,12 @@ def test_a_response_that_cannot_continue_fails_once_and_frees_the_chat(
         response_ids.append(response_id)
         with get_session_with_current_tenant() as db_session:
             checkpoint = db_session.get_one(ChatResponseCheckpoint, response_id)
-            # The saved history no longer matches the checkpoint.
-            checkpoint.state = {**checkpoint.state, "history_digest": "changed"}
+            state = ResponseCheckpoint.model_validate(checkpoint.state)
+            if incompatibility == "history_digest":
+                state.history_digest = "changed"
+            else:
+                state.message_payloads[0].metadata = {"tag": "retired.v1", "value": {}}
+            checkpoint.state = state.model_dump(mode="json")
             db_session.commit()
         return _decide(
             admin_user, request.approval_id, "approve_once"

@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 import pytest
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.agents.models import (
@@ -13,7 +13,13 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.chat.models import ChatSearchResult, ToolReplayData
+from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES, CheckpointSerializer
+from onyx.chat.models import (
+    ChatSearchResult,
+    PresentationMode,
+    ToolReplayData,
+    read_message_rendering,
+)
 from onyx.chat.presentation import _collect_tool_history, replay_response
 from onyx.chat.renderer import ToolRenderer
 from onyx.chat.response import response_record
@@ -421,3 +427,43 @@ def test_legacy_thinking_precedes_tool_groups_and_final_answer(
     ] == [("Final answer", final_turn)]
     assert isinstance(packets[-1].obj, OverallStop)
     assert packets[-1].placement.turn_index == final_turn
+
+
+def test_unknown_saved_display_mode_stays_hidden_and_cannot_resume() -> None:
+    raw: dict[str, JsonValue] = {"mode": "unavailable"}
+    assert read_message_rendering(raw).mode == PresentationMode.SILENT
+    with pytest.raises(ValidationError):
+        CheckpointSerializer(CHECKPOINT_PAYLOAD_TYPES).decode_payload(
+            {"tag": "chat.rendering.v1", "value": raw}
+        )
+    with pytest.raises(ValidationError):
+        read_message_rendering({**raw, "citation_mode": "invalid"})
+
+
+def test_legacy_deleted_tool_keeps_only_the_final_answer() -> None:
+    response = ChatMessage(
+        message="Saved answer",
+        message_type=MessageType.ASSISTANT,
+        tool_calls=[
+            ToolCall(
+                tool_id=1,
+                tool_call_id="call",
+                turn_number=0,
+                tab_index=0,
+                tool_call_arguments={"input": "sensitive input"},
+                result=StoredToolResult(
+                    tool_call_id="call",
+                    tool_name="removed",
+                    content="sensitive model result",
+                    is_error=True,
+                ),
+                legacy_response="sensitive legacy text",
+            )
+        ],
+    )
+    with Session() as session:
+        packets = translate_assistant_message_to_packets(response, {}, session)
+    assert [
+        p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
+    ] == ["Saved answer"]
+    assert not any("sensitive" in p.model_dump_json() for p in packets)

@@ -42,8 +42,6 @@ _TOOL_STARTS: dict[str, tuple[str, str]] = {
     "memory_tool_no_access": ("edit", "Memory"),
     "deep_research_plan_start": ("think", "Generating plan"),
     "research_agent_start": ("other", "Researching"),
-    "coding_agent_start": ("other", "Coding"),
-    "bash_tool_start": ("execute", "Running command"),
     "code_mode_start": ("execute", "Running code"),
     "exec_command_start": ("execute", "Running command"),
     "write_stdin_start": ("execute", "Sending input"),

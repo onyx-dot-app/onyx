@@ -46,7 +46,6 @@ from onyx.db.models import (
     ChatMessage,
     ChatSession,
     Persona,
-    Tool,
     User,
     UserProject,
 )
@@ -68,7 +67,6 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.server.query_and_chat.models import SendMessageRequest
-from onyx.tools.constants import CODING_AGENT_TOOL_ID
 from onyx.tools.models import (
     CapabilityEntry,
     PersonaToolConfiguration,
@@ -570,34 +568,6 @@ def test_invalid_deep_research_is_rejected_before_the_question_is_saved(
     create_message.assert_not_called()
     # A rejected question reads no skills.
     accept_picks.assert_not_called()
-
-
-def test_incognito_rejects_a_preferred_coding_agent_before_the_question_is_saved(
-    chat_session: ChatSession,
-    _mock_chat_preparation: None,
-) -> None:
-    chat_session.incognito_record_mode = IncognitoRecordMode.FULL_HISTORY
-    chat_session.persona.tools = [
-        Tool(id=7, name="coding_agent", in_code_tool_id=CODING_AGENT_TOOL_ID)
-    ]
-    with (
-        patch("onyx.chat.process_message.create_new_chat_message") as create_message,
-        pytest.raises(OnyxError) as raised,
-    ):
-        prepare_chat_turn(
-            SendMessageRequest(
-                message="Question",
-                chat_session_id=chat_session.id,
-                tool_options=ToolOptions(preferred=CapabilityEntry(tool_id=7)),
-            ),
-            User(id=uuid4(), email="reader@example.com"),
-            llm_overrides=None,
-        )
-    assert raised.value.error_code == OnyxErrorCode.BAD_REQUEST
-    assert raised.value.detail == (
-        "The Coding Agent is not available in incognito. Start a normal chat to use it."
-    )
-    create_message.assert_not_called()
 
 
 def test_a_queued_turn_uses_the_saved_tools_and_search_filters(

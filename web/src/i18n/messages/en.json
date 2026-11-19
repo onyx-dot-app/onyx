@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "Add Connectors"
       },
-      "codingAgentIncognito": {
-        "tooltip": "Coding agent isn't available in incognito mode"
-      },
       "configure": {
         "tooltip": "Configure"
       },
@@ -266,9 +263,6 @@
       },
       "addMemory": {
         "label": "Add Memory"
-      },
-      "codingAgent": {
-        "label": "Coding Agent"
       }
     },
     "toolsPopover": {
@@ -323,9 +317,6 @@
       "tooltips": {
         "askAdminSuffix": {
           "text": "Ask an admin to configure."
-        },
-        "codingAgent": {
-          "description": "Investigate a GitHub repository and answer questions about its code."
         },
         "configureSuffix": {
           "text": "Press the settings cog to enable."
@@ -1506,10 +1497,6 @@
         "codeInterpreter": {
           "description": "Generate and run code.",
           "title": "Code Interpreter"
-        },
-        "codingAgent": {
-          "description": "Investigate a GitHub repository and answer questions about its code.",
-          "title": "Coding Agent"
         },
         "description": "Tools and capabilities available for chat to use. This does not apply to agents.",
         "pluginsNote": "Manage MCP servers and OpenAPI apps in [Integrations]({url}).",
@@ -10719,10 +10706,6 @@
           "description": "Generate and run code.",
           "title": "Code Interpreter"
         },
-        "codingAgent": {
-          "description": "Investigate a GitHub repository and answer questions about its code.",
-          "title": "Coding Agent"
-        },
         "description": "Tools and capabilities available for this agent to use.",
         "imageGeneration": {
           "description": "Generate and manipulate images using AI-powered tools.",
@@ -12322,41 +12305,6 @@
         }
       },
       "timeline": {
-        "codingAgent": {
-          "bashExit": {
-            "header": "Bash · exit {exitCode}"
-          },
-          "bashFailed": {
-            "header": "Bash · failed"
-          },
-          "bashRequest": {
-            "label": "Request"
-          },
-          "bashResponse": {
-            "label": "Response"
-          },
-          "bashRunning": {
-            "header": "Bash · running…"
-          },
-          "bashTimedOut": {
-            "header": "Bash · timed out"
-          },
-          "noOutput": {
-            "text": "No output"
-          },
-          "response": {
-            "header": "Response"
-          },
-          "task": {
-            "header": "Coding Task"
-          },
-          "taskWithRepo": {
-            "text": "{query}\n\nRepository: {repo}"
-          },
-          "thinking": {
-            "header": "Thinking"
-          }
-        },
         "collapseButton": {
           "ariaLabel": "Collapse timeline"
         },
@@ -12619,7 +12567,6 @@
         },
         "toolNames": {
           "codeInterpreter": "Code Interpreter",
-          "codingAgent": "Coding agent",
           "customTool": "Custom Tool",
           "generateImage": "Generate Image",
           "generatePlan": "Generate plan",

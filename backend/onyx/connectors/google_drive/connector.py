@@ -654,7 +654,6 @@ class GoogleDriveConnector(
         self,
         folder: GoogleDriveFileType,
         permission_sync_context: PermissionSyncContext | None,
-        add_prefix: bool,
         raw_id: str | None = None,
     ) -> HierarchyNode:
         # None when this run did not read permissions: the stored access stays.
@@ -664,7 +663,6 @@ class GoogleDriveConnector(
                 permission_sync_context.google_domain,
                 self.ops,
                 self.primary_admin_email,
-                add_prefix,
             )
             if permission_sync_context
             else None
@@ -1093,7 +1091,6 @@ class GoogleDriveConnector(
                         folders_batch,
                         files_batch,
                         permission_sync_context,
-                        add_prefix=True,
                     )
                     folders_batch = []
                     files_batch = []
@@ -1104,7 +1101,6 @@ class GoogleDriveConnector(
                 folders_batch,
                 files_batch,
                 permission_sync_context,
-                add_prefix=True,
             )
             yield from _converted(runner.drain())
 
@@ -1180,7 +1176,7 @@ class GoogleDriveConnector(
                 )
             if listing.is_done:
                 for parents in self._resolve_unlisted_parents(
-                    checkpoint, include_permissions, add_prefix=True
+                    checkpoint, include_permissions
                 ):
                     yield from parents
         except Exception as e:
@@ -1283,9 +1279,7 @@ class GoogleDriveConnector(
                     drive_id=retrieved.drive_file.get("driveId"),
                     owner=owner_email(retrieved.drive_file),
                 )
-        for nodes in self._resolve_unlisted_parents(
-            parents, include_permissions, add_prefix=True
-        ):
+        for nodes in self._resolve_unlisted_parents(parents, include_permissions):
             yield from nodes
 
         func_with_args = [
@@ -1346,7 +1340,6 @@ class GoogleDriveConnector(
                 folders_batch,
                 files_batch,
                 permission_sync_context,
-                add_prefix=False,
             )
 
             # Build slim documents. With permissions, each may call permissions.list
@@ -1414,7 +1407,7 @@ class GoogleDriveConnector(
             yield _yield_slim_batch()
         if listing.is_done:
             for parents in self._resolve_unlisted_parents(
-                checkpoint, include_permissions, add_prefix=False
+                checkpoint, include_permissions
             ):
                 parent_batch: list[SlimDocument | HierarchyNode] = list(parents)
                 yield parent_batch
@@ -1426,7 +1419,6 @@ class GoogleDriveConnector(
         folders: list[RetrievedDriveFile],
         files: list[RetrievedDriveFile],
         permission_sync_context: PermissionSyncContext | None,
-        add_prefix: bool,
     ) -> list[HierarchyNode]:
         """Hierarchy nodes for the listed folders that are new. Records each
         parent that is not yielded yet, with a user who can see its child.
@@ -1457,7 +1449,7 @@ class GoogleDriveConnector(
                 [
                     (
                         self._folder_node,
-                        (folder.drive_file, permission_sync_context, add_prefix),
+                        (folder.drive_file, permission_sync_context),
                     )
                     for folder in yielded
                 ],
@@ -1513,7 +1505,6 @@ class GoogleDriveConnector(
         self,
         checkpoint: GoogleDriveCheckpoint,
         include_permissions: bool,
-        add_prefix: bool,
     ) -> Iterator[list[HierarchyNode]]:
         """After the listing: reads what no folder listing gave. First the
         folders listed with no parent: a read as the lister or the admin can
@@ -1558,7 +1549,6 @@ class GoogleDriveConnector(
                                     email,
                                     checkpoint,
                                     permission_sync_context,
-                                    add_prefix,
                                 ),
                             )
                             for folder_id, email in batch.items()
@@ -1594,7 +1584,6 @@ class GoogleDriveConnector(
                                 emails,
                                 checkpoint,
                                 permission_sync_context,
-                                add_prefix,
                             ),
                         )
                         for folder_id, emails in batch.items()
@@ -1633,7 +1622,6 @@ class GoogleDriveConnector(
         email: str,
         checkpoint: GoogleDriveCheckpoint,
         permission_sync_context: PermissionSyncContext | None,
-        add_prefix: bool,
     ) -> HierarchyNode | None:
         """The node of a folder listed with no parent, when the lister or the
         admin can now see its parent. None leaves the folder at the root."""
@@ -1647,9 +1635,7 @@ class GoogleDriveConnector(
         )
         if folder is None or not _get_parent_id_from_file(folder):
             return None
-        return self._folder_node(
-            folder, permission_sync_context, add_prefix, raw_id=folder_id
-        )
+        return self._folder_node(folder, permission_sync_context, raw_id=folder_id)
 
     def _read_unlisted_folder(
         self,
@@ -1657,7 +1643,6 @@ class GoogleDriveConnector(
         emails: list[str],
         checkpoint: GoogleDriveCheckpoint,
         permission_sync_context: PermissionSyncContext | None,
-        add_prefix: bool,
     ) -> _FolderRead:
         """The node for one folder, and the parent to read next. Reads as each
         of ``emails`` and then as the admin, until one read shows the
@@ -1694,16 +1679,12 @@ class GoogleDriveConnector(
             if folder_id in checkpoint.seen_hierarchy_node_raw_ids:
                 return _FolderRead(None, None, None, None)
             folder, email = parentless
-            node = self._folder_node(
-                folder, permission_sync_context, add_prefix, raw_id=folder_id
-            )
+            node = self._folder_node(folder, permission_sync_context, raw_id=folder_id)
             return _FolderRead(node, None, email, folder.get("driveId"))
         if folder is None:
             # Documents under it keep their STUB parent.
             return _FolderRead(None, None, None, None)
-        node = self._folder_node(
-            folder, permission_sync_context, add_prefix, raw_id=folder_id
-        )
+        node = self._folder_node(folder, permission_sync_context, raw_id=folder_id)
         if checkpoint.seen_hierarchy_node_raw_ids.check_and_add(folder_id):
             # A listing yielded it while this read ran.
             return _FolderRead(None, None, None, None)

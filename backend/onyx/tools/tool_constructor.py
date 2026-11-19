@@ -29,9 +29,6 @@ from onyx.tools.models import (
     ToolConfiguration,
     ToolOptions,
 )
-from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
-    CodingAgentTool,
-)
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -360,15 +357,6 @@ def _construct_tools_impl(
                         chat_session_id=_require_chat_session_id(
                             custom_tool_config, PythonTool.__name__
                         ),
-                    )
-                )
-
-            # Handle Coding Agent Tool
-            elif tool_cls.__name__ == CodingAgentTool.__name__:
-                tools.append(
-                    CodingAgentTool(
-                        tool_id=db_tool_model.id,
-                        llm=llm,
                     )
                 )
 

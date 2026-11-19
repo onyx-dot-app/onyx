@@ -1064,7 +1064,6 @@ export default function useChatController({
               requestedToolId: toolConfiguration.preferredToolId,
               requestedAction: toolConfiguration.preferredAction,
               agent: activeAgent,
-              incognito,
               isIntegrationEnabled: toolConfiguration.isIntegrationEnabled,
             });
 

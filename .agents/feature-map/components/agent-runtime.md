@@ -1,6 +1,6 @@
 # Shared Agent Runtime
 
-> A Python engine that runs chat, deep research, research and coding agents
+> A Python engine that runs chat and research agents
 > through model steps and parallel tools, with child agents, cancellation,
 > compaction and suspension. This document is the one record of which chat
 > adapters implement its interfaces, and which runtime features no product path
@@ -27,14 +27,13 @@ document does not repeat it.
   `ChatAgent` or a `DeepResearchAgent` for each response, and the response
   thread starts it with `background=False` ([[#context-captured-at-start]]).
 - **Child agents.** The deep research step starts
-  `deep_research/research_agent.py:ResearchAgent`, and the coding agent tool
-  starts `coding_agent/agent.py:CodingAgent`, through
+  `deep_research/research_agent.py:ResearchAgent` through
   `ToolInvocation.agents.spawn_agent`. The tool returns a `ChildRunWait` and
   sets `result_from_children` instead of blocking, and the parent run suspends
   until the child ends.
 - **Independent children.** ChatAgent and its children expose controls from
   `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, message, and interrupt children. Incognito chats have no child agents: they omit these controls,
-  the coding agent tool and deep research. Children survive
+  and deep research. Children survive
   the root response. A subagent must incorporate the results of children it spawns before
   completing; `RunOwnership.delegated_runs` lists the unread ones. `WAIT_CHILDREN` releases its execution thread while results are pending and reserves
   the last model step for synthesis. Dependencies belong to the current run, not the
@@ -183,8 +182,7 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 | `RestorableFeature` | `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`. Product calls only `capture_state`, at each suspension. `chat/restoration.py:restore_chat_agent` rebuilds them for `ChatRunStore.resume`. |
 | `AgentTool` | `tools/interface.py:Tool.bind`. |
 
-**Live paths.** In-process suspension is live: deep research and the coding
-agent suspend the parent on `ChildRunWait`, and it continues in the same
+**Live paths.** Deep research suspends the parent on `ChildRunWait`. The parent continues in the same
 process. Checkpoint transfer is live for chat tool approvals and the root's
 questions: the runtime gates calls of `AgentTool.approval_required` through
 the coordinator's `ToolApprovals`
@@ -255,8 +253,7 @@ calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
    and the run's worker threads use that copy. So set the tenant and open the
    root trace before `Agent.start` or `Agent.resume`. A trace that opens later,
    or a tenant that a tool sets, does not reach the run. `start(background=False)`
-   returns at the first suspension, not at completion: in a deep research or
-   coding-agent turn, chat's `with trace(...)` block in
+   returns at the first suspension. In a deep research turn, chat's `with trace(...)` block in
    `chat/execution.py:ChatTurnExecution._run_response` closes while children
    and later parent steps still run on copied context. A Celery task or a
    process that resumes a checkpoint ([[#restored-tools-must-match]]) must do
@@ -342,17 +339,16 @@ calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
   `backend/tests/external_dependency_unit/llm/test_agent_runtime_http.py`.
 - `new-feature` **Build a new feature on the runtime.** Start from
   [[#run-by-hand]], then settle these:
-  - Inside chat, copy `coding_agent/agent.py:CodingAgent` and the tool that
-    starts it as a child (`tools/tool_implementations/coding_agent/coding_agent_tool.py`).
-    Return `ChildRunWait`, set `result_from_children`, and release held
-    resources through `agents.add_completion_cleanup`. The chat adapters then
+  - For a child inside chat, see `deep_research/agent.py:DeepResearchAgent` and
+    the `ResearchAgent` it starts.
+    Return `ChildRunWait` and set `result_from_children`. The chat adapters then
     save and own the child for one run. Incognito chats have no children. To
     rerun it, add a `restoration_config` and a branch in
     `chat/restoration.py:restore_subagent`. `ChatRunStore` authorizes and
     loads saved history; this factory rebuilds Chat and Research children with
     the current request's authorized resources. For suspended execution, add
     a `RestorableFeature` and a branch in `restore_chat_agent`, which rebuilds
-    Chat, Research and DeepResearch agents. Neither factory rebuilds CodingAgent.
+    Chat, Research and DeepResearch agents.
   - Outside chat, only tests implement `RunStore`, `RunOwnership` and
     `AgentDirectory` without chat storage
     (`backend/tests/unit/onyx/agents/fakes.py`). Children and durable completion

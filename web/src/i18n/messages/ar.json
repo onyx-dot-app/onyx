@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "إضافة موصّلات"
       },
-      "codingAgentIncognito": {
-        "tooltip": "وكيل البرمجة غير متاح في وضع التخفي"
-      },
       "configure": {
         "tooltip": "تكوين"
       },
@@ -266,9 +263,6 @@
       },
       "addMemory": {
         "label": "إضافة إلى الذاكرة"
-      },
-      "codingAgent": {
-        "label": "وكيل البرمجة"
       }
     },
     "toolsPopover": {
@@ -323,9 +317,6 @@
       "tooltips": {
         "askAdminSuffix": {
           "text": "اطلب من مسؤول تهيئته."
-        },
-        "codingAgent": {
-          "description": "استقصِ مستودع GitHub وأجب عن أسئلة حول كوده."
         },
         "configureSuffix": {
           "text": "اضغط على ترس الإعدادات للتفعيل."
@@ -1506,10 +1497,6 @@
         "codeInterpreter": {
           "description": "توليد الأكواد وتشغيلها.",
           "title": "مفسر الأكواد"
-        },
-        "codingAgent": {
-          "description": "استقصاء مستودع GitHub والإجابة عن أسئلة حول كوده.",
-          "title": "وكيل البرمجة"
         },
         "description": "الأدوات والقدرات المتاحة للمحادثة. لا ينطبق هذا على الوكلاء.",
         "pluginsNote": "أدِر خوادم MCP وتطبيقات OpenAPI من [التكاملات]({url}).",
@@ -10719,10 +10706,6 @@
           "description": "أنشئ التعليمات البرمجية وشغّلها.",
           "title": "مفسر التعليمات البرمجية"
         },
-        "codingAgent": {
-          "description": "افحص مستودع GitHub وأجب عن الأسئلة المتعلقة بكوده.",
-          "title": "وكيل البرمجة"
-        },
         "description": "الأدوات والقدرات المتاحة لهذا الوكيل لاستخدامها.",
         "imageGeneration": {
           "description": "أنشئ الصور وعالجها باستخدام أدوات مدعومة بالذكاء الاصطناعي.",
@@ -12322,41 +12305,6 @@
         }
       },
       "timeline": {
-        "codingAgent": {
-          "bashExit": {
-            "header": "Bash · خرج بالرمز {exitCode}"
-          },
-          "bashFailed": {
-            "header": "Bash · فشل"
-          },
-          "bashRequest": {
-            "label": "الطلب"
-          },
-          "bashResponse": {
-            "label": "الاستجابة"
-          },
-          "bashRunning": {
-            "header": "Bash · قيد التشغيل…"
-          },
-          "bashTimedOut": {
-            "header": "Bash · انتهت المهلة"
-          },
-          "noOutput": {
-            "text": "لا يوجد إخراج"
-          },
-          "response": {
-            "header": "الاستجابة"
-          },
-          "task": {
-            "header": "مهمة برمجية"
-          },
-          "taskWithRepo": {
-            "text": "{query}\n\nالمستودع: {repo}"
-          },
-          "thinking": {
-            "header": "جارٍ التفكير"
-          }
-        },
         "collapseButton": {
           "ariaLabel": "طي الخط الزمني"
         },
@@ -12619,7 +12567,6 @@
         },
         "toolNames": {
           "codeInterpreter": "مفسر الأكواد",
-          "codingAgent": "وكيل البرمجة",
           "customTool": "أداة مخصصة",
           "generateImage": "توليد صورة",
           "generatePlan": "توليد خطة",

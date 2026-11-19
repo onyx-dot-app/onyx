@@ -47,7 +47,6 @@ from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     FileReadResult,
-    LlmBashExecutionResult,
     LlmPythonExecutionResult,
     ToolCallException,
     ToolContext,
@@ -232,7 +231,7 @@ def _bounded_details(
         if len(text) <= max_chars:
             return details
         return details.model_copy(update={"tool_result": _bounded(text, max_chars)})
-    if isinstance(details, (LlmPythonExecutionResult, LlmBashExecutionResult)):
+    if isinstance(details, LlmPythonExecutionResult):
         return details.model_copy(
             update={
                 "stdout": _bounded(details.stdout, max_chars),

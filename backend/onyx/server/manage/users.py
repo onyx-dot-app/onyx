@@ -28,6 +28,7 @@ from onyx.auth.session_tokens import (
     SessionRejection,
     build_session_rejection_error,
     classify_session_token_value,
+    clear_unrecognized_session_cookie,
 )
 from onyx.auth.users import (
     anonymous_user_enabled,
@@ -1121,6 +1122,7 @@ def verify_user_logged_in(
             # A browser that still carries a signed-out user's cookie follows
             # the workspace default like any other anonymous visitor.
             reconcile_locale_cookie(request, response, stored_language=None)
+            clear_unrecognized_session_cookie(response)
             return fetch_anonymous_user_info(store)
         session_rejection_error = build_session_rejection_error()
         if session_rejection_error is not None:

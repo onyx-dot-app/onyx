@@ -622,7 +622,6 @@ def _get_external_access_for_raw_gdrive_file(
     retriever_email: str | None,
     admin_email: str,
     fallback_user_email: str,
-    add_prefix: bool = False,
     fallback_retriever_email: str | None = None,
 ) -> ExternalAccess:
     """
@@ -631,9 +630,6 @@ def _get_external_access_for_raw_gdrive_file(
     Permissions are read as ``retriever_email``, then as
     ``fallback_retriever_email``, then as ``admin_email``, until all are found.
 
-    add_prefix: When True, prefix group IDs with source type (for indexing path).
-               When False (default), leave unprefixed (for permission sync path
-               where upsert_document_external_perms handles prefixing).
     fallback_user_email: When permission info can't be retrieved (e.g. externally-owned
                files), fall back to granting access to this user.
     """
@@ -646,7 +642,6 @@ def _get_external_access_for_raw_gdrive_file(
                 str | None,
                 str,
                 str,
-                bool,
                 str | None,
             ],
             ExternalAccess,
@@ -664,7 +659,6 @@ def _get_external_access_for_raw_gdrive_file(
         retriever_email,
         admin_email,
         fallback_user_email,
-        add_prefix,
         fallback_retriever_email,
     )
 
@@ -891,7 +885,6 @@ def _convert_drive_item_to_document(
                 # try both retriever_email and primary_admin_email if necessary
                 retriever_email=retriever_email,
                 admin_email=permission_sync_context.primary_admin_email,
-                add_prefix=True,  # Indexing path - prefix here
                 fallback_user_email=retriever_email,
             )
             if permission_sync_context
