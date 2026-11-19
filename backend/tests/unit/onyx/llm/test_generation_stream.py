@@ -633,6 +633,35 @@ def test_stream_failure_recovers_no_call_from_an_unfinished_payload() -> None:
     assert record.call_args.kwargs["tool_calls"] is None
 
 
+def test_stream_failure_keeps_prose_after_a_closed_xml_block() -> None:
+    failure = RuntimeError("provider failed")
+
+    def chunks() -> Iterator[ModelResponseStream]:
+        yield _stream_chunk(
+            Delta(
+                content='Before <function_calls><invoke name="search">'
+                "</invoke></function_calls>"
+            )
+        )
+        yield _stream_chunk(Delta(content=" after"))
+        raise failure
+
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})],
+    )
+    client = ScriptedLLM([])
+    events: list[GenerationEvent] = []
+    with (
+        patch.object(client, "stream_raw", return_value=chunks()),
+        pytest.raises(RuntimeError) as caught,
+    ):
+        events.extend(client.stream(request))
+    assert caught.value is failure
+    message = collect_generation(events)
+    assert message.text == "Before after"
+    assert message.tool_calls == []
+
+
 def test_incremental_events_preserve_partial_content_and_snapshot_isolation() -> None:
     accumulator = MessageAccumulator()
     accepted = AssistantMessage(id="run:0")

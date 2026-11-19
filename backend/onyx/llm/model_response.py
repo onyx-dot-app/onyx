@@ -740,6 +740,11 @@ class MessageAccumulator:
                 yield from self._add_recovered_calls(recovered_calls)
             self.message.usage = usage
             self.message.stop_reason = stop_reason
+        except Exception:
+            # A failed stream recovers no call, so show the prose it held.
+            if content_filter is not None and (held := content_filter.flush()):
+                yield from self._add_text(TextContent(text=held))
+            raise
         finally:
             if isinstance(stream, Closable):
                 stream.close()
