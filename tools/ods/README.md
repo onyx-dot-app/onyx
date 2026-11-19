@@ -635,8 +635,10 @@ ods coverage <suite|module-dir> [flags]
 
 The baseline is a `.coverage-baseline.yaml` at the module root recording each
 package's floor. `--check` fails when a package drops below its floor, which is
-what `pr-golang-tests.yml` runs on every PR. After adding tests, `--update`
-raises the floors.
+what `pr-golang-tests.yml` runs on every PR. A floor is a coarse minimum, not
+the last measurement: `--update` rounds each package down to a multiple of 5%
+and leaves out a package below 5%. Run `--update` when a package crosses the
+next 5% step.
 
 The floors are the gate, but they are not always a good comparison: they go
 stale, so the report shows gains the current change never made. Give `--base` a
@@ -662,7 +664,7 @@ suite name, which is what CI passes.
 | `--from-profile` | | Report from this coverage profile instead of running the tests |
 | `--html` | | Render the profile as a browsable page at this path |
 | `--markdown` | | Write the changed packages as a markdown table at this path, for a PR comment |
-| `--tolerance` | `0.1` | Percentage points a package may drop below its floor without failing |
+| `--tolerance` | `1` | Percentage points a package may drop below its floor without failing |
 | `--base` | | Report against the coverage snapshot of this commit instead of the floors |
 | `--publish` | `false` | Record this run as the snapshot of `HEAD` (needs AWS credentials) |
 | `--snapshot-bucket` | `onyx-playwright-artifacts` | S3 bucket that holds the snapshots |
@@ -741,9 +743,10 @@ In CI, each module's `--markdown` report goes to the job summary, and its
 One PR comment, updated in place, lists the modules where a package moved, each
 with a link to its page.
 
-Floors are rounded down to one decimal, and a package may sit `--tolerance`
+Floors are rounded down to a multiple of 5%, and a package may sit `--tolerance`
 below its floor without failing. That absorbs the jitter from suites that depend
-on ports or timing; a real regression is far larger.
+on ports, timing or the runner image. The step is recorded as `step` in the
+baseline file.
 
 The package floors are the gate. The module total is reported with its delta
 but never fails the check: a package added without tests, or a well-covered

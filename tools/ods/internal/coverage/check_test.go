@@ -111,10 +111,10 @@ func TestCompare_roundingIsNotAnImprovement(t *testing.T) {
 	}
 }
 
-// A package added without tests has no floor. It is reported so it gets a floor,
-// but it cannot fail a check it was never measured for.
+// A package added since the last update has no floor. It is reported so it
+// gets a floor, but it cannot fail a check it was never measured for.
 func TestCompare_newPackageDoesNotFail(t *testing.T) {
-	profile := profileOf(map[string][2]int{"internal/new": {0, 10}})
+	profile := profileOf(map[string][2]int{"internal/new": {3, 10}})
 	baseline := &Baseline{Total: 0, Packages: map[string]float64{}}
 
 	report := Compare(profile, floorReference(baseline), DefaultTolerance)
@@ -124,6 +124,21 @@ func TestCompare_newPackageDoesNotFail(t *testing.T) {
 	}
 	if got := len(report.Regressions()); got != 0 {
 		t.Fatalf("expected no regressions, got %d", got)
+	}
+}
+
+// A package below the first floor step has nothing to record, so it is not new
+// and does not ask for a baseline update on every run.
+func TestCompare_packageWithoutAFloorStepIsOK(t *testing.T) {
+	profile := profileOf(map[string][2]int{"odsaudit": {0, 10}, "internal/low": {4, 100}})
+	baseline := &Baseline{Total: 0, Step: 5, Packages: map[string]float64{}}
+
+	report := Compare(profile, floorReference(baseline), DefaultTolerance)
+
+	for _, name := range []string{"odsaudit", "internal/low"} {
+		if got := statusOf(t, report, name); got != StatusOK {
+			t.Fatalf("expected %s ok, got %q", name, got)
+		}
 	}
 }
 

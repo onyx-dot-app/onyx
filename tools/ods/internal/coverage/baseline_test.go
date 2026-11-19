@@ -10,7 +10,7 @@ import (
 func TestNewBaseline_roundsFloorsDown(t *testing.T) {
 	// 2/3 is 66.66...%, which must not become a 66.7% floor the same run
 	// would then fail against.
-	baseline := NewBaseline(profileOf(map[string][2]int{"cmd": {2, 3}}))
+	baseline := NewBaseline(profileOf(map[string][2]int{"cmd": {2, 3}}), TypeScript)
 
 	if got := baseline.Packages["cmd"]; got != 66.6 {
 		t.Fatalf("expected a 66.6 floor, got %v", got)
@@ -25,16 +25,21 @@ func TestNewBaseline_isSelfConsistent(t *testing.T) {
 		"internal/empty": {0, 0},
 	})
 
-	report := Compare(profile, NewBaseline(profile).Reference(), 0)
+	for _, kind := range []Kind{GoTests, TypeScript} {
+		report := Compare(profile, NewBaseline(profile, kind).Reference(), 0)
 
-	if got := len(report.Regressions()); got != 0 {
-		t.Fatalf("a fresh baseline must not fail its own run, got %d regressions", got)
+		if got := len(report.Regressions()); got != 0 {
+			t.Fatalf("%s: a fresh baseline must not fail its own run, got %d regressions", kind.Name, got)
+		}
+		if report.Changed() {
+			t.Fatalf("%s: a fresh baseline must match its own run, got %+v", kind.Name, report.Packages)
+		}
 	}
 }
 
 func TestBaseline_saveAndLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), BaselineFile)
-	original := NewBaseline(profileOf(map[string][2]int{"cmd": {1, 4}, "internal/audit": {1, 2}}))
+	original := NewBaseline(profileOf(map[string][2]int{"cmd": {1, 4}, "internal/audit": {1, 2}}), GoTests)
 
 	if err := original.Save(path, GoTests); err != nil {
 		t.Fatalf("failed to save the baseline: %v", err)
@@ -44,7 +49,7 @@ func TestBaseline_saveAndLoadRoundTrip(t *testing.T) {
 		t.Fatalf("failed to load the baseline: %v", err)
 	}
 
-	if loaded.Total != original.Total {
+	if loaded.Total != original.Total || loaded.Step != original.Step {
 		t.Fatalf("expected total %v, got %v", original.Total, loaded.Total)
 	}
 	if len(loaded.Packages) != len(original.Packages) {
@@ -61,7 +66,7 @@ func TestBaseline_saveIsDeterministic(t *testing.T) {
 	dir := t.TempDir()
 	baseline := NewBaseline(profileOf(map[string][2]int{
 		"cmd": {1, 4}, "internal/audit": {1, 2}, "internal/tui": {3, 4},
-	}))
+	}), GoTests)
 
 	first := filepath.Join(dir, "first.yaml")
 	second := filepath.Join(dir, "second.yaml")
@@ -85,7 +90,7 @@ func TestBaseline_saveIsDeterministic(t *testing.T) {
 
 func TestBaseline_saveUsesTheKindHeader(t *testing.T) {
 	path := filepath.Join(t.TempDir(), TypeBaselineFile)
-	baseline := NewBaseline(profileOf(map[string][2]int{"src/app": {1, 2}}))
+	baseline := NewBaseline(profileOf(map[string][2]int{"src/app": {1, 2}}), TypeScript)
 
 	if err := baseline.Save(path, TypeScript); err != nil {
 		t.Fatalf("failed to save the baseline: %v", err)
@@ -177,5 +182,35 @@ func TestBaseline_saveFailsUnderAFile(t *testing.T) {
 	err := baseline.Save(path, GoTests)
 	if err == nil || !strings.HasPrefix(err.Error(), "write "+path+": ") {
 		t.Fatalf("expected a write error naming %s, got %v", path, err)
+	}
+}
+
+func TestNewBaseline_goFloorsRoundDownToFivePercentAndSkipZero(t *testing.T) {
+	// 889/1000 is 88.9%, 999/1000 is 99.9%, 4/100 is 4%, 0/7 is 0%.
+	baseline := NewBaseline(profileOf(map[string][2]int{
+		"cmd": {889, 1000}, "internal/docker": {999, 1000}, "internal/low": {4, 100}, "odsaudit": {0, 7},
+	}), GoTests)
+
+	want := map[string]float64{"cmd": 85, "internal/docker": 95}
+	if len(baseline.Packages) != len(want) {
+		t.Fatalf("expected floors %v, got %v", want, baseline.Packages)
+	}
+	for name, floor := range want {
+		if got := baseline.Packages[name]; got != floor {
+			t.Fatalf("expected a %v floor for %s, got %v", floor, name, got)
+		}
+	}
+	if baseline.Step != 5 {
+		t.Fatalf("expected step 5, got %v", baseline.Step)
+	}
+}
+
+func TestLoadBaseline_rejectsANegativeStep(t *testing.T) {
+	path := filepath.Join(t.TempDir(), BaselineFile)
+	if err := os.WriteFile(path, []byte("total: 50\nstep: -5\npackages:\n  cmd: 50\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadBaseline(path); err == nil || !strings.Contains(err.Error(), "step") {
+		t.Fatalf("expected a step error, got %v", err)
 	}
 }
