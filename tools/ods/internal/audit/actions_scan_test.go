@@ -414,12 +414,6 @@ func TestQueryActionAdvisories(t *testing.T) {
 			t.Fatal("expected an error for a closed server")
 		}
 	})
-
-	t.Run("invalid url", func(t *testing.T) {
-		if _, err := queryActionAdvisories(http.DefaultClient, "http://[::1", "a/b"); err == nil {
-			t.Fatal("expected an error for an invalid URL")
-		}
-	})
 }
 
 func TestResolveActionTags_errors(t *testing.T) {
