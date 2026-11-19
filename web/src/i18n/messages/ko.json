@@ -13381,6 +13381,14 @@
           "ariaLabel": "{name} 미리 보기"
         }
       }
+    },
+    "suggestedQuestions": {
+      "preparing": {
+        "text": "문서에서 질문을 준비하고 있습니다…"
+      },
+      "noDocuments": {
+        "text": "소스를 추가하면 문서에 대한 질문을 받을 수 있습니다."
+      }
     }
   },
   "common": {

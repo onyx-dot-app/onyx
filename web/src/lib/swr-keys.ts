@@ -92,6 +92,10 @@ export const SWR_KEYS = {
   opensearchResourceHealth: "/api/manage/admin/opensearch-health",
   version: "/api/version",
 
+  // ── Suggested questions (Playground) ────────────────────────────────────
+  suggestedQuestions: (agentId: number, seed: number) =>
+    `/api/chat/suggested-questions?agent_id=${agentId}&seed=${seed}`,
+
   // ── Settings ──────────────────────────────────────────────────────────────
   settings: "/api/settings",
   enterpriseSettings: "/api/enterprise-settings",

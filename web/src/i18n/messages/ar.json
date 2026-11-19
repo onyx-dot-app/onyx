@@ -13381,6 +13381,14 @@
           "ariaLabel": "معاينة {name}"
         }
       }
+    },
+    "suggestedQuestions": {
+      "preparing": {
+        "text": "جارٍ إعداد أسئلة من مستنداتك…"
+      },
+      "noDocuments": {
+        "text": "أضف مصدرًا للحصول على أسئلة حول مستنداتك."
+      }
     }
   },
   "common": {
