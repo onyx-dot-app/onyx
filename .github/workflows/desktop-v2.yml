@@ -290,6 +290,14 @@ jobs:
         run: |
           sed "s/^version = .*/version = \"${VERSION}\"/" src-tauri/Cargo.toml > src-tauri/Cargo.toml.tmp
           mv src-tauri/Cargo.toml.tmp src-tauri/Cargo.toml
+          # The release build is --locked, so the lockfile entry of this
+          # package must match. Other pins stay as they are.
+          awk -v v="${VERSION}" '
+            prev == "name = \"onyx-desktop-v2\"" && /^version = / { $0 = "version = \"" v "\""; n++ }
+            { print; prev = $0 }
+            END { if (n != 1) exit 1 }
+          ' src-tauri/Cargo.lock > src-tauri/Cargo.lock.tmp
+          mv src-tauri/Cargo.lock.tmp src-tauri/Cargo.lock
           jq --arg v "${VERSION}" '.version = $v' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp
           mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
           jq --arg v "${VERSION}" '.version = $v' package.json > package.json.tmp
