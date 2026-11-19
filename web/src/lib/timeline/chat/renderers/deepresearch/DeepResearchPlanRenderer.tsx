@@ -15,7 +15,7 @@ import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisp
 import {
   mutedTextMarkdownComponents,
   collapsedMarkdownComponents,
-} from "@/lib/timeline/chat/renderers/sharedMarkdownComponents";
+} from "@/lib/timeline/components/bodies/markdownComponents";
 
 /**
  * Renderer for deep research plan packets.

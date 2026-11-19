@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
-  SvgBubbleText,
+  SvgCircle,
   SvgCheckAll,
   SvgCheckCircle,
   SvgLoader,
@@ -20,7 +20,10 @@ import { groupTimelineEntries } from "@/lib/timeline/entries";
 import type { TimelineStepPosition } from "@/lib/timeline/types";
 import TaskBody from "@/lib/timeline/craft/components/tool-cards/TaskBody";
 import SkillBadge from "@/lib/timeline/craft/components/tool-cards/SkillBadge";
-import ThinkingMarkdown from "@/lib/timeline/craft/components/ThinkingMarkdown";
+import {
+  ThinkingBody,
+  splitThinkingTitle,
+} from "@/lib/timeline/components/bodies/ThinkingBody";
 import {
   getToolCallStepIcon,
   hasToolCallBody,
@@ -28,6 +31,18 @@ import {
   renderToolCallHeader,
 } from "@/lib/timeline/craft/components/tool-cards/toolCallContent";
 import type { CraftTimelineEntry } from "@/lib/timeline/craft/timelineEntries";
+
+/**
+ * Agent reasoning separates lines with single newlines, which markdown joins,
+ * and runs bold section titles into the text around them. Give each line its
+ * own paragraph and each bold title its own block.
+ */
+function normalizeThinking(text: string): string {
+  let out = text.replace(/(?<!\n)\n(?!\n)/g, "\n\n");
+  out = out.replace(/([.!?)\]])(\*\*[^*\n]+\*\*)/g, "$1\n\n$2");
+  out = out.replace(/(\*\*[^*\n]+\*\*)(?=[A-Z([])/g, "$1\n\n");
+  return out;
+}
 
 interface CraftTimelineStepProps {
   entry: CraftTimelineEntry;
@@ -46,14 +61,17 @@ function CraftTimelineStep({
   const { payload } = entry;
 
   if (payload.kind === "thinking") {
-    const header = t(
-      payload.isStreaming
-        ? "header.thinkingEllipsis.label"
-        : "header.thinking.label"
-    );
+    const { title, remainingContent } = splitThinkingTitle(payload.content);
+    const header =
+      title ??
+      t(
+        payload.isStreaming
+          ? "header.thinkingEllipsis.label"
+          : "header.thinking.label"
+      );
     return (
       <StepContainer
-        stepIcon={SvgBubbleText}
+        stepIcon={SvgCircle}
         header={header}
         toggleLabel={header}
         isExpanded={isExpanded}
@@ -64,8 +82,11 @@ function CraftTimelineStep({
         noPaddingRight
       >
         {isExpanded ? (
-          <ThinkingMarkdown
+          <ThinkingBody
             content={payload.content}
+            displayContent={normalizeThinking(
+              title ? remainingContent : payload.content
+            )}
             isStreaming={payload.isStreaming}
           />
         ) : null}
