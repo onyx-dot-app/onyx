@@ -163,34 +163,37 @@ def _seed(
     cc_pair.access_type = access_type
     db_session.commit()
     seed = Seed(db_session, cc_pair, source, [], [], [])
-    yield seed
-
-    db_session.rollback()
-    db_session.execute(
-        delete(User__ExternalUserGroupId).where(
-            User__ExternalUserGroupId.cc_pair_id == cc_pair.id
-        )
-    )
-    db_session.execute(delete(Document).where(Document.id.in_(seed.doc_ids)))
-    db_session.execute(
-        delete(HierarchyNode).where(HierarchyNode.raw_node_id.in_(seed.node_raw_ids))
-    )
-    if not had_source_node:
+    try:
+        yield seed
+    finally:
+        db_session.rollback()
         db_session.execute(
-            delete(HierarchyNode).where(
-                HierarchyNode.source == source,
-                HierarchyNode.node_type == HierarchyNodeType.SOURCE,
+            delete(User__ExternalUserGroupId).where(
+                User__ExternalUserGroupId.cc_pair_id == cc_pair.id
             )
         )
-    users = [
-        user
-        for email in seed.user_emails
-        if (user := get_user_by_email(email, db_session)) is not None
-    ]
-    if users:
-        delete_test_user(db_session, *users)
-    db_session.commit()
-    cleanup_cc_pair(db_session, cc_pair)
+        db_session.execute(delete(Document).where(Document.id.in_(seed.doc_ids)))
+        db_session.execute(
+            delete(HierarchyNode).where(
+                HierarchyNode.raw_node_id.in_(seed.node_raw_ids)
+            )
+        )
+        if not had_source_node:
+            db_session.execute(
+                delete(HierarchyNode).where(
+                    HierarchyNode.source == source,
+                    HierarchyNode.node_type == HierarchyNodeType.SOURCE,
+                )
+            )
+        users = [
+            user
+            for email in seed.user_emails
+            if (user := get_user_by_email(email, db_session)) is not None
+        ]
+        if users:
+            delete_test_user(db_session, *users)
+        db_session.commit()
+        cleanup_cc_pair(db_session, cc_pair)
 
 
 @pytest.fixture
