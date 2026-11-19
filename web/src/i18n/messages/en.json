@@ -17372,6 +17372,16 @@
         "done": "{name} is now available to the organization.",
         "failed": "Could not publish the integration."
       }
+    },
+    "requiredGate": {
+      "title": "Connect your work tools",
+      "description": "Your admin requires these integrations. Connect each one to continue.",
+      "requiredNote": "Required by your admin",
+      "connected": "Connected",
+      "continue": "Continue",
+      "adminNote": "You can continue without connecting because you are an admin.",
+      "signOut": "Sign out",
+      "signOutFailed": "Could not sign out. Try again."
     }
   },
   "customize": {

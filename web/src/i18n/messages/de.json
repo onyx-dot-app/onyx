@@ -17372,6 +17372,16 @@
         "done": "{name} ist jetzt für die Organisation verfügbar.",
         "failed": "Die Integration konnte nicht veröffentlicht werden."
       }
+    },
+    "requiredGate": {
+      "title": "Verbinden Sie Ihre Arbeitstools",
+      "description": "Ihr Administrator verlangt diese Integrationen. Verbinden Sie jede, um fortzufahren.",
+      "requiredNote": "Von Ihrem Administrator verlangt",
+      "connected": "Verbunden",
+      "continue": "Weiter",
+      "adminNote": "Sie können ohne Verbindung fortfahren, da Sie Administrator sind.",
+      "signOut": "Abmelden",
+      "signOutFailed": "Abmelden fehlgeschlagen. Versuchen Sie es erneut."
     }
   },
   "customize": {

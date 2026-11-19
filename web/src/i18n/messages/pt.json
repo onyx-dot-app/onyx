@@ -17372,6 +17372,16 @@
         "done": "{name} agora está disponível para a organização.",
         "failed": "Não foi possível publicar a integração."
       }
+    },
+    "requiredGate": {
+      "title": "Conecte suas ferramentas de trabalho",
+      "description": "Seu administrador exige estas integrações. Conecte cada uma para continuar.",
+      "requiredNote": "Exigida pelo seu administrador",
+      "connected": "Conectada",
+      "continue": "Continuar",
+      "adminNote": "Você pode continuar sem conectar porque é administrador.",
+      "signOut": "Sair",
+      "signOutFailed": "Não foi possível sair. Tente novamente."
     }
   },
   "customize": {

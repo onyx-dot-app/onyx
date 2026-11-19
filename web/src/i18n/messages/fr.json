@@ -17372,6 +17372,16 @@
         "done": "{name} est maintenant disponible pour l'organisation.",
         "failed": "Impossible de publier l'intégration."
       }
+    },
+    "requiredGate": {
+      "title": "Connectez vos outils de travail",
+      "description": "Votre administrateur exige ces intégrations. Connectez chacune d'elles pour continuer.",
+      "requiredNote": "Exigée par votre administrateur",
+      "connected": "Connectée",
+      "continue": "Continuer",
+      "adminNote": "Vous pouvez continuer sans vous connecter, car vous êtes administrateur.",
+      "signOut": "Se déconnecter",
+      "signOutFailed": "Impossible de se déconnecter. Réessayez."
     }
   },
   "customize": {

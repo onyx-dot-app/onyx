@@ -18,6 +18,21 @@ export function connectAction(integration: MemberIntegration): ConnectAction {
   return null;
 }
 
+/**
+ * The integrations an admin made Required that the user must still sign in
+ * to, and can. An integration that only an admin can fix does not count.
+ */
+export function requiredSignIns(
+  integrations: readonly MemberIntegration[]
+): MemberIntegration[] {
+  return integrations.filter(
+    (integration) =>
+      integration.access.installation_policy === "REQUIRED" &&
+      integration.access.state === "sign_in" &&
+      connectAction(integration) !== null
+  );
+}
+
 /** The connection does not work and only an admin can fix it. */
 export function needsAdmin(integration: MemberIntegration): boolean {
   return (

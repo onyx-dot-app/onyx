@@ -17372,6 +17372,16 @@
         "done": "{name}は組織で利用できるようになりました。",
         "failed": "統合を公開できませんでした。"
       }
+    },
+    "requiredGate": {
+      "title": "業務ツールを接続",
+      "description": "管理者がこれらの連携を必須にしています。続行するには、それぞれを接続してください。",
+      "requiredNote": "管理者により必須",
+      "connected": "接続済み",
+      "continue": "続行",
+      "adminNote": "管理者のため、接続せずに続行できます。",
+      "signOut": "サインアウト",
+      "signOutFailed": "サインアウトできませんでした。もう一度お試しください。"
     }
   },
   "customize": {
