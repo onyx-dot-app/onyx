@@ -1,6 +1,8 @@
 //! HTTP client for the Onyx server. All calls use the mobile bearer token, so the
 //! local windows never hold credentials or talk to the network themselves.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use reqwest::{Client, Response, StatusCode};
@@ -248,6 +250,32 @@ fn multipart_body(boundary: &str, name: &str, mime: &str, bytes: &[u8]) -> Vec<u
     body.extend_from_slice(bytes);
     body.extend_from_slice(tail.as_bytes());
     body
+}
+
+const UPLOAD_CHUNK: usize = 64 * 1024;
+
+/// Sends `body` in chunks and fails once `cancelled` is set. The server then
+/// gets an incomplete request and stores no file.
+fn cancellable_body(body: Vec<u8>, cancelled: Arc<AtomicBool>) -> reqwest::Body {
+    reqwest::Body::wrap_stream(body_chunks(body, cancelled))
+}
+
+fn body_chunks(
+    body: Vec<u8>,
+    cancelled: Arc<AtomicBool>,
+) -> impl futures_util::Stream<Item = Result<Vec<u8>, std::io::Error>> {
+    futures_util::stream::unfold(0, move |at| {
+        let next = if at >= body.len() {
+            None
+        } else if cancelled.load(Ordering::SeqCst) {
+            let error = std::io::Error::other("The upload was cancelled.");
+            Some((Err(error), body.len()))
+        } else {
+            let end = body.len().min(at + UPLOAD_CHUNK);
+            Some((Ok(body[at..end].to_vec()), end))
+        };
+        std::future::ready(next)
+    })
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -747,6 +775,7 @@ impl Api {
 
     /// Uploads one chat file (`POST /api/user/projects/file/upload`, as the
     /// web chat does). The file can still be processing when this returns.
+    /// Setting `cancelled` stops the request while the file is still being sent.
     pub async fn upload_file(
         &self,
         server: &str,
@@ -754,12 +783,15 @@ impl Api {
         name: &str,
         mime: &str,
         bytes: &[u8],
+        cancelled: Arc<AtomicBool>,
     ) -> Result<UserFileRow, String> {
         use rand::distributions::{Alphanumeric, DistString};
         let boundary = format!(
             "----OnyxDesktop{}",
             Alphanumeric.sample_string(&mut rand::thread_rng(), 24)
         );
+        let body = multipart_body(&boundary, name, mime, bytes);
+        let length = body.len();
         let response = self
             .http
             .post(format!("{server}/api/user/projects/file/upload"))
@@ -768,7 +800,8 @@ impl Api {
                 reqwest::header::CONTENT_TYPE,
                 format!("multipart/form-data; boundary={boundary}"),
             )
-            .body(multipart_body(&boundary, name, mime, bytes))
+            .header(reqwest::header::CONTENT_LENGTH, length)
+            .body(cancellable_body(body, cancelled))
             .timeout(Duration::from_secs(300))
             .send()
             .await
@@ -987,9 +1020,10 @@ mod tests {
     use std::sync::Arc;
 
     use super::{
-        file_state, is_file_id, multipart_body, normalize_managed_server_url, normalize_server_url,
-        parse_agents, parse_settings, redirect_allowed, sso_options, upload_limit, upload_outcome,
-        Agent, Api, AttachedFile, AuthTypeResponse, FileState, ServerSettings, MAX_UPLOAD_BYTES,
+        body_chunks, file_state, is_file_id, multipart_body, normalize_managed_server_url,
+        normalize_server_url, parse_agents, parse_settings, redirect_allowed, sso_options,
+        upload_limit, upload_outcome, Agent, Api, AttachedFile, AuthTypeResponse, FileState,
+        ServerSettings, MAX_UPLOAD_BYTES,
     };
     use crate::reachability::Unreachable;
     use url::Url;
@@ -1147,6 +1181,27 @@ mod tests {
         assert_eq!(upload_limit(Some(&large)), MAX_UPLOAD_BYTES);
         assert_eq!(upload_limit(None), MAX_UPLOAD_BYTES);
         assert!(parse_settings("not json").is_none());
+    }
+
+    #[test]
+    fn a_cancelled_upload_stops_sending() {
+        use futures_util::StreamExt;
+        let body = vec![7u8; super::UPLOAD_CHUNK * 2 + 10];
+        let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let sent = tauri::async_runtime::block_on(async {
+            let mut chunks = Box::pin(body_chunks(body.clone(), cancelled.clone()));
+            let first = chunks.next().await.unwrap().unwrap();
+            cancelled.store(true, Ordering::SeqCst);
+            let second = chunks.next().await.unwrap();
+            (first.len(), second.is_err(), chunks.next().await.is_none())
+        });
+        assert_eq!(sent, (super::UPLOAD_CHUNK, true, true));
+        let all: Vec<u8> = tauri::async_runtime::block_on(
+            body_chunks(body.clone(), Arc::default())
+                .map(|c| c.unwrap())
+                .concat(),
+        );
+        assert_eq!(all, body);
     }
 
     #[test]

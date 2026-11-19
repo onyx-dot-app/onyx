@@ -46,7 +46,8 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
 - Launcher agents: type `@` at the start of the input, or press `Cmd+K`, to pick an agent from
   `GET /api/persona`. As in the web app, built-in agents other than the default one are not
   offered, and the default one is not offered when "Always Start with an Agent" is on. The
-  agent shows as a chip; `Backspace` in an empty input removes it. New chats start with that
+  agent shows as a chip; `Backspace` in an empty input removes the last file chip, then the
+  agent chip. New chats start with that
   agent, and the choice is saved per server in `config.json`. A follow-up keeps its chat's
   agent; a question for another agent starts a new chat. A server without the agent list uses
   the default agent.
@@ -56,7 +57,9 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   larger than the server's limit (`GET /api/settings`) or the app's 250 MB limit is rejected
   before it is read. Rejection reasons show on the file's chip. Removing a chip, or `Cmd+N`,
   stops its upload and deletes the file from the user's files (`DELETE
-  /api/user/projects/file/{id}`); files sent with a question stay.
+  /api/user/projects/file/{id}`); files sent with a question stay. A file that could not be
+  deleted comes back as a failed chip, so removing it again tries again. If a question fails
+  before it is sent (for example, the chat could not be created), its files come back.
 - A native notification when an Ask answer finishes while the launcher is hidden
   (`src-tauri/src/notify.rs`). The notification does not show the question or the answer,
   because lock screens and notification history keep it. Only the launcher's current answer

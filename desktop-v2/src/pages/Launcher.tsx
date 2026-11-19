@@ -222,6 +222,8 @@ function Launcher() {
   const [pickerDismissed, setPickerDismissed] = useState(false);
   // The draft that ⌘K set aside to show the picker; null when "@" opened it.
   const pickerDraft = useRef<string | null>(null);
+  // Each ⌘K gets an id; ⌘N drops one that still waits for the agent list.
+  const pickerRequest = useRef(0);
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const attachmentKey = useRef(0);
@@ -325,6 +327,7 @@ function Launcher() {
     setSourceFilter(null);
     discardAttachments(attachments);
     setAttachments([]);
+    pickerRequest.current += 1;
     pickerDraft.current = null;
     setPickerDismissed(false);
     setPickerIndex(0);
@@ -338,8 +341,15 @@ function Launcher() {
     });
   }
 
-  async function runAsk(question: string, files: AttachedFile[]) {
+  async function runAsk(question: string, sent: Attachment[]) {
     const id = ++askId.current;
+    const files = sent.flatMap((a) => (a.file ? [a.file] : []));
+    // Set once the question may have reached the server.
+    let sending = false;
+    const notSent = () => {
+      if (!sending) returnFiles(id, sent);
+      sending = true;
+    };
     const last = turns.at(-1);
     // A follow-up continues the chat once its last answer is complete, with the same agent.
     const followUp =
@@ -368,6 +378,8 @@ function Launcher() {
         question,
         { chatSessionId: followUp ? chatSessionId : null, agentId, files },
         (event) => {
+          if (event.kind === "session") sending = true;
+          else if (event.kind === "error") notSent();
           if (id !== askId.current) return;
           if (event.kind === "session") {
             setChatSessionId(event.chatSessionId);
@@ -400,15 +412,30 @@ function Launcher() {
         }
       );
     } catch (e) {
+      notSent();
       if (id !== askId.current) return;
       updateLast((t) => ({ ...t, streaming: false, status: null, error: errorMessage(e) }));
     }
+  }
+
+  // The files of a question that was not sent go back to the input. After ⌘N
+  // or a newer question, nothing will send them, so they are deleted.
+  function returnFiles(id: number, sent: Attachment[]) {
+    if (sent.length === 0) return;
+    if (id !== askId.current) {
+      discardAttachments(sent);
+      return;
+    }
+    for (const a of sent) liveKeys.current.add(a.key);
+    setAttachments((prev) => [...sent, ...prev]);
   }
 
   async function runSearch(text: string, filter: string | null) {
     const id = ++searchId.current;
     setSearching(true);
     setSearchError(null);
+    // A new query's filters come from its own results.
+    if (text !== lastSearch) setSources([]);
     setLastSearch(text);
     setSourceFilter(filter);
     try {
@@ -433,11 +460,10 @@ function Launcher() {
   // ── Agents ──
 
   const agent = agentId === null ? null : (agents.find((a) => a.id === agentId) ?? null);
-  const pickerMatches =
-    mode === "ask" && query.startsWith("@") && !pickerDismissed && agents.length > 0
-      ? agentMatches(agents, query.slice(1)).slice(0, 50)
-      : [];
-  const pickerOpen = pickerMatches.length > 0;
+  // Stays open when no agent matches, so Enter does not send the filter.
+  const pickerOpen =
+    mode === "ask" && query.startsWith("@") && !pickerDismissed && agents.length > 0;
+  const pickerMatches = pickerOpen ? agentMatches(agents, query.slice(1)).slice(0, 50) : [];
   const highlighted = pickerMatches[Math.min(pickerIndex, pickerMatches.length - 1)];
   const highlightedId = highlighted?.id ?? null;
 
@@ -474,10 +500,12 @@ function Launcher() {
   }
 
   async function openPicker() {
+    const request = ++pickerRequest.current;
     if (mode !== "ask") setMode("ask");
     if (agents.length === 0) {
       // An earlier load can have failed; try again before saying there are none.
       const result = await refreshAgents(true);
+      if (request !== pickerRequest.current) return;
       if (result === "failed") {
         flash("Could not load the agents. Try again.");
         return;
@@ -537,10 +565,14 @@ function Launcher() {
       return;
     }
     try {
-      const uploaded = await uploadFile(file, name, key);
+      const live = () => liveKeys.current.has(key);
+      const uploaded = await uploadFile(file, name, key, live);
       if (liveKeys.current.has(key)) settle(key, { file: uploaded });
       // Removed while the server finished it.
-      else void deleteUserFile(uploaded.userFileId).catch(() => undefined);
+      else {
+        const isImage = file.type.startsWith("image/");
+        deleteFile({ key, name, isImage, file: uploaded, error: null });
+      }
     } catch (e) {
       if (liveKeys.current.has(key)) settle(key, { error: errorMessage(e) });
     }
@@ -572,12 +604,25 @@ function Launcher() {
     pumpUploads();
   }
 
+  // A file the server did not delete comes back as a failed chip; removing it
+  // again tries again.
+  function deleteFile(a: Attachment) {
+    if (!a.file) return;
+    void deleteUserFile(a.file.userFileId).catch(() => {
+      liveKeys.current.add(a.key);
+      const error = `Could not remove ${a.name} from your files. Remove it again to try again.`;
+      setAttachments((prev) =>
+        prev.some((p) => p.key === a.key) ? prev : [...prev, { ...a, error }]
+      );
+    });
+  }
+
   // Stops the uploads of chips that go away and deletes their files.
   function discardAttachments(list: Attachment[]) {
     for (const a of list) {
       liveKeys.current.delete(a.key);
       if (a.file) {
-        void deleteUserFile(a.file.userFileId).catch(() => undefined);
+        deleteFile(a);
       } else if (activeUploads.current.has(a.key)) {
         void cancelUpload(a.key).catch(() => undefined);
       } else {
@@ -627,6 +672,8 @@ function Launcher() {
     if (mode === "ask") {
       return lastTurn?.citations.find((c) => c.number === n)?.link ?? null;
     }
+    // The results on screen are from the search before.
+    if (searching) return null;
     return hits?.[n - 1]?.link ?? null;
   }
 
@@ -773,10 +820,13 @@ function Launcher() {
     if (!pickerOpen) return false;
     const count = pickerMatches.length;
     const at = Math.min(pickerIndex, count - 1);
-    if (event.key === "ArrowDown") setPickerIndex((at + 1) % count);
-    else if (event.key === "ArrowUp") setPickerIndex((at - 1 + count) % count);
-    else if ((event.key === "Enter" || event.key === "Tab") && highlighted) pickAgent(highlighted);
-    else return false;
+    if (event.key === "ArrowDown") {
+      if (count > 0) setPickerIndex((at + 1) % count);
+    } else if (event.key === "ArrowUp") {
+      if (count > 0) setPickerIndex((at - 1 + count) % count);
+    } else if (event.key === "Enter" || event.key === "Tab") {
+      if (highlighted) pickAgent(highlighted);
+    } else return false;
     return true;
   }
 
@@ -790,7 +840,11 @@ function Launcher() {
       return;
     }
     if (agentId === null && defaultDisabled) {
-      flash(`Choose an agent first: type @ or press ${primaryShortcut("K")}.`);
+      flash(
+        agents.length === 0
+          ? "This server needs an agent for new chats, and you have no agent to use."
+          : `Choose an agent first: type @ or press ${primaryShortcut("K")}.`
+      );
       return;
     }
     if (uploading) {
@@ -801,7 +855,7 @@ function Launcher() {
       flash("Remove the files that could not be attached.");
       return;
     }
-    const files = attachments.flatMap((a) => (a.file ? [a.file] : []));
+    const sent = attachments.filter((a) => a.file !== null);
     // Sent files stay on the server; their chips leave without a delete.
     for (const a of attachments) liveKeys.current.delete(a.key);
     remember(text);
@@ -809,7 +863,7 @@ function Launcher() {
     // The question and its files move into the thread, like a chat input.
     setQuery("");
     setAttachments([]);
-    void runAsk(text, files);
+    void runAsk(text, sent);
   }
 
   // A queued question goes once the first agent list settles, or after AGENT_WAIT_MS.
@@ -827,9 +881,14 @@ function Launcher() {
 
   function onInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (composing(event)) return;
+    const lastAttachment = attachments.at(-1);
     if (pickerKey(event) || browseHistory(event)) {
       event.preventDefault();
       event.stopPropagation();
+    } else if (event.key === "Backspace" && query === "" && mode === "ask" && lastAttachment) {
+      // Backspace in an empty input removes the last chip: the files, then the agent.
+      event.preventDefault();
+      removeAttachment(lastAttachment.key);
     } else if (
       event.key === "Backspace" &&
       query === "" &&
@@ -943,6 +1002,11 @@ function Launcher() {
             }}
             onKeyDown={onInputKeyDown}
             placeholder={placeholder}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={pickerOpen}
+            aria-controls={pickerMatches.length > 0 ? AGENT_LIST_ID : undefined}
+            aria-activedescendant={highlighted ? agentOptionId(highlighted.id) : undefined}
           />
           {showChips ? (
             <div className="flex flex-wrap items-center gap-1 pt-2">
@@ -1024,8 +1088,9 @@ function Launcher() {
                 pickerOpen,
                 hasAnswer: answer !== null,
                 hasCitations: (lastTurn?.citations.length ?? 0) > 0,
-                hasHits: (hits?.length ?? 0) > 0,
+                hasHits: !searching && (hits?.length ?? 0) > 0,
                 hasAgents: agents.length > 0,
+                hasAttachments: attachments.length > 0,
               })}
           </Text>
         </div>
@@ -1041,6 +1106,7 @@ interface HintState {
   hasCitations: boolean;
   hasHits: boolean;
   hasAgents: boolean;
+  hasAttachments: boolean;
 }
 
 function hint(state: HintState): string {
@@ -1055,9 +1121,10 @@ function hint(state: HintState): string {
     if (state.hasCitations) parts.push(`${primaryShortcut("1–9")} opens source [n]`, `${primaryShortcut("Shift+1–9")} copies its link`);
     return parts.join(" · ");
   }
-  return state.hasAgents
-    ? `@ or ${primaryShortcut("K")} picks an agent · Paste or drop files to attach them`
+  const files = state.hasAttachments
+    ? "Backspace in an empty input removes the last file"
     : "Paste or drop files to attach them";
+  return state.hasAgents ? `@ or ${primaryShortcut("K")} picks an agent · ${files}` : files;
 }
 
 // A local window cannot follow links itself; they open through the app, which
@@ -1090,25 +1157,44 @@ interface AgentPickerProps {
   onPick: (agent: Agent) => void;
 }
 
+const AGENT_LIST_ID = "launcher-agent-list";
+
+function agentOptionId(id: number): string {
+  return `launcher-agent-${id}`;
+}
+
+// The input keeps focus and names the highlighted option (aria-activedescendant).
 function AgentPicker({ agents, highlighted, selected, onPick }: AgentPickerProps) {
+  if (agents.length === 0) {
+    return (
+      <Text font="main-ui-muted" color="text-02">
+        No matching agents.
+      </Text>
+    );
+  }
   return (
-    <Section gap={1} alignItems="stretch" justifyContent="start" height="fit">
-      {agents.map((a) => (
-        <LineItemButton
-          key={a.id}
-          data-agent-id={a.id}
-          presentational
-          state={a.id === highlighted ? "selected" : "empty"}
-          title={a.name}
-          description={a.description || undefined}
-          descriptionMaxLines={1}
-          suffix={a.id === (selected ?? DEFAULT_AGENT_ID) ? "Current" : undefined}
-          // The input keeps focus, so typing still filters the list.
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => onPick(a)}
-        />
-      ))}
-    </Section>
+    <div id={AGENT_LIST_ID} role="listbox" aria-label="Agents">
+      <Section gap={1} alignItems="stretch" justifyContent="start" height="fit">
+        {agents.map((a) => (
+          <LineItemButton
+            key={a.id}
+            id={agentOptionId(a.id)}
+            data-agent-id={a.id}
+            presentational
+            role="option"
+            aria-selected={a.id === highlighted}
+            state={a.id === highlighted ? "selected" : "empty"}
+            title={a.name}
+            description={a.description || undefined}
+            descriptionMaxLines={1}
+            suffix={a.id === (selected ?? DEFAULT_AGENT_ID) ? "Current" : undefined}
+            // The input keeps focus, so typing still filters the list.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => onPick(a)}
+          />
+        ))}
+      </Section>
+    </div>
   );
 }
 

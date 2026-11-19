@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use crate::api::Api;
 use crate::config::ConfigStore;
@@ -19,24 +19,24 @@ pub struct AppState {
     /// The server's session cookie name, by server origin.
     cookie_name: Mutex<Option<(String, String)>>,
     /// Launcher uploads in flight, by the page's upload id: true once cancelled.
-    uploads: Mutex<HashMap<u64, bool>>,
+    uploads: Mutex<HashMap<u64, Arc<AtomicBool>>>,
 }
 
 /// Ends an upload's entry in `AppState::uploads` when the upload ends.
 pub struct UploadEntry<'a> {
     state: &'a AppState,
     id: u64,
+    cancelled: Arc<AtomicBool>,
 }
 
 impl UploadEntry<'_> {
     pub fn cancelled(&self) -> bool {
-        self.state
-            .uploads
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .get(&self.id)
-            .copied()
-            .unwrap_or(false)
+        self.cancelled.load(Ordering::SeqCst)
+    }
+
+    /// The flag `cancel_upload` sets, for work that outlives a borrow of the state.
+    pub fn cancel_flag(&self) -> Arc<AtomicBool> {
+        self.cancelled.clone()
     }
 }
 
@@ -65,11 +65,16 @@ impl AppState {
 
     /// Tracks an upload until the returned entry drops.
     pub fn begin_upload(&self, id: u64) -> UploadEntry<'_> {
+        let cancelled = Arc::new(AtomicBool::new(false));
         self.uploads
             .lock()
             .unwrap_or_else(|p| p.into_inner())
-            .insert(id, false);
-        UploadEntry { state: self, id }
+            .insert(id, cancelled.clone());
+        UploadEntry {
+            state: self,
+            id,
+            cancelled,
+        }
     }
 
     /// Marks an upload in flight as cancelled; other ids are ignored.
@@ -78,9 +83,9 @@ impl AppState {
             .uploads
             .lock()
             .unwrap_or_else(|p| p.into_inner())
-            .get_mut(&id)
+            .get(&id)
         {
-            *cancelled = true;
+            cancelled.store(true, Ordering::SeqCst);
         }
     }
 

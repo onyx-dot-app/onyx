@@ -298,11 +298,13 @@ fn selected_agent(agents: &[Agent], saved: Option<i64>, default_disabled: bool) 
 pub async fn list_agents(state: State<'_, AppState>) -> Result<LauncherAgents, String> {
     let epoch = state.epoch();
     let (server, token) = state.session()?;
+    // Without the settings the launcher cannot tell whether the default agent is on.
     let default_disabled = state
         .api
         .server_settings(&server, &token)
         .await
-        .is_some_and(|s| s.default_agent_disabled);
+        .ok_or_else(|| "Could not read the server settings.".to_string())?
+        .default_agent_disabled;
     let agents = state
         .api
         .list_agents(&server, &token, default_disabled)
@@ -390,15 +392,23 @@ pub async fn upload_file(
     }
     let row = state
         .api
-        .upload_file(&server, &token, &name, &mime, bytes)
-        .await?;
+        .upload_file(&server, &token, &name, &mime, bytes, entry.cancel_flag())
+        .await
+        .map_err(|e| {
+            if current() {
+                e
+            } else {
+                "The upload was cancelled.".into()
+            }
+        })?;
     let user_file_id = row.id.clone();
     let result = state
         .api
         .wait_for_file(&server, &token, row, &current)
         .await;
-    let cancelled = entry.cancelled();
-    if cancelled || result.is_err() {
+    // Removed, or from a session that has ended.
+    let stale = !current();
+    if stale || result.is_err() {
         // A removed or failed file must not stay in the user's files; the
         // launcher gets no id to delete it with.
         if let Err(e) = state
@@ -409,7 +419,7 @@ pub async fn upload_file(
             log::warn!("could not delete an unused attachment: {e}");
         }
     }
-    if cancelled {
+    if stale {
         return Err("The upload was cancelled.".into());
     }
     result

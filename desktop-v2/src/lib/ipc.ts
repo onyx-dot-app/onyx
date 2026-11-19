@@ -42,6 +42,8 @@ export interface Citation {
 }
 
 export type AskEvent =
+  // Sent just before the question goes to the server: an error before it
+  // means the question was not sent.
   | { kind: "session"; chatSessionId: string }
   | { kind: "delta"; text: string }
   // What the answer is doing while no text streams.
@@ -135,14 +137,17 @@ export const getUploadLimit = (): Promise<number> => invoke("get_upload_limit");
 /**
  * Uploads the file and resolves once the server has processed it. `uploadId`
  * is the id that `cancelUpload` takes. Check `file.size` first: this reads
- * the whole file into memory.
+ * the whole file into memory. Nothing is sent if `isWanted` is false once
+ * the file is read.
  */
 export async function uploadFile(
   file: File,
   name: string,
-  uploadId: number
+  uploadId: number,
+  isWanted: () => boolean
 ): Promise<AttachedFile> {
   const bytes = new Uint8Array(await file.arrayBuffer());
+  if (!isWanted()) throw new Error("The upload was cancelled.");
   return invoke("upload_file", bytes, {
     headers: {
       "Onyx-File-Name": encodeURIComponent(name),
