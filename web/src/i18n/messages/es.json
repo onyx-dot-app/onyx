@@ -9277,7 +9277,16 @@
         "toasts": {
           "blockedBySkills": "No se puede eliminar este usuario",
           "openSkills": "Abrir habilidades para transferirlas",
+          "renamed": "El nuevo propietario ya tenía skills con estos nombres, así que los skills movidos recibieron nombres nuevos",
           "success": "Usuario eliminado"
+        },
+        "transfer": {
+          "description": "<strong>{email}</strong> tiene {count, plural, one {# skill privado} other {# skills privados}}. Transfiera la propiedad a otro usuario y luego se eliminará la cuenta.",
+          "submit": {
+            "label": "Transferir todo y eliminar"
+          },
+          "ownersLoadFailed": "No se pudieron cargar los usuarios que pueden recibir las habilidades.",
+          "retry": "Reintentar"
         }
       },
       "editModal": {

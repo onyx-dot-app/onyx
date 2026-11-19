@@ -656,8 +656,18 @@ the app from the same rule
     the check would refuse a user delete. A user delete moves the
     user's private integrations to the Organization library as NOT_AVAILABLE
     (`db/plugin.py:release_private_integrations__no_commit`), then is refused
-    while the user's "My uploads" holds a plugin (`db/users.py:delete_user_from_db__no_commit`);
-    published plugins stay with no author. Migration `55bf66dd54dd` re-syncs every plugin from the
+    while the user's "My uploads" holds a plugin
+    (`db/plugin.py:private_plugins_blocking_user_delete`,
+    `db/users.py:delete_user_from_db__no_commit`); the `CONFLICT` body lists
+    them in `private_plugins`. Published plugins stay with no author.
+    `POST /manage/admin/transfer-private-plugins` (full admin) moves each
+    of those plugins to one new owner in one transaction through
+    `transfer_skill_ownership` with `on_name_clash="rename"`
+    (`db/skill.py:transfer_private_plugins__no_commit`): a clash takes the
+    next free plugin name, the response lists each rename, and shares stay.
+    The admin user-delete dialog
+    (`web/src/views/admin/UsersPage/UserActionModals.tsx:DeleteUserModal`)
+    shows that list with a user picker, calls the transfer, then the delete. Migration `55bf66dd54dd` re-syncs every plugin from the
     skill rows once, before these reads, to fix rows that older code left
     stale; it copies `backfill_plugins_from_skills` instead of importing it.
     Reads of bundles,

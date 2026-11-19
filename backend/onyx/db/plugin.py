@@ -22,7 +22,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import ColumnElement, and_, delete, func, or_, select
+from sqlalchemy import ColumnElement, Select, and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -697,6 +697,21 @@ def _move_plugin__no_commit(
                 raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name)) from exc
 
 
+def private_plugins_blocking_user_delete(user_id: UUID) -> Select[tuple[Plugin]]:
+    """The plugins in the user's "My uploads" that a user delete does not
+    release: each one that holds a skill."""
+    return (
+        select(Plugin)
+        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
+        .where(
+            Marketplace.kind == MarketplaceKind.USER_UPLOADS,
+            Marketplace.owner_user_id == user_id,
+            ~_holds_only_integrations(),
+        )
+        .order_by(Plugin.name, Plugin.id)
+    )
+
+
 def release_private_integrations__no_commit(user_id: UUID, db_session: Session) -> None:
     """Before a user delete: move each private integration of the user to the
     Organization library as NOT_AVAILABLE. Its shares keep the same people, as
@@ -870,10 +885,12 @@ def transfer_plugin__no_commit(
     plugin_id: UUID,
     new_author_user_id: UUID,
     db_session: Session,
+    on_name_clash: NameClashAction = "raise",
 ) -> None:
     """Set the plugin's author. A private plugin also moves to the new owner's
-    "My uploads"; a name clash there is refused with CONFLICT. A published
-    plugin stays in the Organization library."""
+    "My uploads". On a name clash there, "raise" refuses with CONFLICT and
+    "rename" takes the next free name. A published plugin stays in the
+    Organization library."""
     plugin = lock_plugin(plugin_id, db_session)
     if plugin is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
@@ -886,7 +903,7 @@ def transfer_plugin__no_commit(
             marketplace_id=get_or_create_user_uploads__no_commit(
                 new_author_user_id, db_session
             ),
-            on_name_clash="raise",
+            on_name_clash=on_name_clash,
             clash_detail=lambda name: (
                 f"The new owner already has a skill named '{name}'. "
                 "Ask them to delete or rename it first."

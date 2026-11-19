@@ -9277,7 +9277,16 @@
         "toasts": {
           "blockedBySkills": "Impossible de supprimer cet utilisateur",
           "openSkills": "Ouvrir les compétences pour les transférer",
+          "renamed": "Le nouveau propriétaire avait déjà des skills portant ces noms, les skills déplacés ont donc reçu de nouveaux noms",
           "success": "Utilisateur supprimé"
+        },
+        "transfer": {
+          "description": "<strong>{email}</strong> possède {count, plural, one {# skill privé} other {# skills privés}}. Transférez la propriété à un autre utilisateur, puis le compte sera supprimé.",
+          "submit": {
+            "label": "Tout transférer et supprimer"
+          },
+          "ownersLoadFailed": "Impossible de charger les utilisateurs qui peuvent recevoir les compétences.",
+          "retry": "Réessayer"
         }
       },
       "editModal": {

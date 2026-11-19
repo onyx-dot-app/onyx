@@ -60,3 +60,19 @@ export type StatusCountMap = {
   invited?: number;
   requested?: number;
 };
+
+export interface PrivatePlugin {
+  id: string;
+  name: string;
+}
+
+export interface PluginRename {
+  plugin_id: string;
+  old_name: string;
+  new_name: string;
+}
+
+export interface TransferPrivatePluginsResponse {
+  plugin_ids: string[];
+  renames: PluginRename[];
+}

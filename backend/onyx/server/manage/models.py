@@ -24,6 +24,7 @@ from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
 from onyx.db.models import StandardAnswer as StandardAnswerModel
 from onyx.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
 from onyx.db.port_attempt import ReindexProgressCounts
+from onyx.db.skill_models import PluginRename
 from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
 from onyx.server.features.persona.models import FullPersonaSnapshot, PersonaSnapshot
@@ -272,6 +273,16 @@ class UserInfo(BaseModel):
 
 class UserByEmail(BaseModel):
     user_email: str
+
+
+class TransferPrivatePluginsRequest(BaseModel):
+    user_email: str
+    new_owner_user_id: UUID
+
+
+class TransferPrivatePluginsResponse(BaseModel):
+    plugin_ids: list[UUID]
+    renames: list[PluginRename]
 
 
 class UserAdminAccessUpdateRequest(BaseModel):

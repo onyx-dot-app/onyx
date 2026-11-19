@@ -9277,7 +9277,16 @@
         "toasts": {
           "blockedBySkills": "无法删除此用户",
           "openSkills": "打开技能以转移",
+          "renamed": "新所有者已有同名技能，因此移动的技能已重命名",
           "success": "用户已删除"
+        },
+        "transfer": {
+          "description": "<strong>{email}</strong> 拥有 {count, plural, other {# 个私有技能}}。将所有权转移给其他用户后，该账户将被删除。",
+          "submit": {
+            "label": "全部转移并删除"
+          },
+          "ownersLoadFailed": "无法加载可以接收技能的用户。",
+          "retry": "重试"
         }
       },
       "editModal": {

@@ -9277,7 +9277,16 @@
         "toasts": {
           "blockedBySkills": "Dieser Benutzer kann nicht gelöscht werden",
           "openSkills": "Skills zum Übertragen öffnen",
+          "renamed": "Der neue Besitzer hatte bereits Skills mit diesen Namen, daher erhielten die verschobenen Skills neue Namen",
           "success": "Benutzer gelöscht"
+        },
+        "transfer": {
+          "description": "<strong>{email}</strong> besitzt {count, plural, one {# privaten Skill} other {# private Skills}}. Übertragen Sie den Besitz an einen anderen Benutzer, danach wird das Konto gelöscht.",
+          "submit": {
+            "label": "Alle übertragen und löschen"
+          },
+          "ownersLoadFailed": "Die Benutzer, die die Skills übernehmen können, konnten nicht geladen werden.",
+          "retry": "Erneut versuchen"
         }
       },
       "editModal": {

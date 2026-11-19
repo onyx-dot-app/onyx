@@ -9277,7 +9277,16 @@
         "toasts": {
           "blockedBySkills": "このユーザーを削除できません",
           "openSkills": "スキルを開いて移管する",
+          "renamed": "新しい所有者は同じ名前のスキルをすでに持っていたため、移動したスキルの名前が変更されました",
           "success": "ユーザーを削除しました"
+        },
+        "transfer": {
+          "description": "<strong>{email}</strong> は {count, plural, other {# 件の非公開スキル}} を所有しています。所有権を別のユーザーに移管すると、アカウントが削除されます。",
+          "submit": {
+            "label": "すべて移管して削除"
+          },
+          "ownersLoadFailed": "スキルを受け取れるユーザーを読み込めませんでした。",
+          "retry": "再試行"
         }
       },
       "editModal": {
