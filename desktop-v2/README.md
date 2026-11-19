@@ -70,27 +70,58 @@ sprite sheets in `public/aonyx/` are played faster than the pack's timing.
 IT can push the app to every device with Kandji, Jamf, Intune or Group Policy, and set it up
 in advance. With a managed server, the app skips onboarding and opens at sign-in.
 
-The app reads the policy at launch and again each time Preferences opens
-(`src-tauri/src/policy.rs`). A managed value wins over the user's own `config.json` value.
-Preferences shows managed values read-only, with "Managed by your organization". The app logs
-and ignores a value that is not valid.
+The app reads the policy at launch, every 5 minutes, before each update check, and each time
+Preferences opens (`src-tauri/src/policy.rs`). A managed value wins over the user's own
+`config.json` value. Preferences shows managed values read-only, with "Managed by your
+organization". Sample files for each platform are in [`deploy/`](deploy/).
 
 | Key | Type | Effect |
 |---|---|---|
-| `ServerURL` | string | The Onyx server. Must be `https://` (`http://` only for this computer). If the user has not saved a server, onboarding is skipped. A server the user saves later is used instead, unless `LockServerURL` is set. |
-| `LockServerURL` | bool | Always use `ServerURL`, and hide **Change server**. Needs a valid `ServerURL`. |
-| `DisableAutoUpdate` | bool | The updater does not check for updates. **Check for Updates…** says that updates are managed. |
-| `LauncherShortcut` | string | The launcher shortcut, in the Preferences format, for example `CommandOrControl+Shift+Space`. |
+| `ServerURL` | string | The Onyx server. `http://` is allowed here for an intranet server; a server that the user enters must use `https://` (`http://` only for this computer). If the user has not saved a server, onboarding is skipped. A server the user saves later is used instead, unless `LockServerURL` is set. |
+| `LockServerURL` | bool | Always use `ServerURL`, and hide **Change server**. Without a valid `ServerURL`, the user's saved server stays and cannot change. |
+| `DisableAutoUpdate` | bool | The updater does not check for updates, and an update that already downloaded is not installed. **Check for Updates…** says that updates are managed. |
+| `LauncherShortcut` | string | The launcher shortcut, in the Preferences format, for example `CommandOrControl+Shift+Space`. If another app holds the shortcut, the app tries again at each policy read. |
 | `DisableLauncher` | bool | No launcher shortcut, and the launcher does not open. |
-| `LaunchAtLogin` | bool | Turns **Launch at login** on or off, and the user cannot change it. |
+| `LaunchAtLogin` | bool | Turns **Launch at login** on or off, and the Preferences switch is locked. See [Launch at login](#launch-at-login). |
+| `DisableNotifications` | bool | Turns off desktop notifications. |
 
-A change to `ServerURL` or `LockServerURL` applies at the next launch. The other keys apply when
-Preferences opens.
+A change to `ServerURL` or `LockServerURL` applies at the next launch. The other keys apply at
+the next policy read.
+
+Booleans accept `true`/`false`, `1`/`0` and `yes`/`no` (as strings too). Other values are not
+valid.
+
+### Invalid policy
+
+The app does not ignore a policy that it cannot read. It fails closed:
+
+- If the policy file or a value cannot be read, Preferences shows "Your organization's Onyx
+  policy is invalid".
+- If the Linux policy file exists but is not a valid JSON object (for example, it has a trailing
+  comma), the server is locked and updates are off. A UTF-8 byte order mark is allowed.
+- An invalid `LockServerURL` or `Disable*` value counts as `true`.
+- An invalid `ServerURL`, `LauncherShortcut` or `LaunchAtLogin` value is ignored.
+
+### Launch at login
+
+The app adds a login item for the current user only: a LaunchAgent on macOS,
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on Windows, and
+`~/.config/autostart/app.onyx.desktop.v2.desktop` on Linux. `LaunchAtLogin` is best effort. A
+user can still turn the item off in System Settings, Task Manager or the desktop's startup
+settings, and the app sets it again only at its next launch or policy change. To make sure the
+app opens at login, deploy the login item with your management tool instead:
+
+- macOS: a managed login item (the `com.apple.servicemanagement` payload) for the bundle ID
+  `app.onyx.desktop.v2`, or a LaunchAgent in `/Library/LaunchAgents`.
+- Windows: a value under `HKLM\Software\Microsoft\Windows\CurrentVersion\Run`, with Group
+  Policy Preferences or Intune. Quote the path.
+- Linux: a `.desktop` file in `/etc/xdg/autostart`.
 
 ### macOS
 
 macOS reads forced managed preferences for the bundle ID `app.onyx.desktop.v2`. Values that a
-user writes with `defaults write` are not managed and are ignored. Upload this profile as a
+user writes with `defaults write` are not managed and are ignored. Upload this profile
+([`deploy/macos/Onyx.mobileconfig`](deploy/macos/Onyx.mobileconfig)) as a
 custom configuration profile (Kandji: Custom Profile; Jamf Pro: Configuration Profiles, Upload;
 Intune: macOS, Templates, Custom). Give each payload a new `PayloadUUID` (`uuidgen`).
 
@@ -133,6 +164,8 @@ Intune: macOS, Templates, Custom). Give each payload a new `PayloadUUID` (`uuidg
                 <false/>
                 <key>LaunchAtLogin</key>
                 <true/>
+                <key>DisableNotifications</key>
+                <false/>
               </dict>
             </dict>
           </array>
@@ -162,7 +195,10 @@ To see what the app gets on a device, run `defaults read "/Library/Managed Prefe
 
 The app reads `HKLM\SOFTWARE\Policies\Onyx\Desktop`, then the same key under `HKCU`. A machine
 value wins over a user value. Use `REG_SZ` for strings and `REG_DWORD` (`0` or `1`) for booleans.
-Deploy the values with Group Policy Preferences (Registry), an Intune script, or this file:
+For Group Policy or Intune (imported ADMX), use the templates in
+[`deploy/windows/`](deploy/windows/): copy `Onyx.admx` to `PolicyDefinitions` and `en-US/Onyx.adml`
+to `PolicyDefinitions/en-US`. You can also deploy the values with Group Policy Preferences
+(Registry), an Intune script, or this file:
 
 ```reg
 Windows Registry Editor Version 5.00
@@ -174,11 +210,16 @@ Windows Registry Editor Version 5.00
 "LauncherShortcut"="CommandOrControl+Shift+Space"
 "DisableLauncher"=dword:00000000
 "LaunchAtLogin"=dword:00000001
+"DisableNotifications"=dword:00000000
 ```
+
+The installer does not set policy values yet (no `msiexec ... SERVER_URL=` property). Deploy them
+separately.
 
 ### Linux
 
-The app reads `/etc/onyx-desktop/policy.json`, one JSON object with the same keys:
+The app reads `/etc/onyx-desktop/policy.json`, one JSON object with the same keys
+([`deploy/linux/policy.json`](deploy/linux/policy.json)). Make it readable by all users:
 
 ```json
 {
@@ -187,7 +228,8 @@ The app reads `/etc/onyx-desktop/policy.json`, one JSON object with the same key
   "DisableAutoUpdate": false,
   "LauncherShortcut": "CommandOrControl+Shift+Space",
   "DisableLauncher": false,
-  "LaunchAtLogin": true
+  "LaunchAtLogin": true,
+  "DisableNotifications": false
 }
 ```
 
