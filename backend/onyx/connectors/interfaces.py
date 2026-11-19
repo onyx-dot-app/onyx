@@ -42,11 +42,51 @@ class NormalizationResult(BaseModel):
     candidate_document_ids: list[str] = Field(default_factory=list)
 
 
+class SourceApiLimiter(abc.ABC):
+    """A budget for calls to a source API, which every worker that uses the
+    same credential shares. The worker builds it and passes it to the
+    connector, like the credentials provider. A connector must not build one:
+    connector code has no cache client."""
+
+    @abc.abstractmethod
+    def acquire(
+        self,
+        api: str,
+        cost: int,
+        user: str | None = None,
+        request_count: int = 1,
+        *,
+        bulk: bool = False,
+    ) -> None:
+        """Waits until the call fits the budget of ``api``, and of ``user``
+        when the source also limits each user. Call it before each request.
+        ``request_count`` is the number of requests in the call, more than 1 for a
+        batch: a source that counts requests charges that number, not
+        ``cost``. A ``bulk`` call, such as a content read of conversion, waits
+        after the other calls."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def report_rate_limit(
+        self, api: str, user: str | None, user_scope: bool, count: int = 1
+    ) -> None:
+        """Tells the limiter that the source refused ``count`` requests for
+        its rate. Report each refused try, from the thread that acquired its
+        slot: the limiter cuts on the refused share of the recent requests,
+        not on one refusal, and does not count a refusal of a request sent
+        before its last cut. ``user_scope`` is True when the source limited
+        the user, and False when it limited the whole credential."""
+        raise NotImplementedError
+
+
 class BaseConnector(abc.ABC, Generic[CT]):
     REDIS_KEY_PREFIX = "da_connector_data:"
 
     # Optional raw-file persistence hook to save original file
     raw_file_callback: RawFileCallback | None = None
+
+    # Optional shared budget for the source's API calls.
+    source_api_limiter: SourceApiLimiter | None = None
 
     # True when the slim listing filters `start` by the same date as indexing,
     # so a prune can list only the documents from the indexing start.
@@ -97,6 +137,11 @@ class BaseConnector(abc.ABC, Generic[CT]):
     def set_allow_images(self, value: bool) -> None:
         """Implement if the underlying connector wants to skip/allow image downloading
         based on the application level image analysis setting."""
+
+    def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
+        """Inject the shared budget for this connector's source API calls. A
+        connector that does not limit its calls ignores it."""
+        self.source_api_limiter = limiter
 
     def set_raw_file_callback(self, callback: RawFileCallback) -> None:
         """Inject the per-attempt raw-file persistence callback.

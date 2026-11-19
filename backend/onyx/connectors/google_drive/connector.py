@@ -23,6 +23,7 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
+    UnexpectedValidationError,
 )
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.doc_conversion import (
@@ -75,6 +76,7 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveHttpError,
     GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
+    attach_source_api_limiter,
 )
 from onyx.connectors.google_utils.google_utils import (
     get_file_owners,
@@ -98,10 +100,12 @@ from onyx.connectors.interfaces import (
     SlimCheckpointOutput,
     SlimConnector,
     SlimConnectorWithPermSync,
+    SourceApiLimiter,
 )
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
+    ConnectorStopSignal,
     Document,
     DocumentFailure,
     EntityFailure,
@@ -487,6 +491,12 @@ class GoogleDriveConnector(
 
         self.size_threshold = GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
 
+    @override
+    def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
+        self.source_api_limiter = limiter
+        if self._ops is not None:
+            attach_source_api_limiter(self._ops, limiter)
+
     def set_allow_images(self, value: bool) -> None:
         self.allow_images = value
 
@@ -568,6 +578,8 @@ class GoogleDriveConnector(
                 None, DocumentSource.GOOGLE_DRIVE.value, credentials
             )
         )
+        if self.source_api_limiter is not None:
+            attach_source_api_limiter(self._ops, self.source_api_limiter)
         auth = self._ops.authenticate()
         self._is_service_account = auth.kind == GoogleCredentialKind.SERVICE_ACCOUNT
 
@@ -2086,6 +2098,13 @@ class GoogleDriveConnector(
 
         except GoogleDriveHttpError as e:
             status_code = e.status_code
+            if e.rate_limited:
+                # Google refused the call for its rate, after the retries.
+                # The credential is fine, so the pair must not become
+                # invalid.
+                raise UnexpectedValidationError(
+                    f"Google Drive refused the validation call for its rate: {e}"
+                ) from e
             if status_code == 401:
                 raise CredentialExpiredError(
                     "Invalid or expired Google Drive credentials (401)."
@@ -2101,6 +2120,9 @@ class GoogleDriveConnector(
                     f"Unexpected Google Drive error (status={status_code}): {e}"
                 )
 
+        except ConnectorStopSignal:
+            # The attempt stopped while it waited for the API budget.
+            raise
         except Exception as e:
             # Check for scope-related hints from the error message
             if MISSING_SCOPES_ERROR_STR in str(e):
@@ -2124,6 +2146,11 @@ class GoogleDriveConnector(
             self.ops.get_admin_user()
         except GoogleDriveHttpError as e:
             status_code = e.status_code
+            if e.rate_limited:
+                raise UnexpectedValidationError(
+                    "The Google Workspace directory API refused the probe for "
+                    f"its rate: {e}"
+                ) from e
             if status_code == 403:
                 raise InsufficientPermissionsError(
                     f"Primary admin {self.primary_admin_email} is not authorized "
@@ -2137,6 +2164,8 @@ class GoogleDriveConnector(
             raise ConnectorValidationError(
                 f"Unexpected Google Workspace directory API error (status={status_code}): {e}"
             )
+        except ConnectorStopSignal:
+            raise
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise InsufficientPermissionsError(

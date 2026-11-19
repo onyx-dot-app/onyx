@@ -5,15 +5,18 @@ from unittest import mock
 
 import httplib2
 import pytest
+import requests
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.errors import HttpError
+from googleapiclient.http import HttpRequest
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.google_drive import source_operations
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.google_drive.models import GoogleSharedDrive
+from onyx.connectors.google_drive.models import GoogleDriveAuth, GoogleSharedDrive
 from onyx.connectors.google_drive.source_operations import (
     DriveCorpus,
     GoogleDriveHttpError,
@@ -26,8 +29,11 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
     GoogleCredentialKind,
 )
-from onyx.connectors.interfaces import CredentialsProviderInterface
-from onyx.connectors.models import ConnectorMissingCredentialError
+from onyx.connectors.interfaces import CredentialsProviderInterface, SourceApiLimiter
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    ConnectorStopSignal,
+)
 
 _ADMIN = "admin@co.com"
 _CREDENTIALS = {
@@ -507,9 +513,509 @@ def test_a_download_error_that_is_not_a_rate_limit_is_not_retried() -> None:
 def test_download_retries_outlast_one_minute() -> None:
     waits = [
         min(
-            source_operations._RATE_LIMITED_DOWNLOAD_DELAY_SECONDS * 2**attempt,
-            source_operations._RATE_LIMITED_DOWNLOAD_MAX_DELAY_SECONDS,
+            source_operations._DOWNLOAD_RETRY_DELAY_SECONDS * 2**attempt,
+            source_operations._DOWNLOAD_RETRY_MAX_DELAY_SECONDS,
         )
-        for attempt in range(source_operations._RATE_LIMITED_DOWNLOAD_TRIES - 1)
+        for attempt in range(source_operations._DOWNLOAD_TRIES - 1)
     ]
     assert sum(waits) > 60
+
+
+class _RecordingLimiter(SourceApiLimiter):
+    def __init__(self) -> None:
+        self.bulk: list[bool] = []
+        self.spent: list[tuple[str, int, str | None]] = []
+        self.request_counts: list[int] = []
+        self.reported: list[tuple[str, str | None, bool]] = []
+        self.report_counts: list[int] = []
+
+    def acquire(
+        self,
+        api: str,
+        cost: int,
+        user: str | None = None,
+        request_count: int = 1,
+        *,
+        bulk: bool = False,
+    ) -> None:
+        self.bulk.append(bulk)
+        self.spent.append((api, cost, user))
+        self.request_counts.append(request_count)
+
+    def report_rate_limit(
+        self, api: str, user: str | None, user_scope: bool, count: int = 1
+    ) -> None:
+        self.reported.append((api, user, user_scope))
+        self.report_counts.append(count)
+
+
+def _limited_gateway(
+    kind: GoogleCredentialKind = GoogleCredentialKind.SERVICE_ACCOUNT,
+) -> tuple[GoogleDriveSourceOperations, _RecordingLimiter]:
+    gateway = _gateway()
+    gateway._cached_auth = GoogleDriveAuth(
+        kind=kind, primary_admin_email="admin@co.com"
+    )
+    limiter = _RecordingLimiter()
+    source_operations.attach_source_api_limiter(gateway, limiter)
+    return gateway, limiter
+
+
+def test_each_list_page_spends_list_units_before_its_request() -> None:
+    gateway, limiter = _limited_gateway()
+    pages = [
+        {"files": [{"id": "1"}], "nextPageToken": "t"},
+        {"files": [{"id": "2"}]},
+    ]
+    drive = mock.MagicMock()
+    drive.files.return_value.list.return_value.execute.side_effect = pages
+
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive):
+        files = list(
+            gateway.list_files(
+                variant=DriveCorpus.USER,
+                user_email="a@co.com",
+                fields="nextPageToken, files(id)",
+            )
+        )
+
+    assert files == [{"id": "1"}, {"id": "2"}]
+    assert limiter.spent == [("drive", 100, "a@co.com")] * 2
+    assert limiter.bulk == [False] * 2
+    assert limiter.reported == []
+
+
+def test_reads_downloads_and_docs_spend_their_own_costs() -> None:
+    gateway, limiter = _limited_gateway()
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive"),
+        mock.patch.object(source_operations, "_download", return_value=b"x"),
+    ):
+        gateway.get_file(user_email="a@co.com", file_id="f", fields="id")
+        gateway.download_file(user_email="a@co.com", file_id="f", size_threshold=10)
+        gateway.export_file(
+            user_email="b@co.com",
+            file_id="f",
+            mime_type="text/plain",
+            size_threshold=10,
+        )
+
+    assert limiter.spent == [
+        ("drive", 5, "a@co.com"),
+        ("drive", 200, "a@co.com"),
+        ("drive", 200, "b@co.com"),
+    ]
+    # Content reads wait after the other calls; a metadata read does not.
+    assert limiter.bulk == [False, True, True]
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "user_scope"),
+    [
+        (403, _RATE_LIMIT_BODY, True),
+        (429, b"{}", False),
+    ],
+)
+def test_a_rate_limit_answer_is_reported_with_its_scope(
+    status: int, body: bytes, user_scope: bool
+) -> None:
+    gateway, limiter = _limited_gateway()
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive"),
+        mock.patch.object(
+            source_operations, "_download", side_effect=_http_error(status, body)
+        ),
+        mock.patch("time.sleep"),
+        pytest.raises(GoogleDriveHttpError),
+    ):
+        gateway.download_file(user_email="a@co.com", file_id="f", size_threshold=10)
+
+    # Each try spends and reports: the limiter cuts on the refused share.
+    tries = source_operations._DOWNLOAD_TRIES
+    assert limiter.spent == [("drive", 200, "a@co.com")] * tries
+    assert limiter.reported == [("drive", "a@co.com", user_scope)] * tries
+
+
+@pytest.mark.parametrize("operation", ["download", "export"])
+def test_a_download_that_recovers_reports_and_spends_each_try(
+    operation: str,
+) -> None:
+    gateway, limiter = _limited_gateway()
+    outcomes: list[Exception | bytes] = [
+        _http_error(429),
+        _http_error(403, _RATE_LIMIT_BODY),
+        _http_error(429),
+        b"content",
+    ]
+
+    def download(*_args: object) -> bytes:
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive"),
+        mock.patch.object(source_operations, "_download", side_effect=download),
+        mock.patch("time.sleep"),
+    ):
+        if operation == "download":
+            content = gateway.download_file(
+                user_email="a@co.com", file_id="f", size_threshold=10
+            )
+        else:
+            content = gateway.export_file(
+                user_email="a@co.com",
+                file_id="f",
+                mime_type="text/plain",
+                size_threshold=10,
+            )
+
+    assert content == b"content"
+    assert limiter.spent == [("drive", 200, "a@co.com")] * 4
+    assert limiter.reported == [
+        ("drive", "a@co.com", False),
+        ("drive", "a@co.com", True),
+        ("drive", "a@co.com", False),
+    ]
+
+
+class _ScriptedHttp:
+    """An httplib2-like http object that gives one scripted answer for each
+    request: a (status, body) pair, or an error to raise."""
+
+    def __init__(self, answers: list[tuple[int, bytes] | Exception]) -> None:
+        self.answers = answers
+        self.requests = 0
+
+    def request(self, *_args: object, **_kwargs: object) -> tuple[Any, bytes]:
+        self.requests += 1
+        answer = self.answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        status, body = answer
+        return (
+            httplib2.Response({"status": status, "content-length": str(len(body))}),
+            body,
+        )
+
+
+def _download_through(http: _ScriptedHttp) -> tuple[bytes, _RecordingLimiter]:
+    """Downloads a file through the real media download over ``http``."""
+    gateway, limiter = _limited_gateway()
+    drive = mock.Mock()
+    drive.files.return_value.get_media.return_value = HttpRequest(
+        http, lambda _resp, content: content, "https://drive.test/files/f?alt=media"
+    )
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive),
+        mock.patch("time.sleep"),
+    ):
+        content = gateway.download_file(
+            user_email="a@co.com", file_id="f", size_threshold=100
+        )
+    return content, limiter
+
+
+@pytest.mark.parametrize(
+    "rate_limit", [(429, b"{}"), (403, _RATE_LIMIT_BODY)], ids=["429", "403"]
+)
+def test_the_media_download_does_not_hide_a_rate_limit_from_the_limiter(
+    rate_limit: tuple[int, bytes],
+) -> None:
+    """googleapiclient's own retry would get past the rate limit unseen. The
+    gateway's retry reports it and spends for each try."""
+    http = _ScriptedHttp([rate_limit, (200, b"content")])
+
+    content, limiter = _download_through(http)
+
+    assert content == b"content"
+    assert http.requests == 2
+    assert limiter.spent == [("drive", 200, "a@co.com")] * 2
+    assert limiter.reported == [("drive", "a@co.com", rate_limit[0] == 403)]
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [ConnectionResetError("reset"), TimeoutError("timed out"), (503, b"{}")],
+    ids=["reset", "timeout", "503"],
+)
+def test_the_media_download_retries_a_lost_connection_or_server_error(
+    failure: tuple[int, bytes] | Exception,
+) -> None:
+    http = _ScriptedHttp([failure, (200, b"content")])
+
+    content, limiter = _download_through(http)
+
+    assert content == b"content"
+    assert http.requests == 2
+    assert limiter.reported == []
+
+
+def test_an_access_error_is_not_reported_as_a_rate_limit() -> None:
+    gateway, limiter = _limited_gateway()
+    drive = mock.MagicMock()
+    drive.files.return_value.get.return_value.execute.side_effect = _http_error(404)
+
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive):
+        assert gateway.get_file(user_email="a@co.com", file_id="f", fields="id") is None
+
+    assert limiter.spent == [("drive", 5, "a@co.com")]
+    assert limiter.reported == []
+
+
+def test_an_oauth_credential_spends_and_reports_as_the_user_who_granted_it() -> None:
+    """Google charges every call of an OAuth credential to its user, whatever
+    user the caller names."""
+    gateway, limiter = _limited_gateway(GoogleCredentialKind.OAUTH)
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive"),
+        mock.patch.object(
+            source_operations,
+            "_download",
+            side_effect=[_http_error(403, _RATE_LIMIT_BODY), b"x"],
+        ),
+        mock.patch("time.sleep"),
+    ):
+        gateway.get_file(user_email="b@co.com", file_id="f", fields="id")
+        gateway.download_file(user_email="b@co.com", file_id="f", size_threshold=10)
+
+    assert [user for _, _, user in limiter.spent] == ["admin@co.com"] * 3
+    assert limiter.reported == [("drive", "admin@co.com", True)]
+
+
+class _ScopedBatch:
+    """Answers each request of a batch with the scripted answer for it."""
+
+    def __init__(
+        self,
+        callback: Any,
+        answers: list[Exception | None],
+    ) -> None:
+        self._callback = callback
+        self._answers = answers
+        self._keys: list[str] = []
+
+    def add(self, _request: Any, request_id: str) -> None:
+        self._keys.append(request_id)
+
+    def execute(self) -> None:
+        for key, answer in zip(self._keys, self._answers, strict=True):
+            if answer is None:
+                self._callback(key, {"id": key}, None)
+            else:
+                self._callback(key, None, answer)
+
+
+def test_a_batch_reports_each_refused_call_by_scope() -> None:
+    gateway, limiter = _limited_gateway()
+    project_limit = _http_error(429)
+    user_limit = _http_error(403, _RATE_LIMIT_BODY)
+    answers: list[Exception | None] = [
+        None,
+        project_limit,
+        user_limit,
+        project_limit,
+        _http_error(404),
+    ]
+    drive = mock.MagicMock()
+    drive.new_batch_http_request.side_effect = lambda callback: _ScopedBatch(
+        callback, answers
+    )
+
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive):
+        gateway.batch_get_files(
+            user_email="a@co.com",
+            file_ids_by_key={f"k{i}": f"f{i}" for i in range(5)},
+            fields="id",
+        )
+
+    assert sorted(zip(limiter.reported, limiter.report_counts, strict=True)) == [
+        (("drive", "a@co.com", False), 2),
+        (("drive", "a@co.com", True), 1),
+    ]
+
+
+def test_a_refused_batch_reports_each_of_its_calls() -> None:
+    gateway, limiter = _limited_gateway()
+    drive = mock.MagicMock()
+    batch = mock.MagicMock()
+    batch.execute.side_effect = _http_error(429)
+    drive.new_batch_http_request.return_value = batch
+
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive),
+        mock.patch("time.sleep"),
+        pytest.raises(GoogleDriveHttpError),
+    ):
+        gateway.batch_get_files(
+            user_email="a@co.com",
+            file_ids_by_key={f"k{i}": f"f{i}" for i in range(3)},
+            fields="id",
+        )
+
+    # Each refused try of the batch reports its 3 calls.
+    assert limiter.reported
+    assert set(limiter.reported) == {("drive", "a@co.com", False)}
+    assert set(limiter.report_counts) == {3}
+
+
+def test_a_stop_while_validation_waits_for_the_budget_is_not_a_validation_error() -> (
+    None
+):
+    """A validation error pauses the pair. A stop is not one."""
+    connector = GoogleDriveConnector(include_my_drives=True)
+    ops = mock.MagicMock(spec=GoogleDriveSourceOperations)
+    ops.list_files.side_effect = ConnectorStopSignal("stop")
+    connector._ops = ops
+    connector._primary_admin_email = "admin@co.com"
+
+    with pytest.raises(ConnectorStopSignal):
+        connector.validate_connector_settings()
+
+
+def test_a_gateway_with_no_limiter_calls_google_directly() -> None:
+    gateway = _gateway()
+    drive = mock.MagicMock()
+    drive.files.return_value.get.return_value.execute.return_value = {"id": "f"}
+
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive):
+        assert gateway.get_file(user_email="a@co.com", file_id="f", fields="id") == {
+            "id": "f"
+        }
+
+
+_DOCS_PER_USER_BODY = (
+    b'{"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "details": [{'
+    b'"@type": "type.googleapis.com/google.rpc.ErrorInfo", '
+    b'"reason": "RATE_LIMIT_EXCEEDED", "metadata": {'
+    b'"quota_limit": "ReadRequestsPerMinutePerUser", '
+    b'"quota_metric": "docs.googleapis.com/read_requests"}}]}}'
+)
+_DOCS_PER_PROJECT_BODY = _DOCS_PER_USER_BODY.replace(
+    b"ReadRequestsPerMinutePerUser", b"ReadRequestsPerMinutePerProject"
+)
+
+
+@pytest.mark.parametrize(
+    ("body", "user_scope"),
+    [(_DOCS_PER_USER_BODY, True), (_DOCS_PER_PROJECT_BODY, False), (b"{}", False)],
+)
+def test_a_429_that_names_a_per_user_quota_cuts_only_that_user(
+    body: bytes, user_scope: bool
+) -> None:
+    """A 429 has no userRateLimitExceeded reason. The quota metadata says if
+    the limit is the user's or the project's."""
+    gateway, limiter = _limited_gateway()
+    with (
+        mock.patch.object(GoogleDriveSourceOperations, "_drive"),
+        mock.patch.object(
+            source_operations, "_download", side_effect=_http_error(429, body)
+        ),
+        mock.patch("time.sleep"),
+        pytest.raises(GoogleDriveHttpError),
+    ):
+        gateway.download_file(user_email="a@co.com", file_id="f", size_threshold=10)
+
+    assert set(limiter.reported) == {("drive", "a@co.com", user_scope)}
+
+
+def test_a_docs_fetch_that_recovers_reports_and_spends_each_try() -> None:
+    gateway, limiter = _limited_gateway()
+    responses: list[mock.MagicMock] = []
+    for status in (429, 429, 429, 200):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        if status == 200:
+            response.iter_content.return_value = [b'{"title": "t"}']
+        else:
+            error_response = requests.Response()
+            error_response.status_code = status
+            error_response._content = _DOCS_PER_USER_BODY
+            response.raise_for_status.side_effect = requests.HTTPError(
+                response=error_response
+            )
+        responses.append(response)
+    session = mock.Mock()
+    session.get.side_effect = responses
+
+    with (
+        mock.patch.object(
+            GoogleDriveSourceOperations, "_docs_session", return_value=session
+        ),
+        mock.patch("time.sleep"),
+    ):
+        doc = gateway.fetch_google_doc(
+            user_email="a@co.com", doc_id="d", max_response_bytes=1000
+        )
+
+    assert doc == {"title": "t"}
+    assert [api for api, _, _ in limiter.spent] == ["docs"] * 4
+    assert limiter.bulk == [True] * 4
+    assert limiter.reported == [("docs", "a@co.com", True)] * 3
+
+
+def test_a_batch_read_spends_one_read_for_each_file() -> None:
+    gateway, limiter = _limited_gateway()
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive"):
+        gateway.batch_get_files(
+            user_email="a@co.com",
+            file_ids_by_key={"k1": "f1", "k2": "f2", "k3": "f3"},
+            fields="id",
+        )
+
+    assert limiter.spent == [("drive", 15, "a@co.com")]
+    # The requests quota model counts three requests.
+    assert limiter.request_counts == [3]
+
+
+def test_drive_and_member_listings_spend_list_units() -> None:
+    gateway, limiter = _limited_gateway()
+    drive = mock.MagicMock()
+    drive.drives.return_value.list.return_value.execute.return_value = {
+        "drives": [{"id": "d1"}]
+    }
+    drive.drives.return_value.get.return_value.execute.return_value = {"name": "D"}
+
+    with mock.patch.object(GoogleDriveSourceOperations, "_drive", return_value=drive):
+        assert list(
+            gateway.list_drives(user_email="a@co.com", use_domain_admin_access=False)
+        ) == ["d1"]
+        assert (
+            gateway.get_shared_drive_name(user_email="a@co.com", drive_id="d1") == "D"
+        )
+
+    assert limiter.spent == [("drive", 100, "a@co.com"), ("drive", 5, "a@co.com")]
+
+
+def _rate_limited_403() -> GoogleDriveHttpError:
+    return GoogleDriveHttpError(
+        status_code=403,
+        reasons=("userRateLimitExceeded",),
+        access_denied=False,
+        message="User Rate Limit Exceeded",
+    )
+
+
+def test_a_rate_limit_in_validation_is_not_a_permission_error() -> None:
+    """A permission error marks the pair invalid. Google's 403 for a rate
+    limit is a temporary error."""
+    connector = GoogleDriveConnector(include_my_drives=True)
+    ops = mock.MagicMock(spec=GoogleDriveSourceOperations)
+    ops.list_files.side_effect = _rate_limited_403()
+    connector._ops = ops
+    connector._primary_admin_email = "admin@co.com"
+
+    with pytest.raises(UnexpectedValidationError):
+        connector.validate_connector_settings()
+
+
+def test_a_rate_limit_in_the_directory_probe_is_not_a_permission_error() -> None:
+    connector = GoogleDriveConnector(include_my_drives=True)
+    ops = mock.MagicMock(spec=GoogleDriveSourceOperations)
+    ops.get_admin_user.side_effect = _rate_limited_403()
+    connector._ops = ops
+    connector._primary_admin_email = "admin@co.com"
+
+    with pytest.raises(UnexpectedValidationError):
+        connector.probe_directory_admin_permission()

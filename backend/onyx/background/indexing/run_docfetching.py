@@ -1,7 +1,7 @@
 import sys
 import time
 import traceback
-from collections.abc import Generator, Iterable
+from collections.abc import Callable, Generator, Iterable
 from datetime import datetime, timedelta, timezone
 from typing import Any, TypeVar
 
@@ -175,6 +175,7 @@ def _get_connector_runner(
     include_permissions: bool,
     leave_connector_active: bool = LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE,
     raw_file_callback: RawFileCallback | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> ConnectorRunner:
     """
     NOTE: `start_time` and `end_time` are only used for poll and checkpointed
@@ -225,6 +226,7 @@ def _get_connector_runner(
                 connector_specific_config=connector_specific_config,
                 credential=attempt.connector_credential_pair.credential,
                 raw_file_callback=raw_file_callback,
+                should_stop=should_stop,
             )
 
             # The drain needs the pair and the attempt, which are the run's,
@@ -255,6 +257,10 @@ def _get_connector_runner(
         )
         _record_outcome(e, perm_sync_validated=False)
         raise e
+    except ConnectorStopSignal:
+        # The attempt stopped while it waited for the source's API budget. The
+        # connector is fine, so the pair stays active.
+        raise
     except Exception as e:
         logger.exception("Unable to instantiate connector. Pausing until fixed.")
         _record_outcome(e, perm_sync_validated=False)
@@ -752,15 +758,27 @@ def connector_document_extraction(
         # TODO: maybe memory tracer here
 
         # Set up connector runner
-        connector_runner = _get_connector_runner(
-            db_session=db_session,
-            attempt=index_attempt,
-            batch_size=INDEX_BATCH_SIZE,
-            start_time=window_start,
-            end_time=window_end,
-            include_permissions=should_fetch_permissions_during_indexing,
-            raw_file_callback=raw_file_callback,
-        )
+        try:
+            connector_runner = _get_connector_runner(
+                db_session=db_session,
+                attempt=index_attempt,
+                batch_size=INDEX_BATCH_SIZE,
+                start_time=window_start,
+                end_time=window_end,
+                include_permissions=should_fetch_permissions_during_indexing,
+                raw_file_callback=raw_file_callback,
+                should_stop=callback.should_stop if callback is not None else None,
+            )
+        except ConnectorStopSignal as e:
+            # A stop while validation waits for the source's API budget cancels
+            # the attempt, as a stop during extraction does.
+            logger.info(
+                "Marking attempt %s as canceled due to a stop signal during validation.",
+                index_attempt_id,
+            )
+            mark_attempt_canceled(index_attempt_id, db_session, reason=str(e))
+            memory_tracer.stop()
+            return
 
         # don't use a checkpoint if we're explicitly indexing from
         # the beginning in order to avoid weird interactions between

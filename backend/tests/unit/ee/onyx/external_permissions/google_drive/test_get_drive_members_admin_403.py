@@ -53,3 +53,50 @@ def test_get_drive_members_admin_non_403_reraised() -> None:
         _get_drive_members(connector, deadline=time.monotonic() + 60)
 
     assert exc_info.value.status_code == 500
+
+
+def _rate_limit_error() -> GoogleDriveHttpError:
+    """Google's 403 for a rate limit: not an access denial."""
+    return GoogleDriveHttpError(
+        status_code=403,
+        reasons=("rateLimitExceeded",),
+        access_denied=False,
+        message="Rate Limit Exceeded",
+    )
+
+
+def test_a_rate_limited_admin_lookup_is_not_a_permission_error() -> None:
+    connector = _make_connector(_rate_limit_error())
+
+    with pytest.raises(GoogleDriveHttpError) as exc_info:
+        _get_drive_members(connector, deadline=time.monotonic() + 60)
+
+    assert exc_info.value.rate_limited
+
+
+def _connector_with_drive_member_error(error: GoogleDriveHttpError) -> MagicMock:
+    connector = MagicMock()
+    connector.primary_admin_email = "admin@example.com"
+    connector.get_all_drive_ids.return_value = ["drive-1"]
+    ops = MagicMock(spec=GoogleDriveSourceOperations)
+    ops.get_admin_user.return_value = MagicMock(is_admin=True, is_delegated_admin=False)
+    ops.list_drive_members.side_effect = error
+    connector.ops = ops
+    return connector
+
+
+def test_a_rate_limited_drive_member_read_fails_the_sync() -> None:
+    """A drive with no members would remove its users' access, so a rate
+    refusal must not read as "no access"."""
+    connector = _connector_with_drive_member_error(_rate_limit_error())
+
+    with pytest.raises(GoogleDriveHttpError):
+        _get_drive_members(connector, deadline=time.monotonic() + 60)
+
+
+def test_a_denied_drive_member_read_leaves_the_drive_with_no_members() -> None:
+    connector = _connector_with_drive_member_error(_make_http_error(403))
+
+    members = _get_drive_members(connector, deadline=time.monotonic() + 60)
+
+    assert members == {"drive-1": (set(), set())}
