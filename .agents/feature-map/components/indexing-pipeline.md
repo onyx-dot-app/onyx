@@ -118,6 +118,14 @@ fetching path. The attempt row keeps `uses_conversion_stage` and the last task
 that dispatched; a claim of no batch does not change it. An attempt that
 continues a failed one takes over its stub batches with new numbers; a change
 of the switch between attempts starts the listing again.
+The lister drops a listed document when this cc_pair indexed the same
+version (`backend/onyx/db/document.py:get_unchanged_document_ids`: same
+modified time and size, and a content hash), except in a run from the
+beginning and a run for a FUTURE index. The stored modified time marks the
+version in the index: `post_index` writes it only for a confirmed write. A
+reindex swap clears the hash, so the lister keeps such a document.
+`stubs_listed` and `stubs_skipped` on the attempt count both, and the failure
+ratio counts every listed document.
 `background/indexing/conversion_recovery.py:check_conversion_chain` runs in
 the watchdog: when stub batches wait, no conversion task exists and the last
 dispatcher is gone, it sends the lost batches again and counts that as a

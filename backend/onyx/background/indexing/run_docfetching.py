@@ -69,6 +69,7 @@ from onyx.db.connector_credential_pair import (
     update_connector_credential_pair,
 )
 from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
+from onyx.db.document import get_unchanged_document_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     AccessType,
@@ -423,6 +424,24 @@ def connector_uses_conversion_stage(connector: BaseConnector) -> bool:
         and isinstance(connector, Resolver)
         and connector.listing_payload_type is not None
     )
+
+
+def drop_unchanged_stubs(
+    stubs: list[SlimDocumentStub], connector_id: int, credential_id: int
+) -> list[SlimDocumentStub]:
+    """Drops the stubs whose document is in the index with the same modified
+    time and size, so the conversion stage does not fetch it again. A stub
+    with no modified time is kept."""
+    listed = {
+        stub.id: (stub.doc_updated_at, stub.size_bytes)
+        for stub in stubs
+        if stub.doc_updated_at is not None
+    }
+    with get_session_with_current_tenant() as db_session:
+        unchanged = get_unchanged_document_ids(
+            db_session, connector_id, credential_id, listed
+        )
+    return [stub for stub in stubs if stub.id not in unchanged]
 
 
 _ListerYield = tuple[
@@ -894,6 +913,10 @@ def connector_document_extraction(
         # batches and the docconversion worker fetches the documents.
         lister_mode = connector_uses_conversion_stage(connector_runner.connector)
         lister_task_id = index_attempt.celery_task_id
+        # The lister drops a listed document when the index has that version.
+        # A run from the beginning and a run for a new index need every
+        # document, so they drop none.
+        skip_unchanged_stubs = lister_mode and is_primary and not from_beginning
         stub_storage = get_stub_batch_storage(
             cc_pair_id, index_attempt_id, is_backfill=is_backfill
         )
@@ -1113,6 +1136,23 @@ def connector_document_extraction(
                     )
 
                 if stub_batch:
+                    listed_count = len(stub_batch)
+                    # The failure ratio counts every listed document, also
+                    # the ones dropped as unchanged.
+                    document_count += listed_count
+                    if skip_unchanged_stubs:
+                        stub_batch = drop_unchanged_stubs(
+                            stub_batch, db_connector.id, db_credential.id
+                        )
+                    with get_session_with_current_tenant() as db_session:
+                        IndexingCoordination.record_stubs_listed(
+                            db_session,
+                            index_attempt_id,
+                            listed_count,
+                            listed_count - len(stub_batch),
+                        )
+
+                if stub_batch:
                     with time_stage(
                         IndexAttemptStage.DOC_BATCH_STORE, index_attempt_id
                     ):
@@ -1134,7 +1174,6 @@ def connector_document_extraction(
                         )
                     batch_num += 1
                     total_doc_batches_queued += 1
-                    document_count += len(stub_batch)
                     memory_tracer.increment_and_maybe_trace()
                     logger.info(
                         "Stored stub batch: batch_num=%s stubs=%s attempt=%s",

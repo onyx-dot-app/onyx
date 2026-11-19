@@ -37,6 +37,7 @@ from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorFailure,
     Document,
+    DocumentFailure,
     HierarchyNode,
     ListingPayload,
     ResolveTarget,
@@ -44,13 +45,20 @@ from onyx.connectors.models import (
     SlimDocumentStub,
 )
 from onyx.db.enums import HierarchyNodeType, IndexingStatus
-from onyx.db.models import ConnectorCredentialPair, IndexAttempt
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    DocumentByConnectorCredentialPair,
+    IndexAttempt,
+    IndexAttemptError,
+)
+from onyx.db.models import Document as DBDocument
 from onyx.db.models import HierarchyNode as DBHierarchyNode
 from onyx.db.search_settings import get_current_search_settings
 from onyx.file_store.document_batch_storage import (
     get_document_batch_storage,
     get_stub_batch_storage,
 )
+from onyx.kg.models import KGStage
 from onyx.redis.redis_docprocessing import RedisDocprocessing
 from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import get_redis_client
@@ -62,6 +70,9 @@ from tests.external_dependency_unit.indexing_helpers import (
 )
 
 _WINDOW_END = datetime(2026, 1, 2, tzinfo=timezone.utc)
+# What the source reports for each listed document.
+_MODIFIED = datetime(2025, 12, 1, 8, 30, 0, 123000, tzinfo=timezone.utc)
+_SIZE = 2048
 
 
 class _Payload(ListingPayload):
@@ -84,6 +95,8 @@ class _FakeLister(
         self.listed = 0
         self.fetch_calls = 0
         self.listing_permissions: list[bool] = []
+        # Document failures that the last call yields after its stubs.
+        self.final_failure_ids: list[str] = []
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:  # noqa: ARG002
         return None
@@ -116,9 +129,22 @@ class _FakeLister(
             )
             yield SlimDocument(id="dropped by the indexing filters")
         for doc_id in self.doc_ids[self.listed : self.listed + 3]:
-            yield SlimDocumentStub(id=doc_id, listing_payload=_Payload(title=doc_id))
+            yield SlimDocumentStub(
+                id=doc_id,
+                doc_updated_at=_MODIFIED,
+                size_bytes=_SIZE,
+                listing_payload=_Payload(title=doc_id),
+            )
         self.listed += 3
-        return ConnectorCheckpoint(has_more=self.listed < len(self.doc_ids))
+        has_more = self.listed < len(self.doc_ids)
+        if not has_more:
+            for doc_id in self.final_failure_ids:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(document_id=doc_id),
+                    failure_message="the listing could not read it",
+                    exception=RuntimeError("listing failure"),
+                )
+        return ConnectorCheckpoint(has_more=has_more)
 
     def build_dummy_checkpoint(self) -> ConnectorCheckpoint:
         return ConnectorCheckpoint(has_more=True)
@@ -157,10 +183,10 @@ class _Run:
     def add_attempt(
         self, status: IndexingStatus, created: datetime, **fields: Any
     ) -> IndexAttempt:
+        fields.setdefault("from_beginning", False)
         attempt = IndexAttempt(
             connector_credential_pair_id=self.pair.id,
             search_settings_id=self.search_settings_id,
-            from_beginning=False,
             status=status,
             celery_task_id=f"task_{uuid4().hex[:8]}",
             time_created=created,
@@ -259,6 +285,9 @@ def run(
                 get_document_batch_storage(
                     pair.id, attempt_id, is_backfill=False
                 ).cleanup_all_batches()
+            db_session.query(IndexAttemptError).filter(
+                IndexAttemptError.index_attempt_id.in_(run.attempt_ids)
+            ).delete(synchronize_session="fetch")
             db_session.query(IndexAttempt).filter(
                 IndexAttempt.connector_credential_pair_id == pair.id
             ).delete(synchronize_session="fetch")
@@ -458,3 +487,155 @@ def test_a_change_of_the_switch_starts_the_listing_again(run: _Run) -> None:
     row = run.attempt(attempt.id)
     assert row.total_batches == 3
     assert run.sent_batch_nums(OnyxCeleryTask.DOCCONVERSION_TASK) == [0, 1, 2]
+
+
+def _store_indexed_document(
+    run: _Run,
+    doc_id: str,
+    modified: datetime | None,
+    size: int | None,
+    content_hash: str | None = "hash",
+) -> None:
+    """A document that this cc_pair indexed, as the index pipeline stores it."""
+    run.db_session.add(
+        DBDocument(
+            id=doc_id,
+            semantic_id=doc_id,
+            kg_stage=KGStage.NOT_STARTED,
+            doc_updated_at=modified,
+            source_size_bytes=size,
+            content_hash=content_hash,
+        )
+    )
+    run.db_session.flush()
+    run.db_session.add(
+        DocumentByConnectorCredentialPair(
+            id=doc_id,
+            connector_id=run.pair.connector_id,
+            credential_id=run.pair.credential_id,
+            has_been_indexed=True,
+        )
+    )
+    run.db_session.commit()
+
+
+def _store_index_state(run: _Run) -> None:
+    """Documents 0 and 1 are in the index as listed. Document 2 has a new
+    size, document 3 a new modified time, and document 4 is new."""
+    doc_ids = run.connector.doc_ids
+    _store_indexed_document(run, doc_ids[0], _MODIFIED, _SIZE)
+    _store_indexed_document(run, doc_ids[1], _MODIFIED, _SIZE)
+    _store_indexed_document(run, doc_ids[2], _MODIFIED, _SIZE - 1)
+    _store_indexed_document(run, doc_ids[3], _MODIFIED - timedelta(days=1), _SIZE)
+
+
+def test_the_lister_drops_documents_that_did_not_change(run: _Run) -> None:
+    _store_index_state(run)
+    attempt = run.add_attempt(IndexingStatus.IN_PROGRESS, _WINDOW_END)
+
+    with patch.object(run_docfetching, "ENABLE_CONVERSION_STAGE", True):
+        run.extract(attempt.id)
+
+    # Only the changed and the new documents go to conversion.
+    doc_ids = run.connector.doc_ids
+    assert run.stub_doc_ids(attempt.id, 0) == [doc_ids[2]]
+    assert run.stub_doc_ids(attempt.id, 1) == doc_ids[3:5]
+    row = run.attempt(attempt.id)
+    assert (row.stubs_listed, row.stubs_skipped) == (5, 2)
+    assert row.total_batches == 2
+
+
+def test_a_run_from_the_beginning_drops_no_document(run: _Run) -> None:
+    _store_index_state(run)
+    attempt = run.add_attempt(
+        IndexingStatus.IN_PROGRESS, _WINDOW_END, from_beginning=True
+    )
+
+    with patch.object(run_docfetching, "ENABLE_CONVERSION_STAGE", True):
+        run.extract(attempt.id)
+
+    listed = [
+        doc_id
+        for batch_num in range(3)
+        for doc_id in run.stub_doc_ids(attempt.id, batch_num)
+    ]
+    assert listed == run.connector.doc_ids
+    row = run.attempt(attempt.id)
+    assert (row.stubs_listed, row.stubs_skipped) == (5, 0)
+
+
+def test_a_document_of_another_cc_pair_is_not_dropped(
+    run: _Run, db_session: Session
+) -> None:
+    """The same version is in the index, but another cc_pair indexed it. This
+    cc_pair must index it too, or it has no link to the document."""
+    other_pair = make_cc_pair(db_session)
+    try:
+        doc_id = run.connector.doc_ids[0]
+        db_session.add(
+            DBDocument(
+                id=doc_id,
+                semantic_id=doc_id,
+                kg_stage=KGStage.NOT_STARTED,
+                doc_updated_at=_MODIFIED,
+                source_size_bytes=_SIZE,
+            )
+        )
+        db_session.flush()
+        db_session.add(
+            DocumentByConnectorCredentialPair(
+                id=doc_id,
+                connector_id=other_pair.connector_id,
+                credential_id=other_pair.credential_id,
+                has_been_indexed=True,
+            )
+        )
+        db_session.commit()
+        attempt = run.add_attempt(IndexingStatus.IN_PROGRESS, _WINDOW_END)
+
+        with patch.object(run_docfetching, "ENABLE_CONVERSION_STAGE", True):
+            run.extract(attempt.id)
+
+        assert run.stub_doc_ids(attempt.id, 0) == run.connector.doc_ids[0:2]
+        assert run.attempt(attempt.id).stubs_skipped == 0
+    finally:
+        db_session.rollback()
+        cleanup_cc_pair(db_session, other_pair)
+
+
+def test_a_document_whose_hash_a_swap_cleared_is_not_dropped(run: _Run) -> None:
+    """A reindex swap cleared the hash of a document that the new index may
+    lack. Its modified time and size still match, but the run must write it
+    again."""
+    doc_ids = run.connector.doc_ids
+    _store_indexed_document(run, doc_ids[0], _MODIFIED, _SIZE, content_hash=None)
+    _store_indexed_document(run, doc_ids[1], _MODIFIED, _SIZE)
+    attempt = run.add_attempt(IndexingStatus.IN_PROGRESS, _WINDOW_END)
+
+    with patch.object(run_docfetching, "ENABLE_CONVERSION_STAGE", True):
+        run.extract(attempt.id)
+
+    # The first stub batch held documents 0 and 1. Only 1 is dropped.
+    assert run.stub_doc_ids(attempt.id, 0) == [doc_ids[0]]
+    assert run.attempt(attempt.id).stubs_skipped == 1
+
+
+def test_documents_dropped_as_unchanged_count_for_the_failure_ratio(
+    run: _Run, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every listed document is unchanged, and the listing reports 4 document
+    failures after them. 4 of 60 listed documents is under the failure ratio,
+    so the run goes on."""
+    monkeypatch.setattr(run_docfetching, "PERSISTENT_INDEXING", False)
+    run.connector = _FakeLister(run.tag, doc_count=60)
+    run.connector.final_failure_ids = [f"failed_{run.tag}_{i}" for i in range(4)]
+    for doc_id in run.connector.doc_ids:
+        _store_indexed_document(run, doc_id, _MODIFIED, _SIZE)
+    attempt = run.add_attempt(IndexingStatus.IN_PROGRESS, _WINDOW_END)
+
+    with patch.object(run_docfetching, "ENABLE_CONVERSION_STAGE", True):
+        run.extract(attempt.id)
+
+    row = run.attempt(attempt.id)
+    assert (row.stubs_listed, row.stubs_skipped) == (60, 60)
+    assert row.status == IndexingStatus.IN_PROGRESS
