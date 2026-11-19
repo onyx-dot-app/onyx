@@ -146,9 +146,9 @@ test.describe("Default Agent MCP Integration", () => {
     await page.context().clearCookies();
     await apiLogin(page, basicUserEmail, basicUserPassword);
     const plugins = new CustomizePage(page);
-    await plugins.goto("Integrations");
+    await plugins.goto("Plugins");
     await plugins.search(serverName);
-    await plugins.openIntegration(serverName);
+    await plugins.openPlugin(serverName);
 
     const detail = new MemberPluginDetailPage(page);
     await detail.expectTabs(["Overview", "Integrations"]);

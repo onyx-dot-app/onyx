@@ -27,14 +27,23 @@ export class MemberPluginDetailPage {
     await this.page.goto(`/app/customize/plugins/${pluginId}${query}`);
   }
 
+  /** Skills and Integrations show a count, for example "Skills · 2". */
+  private tab(tab: MemberPluginTab): Locator {
+    return this.page.getByRole("tab", {
+      name: new RegExp(`^${tab}( · \\d+)?$`),
+    });
+  }
+
   async openTab(tab: MemberPluginTab): Promise<void> {
-    const trigger = this.page.getByRole("tab", { name: tab, exact: true });
+    const trigger = this.tab(tab);
     await trigger.click();
     await expect(trigger).toHaveAttribute("aria-selected", "true");
   }
 
   async expectTabs(tabs: MemberPluginTab[]): Promise<void> {
-    await expect(this.page.getByRole("tab")).toHaveText(tabs);
+    await expect(this.page.getByRole("tab")).toHaveText(
+      tabs.map((tab) => new RegExp(`^${tab}( · \\d+)?$`))
+    );
   }
 
   pluginSwitch(plugin: string): Locator {

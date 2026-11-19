@@ -17094,7 +17094,8 @@
           "location": "Ort",
           "owner": "Eigentümer",
           "skills": "Skills",
-          "integrations": "Integrationen"
+          "integrations": "Integrationen",
+          "description": "Beschreibung"
         },
         "skills": {
           "off": "Aus",
@@ -17164,7 +17165,9 @@
         },
         "retry": {
           "label": "Erneut versuchen"
-        }
+        },
+        "readOnlyTitle": "Aktionen",
+        "readOnlyDescription": "Ihr Administrator legt fest, wie jede Aktion ausgeführt wird."
       },
       "oauthCallback": {
         "processing": "Ihr Konto wird verbunden…",
@@ -17400,6 +17403,33 @@
       "required": {
         "label": "Erforderlich",
         "tooltip": "Ihr Administrator schreibt diesen Skill vor, daher können Sie ihn nicht deaktivieren."
+      }
+    },
+    "integrationPage": {
+      "title": "Integration",
+      "back": "Integrationen",
+      "loadFailed": "Diese Integration ist für Sie nicht verfügbar.",
+      "tabs": {
+        "overview": "Übersicht",
+        "configuration": "Konfiguration",
+        "actions": "Aktionen"
+      },
+      "overview": {
+        "description": "Beschreibung",
+        "noDescription": "Keine Beschreibung.",
+        "type": "Typ",
+        "signIn": "Anmeldung",
+        "url": "Server-URL",
+        "plugins": "In Plugins"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {Ihre Verbindung zu dieser Integration. Nur Sie verwenden sie.} shared {Das Konto dieser Integration. Alle mit Zugriff verwenden es.} other {Diese Integration benötigt keine Anmeldung.}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "Skills · {count}",
+        "integrations": "Integrationen · {count}"
       }
     },
     "search": "Suchen"

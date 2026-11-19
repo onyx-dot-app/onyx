@@ -17094,7 +17094,8 @@
           "location": "위치",
           "owner": "소유자",
           "skills": "스킬",
-          "integrations": "통합"
+          "integrations": "통합",
+          "description": "설명"
         },
         "skills": {
           "off": "꺼짐",
@@ -17164,7 +17165,9 @@
         },
         "retry": {
           "label": "다시 시도"
-        }
+        },
+        "readOnlyTitle": "작업",
+        "readOnlyDescription": "관리자가 각 작업의 실행 방식을 설정합니다."
       },
       "oauthCallback": {
         "processing": "계정을 연결하는 중…",
@@ -17400,6 +17403,33 @@
       "required": {
         "label": "필수",
         "tooltip": "관리자가 이 스킬을 필수로 지정해서 끌 수 없습니다."
+      }
+    },
+    "integrationPage": {
+      "title": "통합",
+      "back": "통합",
+      "loadFailed": "이 통합을 사용할 수 없습니다.",
+      "tabs": {
+        "overview": "개요",
+        "configuration": "구성",
+        "actions": "작업"
+      },
+      "overview": {
+        "description": "설명",
+        "noDescription": "설명이 없습니다.",
+        "type": "유형",
+        "signIn": "로그인",
+        "url": "서버 URL",
+        "plugins": "포함된 플러그인"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {이 통합에 대한 내 연결입니다. 나만 사용합니다.} shared {이 통합의 계정입니다. 접근 권한이 있는 모든 사람이 사용합니다.} other {이 통합은 로그인이 필요하지 않습니다.}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "스킬 · {count}",
+        "integrations": "통합 · {count}"
       }
     },
     "search": "검색"

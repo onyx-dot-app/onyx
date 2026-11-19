@@ -81,13 +81,13 @@ afterEach(() => {
 test("shows only the tabs with content", async () => {
   open([makeMemberIntegration()]);
   expect(
-    await screen.findByRole("tab", { name: copy.detail.tabs.integrations })
+    await screen.findByRole("tab", { name: "Integrations · 1" })
   ).toHaveAttribute("aria-selected", "true");
   expect(
     screen.getByRole("tab", { name: copy.detail.tabs.overview })
   ).toBeInTheDocument();
   expect(
-    screen.queryByRole("tab", { name: copy.detail.tabs.skills })
+    screen.queryByRole("tab", { name: /^Skills/ })
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("tab", { name: copy.detail.tabs.versions })
@@ -120,7 +120,7 @@ test("a plugin that is one skill opens the skill page", async () => {
     )
   );
   expect(
-    screen.queryByRole("tab", { name: copy.detail.tabs.skills })
+    screen.queryByRole("tab", { name: /^Skills/ })
   ).not.toBeInTheDocument();
 });
 

@@ -17094,7 +17094,8 @@
           "location": "Emplacement",
           "owner": "Propriétaire",
           "skills": "Compétences",
-          "integrations": "Intégrations"
+          "integrations": "Intégrations",
+          "description": "Description"
         },
         "skills": {
           "off": "Désactivée",
@@ -17164,7 +17165,9 @@
         },
         "retry": {
           "label": "Réessayer"
-        }
+        },
+        "readOnlyTitle": "Actions",
+        "readOnlyDescription": "Votre administrateur définit comment chaque action s’exécute."
       },
       "oauthCallback": {
         "processing": "Connexion de votre compte…",
@@ -17400,6 +17403,33 @@
       "required": {
         "label": "Obligatoire",
         "tooltip": "Votre administrateur exige cette compétence, vous ne pouvez donc pas la désactiver."
+      }
+    },
+    "integrationPage": {
+      "title": "Intégration",
+      "back": "Intégrations",
+      "loadFailed": "Cette intégration ne vous est pas disponible.",
+      "tabs": {
+        "overview": "Aperçu",
+        "configuration": "Configuration",
+        "actions": "Actions"
+      },
+      "overview": {
+        "description": "Description",
+        "noDescription": "Aucune description.",
+        "type": "Type",
+        "signIn": "Connexion",
+        "url": "URL du serveur",
+        "plugins": "Dans les plugins"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {Votre connexion à cette intégration. Vous seul l’utilisez.} shared {Le compte de cette intégration. Toutes les personnes qui y ont accès l’utilisent.} other {Cette intégration ne nécessite pas de connexion.}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "Compétences · {count}",
+        "integrations": "Intégrations · {count}"
       }
     },
     "search": "Rechercher"

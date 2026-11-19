@@ -2,15 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Badge, Button, Card, InputSwitch, Tabs } from "@opal/components";
-import {
-  Content,
-  InputHorizontal,
-  Section,
-  SettingsLayouts,
-  toast,
-} from "@opal/layouts";
-import { SvgArrowLeft, SvgOrganization, SvgShare } from "@opal/icons";
+import { Badge, Button, Card, InputSwitch } from "@opal/components";
+import { Content, Section, toast } from "@opal/layouts";
+import { SvgBlocks, SvgOrganization, SvgShare } from "@opal/icons";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import useUserSkills from "@/hooks/useUserSkills";
 import { useMemberIntegrations } from "@/lib/integrations/hooks";
@@ -39,6 +33,11 @@ import IntegrationConnectionRow from "@/sections/plugins/IntegrationConnectionRo
 import SharePluginModal from "@/sections/plugins/SharePluginModal";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
+import CustomizeDetailLayout, {
+  BackLink,
+  DetailOverview,
+  type DetailTab,
+} from "@/sections/customize/CustomizeDetailLayout";
 
 interface PluginTabProps {
   entry: MemberPluginEntry;
@@ -48,7 +47,7 @@ interface OverviewTabProps extends PluginTabProps {
   onChanged: () => Promise<void>;
 }
 
-function PluginSwitchCard({ entry, onChanged }: OverviewTabProps) {
+function PluginSwitch({ entry, onChanged }: OverviewTabProps) {
   const t = useTranslations("plugins.member.detail.switch");
   const [busy, setBusy] = useState(false);
   const { enabled, blocked } = pluginSwitch(entry);
@@ -68,67 +67,55 @@ function PluginSwitchCard({ entry, onChanged }: OverviewTabProps) {
   }
 
   return (
-    <Card padding={4}>
-      <InputHorizontal
-        withLabel
-        title={t("title")}
-        description={blocked ? t(blocked) : t("description")}
+    <Section width="auto" height="auto" padding={1}>
+      <InputSwitch
+        aria-label={t("label", { name: entry.name })}
+        checked={enabled}
         disabled={busy || blocked !== null}
-      >
-        <InputSwitch
-          aria-label={t("label", { name: entry.name })}
-          checked={enabled}
-          disabled={busy || blocked !== null}
-          onCheckedChange={(checked) => void change(checked)}
-        />
-      </InputHorizontal>
-    </Card>
+        onCheckedChange={(checked) => void change(checked)}
+      />
+    </Section>
   );
 }
 
-function OverviewTab({ entry, onChanged }: OverviewTabProps) {
+function OverviewTab({ entry }: PluginTabProps) {
   const t = useTranslations("plugins.member.detail.overview");
+  const switchCopy = useTranslations("plugins.member.detail.switch");
   const sections = useTranslations("plugins.member.sections");
+  const { blocked } = pluginSwitch(entry);
   return (
-    <Section gap={4} alignItems="stretch" height="auto">
-      <PluginSwitchCard entry={entry} onChanged={onChanged} />
-      <Card padding={4}>
-        <Section gap={4} alignItems="stretch" height="auto">
-          <Content
-            title={entry.name}
-            description={entry.description ?? t("noDescription")}
-          />
-          <Content
-            font="secondary-body"
-            title={t("location")}
-            description={sections(entry.section)}
-          />
-          {entry.ownerEmail && (
-            <Content
-              font="secondary-body"
-              title={t("owner")}
-              description={entry.ownerEmail}
-            />
-          )}
-          {entry.skills.length > 0 && (
-            <Content
-              font="secondary-body"
-              title={t("skills")}
-              description={entry.skills.map((skill) => skill.name).join(", ")}
-            />
-          )}
-          {entry.integrations.length > 0 && (
-            <Content
-              font="secondary-body"
-              title={t("integrations")}
-              description={entry.integrations
-                .map((integration) => integration.name)
-                .join(", ")}
-            />
-          )}
-        </Section>
-      </Card>
-    </Section>
+    <DetailOverview
+      descriptionLabel={t("description")}
+      description={entry.description ?? t("noDescription")}
+      facts={[
+        {
+          label: switchCopy("title"),
+          value: blocked ? switchCopy(blocked) : switchCopy("description"),
+        },
+        { label: t("location"), value: sections(entry.section) },
+        ...(entry.ownerEmail
+          ? [{ label: t("owner"), value: entry.ownerEmail }]
+          : []),
+        ...(entry.skills.length > 0
+          ? [
+              {
+                label: t("skills"),
+                value: entry.skills.map((skill) => skill.name).join(", "),
+              },
+            ]
+          : []),
+        ...(entry.integrations.length > 0
+          ? [
+              {
+                label: t("integrations"),
+                value: entry.integrations
+                  .map((integration) => integration.name)
+                  .join(", "),
+              },
+            ]
+          : []),
+      ]}
+    />
   );
 }
 
@@ -190,6 +177,7 @@ export default function MemberPluginDetailPage({
   const t = useTranslations("plugins.member.detail");
   const promptCopy = useTranslations("plugins.chat.connectPrompt");
   const tabCopy = useTranslations("customize.tabs");
+  const pageCopy = useTranslations("customize.pluginPage");
   const locale = useLocale();
   const navigation = useNavigation();
   const searchParams = useSearchParams();
@@ -255,9 +243,62 @@ export default function MemberPluginDetailPage({
     }
   }
 
+  const tabs: DetailTab<PluginPageTab>[] | null = entry
+    ? [
+        {
+          value: "overview",
+          label: t("tabs.overview"),
+          content: <OverviewTab entry={entry} />,
+        },
+        ...(entry.skills.length > 0
+          ? [
+              {
+                value: "skills" as const,
+                label: pageCopy("tabs.skills", { count: entry.skills.length }),
+                content: <SkillsTab entry={entry} />,
+              },
+            ]
+          : []),
+        ...(entry.integrations.length > 0
+          ? [
+              {
+                value: "integrations" as const,
+                label: pageCopy("tabs.integrations", {
+                  count: entry.integrations.length,
+                }),
+                content: <IntegrationsTab entry={entry} />,
+              },
+            ]
+          : []),
+        ...(skill && showVersions
+          ? [
+              {
+                value: "versions" as const,
+                label: t("tabs.versions"),
+                content: (
+                  <SkillVersionsTab
+                    skill={skill}
+                    canPublish={canChangeOrganizationAccess(
+                      skill,
+                      isGlobalHolder
+                    )}
+                    onChanged={() => void skills.refresh()}
+                  />
+                ),
+              },
+            ]
+          : []),
+      ]
+    : null;
+
   return (
-    <SettingsLayouts.Root
-      width="lg"
+    <CustomizeDetailLayout
+      back={
+        <BackLink to={customizeTabHref("plugins")} label={tabCopy("plugins")} />
+      }
+      icon={SvgBlocks}
+      title={entry?.name ?? t("title")}
+      description={entry?.description ?? undefined}
       loading={loading || skillOnlyId !== undefined}
       error={
         loading
@@ -268,102 +309,52 @@ export default function MemberPluginDetailPage({
               ? false
               : t("notFound")
       }
+      tabs={tabs}
+      tab={tab}
+      onTabChange={(next) =>
+        navigation.go(pluginHref(pluginId, next), {
+          replace: true,
+          scroll: false,
+        })
+      }
+      actions={[
+        ...(owner
+          ? [
+              <Button
+                key="share"
+                prominence="secondary"
+                icon={SvgShare}
+                onClick={() => setSharing(true)}
+              >
+                {t("share.label")}
+              </Button>,
+              <Button
+                key="publish"
+                prominence="secondary"
+                icon={SvgOrganization}
+                disabled={!isActionManager}
+                tooltip={isActionManager ? undefined : t("publish.blocked")}
+                onClick={() => setPublishing(true)}
+              >
+                {t("publish.label")}
+              </Button>,
+            ]
+          : []),
+        ...(entry
+          ? [<PluginSwitch key="switch" entry={entry} onChanged={refresh} />]
+          : []),
+        ...(pending > 0
+          ? [
+              <Badge
+                key="pending"
+                size={6}
+                color="warning"
+                title={promptCopy("trigger.label", { count: pending })}
+              />,
+            ]
+          : []),
+      ]}
     >
-      <SettingsLayouts.Header
-        title={entry?.name ?? t("title")}
-        description={entry?.description ?? undefined}
-        stackActionsOnMobile
-        actions={[
-          <Button
-            key="back"
-            prominence="secondary"
-            icon={SvgArrowLeft}
-            {...navigation.linkTo(customizeTabHref("plugins"))}
-          >
-            {tabCopy("plugins")}
-          </Button>,
-          ...(owner
-            ? [
-                <Button
-                  key="share"
-                  prominence="secondary"
-                  icon={SvgShare}
-                  onClick={() => setSharing(true)}
-                >
-                  {t("share.label")}
-                </Button>,
-                <Button
-                  key="publish"
-                  prominence="secondary"
-                  icon={SvgOrganization}
-                  disabled={!isActionManager}
-                  tooltip={isActionManager ? undefined : t("publish.blocked")}
-                  onClick={() => setPublishing(true)}
-                >
-                  {t("publish.label")}
-                </Button>,
-              ]
-            : []),
-          ...(pending > 0
-            ? [
-                <Badge
-                  key="pending"
-                  size={6}
-                  color="warning"
-                  title={promptCopy("trigger.label", { count: pending })}
-                />,
-              ]
-            : []),
-        ]}
-      />
-      <SettingsLayouts.Body>
-        {entry && (
-          <Tabs
-            value={tab}
-            onValueChange={(value) =>
-              navigation.go(pluginHref(entry.id, parsePluginPageTab(value)), {
-                replace: true,
-                scroll: false,
-              })
-            }
-            variant="contained"
-            gap={6}
-          >
-            <Tabs.List>
-              {available.map((value) => (
-                <Tabs.Trigger key={value} value={value}>
-                  {t(`tabs.${value}`)}
-                </Tabs.Trigger>
-              ))}
-            </Tabs.List>
-            <Tabs.Content value="overview">
-              <OverviewTab entry={entry} onChanged={refresh} />
-            </Tabs.Content>
-            {available.includes("skills") && (
-              <Tabs.Content value="skills">
-                <SkillsTab entry={entry} />
-              </Tabs.Content>
-            )}
-            {available.includes("integrations") && (
-              <Tabs.Content value="integrations">
-                <IntegrationsTab entry={entry} />
-              </Tabs.Content>
-            )}
-            {skill && showVersions && (
-              <Tabs.Content value="versions">
-                <SkillVersionsTab
-                  skill={skill}
-                  canPublish={canChangeOrganizationAccess(
-                    skill,
-                    isGlobalHolder
-                  )}
-                  onChanged={() => void skills.refresh()}
-                />
-              </Tabs.Content>
-            )}
-          </Tabs>
-        )}
-      </SettingsLayouts.Body>
       {entry && sharing && (
         <SharePluginModal
           pluginId={entry.id}
@@ -384,6 +375,6 @@ export default function MemberPluginDetailPage({
           onConfirm={() => void publish()}
         />
       )}
-    </SettingsLayouts.Root>
+    </CustomizeDetailLayout>
   );
 }

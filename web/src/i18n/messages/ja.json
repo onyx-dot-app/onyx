@@ -17094,7 +17094,8 @@
           "location": "場所",
           "owner": "所有者",
           "skills": "スキル",
-          "integrations": "連携"
+          "integrations": "連携",
+          "description": "説明"
         },
         "skills": {
           "off": "オフ",
@@ -17164,7 +17165,9 @@
         },
         "retry": {
           "label": "再試行"
-        }
+        },
+        "readOnlyTitle": "アクション",
+        "readOnlyDescription": "各アクションの実行方法は管理者が設定します。"
       },
       "oauthCallback": {
         "processing": "アカウントを接続中…",
@@ -17400,6 +17403,33 @@
       "required": {
         "label": "必須",
         "tooltip": "管理者がこのスキルを必須にしているため、オフにできません。"
+      }
+    },
+    "integrationPage": {
+      "title": "インテグレーション",
+      "back": "インテグレーション",
+      "loadFailed": "このインテグレーションは利用できません。",
+      "tabs": {
+        "overview": "概要",
+        "configuration": "設定",
+        "actions": "アクション"
+      },
+      "overview": {
+        "description": "説明",
+        "noDescription": "説明はありません。",
+        "type": "種類",
+        "signIn": "サインイン",
+        "url": "サーバー URL",
+        "plugins": "含まれるプラグイン"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {このインテグレーションへの接続です。使用するのはあなただけです。} shared {このインテグレーションのアカウントです。アクセス権を持つ全員が使用します。} other {このインテグレーションにサインインは不要です。}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "スキル · {count}",
+        "integrations": "インテグレーション · {count}"
       }
     },
     "search": "検索"

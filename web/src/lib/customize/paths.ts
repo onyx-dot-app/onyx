@@ -44,3 +44,14 @@ export function parsePluginPageTab(value: string | null): PluginPageTab {
     ? value
     : "overview";
 }
+
+export type IntegrationPageTab = "overview" | "configuration" | "actions";
+
+export function integrationHref(
+  integrationId: number,
+  tab?: IntegrationPageTab
+): `/app/customize/integrations/${string}` {
+  return tab && tab !== "overview"
+    ? `/app/customize/integrations/${integrationId}?tab=${tab}`
+    : `/app/customize/integrations/${integrationId}`;
+}

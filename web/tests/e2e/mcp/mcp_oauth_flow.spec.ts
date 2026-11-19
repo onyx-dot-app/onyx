@@ -190,8 +190,9 @@ test.describe("MCP OAuth flows", () => {
     await loginAsWorkerUser(page, testInfo.workerIndex);
 
     const plugins = new CustomizePage(page);
-    await plugins.goto("Integrations");
-    await plugins.openIntegration(serverName);
+    await plugins.goto("Plugins");
+    await plugins.search(serverName);
+    await plugins.openPlugin(serverName);
     const detail = new MemberPluginDetailPage(page);
     await detail.openTab("Integrations");
     if (await detail.connectButton(serverName).isVisible()) {

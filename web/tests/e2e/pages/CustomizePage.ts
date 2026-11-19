@@ -106,7 +106,7 @@ export class CustomizePage {
 
   /** Adds a personal MCP server from the Add menu of the Integrations tab
    * ("For me" only) and returns the new integration and its plugin. The page
-   * then shows the plugin. */
+   * then shows the integration on its Configuration tab. */
   async addMcpServer(details: {
     name: string;
     url: string;
@@ -153,13 +153,19 @@ export class CustomizePage {
     const pluginId = body.plugins[0]?.plugin_id;
     if (!pluginId) throw new Error("The new integration has no plugin");
     await expect(this.page).toHaveURL(
-      new RegExp(`/app/customize/plugins/${pluginId}`)
+      new RegExp(`/app/customize/integrations/${body.id}\\?tab=configuration`)
     );
     return { integrationId: body.id, pluginId };
   }
 
   async openIntegration(name: string): Promise<void> {
     await this.integrationRow(name).click();
+    await expect(this.page).toHaveURL(/\/app\/customize\/integrations\/\d+/);
+  }
+
+  /** Opens a plugin from the Plugins tab. */
+  async openPlugin(name: string): Promise<void> {
+    await this.skillRow(name).click();
     await expect(this.page).toHaveURL(
       /\/app\/customize\/plugins\/[0-9a-f-]{36}/
     );

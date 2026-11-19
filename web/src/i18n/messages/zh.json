@@ -17094,7 +17094,8 @@
           "location": "位置",
           "owner": "所有者",
           "skills": "技能",
-          "integrations": "集成"
+          "integrations": "集成",
+          "description": "描述"
         },
         "skills": {
           "off": "已关闭",
@@ -17164,7 +17165,9 @@
         },
         "retry": {
           "label": "重试"
-        }
+        },
+        "readOnlyTitle": "操作",
+        "readOnlyDescription": "管理员设置每个操作的运行方式。"
       },
       "oauthCallback": {
         "processing": "正在连接你的账户…",
@@ -17400,6 +17403,33 @@
       "required": {
         "label": "必需",
         "tooltip": "你的管理员要求使用此技能，因此你无法将其关闭。"
+      }
+    },
+    "integrationPage": {
+      "title": "集成",
+      "back": "集成",
+      "loadFailed": "你无法使用此集成。",
+      "tabs": {
+        "overview": "概览",
+        "configuration": "配置",
+        "actions": "操作"
+      },
+      "overview": {
+        "description": "描述",
+        "noDescription": "没有描述。",
+        "type": "类型",
+        "signIn": "登录",
+        "url": "服务器 URL",
+        "plugins": "所属插件"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {你与此集成的连接。只有你使用它。} shared {此集成的账户。所有有权访问的人都使用它。} other {此集成无需登录。}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "技能 · {count}",
+        "integrations": "集成 · {count}"
       }
     },
     "search": "搜索"
