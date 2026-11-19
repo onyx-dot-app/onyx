@@ -21,7 +21,7 @@ from onyx.chat.models import (
     PresentationMode,
     ToolApprovalDenial,
 )
-from onyx.chat.response import thinking_tool_text, tool_arguments_for_display
+from onyx.chat.response import tool_arguments_for_display
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_NAME,
@@ -36,7 +36,6 @@ from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_NAME,
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
-    THINK_TOOL_NAME,
 )
 from onyx.llm.models import (
     AssistantMessage,
@@ -121,7 +120,6 @@ HIDDEN_TOOLS = frozenset(
         GENERATE_PLAN_TOOL_NAME,
         GENERATE_REPORT_TOOL_NAME,
         GENERATE_ANSWER_TOOL_NAME,
-        THINK_TOOL_NAME,
     }
 )
 
@@ -279,7 +277,7 @@ class MessageRenderer:
         return result
 
     def _content(self, text: str | None) -> list[packets.Packet]:
-        if self.settings.text_as_thinking:
+        if self.settings.mode == PresentationMode.RESEARCH:
             return self._append(text or "", thinking=True)
         if self.citation_processor is None:
             return self._append(text or "")
@@ -319,10 +317,7 @@ class MessageRenderer:
             self._raw_thinking += event.text
             return self._append(event.text, thinking=True)
         if isinstance(event, ToolCallStartEvent):
-            if (
-                event.tool_name in CODE_ARGUMENT_TOOLS
-                or event.tool_name == self.settings.think_tool
-            ):
+            if event.tool_name in CODE_ARGUMENT_TOOLS:
                 self._argument_streams[event.content_index] = ToolCall(
                     id=event.tool_call_id,
                     name=event.tool_name,
@@ -330,10 +325,7 @@ class MessageRenderer:
                     raw_arguments="",
                     arguments_complete=False,
                 )
-            if (
-                event.tool_name == self.settings.think_tool
-                or event.tool_name in HIDDEN_TOOLS
-            ):
+            if event.tool_name in HIDDEN_TOOLS:
                 return []
             result = self._close_answer()
             result.extend(self._close_reasoning())
@@ -357,10 +349,6 @@ class MessageRenderer:
             arguments = event.tool_call.arguments
         deltas = appended_text(call.arguments, arguments)
         call.arguments = arguments
-        if call.name == self.settings.think_tool:
-            text = deltas.get("reasoning", "")
-            self._raw_thinking += text
-            return self._append(text, thinking=True)
         if not deltas:
             return []
         return [
@@ -379,13 +367,7 @@ class MessageRenderer:
         text = "".join(
             block.text for block in message.content if isinstance(block, TextContent)
         )
-        thinking_by_index: dict[int, str] = {}
-        for index, block in enumerate(message.content):
-            if isinstance(block, ThinkingContent):
-                thinking_by_index[index] = block.text
-            elif isinstance(block, ToolCall) and block.name == self.settings.think_tool:
-                thinking_by_index[index] = thinking_tool_text(block)
-        thinking = "".join(thinking_by_index.values())
+        thinking = message.thinking
         result = []
         text_chars_to_skip = (
             len(self._raw_text) if text.startswith(self._raw_text) else len(text)
@@ -410,13 +392,13 @@ class MessageRenderer:
             )
 
         # Batch adjacent output without moving it across thinking or tool boundaries.
-        for index, block in enumerate(message.content):
+        for block in message.content:
             if isinstance(block, TextContent):
                 content = block.text[text_chars_to_skip:]
                 text_chars_to_skip = max(0, text_chars_to_skip - len(block.text))
                 is_thinking = False
-            elif index in thinking_by_index:
-                thinking_text = thinking_by_index[index]
+            elif isinstance(block, ThinkingContent):
+                thinking_text = block.text
                 content = thinking_text[thinking_chars_to_skip:]
                 thinking_chars_to_skip = max(
                     0, thinking_chars_to_skip - len(thinking_text)

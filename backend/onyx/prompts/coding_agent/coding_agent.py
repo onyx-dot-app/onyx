@@ -1,5 +1,4 @@
 from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME, GENERATE_ANSWER_TOOL_NAME
-from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 
 MAX_CODING_AGENT_CYCLES = 20
 
@@ -66,9 +65,6 @@ Avoid:
 - Commands that mutate the working tree unnecessarily — keep your investigation reproducible.
 
 If a command fails or returns empty, read the output before retrying. Do not blindly try variants.
-
-## {THINK_TOOL_NAME}
-Use `{THINK_TOOL_NAME}` between sets of bash calls to consolidate what you've learned, identify the next question, and decide which command(s) will most efficiently answer it. Use it before calling `{GENERATE_ANSWER_TOOL_NAME}` to verify that every claim you intend to make is backed by something you read.
 
 ## {GENERATE_ANSWER_TOOL_NAME}
 Call this once you can answer the user's query with confidence and specific file/line citations. After this call, no further bash calls happen — a separate step writes the final user-facing answer from the conversation history. Do not call it before you have enough evidence; do not call it because you are running out of cycles unless you genuinely have enough.

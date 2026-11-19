@@ -36,7 +36,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
 from onyx.chat.renderer import MessageRenderer, ResponseLayout, ToolRenderer
-from onyx.chat.response import response_record, tool_arguments_for_display
+from onyx.chat.response import response_record
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.configs.constants import DocumentSource
@@ -697,34 +697,6 @@ def test_invalid_tool_arguments_replay_the_error_and_later_answer(
     )
 
 
-@pytest.mark.parametrize("reasoning", ["Reasoning", []])
-def test_replay_hides_configured_thinking_tool(reasoning: str | list[str]) -> None:
-    response = ResponseRecord(
-        run_id="r",
-        status=RunStatus.COMPLETE,
-        steps=[
-            StepRecord(
-                message=AssistantMessage(
-                    id="m",
-                    content=[
-                        ToolCall(
-                            id="think",
-                            name="think",
-                            arguments={"reasoning": reasoning},
-                        )
-                    ],
-                ),
-                generation_status=ExecutionStatus.COMPLETE,
-            ),
-        ],
-    )
-    packets = replay_response(
-        response, {}, {"m": MessageRendering(think_tool="think")}, {}
-    )
-    assert not any(isinstance(p.obj, CustomToolStart) for p in packets)
-    assert any(p.obj.type == "reasoning_delta" for p in packets) == bool(reasoning)
-
-
 @pytest.mark.parametrize("status", [RunStatus.ERROR, RunStatus.CANCELLED])
 def test_interrupted_answer_citations_belong_to_the_selected_text(
     status: RunStatus,
@@ -769,40 +741,23 @@ def test_interrupted_answer_citations_belong_to_the_selected_text(
     assert response.citation_info == []
 
 
-@pytest.mark.parametrize("live", [False, True])
-@pytest.mark.parametrize("tool_thinking", [False, True])
+@pytest.mark.parametrize("live", [True, False])
 @pytest.mark.parametrize(
     "mode", [PresentationMode.CODING_THINKING, PresentationMode.CODING_ANSWER]
 )
 def test_coding_thinking_uses_coding_packets(
-    live: bool, tool_thinking: bool, mode: PresentationMode
+    live: bool, mode: PresentationMode
 ) -> None:
-    settings = MessageRendering(mode=mode, think_tool="think")
+    settings = MessageRendering(mode=mode)
     message = AssistantMessage(
-        id="m",
-        content=[
-            ToolCall(id="t", name="think", arguments={"reasoning": "Inspect the code"})
-            if tool_thinking
-            else ThinkingContent(text="Inspect the code")
-        ],
+        id="m", content=[ThinkingContent(text="Inspect the code")]
     )
     parent = Placement(turn_index=3, tab_index=1)
     if live:
         renderer = MessageRenderer(settings, {}, ResponseLayout(), parent)
-        if tool_thinking:
-            call = message.tool_calls[0]
-            output = renderer.consume(
-                ToolCallStartEvent(
-                    content_index=0, tool_call_id=call.id, tool_name=call.name
-                )
-            )
-            output.extend(
-                renderer.consume(ToolCallEndEvent(content_index=0, tool_call=call))
-            )
-        else:
-            output = renderer.consume(
-                ThinkingDeltaEvent(content_index=0, text="Inspect the code")
-            )
+        output = renderer.consume(
+            ThinkingDeltaEvent(content_index=0, text="Inspect the code")
+        )
         output.extend(renderer.complete(message))
     else:
         output = replay_response(
@@ -1066,36 +1021,17 @@ def test_tool_errors_only_display_explicit_public_details(
 
 
 @pytest.mark.parametrize("live", [False, True])
-def test_completion_batches_content_and_decodes_thinking_once(
-    live: bool, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    decoded_calls: list[str] = []
-
-    def decode(call: ToolCall) -> dict[str, JsonValue]:
-        decoded_calls.append(call.id)
-        return tool_arguments_for_display(call)
-
-    monkeypatch.setattr("onyx.chat.response.tool_arguments_for_display", decode)
-    think = ToolCall(
-        id="think",
-        name="think",
-        arguments={},
-        raw_arguments='{"reasoning":"' + "r" * 128,
-        arguments_complete=False,
-    )
+def test_completion_batches_content(live: bool) -> None:
     tool = ToolCall(id="lookup", name="lookup", arguments={})
     message = AssistantMessage(
         content=[
-            *[ThinkingContent(text="r") for _ in range(128)],
-            think,
+            *[ThinkingContent(text="r") for _ in range(256)],
             *[TextContent(text="a") for _ in range(128)],
             tool,
             *[TextContent(text="b") for _ in range(128)],
         ]
     )
-    renderer = MessageRenderer(
-        MessageRendering(think_tool="think"), {}, ResponseLayout()
-    )
+    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
     output: list[Packet] = []
     if live:
         output.extend(
@@ -1103,7 +1039,6 @@ def test_completion_batches_content_and_decodes_thinking_once(
         )
     output.extend(renderer.complete(message))
     assert renderer.complete(message) == []
-    assert decoded_calls == ["think"]
     assert renderer.reasoning == "r" * 256
     assert renderer.answer == "a" * 128 + "b" * 128
     assert [
@@ -1122,8 +1057,6 @@ def test_completion_batches_content_and_decodes_thinking_once(
     assert (
         renderer.tool_placement(tool.id).turn_index > answer_start.placement.turn_index
     )
-    assert think.arguments == {}
-    assert len(message.content) == 386
 
 
 @pytest.mark.parametrize("public_error", [False, True])

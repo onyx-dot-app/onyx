@@ -196,7 +196,7 @@ def test_coding_rendering_survives_checkpoint_round_trip(
     mode: PresentationMode,
 ) -> None:
     captured = checkpoint()
-    rendering = MessageRendering(mode=mode, think_tool="think_tool")
+    rendering = MessageRendering(mode=mode)
     captured.run_state.steps[0].message.metadata = rendering
     storage = CheckpointStorage({**codec().payload_types, **CHECKPOINT_PAYLOAD_TYPES})
     serialized = storage.save(

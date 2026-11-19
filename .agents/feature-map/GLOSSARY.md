@@ -36,7 +36,7 @@ owns the rules.
   `openapi_schema` or `mcp_server_id`. See [[tools-framework]].
 - `backend/onyx/agents/tools.py:AgentTool` is the tool the shared runtime runs.
   A chat `Tool` becomes one through `Tool.bind`. The control tools of the
-  research and coding agents, such as `think_tool` and `generate_report`, are
+  research and coding agents, such as `generate_report`, are
   `AgentTool` objects only, with no `Tool` class and no table row. See
   [[tools-framework]].
 

@@ -62,6 +62,7 @@ from onyx.chat.models import (
     ChatResponseSnapshot,
     CheckpointBinding,
     MessageRendering,
+    PresentationMode,
     ResponseCheckpoint,
     ResponseRecord,
     accepted_input_messages,
@@ -824,7 +825,6 @@ def test_metadata_sources_survive_storage_without_search_results(
     )
     snapshot.child_runs[0].steps[0].message.metadata = ResearchMessageMetadata(
         phase=ResearchPhase.REPORT,
-        is_reasoning_model=False,
         sources={2: documents[1]},
     )
     projected = project_response(
@@ -1659,7 +1659,9 @@ def test_empty_generation_retains_outcome_and_rendering(
         record,
         db_session=db_session,
         persist_content=True,
-        presentation={"empty-generation": MessageRendering(text_as_thinking=True)},
+        presentation={
+            "empty-generation": MessageRendering(mode=PresentationMode.RESEARCH)
+        },
     )
     db_session.expire(response)
     restored = (
@@ -1675,7 +1677,7 @@ def test_empty_generation_retains_outcome_and_rendering(
     assert restored.steps[0].generation_status == generation_status
     execution = read_chat_execution(response)
     assert execution is not None
-    assert execution.presentation["empty-generation"].text_as_thinking
+    assert execution.presentation["empty-generation"].mode == PresentationMode.RESEARCH
     saved_settings = response.response_items[0].rendering
     assert saved_settings is not None
     assert "run_id" not in saved_settings and "step_index" not in saved_settings

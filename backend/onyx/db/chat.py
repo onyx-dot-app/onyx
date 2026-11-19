@@ -41,7 +41,6 @@ from onyx.chat.models import (
     ResponseAncestry,
     SessionAncestor,
 )
-from onyx.chat.response import message_thinking
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
@@ -72,7 +71,7 @@ from onyx.file_store.constants import (
 )
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
-from onyx.llm.models import GenerationRequestParams
+from onyx.llm.models import GenerationRequestParams, TextContent, ThinkingContent
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
@@ -1353,13 +1352,16 @@ def get_chat_message_reasoning(chat_message: ChatMessage) -> str | None:
             if item.rendering is not None
             else MessageRendering()
         )
-        if rendering.mode != PresentationMode.ANSWER:
+        if rendering.mode not in (PresentationMode.ANSWER, PresentationMode.RESEARCH):
             continue
-        return message_thinking(
-            item.message,
-            rendering.think_tool,
-            text_as_thinking=rendering.text_as_thinking,
-        )
+        message = item.message
+        if rendering.mode == PresentationMode.RESEARCH:
+            return "".join(
+                block.text
+                for block in message.content
+                if isinstance(block, (TextContent, ThinkingContent))
+            )
+        return message.thinking
     return None
 
 

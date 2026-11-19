@@ -65,7 +65,6 @@ from onyx.chat.tool_results import (
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
-from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage, UserMessage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -241,9 +240,6 @@ def message_presentation(
         mode=PresentationMode.CODING_THINKING
         if parent_tool_name == CODING_AGENT_TOOL_NAME
         else PresentationMode.ANSWER,
-        think_tool=THINK_TOOL_NAME
-        if parent_tool_name == CODING_AGENT_TOOL_NAME
-        else None,
     )
     if isinstance(metadata, ChatMessageMetadata):
         presentation.citation_mode = (
@@ -262,10 +258,7 @@ def message_presentation(
         if metadata.phase == ResearchPhase.PLANNING:
             presentation.mode = PresentationMode.PLAN
         elif metadata.phase == ResearchPhase.RESEARCH:
-            presentation.text_as_thinking = True
-            presentation.think_tool = (
-                THINK_TOOL_NAME if not metadata.is_reasoning_model else None
-            )
+            presentation.mode = PresentationMode.RESEARCH
         elif metadata.phase == ResearchPhase.REPORT:
             presentation.mode = (
                 PresentationMode.REPORT
@@ -369,7 +362,10 @@ def _project_response_display(
                 parent_tool_name=parent_tool_name,
             )
             presentation[message_id] = setting
-            if node is not snapshot or setting.mode != PresentationMode.ANSWER:
+            if node is not snapshot or setting.mode not in (
+                PresentationMode.ANSWER,
+                PresentationMode.RESEARCH,
+            ):
                 continue
             renderer = MessageRenderer(
                 setting,
@@ -505,8 +501,7 @@ class ResponsePresenter:
             calls = [
                 call
                 for call in event.message.tool_calls
-                if call.name != renderer.settings.think_tool
-                and call.name not in HIDDEN_TOOLS
+                if call.name not in HIDDEN_TOOLS
             ]
             for call in calls:
                 tool_placement = renderer.tool_placement(call.id)
@@ -615,14 +610,10 @@ def replay_response(
         packets.extend(user_message_packets(step.input_messages, layout, parent))
         message = step.message
         message_id = _message_identity(message)
-        setting = settings.get(message_id, MessageRendering(mode=default_mode))
+        setting = settings.get(message_id) or MessageRendering(mode=default_mode)
         renderer = MessageRenderer(setting, documents, layout, parent)
         packets.extend(renderer.complete(message))
-        calls = [
-            call
-            for call in message.tool_calls
-            if call.name not in HIDDEN_TOOLS and call.name != setting.think_tool
-        ]
+        calls = [call for call in message.tool_calls if call.name not in HIDDEN_TOOLS]
         if not calls:
             continue
         for call in calls:

@@ -232,6 +232,7 @@ class CitationMode(str, Enum):
 
 class PresentationMode(str, Enum):
     ANSWER = "answer"
+    RESEARCH = "research"
     PLAN = "plan"
     REPORT = "report"
     CODING_THINKING = "coding_thinking"
@@ -252,8 +253,6 @@ class MessageRendering(BaseModel):
     """Chat display settings retained with one generated message for history replay."""
 
     mode: PresentationMode = PresentationMode.ANSWER
-    text_as_thinking: bool = False
-    think_tool: str | None = None
     is_clarification: bool = False
     citation_mode: CitationMode | None = None
     citation_documents: dict[int, str] = Field(default_factory=dict)

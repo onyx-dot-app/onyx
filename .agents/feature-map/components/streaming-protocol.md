@@ -206,9 +206,8 @@ and its resolution once decided, for each request of an ended or suspended
 response from its `approval_request` row, and a suspended response ends with
 `stop(awaiting_user)` ([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
 `chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
-model writes it, with the tool name as `tool_type`; the configured reasoning
-tool streams as reasoning packets instead
-(`chat/renderer.py:MessageRenderer.consume`). Code mode (`code_mode_start`,
+model writes it, with the tool name as `tool_type`. Native model reasoning streams
+as reasoning packets. Code mode (`code_mode_start`,
 `code_mode_delta`) renders each tool call its program makes with that tool's
 own packets at `sub_turn_index` = call index, inside the code mode tab. A
 call that runs across observations keeps its `sub_turn_index` in each tab, so

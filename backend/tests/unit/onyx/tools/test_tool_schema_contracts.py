@@ -6,16 +6,12 @@ from pydantic import JsonValue
 
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_DESCRIPTION,
-    CODING_AGENT_THINK_TOOL_DESCRIPTION,
     GENERATE_ANSWER_TOOL_DESCRIPTION,
 )
 from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_DESCRIPTION,
     GENERATE_REPORT_TOOL_DESCRIPTION,
-    RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION,
-    RESEARCH_AGENT_THINK_TOOL_DESCRIPTION,
     RESEARCH_AGENT_TOOL_DESCRIPTION,
-    THINK_TOOL_DESCRIPTION,
 )
 from onyx.llm.models import ToolDefinition
 from onyx.tools.interface import Tool
@@ -85,14 +81,10 @@ def _check_closed_objects(schema: JsonValue) -> None:
             )
         ],
         BASH_TOOL_DESCRIPTION,
-        CODING_AGENT_THINK_TOOL_DESCRIPTION,
         GENERATE_ANSWER_TOOL_DESCRIPTION,
         GENERATE_PLAN_TOOL_DESCRIPTION,
         GENERATE_REPORT_TOOL_DESCRIPTION,
-        RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION,
-        RESEARCH_AGENT_THINK_TOOL_DESCRIPTION,
         RESEARCH_AGENT_TOOL_DESCRIPTION,
-        THINK_TOOL_DESCRIPTION,
     ],
     ids=lambda definition: definition.name,
 )
