@@ -8,8 +8,8 @@ import {
   PacketType,
   SearchToolPacket,
 } from "@/app/app/services/streamingModels";
-import { constructCurrentSearchState } from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
-import { isGroupEndPacket } from "@/app/app/message/messageComponents/timeline/packetHelpers";
+import { constructCurrentSearchState } from "@/lib/timeline/chat/renderers/search/searchStateUtils";
+import { isGroupEndPacket } from "@/lib/timeline/chat/packetHelpers";
 import { isDisplayPacket, isToolPacket } from "@/app/app/services/packetUtils";
 import {
   SvgListCheck,

@@ -21,7 +21,7 @@ import {
 import { getMultiModelChildren } from "@/app/app/message/multiModel";
 import type { Message } from "@/app/app/types";
 import type { ApprovalStatus } from "@/lib/approvals/types";
-import type { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
+import type { GroupedPacket } from "@/lib/timeline/chat/hooks/packetProcessor";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
 
 /** What one response's packets say about an approval request. */

@@ -1,5 +1,5 @@
 import { JSX } from "react";
-import type { NestedCall } from "@/app/app/message/messageComponents/timeline/packetHelpers";
+import type { NestedCall } from "@/lib/timeline/chat/packetHelpers";
 import { MinimalAgent } from "@/lib/agents/types";
 import { Packet, StopReason } from "../../services/streamingModels";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
@@ -7,7 +7,7 @@ import { ProjectFile } from "@/lib/projects/types";
 import { LlmDescriptor } from "@/lib/hooks";
 import type { IconFunctionComponent } from "@opal/types";
 import { CitationMap } from "@/app/app/types";
-import { TimelineSurfaceBackground } from "@/lib/timeline/primitives/TimelineSurface";
+import { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
 
 export enum RenderType {
   HIGHLIGHT = "highlight",
