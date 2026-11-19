@@ -12591,7 +12591,10 @@
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {セッション {sessionId} に入力を送信中} failed {セッション {sessionId} に入力を送信できませんでした} canceled {キャンセルされました} done {セッション {sessionId} に入力を送信しました} other {セッション {sessionId} に入力を送信しました}}} check {{phase, select, running {セッション {sessionId} を確認中} failed {セッション {sessionId} を確認できませんでした} canceled {キャンセルされました} done {セッション {sessionId} を確認しました} other {セッション {sessionId} を確認しました}}} other {セッション {sessionId}}}"
+            "status": "{kind, select, send {{phase, select, running {セッション {sessionId} に入力を送信中} failed {セッション {sessionId} に入力を送信できませんでした} canceled {キャンセルされました} done {セッション {sessionId} に入力を送信しました} other {セッション {sessionId} に入力を送信しました}}} check {{phase, select, running {セッション {sessionId} を確認中} failed {セッション {sessionId} を確認できませんでした} canceled {キャンセルされました} done {セッション {sessionId} を確認しました} other {セッション {sessionId} を確認しました}}} other {セッション {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {セッションに入力を送信中} failed {セッションに入力を送信できませんでした} canceled {キャンセルされました} done {セッションに入力を送信しました} other {セッションに入力を送信しました}}} check {{phase, select, running {セッションを確認中} failed {セッションを確認できませんでした} canceled {キャンセルされました} done {セッションを確認しました} other {セッションを確認しました}}} other {セッション}}"
+            }
           },
           "output": {
             "title": "出力"

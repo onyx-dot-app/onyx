@@ -54,15 +54,14 @@ export function countryCodeToFlag(code: string | null | undefined): string {
 const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069\u200E\u200F\u061C]/g;
 
 /**
- * Text without its bidi controls, for display or parsing only: a path or label
- * from a sandbox shows its characters in their own order.
+ * Text without its bidi controls, for display or parsing only.
  *
- * Bidi isolation rule for untrusted text (sandbox paths, labels, patches,
- * errors): strip its controls with this function, and show it in an element
- * with a `dir` attribute, which isolates it so it cannot reorder the text
- * around it. Use `dir="ltr"` for code and paths, and `dir="auto"` for labels.
- * Text that is its own flex item cannot reorder its neighbors, so it needs
- * only the strip.
+ * Bidi rule for untrusted text: strip the controls from paths and labels with
+ * this function, so they show their characters in their own order. Show all
+ * untrusted text in an element with a `dir` attribute, which isolates it so it
+ * cannot reorder the text around it: `dir="ltr"` for code and paths,
+ * `dir="auto"` for labels. Patches and errors are isolated but keep their
+ * exact characters.
  */
 export function stripBidiControls(text: string): string {
   return text.replace(BIDI_CONTROLS, "");

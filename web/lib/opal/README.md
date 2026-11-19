@@ -162,10 +162,7 @@ The tag pattern must match `opal/v*.*.*` for the workflow to fire.
 - Imports inside the lib use the `@opal/` path alias; never `@/`.
 - Types/interfaces are declared at the top of `components.tsx` without `export`; everything is
   re-exported from a single `export { Foo, type FooProps };` block at the bottom.
-- Untrusted text (sandbox paths, labels, patches, errors) goes through `stripBidiControls` and
-  shows in an element with a `dir` attribute: `ltr` for code and paths, `auto` for labels. The
-  attribute isolates the text, so it cannot reorder the text around it. Text that is its own flex
-  item needs only the strip.
+- For the bidi rule for untrusted text, see `stripBidiControls` in `src/utils.ts`.
 - See `web/AGENTS.md` for broader frontend standards.
 
 ## Third-party trademarks

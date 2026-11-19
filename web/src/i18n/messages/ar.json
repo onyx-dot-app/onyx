@@ -12591,7 +12591,10 @@
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة {sessionId}} failed {تعذر إرسال إدخال إلى الجلسة {sessionId}} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة {sessionId}} other {تم إرسال إدخال إلى الجلسة {sessionId}}}} check {{phase, select, running {جارٍ فحص الجلسة {sessionId}} failed {تعذر فحص الجلسة {sessionId}} canceled {أُلغي} done {تم فحص الجلسة {sessionId}} other {تم فحص الجلسة {sessionId}}}} other {الجلسة {sessionId}}}"
+            "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة {sessionId}} failed {تعذر إرسال إدخال إلى الجلسة {sessionId}} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة {sessionId}} other {تم إرسال إدخال إلى الجلسة {sessionId}}}} check {{phase, select, running {جارٍ فحص الجلسة {sessionId}} failed {تعذر فحص الجلسة {sessionId}} canceled {أُلغي} done {تم فحص الجلسة {sessionId}} other {تم فحص الجلسة {sessionId}}}} other {الجلسة {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة} failed {تعذر إرسال إدخال إلى الجلسة} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة} other {تم إرسال إدخال إلى الجلسة}}} check {{phase, select, running {جارٍ فحص الجلسة} failed {تعذر فحص الجلسة} canceled {أُلغي} done {تم فحص الجلسة} other {تم فحص الجلسة}}} other {الجلسة}}"
+            }
           },
           "output": {
             "title": "المخرجات"

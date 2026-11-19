@@ -12591,7 +12591,10 @@
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {Enviando entrada para a sessão {sessionId}} failed {Não foi possível enviar a entrada para a sessão {sessionId}} canceled {Cancelado} done {Entrada enviada para a sessão {sessionId}} other {Entrada enviada para a sessão {sessionId}}}} check {{phase, select, running {Verificando a sessão {sessionId}} failed {Não foi possível verificar a sessão {sessionId}} canceled {Cancelado} done {Sessão {sessionId} verificada} other {Sessão {sessionId} verificada}}} other {Sessão {sessionId}}}"
+            "status": "{kind, select, send {{phase, select, running {Enviando entrada para a sessão {sessionId}} failed {Não foi possível enviar a entrada para a sessão {sessionId}} canceled {Cancelado} done {Entrada enviada para a sessão {sessionId}} other {Entrada enviada para a sessão {sessionId}}}} check {{phase, select, running {Verificando a sessão {sessionId}} failed {Não foi possível verificar a sessão {sessionId}} canceled {Cancelado} done {Sessão {sessionId} verificada} other {Sessão {sessionId} verificada}}} other {Sessão {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {Enviando entrada para a sessão} failed {Não foi possível enviar a entrada para a sessão} canceled {Cancelado} done {Entrada enviada para a sessão} other {Entrada enviada para a sessão}}} check {{phase, select, running {Verificando a sessão} failed {Não foi possível verificar a sessão} canceled {Cancelado} done {Sessão verificada} other {Sessão verificada}}} other {Sessão}}"
+            }
           },
           "output": {
             "title": "Saída"

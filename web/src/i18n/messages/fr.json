@@ -12591,7 +12591,10 @@
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session {sessionId}} failed {Impossible d'envoyer la saisie à la session {sessionId}} canceled {Annulé} done {Saisie envoyée à la session {sessionId}} other {Saisie envoyée à la session {sessionId}}}} check {{phase, select, running {Vérification de la session {sessionId}} failed {Impossible de vérifier la session {sessionId}} canceled {Annulé} done {Session {sessionId} vérifiée} other {Session {sessionId} vérifiée}}} other {Session {sessionId}}}"
+            "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session {sessionId}} failed {Impossible d'envoyer la saisie à la session {sessionId}} canceled {Annulé} done {Saisie envoyée à la session {sessionId}} other {Saisie envoyée à la session {sessionId}}}} check {{phase, select, running {Vérification de la session {sessionId}} failed {Impossible de vérifier la session {sessionId}} canceled {Annulé} done {Session {sessionId} vérifiée} other {Session {sessionId} vérifiée}}} other {Session {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session} failed {Impossible d'envoyer la saisie à la session} canceled {Annulé} done {Saisie envoyée à la session} other {Saisie envoyée à la session}}} check {{phase, select, running {Vérification de la session} failed {Impossible de vérifier la session} canceled {Annulé} done {Session vérifiée} other {Session vérifiée}}} other {Session}}"
+            }
           },
           "output": {
             "title": "Sortie"

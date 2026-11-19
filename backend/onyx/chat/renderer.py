@@ -838,14 +838,8 @@ class ToolRenderer:
         elif is_file_tool(name):
             text_key, path_key = FILE_TOOL_ARGUMENTS[name]
             patch = _STRING.validate_python(args.get(text_key, ""))
-            path = (
-                ""
-                if path_key is None
-                else _STRING.validate_python(args.get(path_key, ""))
-            )
-            # A call without a file path, such as one with wrong-typed
-            # arguments, has no file header.
-            if path:
+            if path_key is not None:
+                path = _STRING.validate_python(args.get(path_key, ""))
                 # An edit with an empty old_string creates the file; write's
                 # end packet tells an added file from an updated one.
                 old = (
@@ -853,7 +847,9 @@ class ToolRenderer:
                     if name == EditTool.NAME
                     else ""
                 )
-                patch = display_patch(path, old or None, patch)
+                # Without a file path the text is not a patch, so the card
+                # starts empty.
+                patch = display_patch(path, old or None, patch) if path else ""
             objects = [packets.ApplyPatchStart(patch=patch, tool_name=name)]
         elif name == PublishFilesTool.NAME:
             objects = [

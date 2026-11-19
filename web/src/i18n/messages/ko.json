@@ -12591,7 +12591,10 @@
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {세션 {sessionId}에 입력을 보내는 중} failed {세션 {sessionId}에 입력을 보내지 못함} canceled {취소됨} done {세션 {sessionId}에 입력을 보냄} other {세션 {sessionId}에 입력을 보냄}}} check {{phase, select, running {세션 {sessionId} 확인 중} failed {세션 {sessionId}을(를) 확인하지 못함} canceled {취소됨} done {세션 {sessionId} 확인함} other {세션 {sessionId} 확인함}}} other {세션 {sessionId}}}"
+            "status": "{kind, select, send {{phase, select, running {세션 {sessionId}에 입력을 보내는 중} failed {세션 {sessionId}에 입력을 보내지 못함} canceled {취소됨} done {세션 {sessionId}에 입력을 보냄} other {세션 {sessionId}에 입력을 보냄}}} check {{phase, select, running {세션 {sessionId} 확인 중} failed {세션 {sessionId}을(를) 확인하지 못함} canceled {취소됨} done {세션 {sessionId} 확인함} other {세션 {sessionId} 확인함}}} other {세션 {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {세션에 입력을 보내는 중} failed {세션에 입력을 보내지 못함} canceled {취소됨} done {세션에 입력을 보냄} other {세션에 입력을 보냄}}} check {{phase, select, running {세션 확인 중} failed {세션을 확인하지 못함} canceled {취소됨} done {세션 확인함} other {세션 확인함}}} other {세션}}"
+            }
           },
           "output": {
             "title": "출력"

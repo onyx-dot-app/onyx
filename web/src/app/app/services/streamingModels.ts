@@ -452,7 +452,8 @@ export interface FileToolProgress extends BaseObj {
   tool_name: FileToolName;
   // The files the arguments name so far, in order
   paths: string[];
-  // The lines of the file text or patch so far
+  // The lines of the file text or patch so far; a write or edit card shows
+  // them, an apply_patch card shows the count and list of files instead
   lines: number;
 }
 

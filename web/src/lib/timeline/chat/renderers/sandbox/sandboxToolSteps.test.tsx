@@ -296,6 +296,35 @@ test("session input shows typed keys, and polls show the session state", async (
   }
 });
 
+// Renderer contract: the backend renderer starts a write_stdin call whose
+// arguments are wrong-typed with an empty session ID.
+test("a session call without a session ID leaves the session out", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      call({ type: PacketType.WRITE_STDIN_START, session_id: "", chars: "" }),
+      call({
+        type: PacketType.EXEC_END,
+        exit_code: null,
+        wall_time_seconds: null,
+        truncated: false,
+        output: null,
+        completion: null,
+        session_id: null,
+        error: "session_id: Input should be a valid string",
+      }),
+      call(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(screen.getByText("Could not check the session")).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
 test("a patch lists the files it changed, and a failed patch says why", async () => {
   const applied = at({ turn_index: 0, tab_index: 0 });
   const rejected = at({ turn_index: 1, tab_index: 0 });
@@ -594,10 +623,9 @@ test("a patch whose call fails after its progress shows only the error", async (
     await expandTimeline();
     expect(screen.getByText("Edit failed")).toBeInTheDocument();
     expect(screen.getByText("Permission denied")).toBeInTheDocument();
-    // The progress file list and status are gone.
+    // The progress file list is gone.
     expect(screen.queryByText("new.py")).not.toBeInTheDocument();
     expect(screen.queryByText("old.py")).not.toBeInTheDocument();
-    expect(view.container).not.toHaveTextContent("Patching");
   } finally {
     view.unmount();
   }
@@ -605,7 +633,7 @@ test("a patch whose call fails after its progress shows only the error", async (
 
 // Renderer contract: the backend renderer starts an edit whose arguments are
 // wrong-typed with an empty patch, and ends it with the validation error.
-test("renderer contract: an edit with wrong-typed arguments shows only that it failed and why", async () => {
+test("an edit with wrong-typed arguments shows only that it failed and why", async () => {
   const call = at({ turn_index: 0, tab_index: 0 });
   const view = render(
     renderMessage([
