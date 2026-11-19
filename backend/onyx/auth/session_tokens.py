@@ -18,9 +18,13 @@ from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
+from fastapi import Response
+from fastapi_users.authentication import CookieTransport
 from pydantic import AwareDatetime, BaseModel, ConfigDict, ValidationError
 
 from onyx.auth.constants import API_KEY_PREFIX, DEPRECATED_API_KEY_PREFIX, PAT_PREFIX
+from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS, WEB_DOMAIN
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -30,6 +34,15 @@ logger = setup_logger()
 # How long an entry outlives its logical expiry (and how long a tombstone
 # lingers); past this, rejections classify as NOT_FOUND.
 SESSION_TOKEN_GRACE_PERIOD_SECONDS = 60 * 60
+
+# The cookie outlives the logical expiry by the grace window so a dead token is
+# still presented and can be classified (expired/terminated) instead of the
+# browser silently dropping it.
+cookie_transport = CookieTransport(
+    cookie_max_age=SESSION_EXPIRE_TIME_SECONDS + SESSION_TOKEN_GRACE_PERIOD_SECONDS,
+    cookie_secure=WEB_DOMAIN.startswith("https"),
+    cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
+)
 
 
 class SessionTokenValue(BaseModel):
@@ -220,7 +233,18 @@ def build_session_rejection_error() -> OnyxError | None:
             "the grace window, or Redis dropped the key (restart/eviction/flush)."
         )
 
-    return OnyxError(
-        _REASON_TO_ERROR_CODE[rejection.reason],
-        _REASON_TO_DETAIL[rejection.reason],
+    error_code = _REASON_TO_ERROR_CODE[rejection.reason]
+    # No stored value can ever accept an unrecognized token, so the response
+    # also expires the cookie (the logout Set-Cookie) and the browser stops
+    # presenting it. Expired and terminated cookies stay for the grace window
+    # so other tabs can still name the reason.
+    headers = (
+        {
+            "set-cookie": cookie_transport._set_logout_cookie(Response()).headers[
+                "set-cookie"
+            ]
+        }
+        if error_code == OnyxErrorCode.SESSION_UNRECOGNIZED
+        else None
     )
+    return OnyxError(error_code, _REASON_TO_DETAIL[rejection.reason], headers=headers)

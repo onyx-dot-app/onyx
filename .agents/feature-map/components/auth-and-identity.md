@@ -95,8 +95,10 @@ strategies in `onyx/auth/users.py`. A Redis session value records its own
 expiry. Logout overwrites it with a tombstone
 (`auth/session_tokens.py:build_session_tombstone_value`). The cookie lives a
 grace period past the session, so a dead token still arrives and
-`classify_session_token_value` can name the reason. The web client
-(`web/src/lib/auth/hooks.ts:useSessionWatcher`) turns that 403 into the
+`classify_session_token_value` can name the reason. A token with no Redis
+entry gets `SESSION_UNRECOGNIZED`, and that 403 also expires the cookie
+(`build_session_rejection_error`), so the browser stops sending it. The web
+client (`web/src/lib/auth/hooks.ts:useSessionWatcher`) turns that 403 into the
 session-ended message.
 
 **SSO.** `SSOProvider` rows hold the OIDC, Google and SAML settings. Login

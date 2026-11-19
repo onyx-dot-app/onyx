@@ -65,13 +65,15 @@ async def test_expired_session_yields_403_with_expired_code(
         # Postcondition.
         assert response.status_code == 403
         assert response.json()["error_code"] == "SESSION_EXPIRED"
+        # The cookie stays for the grace window so other tabs can name the reason.
+        assert "set-cookie" not in response.headers
     finally:
         redis.delete(redis_key)
 
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("tenant_context", "db_session")
-async def test_absent_session_yields_403_with_unrecognized_code(
+async def test_absent_session_yields_403_with_unrecognized_code_and_clears_cookie(
     app: FastAPI,
 ) -> None:
     async with _client(app, secrets.token_urlsafe()) as client:
@@ -79,3 +81,7 @@ async def test_absent_session_yields_403_with_unrecognized_code(
 
     assert response.status_code == 403
     assert response.json()["error_code"] == "SESSION_UNRECOGNIZED"
+    # The browser must stop presenting a token no session can accept.
+    set_cookie = response.headers["set-cookie"]
+    assert set_cookie.startswith(f'{FASTAPI_USERS_AUTH_COOKIE_NAME}="";')
+    assert "Max-Age=0" in set_cookie

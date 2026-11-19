@@ -38,7 +38,6 @@ from fastapi_users import (
 from fastapi_users.authentication import (
     AuthenticationBackend,
     BearerTransport,
-    CookieTransport,
     JWTStrategy,
     RedisStrategy,  # ty: ignore[possibly-missing-import]
     Strategy,
@@ -92,6 +91,7 @@ from onyx.auth.session_tokens import (
     build_session_tombstone_value,
     classify_session_token_value,
     compute_session_expires_at,
+    cookie_transport,
     may_be_session_token,
     physical_session_ttl_seconds,
     record_session_rejection,
@@ -1758,15 +1758,6 @@ async def get_user_manager(
 ) -> AsyncGenerator[UserManager, None]:
     yield UserManager(user_db)
 
-
-# The cookie outlives the logical expiry by the grace window so a dead token is
-# still presented and can be classified (expired/terminated) instead of the
-# browser silently dropping it.
-cookie_transport = CookieTransport(
-    cookie_max_age=SESSION_EXPIRE_TIME_SECONDS + SESSION_TOKEN_GRACE_PERIOD_SECONDS,
-    cookie_secure=WEB_DOMAIN.startswith("https"),
-    cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
-)
 
 # Native mobile clients can't use the HttpOnly auth cookie above, so they
 # authenticate with the SAME stateful session token returned/refreshed as a
