@@ -323,14 +323,36 @@ pub fn toggle(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle) + Send +
         // the caller checked.
         if platform::is_visible(&handle) || state.policy().disable_launcher {
             platform::hide(&handle);
-        } else if state.session().is_err() {
-            when_signed_out(&handle);
-        } else if let Err(e) = platform::ensure(&handle, WebviewUrl::App("launcher.html".into()))
-            .and_then(|()| platform::show(&handle))
-        {
-            log::warn!("could not show launcher: {e}");
         } else {
-            crate::aonyx::set_mood(&handle, crate::aonyx::Mood::Hop);
+            show_now(&handle, when_signed_out);
         }
     });
+}
+
+/// Shows the launcher with what it last showed; does nothing if it is showing.
+pub fn show(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle) + Send + 'static) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if !platform::is_visible(&handle) {
+            show_now(&handle, when_signed_out);
+        }
+    });
+}
+
+fn show_now(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle)) {
+    if app.state::<crate::state::AppState>().session().is_err() {
+        when_signed_out(app);
+    } else if let Err(e) = platform::ensure(app, WebviewUrl::App("launcher.html".into()))
+        .and_then(|()| platform::show(app))
+    {
+        log::warn!("could not show launcher: {e}");
+    } else {
+        crate::aonyx::set_mood(app, crate::aonyx::Mood::Hop);
+    }
+}
+
+/// Whether the launcher is on screen. Safe to call off the main thread.
+pub fn is_visible(app: &AppHandle) -> bool {
+    app.get_webview_window(LAUNCHER)
+        .is_some_and(|w| w.is_visible().unwrap_or(false))
 }

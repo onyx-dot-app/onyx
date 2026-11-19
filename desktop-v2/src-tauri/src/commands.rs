@@ -40,6 +40,7 @@ pub struct Prefs {
     notifications_disabled: bool,
     /// The managed policy exists but is not valid.
     policy_invalid: bool,
+    notify_answers: bool,
 }
 
 const MANAGED: &str = "This setting is managed by your organization.";
@@ -162,8 +163,14 @@ pub fn get_prefs(app: AppHandle, state: State<'_, AppState>) -> Prefs {
         hotkey,
         launch_at_login: login_item::is_enabled(&app).unwrap_or(false),
         server_url,
+        notify_answers: state.config.get().notify_answers(),
         signed_in,
     }
+}
+
+#[tauri::command]
+pub fn set_notify_answers(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
+    state.config.update(|c| c.notify_answers = Some(enabled))
 }
 
 #[tauri::command]
@@ -278,6 +285,15 @@ pub async fn ask(
     )
     .await;
     crate::aonyx::answer_finished(&app, answer, result.is_ok());
+    // An answer cut short by a sign-out does not notify.
+    if current() {
+        let outcome = match &result {
+            Ok(a) if a.awaiting_approval => crate::notify::Outcome::NeedsApproval,
+            Ok(_) => crate::notify::Outcome::Answered,
+            Err(_) => crate::notify::Outcome::Failed,
+        };
+        crate::notify::answer_finished(&app, answer, &question, outcome);
+    }
     let event = match &result {
         Ok(_) => AskEvent::Done,
         Err(message) => AskEvent::Error {

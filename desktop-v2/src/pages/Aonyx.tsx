@@ -170,9 +170,14 @@ function Aonyx() {
     };
 
     const image = images.current[play.anim];
-    if (image && !image.complete) image.onload = () => draw();
+    const onLoad = () => draw();
+    if (image && !image.complete) image.onload = onLoad;
     tick();
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      // A sheet that loads after the animation changed must not draw over the new one.
+      if (image && image.onload === onLoad) image.onload = null;
+    };
   }, [play, reducedMotion]);
 
   // A press that moves drags the window; one that does not is a click.

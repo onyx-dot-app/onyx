@@ -42,6 +42,9 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   markdown. A question after an answer is a follow-up in the same chat. **Search** calls
   `POST /api/search/send-search-message` (EE). If Onyx is hidden (`Cmd+H`), the launcher still
   opens over the current app and Onyx stays hidden.
+- A native notification when an Ask answer finishes while the launcher is hidden
+  (`src-tauri/src/notify.rs`). Only the latest answer notifies. A click on it shows the
+  launcher with the answer. Turn it off in Preferences.
 - SSO in the system browser, where you are often signed in already. The browser runs the
   server's normal OAuth flow with Onyx's mobile SSO parameters and PKCE, and the server ends it
   with `onyx://auth/callback?code=..`. The app swaps the one-time code for a session token

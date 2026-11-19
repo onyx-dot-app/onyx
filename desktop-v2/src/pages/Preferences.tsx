@@ -10,6 +10,7 @@ import {
   getPrefs,
   setHotkey,
   setLaunchAtLogin,
+  setNotifyAnswers,
   signOut,
   type Prefs,
 } from "@/lib/ipc";
@@ -224,6 +225,13 @@ function Preferences() {
     });
   }
 
+  async function onNotifyAnswers(enabled: boolean) {
+    await run(async () => {
+      await setNotifyAnswers(enabled);
+      setPrefs((p) => (p ? { ...p, notifyAnswers: enabled } : p));
+    });
+  }
+
   return (
     <WindowFrame title="Preferences" subtitle="Settings for this device">
       <Section gap={4} alignItems="stretch" height="fit">
@@ -294,6 +302,21 @@ function Preferences() {
               Automatic updates are turned off by your organization.
             </Text>
           ) : null}
+        </PrefSection>
+        <PrefSection title="Notifications">
+          <Section flexDirection="row" justifyContent="between" height="fit">
+            <label htmlFor="notify-answers">
+              <Text font="main-ui-body" color="text-04">
+                Notify me when an answer is ready
+              </Text>
+            </label>
+            <InputSwitch
+              id="notify-answers"
+              checked={prefs?.notifyAnswers ?? true}
+              disabled={!prefs}
+              onCheckedChange={(enabled) => void onNotifyAnswers(enabled)}
+            />
+          </Section>
         </PrefSection>
         <PrefSection title="Account">
           <Text font="main-ui-body" color="text-04">

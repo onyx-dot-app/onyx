@@ -61,9 +61,14 @@ pub fn answer_started(app: &AppHandle) -> u64 {
     id
 }
 
+/// Whether no newer answer has replaced answer `id`.
+pub fn is_latest_answer(id: u64) -> bool {
+    ANSWER.load(Ordering::SeqCst) == id
+}
+
 /// An answer ended. An older answer that a newer one replaced changes nothing.
 pub fn answer_finished(app: &AppHandle, id: u64, ok: bool) {
-    if ANSWER.load(Ordering::SeqCst) == id {
+    if is_latest_answer(id) {
         set_mood(app, if ok { Mood::Happy } else { Mood::Idle });
     }
 }
