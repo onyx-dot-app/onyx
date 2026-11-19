@@ -7,12 +7,14 @@ mod commands;
 mod config;
 mod dialog;
 mod launcher;
+mod login_item;
 #[cfg(target_os = "macos")]
 mod macos_cookies;
 #[cfg(target_os = "macos")]
 mod macos_dialogs;
 mod main_window;
 mod menu;
+mod policy;
 mod qa;
 mod session_store;
 mod shortcut;
@@ -46,12 +48,16 @@ fn main() {
     // Launcher as a non-activating NSPanel (see launcher.rs); macOS only.
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_nspanel::init());
+    // Launch at login on macOS (login_item.rs).
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_plugin_autostart::Builder::new().build());
     let app = builder
         .setup(|app| {
             let config_path = app.path().app_config_dir()?.join("config.json");
-            app.manage(AppState::new(ConfigStore::load(config_path)));
-
             let handle = app.handle();
+            let policy = policy::read(handle);
+            policy::apply_launch_at_login(handle, &policy);
+            app.manage(AppState::new(ConfigStore::load(config_path), policy));
 
             // Windows and Linux: the main window gets its own menu (main_window.rs).
             #[cfg(target_os = "macos")]
@@ -59,11 +65,11 @@ fn main() {
             app.on_menu_event(|app, event| menu::handle(app, event.id().as_ref()));
             menu::build_tray(handle)?;
 
-            let hotkey = app.state::<AppState>().config.get().hotkey();
-            if let Err(e) = shortcut::register(handle, &hotkey) {
-                log::warn!("{e}");
+            policy::sync_hotkey(handle);
+            if app.state::<AppState>().hotkey().is_some() {
+                launcher::preload(handle);
             }
-            launcher::preload(handle);
+            policy::spawn_refresh(handle);
 
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
@@ -97,6 +103,7 @@ fn main() {
             commands::sign_in_with_sso,
             commands::get_prefs,
             commands::set_hotkey,
+            commands::set_launch_at_login,
             commands::change_server,
             commands::sign_out,
             commands::ask,

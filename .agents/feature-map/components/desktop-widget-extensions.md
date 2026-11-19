@@ -62,7 +62,9 @@ shortcut) calls the chat endpoints from Rust with the bearer token:
 (`origin "unknown"`), and it reads the streamed packets (text, citations,
 `stop`, `tool_approval_request`). Search mode calls
 `POST /search/send-search-message`. A change to those request or packet
-shapes must keep the launcher working.
+shapes must keep the launcher working. IT can preset the server and lock
+some settings with managed policy (MDM profile, Windows registry policy, or a
+Linux policy file). The v2 README lists the keys.
 
 It does not own the chat UI that the desktop shell and the side panel load
 ([[chat-frontend]]), the chat endpoints ([[core-chat-loop]]), API keys and JWT

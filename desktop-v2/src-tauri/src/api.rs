@@ -178,6 +178,16 @@ struct SearchResponse {
 
 /// Reduce user input to a server origin such as `https://cloud.onyx.app`.
 pub fn normalize_server_url(input: &str) -> Result<String, String> {
+    normalize(input, false)
+}
+
+/// Like `normalize_server_url`, but allows `http://` on any host: an admin
+/// who sets the server in managed policy may run it on an intranet.
+pub fn normalize_managed_server_url(input: &str) -> Result<String, String> {
+    normalize(input, true)
+}
+
+fn normalize(input: &str, allow_any_http: bool) -> Result<String, String> {
     let trimmed = input.trim().trim_end_matches('/');
     if trimmed.is_empty() {
         return Err("Enter a server URL.".into());
@@ -196,7 +206,7 @@ pub fn normalize_server_url(input: &str) -> Result<String, String> {
     };
     // Passwords and session tokens cross this connection: plain http is only
     // for a server on this computer.
-    if url.scheme() == "http" && !is_loopback_host(host) {
+    if url.scheme() == "http" && !allow_any_http && !is_loopback_host(host) {
         return Err(
             "Use https:// for this server. http:// only works for a server on this computer."
                 .into(),
@@ -522,7 +532,10 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
-    use super::{normalize_server_url, redirect_allowed, sso_options, Api, AuthTypeResponse};
+    use super::{
+        normalize_managed_server_url, normalize_server_url, redirect_allowed, sso_options, Api,
+        AuthTypeResponse,
+    };
     use url::Url;
 
     /// A local HTTP server that answers every request with `response(path)`
@@ -676,6 +689,11 @@ mod tests {
         );
         assert!(normalize_server_url("http://[::1]:3000").is_ok());
         assert!(normalize_server_url("http://onyx.example.com").is_err());
+        assert_eq!(
+            normalize_managed_server_url("http://onyx.corp.internal/").unwrap(),
+            "http://onyx.corp.internal"
+        );
+        assert!(normalize_managed_server_url("ftp://onyx.corp.internal").is_err());
         assert!(normalize_server_url("  ").is_err());
     }
 }

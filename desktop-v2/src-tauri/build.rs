@@ -8,6 +8,7 @@ const COMMANDS: &[&str] = &[
     "sign_in_with_sso",
     "get_prefs",
     "set_hotkey",
+    "set_launch_at_login",
     "change_server",
     "sign_out",
     "ask",

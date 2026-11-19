@@ -38,11 +38,16 @@ log = "0.4"
 libc = "0.2" # QA harness: checks its directory's owner (geteuid)
 
 [target.'cfg(target_os = "macos")'.dependencies]
+tauri-plugin-autostart = "2"
 tauri-nspanel = "2.1.1"
 block2 = "0.6"
 objc2 = "0.6"
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFPreferences", "CFNumber", "CFString"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSGeometry", "NSDictionary"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSAlert", "NSApplication", "NSButton", "NSControl", "NSResponder", "NSTextField", "NSView", "NSWindow"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
 
 [features]
 default = ["custom-protocol"]

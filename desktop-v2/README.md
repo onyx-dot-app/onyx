@@ -26,7 +26,7 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   sites, for OAuth consent and identity providers. Downloads open the native save panel.
   `alert()`, `confirm()` and `prompt()` show native dialogs.
 - Tray icon, standard macOS menus (with Edit), and a Preferences window (`Cmd+,`) for the
-  server and sign-out.
+  server, the launcher shortcut, **Launch at login** and sign-out.
 - Native main window chrome: overlay title bar, the sidebar runs to the top with
   the traffic lights inside it, the collapse button sits on that row, and collapsing slides the
   sidebar fully away. In full screen the button moves to the left edge. The sidebar's top row
@@ -64,6 +64,176 @@ thinks while a launcher answer streams, is happy when it is done, and hops when 
 opens. Click it to open the launcher, drag it anywhere, right-click to hide it. Five more logo
 clicks send it away. Whether it is shown and where it sits are saved in `config.json`. The
 sprite sheets in `public/aonyx/` are played faster than the pack's timing.
+
+## Managed deployment (MDM and Group Policy)
+
+IT can push the app to every device with Kandji, Jamf, Intune or Group Policy, and set it up
+in advance. With a managed server, the app skips onboarding and opens at sign-in.
+
+The app reads the policy at launch, every 5 minutes, before each update check, and each time
+Preferences opens (`src-tauri/src/policy.rs`). A managed value wins over the user's own
+`config.json` value. Preferences shows managed values read-only, with "Managed by your
+organization". Sample files for each platform are in [`deploy/`](deploy/).
+
+| Key | Type | Effect |
+|---|---|---|
+| `ServerURL` | string | The Onyx server. `http://` is allowed here for an intranet server; a server that the user enters must use `https://` (`http://` only for this computer). If the user has not saved a server, onboarding is skipped. A server the user saves later is used instead, unless `LockServerURL` is set. |
+| `LockServerURL` | bool | Always use `ServerURL`, and hide **Change server**. Without a valid `ServerURL`, the user's saved server stays and cannot change. |
+| `DisableAutoUpdate` | bool | The updater does not check for updates, and an update that already downloaded is not installed. **Check for Updates…** says that updates are managed. |
+| `LauncherShortcut` | string | The launcher shortcut, in the Preferences format, for example `CommandOrControl+Shift+Space`. If another app holds the shortcut, the app tries again at each policy read. |
+| `DisableLauncher` | bool | No launcher shortcut, and the launcher does not open. An open launcher closes at the next policy read. |
+| `LaunchAtLogin` | bool | Turns **Launch at login** on or off, and the Preferences switch is locked. See [Launch at login](#launch-at-login). |
+| `DisableNotifications` | bool | Turns off desktop notifications. |
+
+A change to `ServerURL` or `LockServerURL` applies at the next launch. The other keys apply at
+the next policy read.
+
+Booleans accept `true`/`false`, `1`/`0` and `yes`/`no` (as strings too). Other values are not
+valid.
+
+### Invalid policy
+
+The app does not ignore a policy that it cannot read. It fails closed:
+
+- If the policy file or a value cannot be read, Preferences shows "Your organization's Onyx
+  policy is invalid".
+- If the Linux policy file exists but is not a valid JSON object (for example, it has a trailing
+  comma), the server is locked and updates are off. A UTF-8 byte order mark is allowed.
+- An invalid `LockServerURL` or `Disable*` value counts as `true`.
+- An invalid `ServerURL`, `LauncherShortcut` or `LaunchAtLogin` value is ignored.
+
+### Launch at login
+
+The app adds a login item for the current user only: a LaunchAgent on macOS,
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on Windows, and
+`~/.config/autostart/app.onyx.desktop.v2.desktop` on Linux. `LaunchAtLogin` is best effort. A
+user can still turn the item off in System Settings, Task Manager or the desktop's startup
+settings. While the app runs, it sets the item again within five minutes (at each policy read,
+or when Preferences opens). If the app does not run, nothing sets it again. To make sure the
+app opens at login, deploy the login item with your management tool instead:
+
+- macOS: a managed login item (the `com.apple.servicemanagement` payload) for the bundle ID
+  `app.onyx.desktop.v2`, or a LaunchAgent in `/Library/LaunchAgents`.
+- Windows: a value under `HKLM\Software\Microsoft\Windows\CurrentVersion\Run`, with Group
+  Policy Preferences or Intune. Quote the path.
+- Linux: a `.desktop` file in `/etc/xdg/autostart`.
+
+### macOS
+
+macOS reads forced managed preferences for the bundle ID `app.onyx.desktop.v2`. Values that a
+user writes with `defaults write` are not managed and are ignored. Upload this profile
+([`deploy/macos/Onyx.mobileconfig`](deploy/macos/Onyx.mobileconfig)) as a
+custom configuration profile (Kandji: Custom Profile; Jamf Pro: Configuration Profiles, Upload;
+Intune: macOS, Templates, Custom). Give each payload a new `PayloadUUID` (`uuidgen`).
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key>
+      <string>com.apple.ManagedClient.preferences</string>
+      <key>PayloadIdentifier</key>
+      <string>com.example.onyx-desktop.preferences</string>
+      <key>PayloadUUID</key>
+      <string>0B0EFAE4-B391-4C0D-8953-D994C35D8BD8</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>PayloadDisplayName</key>
+      <string>Onyx Desktop settings</string>
+      <key>PayloadContent</key>
+      <dict>
+        <key>app.onyx.desktop.v2</key>
+        <dict>
+          <key>Forced</key>
+          <array>
+            <dict>
+              <key>mcx_preference_settings</key>
+              <dict>
+                <key>ServerURL</key>
+                <string>https://onyx.example.com</string>
+                <key>LockServerURL</key>
+                <true/>
+                <key>DisableAutoUpdate</key>
+                <false/>
+                <key>LauncherShortcut</key>
+                <string>CommandOrControl+Shift+Space</string>
+                <key>DisableLauncher</key>
+                <false/>
+                <key>LaunchAtLogin</key>
+                <true/>
+                <key>DisableNotifications</key>
+                <false/>
+              </dict>
+            </dict>
+          </array>
+        </dict>
+      </dict>
+    </dict>
+  </array>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadIdentifier</key>
+  <string>com.example.onyx-desktop</string>
+  <key>PayloadUUID</key>
+  <string>B9F776F8-59CA-4093-9C03-95707C6E65EA</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+  <key>PayloadDisplayName</key>
+  <string>Onyx Desktop</string>
+  <key>PayloadScope</key>
+  <string>System</string>
+</dict>
+</plist>
+```
+
+To see what the app gets on a device, run `defaults read "/Library/Managed Preferences/app.onyx.desktop.v2"`.
+
+### Windows
+
+The app reads `HKLM\SOFTWARE\Policies\Onyx\Desktop`, then the same key under `HKCU`. A machine
+value wins over a user value. If the app cannot read a machine key or value (for example, access
+is denied), it does not use the user value. The value is not valid. Use `REG_SZ` for strings and `REG_DWORD` (`0` or `1`) for booleans.
+For Group Policy or Intune (imported ADMX), use the templates in
+[`deploy/windows/`](deploy/windows/): copy `Onyx.admx` to `PolicyDefinitions` and `en-US/Onyx.adml`
+to `PolicyDefinitions/en-US`. You can also deploy the values with Group Policy Preferences
+(Registry), an Intune script, or this file:
+
+```reg
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Onyx\Desktop]
+"ServerURL"="https://onyx.example.com"
+"LockServerURL"=dword:00000001
+"DisableAutoUpdate"=dword:00000000
+"LauncherShortcut"="CommandOrControl+Shift+Space"
+"DisableLauncher"=dword:00000000
+"LaunchAtLogin"=dword:00000001
+"DisableNotifications"=dword:00000000
+```
+
+The installer does not set policy values yet (no `msiexec ... SERVER_URL=` property). Deploy them
+separately.
+
+### Linux
+
+The app reads `/etc/onyx-desktop/policy.json`, one JSON object with the same keys
+([`deploy/linux/policy.json`](deploy/linux/policy.json)). Make it readable by all users:
+
+```json
+{
+  "ServerURL": "https://onyx.example.com",
+  "LockServerURL": true,
+  "DisableAutoUpdate": false,
+  "LauncherShortcut": "CommandOrControl+Shift+Space",
+  "DisableLauncher": false,
+  "LaunchAtLogin": true,
+  "DisableNotifications": false
+}
+```
 
 ## Keyboard shortcuts
 
@@ -206,6 +376,7 @@ installed; a build that was changed after signing, or signed with another key, i
 The plugin installs only a version newer than the running one. `requireSignedVersion` makes it
 also check the version in the signature, so a changed feed cannot offer an old signed build
 under a new version number.
+The managed `DisableAutoUpdate` key turns off all checks.
 
 - The feed (`plugins.updater.endpoints`) must be HTTPS. It points at a feed that does not exist
   yet, so checks fail quietly until the feed is set up.

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Onyx Desktop policy. Values go to SOFTWARE\Policies\Onyx\Desktop. -->
+<policyDefinitions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <policyNamespaces>
+    <target prefix="onyx" namespace="Onyx.Policies.Desktop" />
+  </policyNamespaces>
+  <resources minRequiredRevision="1.0" />
+  <supportedOn>
+    <definitions>
+      <definition name="SUPPORTED_OnyxDesktopV2" displayName="$(string.SUPPORTED_OnyxDesktopV2)" />
+    </definitions>
+  </supportedOn>
+  <categories>
+    <category name="Onyx" displayName="$(string.Onyx)" />
+    <category name="OnyxDesktop" displayName="$(string.OnyxDesktop)">
+      <parentCategory ref="Onyx" />
+    </category>
+  </categories>
+  <policies>
+    <policy name="ServerURL" class="Both" displayName="$(string.ServerURL)" explainText="$(string.ServerURL_Explain)" presentation="$(presentation.ServerURL)" key="SOFTWARE\Policies\Onyx\Desktop">
+      <parentCategory ref="OnyxDesktop" />
+      <supportedOn ref="SUPPORTED_OnyxDesktopV2" />
+      <elements>
+        <text id="ServerURL" valueName="ServerURL" required="true" />
+      </elements>
+    </policy>
+    <policy name="LockServerURL" class="Both" displayName="$(string.LockServerURL)" explainText="$(string.LockServerURL_Explain)" key="SOFTWARE\Policies\Onyx\Desktop" valueName="LockServerURL">
+      <parentCategory ref="OnyxDesktop" />
+      <supportedOn ref="SUPPORTED_OnyxDesktopV2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="DisableAutoUpdate" class="Both" displayName="$(string.DisableAutoUpdate)" explainText="$(string.DisableAutoUpdate_Explain)" key="SOFTWARE\Policies\Onyx\Desktop" valueName="DisableAutoUpdate">
+      <parentCategory ref="OnyxDesktop" />
+      <supportedOn ref="SUPPORTED_OnyxDesktopV2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="LauncherShortcut" class="Both" displayName="$(string.LauncherShortcut)" explainText="$(string.LauncherShortcut_Explain)" presentation="$(presentation.LauncherShortcut)" key="SOFTWARE\Policies\Onyx\Desktop">
+      <parentCategory ref="OnyxDesktop" />
+      <supportedOn ref="SUPPORTED_OnyxDesktopV2" />
+      <elements>
+        <text id="LauncherShortcut" valueName="LauncherShortcut" required="true" />
+      </elements>
+    </policy>
+    <policy name="DisableLauncher" class="Both" displayName="$(string.DisableLauncher)" explainText="$(string.DisableLauncher_Explain)" key="SOFTWARE\Policies\Onyx\Desktop" valueName="DisableLauncher">
+      <parentCategory ref="OnyxDesktop" />
+      <supportedOn ref="SUPPORTED_OnyxDesktopV2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="LaunchAtLogin" class="Both" displayName="$(string.LaunchAtLogin)" explainText="$(string.LaunchAtLogin_Explain)" key="SOFTWARE\Policies\Onyx\Desktop" valueName="LaunchAtLogin">
+      <parentCategory ref="OnyxDesktop" />
+      <supportedOn ref="SUPPORTED_OnyxDesktopV2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="DisableNotifications" class="Both" displayName="$(string.DisableNotifications)" explainText="$(string.DisableNotifications_Explain)" key="SOFTWARE\Policies\Onyx\Desktop" valueName="DisableNotifications">
+      <parentCategory ref="OnyxDesktop" />
+      <supportedOn ref="SUPPORTED_OnyxDesktopV2" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+  </policies>
+</policyDefinitions>

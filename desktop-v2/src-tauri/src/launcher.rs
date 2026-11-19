@@ -318,9 +318,12 @@ pub fn preload(app: &AppHandle) {
 pub fn toggle(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle) + Send + 'static) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        if platform::is_visible(&handle) {
+        let state = handle.state::<crate::state::AppState>();
+        // Checked here too: a policy read can turn the launcher off after
+        // the caller checked.
+        if platform::is_visible(&handle) || state.policy().disable_launcher {
             platform::hide(&handle);
-        } else if handle.state::<crate::state::AppState>().session().is_err() {
+        } else if state.session().is_err() {
             when_signed_out(&handle);
         } else if let Err(e) = platform::ensure(&handle, WebviewUrl::App("launcher.html".into()))
             .and_then(|()| platform::show(&handle))
