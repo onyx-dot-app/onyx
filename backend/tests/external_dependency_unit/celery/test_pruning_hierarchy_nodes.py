@@ -21,6 +21,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import (
@@ -335,7 +336,9 @@ def test_pruning_upserts_hierarchy_nodes_to_db(db_session: Session) -> None:
     # Channel C is public and has a group
     assert channel_c.is_public is True
     assert channel_c.external_user_group_ids is not None
-    assert set(channel_c.external_user_group_ids) == {"eng-team"}
+    assert set(channel_c.external_user_group_ids) == {
+        build_ext_group_name_for_onyx("eng-team", TEST_SOURCE)
+    }
 
 
 def test_pruning_upserts_hierarchy_nodes_public_connector(
@@ -491,7 +494,9 @@ def test_pruning_hierarchy_node_upsert_preserves_unspecified_access(
     db_node = get_hierarchy_node_by_raw_id(db_session, CHANNEL_A_ID, TEST_SOURCE)
     assert db_node is not None
     assert db_node.external_user_emails == ["user@example.com"]
-    assert db_node.external_user_group_ids == ["external_group"]
+    assert db_node.external_user_group_ids == [
+        build_ext_group_name_for_onyx("external_group", TEST_SOURCE)
+    ]
     assert db_node.is_public is False
 
 

@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import null
 
+from onyx.access.models import ExternalAccess
 from onyx.access.utils import build_ext_group_names_for_storage
 from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
 from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
@@ -1317,6 +1318,13 @@ def upsert_documents(
 
     includes_permissions = any(doc.external_access for doc in seen_documents.values())
 
+    def stored_group_ids(access: ExternalAccess) -> list[str]:
+        if source is None:
+            raise ValueError("Cannot store external access without a source.")
+        return list(
+            build_ext_group_names_for_storage(access.external_user_group_ids, source)
+        )
+
     insert_stmt = insert(DbDocument).values(
         [
             model_to_dict(
@@ -1341,11 +1349,8 @@ def upsert_documents(
                             "external_user_emails": list(
                                 doc.external_access.external_user_emails
                             ),
-                            "external_user_group_ids": list(
-                                build_ext_group_names_for_storage(
-                                    doc.external_access.external_user_group_ids,
-                                    source,
-                                )
+                            "external_user_group_ids": stored_group_ids(
+                                doc.external_access
                             ),
                             "is_public": doc.external_access.is_public,
                         }
