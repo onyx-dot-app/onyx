@@ -24,7 +24,27 @@ export interface OnyxMeta {
   snapshotText?: string;
   /** For a plan entry: its present-tense label while it runs. */
   activeForm?: string;
+  /**
+   * For a chat tool call: which Onyx tool it is. The step body renders from
+   * the tool's own packets.
+   */
+  toolType?: OnyxToolType;
 }
+
+/** Onyx chat tools, as the timeline names them. */
+export type OnyxToolType =
+  | "internal_search"
+  | "web_search"
+  | "open_url"
+  | "python"
+  | "image_generation"
+  | "custom"
+  | "file_reader"
+  | "memory"
+  | "deep_research_plan"
+  | "research_agent"
+  | "coding_agent"
+  | "bash";
 
 /** ACP's extension field on every object. */
 export interface AcpMeta {
