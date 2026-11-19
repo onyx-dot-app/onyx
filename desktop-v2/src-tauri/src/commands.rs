@@ -243,16 +243,11 @@ pub async fn open_external(
     // A page on the signed-in server opens in the Onyx window, which has the
     // session; the browser would show the web sign-in page instead.
     if let (Some(base), Ok((server, token))) = (&base, state.session()) {
+        // The parsed URL, not its path: a path such as `//host/x` joined to
+        // the server again names another host.
         if parsed.origin() == base.origin() {
-            let mut path = parsed.path().to_string();
-            if let Some(query) = parsed.query() {
-                path = format!("{path}?{query}");
-            }
-            if let Some(fragment) = parsed.fragment() {
-                path = format!("{path}#{fragment}");
-            }
             windows::hide_launcher(&app);
-            return main_window::open(&app, &server, &token, &path).await;
+            return main_window::open_url(&app, &server, &token, parsed).await;
         }
     }
     main_window::open_external(&app, parsed.as_str());

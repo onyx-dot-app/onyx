@@ -14,6 +14,17 @@ pub struct Api {
     http: Client,
 }
 
+const MAX_REDIRECTS: usize = 10;
+
+/// Redirects stay on the server's origin (scheme, host and port). A request
+/// body (a password, an SSO code) must never go to another host or over plain HTTP.
+fn redirect_allowed(previous: &[Url], next: &Url) -> bool {
+    previous.len() <= MAX_REDIRECTS
+        && previous
+            .first()
+            .is_some_and(|first| first.origin() == next.origin())
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchHit {
@@ -226,6 +237,13 @@ impl Api {
         let http = Client::builder()
             .user_agent(USER_AGENT)
             .connect_timeout(Duration::from_secs(10))
+            .redirect(reqwest::redirect::Policy::custom(|attempt| {
+                if redirect_allowed(attempt.previous(), attempt.url()) {
+                    attempt.follow()
+                } else {
+                    attempt.error("the server redirected to another site")
+                }
+            }))
             .build()
             .expect("failed to build HTTP client");
         Self { http }
@@ -499,7 +517,94 @@ impl Api {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_server_url, sso_options, AuthTypeResponse};
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    use super::{normalize_server_url, redirect_allowed, sso_options, Api, AuthTypeResponse};
+    use url::Url;
+
+    /// A local HTTP server that answers every request with `response(path)`
+    /// and counts the requests. Returns its base URL.
+    fn serve(response: impl Fn(&str) -> String + Send + 'static) -> (String, Arc<AtomicUsize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let hits = Arc::new(AtomicUsize::new(0));
+        let counter = hits.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { return };
+                counter.fetch_add(1, Ordering::SeqCst);
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut request_line = String::new();
+                let _ = reader.read_line(&mut request_line);
+                let path = request_line.split(' ').nth(1).unwrap_or("/").to_string();
+                // The headers end at the first empty line; the body is not needed.
+                let mut line = String::new();
+                while reader.read_line(&mut line).is_ok_and(|n| n > 2) {
+                    line.clear();
+                }
+                let _ = stream.write_all(response(&path).as_bytes());
+            }
+        });
+        (base, hits)
+    }
+
+    fn redirect_to(location: &str) -> String {
+        format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+    }
+
+    const OK: &str = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok";
+
+    fn post(url: &str) -> Result<reqwest::StatusCode, reqwest::Error> {
+        tauri::async_runtime::block_on(async {
+            Api::new()
+                .http
+                .post(url)
+                .body("password=secret")
+                .send()
+                .await
+                .map(|r| r.status())
+        })
+    }
+
+    #[test]
+    fn redirects_to_another_origin_are_not_followed() {
+        let (other, other_hits) = serve(|_| OK.to_string());
+        let target = format!("{other}/steal");
+        let (server, _) = serve(move |_| redirect_to(&target));
+        assert!(post(&format!("{server}/api/auth/mobile/login")).is_err());
+        assert_eq!(other_hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn redirects_on_the_same_origin_are_followed() {
+        let (server, hits) = serve(|path| {
+            if path == "/start" {
+                redirect_to("/end")
+            } else {
+                OK.to_string()
+            }
+        });
+        assert_eq!(
+            post(&format!("{server}/start")).unwrap(),
+            reqwest::StatusCode::OK
+        );
+        assert_eq!(hits.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn redirect_rule() {
+        let url = |s: &str| Url::parse(s).unwrap();
+        let start = [url("https://onyx.corp/api/x")];
+        assert!(redirect_allowed(&start, &url("https://onyx.corp/api/y")));
+        assert!(!redirect_allowed(&start, &url("https://evil.example/")));
+        assert!(!redirect_allowed(&start, &url("http://onyx.corp/api/y")));
+        assert!(!redirect_allowed(&start, &url("https://onyx.corp:8443/")));
+        let long = vec![url("https://onyx.corp/"); 11];
+        assert!(!redirect_allowed(&long, &url("https://onyx.corp/")));
+    }
 
     fn options(json: &str) -> Vec<(String, bool, Option<String>)> {
         let parsed: AuthTypeResponse = serde_json::from_str(json).unwrap();

@@ -58,15 +58,37 @@ pub enum LinkAction {
     Block,
 }
 
+/// A `blob:` URL has the origin of the page that made it, so another site (in
+/// a popup) cannot show its own page in the main window. `data:` pages have no
+/// origin and are blocked.
 pub fn classify(url: &Url, server_origin: &str) -> LinkAction {
+    let same_origin = url.origin().ascii_serialization() == server_origin;
     match url.scheme() {
-        "about" | "blob" | "data" => LinkAction::Allow,
-        "http" | "https" if url.origin().ascii_serialization() == server_origin => {
-            LinkAction::Allow
-        }
+        // about:srcdoc is the document of an iframe with inline content.
+        "about" if matches!(url.path(), "blank" | "srcdoc") => LinkAction::Allow,
+        "blob" | "http" | "https" if same_origin => LinkAction::Allow,
         "http" | "https" | "mailto" | "tel" => LinkAction::External,
         _ => LinkAction::Block,
     }
+}
+
+/// Popups and the SSO window may also load other HTTPS sites (OAuth consent,
+/// identity providers). All other URLs follow the main window's rules.
+pub fn classify_popup(url: &Url, server_origin: &str) -> LinkAction {
+    match classify(url, server_origin) {
+        LinkAction::External if url.scheme() == "https" => LinkAction::Allow,
+        action => action,
+    }
+}
+
+/// Resolves `path` against the server. Fails if the result is on another
+/// origin: `//host/x` and `/\host/x` are paths that name another host.
+pub fn server_url_join(server_url: &Url, path: &str) -> Result<Url, String> {
+    let target = server_url.join(path).map_err(|e| e.to_string())?;
+    if target.origin() != server_url.origin() {
+        return Err("That link is not on your Onyx server.".into());
+    }
+    Ok(target)
 }
 
 /// The web app opens popups for OAuth consent (connectors, MCP): it opens a
@@ -75,9 +97,8 @@ pub fn classify(url: &Url, server_origin: &str) -> LinkAction {
 /// the site's host so it is never mistaken for Onyx. Plain HTTP and other
 /// schemes follow the main window's rules.
 fn popup_navigation_allowed(app: &AppHandle, label: &str, url: &Url, server_origin: &str) -> bool {
-    match classify(url, server_origin) {
+    match classify_popup(url, server_origin) {
         LinkAction::Allow => true,
-        LinkAction::External if url.scheme() == "https" => true,
         LinkAction::External => {
             open_external(app, url.as_str());
             close_if_blank(app, label);
@@ -240,9 +261,23 @@ fn hand_over_session(
 
 /// Opens (or reuses) the main window logged in as `token`, at `path` on the server.
 pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Result<(), String> {
+    let server_url = Url::parse(server).map_err(|e| e.to_string())?;
+    let target = server_url_join(&server_url, path)?;
+    open_url(app, server, token, target).await
+}
+
+/// Like `open`, for a URL that is already parsed. It must be on the server's origin.
+pub async fn open_url(
+    app: &AppHandle,
+    server: &str,
+    token: &str,
+    target: Url,
+) -> Result<(), String> {
     let epoch = app.state::<AppState>().epoch();
     let server_url = Url::parse(server).map_err(|e| e.to_string())?;
-    let target = server_url.join(path).map_err(|e| e.to_string())?;
+    if target.origin() != server_url.origin() {
+        return Err("That link is not on your Onyx server.".into());
+    }
 
     if let Some(window) = app.get_webview_window(LABEL) {
         window.navigate(target).map_err(|e| e.to_string())?;
@@ -399,13 +434,17 @@ pub fn spawn_session_renewal(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify, LinkAction};
+    use super::{classify, classify_popup, server_url_join, LinkAction};
     use url::Url;
 
     const ORIGIN: &str = "http://localhost:3000";
 
     fn action(url: &str) -> LinkAction {
         classify(&Url::parse(url).unwrap(), ORIGIN)
+    }
+
+    fn popup_action(url: &str) -> LinkAction {
+        classify_popup(&Url::parse(url).unwrap(), ORIGIN)
     }
 
     #[test]
@@ -415,7 +454,58 @@ mod tests {
             LinkAction::Allow
         );
         assert_eq!(action("about:blank"), LinkAction::Allow);
+        assert_eq!(action("about:srcdoc"), LinkAction::Allow);
         assert_eq!(action("blob:http://localhost:3000/abc"), LinkAction::Allow);
+    }
+
+    #[test]
+    fn other_sites_cannot_replace_the_page() {
+        // What a third-party page in a popup could send `window.opener` to.
+        for url in [
+            "blob:https://evil.example/abc",
+            "blob:null/abc",
+            "data:text/html,<title>Onyx</title>",
+            "about:evil",
+        ] {
+            assert_eq!(action(url), LinkAction::Block, "{url}");
+            assert_eq!(popup_action(url), LinkAction::Block, "{url}");
+        }
+        assert_eq!(action("https://evil.example/login"), LinkAction::External);
+    }
+
+    #[test]
+    fn popups_may_load_other_https_sites() {
+        assert_eq!(
+            popup_action("https://accounts.google.com/o/oauth2"),
+            LinkAction::Allow
+        );
+        assert_eq!(popup_action("http://evil.example/"), LinkAction::External);
+        assert_eq!(popup_action("javascript:alert(1)"), LinkAction::Block);
+    }
+
+    #[test]
+    fn joined_paths_stay_on_the_server() {
+        let server = Url::parse("https://onyx.corp").unwrap();
+        assert_eq!(
+            server_url_join(&server, "/app?chatId=1#top")
+                .unwrap()
+                .as_str(),
+            "https://onyx.corp/app?chatId=1#top"
+        );
+        assert_eq!(
+            server_url_join(&server, "/onyx.corp//x").unwrap().as_str(),
+            "https://onyx.corp/onyx.corp//x"
+        );
+        for path in [
+            "//evil.example/x",
+            "/\\evil.example/x",
+            "\\\\evil.example/x",
+            "https://evil.example/x",
+            "http://onyx.corp/x",
+            "javascript:alert(1)",
+        ] {
+            assert!(server_url_join(&server, path).is_err(), "{path}");
+        }
     }
 
     #[test]

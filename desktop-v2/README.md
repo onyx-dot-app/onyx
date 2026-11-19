@@ -19,9 +19,12 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   is built natively as a host-only, HttpOnly cookie (`src-tauri/src/macos_cookies.rs`):
   wry's `set_cookie` always adds `Domain` and writes `Secure=FALSE`, and WebKit reads any
   `Secure` key as secure, so such a cookie never reaches an `http://` server.
-- Link policy, in Rust: same-origin pages stay in the app; other `http(s)`, `mailto:` and
-  `tel:` links open in the system browser; other schemes are blocked. Downloads open the
-  native save panel. `alert()`, `confirm()` and `prompt()` show native dialogs.
+- Link policy, in Rust: same-origin pages and `blob:` URLs stay in the app; other `http(s)`,
+  `mailto:` and `tel:` links open in the system browser; other schemes (also `data:`, a
+  `blob:` URL from another site, and every `about:` page except `about:blank` and
+  `about:srcdoc`) are blocked. Popups and the SSO sign-in window can also load other HTTPS
+  sites, for OAuth consent and identity providers. Downloads open the native save panel.
+  `alert()`, `confirm()` and `prompt()` show native dialogs.
 - Tray icon, standard macOS menus (with Edit), and a Preferences window (`Cmd+,`) for the
   server and sign-out.
 - Native main window chrome: overlay title bar, the sidebar runs to the top with
@@ -90,7 +93,9 @@ On macOS. For Windows and Linux, see [Windows and Linux](#windows-and-linux).
 - Local windows have a strict CSP (`script-src 'self'`, `connect-src` limited to IPC). The
   Vite plugin adds it as a `<meta>` tag, so it also applies in `bun run dev`; production
   builds also send it as a header (`tauri.conf.json`).
-- Local windows never call the server. All HTTP goes through Rust with the bearer token.
+- Local windows never call the server. All HTTP goes through Rust with the bearer token. The
+  Rust client follows a redirect only on the server's origin (scheme, host and port), so a
+  password or an SSO code never goes to another host or over plain HTTP.
 
 ## Run it
 
@@ -179,6 +184,9 @@ and every 6 hours, downloads a newer version in the background, then changes **C
 Updates…** (app menu and tray) to **Restart to Update (vX)**. It does not restart on its own.
 Every download is verified against `plugins.updater.pubkey` in `tauri.conf.json` before it is
 installed; a build that was changed after signing, or signed with another key, is rejected.
+The plugin installs only a version newer than the running one. `requireSignedVersion` makes it
+also check the version in the signature, so a changed feed cannot offer an old signed build
+under a new version number.
 
 - The feed (`plugins.updater.endpoints`) must be HTTPS. It points at a feed that does not exist
   yet, so checks fail quietly until the feed is set up.
