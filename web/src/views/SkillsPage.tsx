@@ -408,7 +408,7 @@ export default function AdminSkillsPage() {
                 actions={
                   selectedItems.length > 0 && (
                     <>
-                      <Text font="secondary-body" color="text-03">
+                      <Text as="p" font="secondary-body" color="text-03">
                         {bulkCopy("selected", { count: selectedItems.length })}
                       </Text>
                       <Button

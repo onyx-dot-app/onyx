@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
 import { FilePickerButton } from "@opal/components";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import {
   prepareSkillFilesUpload,
   type PreparedSkillFilesUpload,
@@ -11,7 +11,7 @@ import {
 } from "@/lib/skills/bundleUpload";
 
 interface SkillFilesPickerProps {
-  label: string;
+  label: string | RichStr;
   icon: IconFunctionComponent;
   disabled?: boolean;
   onChange: (upload: PreparedSkillFilesUpload) => void;

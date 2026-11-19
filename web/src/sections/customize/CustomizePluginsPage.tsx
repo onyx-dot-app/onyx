@@ -273,7 +273,7 @@ export default function CustomizePluginsPage() {
         skills.error || integrations.error ? t("plugins.loadFailed") : false
       }
     >
-      <Text font="secondary-body" color="text-03">
+      <Text as="p" font="secondary-body" color="text-03">
         {t("plugins.intro")}
       </Text>
       {shownCount === 0 ? (

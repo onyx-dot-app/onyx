@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import {
   Button,
+  Card,
   InputSingleSelect,
   InputTextArea,
   InputTypeIn,
@@ -328,188 +329,202 @@ export default function AddIntegrationPage({ from }: AddIntegrationPageProps) {
 
           <Section alignItems="stretch" height="auto">
             <Content font="main-content-emphasis" title={t("details.title")} />
-            {type === "app" &&
-              (presets.isLoading ? (
-                <IconLoader />
-              ) : presets.error ? (
-                <MessageCard variant="error" title={t("preset.loadFailed")} />
-              ) : (
+            <Card padding={2}>
+              <Section gap={4} alignItems="stretch" height="auto">
+                {type === "app" &&
+                  (presets.isLoading ? (
+                    <IconLoader />
+                  ) : presets.error ? (
+                    <MessageCard
+                      variant="error"
+                      title={t("preset.loadFailed")}
+                    />
+                  ) : (
+                    <InputVertical
+                      title={t("preset.title")}
+                      description={t("preset.description")}
+                    >
+                      <InputSingleSelect
+                        placeholder={t("preset.title")}
+                        value={appSource}
+                        disabled={busy}
+                        options={[
+                          { value: CUSTOM_APP, title: t("preset.custom") },
+                          ...(presets.data ?? []).map((option) => ({
+                            value: option.id,
+                            title: option.name,
+                          })),
+                        ]}
+                        onValueChange={pickAppSource}
+                      />
+                    </InputVertical>
+                  ))}
+                {preset?.setup_instructions && (
+                  <MessageCard
+                    variant="info"
+                    title={t("preset.instructions")}
+                    description={preset.setup_instructions}
+                  />
+                )}
+                {type === "openapi" && (
+                  <InputVertical
+                    title={t("openapi.schema.title")}
+                    description={
+                      openapiSpec
+                        ? t("openapi.schema.added", {
+                            count: Object.keys(
+                              typeof openapiSpec.paths === "object" &&
+                                openapiSpec.paths !== null
+                                ? openapiSpec.paths
+                                : {}
+                            ).length,
+                          })
+                        : t("openapi.schema.description")
+                    }
+                    error={
+                      showErrors && !openapiSpec
+                        ? t("openapi.schema.required")
+                        : undefined
+                    }
+                  >
+                    <Section width="auto" height="auto" alignItems="start">
+                      <Button
+                        type="button"
+                        prominence="secondary"
+                        icon={SvgCodeFile}
+                        disabled={busy}
+                        onClick={() => setSchemaOpen(true)}
+                      >
+                        {openapiSpec
+                          ? t("openapi.schema.edit")
+                          : t("openapi.schema.add")}
+                      </Button>
+                    </Section>
+                  </InputVertical>
+                )}
                 <InputVertical
-                  title={t("preset.title")}
-                  description={t("preset.description")}
+                  title={t("name.title")}
+                  error={
+                    showErrors && !name.trim() ? t("name.required") : undefined
+                  }
                 >
-                  <InputSingleSelect
-                    placeholder={t("preset.title")}
-                    value={appSource}
-                    disabled={busy}
-                    options={[
-                      { value: CUSTOM_APP, title: t("preset.custom") },
-                      ...(presets.data ?? []).map((option) => ({
-                        value: option.id,
-                        title: option.name,
-                      })),
-                    ]}
-                    onValueChange={pickAppSource}
+                  <InputTypeIn
+                    aria-label={t("name.title")}
+                    placeholder={t("name.placeholder")}
+                    value={name}
+                    variant={busy ? "disabled" : "primary"}
+                    onChange={(event) => setName(event.target.value)}
                   />
                 </InputVertical>
-              ))}
-            {preset?.setup_instructions && (
-              <MessageCard
-                variant="info"
-                title={t("preset.instructions")}
-                description={preset.setup_instructions}
-              />
-            )}
-            {type === "openapi" && (
-              <InputVertical
-                title={t("openapi.schema.title")}
-                description={
-                  openapiSpec
-                    ? t("openapi.schema.added", {
-                        count: Object.keys(
-                          typeof openapiSpec.paths === "object" &&
-                            openapiSpec.paths !== null
-                            ? openapiSpec.paths
-                            : {}
-                        ).length,
-                      })
-                    : t("openapi.schema.description")
-                }
-                error={
-                  showErrors && !openapiSpec
-                    ? t("openapi.schema.required")
-                    : undefined
-                }
-              >
-                <Section width="auto" height="auto" alignItems="start">
-                  <Button
-                    type="button"
-                    prominence="secondary"
-                    icon={SvgCodeFile}
+                <InputVertical
+                  title={t("descriptionField.title")}
+                  suffix="optional"
+                >
+                  <InputTextArea
+                    aria-label={t("descriptionField.title")}
+                    placeholder={t("descriptionField.placeholder")}
+                    value={description}
+                    rows={2}
+                    variant={busy ? "disabled" : "primary"}
+                    onChange={(event) => setDescription(event.target.value)}
+                  />
+                </InputVertical>
+                {type === "mcp_server" && (
+                  <McpServerFields
+                    serverUrl={serverUrl}
+                    transport={transport}
+                    onServerUrlChange={setServerUrl}
+                    onSuggestion={(suggestedName, url) => {
+                      setName(suggestedName);
+                      setServerUrl(url);
+                    }}
+                    onTransportChange={setTransport}
+                    onProbed={applyProbe}
+                    showErrors={showErrors}
                     disabled={busy}
-                    onClick={() => setSchemaOpen(true)}
+                  />
+                )}
+                {shape === "custom" && (
+                  <InputVertical
+                    title={t("custom.patterns.title")}
+                    description={t("custom.patterns.description")}
+                    error={
+                      showErrors && !config()
+                        ? t("custom.patterns.required")
+                        : undefined
+                    }
                   >
-                    {openapiSpec
-                      ? t("openapi.schema.edit")
-                      : t("openapi.schema.add")}
-                  </Button>
-                </Section>
-              </InputVertical>
-            )}
-            <InputVertical
-              title={t("name.title")}
-              error={
-                showErrors && !name.trim() ? t("name.required") : undefined
-              }
-            >
-              <InputTypeIn
-                aria-label={t("name.title")}
-                placeholder={t("name.placeholder")}
-                value={name}
-                variant={busy ? "disabled" : "primary"}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </InputVertical>
-            <InputVertical
-              title={t("descriptionField.title")}
-              suffix="optional"
-            >
-              <InputTextArea
-                aria-label={t("descriptionField.title")}
-                placeholder={t("descriptionField.placeholder")}
-                value={description}
-                rows={2}
-                variant={busy ? "disabled" : "primary"}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-            </InputVertical>
-            {type === "mcp_server" && (
-              <McpServerFields
-                serverUrl={serverUrl}
-                transport={transport}
-                onServerUrlChange={setServerUrl}
-                onSuggestion={(suggestedName, url) => {
-                  setName(suggestedName);
-                  setServerUrl(url);
-                }}
-                onTransportChange={setTransport}
-                onProbed={applyProbe}
-                showErrors={showErrors}
-                disabled={busy}
-              />
-            )}
-            {shape === "custom" && (
-              <InputVertical
-                title={t("custom.patterns.title")}
-                description={t("custom.patterns.description")}
-                error={
-                  showErrors && !config()
-                    ? t("custom.patterns.required")
-                    : undefined
-                }
-              >
-                <InputTextArea
-                  aria-label={t("custom.patterns.title")}
-                  placeholder={t("custom.patterns.placeholder")}
-                  value={urlPatterns}
-                  rows={3}
-                  variant={busy ? "disabled" : "primary"}
-                  onChange={(event) => setUrlPatterns(event.target.value)}
-                />
-              </InputVertical>
-            )}
-            {preset && (
-              <CredentialFieldInputs
-                fields={preset.required_org_credential_fields}
-                values={orgCredentials}
-                onChange={setOrgCredentials}
-                disabled={busy}
-                error={(field) =>
-                  showErrors && !orgCredentials[field.key]?.trim()
-                    ? t("preset.credentialRequired")
-                    : undefined
-                }
-              />
-            )}
-            {canChooseOrganization ? (
-              <InputVertical
-                title={t("owner.title")}
-                description={
-                  forOrganization
-                    ? t("owner.organizationDescription")
-                    : t("owner.personalDescription")
-                }
-              >
-                <InputSingleSelect
-                  placeholder={t("owner.title")}
-                  value={forOrganization ? "organization" : "personal"}
-                  disabled={busy}
-                  options={[
-                    { value: "personal", title: t("owner.personal") },
-                    { value: "organization", title: t("owner.organization") },
-                  ]}
-                  onValueChange={(value) =>
-                    setForOrganization(value === "organization")
-                  }
-                />
-              </InputVertical>
-            ) : (
-              <Text font="secondary-body" color="text-03">
-                {t("owner.personalDescription")}
-              </Text>
-            )}
+                    <InputTextArea
+                      aria-label={t("custom.patterns.title")}
+                      placeholder={t("custom.patterns.placeholder")}
+                      value={urlPatterns}
+                      rows={3}
+                      variant={busy ? "disabled" : "primary"}
+                      onChange={(event) => setUrlPatterns(event.target.value)}
+                    />
+                  </InputVertical>
+                )}
+                {preset && (
+                  <CredentialFieldInputs
+                    fields={preset.required_org_credential_fields}
+                    values={orgCredentials}
+                    onChange={setOrgCredentials}
+                    disabled={busy}
+                    error={(field) =>
+                      showErrors && !orgCredentials[field.key]?.trim()
+                        ? t("preset.credentialRequired")
+                        : undefined
+                    }
+                  />
+                )}
+                {canChooseOrganization ? (
+                  <InputVertical
+                    title={t("owner.title")}
+                    description={
+                      forOrganization
+                        ? t("owner.organizationDescription")
+                        : t("owner.personalDescription")
+                    }
+                  >
+                    <InputSingleSelect
+                      placeholder={t("owner.title")}
+                      value={forOrganization ? "organization" : "personal"}
+                      disabled={busy}
+                      options={[
+                        { value: "personal", title: t("owner.personal") },
+                        {
+                          value: "organization",
+                          title: t("owner.organization"),
+                        },
+                      ]}
+                      onValueChange={(value) =>
+                        setForOrganization(value === "organization")
+                      }
+                    />
+                  </InputVertical>
+                ) : (
+                  <Text as="p" font="secondary-body" color="text-03">
+                    {t("owner.personalDescription")}
+                  </Text>
+                )}
+              </Section>
+            </Card>
           </Section>
 
           <Section alignItems="stretch" height="auto">
             <Content font="main-content-emphasis" title={t("signIn.title")} />
-            <IntegrationSignInFields
-              draft={signIn}
-              onChange={changeSignIn}
-              methods={methods}
-              shape={shape}
-              showErrors={showErrors}
-              disabled={busy}
-            />
+            <Card padding={2}>
+              <Section gap={4} alignItems="stretch" height="auto">
+                <IntegrationSignInFields
+                  draft={signIn}
+                  onChange={changeSignIn}
+                  methods={methods}
+                  shape={shape}
+                  showErrors={showErrors}
+                  disabled={busy}
+                />
+              </Section>
+            </Card>
           </Section>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>

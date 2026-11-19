@@ -278,6 +278,95 @@ describe("SkillEditorPage", () => {
     );
   });
 
+  it("keeps the page when a file fails and sends only that file on retry", async () => {
+    const user = setupUser();
+    const first = new File(["a"], "a.txt");
+    const second = new File(["b"], "b.txt");
+    mockPickedUploads.push(
+      {
+        file: first,
+        displayName: "a.txt",
+        entries: [{ path: "a.txt", size: 1 }],
+        containsSkillMd: false,
+      },
+      {
+        file: second,
+        displayName: "b.txt",
+        entries: [{ path: "b.txt", size: 1 }],
+        containsSkillMd: false,
+      }
+    );
+    mockCreateCustomSkillFromEditor.mockResolvedValue({
+      id: "created-id",
+      name: "report-writer",
+      current_version_id: "v1",
+    } as SkillEditableDetail);
+    mockUploadUserSkillFiles
+      .mockRejectedValueOnce(new Error("Upload failed"))
+      .mockResolvedValueOnce({
+        id: "created-id",
+        current_version_id: "v2",
+      } as SkillEditableDetail);
+    jest.spyOn(console, "error").mockImplementation();
+
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Pick a file" }));
+    await user.click(screen.getByRole("button", { name: "Pick a file" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(mockUploadUserSkillFiles).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Create" })).toBeEnabled()
+    );
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() =>
+      expect(mockRouterReplace).toHaveBeenCalledWith(
+        "/app/customize/skills/created-id"
+      )
+    );
+    expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledTimes(1);
+    expect(mockUploadUserSkillFiles).toHaveBeenCalledTimes(2);
+    expect(mockUploadUserSkillFiles).toHaveBeenLastCalledWith(
+      "created-id",
+      second,
+      "v1"
+    );
+  });
+
+  it("does not send an upload whose files were all removed", async () => {
+    const user = setupUser();
+    mockPickedUploads.push({
+      file: new File(["zip"], "references.zip"),
+      displayName: "references.zip",
+      entries: null,
+      containsSkillMd: false,
+    });
+    mockCreateCustomSkillFromEditor.mockResolvedValue({
+      id: "created-id",
+      name: "report-writer",
+      current_version_id: "v1",
+    } as SkillEditableDetail);
+
+    render(<SkillEditorPage />);
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: "Pick a file" }));
+    await user.click(screen.getByRole("button", { name: "references.zip" }));
+    await user.click(
+      screen.getByRole("button", { name: "Remove references.zip" })
+    );
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "report-writer" }),
+        undefined
+      )
+    );
+    expect(mockUploadUserSkillFiles).not.toHaveBeenCalled();
+  });
+
   it("confirms before canceling a create page with unsaved changes", async () => {
     const user = setupUser();
     render(<SkillEditorPage />);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useNavigation } from "@opal/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { Button, Tooltip, useCreateModal } from "@opal/components";
@@ -57,6 +57,12 @@ const EMPTY_SKILL_MD = composeSkillMarkdown({
   description: "",
   instructions: "",
 });
+
+interface CreatedSkill {
+  id: string;
+  name: string;
+  versionId: string | null;
+}
 
 interface SkillEditorPageProps {
   draftId?: string;
@@ -115,6 +121,10 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
   const [conflictingSkillName, setConflictingSkillName] = useState<
     string | null
   >(null);
+  // Set once the skill exists; the files that are left go to it.
+  const [created, setCreated] = useState<CreatedSkill | null>(null);
+  // The paths that the new skill holds from the uploads sent so far.
+  const sent = useRef<Set<string>>(new Set());
 
   const parsed = parseSkillMarkdown(text);
   const name = parsed.ok ? parsed.name : "";
@@ -200,29 +210,6 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
     );
   }
 
-  async function addRemainingFiles(
-    skillId: string,
-    baseVersionId: string | null
-  ): Promise<void> {
-    let versionId = baseVersionId;
-    const present = new Set(uploads[0] ? uploadPaths(uploads[0]) : []);
-    for (const upload of uploads.slice(1)) {
-      if (uploadPaths(upload).every((path) => removed.has(path))) continue;
-      const updated = await uploadUserSkillFiles(
-        skillId,
-        upload.file,
-        versionId
-      );
-      versionId = updated.current_version_id;
-      uploadPaths(upload).forEach((path) => present.add(path));
-    }
-    for (const path of removed) {
-      if (!present.has(path)) continue;
-      const updated = await removeUserSkillFile(skillId, path, versionId);
-      versionId = updated.current_version_id;
-    }
-  }
-
   async function handleSave(
     event?: FormEvent<HTMLFormElement>,
     createDisabled = false
@@ -230,25 +217,64 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
     event?.preventDefault();
     if (!parsed.ok || (!canCreate && !createDisabled)) return;
     setIsSaving(true);
+    // An upload whose files were all removed is not sent.
+    let pending = uploads.filter((upload) =>
+      uploadPaths(upload).some((path) => !removed.has(path))
+    );
+    let skill = created;
     try {
-      const created = await createCustomSkillFromEditor(
-        {
-          name: parsed.name,
-          description: parsed.description,
-          instructions_markdown: parsed.instructions,
-          auto_enable: !createDisabled,
-          sharing: creationSharing
-            ? serializeSkillSharing(creationSharing, canManageOrgSkills)
-            : undefined,
-        },
-        uploads[0]?.file
-      );
-      nameConflictModal.toggle(false);
-      if (draftId) discardSkillCreationDraft(draftId);
-      try {
-        await addRemainingFiles(created.id, created.current_version_id);
-      } catch (err) {
-        toast.error(describeError(err, t("editor.toasts.saveFailed")));
+      if (!skill) {
+        const [first, ...rest] = pending;
+        const made = await createCustomSkillFromEditor(
+          {
+            name: parsed.name,
+            description: parsed.description,
+            instructions_markdown: parsed.instructions,
+            auto_enable: !createDisabled,
+            sharing: creationSharing
+              ? serializeSkillSharing(creationSharing, canManageOrgSkills)
+              : undefined,
+          },
+          first?.file
+        );
+        skill = {
+          id: made.id,
+          name: made.name,
+          versionId: made.current_version_id,
+        };
+        setCreated(skill);
+        nameConflictModal.toggle(false);
+        if (draftId) discardSkillCreationDraft(draftId);
+        if (first) uploadPaths(first).forEach((path) => sent.current.add(path));
+        pending = rest;
+        setUploads(rest);
+      }
+      // Each finished step leaves the pending lists, so a retry sends only
+      // the rest to the skill that now exists.
+      for (const upload of pending) {
+        const updated = await uploadUserSkillFiles(
+          skill.id,
+          upload.file,
+          skill.versionId
+        );
+        skill = { ...skill, versionId: updated.current_version_id };
+        setCreated(skill);
+        uploadPaths(upload).forEach((path) => sent.current.add(path));
+        setUploads((current) => current.filter((item) => item !== upload));
+      }
+      for (const path of removed) {
+        if (!sent.current.has(path)) continue;
+        const updated = await removeUserSkillFile(
+          skill.id,
+          path,
+          skill.versionId
+        );
+        skill = { ...skill, versionId: updated.current_version_id };
+        setCreated(skill);
+        sent.current.delete(path);
+        setRemoved(
+          (current) => new Set([...current].filter((item) => item !== path))
+        );
       }
       // The skill page finds the new skill in the user's list; the other
       // lists refresh in the background.
@@ -256,10 +282,10 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
       void refreshSkillListsChecked(mutate, cache).then((ok) => {
         if (!ok) toast.error(t("page.toasts.listRefreshFailed"));
       });
-      toast.success(t("editor.toasts.created", { name: created.name }));
-      navigation.go(skillHref(created.id), { replace: true });
+      toast.success(t("editor.toasts.created", { name: skill.name }));
+      navigation.go(skillHref(skill.id), { replace: true });
     } catch (err) {
-      if (!createDisabled && isSkillNameConflict(err)) {
+      if (!skill && !createDisabled && isSkillNameConflict(err)) {
         setConflictingSkillName(parsed.name);
         nameConflictModal.toggle(true);
         return;
@@ -312,7 +338,7 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
           <Section gap={4} alignItems="stretch" height="auto">
             <SkillBundleEditor
               files={files}
-              editing
+              editing={created === null}
               text={text}
               onTextChange={setText}
               preview={parsed.ok ? parsed.instructions : text}

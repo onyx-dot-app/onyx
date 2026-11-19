@@ -86,7 +86,7 @@ export default function IntegrationsPage() {
       title: t("columns.type"),
       width: { weight: 14 },
       cell: (row) => (
-        <Text font="main-ui-body" color="text-03" maxLines={1}>
+        <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
           {labels.shape(row)}
         </Text>
       ),
@@ -97,7 +97,7 @@ export default function IntegrationsPage() {
       title: t("columns.signIn"),
       width: { weight: 18 },
       cell: (row) => (
-        <Text font="main-ui-body" color="text-03" maxLines={1}>
+        <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
           {labels.signIn(row)}
         </Text>
       ),
@@ -108,7 +108,7 @@ export default function IntegrationsPage() {
       title: t("columns.access"),
       width: { weight: 22 },
       cell: (row) => (
-        <Text font="main-ui-body" color="text-03" maxLines={1}>
+        <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
           {labels.access(row)}
         </Text>
       ),

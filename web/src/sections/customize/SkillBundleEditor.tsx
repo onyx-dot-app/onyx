@@ -11,6 +11,7 @@ import {
 } from "@opal/components";
 import { Section, SplitCard, toast } from "@opal/layouts";
 import { SvgFileText, SvgPlus, SvgTrash } from "@opal/icons";
+import type { RichStr } from "@opal/types";
 import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
 import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
 import InstructionsDisplayModeToggle, {
@@ -73,7 +74,7 @@ interface SkillBundleEditorProps {
   onRemove: (path: string) => void;
   onPreparingChange: (preparing: boolean) => void;
   /** What happens to an added file, shown in place of its contents. */
-  addedFileNote: string;
+  addedFileNote: string | RichStr;
 }
 
 /** The files of a skill beside a viewer of the selected file. While editing,
@@ -141,7 +142,7 @@ export default function SkillBundleEditor({
         height="auto"
         gap={1}
       >
-        <Text font="secondary-mono" color="text-03" maxLines={1}>
+        <Text as="p" font="secondary-mono" color="text-03" maxLines={1}>
           {`/${shown}`}
         </Text>
         {shown === SKILL_MD ? (
@@ -161,7 +162,7 @@ export default function SkillBundleEditor({
         )}
       </Section>
       {shown !== SKILL_MD ? (
-        <Text font="secondary-body" color="text-03">
+        <Text as="p" font="secondary-body" color="text-03">
           {selectedFile?.added ? addedFileNote : t("noPreview")}
         </Text>
       ) : mode === "raw" ? (

@@ -124,7 +124,7 @@ export default function AdminPluginsPage() {
       title: t("columns.library"),
       width: { weight: 20 },
       cell: (row) => (
-        <Text font="main-ui-body" color="text-03" maxLines={1}>
+        <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
           {row.plugin.scope === "organization"
             ? t("library.organization")
             : (row.plugin.owner_email ?? t("library.personal"))}
@@ -141,7 +141,7 @@ export default function AdminPluginsPage() {
         // Only an Organization library plugin has an install setting.
         if (row.plugin.scope !== "organization" || policy === null)
           return (
-            <Text font="main-ui-body" color="text-03" maxLines={1}>
+            <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
               {"\u2014"}
             </Text>
           );

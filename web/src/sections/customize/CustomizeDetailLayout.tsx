@@ -147,10 +147,10 @@ export function DetailOverview({
   return (
     <Section flexDirection="row" alignItems="start" height="auto" gap={6} wrap>
       <Section gap={1} alignItems="stretch" height="auto" grow={3} basis={20}>
-        <Text font="secondary-body" color="text-03">
+        <Text as="p" font="secondary-body" color="text-03">
           {descriptionLabel}
         </Text>
-        <Text font="main-content-body" color="text-04">
+        <Text as="p" font="main-content-body" color="text-04">
           {description}
         </Text>
       </Section>

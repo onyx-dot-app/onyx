@@ -42,6 +42,29 @@ export class SkillsLibraryPage {
     return this.page.getByRole("textbox", { name: "SKILL.md", exact: true });
   }
 
+  /** Opens the create page, where SKILL.md is the editor's text. */
+  async openCreatePage(): Promise<void> {
+    await this.page.goto(`${SKILLS_PATH}/new`);
+    await expect(this.skillMdEditor).toBeVisible();
+  }
+
+  /** Adds files through the editor's Add File picker. */
+  async addSkillFiles(
+    files: Parameters<Locator["setInputFiles"]>[0]
+  ): Promise<void> {
+    await this.page.getByLabel("Add skill files").setInputFiles(files);
+  }
+
+  /** Confirms the dialog that replaces the editor with a SKILL.md bundle. */
+  async confirmSkillImport(): Promise<void> {
+    const dialog = this.page
+      .getByRole("dialog")
+      .filter({ hasText: "Import this skill?" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Import skill" }).click();
+    await expect(dialog).toBeHidden();
+  }
+
   /** Replaces the text of SKILL.md and saves a version. */
   async saveSkillMd(text: string): Promise<void> {
     await this.skillMdEditor.fill(text);
