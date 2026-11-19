@@ -14,8 +14,8 @@ ACP-shaped update instead of a v1 packet, the shape Craft already sends (see
 - Anything else (session ids, citations, stop, errors outside a call) is an
   ``_onyx/<type>`` extension notification with the v1 object as ``params``.
   ``message_start`` is one too, for its documents and timing, before its text.
-  ``stop`` closes the calls still open (``failed`` with ``cancelled`` when the
-  user stopped) before its notification.
+  ``stop`` closes the calls still open before its notification: ``failed``
+  when the user stopped (with ``cancelled``) or a deadline cut them off.
 
 Every update carries ``_meta.onyx.version = 2``. v1 stays the default and is
 unchanged; this only re-shapes what the chat pipeline already yields.
@@ -35,6 +35,7 @@ _TOOL_STARTS: dict[str, tuple[str, str]] = {
     "tool_call_argument_delta": ("other", "Running tool"),
     "custom_tool_start": ("other", "Running tool"),
     "file_reader_start": ("read", "Reading file"),
+    "postgres_tool_start": ("search", "Querying knowledge base"),
     "memory_tool_start": ("edit", "Updating memory"),
     "memory_tool_no_access": ("edit", "Memory"),
     "deep_research_plan_start": ("think", "Generating plan"),
@@ -112,13 +113,16 @@ class ChatAcpTranslator:
         if packet_type == "stop":
             # The stream's end, whatever its placement: close the calls still
             # open, then report the stop.
-            cancelled = packet.get("stop_reason") == "user_cancelled"
+            stop_reason = packet.get("stop_reason")
+            cancelled = stop_reason == "user_cancelled"
+            # A user stop or a deadline interrupted the calls still open.
+            interrupted = cancelled or stop_reason == "timed_out"
             for open_id in list(self._open):
-                self._open.pop(open_id)
+                failed = self._open.pop(open_id)
                 yield {
                     "sessionUpdate": "tool_call_update",
                     "toolCallId": open_id,
-                    "status": "failed" if cancelled else "completed",
+                    "status": "failed" if interrupted or failed else "completed",
                     "_meta": _onyx_meta(**({"cancelled": True} if cancelled else {})),
                 }
             yield self._notice(obj, packet_type)
