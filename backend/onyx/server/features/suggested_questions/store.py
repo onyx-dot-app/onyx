@@ -1,4 +1,5 @@
 from collections.abc import Callable, Iterable
+from contextlib import AbstractContextManager
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -9,14 +10,17 @@ from onyx.configs.constants import (
     KV_SUGGESTED_QUESTIONS_POOL_KEY,
     KV_SUGGESTED_QUESTIONS_USER_KEY,
 )
+from onyx.db.document import filter_existing_document_ids
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.db.suggested_questions import load_user_record_values
+from onyx.db.user_file import filter_existing_user_file_ids_any_owner
 from onyx.db.users import get_all_users
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.features.suggested_questions.config import (
     SQ_ACTIVE_DAYS,
+    SQ_POOL_LOCK_HELD_S,
     SQ_POOL_MAX,
     SQ_USED_IDS_MAX,
     SQ_USER_RECORD_LOCK_TIMEOUT_S,
@@ -33,9 +37,13 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 
-def load_pool() -> QuestionPool | None:
+def load_pool(refresh_cache: bool = False) -> QuestionPool | None:
+    """Pass refresh_cache=True under pool_lock: an unlocked reader can refill
+    the cache with an older pool after a locked writer has saved."""
     try:
-        stored = get_kv_store().load(KV_SUGGESTED_QUESTIONS_POOL_KEY)
+        stored = get_kv_store().load(
+            KV_SUGGESTED_QUESTIONS_POOL_KEY, refresh_cache=refresh_cache
+        )
     except KvKeyNotFoundError:
         return None
     return QuestionPool.model_validate(stored)
@@ -43,6 +51,24 @@ def load_pool() -> QuestionPool | None:
 
 def save_pool(pool: QuestionPool) -> None:
     get_kv_store().store(KV_SUGGESTED_QUESTIONS_POOL_KEY, pool.model_dump(mode="json"))
+
+
+def pool_lock(wait_s: float) -> AbstractContextManager[None]:
+    """The lock a pool run, a top-up and a deletion take before they change
+    the company's pool. Raises CacheLockAcquisitionError after `wait_s`."""
+    return cache_shared_lock(
+        lock_name=f"suggested_questions_pool:{get_current_tenant_id()}",
+        max_time_lock_held_s=SQ_POOL_LOCK_HELD_S,
+        wait_for_lock_s=wait_s,
+        logger=logger,
+    )
+
+
+def get_live_document_ids(db_session: Session, document_ids: list[str]) -> set[str]:
+    """The ids, out of these, whose connector document or upload still exists."""
+    return filter_existing_document_ids(
+        db_session, document_ids
+    ) | filter_existing_user_file_ids_any_owner(db_session, document_ids)
 
 
 def merge_questions(
