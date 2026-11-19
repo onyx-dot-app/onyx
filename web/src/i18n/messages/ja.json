@@ -13516,6 +13516,14 @@
       "menu": {
         "label": "形式を指定してエクスポート…"
       }
+    },
+    "suggestedQuestions": {
+      "preparing": {
+        "text": "ドキュメントから質問を準備しています…"
+      },
+      "noDocuments": {
+        "text": "ソースを追加すると、ドキュメントに関する質問が表示されます。"
+      }
     }
   },
   "common": {

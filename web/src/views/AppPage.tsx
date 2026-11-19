@@ -84,6 +84,7 @@ import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
 import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
+import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { OnboardingFlow } from "@/lib/onboarding/components";
 import { OnboardingStep } from "@/lib/onboarding/types";
 import { STEP_CONFIG } from "@/lib/onboarding/constants";
@@ -183,7 +184,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     currentChatSessionId,
     isLoading: isLoadingChatSessions,
   } = useChatSessions();
-  const { vectorDbEnabled, disable_default_assistant } = useSettings();
+  const { vectorDbEnabled, disable_default_assistant, is_playground } =
+    useSettings();
 
   const {
     currentMessageFiles,
@@ -788,6 +790,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const hasAgentStarterMessages =
     (activeAgent?.starter_messages?.length ?? 0) > 0;
+  // On the Playground, the default agent suggests questions from the
+  // person's own documents.
+  const hasSuggestedQuestions =
+    is_playground === true && activeAgent?.id === DEFAULT_AGENT_ID;
 
   const gridStyle = {
     // The chat column's width, set once here: the messages, the first-open
@@ -1214,7 +1220,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   <Fade
                     show={
                       (appPosition.isNewSession() || appPosition.isAgent()) &&
-                      hasAgentStarterMessages
+                      (hasAgentStarterMessages || hasSuggestedQuestions)
                     }
                     className="h-full flex-1 w-full max-w-(--app-page-main-content-width)"
                   >

@@ -94,6 +94,10 @@ export const SWR_KEYS = {
   serviceStatusSearches: "/api/admin/service-status/opensearch/searches",
   version: "/api/version",
 
+  // ── Suggested questions (Playground) ────────────────────────────────────
+  suggestedQuestions: (agentId: number, seed: number) =>
+    `/api/chat/suggested-questions?agent_id=${agentId}&seed=${seed}`,
+
   // ── Settings ──────────────────────────────────────────────────────────────
   settings: "/api/settings",
   enterpriseSettings: "/api/enterprise-settings",

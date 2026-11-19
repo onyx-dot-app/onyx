@@ -1,0 +1,55 @@
+"use client";
+
+import { useRef, useState } from "react";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { useSettings } from "@/lib/settings/hooks";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import type { PersonSuggestions } from "@/lib/suggestedQuestions/types";
+
+/** How often to check again while the server is preparing questions. */
+const POLL_INTERVAL_MS = 30_000;
+/** Stop checking after this long; the server's SQ_PREPARING_S matches it. */
+const POLL_FOR_MS = 120_000;
+
+/**
+ * The person's suggested questions, on the Playground only. The first fetch
+ * for an agent counts as a chat open: the server records the visit and may
+ * ask for a run. Every later fetch (the checks while "preparing") sends
+ * `poll=true` and only reads. The seed is made once per page load, so the
+ * questions stay put while the page is open and change on reload.
+ */
+export function useSuggestedQuestions(agentId: number | null) {
+  const { is_playground } = useSettings();
+  const [seed] = useState(() => Math.floor(Math.random() * 2 ** 31));
+  // When each agent's first fetch ran, which also starts its polling window.
+  const openedAt = useRef<Map<number, number>>(new Map());
+
+  const key =
+    is_playground && agentId !== null
+      ? SWR_KEYS.suggestedQuestions(agentId, seed)
+      : null;
+
+  function fetchSuggestions(url: string): Promise<PersonSuggestions> {
+    const opened = agentId !== null && openedAt.current.has(agentId);
+    if (agentId !== null && !opened) {
+      openedAt.current.set(agentId, Date.now());
+    }
+    return errorHandlingFetcher<PersonSuggestions>(`${url}&poll=${opened}`);
+  }
+
+  const { data, mutate } = useSWR<PersonSuggestions>(key, fetchSuggestions, {
+    revalidateOnFocus: false,
+    refreshInterval: (latest) => {
+      const opened =
+        agentId === null ? undefined : openedAt.current.get(agentId);
+      const stillPreparing =
+        latest?.state === "preparing" &&
+        opened !== undefined &&
+        Date.now() - opened < POLL_FOR_MS;
+      return stillPreparing ? POLL_INTERVAL_MS : 0;
+    },
+  });
+
+  return { suggestions: data, mutate };
+}
