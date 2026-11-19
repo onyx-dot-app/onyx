@@ -216,7 +216,8 @@ function Launcher() {
   const agentsLoadedAt = useRef<number | null>(null);
   // The first agent list is loading; a question waits for the saved agent.
   const [agentsPending, setAgentsPending] = useState(false);
-  const [askQueued, setAskQueued] = useState(false);
+  // The question the user submitted while the first agent list loaded.
+  const [askQueued, setAskQueued] = useState<string | null>(null);
   const [agentWaitOver, setAgentWaitOver] = useState(false);
   const [pickerIndex, setPickerIndex] = useState(0);
   const [pickerDismissed, setPickerDismissed] = useState(false);
@@ -316,7 +317,7 @@ function Launcher() {
     void discardAnswer();
     askId.current += 1;
     searchId.current += 1;
-    setAskQueued(false);
+    setAskQueued(null);
     setTurns([]);
     setChatSessionId(null);
     setQuery("");
@@ -836,7 +837,7 @@ function Launcher() {
     if (awaitingApproval) return;
     // Without the saved agent, this question and the next would go to different chats.
     if (agentsPending && !agentWaitOver) {
-      setAskQueued(true);
+      setAskQueued(text);
       return;
     }
     if (agentId === null && defaultDisabled) {
@@ -868,14 +869,14 @@ function Launcher() {
 
   // A queued question goes once the first agent list settles, or after AGENT_WAIT_MS.
   useEffect(() => {
-    if (!askQueued) return;
+    if (askQueued === null) return;
     if (agentsPending && !agentWaitOver) {
       const timer = window.setTimeout(() => setAgentWaitOver(true), AGENT_WAIT_MS);
       return () => window.clearTimeout(timer);
     }
-    setAskQueued(false);
-    const text = query.trim();
-    if (mode === "ask" && text !== "") submitAsk(text);
+    setAskQueued(null);
+    // A draft edited after Enter waits for another Enter.
+    if (mode === "ask" && query.trim() === askQueued) submitAsk(askQueued);
     setAgentWaitOver(false);
   }, [askQueued, agentsPending, agentWaitOver]);
 
