@@ -108,7 +108,8 @@ The app adds a login item for the current user only: a LaunchAgent on macOS,
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on Windows, and
 `~/.config/autostart/app.onyx.desktop.v2.desktop` on Linux. `LaunchAtLogin` is best effort. A
 user can still turn the item off in System Settings, Task Manager or the desktop's startup
-settings, and the app sets it again only at its next launch or policy change. To make sure the
+settings. While the app runs, it sets the item again within five minutes (at each policy read,
+or when Preferences opens). If the app does not run, nothing sets it again. To make sure the
 app opens at login, deploy the login item with your management tool instead:
 
 - macOS: a managed login item (the `com.apple.servicemanagement` payload) for the bundle ID
