@@ -51,8 +51,8 @@ from onyx.configs.chat_configs import (
 )
 from onyx.context.models import UserMemoryContext
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
-from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
+from onyx.llm.model_request import estimate_text_tokens
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -114,7 +114,7 @@ class ChatAgent(Agent, RestorableFeature):
         persona: PersonaPromptConfig | None,
         user_memory_context: UserMemoryContext | None,
         llm: LLM,
-        token_counter: Callable[[str], int],
+        token_counter: Callable[[str], int] = estimate_text_tokens,
         preferred_tool: ToolPreference | None = None,
         user_identity: LLMUserIdentity | None = None,
         chat_files: list[ChatFile] | None = None,
@@ -562,7 +562,6 @@ def build_chat_agent(
         base_system_prompt=setup.base_system_prompt,
         user_memory_context=setup.user_memory_context,
         llm=llm,
-        token_counter=get_llm_token_counter(llm),
         preferred_tool=preferred_tool,
         user_identity=setup.user_identity,
         chat_files=setup.chat_files_for_tools,

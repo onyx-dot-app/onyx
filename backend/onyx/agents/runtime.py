@@ -23,6 +23,7 @@ from onyx.agents.compaction import (
     history_boundaries,
     is_input_context,
     messages_after_compaction,
+    request_token_upper_bound,
     request_tokens,
     working_messages,
 )
@@ -118,7 +119,7 @@ from onyx.llm.models import (
     UserMessage,
     apply_generation_event,
 )
-from onyx.llm.token_budget import resolve_token_budget
+from onyx.llm.token_budget import TokenBudget, resolve_token_budget
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 
@@ -2020,9 +2021,17 @@ def _compact_context(
     request = prepared.generation_request(messages, tools=tools)
     cancellation_signal.check()
     budget = context_budget(llm)
+    output = resolve_token_budget(llm)
+    if not force and not run._token_counts:
+        upper_bound = request_token_upper_bound(request)
+        if (
+            upper_bound <= budget.trigger
+            and output.output_allowance(upper_bound) == output.max_output_tokens
+        ):
+            return _limit_output(output, request, upper_bound)
     original_size = request_tokens(request, run._token_counts)
     if not force and original_size <= budget.trigger:
-        return _limit_output(llm, request, original_size)
+        return _limit_output(output, request, original_size)
 
     selected_checkpoint = None
     try:
@@ -2042,7 +2051,7 @@ def _compact_context(
                 "Proactive compaction failed while request still fits",
                 exc_info=True,
             )
-            return _limit_output(llm, request, original_size)
+            return _limit_output(output, request, original_size)
         logger.warning("Compaction failed; truncating older turns", exc_info=True)
 
     candidate_request = request
@@ -2071,7 +2080,7 @@ def _compact_context(
     with run.execution_lock:
         cancellation_signal.check()
         run._state.checkpoint = selected_checkpoint
-    return _limit_output(llm, candidate_request, candidate_size)
+    return _limit_output(output, candidate_request, candidate_size)
 
 
 def _truncate_context(
@@ -2111,9 +2120,9 @@ def _truncate_context(
 
 
 def _limit_output(
-    llm: LLM, request: GenerationRequest, input_tokens: int
+    budget: TokenBudget, request: GenerationRequest, input_tokens: int
 ) -> GenerationRequest:
-    allowance = resolve_token_budget(llm).output_allowance(input_tokens)
+    allowance = budget.output_allowance(input_tokens)
     if allowance is not None:
         request.options.max_tokens = (
             min(request.options.max_tokens, allowance)

@@ -117,15 +117,27 @@ def request_tokens(
             current_counts[text] = tokens
         return tokens
 
-    total = (
-        count(request.system_prompt)
-        + sum(count(tool.model_dump_json()) for tool in request.tools)
-        + sum(message_tokens(message, count) for message in request.messages)
-    )
+    total = _count_request(request, count)
     if cached_counts is not None:
         cached_counts.clear()
         cached_counts.update(current_counts)
     return total
+
+
+def _count_request(request: GenerationRequest, count: Callable[[str], int]) -> int:
+    return (
+        count(request.system_prompt)
+        + sum(count(tool.model_dump_json()) for tool in request.tools)
+        + sum(message_tokens(message, count) for message in request.messages)
+    )
+
+
+def request_token_upper_bound(request: GenerationRequest) -> int:
+    # Each cl100k token consumes at least one byte. UTF-8 needs at most four
+    # bytes per code point. Both string operations run in constant time.
+    return _count_request(
+        request, lambda text: len(text) * (1 if text.isascii() else 4)
+    )
 
 
 def context_budget(model: LLM) -> ContextBudget:
