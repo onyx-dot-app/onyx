@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
@@ -17,6 +18,36 @@ pub struct AppState {
     epoch: AtomicU64,
     /// The server's session cookie name, by server origin.
     cookie_name: Mutex<Option<(String, String)>>,
+    /// Launcher uploads in flight, by the page's upload id: true once cancelled.
+    uploads: Mutex<HashMap<u64, bool>>,
+}
+
+/// Ends an upload's entry in `AppState::uploads` when the upload ends.
+pub struct UploadEntry<'a> {
+    state: &'a AppState,
+    id: u64,
+}
+
+impl UploadEntry<'_> {
+    pub fn cancelled(&self) -> bool {
+        self.state
+            .uploads
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&self.id)
+            .copied()
+            .unwrap_or(false)
+    }
+}
+
+impl Drop for UploadEntry<'_> {
+    fn drop(&mut self) {
+        self.state
+            .uploads
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(&self.id);
+    }
 }
 
 impl AppState {
@@ -28,6 +59,28 @@ impl AppState {
             token: Mutex::new(None),
             epoch: AtomicU64::new(0),
             cookie_name: Mutex::new(None),
+            uploads: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Tracks an upload until the returned entry drops.
+    pub fn begin_upload(&self, id: u64) -> UploadEntry<'_> {
+        self.uploads
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(id, false);
+        UploadEntry { state: self, id }
+    }
+
+    /// Marks an upload in flight as cancelled; other ids are ignored.
+    pub fn cancel_upload(&self, id: u64) {
+        if let Some(cancelled) = self
+            .uploads
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get_mut(&id)
+        {
+            *cancelled = true;
         }
     }
 

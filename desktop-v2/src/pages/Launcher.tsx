@@ -23,10 +23,13 @@ import { mount } from "@/lib/mount";
 import { hasPrimaryModifier, primaryShortcut } from "@/lib/platform";
 import {
   ask,
+  cancelUpload,
   DEFAULT_AGENT_ID,
+  deleteUserFile,
   discardAnswer,
   errorMessage,
   getPrefs,
+  getUploadLimit,
   hideLauncher,
   listAgents,
   openChatInMain,
@@ -70,8 +73,11 @@ interface Attachment {
 const HISTORY_KEY = "onyx.launcher.history";
 const HISTORY_SIZE = 20;
 const MAX_ATTACHMENTS = 10;
-// The page reads a file into memory before it uploads; the server has its own limit.
-const MAX_FILE_BYTES = 512 * 1024 * 1024;
+// The app's own limit (api.rs MAX_UPLOAD_BYTES): a file is in memory while it
+// uploads. The server's limit can be lower.
+const MAX_FILE_BYTES = 250 * 1024 * 1024;
+// Uploads that read files into memory at one time; the others wait.
+const PARALLEL_UPLOADS = 2;
 const AGENT_REFRESH_MS = 60_000;
 
 function loadHistory(): string[] {
@@ -113,8 +119,9 @@ function attachmentName(file: File): string {
 }
 
 // Copies from a key press. execCommand runs inside the key event, which
-// every web view allows; the async clipboard API is the fallback.
-function copyText(text: string): boolean {
+// every web view allows; the async clipboard API is the fallback. Resolves
+// true once the text is on the clipboard.
+async function copyText(text: string): Promise<boolean> {
   const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const area = document.createElement("textarea");
   area.value = text;
@@ -131,11 +138,27 @@ function copyText(text: string): boolean {
   }
   area.remove();
   active?.focus();
-  if (!copied && navigator.clipboard) {
-    void navigator.clipboard.writeText(text).catch(() => undefined);
+  if (copied) return true;
+  if (!navigator.clipboard) return false;
+  try {
+    await navigator.clipboard.writeText(text);
     return true;
+  } catch {
+    return false;
   }
-  return copied;
+}
+
+function megabytes(bytes: number): number {
+  return Math.floor(bytes / (1024 * 1024));
+}
+
+// "unchanged": the list was fresh, or a newer refresh replaced this one.
+type AgentRefresh = Agent[] | "failed" | "unchanged";
+
+interface UploadJob {
+  key: number;
+  file: File;
+  name: string;
 }
 
 function agentMatches(agents: Agent[], filter: string): Agent[] {
@@ -183,6 +206,9 @@ function Launcher() {
   // Agents. null is the server's default agent.
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentId, setAgentId] = useState<number | null>(null);
+  // "Always Start with an Agent": the default agent cannot start a chat.
+  const [defaultDisabled, setDefaultDisabled] = useState(false);
+  const agentsRequest = useRef(0);
   // The agent of the chat on screen; a different agent starts a new chat.
   const [chatAgentId, setChatAgentId] = useState<number | null>(null);
   const agentsLoadedAt = useRef<number | null>(null);
@@ -193,6 +219,13 @@ function Launcher() {
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const attachmentKey = useRef(0);
+  const uploadQueue = useRef<UploadJob[]>([]);
+  const activeUploads = useRef(new Set<number>());
+  // Keys of the chips on screen. A file whose chip is gone is deleted, unless
+  // it was sent with a question.
+  const liveKeys = useRef(new Set<number>());
+  // Read once each time the launcher shows.
+  const uploadLimit = useRef<Promise<number> | null>(null);
   const [dragging, setDragging] = useState(false);
 
   // Search source filter; the sources come from the last unfiltered results.
@@ -212,17 +245,26 @@ function Launcher() {
   }
 
   // Failures keep the list the launcher has; servers without the list have no agents.
-  async function refreshAgents(force = false) {
+  async function refreshAgents(force = false): Promise<AgentRefresh> {
     const loadedAt = agentsLoadedAt.current;
-    if (!force && loadedAt !== null && Date.now() - loadedAt < AGENT_REFRESH_MS) return;
+    if (!force && loadedAt !== null && Date.now() - loadedAt < AGENT_REFRESH_MS) {
+      return "unchanged";
+    }
+    const request = ++agentsRequest.current;
     try {
       const result = await listAgents();
+      if (request !== agentsRequest.current) return "unchanged";
       setAgents(result.agents);
+      setDefaultDisabled(result.defaultAgentDisabled);
+      const usable = (id: number | null) =>
+        id === null ? !result.defaultAgentDisabled : result.agents.some((a) => a.id === id);
       if (loadedAt === null) setAgentId(result.selected);
-      else setAgentId((id) => (result.agents.some((a) => a.id === id) ? id : null));
+      else setAgentId((id) => (usable(id) ? id : result.selected));
       agentsLoadedAt.current = Date.now();
+      return result.agents;
     } catch {
       // The default agent still answers.
+      return request === agentsRequest.current ? "failed" : "unchanged";
     }
   }
 
@@ -232,12 +274,14 @@ function Launcher() {
       inputRef.current?.focus();
       inputRef.current?.select();
       void refreshAgents();
+      uploadLimit.current = null;
+      // The server can change while the launcher is hidden (onboarding, sign-in).
+      void getPrefs().then(
+        (prefs) => (serverUrl.current = prefs.serverUrl),
+        () => undefined
+      );
     }
     focus();
-    void getPrefs().then(
-      (prefs) => (serverUrl.current = prefs.serverUrl),
-      () => undefined
-    );
     window.addEventListener("focus", focus);
     return () => window.removeEventListener("focus", focus);
   }, []);
@@ -269,7 +313,11 @@ function Launcher() {
     setSearchError(null);
     setSources([]);
     setSourceFilter(null);
+    discardAttachments(attachments);
     setAttachments([]);
+    pickerDraft.current = null;
+    setPickerDismissed(false);
+    setPickerIndex(0);
     inputRef.current?.focus();
   }
 
@@ -381,9 +429,19 @@ function Launcher() {
       : [];
   const pickerOpen = pickerMatches.length > 0;
   const highlighted = pickerMatches[Math.min(pickerIndex, pickerMatches.length - 1)];
+  const highlightedId = highlighted?.id ?? null;
+
+  // The input keeps focus, so the list does not scroll to the highlighted row itself.
+  useEffect(() => {
+    if (highlightedId === null) return;
+    resultsRef.current
+      ?.querySelector(`[data-agent-id="${highlightedId}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [highlightedId]);
 
   function chooseAgent(next: Agent | null) {
     const id = next === null || next.id === DEFAULT_AGENT_ID ? null : next.id;
+    if (id === null && defaultDisabled) return;
     setAgentId(id);
     // Remembering is optional; the choice still applies now.
     void setLauncherAgent(id).catch(() => undefined);
@@ -405,15 +463,26 @@ function Launcher() {
     closePicker(false);
   }
 
-  function openPicker() {
+  async function openPicker() {
     if (mode !== "ask") setMode("ask");
     if (agents.length === 0) {
-      flash("This server has no other agents to choose.");
-      return;
+      // An earlier load can have failed; try again before saying there are none.
+      const result = await refreshAgents(true);
+      if (result === "failed") {
+        flash("Could not load the agents. Try again.");
+        return;
+      }
+      if (result === "unchanged") return;
+      if (result.length === 0) {
+        flash("This server has no other agents to choose.");
+        return;
+      }
+    } else {
+      // The list may be up to a minute old; an agent added meanwhile shows up.
+      void refreshAgents(true);
     }
-    if (!query.startsWith("@")) pickerDraft.current = query;
-    // The list may be up to a minute old; an agent added meanwhile shows up.
-    void refreshAgents(true);
+    const draft = inputRef.current?.value ?? query;
+    if (!draft.startsWith("@")) pickerDraft.current = draft;
     setQuery("@");
     setPickerDismissed(false);
     setPickerIndex(0);
@@ -424,6 +493,48 @@ function Launcher() {
 
   const uploading = attachments.some((a) => a.file === null && a.error === null);
   const failed = attachments.some((a) => a.error !== null);
+
+  function settle(key: number, change: Partial<Attachment>) {
+    setAttachments((prev) => prev.map((a) => (a.key === key ? { ...a, ...change } : a)));
+  }
+
+  function serverUploadLimit(): Promise<number> {
+    uploadLimit.current ??= getUploadLimit().catch(() => MAX_FILE_BYTES);
+    return uploadLimit.current;
+  }
+
+  // Starts queued uploads while fewer than PARALLEL_UPLOADS run.
+  function pumpUploads() {
+    while (activeUploads.current.size < PARALLEL_UPLOADS) {
+      const job = uploadQueue.current.shift();
+      if (!job) return;
+      activeUploads.current.add(job.key);
+      void runUpload(job).finally(() => {
+        activeUploads.current.delete(job.key);
+        pumpUploads();
+      });
+    }
+  }
+
+  async function runUpload({ key, file, name }: UploadJob) {
+    // Checked before the file is read into memory.
+    const limit = await serverUploadLimit();
+    if (!liveKeys.current.has(key)) return;
+    if (file.size > limit) {
+      settle(key, {
+        error: `${name} is larger than ${megabytes(limit)} MB, the largest file you can attach.`,
+      });
+      return;
+    }
+    try {
+      const uploaded = await uploadFile(file, name, key);
+      if (liveKeys.current.has(key)) settle(key, { file: uploaded });
+      // Removed while the server finished it.
+      else void deleteUserFile(uploaded.userFileId).catch(() => undefined);
+    } catch (e) {
+      if (liveKeys.current.has(key)) settle(key, { error: errorMessage(e) });
+    }
+  }
 
   function addFiles(files: File[]) {
     if (files.length === 0) return;
@@ -437,26 +548,36 @@ function Launcher() {
     for (const file of files.slice(0, room)) {
       const key = ++attachmentKey.current;
       const name = attachmentName(file);
-      const tooLarge = file.size > MAX_FILE_BYTES;
-      const empty = file.size === 0;
-      const error = tooLarge
-        ? `${name} is larger than ${MAX_FILE_BYTES / (1024 * 1024)} MB.`
-        : empty
-          ? `${name} is empty or is a folder.`
-          : null;
+      const error =
+        file.size > MAX_FILE_BYTES
+          ? `${name} is larger than ${megabytes(MAX_FILE_BYTES)} MB, the largest file you can attach.`
+          : file.size === 0
+            ? `${name} is empty or is a folder.`
+            : null;
       const isImage = file.type.startsWith("image/");
+      liveKeys.current.add(key);
       setAttachments((prev) => [...prev, { key, name, isImage, file: null, error }]);
-      if (error) continue;
-      const settle = (change: Partial<Attachment>) =>
-        setAttachments((prev) => prev.map((a) => (a.key === key ? { ...a, ...change } : a)));
-      uploadFile(file, name).then(
-        (uploaded) => settle({ file: uploaded }),
-        (e: unknown) => settle({ error: errorMessage(e) })
-      );
+      if (!error) uploadQueue.current.push({ key, file, name });
+    }
+    pumpUploads();
+  }
+
+  // Stops the uploads of chips that go away and deletes their files.
+  function discardAttachments(list: Attachment[]) {
+    for (const a of list) {
+      liveKeys.current.delete(a.key);
+      if (a.file) {
+        void deleteUserFile(a.file.userFileId).catch(() => undefined);
+      } else if (activeUploads.current.has(a.key)) {
+        void cancelUpload(a.key).catch(() => undefined);
+      } else {
+        uploadQueue.current = uploadQueue.current.filter((job) => job.key !== a.key);
+      }
     }
   }
 
   function removeAttachment(key: number) {
+    discardAttachments(attachments.filter((a) => a.key === key));
     setAttachments((prev) => prev.filter((a) => a.key !== key));
   }
 
@@ -524,13 +645,19 @@ function Launcher() {
       if (hasTextSelection()) return false;
       const link = (document.activeElement as HTMLElement | null)?.dataset.link;
       if (link) {
-        if (copyText(absoluteLink(link))) flash("Copied the link");
+        copyAndFlash(absoluteLink(link), "link");
         return true;
       }
     }
     if (mode !== "ask" || !answer) return false;
-    if (copyText(answer)) flash("Copied the answer");
+    copyAndFlash(answer, "answer");
     return true;
+  }
+
+  function copyAndFlash(text: string, what: "answer" | "link") {
+    void copyText(text).then((copied) =>
+      flash(copied ? `Copied the ${what}` : `Could not copy the ${what}`)
+    );
   }
 
   function onSourceKey(event: KeyboardEvent<HTMLDivElement>): boolean {
@@ -539,7 +666,7 @@ function Launcher() {
     const link = sourceLink(Number(digit));
     if (!link) return true;
     if (event.shiftKey) {
-      if (copyText(absoluteLink(link))) flash("Copied the link");
+      copyAndFlash(absoluteLink(link), "link");
     } else {
       void openExternal(link);
     }
@@ -570,7 +697,7 @@ function Launcher() {
       newChat();
     } else if (key === "k") {
       if (pickerOpen) closePicker(true);
-      else openPicker();
+      else void openPicker();
     } else if (key === "c") {
       handled = onCopyKey(event);
     } else {
@@ -606,7 +733,9 @@ function Launcher() {
     }
   }
 
-  const awaitingApproval = turns.at(-1)?.approval != null;
+  // The server takes no new message in a chat that waits for approval. A
+  // question to another agent starts a new chat, so it can still go.
+  const awaitingApproval = turns.at(-1)?.approval != null && chatAgentId === agentId;
 
   // ↑ in an empty input steps back through recent questions; ↓ steps forward.
   function browseHistory(event: KeyboardEvent<HTMLInputElement>): boolean {
@@ -654,6 +783,8 @@ function Launcher() {
       return;
     }
     const files = attachments.flatMap((a) => (a.file ? [a.file] : []));
+    // Sent files stay on the server; their chips leave without a delete.
+    for (const a of attachments) liveKeys.current.delete(a.key);
     remember(text);
     historyAt.current = null;
     // The question and its files move into the thread, like a chat input.
@@ -667,7 +798,13 @@ function Launcher() {
     if (pickerKey(event) || browseHistory(event)) {
       event.preventDefault();
       event.stopPropagation();
-    } else if (event.key === "Backspace" && query === "" && mode === "ask" && agentId !== null) {
+    } else if (
+      event.key === "Backspace" &&
+      query === "" &&
+      mode === "ask" &&
+      agentId !== null &&
+      !defaultDisabled
+    ) {
       // Backspace in an empty input removes the agent chip.
       event.preventDefault();
       chooseAgent(null);
@@ -782,11 +919,19 @@ function Launcher() {
                   icon={SvgBubbleText}
                   title={agent.name}
                   truncate
-                  tooltip="The agent for new chats. Backspace in an empty input removes it."
-                  onRemove={() => {
-                    chooseAgent(null);
-                    inputRef.current?.focus();
-                  }}
+                  tooltip={
+                    defaultDisabled
+                      ? "The agent for new chats."
+                      : "The agent for new chats. Backspace in an empty input removes it."
+                  }
+                  onRemove={
+                    defaultDisabled
+                      ? undefined
+                      : () => {
+                          chooseAgent(null);
+                          inputRef.current?.focus();
+                        }
+                  }
                   removeInTabOrder={false}
                 />
               ) : null}
@@ -919,6 +1064,7 @@ function AgentPicker({ agents, highlighted, selected, onPick }: AgentPickerProps
       {agents.map((a) => (
         <LineItemButton
           key={a.id}
+          data-agent-id={a.id}
           presentational
           state={a.id === highlighted ? "selected" : "empty"}
           title={a.name}

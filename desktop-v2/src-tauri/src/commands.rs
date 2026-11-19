@@ -5,7 +5,7 @@ use serde::Serialize;
 use tauri::ipc::{Channel, InvokeBody, Request};
 use tauri::{AppHandle, Manager, State};
 
-use crate::api::{normalize_server_url, Agent, AttachedFile, AuthMethods, SearchHit};
+use crate::api::{self, normalize_server_url, Agent, AttachedFile, AuthMethods, SearchHit};
 use crate::ask::{self, AskEvent};
 use crate::login_item;
 use crate::main_window;
@@ -276,6 +276,21 @@ pub struct LauncherAgents {
     agents: Vec<Agent>,
     /// The saved agent, if the user can still use it; `None` is the default agent.
     selected: Option<i64>,
+    /// "Always Start with an Agent": `agents` has no default agent, and a new
+    /// chat needs one of them.
+    default_agent_disabled: bool,
+}
+
+/// The saved agent if the list has it; otherwise the default agent, or the
+/// first agent when the default one is off.
+fn selected_agent(agents: &[Agent], saved: Option<i64>, default_disabled: bool) -> Option<i64> {
+    saved
+        .filter(|id| agents.iter().any(|a| a.id == *id))
+        .or_else(|| {
+            default_disabled
+                .then(|| agents.first().map(|a| a.id))
+                .flatten()
+        })
 }
 
 /// An error means the list could not be read now; the launcher keeps what it had.
@@ -283,18 +298,33 @@ pub struct LauncherAgents {
 pub async fn list_agents(state: State<'_, AppState>) -> Result<LauncherAgents, String> {
     let epoch = state.epoch();
     let (server, token) = state.session()?;
-    let agents = state.api.list_agents(&server, &token).await?;
+    let default_disabled = state
+        .api
+        .server_settings(&server, &token)
+        .await
+        .is_some_and(|s| s.default_agent_disabled);
+    let agents = state
+        .api
+        .list_agents(&server, &token, default_disabled)
+        .await?;
     if state.epoch() != epoch {
         return Err("Signed out.".into());
     }
-    let selected = state
-        .config
-        .get()
-        .launcher_agents
-        .get(&server)
-        .copied()
-        .filter(|id| agents.iter().any(|a| a.id == *id));
-    Ok(LauncherAgents { agents, selected })
+    let saved = state.config.get().launcher_agents.get(&server).copied();
+    Ok(LauncherAgents {
+        selected: selected_agent(&agents, saved, default_disabled),
+        agents,
+        default_agent_disabled: default_disabled,
+    })
+}
+
+/// The largest file the launcher can attach, in bytes: the server's limit,
+/// within the app's own.
+#[tauri::command]
+pub async fn get_upload_limit(state: State<'_, AppState>) -> Result<u64, String> {
+    let (server, token) = state.session()?;
+    let settings = state.api.server_settings(&server, &token).await;
+    Ok(api::upload_limit(settings.as_ref()))
 }
 
 /// Saves the launcher's agent for the current server (`None`: the default agent).
@@ -325,7 +355,7 @@ fn decode_component(raw: &str) -> Option<String> {
 
 /// Uploads one file for the next question and waits until the server has
 /// processed it. The body is the file's bytes; `Onyx-File-Name` and
-/// `Onyx-File-Type` name it.
+/// `Onyx-File-Type` name it, and `Onyx-Upload-Id` is the id `cancel_upload` takes.
 #[tauri::command]
 pub async fn upload_file(
     request: Request<'_>,
@@ -340,28 +370,70 @@ pub async fn upload_file(
         .filter(|n| !n.trim().is_empty())
         .unwrap_or_else(|| "file".into());
     let mime = encoded_header(&request, "onyx-file-type").unwrap_or_default();
+    let upload_id = encoded_header(&request, "onyx-upload-id")
+        .and_then(|id| id.parse::<u64>().ok())
+        .ok_or_else(|| "The upload has no id.".to_string())?;
+    let entry = state.begin_upload(upload_id);
     if bytes.is_empty() {
         return Err(format!("{name} is empty."));
     }
-    if let Some(limit) = state.api.upload_limit_bytes(&server, &token).await {
-        if bytes.len() as u64 > limit {
-            return Err(format!(
-                "{name} is larger than this server's {} MB limit.",
-                limit / (1024 * 1024)
-            ));
-        }
+    if bytes.len() as u64 > api::MAX_UPLOAD_BYTES {
+        return Err(too_large(&name, api::MAX_UPLOAD_BYTES));
     }
-    let current = || state.epoch() == epoch;
+    let limit = api::upload_limit(state.api.server_settings(&server, &token).await.as_ref());
+    if bytes.len() as u64 > limit {
+        return Err(too_large(&name, limit));
+    }
+    let current = || state.epoch() == epoch && !entry.cancelled();
     if !current() {
-        return Err("Signed out.".into());
+        return Err("The upload was cancelled.".into());
     }
     let row = state
         .api
         .upload_file(&server, &token, &name, &mime, bytes)
         .await?;
-    state
+    let user_file_id = row.id.clone();
+    let result = state
         .api
         .wait_for_file(&server, &token, row, &current)
+        .await;
+    if entry.cancelled() {
+        // The user removed the file: it must not stay in their files.
+        if let Err(e) = state
+            .api
+            .delete_user_file(&server, &token, &user_file_id)
+            .await
+        {
+            log::warn!("could not delete a removed attachment: {e}");
+        }
+        return Err("The upload was cancelled.".into());
+    }
+    result
+}
+
+fn too_large(name: &str, limit: u64) -> String {
+    format!(
+        "{name} is larger than {} MB, the largest file you can attach.",
+        limit / (1024 * 1024)
+    )
+}
+
+/// Stops an upload in flight; `upload_file` deletes the file if the server has it.
+#[tauri::command]
+pub fn cancel_upload(upload_id: u64, state: State<'_, AppState>) {
+    state.cancel_upload(upload_id);
+}
+
+/// Deletes an uploaded file that was not sent (a removed attachment).
+#[tauri::command]
+pub async fn delete_user_file(
+    user_file_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let (server, token) = state.session()?;
+    state
+        .api
+        .delete_user_file(&server, &token, &user_file_id)
         .await
 }
 
@@ -522,7 +594,28 @@ pub fn retry_connection(app: AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::decode_component;
+    use super::{decode_component, selected_agent};
+    use crate::api::Agent;
+
+    fn agent(id: i64) -> Agent {
+        Agent {
+            id,
+            name: format!("Agent {id}"),
+            description: String::new(),
+        }
+    }
+
+    #[test]
+    fn selects_the_saved_agent_or_a_usable_default() {
+        let agents = [agent(0), agent(7)];
+        assert_eq!(selected_agent(&agents, Some(7), false), Some(7));
+        assert_eq!(selected_agent(&agents, Some(9), false), None);
+        assert_eq!(selected_agent(&agents, None, false), None);
+        let without_default = [agent(7), agent(8)];
+        assert_eq!(selected_agent(&without_default, None, true), Some(7));
+        assert_eq!(selected_agent(&without_default, Some(8), true), Some(8));
+        assert_eq!(selected_agent(&[], None, true), None);
+    }
 
     #[test]
     fn decodes_file_name_headers() {

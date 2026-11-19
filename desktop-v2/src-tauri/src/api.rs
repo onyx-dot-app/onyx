@@ -54,17 +54,32 @@ struct AgentRow {
     name: String,
     #[serde(default)]
     description: Option<String>,
+    #[serde(default)]
+    builtin_persona: bool,
 }
 
-/// The agents in a `GET /api/persona` answer. Rows the app cannot read are
-/// skipped, so one odd agent does not hide the others.
-fn parse_agents(body: &str) -> Result<Vec<Agent>, String> {
+/// The server's default agent (`ask::DEFAULT_AGENT_ID`).
+const DEFAULT_AGENT_ID: i64 = 0;
+
+/// The agents in a `GET /api/persona` answer, as the web chat offers them.
+/// The server already leaves out agents the user cannot use. Built-in agents
+/// other than the default one are left out, and the default one too when
+/// "Always Start with an Agent" is on. Rows the app cannot read are skipped,
+/// so one odd agent does not hide the others.
+fn parse_agents(body: &str, default_disabled: bool) -> Result<Vec<Agent>, String> {
     let rows: Vec<serde_json::Value> =
         serde_json::from_str(body).map_err(|e| format!("Unexpected agent list: {e}"))?;
     Ok(rows
         .into_iter()
         .filter_map(|row| serde_json::from_value::<AgentRow>(row).ok())
         .filter(|row| !row.name.trim().is_empty())
+        .filter(|row| {
+            if row.id == DEFAULT_AGENT_ID {
+                !default_disabled
+            } else {
+                !row.builtin_persona
+            }
+        })
         .map(|row| Agent {
             id: row.id,
             name: row.name,
@@ -168,8 +183,47 @@ fn upload_outcome(body: &str, name: &str) -> Result<UserFileRow, String> {
 }
 
 #[derive(Deserialize)]
-struct UploadLimitResponse {
+struct SettingsResponse {
+    #[serde(default)]
     user_file_max_upload_size_mb: Option<u64>,
+    #[serde(default)]
+    disable_default_assistant: Option<bool>,
+}
+
+/// The parts of `GET /api/settings` the launcher uses.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct ServerSettings {
+    /// The upload size limit for chat files, if the server sets one.
+    pub upload_limit_bytes: Option<u64>,
+    /// "Always Start with an Agent": the default agent cannot start a chat.
+    pub default_agent_disabled: bool,
+}
+
+fn parse_settings(body: &str) -> Option<ServerSettings> {
+    let parsed: SettingsResponse = serde_json::from_str(body).ok()?;
+    Some(ServerSettings {
+        upload_limit_bytes: parsed
+            .user_file_max_upload_size_mb
+            .filter(|mb| *mb > 0)
+            .map(|mb| mb.saturating_mul(1024 * 1024)),
+        default_agent_disabled: parsed.disable_default_assistant.unwrap_or(false),
+    })
+}
+
+/// The largest file the app uploads, whatever the server allows, because the
+/// file is in memory while it uploads. The server's own ceiling defaults to this.
+pub const MAX_UPLOAD_BYTES: u64 = 250 * 1024 * 1024;
+
+/// The smaller of the app's limit and the server's.
+pub fn upload_limit(settings: Option<&ServerSettings>) -> u64 {
+    settings
+        .and_then(|s| s.upload_limit_bytes)
+        .map_or(MAX_UPLOAD_BYTES, |limit| limit.min(MAX_UPLOAD_BYTES))
+}
+
+/// A user file id is a UUID; anything else must not reach a URL path.
+fn is_file_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
 }
 
 /// `multipart/form-data` with one `files` part, as a browser sends it.
@@ -184,12 +238,15 @@ fn multipart_body(boundary: &str, name: &str, mime: &str, bytes: &[u8]) -> Vec<u
     } else {
         mime
     };
-    let mut body = format!(
+    let head = format!(
         "--{boundary}\r\nContent-Disposition: form-data; name=\"files\"; filename=\"{safe_name}\"\r\nContent-Type: {safe_mime}\r\n\r\n"
-    )
-    .into_bytes();
+    );
+    let tail = format!("\r\n--{boundary}--\r\n");
+    // Sized once, so a large file is copied only one time.
+    let mut body = Vec::with_capacity(head.len() + bytes.len() + tail.len());
+    body.extend_from_slice(head.as_bytes());
     body.extend_from_slice(bytes);
-    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    body.extend_from_slice(tail.as_bytes());
     body
 }
 
@@ -620,7 +677,12 @@ impl Api {
 
     /// The agents the user can chat with (`GET /api/persona`). A server
     /// without the list answers with none.
-    pub async fn list_agents(&self, server: &str, token: &str) -> Result<Vec<Agent>, String> {
+    pub async fn list_agents(
+        &self,
+        server: &str,
+        token: &str,
+        default_disabled: bool,
+    ) -> Result<Vec<Agent>, String> {
         let response = self
             .http
             .get(format!("{server}/api/persona"))
@@ -639,11 +701,11 @@ impl Api {
             return Err(error_detail(response).await);
         }
         let body = response.text().await.map_err(|e| e.to_string())?;
-        parse_agents(&body)
+        parse_agents(&body, default_disabled)
     }
 
-    /// The server's upload size limit for chat files, if it says.
-    pub async fn upload_limit_bytes(&self, server: &str, token: &str) -> Option<u64> {
+    /// The settings the launcher uses; `None` if the server could not say.
+    pub async fn server_settings(&self, server: &str, token: &str) -> Option<ServerSettings> {
         let response = self
             .http
             .get(format!("{server}/api/settings"))
@@ -655,11 +717,32 @@ impl Api {
         if !response.status().is_success() {
             return None;
         }
-        let parsed = response.json::<UploadLimitResponse>().await.ok()?;
-        parsed
-            .user_file_max_upload_size_mb
-            .filter(|mb| *mb > 0)
-            .map(|mb| mb * 1024 * 1024)
+        parse_settings(&response.text().await.ok()?)
+    }
+
+    /// Deletes one of the user's files (`DELETE /api/user/projects/file/{id}`,
+    /// as the web app does). A file that is already gone counts as deleted.
+    pub async fn delete_user_file(
+        &self,
+        server: &str,
+        token: &str,
+        id: &str,
+    ) -> Result<(), String> {
+        if !is_file_id(id) {
+            return Err("Not a file id.".into());
+        }
+        let response = self
+            .http
+            .delete(format!("{server}/api/user/projects/file/{id}"))
+            .bearer_auth(token)
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if response.status().is_success() || response.status() == StatusCode::NOT_FOUND {
+            return Ok(());
+        }
+        Err(error_detail(response).await)
     }
 
     /// Uploads one chat file (`POST /api/user/projects/file/upload`, as the
@@ -904,9 +987,9 @@ mod tests {
     use std::sync::Arc;
 
     use super::{
-        file_state, multipart_body, normalize_managed_server_url, normalize_server_url,
-        parse_agents, redirect_allowed, sso_options, upload_outcome, Agent, Api, AttachedFile,
-        AuthTypeResponse, FileState,
+        file_state, is_file_id, multipart_body, normalize_managed_server_url, normalize_server_url,
+        parse_agents, parse_settings, redirect_allowed, sso_options, upload_limit, upload_outcome,
+        Agent, Api, AttachedFile, AuthTypeResponse, FileState, ServerSettings, MAX_UPLOAD_BYTES,
     };
     use crate::reachability::Unreachable;
     use url::Url;
@@ -990,6 +1073,7 @@ mod tests {
         assert!(!redirect_allowed(&start, &url("https://onyx.corp:8443/")));
         let long = vec![url("https://onyx.corp/"); 11];
         assert!(!redirect_allowed(&long, &url("https://onyx.corp/")));
+    }
 
     #[test]
     fn reads_agents_and_skips_rows_it_cannot_use() {
@@ -1001,7 +1085,7 @@ mod tests {
             {"id": 12, "name": "No description"}
         ]"#;
         assert_eq!(
-            parse_agents(body).unwrap(),
+            parse_agents(body, false).unwrap(),
             vec![
                 Agent {
                     id: 0,
@@ -1020,7 +1104,57 @@ mod tests {
                 },
             ]
         );
-        assert!(parse_agents(r#"{"detail": "x"}"#).is_err());
+        assert!(parse_agents(r#"{"detail": "x"}"#, false).is_err());
+    }
+
+    #[test]
+    fn offers_agents_as_the_web_chat_does() {
+        let body = r#"[
+            {"id": 0, "name": "Assistant", "builtin_persona": true},
+            {"id": 3, "name": "Old built-in", "builtin_persona": true},
+            {"id": 7, "name": "Sales", "builtin_persona": false}
+        ]"#;
+        let ids = |disabled| -> Vec<i64> {
+            parse_agents(body, disabled)
+                .unwrap()
+                .into_iter()
+                .map(|a| a.id)
+                .collect()
+        };
+        assert_eq!(ids(false), vec![0, 7]);
+        assert_eq!(ids(true), vec![7]);
+    }
+
+    #[test]
+    fn reads_server_settings_and_bounds_uploads() {
+        let settings = parse_settings(
+            r#"{"user_file_max_upload_size_mb": 10, "disable_default_assistant": true, "other": 1}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            settings,
+            ServerSettings {
+                upload_limit_bytes: Some(10 * 1024 * 1024),
+                default_agent_disabled: true,
+            }
+        );
+        assert_eq!(upload_limit(Some(&settings)), 10 * 1024 * 1024);
+        // No limit (0) or a limit above the app's: the app's limit applies.
+        let unlimited = parse_settings(r#"{"user_file_max_upload_size_mb": 0}"#).unwrap();
+        assert_eq!(unlimited, ServerSettings::default());
+        assert_eq!(upload_limit(Some(&unlimited)), MAX_UPLOAD_BYTES);
+        let large = parse_settings(r#"{"user_file_max_upload_size_mb": 4096}"#).unwrap();
+        assert_eq!(upload_limit(Some(&large)), MAX_UPLOAD_BYTES);
+        assert_eq!(upload_limit(None), MAX_UPLOAD_BYTES);
+        assert!(parse_settings("not json").is_none());
+    }
+
+    #[test]
+    fn only_uuid_like_file_ids_reach_the_path() {
+        assert!(is_file_id("3f2a9c1e-0b7d-4c55-9a61-1d2e3f4a5b6c"));
+        assert!(!is_file_id(""));
+        assert!(!is_file_id("../../persona/1"));
+        assert!(!is_file_id("abc?x=1"));
     }
 
     #[test]

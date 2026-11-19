@@ -111,6 +111,9 @@ export interface LauncherAgents {
   agents: Agent[];
   // The saved agent for this server; null is the default agent.
   selected: number | null;
+  // "Always Start with an Agent": the list has no default agent, so a new
+  // chat needs one of the listed agents.
+  defaultAgentDisabled: boolean;
 }
 
 export const listAgents = (): Promise<LauncherAgents> => invoke("list_agents");
@@ -126,16 +129,36 @@ export interface AttachedFile {
   chatFileType: string;
 }
 
-/** Uploads the file and resolves once the server has processed it. */
-export async function uploadFile(file: File, name: string): Promise<AttachedFile> {
+/** The largest file the launcher can attach, in bytes. */
+export const getUploadLimit = (): Promise<number> => invoke("get_upload_limit");
+
+/**
+ * Uploads the file and resolves once the server has processed it. `uploadId`
+ * is the id that `cancelUpload` takes. Check `file.size` first: this reads
+ * the whole file into memory.
+ */
+export async function uploadFile(
+  file: File,
+  name: string,
+  uploadId: number
+): Promise<AttachedFile> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   return invoke("upload_file", bytes, {
     headers: {
       "Onyx-File-Name": encodeURIComponent(name),
       "Onyx-File-Type": encodeURIComponent(file.type),
+      "Onyx-Upload-Id": String(uploadId),
     },
   });
 }
+
+/** Stops an upload in flight; the app deletes the file if the server has it. */
+export const cancelUpload = (uploadId: number): Promise<void> =>
+  invoke("cancel_upload", { uploadId });
+
+/** Deletes an uploaded file that was not sent. */
+export const deleteUserFile = (userFileId: string): Promise<void> =>
+  invoke("delete_user_file", { userFileId });
 
 export interface AskOptions {
   // Continues that chat with a follow-up; null starts a new one.
