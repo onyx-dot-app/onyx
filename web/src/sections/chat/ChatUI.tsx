@@ -156,17 +156,18 @@ const ChatUI = React.memo(
       return () => root.removeEventListener("scroll", onScroll);
     }, [scrollContainerRef]);
 
-    const firstRowRef = useRef<{ nodeId: number; top: number } | null>(null);
-    const firstNodeId = messages[0]?.nodeId;
+    // Rows are found by their DOM id, which can be the id first shown
+    // (messageRowId), not `message-${nodeId}`.
+    const firstRowRef = useRef<{ rowId: string; top: number } | null>(null);
+    const firstMessage = messages[0];
+    const firstRowId = firstMessage ? messageRowId(firstMessage) : undefined;
     useLayoutEffect(() => {
       const root = scrollContainerRef?.current;
-      if (!root || firstNodeId === undefined) return;
+      if (!root || firstRowId === undefined) return;
 
       const previous = firstRowRef.current;
-      if (previous && previous.nodeId !== firstNodeId) {
-        const previousRow = document.getElementById(
-          `message-${previous.nodeId}`
-        );
+      if (previous && previous.rowId !== firstRowId) {
+        const previousRow = document.getElementById(previous.rowId);
         if (previousRow) {
           // A no-op where the browser's anchoring already moved it.
           const target =
@@ -175,11 +176,11 @@ const ChatUI = React.memo(
         }
       }
 
-      const firstRow = document.getElementById(`message-${firstNodeId}`);
+      const firstRow = document.getElementById(firstRowId);
       firstRowRef.current = firstRow
-        ? { nodeId: firstNodeId, top: firstRow.offsetTop }
+        ? { rowId: firstRowId, top: firstRow.offsetTop }
         : null;
-    }, [scrollContainerRef, firstNodeId]);
+    }, [scrollContainerRef, firstRowId]);
 
     // Reading-width cap on messages, from the page's chat column width.
     const msgWidth = CHAT_COLUMN_WIDTH;

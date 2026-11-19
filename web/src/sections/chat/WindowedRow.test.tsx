@@ -70,6 +70,7 @@ function Chat({ root }: { root: HTMLDivElement }) {
       scrollContainerRef={scrollContainerRef}
       contentWrapperRef={contentWrapperRef}
       spacerHeightRef={spacerHeightRef}
+      spaceRestoreRef={{ current: null }}
     >
       <WindowedRow id="message-1" initiallyMounted heightCache={new Map()}>
         First message

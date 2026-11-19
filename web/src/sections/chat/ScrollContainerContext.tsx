@@ -18,6 +18,10 @@ interface ScrollContainerContextType {
   spacerHeightRef: MutableRefObject<number>;
   /** The chat shown, for state kept per chat. */
   sessionId?: string;
+  /** Set by DynamicBottomSpacer to refit a reopened chat's remembered space.
+   *  ChatScrollContainer calls it before it restores the saved position,
+   *  once its own refs are attached. */
+  spaceRestoreRef: MutableRefObject<(() => void) | null>;
   /**
    * Reports whether `target` is within `OVERSCAN_VIEWPORTS` viewport heights
    * of the scroll container, above or below. Returns a function that stops
@@ -39,12 +43,14 @@ export function ScrollContainerProvider({
   contentWrapperRef,
   spacerHeightRef,
   sessionId,
+  spaceRestoreRef,
 }: {
   children: React.ReactNode;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   contentWrapperRef: RefObject<HTMLDivElement | null>;
   spacerHeightRef: MutableRefObject<number>;
   sessionId?: string;
+  spaceRestoreRef: MutableRefObject<(() => void) | null>;
 }) {
   // One observer for every row of the container, rebuilt only when the
   // container's height changes the margin.
@@ -110,6 +116,7 @@ export function ScrollContainerProvider({
       contentWrapperRef,
       spacerHeightRef,
       sessionId,
+      spaceRestoreRef,
       observeNearViewport,
     }),
     [
@@ -117,6 +124,7 @@ export function ScrollContainerProvider({
       contentWrapperRef,
       spacerHeightRef,
       sessionId,
+      spaceRestoreRef,
       observeNearViewport,
     ]
   );

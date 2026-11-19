@@ -32,6 +32,7 @@ function Chat({
           scrollContainerRef={scrollContainerRef}
           contentWrapperRef={contentWrapperRef}
           spacerHeightRef={spacerHeightRef}
+          spaceRestoreRef={{ current: null }}
         >
           <div
             id={`message-${ANCHOR_NODE_ID}`}

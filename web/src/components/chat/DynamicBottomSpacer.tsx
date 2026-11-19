@@ -39,6 +39,7 @@ const DynamicBottomSpacer = React.memo(
       contentWrapperRef,
       spacerHeightRef,
       sessionId,
+      spaceRestoreRef,
     } = useScrollContainer();
 
     // Track state with refs to avoid re-renders
@@ -190,25 +191,34 @@ const DynamicBottomSpacer = React.memo(
 
     /**
      * Reopening a chat whose latest turn had space: fit the space again, with
-     * no scroll. A layout effect, so the space is there before
-     * ChatScrollContainer restores the saved position.
+     * no scroll. ChatScrollContainer runs the fit before it restores the
+     * saved position, once the scroll element's ref is attached; this child
+     * layout effect runs before that.
      */
     useLayoutEffect(() => {
       if (!sessionId || !anchorRowId || isActiveRef.current) return;
       if (getChatScrollMemory(sessionId).spaceAnchorRowId !== anchorRowId) {
         return;
       }
-      const spacerHeight = measureSpacerHeight();
-      if (spacerHeight === null) return;
-      isActiveRef.current = true;
-      setHeight(spacerHeight);
-      startObserving();
+      const restore = () => {
+        if (isActiveRef.current) return;
+        const spacerHeight = measureSpacerHeight();
+        if (spacerHeight === null) return;
+        isActiveRef.current = true;
+        setHeight(spacerHeight);
+        startObserving();
+      };
+      spaceRestoreRef.current = restore;
+      return () => {
+        if (spaceRestoreRef.current === restore) spaceRestoreRef.current = null;
+      };
     }, [
       sessionId,
       anchorRowId,
       measureSpacerHeight,
       setHeight,
       startObserving,
+      spaceRestoreRef,
     ]);
 
     /**

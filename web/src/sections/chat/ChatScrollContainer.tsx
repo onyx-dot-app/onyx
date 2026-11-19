@@ -118,6 +118,7 @@ const ChatScrollContainer = React.memo(
       const scrollContainerRef = useRef<HTMLDivElement>(null);
       const contentWrapperRef = useRef<HTMLDivElement>(null);
       const spacerHeightRef = useRef(0);
+      const spaceRestoreRef = useRef<(() => void) | null>(null);
       const endDivRef = useRef<HTMLDivElement>(null);
       const scrolledForSessionRef = useRef<string | null>(null);
       const prevAnchorSelectorRef = useRef<string | null>(null);
@@ -279,12 +280,15 @@ const ChatScrollContainer = React.memo(
                 container,
                 buttonThresholdPx
               );
+              // Its scroll events came while auto-scrolling, so none saved
+              // where it stopped.
+              savePosition();
             }, 600);
           } else {
             isAutoScrollingRef.current = false;
           }
         },
-        [updateScrollState, buttonThresholdPx]
+        [updateScrollState, buttonThresholdPx, savePosition]
       );
 
       useEffect(
@@ -468,9 +472,25 @@ const ChatScrollContainer = React.memo(
         // New session with existing content = instant, new anchor = smooth
         const isLoadingExistingContent =
           isNewSession || scrolledForSessionRef.current === null;
+
+        // A new anchor while the user reads elsewhere (a refresh brought in a
+        // turn from another tab): keep their position. A send anchors through
+        // DynamicBottomSpacer, and a following view still moves.
+        if (!isLoadingExistingContent && !isAtBottomRef.current) {
+          prevAnchorSelectorRef.current = anchorSelector ?? null;
+          return;
+        }
         const behavior: ScrollBehavior = isLoadingExistingContent
           ? "instant"
           : "smooth";
+
+        // Refit the reopened chat's remembered space first: the saved
+        // position may sit inside it. The spacer cannot measure in its own
+        // layout effect, which runs before this element's ref attaches.
+        if (isLoadingExistingContent) {
+          spaceRestoreRef.current?.();
+          spaceRestoreRef.current = null;
+        }
 
         // Reopening a chat: return to its saved row when that row is loaded.
         // Only rows already loaded count, so opening never waits.
@@ -593,6 +613,7 @@ const ChatScrollContainer = React.memo(
                 contentWrapperRef={contentWrapperRef}
                 spacerHeightRef={spacerHeightRef}
                 sessionId={sessionId}
+                spaceRestoreRef={spaceRestoreRef}
               >
                 {children}
               </ScrollContainerProvider>
