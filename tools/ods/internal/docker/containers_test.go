@@ -74,3 +74,24 @@ func TestListComposeContainersReportsMissingDocker(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestListComposeVolumesCountsEachProject(t *testing.T) {
+	calls := fakeDocker(t, `echo a-1; echo a-1; echo b-2`)
+	counts, err := ListComposeVolumes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(counts) != 2 || counts["a-1"] != 2 || counts["b-2"] != 1 {
+		t.Fatalf("counts = %v", counts)
+	}
+	if got := readCalls(t, calls); len(got) != 1 || !strings.HasPrefix(got[0], "volume ls --filter label=com.docker.compose.project") {
+		t.Fatalf("calls = %v", got)
+	}
+}
+
+func TestListComposeVolumesReportsDockerErrors(t *testing.T) {
+	fakeDocker(t, `echo "Cannot connect to the Docker daemon" >&2; exit 1`)
+	if _, err := ListComposeVolumes(); err == nil || !strings.Contains(err.Error(), "Cannot connect") {
+		t.Fatalf("err = %v", err)
+	}
+}

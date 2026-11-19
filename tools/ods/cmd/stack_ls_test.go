@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -273,5 +274,58 @@ func TestProjectInCheckoutMatchesTheRecordedProject(t *testing.T) {
 	}
 	if !projectInCheckout(stack.Project) || projectInCheckout("another-project") {
 		t.Fatal("project selection does not follow the checkout's state")
+	}
+}
+
+func TestStackPruneRejectsANegativeIdle(t *testing.T) {
+	stackLsEnv(t, "exit 0\n")
+	if code, out := runStackCLI(t, "stack", "prune", "--idle", "-1h"); code != 1 || !strings.Contains(out, "--idle must not be negative") {
+		t.Fatalf("prune --idle -1h exit %d:\n%s", code, out)
+	}
+}
+
+func TestStackPruneIdleWithoutStacks(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("finding coding agents is supported only on Linux and macOS")
+	}
+	stackLsEnv(t, "exit 0\n")
+	if code, out := runStackCLI(t, "stack", "prune", "--idle", "1h", "--yes"); code != 0 || !strings.Contains(out, "No orphaned stacks and no stacks idle for 1h0m0s") {
+		t.Fatalf("prune --idle 1h exit %d:\n%s", code, out)
+	}
+}
+
+func TestStackRowNamesJoinsEachName(t *testing.T) {
+	rows := []devstack.StackRow{{Project: "a-1"}, {Project: "b-2"}}
+	want := stackRowName(rows[0]) + ", " + stackRowName(rows[1])
+	if got := stackRowNames(rows); got != want {
+		t.Fatalf("stackRowNames = %q, want %q", got, want)
+	}
+	if got := stackRowNames(nil); got != "" {
+		t.Fatalf("stackRowNames(nil) = %q", got)
+	}
+}
+
+func TestFilterStackRowsKeepsOnlyOrphans(t *testing.T) {
+	rows := []devstack.StackRow{{Project: "a-1", Status: devstack.StatusActive}, {Project: "b-1", Status: devstack.StatusOrphaned}}
+	if kept := filterStackRows(rows, false, true); len(kept) != 1 || kept[0].Project != "b-1" {
+		t.Fatalf("filterStackRows(orphaned) = %v", kept)
+	}
+	if kept := filterStackRows(rows, true, false); len(kept) != 2 {
+		t.Fatalf("filterStackRows(all) = %v", kept)
+	}
+}
+
+func TestLogProjectResultNamesEachStep(t *testing.T) {
+	logger := log.StandardLogger()
+	original := logger.Out
+	t.Cleanup(func() { logger.SetOutput(original) })
+	var logs strings.Builder
+	logger.SetOutput(&logs)
+	logProjectResult(&devstack.ProjectResult{Row: devstack.StackRow{Project: "a-1"}, StoppedServices: 2, RemovedVolumes: true, ReleasedLeases: 3, RemovedOwner: true})
+	logProjectResult(&devstack.ProjectResult{Row: devstack.StackRow{Project: "b-1"}, ComposeDown: true})
+	for _, want := range []string{"2 service(s) stopped, containers and volumes removed, 3 port lease(s) released, owner record removed", "0 service(s) stopped, containers removed"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Fatalf("logs do not contain %q:\n%s", want, logs.String())
+		}
 	}
 }
