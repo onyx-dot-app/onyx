@@ -29,7 +29,7 @@ export function WorkspaceHome({
         justifyContent="start"
         height="auto"
         gap={1.5}
-        className={cn("mt-2", wide ? "max-w-3xl @container" : "max-w-xs")}
+        className={cn("mt-2", wide ? "max-w-3xl" : "max-w-xs")}
       >
         <div className="pb-3 text-center">
           <Text font="main-ui-muted" color="text-05">
