@@ -502,15 +502,6 @@ class ChatSessionProcessingStatus(BaseModel):
     approvals_version: str = ""
 
 
-class ChatPublishedFile(PublishedFileView):
-    """A file that the model published on the current branch."""
-
-    # The branch answer the file is tied to: the answer that published it,
-    # or for a subagent's file, the turn root of the run that published it
-    # (db/chat.py:ownership_roots).
-    message_id: int
-
-
 class ChatSessionDetailResponse(BaseModel):
     chat_session_id: UUID
     description: str | None
@@ -535,10 +526,10 @@ class ChatSessionDetailResponse(BaseModel):
     incognito: bool = False
     # Set on a paged load when the current branch has messages before the page.
     has_older_messages: bool = False
-    # Every file published on the current branch, also outside a paged load's
-    # page and by the sessions that its answers spawned, oldest first. Set on
-    # a latest-page load and on a shared chat's load.
-    published_files: list[ChatPublishedFile] = Field(default_factory=list)
+    # The files published in the chat, also by its subagents: the newest
+    # publish of each path, oldest first (db/chat.py:get_chat_published_files).
+    # Set on a latest-page load and on a shared chat's load.
+    published_files: list[PublishedFileView] | None = None
     # The owner's saved tool options; NULL means the agent's tools.
     tool_options: ToolOptions | None = None
     # The status route's `approvals_version` for the requests this load shows.

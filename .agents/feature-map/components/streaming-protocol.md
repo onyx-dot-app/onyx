@@ -298,8 +298,8 @@ publish gives a new `file_id`), `display_path` (the path to show: relative
 to the chat's working directory, or the whole path outside it; derived from
 `path`), `size` in bytes and `mime_type`. Live and replay send the same two packets. The
 `publish_files_end` packets of a response list its published files. The
-session load's `published_files` lists those of the whole current branch,
-also of messages outside a paged load's page ([[chat-persistence]]). A sandbox call that
+session load's `published_files` lists the newest copy of each path in the
+whole chat, also of messages outside a paged load's page ([[chat-persistence]]). A sandbox call that
 a Stop ended has no end packet; the client shows it as stopped. So does any
 nested call that its program left unfinished (state `unfinished`,
 `CodeModeRenderer._complete_child`). An `exec_end` with `completion`
