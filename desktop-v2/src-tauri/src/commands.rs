@@ -212,12 +212,21 @@ async fn end_session(app: &AppHandle) -> Result<(), String> {
     let (token, cleared) = state.end_session(&server);
     crate::sso::cancel(app);
     crate::offline::dismiss(app);
-    if let Some(token) = token {
-        state.api.logout(&server, &token).await;
-    }
+    let revoked = match token {
+        Some(token) => crate::revocation::end_server_session(app, &server, &token).await,
+        None => true,
+    };
     cleared?;
     main_window::close(app, &server);
     windows::reset_launcher(app);
+    if !revoked {
+        windows::notify(
+            app,
+            "Signed out",
+            "Signed out on this computer. Onyx could not reach the server to end the \
+             session. Onyx tries again while it is open.",
+        );
+    }
     Ok(())
 }
 

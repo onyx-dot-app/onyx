@@ -21,7 +21,11 @@ function reasonText(reason: Unreachable): string {
     case "dns":
       return "The server name could not be found.";
     case "tls":
-      return "The server's security certificate could not be verified.";
+      return (
+        "The server's security certificate could not be verified. A company proxy that " +
+        "inspects secure traffic, or a missing company root certificate, often causes " +
+        "this. Contact your IT team."
+      );
     case "timeout":
       return "The server took too long to answer.";
     case "refused":

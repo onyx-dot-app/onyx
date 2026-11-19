@@ -84,6 +84,10 @@ pub fn classify_popup(url: &Url, server_origin: &str) -> LinkAction {
 /// Resolves `path` against the server. Fails if the result is on another
 /// origin: `//host/x` and `/\host/x` are paths that name another host.
 pub fn server_url_join(server_url: &Url, path: &str) -> Result<Url, String> {
+    // Only an absolute path; `//host` and `/\host` would name another host.
+    if !path.starts_with('/') || path[1..].starts_with(['/', '\\']) {
+        return Err("That link is not on your Onyx server.".into());
+    }
     let target = server_url.join(path).map_err(|e| e.to_string())?;
     if target.origin() != server_url.origin() {
         return Err("That link is not on your Onyx server.".into());
@@ -311,8 +315,11 @@ pub async fn open_url(
         .min_inner_size(800.0, 600.0)
         .center()
         .initialization_script(LINK_SHIM_JS)
-        .on_page_load(|window, payload| {
-            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+        .on_page_load(|window, payload| match payload.event() {
+            tauri::webview::PageLoadEvent::Started => {
+                crate::offline::load_committed(window.app_handle());
+            }
+            tauri::webview::PageLoadEvent::Finished => {
                 crate::offline::load_finished(window.app_handle());
                 sync_chrome(window.app_handle());
             }
@@ -455,6 +462,31 @@ mod tests {
     use url::Url;
 
     const ORIGIN: &str = "http://localhost:3000";
+
+    fn joined(path: &str) -> Option<String> {
+        let server = Url::parse("https://onyx.example").unwrap();
+        server_url_join(&server, path)
+            .ok()
+            .map(|url| url.to_string())
+    }
+
+    #[test]
+    fn joins_paths_on_the_server() {
+        assert_eq!(
+            joined("/app?chatId=1#end").as_deref(),
+            Some("https://onyx.example/app?chatId=1#end")
+        );
+        assert_eq!(joined("/").as_deref(), Some("https://onyx.example/"));
+    }
+
+    #[test]
+    fn rejects_paths_that_leave_the_server() {
+        assert_eq!(joined("//evil.example/login"), None);
+        assert_eq!(joined("/\\evil.example"), None);
+        assert_eq!(joined("https://evil.example/"), None);
+        assert_eq!(joined("app"), None);
+        assert_eq!(joined(""), None);
+    }
 
     fn action(url: &str) -> LinkAction {
         classify(&Url::parse(url).unwrap(), ORIGIN)

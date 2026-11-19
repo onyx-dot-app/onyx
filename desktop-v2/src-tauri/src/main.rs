@@ -18,6 +18,7 @@ mod offline;
 mod policy;
 mod qa;
 mod reachability;
+mod revocation;
 mod session_store;
 mod shortcut;
 mod sso;

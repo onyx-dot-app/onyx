@@ -430,14 +430,23 @@ impl Api {
             .map_err(|e| e.to_string())
     }
 
-    pub async fn logout(&self, server: &str, token: &str) {
-        let _ = self
+    /// Ends the session on the server. Returns false if the request did not
+    /// reach a working server (no answer, or a 5xx), so it can be tried again.
+    pub async fn logout(&self, server: &str, token: &str) -> bool {
+        match self
             .http
             .post(format!("{server}/api/auth/mobile/logout"))
             .bearer_auth(token)
             .timeout(Duration::from_secs(10))
             .send()
-            .await;
+            .await
+        {
+            Ok(response) => !response.status().is_server_error(),
+            Err(e) => {
+                log::warn!("server sign-out failed: {e}");
+                false
+            }
+        }
     }
 
     pub async fn create_chat_session(&self, server: &str, token: &str) -> Result<String, String> {

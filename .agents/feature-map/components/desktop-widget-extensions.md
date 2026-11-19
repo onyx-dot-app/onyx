@@ -66,8 +66,10 @@ shapes must keep the launcher working. IT can preset the server and lock
 some settings with managed policy (MDM profile, Windows registry policy, or a
 Linux policy file). The v2 README lists the keys. When the server cannot be
 reached, v2 shows a bundled offline window that polls `GET /api/version`
-without a session and loads the web UI again when it answers, so that endpoint
-must stay public.
+without a session, then checks the session with `GET /api/me`, and loads the
+web UI again when both answer, so `/api/version` must stay public. Sign-out
+retries `POST /api/auth/mobile/logout` in the background while the server
+cannot be reached.
 
 It does not own the chat UI that the desktop shell and the side panel load
 ([[chat-frontend]]), the chat endpoints ([[core-chat-loop]]), API keys and JWT
