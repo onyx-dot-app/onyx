@@ -17391,7 +17391,8 @@
           "skillMd": "Edit SKILL.md in the editor. Add only supporting files here."
         },
         "loadFailed": "Could not load the contents of this skill.",
-        "retry": "Retry"
+        "retry": "Retry",
+        "reloadFailed": "Could not load the newest version. Your changes are kept. Try Reload again."
       },
       "required": {
         "label": "Required",

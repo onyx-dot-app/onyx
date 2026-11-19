@@ -17391,7 +17391,8 @@
           "skillMd": "请在编辑器中编辑 SKILL.md。此处仅添加支持文件。"
         },
         "loadFailed": "无法加载此技能的内容。",
-        "retry": "重试"
+        "retry": "重试",
+        "reloadFailed": "无法加载最新版本。你的更改已保留。请再次尝试重新加载。"
       },
       "required": {
         "label": "必需",
