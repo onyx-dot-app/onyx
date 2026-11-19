@@ -17,13 +17,13 @@ from pydantic import BaseModel, JsonValue, TypeAdapter
 from onyx.agents.compaction import (
     CheckpointMismatchError,
     ContextLimitError,
+    cached_request_tokens,
     compact_history,
     context_budget,
     count_tokens,
     history_boundaries,
     is_input_context,
     messages_after_compaction,
-    request_token_upper_bound,
     request_tokens,
     working_messages,
 )
@@ -2023,13 +2023,17 @@ def _compact_context(
     budget = context_budget(llm)
     output = resolve_token_budget(llm)
     if not force and not run._token_counts:
-        upper_bound = request_token_upper_bound(request)
+        # Each cl100k token consumes at least one byte. UTF-8 uses at most
+        # four bytes per character, and one for ASCII.
+        upper_bound = request_tokens(
+            request, lambda text: len(text) * (1 if text.isascii() else 4)
+        )
         if (
             upper_bound <= budget.trigger
             and output.output_allowance(upper_bound) == output.max_output_tokens
         ):
             return _limit_output(output, request, upper_bound)
-    original_size = request_tokens(request, run._token_counts)
+    original_size = cached_request_tokens(request, run._token_counts)
     if not force and original_size <= budget.trigger:
         return _limit_output(output, request, original_size)
 
@@ -2063,7 +2067,7 @@ def _compact_context(
             tools=tools,
         )
         cancellation_signal.check()
-        candidate_size = request_tokens(candidate_request, run._token_counts)
+        candidate_size = cached_request_tokens(candidate_request, run._token_counts)
 
     if selected_checkpoint is None or candidate_size > budget.input_limit:
         selected_checkpoint, candidate_request, candidate_size = _truncate_context(
@@ -2111,7 +2115,7 @@ def _truncate_context(
             messages_after_compaction(source, index, summary=""), tools=tools
         )
         cancellation_signal.check()
-        candidate_size = request_tokens(candidate_request, token_counts)
+        candidate_size = cached_request_tokens(candidate_request, token_counts)
         if candidate_size <= input_limit and candidate_size < original_size:
             return checkpoint, candidate_request, candidate_size
     raise ContextLimitError(
