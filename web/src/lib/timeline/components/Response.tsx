@@ -1,4 +1,7 @@
-import React from "react";
+"use client";
+
+import React, { useState } from "react";
+import { Presence } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { AnswerText } from "@/lib/timeline/components/AnswerText";
 
@@ -20,15 +23,29 @@ export interface ResponseProps {
 /**
  * A response's layout, the same in chat and Craft: its items in arrival order,
  * 0.75rem apart, with text lined up with the run header's text.
+ *
+ * The spacing is the column's gap, so an item that renders nothing (a hidden
+ * run) takes no space. An item that arrives after the response first renders
+ * opens its space: its height grows, then it fades in, so whatever sits below
+ * slides down instead of snapping. Run cards do this themselves (`RunCard`).
+ * Items present on the first render, such as saved history, appear at once.
  */
 export function Response({ items }: ResponseProps) {
+  const [initialKeys] = useState(() => new Set(items.map((item) => item.key)));
+
   return (
     <Section alignItems="stretch" gap={3} height="auto">
       {items.map((item) =>
-        item.kind === "text" ? (
-          <AnswerText key={item.key}>{item.node}</AnswerText>
-        ) : (
+        item.kind === "run" ? (
           <React.Fragment key={item.key}>{item.node}</React.Fragment>
+        ) : (
+          <Presence key={item.key} appear={!initialKeys.has(item.key)} grow>
+            {item.kind === "text" ? (
+              <AnswerText>{item.node}</AnswerText>
+            ) : (
+              item.node
+            )}
+          </Presence>
         )
       )}
     </Section>
