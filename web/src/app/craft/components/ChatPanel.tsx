@@ -377,8 +377,10 @@ function ChatPanelContent({
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const scrollToBottom = useCallback(() => {
-    scrollContainerRef.current?.scrollToBottom();
-  }, []);
+    scrollContainerRef.current?.scrollToBottom(
+      reduceMotion ? "instant" : "smooth"
+    );
+  }, [reduceMotion]);
   // The setting decides whether a running turn is followed. With nothing
   // running, a view at the end keeps to it while layout settles.
   const autoScroll =
@@ -619,7 +621,8 @@ function ChatPanelContent({
               onScrollButtonVisibilityChange={setShowScrollButton}
               data-testid="craft-chat-scroll"
               fadeEdges={false}
-              className="flex flex-col flex-1 min-h-0"
+              // Positioned: the container measures offsetTop from here.
+              className="relative flex flex-col flex-1 min-h-0"
               scrollClassName="flex flex-col flex-1 min-h-0 overflow-y-scroll overflow-x-hidden [scrollbar-color:var(--border-02)_transparent] supports-[selector(::-webkit-scrollbar)]:[scrollbar-color:auto] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border-02 [&::-webkit-scrollbar-thumb:hover]:bg-border-03"
               contentClassName="flex flex-col flex-1 shrink-0"
               footer={

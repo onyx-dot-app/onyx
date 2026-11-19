@@ -252,7 +252,18 @@ const ChatScrollContainer = React.memo(
         // shouldn't make the system think there's real content below the viewport.
         const contentEnd =
           endDivRef.current.offsetTop - spacerHeightRef.current;
-        const viewportBottom = container.scrollTop + container.clientHeight;
+        // A footer inside the scroll element (a sticky composer) covers the
+        // bottom of the viewport.
+        let footerHeight = 0;
+        for (
+          let sibling = contentWrapperRef.current?.nextElementSibling;
+          sibling;
+          sibling = sibling.nextElementSibling
+        ) {
+          footerHeight += sibling.getBoundingClientRect().height;
+        }
+        const viewportBottom =
+          container.scrollTop + container.clientHeight - footerHeight;
         const contentBelowViewport = contentEnd - viewportBottom;
 
         return {
