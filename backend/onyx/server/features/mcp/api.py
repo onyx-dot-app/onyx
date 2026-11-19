@@ -42,7 +42,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.access import (
     publish_integration__no_commit,
     set_company_policy__no_commit,
-    set_group_settings__no_commit,
     share_integration__no_commit,
 )
 from onyx.integrations.connection_models import read_connection_secret
@@ -279,16 +278,6 @@ def _apply_access(
         affected |= set_company_policy__no_commit(
             integration, PluginInstallationPolicy.NOT_AVAILABLE, db_session
         )
-    # The legacy model has no group settings: private means only these
-    # shares, so a group setting that gives access goes too.
-    group_settings = load_integration_group_settings(integration.id, db_session)
-    if group_settings:
-        affected |= set_group_settings__no_commit(
-            user,
-            integration,
-            {setting.group_id: None for setting in group_settings},
-            db_session,
-        )
     users, groups = _shares(integration, db_session)
     return affected | share_integration__no_commit(
         user,
@@ -313,6 +302,16 @@ def _admin_view(integration: Integration, db_session: Session) -> MCPServerAdmin
     server = _server_row(integration, db_session)
     is_public = not is_private(integration)
     users, groups = ([], []) if is_public else _shares(integration, db_session)
+    # A group with its own setting above Not available also has access. The
+    # legacy view has no group settings, so it lists such a group too.
+    groups = sorted(
+        set(groups)
+        | {
+            setting.group_id
+            for setting in load_integration_group_settings(integration.id, db_session)
+            if setting.installation_policy != PluginInstallationPolicy.NOT_AVAILABLE
+        }
+    )
     auth_type, auth_performer = _legacy_auth(integration)
     template = masked_header_template(integration.header_template)
     return MCPServerAdminView(

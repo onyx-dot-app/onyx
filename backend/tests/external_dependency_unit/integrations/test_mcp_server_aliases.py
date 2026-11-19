@@ -500,11 +500,11 @@ def test_agent_mcp_tool_ids_round_trip_and_change_the_selection(
     assert links() == []
 
 
-def test_making_a_server_private_removes_its_group_settings(
+def test_a_private_server_lists_each_group_with_access(
     db_session: Session, admin: User, created: list[int]
 ) -> None:
-    """The legacy model has no group settings, so private means only the
-    shares in the request: a group setting that gives access goes."""
+    """The legacy view has no group settings, so it lists a group whose own
+    setting gives access. A legacy edit keeps the setting."""
     group = make_group(db_session)
     db_session.commit()
     try:
@@ -530,10 +530,20 @@ def test_making_a_server_private_removes_its_group_settings(
             db_session,
             admin,
         )
-
-        assert load_integration_group_settings(integration.id, db_session) == []
         server = mcp_api.get_mcp_server_alias(server_id, db_session, admin)
-        assert (server.is_public, server.groups) == (False, [])
+        assert (server.is_public, server.groups) == (False, [group.id])
+
+        # A share-only edit keeps the group setting.
+        mcp_api.update_mcp_server_alias(
+            server_id,
+            MCPServerSimpleUpdateRequest(users=[admin.id]),
+            db_session,
+            admin,
+        )
+        assert [
+            setting.group_id
+            for setting in load_integration_group_settings(integration.id, db_session)
+        ] == [group.id]
     finally:
         db_session.rollback()
         db_session.execute(

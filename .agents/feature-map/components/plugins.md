@@ -76,9 +76,9 @@ Group or user restriction needs EE.
   Configuration (the user's connection, Disconnect)
   and Actions (each action with the admin's Allow, Ask or Blocked, and the
   user's Always allow switch when the admin allows it). The admin sets the
-  policy only on `/admin/integrations/[id]`. A plugin page (`/app/customize/plugins/[pluginId]`) has Overview,
-  Skills and Versions; a plugin that is one skill replaces itself with the
-  skill page. When the admin lets users save it, each action that asks offers
+  policy only on `/admin/integrations/[id]`. A plugin page (`/app/customize/plugins/[pluginId]`) only
+  opens the skill page of its one skill, or shows that the plugin is not
+  found. When the admin lets users save it, each action that asks offers
   "Always allow". A member with manage:actions adds a private integration
   ("For me" only) from the Integrations Add menu.
 - **In chat**, the tools popover lists the current agent's integrations

@@ -76,7 +76,11 @@ def get_agent_catalog(
 @router.get("/agents/{persona_id}")
 def get_agent_integration_ids(
     persona_id: int,
-    user: User = Depends(_member),
+    # An anonymous chat reads its integrations too: only those open to
+    # everyone (agent_integration_ids_for_user).
+    user: User = Depends(
+        require_permission(Permission.READ_CHAT, allow_anonymous=True)
+    ),
     db_session: Session = Depends(get_session),
 ) -> list[int]:
     """The integrations that a chat of the agent uses for the user."""

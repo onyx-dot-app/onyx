@@ -225,7 +225,7 @@
   "GET /input_prompt/{input_prompt_id}": "basic",
   "GET /integrations": "basic",
   "GET /integrations/agent-catalog": "basic",
-  "GET /integrations/agents/{persona_id}": "basic",
+  "GET /integrations/agents/{persona_id}": "read:chat +anonymous",
   "GET /integrations/{integration_id}": "basic",
   "GET /integrations/{integration_id}/access": "manage:actions +scope",
   "GET /license": "admin",

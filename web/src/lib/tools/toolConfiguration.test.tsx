@@ -1032,15 +1032,20 @@ describe("useToolConfiguration: integrations of the agent", () => {
     expect(result.current.optionsLoaded).toBe(true);
   });
 
-  test("an anonymous visitor sends with no integrations", () => {
+  test("an anonymous visitor's allow-list keeps the agent's integrations", () => {
     mockUser = { ...SIGNED_IN, is_anonymous_user: true };
     mockChatId = null;
     mockActiveAgent = AGENT;
-    // The ids route refuses an anonymous visitor.
-    mockIntegrationIds = null;
+    mockIntegrationIds = [11];
     const { result } = renderHook(() => useToolConfiguration(7));
     expect(result.current.optionsLoaded).toBe(true);
-    expect(mockReadAgentIds).toContain(undefined);
+    expect(mockReadAgentIds).toContain(7);
+    // Turning off a built-in tool makes an allow-list.
+    act(() => result.current.setToolState(2, () => "disabled"));
+    expect(result.current.allowed).toContainEqual({
+      type: "integration",
+      integration_id: 11,
+    });
   });
 
   test("a new chat holds a send until the saved integration switches load", () => {
