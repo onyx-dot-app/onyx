@@ -20,6 +20,8 @@ pub struct Config {
     pub aonyx: Option<bool>,
     /// Where the pet sits, in logical screen coordinates.
     pub aonyx_position: Option<[f64; 2]>,
+    /// Notify when a launcher answer finishes while the launcher is hidden.
+    pub notify_answers: Option<bool>,
 }
 
 impl Config {
@@ -31,6 +33,10 @@ impl Config {
         self.hotkey
             .clone()
             .unwrap_or_else(|| DEFAULT_HOTKEY.to_string())
+    }
+
+    pub fn notify_answers(&self) -> bool {
+        self.notify_answers.unwrap_or(true)
     }
 }
 

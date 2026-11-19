@@ -23,6 +23,7 @@ export interface Prefs {
   notificationsDisabled: boolean;
   // A managed policy exists but is not valid.
   policyInvalid: boolean;
+  notifyAnswers: boolean;
 }
 
 export interface SearchHit {
@@ -90,6 +91,8 @@ export const setHotkey = (hotkey: string): Promise<void> =>
 
 export const setLaunchAtLogin = (enabled: boolean): Promise<void> =>
   invoke("set_launch_at_login", { enabled });
+export const setNotifyAnswers = (enabled: boolean): Promise<void> =>
+  invoke("set_notify_answers", { enabled });
 
 export const changeServer = (): Promise<void> => invoke("change_server");
 
@@ -116,6 +119,9 @@ export const openExternal = (url: string): Promise<void> =>
   invoke("open_external", { url });
 
 export const hideLauncher = (): Promise<void> => invoke("hide_launcher");
+
+// Tells Rust the launcher dropped its answer, so that answer does not notify.
+export const discardAnswer = (): Promise<void> => invoke("discard_answer");
 
 // Why the server could not be reached (reachability.rs).
 export type Unreachable =

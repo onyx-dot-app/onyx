@@ -263,7 +263,7 @@ pub async fn run(
     channel: &Channel<AskEvent>,
     // False once the session that started this answer has ended.
     is_current: &(dyn Fn() -> bool + Sync),
-) -> Result<String, String> {
+) -> Result<Answered, String> {
     let session_id = match follow_up_of {
         Some(id) => id.to_string(),
         None => api.create_chat_session(server, token).await?,
@@ -313,7 +313,15 @@ pub async fn run(
         });
     }
     log::info!("ask finished (stop packet: {})", state.finished);
-    Ok(session_id)
+    Ok(Answered {
+        awaiting_approval: state.awaiting_approval,
+    })
+}
+
+/// How an answer that streamed to the end stopped.
+pub struct Answered {
+    /// The answer stopped to wait for a tool approval in the Onyx window.
+    pub awaiting_approval: bool,
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import {
   Button,
   CompactMarkdown,
@@ -13,6 +14,7 @@ import { mount } from "@/lib/mount";
 import { hasPrimaryModifier, primaryShortcut } from "@/lib/platform";
 import {
   ask,
+  discardAnswer,
   errorMessage,
   hideLauncher,
   openChatInMain,
@@ -65,6 +67,14 @@ function Launcher() {
   const inputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<Mode>("ask");
+
+  // A notification click is for the answer, even if Search was open.
+  useEffect(() => {
+    const unlisten = listen("launcher-show-answer", () => setMode("ask"));
+    return () => {
+      void unlisten.then((stop) => stop());
+    };
+  }, []);
   const [query, setQuery] = useState("");
   // The panel keeps its chat, results and query while hidden; ⌘N starts over.
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -105,6 +115,7 @@ function Launcher() {
   }
 
   function newChat() {
+    void discardAnswer();
     askId.current += 1;
     searchId.current += 1;
     setTurns([]);

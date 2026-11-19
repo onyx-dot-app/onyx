@@ -6,11 +6,14 @@
   "windows": ["launcher"],
   "permissions": [
     "core:window:allow-start-dragging",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
     "allow-ask",
     "allow-search",
     "allow-open-chat-in-main",
     "allow-open-external",
     "allow-hide-launcher",
+    "allow-discard-answer",
     "allow-toggle-aonyx"
   ]
 }

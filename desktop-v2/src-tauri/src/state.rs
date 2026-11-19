@@ -185,6 +185,14 @@ impl AppState {
         session_store::clear(server).map(|()| true)
     }
 
+    /// Runs `f` only if session `epoch` is still current. The check and `f`
+    /// hold the lock `end_session` takes, so a sign-out cannot end the session
+    /// between them.
+    pub fn while_current<T>(&self, epoch: u64, f: impl FnOnce() -> T) -> Option<T> {
+        let _cache = self.token.lock().unwrap_or_else(|p| p.into_inner());
+        (self.epoch() == epoch).then(f)
+    }
+
     /// The server and token for an authenticated call.
     pub fn session(&self) -> Result<(String, String), String> {
         let server = self.server()?;

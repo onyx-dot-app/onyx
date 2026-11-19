@@ -40,6 +40,7 @@ pub struct Prefs {
     notifications_disabled: bool,
     /// The managed policy exists but is not valid.
     policy_invalid: bool,
+    notify_answers: bool,
 }
 
 const MANAGED: &str = "This setting is managed by your organization.";
@@ -162,8 +163,23 @@ pub fn get_prefs(app: AppHandle, state: State<'_, AppState>) -> Prefs {
         hotkey,
         launch_at_login: login_item::is_enabled(&app).unwrap_or(false),
         server_url,
+        notify_answers: crate::notify::enabled(&state),
         signed_in,
     }
+}
+
+#[tauri::command]
+pub fn set_notify_answers(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
+    if state.policy().disable_notifications {
+        return Err(MANAGED.into());
+    }
+    state.config.update(|c| c.notify_answers = Some(enabled))
+}
+
+/// The launcher started a new chat; its old answer must not notify.
+#[tauri::command]
+pub fn discard_answer(app: AppHandle) {
+    crate::aonyx::answer_discarded(&app);
 }
 
 #[tauri::command]
@@ -278,6 +294,11 @@ pub async fn ask(
     )
     .await;
     crate::aonyx::answer_finished(&app, answer, result.is_ok());
+    let outcome = match &result {
+        Ok(a) if a.awaiting_approval => crate::notify::Outcome::NeedsApproval,
+        Ok(_) => crate::notify::Outcome::Answered,
+        Err(_) => crate::notify::Outcome::Failed,
+    };
     let event = match &result {
         Ok(_) => AskEvent::Done,
         Err(message) => AskEvent::Error {
@@ -285,6 +306,16 @@ pub async fn ask(
         },
     };
     let _ = on_event.send(event);
+    // After the answer ends in the launcher: the first notification can wait
+    // for the permission prompt.
+    let notify_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::notify::answer_finished(
+            &notify_app,
+            crate::notify::Answer { id: answer, epoch },
+            outcome,
+        );
+    });
     Ok(())
 }
 

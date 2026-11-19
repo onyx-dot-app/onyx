@@ -10,6 +10,7 @@
     "allow-get-prefs",
     "allow-set-hotkey",
     "allow-set-launch-at-login",
+    "allow-set-notify-answers",
     "allow-change-server",
     "allow-sign-out"
   ]

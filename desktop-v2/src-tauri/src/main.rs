@@ -14,6 +14,7 @@ mod macos_cookies;
 mod macos_dialogs;
 mod main_window;
 mod menu;
+mod notify;
 mod offline;
 mod policy;
 mod qa;
@@ -42,6 +43,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .plugin(notify::plugin())
         // Remember the main window's size and position; small windows stay centred.
         .plugin(
             tauri_plugin_window_state::Builder::default()
@@ -74,6 +76,7 @@ fn main() {
                 launcher::preload(handle);
             }
             policy::spawn_refresh(handle);
+            notify::init(handle);
 
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
@@ -108,6 +111,8 @@ fn main() {
             commands::get_prefs,
             commands::set_hotkey,
             commands::set_launch_at_login,
+            commands::set_notify_answers,
+            commands::discard_answer,
             commands::change_server,
             commands::sign_out,
             commands::ask,
