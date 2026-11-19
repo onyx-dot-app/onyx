@@ -30,6 +30,12 @@ textarea,
   -webkit-app-region: drag;
 }
 
-body.launcher {
+/* A drag region swallows clicks on everything inside it; controls stay clickable. */
+.drag-region button {
+  -webkit-app-region: no-drag;
+}
+
+body.launcher,
+body.aonyx {
   background: transparent;
 }

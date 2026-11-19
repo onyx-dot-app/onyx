@@ -56,6 +56,7 @@ from onyx.llm.interfaces import (
 )
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
+    PROVIDERS_WITHOUT_NONE_TOOL_CHOICE,
     ReasoningParamStyle,
     anthropic_identity_is_always_thinking,
     anthropic_identity_turns_thinking_off_between_tools,
@@ -69,7 +70,7 @@ from onyx.llm.model_capabilities import (
     is_true_openai_model,
     model_is_reasoning_model,
     model_prefers_auto_tool_choice,
-    model_requires_auto_tool_choice,
+    model_supports_none_tool_choice,
     openai_chat_tools_require_reasoning_none,
     openai_chat_variant_rejects_reasoning,
     openai_model_rejects_reasoning_effort,
@@ -1127,14 +1128,13 @@ class LitellmLLM(LLM):
         ):
             tool_choice = ToolChoiceOptions.AUTO
 
-        # These native adapters drop NONE. Omit schemas but retain history;
-        # Onyx or LiteLLM serializes prior calls and results for each provider.
-        if tool_choice == ToolChoiceOptions.NONE and self._model_provider in {
-            LlmProviderNames.BEDROCK,
-            LlmProviderNames.BEDROCK_CONVERSE,
-            LlmProviderNames.OLLAMA,
-            LlmProviderNames.OLLAMA_CHAT,
-        }:
+        # A raw NONE request to these adapters omits the schemas, because they
+        # cannot forbid calls; the history keeps prior calls and results.
+        # Shared requests send AUTO with their tools instead (_prepare_tools).
+        if (
+            tool_choice == ToolChoiceOptions.NONE
+            and self._model_provider in PROVIDERS_WITHOUT_NONE_TOOL_CHOICE
+        ):
             tools = None
 
         # If no tools are provided, tool_choice should be None
@@ -2150,10 +2150,12 @@ class LitellmLLM(LLM):
             if model_prefers_auto_tool_choice(model_names):
                 tools = [tool for tool in tools if tool.name == choice.name]
                 choice = ToolChoiceOptions.AUTO
-        if choice == ToolChoiceOptions.NONE and model_requires_auto_tool_choice(
-            model_names
+        # Tools stay declared so the cached prefix and the history's calls stay
+        # valid. Where NONE cannot be sent, the agent runtime denies any call.
+        if choice == ToolChoiceOptions.NONE and not model_supports_none_tool_choice(
+            self.config.model_provider, model_names
         ):
-            tools = []
+            choice = ToolChoiceOptions.AUTO
         return tools, choice
 
     def _prepare_request(
@@ -2217,7 +2219,7 @@ class LitellmLLM(LLM):
                 # A completed response survives its deadline, but explicit Stop wins.
                 if signal.cancelled:
                     raise AgentCancelled()
-                return to_assistant_message(response, request)
+                return to_assistant_message(response, request, tool_choice)
             except (Exception, AgentCancelled) as error:
                 span.set_error(
                     {
@@ -2277,6 +2279,7 @@ class LitellmLLM(LLM):
                         )
                     ),
                     request,
+                    tool_choice,
                 )
                 for event in events:
                     signal.check()

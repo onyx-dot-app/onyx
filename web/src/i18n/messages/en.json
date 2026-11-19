@@ -9277,7 +9277,16 @@
         "toasts": {
           "blockedBySkills": "Can't delete this user",
           "openSkills": "Open skills to transfer them",
+          "renamed": "The new owner already had skills with these names, so the moved skills got new names",
           "success": "User deleted"
+        },
+        "transfer": {
+          "description": "<strong>{email}</strong> owns {count, plural, one {# private skill} other {# private skills}}. Transfer ownership to another user, then the account is deleted.",
+          "submit": {
+            "label": "Transfer All and Delete"
+          },
+          "ownersLoadFailed": "Could not load the users who can receive the skills.",
+          "retry": "Retry"
         }
       },
       "editModal": {
@@ -10520,14 +10529,17 @@
           "name": {
             "title": "Header Name",
             "placeholder": "Add a header name",
-            "error": "Add a header name."
+            "error": "Add a header name.",
+            "duplicate": "Use each header name once."
           },
           "value": {
             "title": "Header Value",
             "description": "Put each credential in braces, for example {example}. Each placeholder becomes a credential field.",
             "placeholder": "For example: {example}",
             "error": "Add at least one placeholder, for example {example}."
-          }
+          },
+          "add": "Add Header",
+          "remove": "Remove header {name}"
         },
         "oauth": {
           "providerMode": {
@@ -10663,6 +10675,7 @@
           "useDefaults": "Use defaults",
           "readOnly": "Read-Only Actions ({count})",
           "write": "Write Actions ({count})",
+          "other": "Other Actions ({count})",
           "empty": "This integration has no actions.",
           "connectFirst": {
             "title": "Connect the server first",
@@ -10797,7 +10810,7 @@
         "ariaLabel": "Agents Editor Page"
       },
       "plugins": {
-        "askHint": "To run this with no prompt, an admin sets it to Allow on the integration, or each user picks Always allow.",
+        "askHint": "To run this with no prompt, change the agent setting, an admin sets it to Allow on the integration, or each user picks Always allow.",
         "askHintAdminOnly": "To run this with no prompt, an admin sets it to Allow on the integration.",
         "askHintAgent": "To run this with no prompt, change the agent setting, or each user picks Always allow.",
         "askHintAgentOnly": "To run this with no prompt, change the agent setting.",
@@ -12251,9 +12264,6 @@
         "emptyState": {
           "text": "No images generated"
         },
-        "failedStatus": {
-          "text": "Image generation failed"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {Generated # image} other {Generated # images}}"
         },
@@ -12399,21 +12409,18 @@
             "status": "Generating plan"
           }
         },
-        "doneStep": {
-          "header": "Done"
-        },
         "expandButton": {
           "ariaLabel": "Expand timeline"
         },
         "fetch": {
           "reading": {
             "status": "Reading"
+          },
+          "read": {
+            "status": "Read"
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "chars {start, number}–{end, number} of {total, number}"
-          },
           "read": {
             "status": "Read {fileName} (chars {start, number}–{end, number} of {total, number})"
           },
@@ -12439,6 +12446,9 @@
           },
           "generatingPlan": {
             "label": "Generating plan"
+          },
+          "queryingKnowledgeBase": {
+            "label": "Querying knowledge base"
           },
           "reading": {
             "label": "Reading"
@@ -12475,6 +12485,9 @@
           },
           "editingFiles": {
             "label": "Editing files"
+          },
+          "publishingFiles": {
+            "label": "Publishing files"
           }
         },
         "internalSearch": {
@@ -12484,9 +12497,14 @@
           "reading": {
             "status": "Reading"
           },
+          "read": {
+            "label": "Read"
+          },
           "header": {
             "default": "Searching internal documents",
+            "doneDefault": "Searched internal documents",
             "sources": "Searching {sources}",
+            "doneSources": "Searched {sources}",
             "sourcesOverflow": "{sources} +{count} more",
             "withTimeWindow": "{header} ({timeWindow})"
           },
@@ -12509,6 +12527,9 @@
           "updating": {
             "status": "Updating memory"
           },
+          "updated": {
+            "status": "Updated memory"
+          },
           "viewMemoriesButton": {
             "tooltip": "View Memories"
           }
@@ -12521,21 +12542,60 @@
             "label": "Updated memory"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "Queried knowledge base"
+          },
+          "querying": {
+            "status": "Querying knowledge base"
+          },
+          "listed": {
+            "label": "{count, plural, one {# document listed} other {# documents listed}}"
+          },
+          "query": {
+            "table": {
+              "document": "Documents",
+              "hierarchy_node": "Folders",
+              "chat_session": "Chat sessions",
+              "chat_message": "Chat messages",
+              "search_doc": "Cited documents"
+            },
+            "count": "Count",
+            "countBy": {
+              "source": "Count by source",
+              "owner": "Count by owner",
+              "month": "Count by month"
+            },
+            "titleContains": "Title contains “{text}”",
+            "nameContains": "Name contains “{text}”",
+            "textContains": "Text contains “{text}”",
+            "updated": {
+              "since": "Updated since {date}",
+              "before": "Updated before {date}",
+              "between": "Updated {start} – {end}"
+            },
+            "created": {
+              "since": "Created since {date}",
+              "before": "Created before {date}",
+              "between": "Created {start} – {end}"
+            },
+            "sent": {
+              "since": "Sent since {date}",
+              "before": "Sent before {date}",
+              "between": "Sent {start} – {end}"
+            },
+            "owner": "Owner: {owner}",
+            "folder": "In folder {id}",
+            "nodeType": "Type: {type}",
+            "author": "From: {author}",
+            "message": "Message {id}",
+            "allRetrieved": "All retrieved",
+            "nextPage": "Next page"
+          }
+        },
         "python": {
-          "completed": {
-            "status": "Python execution completed"
-          },
-          "default": {
-            "status": "Python execution"
-          },
           "error": {
             "label": "Error:"
-          },
-          "executing": {
-            "status": "Executing Python code..."
-          },
-          "failed": {
-            "status": "Python execution failed"
           },
           "generatedFiles": {
             "label": "{count, plural, one {Generated # file} other {Generated # files}}"
@@ -12546,6 +12606,12 @@
           "output": {
             "label": "Output:"
           },
+          "running": {
+            "status": "Running Python"
+          },
+          "ran": {
+            "status": "Ran Python"
+          },
           "runningCode": {
             "label": "Running code..."
           },
@@ -12554,11 +12620,11 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "Full text"
-          },
           "thinking": {
             "status": "Thinking"
+          },
+          "thought": {
+            "status": "Thought"
           }
         },
         "researchAgent": {
@@ -12580,9 +12646,6 @@
         "stepsButton": {
           "label": "{count, plural, one {# step} other {# steps}}"
         },
-        "stoppedStep": {
-          "header": "Stopped"
-        },
         "thoughtDuration": {
           "label": "Thought for {duration}"
         },
@@ -12599,6 +12662,7 @@
           "generateImage": "Generate Image",
           "generatePlan": "Generate plan",
           "internalSearch": "Internal Search",
+          "knowledgeBaseQuery": "Knowledge Base Query",
           "memory": "Memory",
           "openUrls": "Open URLs",
           "researchAgent": "Research agent",
@@ -12608,11 +12672,15 @@
           "terminal": "Terminal",
           "applyPatch": "Apply Patch",
           "editFile": "Edit File",
-          "writeFile": "Write File"
+          "writeFile": "Write File",
+          "publishFiles": "Publish Files"
         },
         "webSearch": {
           "searching": {
             "status": "Searching the web"
+          },
+          "searched": {
+            "status": "Searched the web"
           }
         },
         "sandbox": {
@@ -12654,6 +12722,14 @@
           },
           "stopped": {
             "status": "Stopped"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, one {Published # file} other {Published # files}}"
+            },
+            "failed": {
+              "status": "Publish failed"
+            }
           }
         }
       },
@@ -13295,6 +13371,16 @@
     "readiness": {
       "stopFailed": "Could not stop the response. Try again.",
       "checkFailed": "Could not confirm that the response finished. Check again before sending another message."
+    },
+    "publishedFiles": {
+      "card": {
+        "updated": {
+          "description": "Updated version · {details}"
+        },
+        "preview": {
+          "ariaLabel": "Preview {name}"
+        }
+      }
     }
   },
   "common": {
@@ -14243,6 +14329,11 @@
         "label": "Recommended Models Only"
       }
     },
+    "messageList": {
+      "turnFailed": {
+        "message": "Turn failed."
+      }
+    },
     "onboarding": {
       "livingMap": {
         "examplePrompts": {
@@ -14791,9 +14882,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# call} other {# calls}}"
-        },
         "working": {
           "label": "Working"
         }

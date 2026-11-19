@@ -43,7 +43,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_connection_secret
 from onyx.integrations.connections import (
-    connect_with_fields__no_commit,
     header_field_keys,
 )
 from onyx.integrations.plugin_settings import (
@@ -58,6 +57,7 @@ from onyx.integrations.service import (
     get_viewable_integration,
     masked_header_template,
     reload_craft_sessions,
+    save_connection_fields__no_commit,
     update_integration__no_commit,
 )
 from onyx.server.features.integrations.models import (
@@ -84,7 +84,7 @@ from onyx.server.features.mcp.models import (
 )
 from onyx.server.features.mcp.oauth_discovery import discover_oauth_capabilities
 from onyx.server.features.mcp.setup_probe import stream_mcp_probe
-from onyx.utils.encryption import is_masked_credential
+from onyx.utils.encryption import is_masked_credential, reject_masked_credentials
 
 router = APIRouter(prefix="/mcp")
 router.include_router(client_metadata_router)
@@ -225,13 +225,10 @@ def _save_credentials(
         db_session, integration.id, owner.id if owner is not None else None
     )
     stored = read_connection_secret(connection).fields if connection else {}
-    values = {
-        **stored,
-        **{
-            key: value
-            for key, value in (request.admin_credentials or {}).items()
-            if request.admin_credentials_changed.get(key) or key not in stored
-        },
+    written = {
+        key: value
+        for key, value in (request.admin_credentials or {}).items()
+        if request.admin_credentials_changed.get(key) or key not in stored
     }
     token = request.api_token
     if (
@@ -239,7 +236,12 @@ def _save_credentials(
         and token
         and (request.api_token_changed or not is_masked_credential(token))
     ):
-        values["api_key"] = token
+        written["api_key"] = token
+    try:
+        reject_masked_credentials(written)
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
+    values = {**stored, **written}
     fields = {
         key: values[key]
         for key in header_field_keys(integration.header_template or {})
@@ -249,7 +251,7 @@ def _save_credentials(
         return
     if not fields and owner is not None:
         return
-    connect_with_fields__no_commit(integration, owner, fields, db_session)
+    save_connection_fields__no_commit(integration, owner, fields, db_session)
 
 
 def _apply_access(
@@ -277,10 +279,16 @@ def _apply_access(
                     row.plugin_id,
                     PluginAccessUpdate(user_shares=[], group_shares=[]),
                     db_session,
+                    token_may_manage=True,
                 )
-                affected |= publish_plugin_for_user__no_commit(
-                    user, row.plugin_id, db_session
+                _, published = publish_plugin_for_user__no_commit(
+                    user,
+                    row.plugin_id,
+                    db_session,
+                    token_may_manage=True,
+                    on_name_clash="rename",
                 )
+                affected |= published
             continue
         if row.in_organization_library:
             affected |= unpublish_integration_plugin__no_commit(
@@ -307,6 +315,7 @@ def _apply_access(
                 ],
             ),
             db_session,
+            token_may_manage=True,
         )
         if row.author_user_id is not None and row.author_user_id in users:
             add_author_share__no_commit(row.plugin_id, row.author_user_id, db_session)

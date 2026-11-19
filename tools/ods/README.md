@@ -453,7 +453,8 @@ state.
 | `stopped` | Nothing runs (with `--all`) |
 | `stale-lease` | Port leases that no stack uses (with `--all`) |
 
-By default `ls` shows stacks with a running process or container. `--all` adds
+By default `ls` shows stacks with a running process or container, and orphans
+that left only Docker volumes. `--all` adds
 stopped stacks, and `--orphaned` shows only orphaned stacks. `--json` prints an
 array with the project, root, branch, mode, profile, phase, application and
 container counts, web URL, age, status, leases, errors, and `next`, the command
@@ -468,7 +469,27 @@ releases the stack's port leases, and removes the owner record of an orphan. The
 refuse a stack that still runs in an existing worktree unless you add `--force`.
 `ods stack prune` runs `down --project` for every orphaned stack after a
 confirmation (`--yes` skips it). `--volumes` also deletes their Docker volumes,
-after a separate confirmation.
+after a separate confirmation. A removed worktree whose stack was already down
+leaves only its volumes. `ls` shows it as orphaned, plain `prune` leaves it,
+and `prune --volumes` deletes the volumes. Plain `prune` keeps the owner record
+of a project with volumes, because that record is the only link from the
+removed worktree to them. When Docker cannot list the volumes, `prune` keeps
+every owner record. Docker keeps a volume that a container still uses, so
+`prune --volumes` lists the volumes again and keeps the owner record if any is left.
+
+`ods stack prune --idle 6h` also stops each isolated stack whose worktree had no
+activity for 6 hours. Activity is the stack start, a Git operation in the
+worktree (commit, checkout, add, rebase), a change to a modified or untracked
+file, a deleted tracked file or directory, or a running coding agent (`claude`, `codex`, `opencode`, `cursor-agent`)
+whose working directory is in the worktree. Ignored files, such as service
+logs, do not count. ods finds agents through `/proc` on Linux and `lsof` on
+macOS. If ods cannot find the agents, `prune --idle` fails and stops nothing.
+If Git cannot read a worktree, prune warns and does not stop its stack.
+After the confirmation and the stack lock, prune checks the activity again and
+skips a stack that had activity since the listing. Shared stacks serve several
+worktrees, so prune never stops them as idle. Idle stacks keep their volumes, also with `--volumes`, so `ods stack up`
+in the worktree starts the stack again with its data. To prune on a schedule,
+run `ods stack prune --idle 6h --yes` from cron or a systemd timer.
 
 **Examples:**
 
@@ -495,6 +516,9 @@ ods stack plan --profile full
 ods stack ls --all
 ods stack down --project fast-mode-93732ec3
 ods stack prune
+
+# Also stop isolated stacks with no work in their worktree for 6 hours
+ods stack prune --idle 6h --yes
 ```
 
 ### `object-store migrate` - Move a Dev MinIO's Files to the Object Store
@@ -611,8 +635,10 @@ ods coverage <suite|module-dir> [flags]
 
 The baseline is a `.coverage-baseline.yaml` at the module root recording each
 package's floor. `--check` fails when a package drops below its floor, which is
-what `pr-golang-tests.yml` runs on every PR. After adding tests, `--update`
-raises the floors.
+what `pr-golang-tests.yml` runs on every PR. A floor is a coarse minimum, not
+the last measurement: `--update` rounds each package down to a multiple of 5%
+and leaves out a package below 5%. Run `--update` when a package crosses the
+next 5% step.
 
 The floors are the gate, but they are not always a good comparison: they go
 stale, so the report shows gains the current change never made. Give `--base` a
@@ -638,7 +664,7 @@ suite name, which is what CI passes.
 | `--from-profile` | | Report from this coverage profile instead of running the tests |
 | `--html` | | Render the profile as a browsable page at this path |
 | `--markdown` | | Write the changed packages as a markdown table at this path, for a PR comment |
-| `--tolerance` | `0.1` | Percentage points a package may drop below its floor without failing |
+| `--tolerance` | `1` | Percentage points a package may drop below its floor without failing |
 | `--base` | | Report against the coverage snapshot of this commit instead of the floors |
 | `--publish` | `false` | Record this run as the snapshot of `HEAD` (needs AWS credentials) |
 | `--snapshot-bucket` | `onyx-playwright-artifacts` | S3 bucket that holds the snapshots |
@@ -717,9 +743,10 @@ In CI, each module's `--markdown` report goes to the job summary, and its
 One PR comment, updated in place, lists the modules where a package moved, each
 with a link to its page.
 
-Floors are rounded down to one decimal, and a package may sit `--tolerance`
+Floors are rounded down to a multiple of 5%, and a package may sit `--tolerance`
 below its floor without failing. That absorbs the jitter from suites that depend
-on ports or timing; a real regression is far larger.
+on ports, timing or the runner image. The step is recorded as `step` in the
+baseline file.
 
 The package floors are the gate. The module total is reported with its delta
 but never fails the check: a package added without tests, or a well-covered

@@ -298,9 +298,11 @@ def test_capacity_error_has_real_reason(
     assert exc.value.error_code is OnyxErrorCode.SANDBOX_CAPACITY_UNAVAILABLE
     assert exc.value.extra == {"reason": "NO_NODES", "nodes": {}}
 
+    # The host agent owns memory admission: placement asks each node, and the
+    # agents refuse with CAPACITY_MEMORY.
     full_a, full_b = _node("full"), _node("full")
-    add_node(full_a, FakeHostAgent(mem_available_mib=1024))
-    add_node(full_b, FakeHostAgent(mem_available_mib=512))
+    agent_a = add_node(full_a, FakeHostAgent(mem_available_mib=1024)).agent
+    agent_b = add_node(full_b, FakeHostAgent(mem_available_mib=512)).agent
     gone_id = _node("gone")
     add_node(gone_id).stop()
 
@@ -322,6 +324,7 @@ def test_capacity_error_has_real_reason(
             gone_id: "NODE_UNREACHABLE",
         },
     }
+    assert agent_a.create_calls == agent_b.create_calls == 1
 
 
 def test_refusal_reason_from_agent(

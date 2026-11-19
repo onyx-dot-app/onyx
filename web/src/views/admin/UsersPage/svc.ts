@@ -3,6 +3,7 @@ import {
   fetchErrorFrom,
   parseErrorDetail,
 } from "@/lib/fetcher";
+import type { TransferPrivatePluginsResponse } from "@/views/admin/UsersPage/types";
 
 export async function deactivateUser(email: string): Promise<void> {
   const res = await fetch("/api/manage/admin/deactivate-user", {
@@ -37,6 +38,26 @@ export async function deleteUser(email: string): Promise<void> {
     error.message = fetchErrorDetail(error) ?? error.message;
     throw error;
   }
+}
+
+export async function transferPrivatePlugins(
+  email: string,
+  newOwnerUserId: string
+): Promise<TransferPrivatePluginsResponse> {
+  const res = await fetch("/api/manage/admin/transfer-private-plugins", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_email: email,
+      new_owner_user_id: newOwnerUserId,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await parseErrorDetail(res, "Failed to transfer private plugins")
+    );
+  }
+  return res.json();
 }
 
 export async function setUserAdminAccess(

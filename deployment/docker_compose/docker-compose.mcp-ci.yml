@@ -76,12 +76,12 @@ services:
 
   # Only satisfy nginx's web upstream; this stack does not test the consent UI.
   web_server:
-    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.25.5-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.30.7-alpine
     volumes:
       - ./mcp-ci-web.conf:/etc/nginx/conf.d/default.conf:ro
 
   nginx:
-    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.25.5-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.30.7-alpine
     command: [sh, /etc/nginx/conf.d/run-nginx.sh, app.conf.template]
     environment:
       MCP_SERVER_ENABLED: "true"

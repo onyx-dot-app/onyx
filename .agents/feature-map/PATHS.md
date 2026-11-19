@@ -49,7 +49,7 @@ covers new files that match it.
 | `backend/onyx/db/chat.py`, `backend/onyx/db/chat_search.py`, `backend/onyx/db/feedback.py` | chat-persistence |
 | `backend/ee/onyx/background/celery/tasks/ttl_management/` | chat-persistence, background-jobs |
 | `backend/onyx/server/query_and_chat/chat_backend.py`, `backend/onyx/server/query_and_chat/models.py`, `backend/onyx/server/query_and_chat/session_loading.py`, `backend/onyx/server/query_and_chat/chat_utils.py` | core-chat-loop, chat-persistence |
-| `backend/onyx/server/query_and_chat/streaming_models.py`, `backend/onyx/server/query_and_chat/placement.py` | streaming-protocol |
+| `backend/onyx/server/query_and_chat/streaming_models.py`, `backend/onyx/server/query_and_chat/placement.py`, `backend/onyx/server/query_and_chat/acp_stream.py` | streaming-protocol |
 | `backend/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
 | `backend/onyx/secondary_llm_flows/chat_session_naming.py` | chat-persistence |
 | `backend/onyx/secondary_llm_flows/memory_update.py` | chat-preferences |
@@ -270,6 +270,7 @@ covers new files that match it.
 | `web/src/hooks/useChatController.ts`, `web/src/hooks/useChatSessionController.ts`, `web/src/hooks/useFeedbackController.ts`, `web/src/hooks/useMultiModelChat.ts`, `web/src/hooks/useChatSessions.ts`, `web/src/hooks/useQueuedMessageNavigation.ts`, `web/src/hooks/useDeepResearchToggle.ts`, `web/src/hooks/useContentEditable.ts` | chat-frontend |
 | `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/lib/app/components/AccountPopover.tsx`, `web/src/lib/app/components/AboutDetails.tsx`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/multiModel/`, `web/src/lib/sandbox/`, `web/src/lib/sidebar/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
 | `web/src/lib/navigation/`, `web/lib/opal/src/navigation/`, `web/tools/oxlint/navigation/` | chat-frontend |
+| `web/src/lib/timeline/` | chat-frontend, craft-frontend |
 | `web/src/lib/app/hooks.ts` | chat-frontend, whitelabelling-and-theme |
 | `web/src/providers/IncognitoProvider.tsx` | chat-frontend, chat-persistence |
 | `web/src/sections/model-selector/` | chat-frontend, llm-providers |

@@ -9277,7 +9277,16 @@
         "toasts": {
           "blockedBySkills": "No se puede eliminar este usuario",
           "openSkills": "Abrir habilidades para transferirlas",
+          "renamed": "El nuevo propietario ya tenía skills con estos nombres, así que los skills movidos recibieron nombres nuevos",
           "success": "Usuario eliminado"
+        },
+        "transfer": {
+          "description": "<strong>{email}</strong> tiene {count, plural, one {# skill privado} other {# skills privados}}. Transfiera la propiedad a otro usuario y luego se eliminará la cuenta.",
+          "submit": {
+            "label": "Transferir todo y eliminar"
+          },
+          "ownersLoadFailed": "No se pudieron cargar los usuarios que pueden recibir las habilidades.",
+          "retry": "Reintentar"
         }
       },
       "editModal": {
@@ -10520,14 +10529,17 @@
           "name": {
             "title": "Nombre del encabezado",
             "placeholder": "Agrega un nombre de encabezado",
-            "error": "Agrega un nombre de encabezado."
+            "error": "Agrega un nombre de encabezado.",
+            "duplicate": "Usa cada nombre de encabezado una sola vez."
           },
           "value": {
             "title": "Valor del encabezado",
             "description": "Pon cada credencial entre llaves, por ejemplo {example}. Cada marcador se convierte en un campo de credencial.",
             "placeholder": "Por ejemplo: {example}",
             "error": "Agrega al menos un marcador, por ejemplo {example}."
-          }
+          },
+          "add": "Agregar encabezado",
+          "remove": "Quitar el encabezado {name}"
         },
         "oauth": {
           "providerMode": {
@@ -10663,6 +10675,7 @@
           "useDefaults": "Usar predeterminados",
           "readOnly": "Acciones de solo lectura ({count})",
           "write": "Acciones de escritura ({count})",
+          "other": "Otras acciones ({count})",
           "empty": "Esta integración no tiene acciones.",
           "connectFirst": {
             "title": "Conecta primero el servidor",
@@ -10797,7 +10810,7 @@
         "ariaLabel": "Página del editor de agentes"
       },
       "plugins": {
-        "askHint": "Para ejecutarla sin preguntar, un administrador la configura como Permitir en la integración, o cada usuario elige Permitir siempre.",
+        "askHint": "Para ejecutarla sin preguntar, cambia la configuración del agente, un administrador la configura como Permitir en la integración, o cada usuario elige Permitir siempre.",
         "askHintAdminOnly": "Para ejecutarla sin preguntar, un administrador la configura como Permitir en la integración.",
         "askHintAgent": "Para ejecutar esto sin confirmación, cambia la configuración del agente, o cada usuario elige Permitir siempre.",
         "askHintAgentOnly": "Para ejecutar esto sin confirmación, cambia la configuración del agente.",
@@ -12251,9 +12264,6 @@
         "emptyState": {
           "text": "No se generaron imágenes"
         },
-        "failedStatus": {
-          "text": "Falló la generación de imágenes"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {Se generó # imagen} other {Se generaron # imágenes}}"
         },
@@ -12399,21 +12409,18 @@
             "status": "Generando plan"
           }
         },
-        "doneStep": {
-          "header": "Listo"
-        },
         "expandButton": {
           "ariaLabel": "Expandir la línea de tiempo"
         },
         "fetch": {
           "reading": {
             "status": "Leyendo"
+          },
+          "read": {
+            "status": "Leído"
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "caracteres {start, number}–{end, number} de {total, number}"
-          },
           "read": {
             "status": "Leyó {fileName} (caracteres {start, number}–{end, number} de {total, number})"
           },
@@ -12439,6 +12446,9 @@
           },
           "generatingPlan": {
             "label": "Generando plan"
+          },
+          "queryingKnowledgeBase": {
+            "label": "Consultando la base de conocimiento"
           },
           "reading": {
             "label": "Leyendo"
@@ -12475,6 +12485,9 @@
           },
           "editingFiles": {
             "label": "Editando archivos"
+          },
+          "publishingFiles": {
+            "label": "Publicando archivos"
           }
         },
         "internalSearch": {
@@ -12484,9 +12497,14 @@
           "reading": {
             "status": "Leyendo"
           },
+          "read": {
+            "label": "Leído"
+          },
           "header": {
             "default": "Buscando en documentos internos",
+            "doneDefault": "Documentos internos buscados",
             "sources": "Buscando en {sources}",
+            "doneSources": "Búsqueda en {sources} completada",
             "sourcesOverflow": "{sources} +{count} más",
             "withTimeWindow": "{header} ({timeWindow})"
           },
@@ -12509,6 +12527,9 @@
           "updating": {
             "status": "Actualizando memoria"
           },
+          "updated": {
+            "status": "Memoria actualizada"
+          },
           "viewMemoriesButton": {
             "tooltip": "Ver memorias"
           }
@@ -12521,21 +12542,60 @@
             "label": "Memoria actualizada"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "Base de conocimiento consultada"
+          },
+          "querying": {
+            "status": "Consultando la base de conocimiento"
+          },
+          "listed": {
+            "label": "{count, plural, one {# documento listado} other {# documentos listados}}"
+          },
+          "query": {
+            "table": {
+              "document": "Documentos",
+              "hierarchy_node": "Carpetas",
+              "chat_session": "Sesiones de chat",
+              "chat_message": "Mensajes de chat",
+              "search_doc": "Documentos citados"
+            },
+            "count": "Recuento",
+            "countBy": {
+              "source": "Recuento por fuente",
+              "owner": "Recuento por propietario",
+              "month": "Recuento por mes"
+            },
+            "titleContains": "El título contiene «{text}»",
+            "nameContains": "El nombre contiene «{text}»",
+            "textContains": "El texto contiene «{text}»",
+            "updated": {
+              "since": "Actualizado desde {date}",
+              "before": "Actualizado antes del {date}",
+              "between": "Actualizado {start} – {end}"
+            },
+            "created": {
+              "since": "Creado desde {date}",
+              "before": "Creado antes del {date}",
+              "between": "Creado {start} – {end}"
+            },
+            "sent": {
+              "since": "Enviado desde {date}",
+              "before": "Enviado antes del {date}",
+              "between": "Enviado {start} – {end}"
+            },
+            "owner": "Propietario: {owner}",
+            "folder": "En la carpeta {id}",
+            "nodeType": "Tipo: {type}",
+            "author": "De: {author}",
+            "message": "Mensaje {id}",
+            "allRetrieved": "Todos los recuperados",
+            "nextPage": "Página siguiente"
+          }
+        },
         "python": {
-          "completed": {
-            "status": "Ejecución de Python completada"
-          },
-          "default": {
-            "status": "Ejecución de Python"
-          },
           "error": {
             "label": "Error:"
-          },
-          "executing": {
-            "status": "Ejecutando código Python..."
-          },
-          "failed": {
-            "status": "Falló la ejecución de Python"
           },
           "generatedFiles": {
             "label": "{count, plural, one {Se generó # archivo} other {Se generaron # archivos}}"
@@ -12546,6 +12606,12 @@
           "output": {
             "label": "Salida:"
           },
+          "running": {
+            "status": "Ejecutando Python"
+          },
+          "ran": {
+            "status": "Python ejecutado"
+          },
           "runningCode": {
             "label": "Ejecutando código..."
           },
@@ -12554,11 +12620,11 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "Texto completo"
-          },
           "thinking": {
             "status": "Pensando"
+          },
+          "thought": {
+            "status": "Pensado"
           }
         },
         "researchAgent": {
@@ -12580,9 +12646,6 @@
         "stepsButton": {
           "label": "{count, plural, one {# paso} other {# pasos}}"
         },
-        "stoppedStep": {
-          "header": "Detenido"
-        },
         "thoughtDuration": {
           "label": "Pensó durante {duration}"
         },
@@ -12599,6 +12662,7 @@
           "generateImage": "Generar imagen",
           "generatePlan": "Generar plan",
           "internalSearch": "Búsqueda interna",
+          "knowledgeBaseQuery": "Consulta de la base de conocimiento",
           "memory": "Memoria",
           "openUrls": "Abrir URL",
           "researchAgent": "Agente de investigación",
@@ -12608,11 +12672,15 @@
           "terminal": "Terminal",
           "applyPatch": "Aplicar parche",
           "editFile": "Editar archivo",
-          "writeFile": "Escribir archivo"
+          "writeFile": "Escribir archivo",
+          "publishFiles": "Publicar archivos"
         },
         "webSearch": {
           "searching": {
             "status": "Buscando en la web"
+          },
+          "searched": {
+            "status": "Búsqueda en la web completada"
           }
         },
         "sandbox": {
@@ -12654,6 +12722,14 @@
           },
           "stopped": {
             "status": "Detenido"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, one {# archivo publicado} other {# archivos publicados}}"
+            },
+            "failed": {
+              "status": "Error al publicar"
+            }
           }
         }
       },
@@ -13295,6 +13371,16 @@
     "readiness": {
       "stopFailed": "No se pudo detener la respuesta. Inténtalo de nuevo.",
       "checkFailed": "No se pudo confirmar que la respuesta haya terminado. Comprueba de nuevo antes de enviar otro mensaje."
+    },
+    "publishedFiles": {
+      "card": {
+        "updated": {
+          "description": "Versión actualizada · {details}"
+        },
+        "preview": {
+          "ariaLabel": "Vista previa de {name}"
+        }
+      }
     }
   },
   "common": {
@@ -14243,6 +14329,11 @@
         "label": "Solo modelos recomendados"
       }
     },
+    "messageList": {
+      "turnFailed": {
+        "message": "El turno falló."
+      }
+    },
     "onboarding": {
       "livingMap": {
         "examplePrompts": {
@@ -14791,9 +14882,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# llamada} other {# llamadas}}"
-        },
         "working": {
           "label": "Trabajando"
         }

@@ -269,6 +269,8 @@ A published Skill shows **Organization** in the sharing dialog. It has no option
 
 If another published Skill has the same name, Onyx refuses the publish.
 Transferring a private Skill to a person who has a Skill with the same name is also refused.
+A transfer of all private Skills during a user delete is not refused.
+It gives the moved Skill the next free plugin name.
 
 ## Choose an installation policy
 
@@ -320,9 +322,8 @@ Onyx uses one of them in this order:
 
 If the two Skills are equal in this order, Onyx uses the older one. The other Skill shows as off.
 
-Only one Skill of a name can be **Installed by default** or **Required** for the whole organization.
-Onyx refuses this setting on a second Skill with the same name. Group settings do not have this limit.
-When group settings turn on two Skills with the same name, Onyx uses the order above.
+Two Skills with the same name can both be **Installed by default** or **Required**. Onyx then uses the order above,
+and the other Skill shows as off.
 
 ### Skill limit for each user
 
@@ -402,6 +403,9 @@ so validate important changes in a new turn or session before announcing them.
 
 Every custom Skill has one owner. The owner can transfer it to another active standard user.
 If ownership becomes vacant because the owner is inactive, an Admin can open the Skill and transfer it.
+Before an Admin deletes a user, the Admin can transfer all private Skills of that user to one owner in one step.
+See [Delete a user who owns private
+Skills](/admins/user_management/users_and_groups#delete-a-user-who-owns-private-skills).
 
 Do not transfer ownership to bots, service accounts, limited accounts, or inactive users.
 

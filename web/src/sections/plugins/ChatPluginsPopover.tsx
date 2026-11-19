@@ -102,7 +102,8 @@ export default function ChatPluginsPopover({
 
   function row(plugin: ChatPluginEntry) {
     const adminOnly = plugin.integrations.every(needsAdmin);
-    const enabled = toolConfiguration.isPluginEnabled(plugin.pluginId);
+    const enabled =
+      plugin.required || toolConfiguration.isPluginEnabled(plugin.pluginId);
     const action =
       plugin.integrations.map(connectAction).find((a) => a !== null) ?? null;
     return (
@@ -111,7 +112,13 @@ export default function ChatPluginsPopover({
         key={plugin.pluginId}
         title={plugin.name}
         titleMaxLines={1}
-        description={adminOnly ? connectionCopy("askAdmin") : undefined}
+        description={
+          plugin.required
+            ? memberCopy("detail.switch.required")
+            : adminOnly
+              ? connectionCopy("askAdmin")
+              : undefined
+        }
         descriptionMaxLines={1}
         icon={SvgBlocks}
         padding={0}
@@ -143,7 +150,7 @@ export default function ChatPluginsPopover({
             )}
             <InputSwitch
               checked={enabled}
-              disabled={disabled || !toolConfiguration.ready}
+              disabled={disabled || plugin.required || !toolConfiguration.ready}
               aria-label={t("toggle.label", { name: plugin.name })}
               onCheckedChange={(checked) =>
                 toolConfiguration.setPluginEnabled([plugin.pluginId], checked)

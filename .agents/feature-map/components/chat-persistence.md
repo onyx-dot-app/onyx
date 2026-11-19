@@ -97,7 +97,9 @@ ChatResponsePersistence.save               chat/persistence.py; for USAGE_ONLY i
     save_chat_response_to_db               db/chat_response.py: checks the record
                                            mode, drops the checkpoint, then:
       save_chat_turn                       ONE commit: text, SearchDoc rows, links,
-                                           citations, final records
+                                           citations, final records, the
+                                           response's published files in
+                                           ChatMessage.files
 GET /chat/get-chat-session/{id}
   get_chat_message_page_ids                with `limit`: one page of the current
                                            branch and the children of its messages;
@@ -390,7 +392,12 @@ directory until the VM stops.
 Hard delete
 (`HARD_DELETE_CHATS` or the `hard_delete` parameter) runs
 `db/chat.py:delete_messages_and_files_from_chat_session` over the session and
-its child sessions: message files, checkpoint blobs, then messages (tool calls,
+its child sessions: message files (`save_chat_turn` also adds each
+`publish_files` call's `PublishedFiles` to the response's `ChatMessage.files`
+in its one save), then by file ID prefix under the root session ID the
+checkpoint blobs and the published files (`CHAT_ARTIFACT_FILE_PREFIX`; this
+covers a response that ended without its save, such as an interrupted parked
+one), then messages (tool calls,
 response items and checkpoints cascade), then `SearchDoc` rows no message links
 to. The EE task
 `ee/onyx/background/celery/tasks/ttl_management/tasks.py:perform_ttl_management_task`

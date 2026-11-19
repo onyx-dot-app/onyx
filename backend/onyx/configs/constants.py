@@ -211,14 +211,17 @@ PERMISSION_SYNC_TASK_EXPIRES = 6 * 60 * 60  # seconds
 # A NOT_STARTED attempt this old whose task is not in the broker queue lost its
 # task (e.g. a Redis restart without persistence), so the reaper fails it.
 PERMISSION_SYNC_LOST_TASK_GRACE = 10 * 60  # seconds
+# Celery drops a targeted reindex task that waited longer than this in the
+# queue. The stale-job validator then fails its NOT_STARTED job.
+TARGETED_REINDEX_TASK_EXPIRES = 10 * 60  # seconds
+TARGETED_REINDEX_TIMEOUT = 30 * 60  # seconds
 
 # Celery drops a user-started export task that waited longer than this. The
 # hourly export cleanup fails its job once the expiry and the grace have passed.
 USER_EXPORT_TASK_EXPIRES = 60 * 60  # seconds
 USER_JOB_LOST_TASK_GRACE = 5 * 60  # seconds
 
-# how long a task should wait for associated fence to be ready
-CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
+PRUNING_GENERATOR_TASK_EXPIRES = 10 * 60  # seconds
 
 # needs to be long enough to cover the maximum time it takes to download an object
 # if we can get callbacks as object bytes download, we could lower this a lot.
@@ -474,13 +477,16 @@ class FileStoreType(str, Enum):
 
 
 # Key in FileRecord.file_metadata naming the chat session that produced a
-# CHAT_IMAGE_GEN file. user_can_access_chat_file scopes the file by it.
+# chat output file (CHAT_OUTPUT_FILE_ORIGINS). user_can_access_chat_file gives
+# the file to the session's readers.
 CHAT_SESSION_ID_FILE_METADATA_KEY = "chat_session_id"
 
 
 class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"
+    # A file that the model published from its sandbox (publish_files).
+    CHAT_ARTIFACT = "chat_artifact"
     CONNECTOR = "connector"
     CONNECTOR_FILE_UPLOAD = "connector_file_upload"
     CONNECTOR_METADATA = "connector_metadata"
@@ -495,6 +501,13 @@ class FileOrigin(str, Enum):
     SANDBOX_SNAPSHOT = "sandbox_snapshot"
     SKILL_BUNDLE = "skill_bundle"
     USER_FILE = "user_file"
+
+
+# Files that a chat produced for its readers: generated images and code
+# interpreter outputs, and the files that the model published from its sandbox.
+CHAT_OUTPUT_FILE_ORIGINS = frozenset(
+    {FileOrigin.CHAT_IMAGE_GEN, FileOrigin.CHAT_ARTIFACT}
+)
 
 
 class FileType(str, Enum):

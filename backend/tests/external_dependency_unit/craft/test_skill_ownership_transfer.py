@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import AccountType, SkillSharePermission
-from onyx.db.models import Skill, Skill__User, User
+from onyx.db.models import Plugin, Plugin__User, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import transfer_current_user_skill_ownership
@@ -18,19 +18,19 @@ from tests.external_dependency_unit.craft.db_helpers import (
 )
 
 
-def _owned_skill(db_session: Session, owner: User) -> Skill:
+def _owned_skill(db_session: Session, owner: User) -> Plugin:
     return make_skill(db_session, author_user_id=owner.id)
 
 
 def _share_row(
     db_session: Session,
-    skill: Skill,
+    skill: Plugin,
     user: User,
-) -> Skill__User | None:
+) -> Plugin__User | None:
     return db_session.scalar(
-        select(Skill__User).where(
-            Skill__User.skill_id == skill.id,
-            Skill__User.user_id == user.id,
+        select(Plugin__User).where(
+            Plugin__User.plugin_id == skill.id,
+            Plugin__User.user_id == user.id,
         )
     )
 

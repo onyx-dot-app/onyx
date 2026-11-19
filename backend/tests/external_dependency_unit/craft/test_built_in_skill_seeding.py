@@ -4,8 +4,8 @@ The ``skill`` rows for built-ins are seeded by the
 ``skill_built_in_id_discriminator`` migration — migrations are the source
 of truth and there is no boot-time seeder. These tests cover the runtime
 behaviors that depend on those rows plus the codified ``BUILT_IN_SKILLS``:
-availability gating, admin-immutability, the non-unique
-``built_in_skill_id``, and the XOR schema invariant. Rows are inserted
+availability gating, admin-immutability and the non-unique
+``built_in_skill_id``. Rows are inserted
 directly via ``make_built_in_skill_row`` so each test is self-contained
 and order-independent."""
 
@@ -17,12 +17,11 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import delete, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
-    SkillManagementPolicy,
+    fetch_editable_skill,
     fetch_skill,
     list_runtime_skills_for_user,
     list_skills,
@@ -90,10 +89,10 @@ class TestAvailabilityGate:
         visible = {
             s.built_in_skill_id
             for s in list_skills(
-                policy=SkillManagementPolicy.VIEW,
                 user=test_user,
                 db_session=db_session,
             )
+            if isinstance(s, Skill)
         }
         assert gated_id not in visible
 
@@ -107,11 +106,10 @@ class TestAvailabilityGate:
         visible_built_ins = {
             s.built_in_skill_id
             for s in list_skills(
-                policy=SkillManagementPolicy.VIEW,
                 user=test_user,
                 db_session=db_session,
             )
-            if s.built_in_skill_id is not None
+            if isinstance(s, Skill)
         }
         # Some built-ins gate on environment availability (e.g. image-generation
         # needs a configured provider); only those available here must be visible.
@@ -134,7 +132,7 @@ class TestAvailabilityGate:
 
         monkeypatch.setattr("onyx.skills.built_in.ENABLE_BROWSER", False)
         off = {
-            s.skill.built_in_skill_id
+            s.built_in_skill_id
             for s in list_runtime_skills_for_user(
                 user=test_user,
                 db_session=db_session,
@@ -144,7 +142,7 @@ class TestAvailabilityGate:
 
         monkeypatch.setattr("onyx.skills.built_in.ENABLE_BROWSER", True)
         on = {
-            s.skill.built_in_skill_id
+            s.built_in_skill_id
             for s in list_runtime_skills_for_user(
                 user=test_user,
                 db_session=db_session,
@@ -175,7 +173,6 @@ class TestAvailabilityGate:
         assert (
             fetch_skill(
                 row.id,
-                policy=SkillManagementPolicy.VIEW,
                 user=test_user,
                 db_session=db_session,
             )
@@ -195,9 +192,8 @@ class TestBuiltInIsImmutable:
         db_session.commit()
 
         assert (
-            fetch_skill(
+            fetch_editable_skill(
                 row.id,
-                policy=SkillManagementPolicy.EDIT,
                 user=test_user,
                 db_session=db_session,
             )
@@ -216,9 +212,8 @@ class TestBuiltInIsImmutable:
         )
         db_session.commit()
 
-        skill = fetch_skill(
+        skill = fetch_editable_skill(
             custom.id,
-            policy=SkillManagementPolicy.EDIT,
             user=test_user,
             db_session=db_session,
         )
@@ -231,13 +226,12 @@ class TestNonUniqueBuiltInId:
         self, db_session: Session
     ) -> None:
         """``built_in_skill_id`` is not unique — a single built-in can
-        back multiple rows with different canonical names and sharing scopes."""
+        back multiple rows with different canonical names."""
         make_built_in_skill_row(db_session, built_in_skill_id="pptx")
         make_built_in_skill_row(
             db_session,
             built_in_skill_id="pptx",
             name="pptx-team-a",
-            is_public=False,
         )
         db_session.commit()
 
@@ -246,18 +240,6 @@ class TestNonUniqueBuiltInId:
         )
         assert len(matches) == 2
         assert {s.name for s in matches} == {"pptx", "pptx-team-a"}
-
-
-class TestDefinitionSourceInvariant:
-    def test_built_in_row_rejects_bundle_storage(self, db_session: Session) -> None:
-        row = make_built_in_skill_row(
-            db_session, built_in_skill_id=f"invalid-source-{uuid4().hex[:8]}"
-        )
-        row.bundle_file_id = "unexpected-bundle"
-
-        with pytest.raises(IntegrityError):
-            db_session.flush()
-        db_session.rollback()
 
 
 class TestBuiltInSourceDirectory:

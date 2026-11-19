@@ -86,7 +86,13 @@ In a Firecracker VM, managed content mounts on read-only, noexec drives at
 `/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces` (each swappable with the
 same A/B slot mechanism); scripts run through interpreters. Each session has
 `/home/onyx/workspaces/<session-id>`, the default working directory of its
-commands; commands can still reach any path in the VM. Publishing the
+commands; commands can still reach any path in the VM. The template boot
+makes `/tmp/onyx/{tool-results,search-files,artifacts}` on the `/tmp` tmpfs,
+owned by the sandbox user, and the template snapshot keeps them. A VM has
+8 GiB of guest memory by default; the host agent charges a starting VM half
+of it in memory admission (`--starting-mem-divisor`) and owns admission;
+placement only ranks nodes by free memory. Every VM has a Firecracker balloon
+with free page reporting. Publishing the
 userspace image does not change the current pod/Docker image settings.
 
 Rootfs delivery (Firecracker only): `.github/workflows/craft-fc-rootfs.yml` converts a
@@ -266,8 +272,13 @@ the stored token on each request, so a new token takes effect at once.
   the agent pass-through: Health, Init, exec (run, start, stream by offsets,
   interact, cancel with an optional SIGINT/SIGTERM, inspect, list; at most 64
   tracked executions per VM) and files (read, write, upload, list, delete,
-  zip; session-relative, or absolute VM paths with no session). Every call but
-  Health sends `x-sandboxd-key`.
+  zip; session-relative. All but upload also take an absolute VM path with
+  no session, anywhere except the denied VM paths; the daemon confines only
+  such paths in its `--onyx-root` (default `/tmp/onyx`), like session
+  paths). Write and
+  upload take bytes or a seekable binary file, streamed whole from its start
+  in 1 MiB messages; the daemon checks the size. Every call but Health sends
+  `x-sandboxd-key`.
 - `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
   free memory (a node at its `max_vms` cap is skipped),
   `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. New `VmRequest`s default to
@@ -317,14 +328,23 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   x 4 bytes). A cancel of the current signal ends the wait and
   kills the command however the wait ends (also when the consumer drops the
   stream); a call cancelled before its command starts or its input is
-  written does neither. `read_file` / `write_file` (exact bytes, a mode),
+  written does neither. `read_file` / `write_file` (exact bytes, a mode;
+  a write also takes a seekable file, for example a file store
+  `read_file(use_tempfile=True)`, and streams it whole from its start),
+  `write_onyx_file` (an
+  absolute path under `ONYX_VM_FILES_ROOT`, `/tmp/onyx`: wakes the VM but
+  restores no session; session saves never include it),
   `stat_files` (the guest daemon's typed `StatFiles` RPC over `os.Root`:
   each path's own entry and link target, and its target through the links
   inside the session with a device and inode identity, or why there is none:
   missing, escapes, loop; at most 8 links per path; up to 1,000 paths and
   1 MiB of path bytes per call; an older root drive fails with a message
-  that it updates after a restart) and `delete_file` for apply_patch,
-  `publish_artifact`, and busy signals (turn and parked-approval marks).
+  that it updates after a restart) and `delete_file` for apply_patch, and
+  busy signals (turn and parked-approval marks). `read_file` and
+  `write_onyx_file` also take an absolute path under `ONYX_VM_FILES_ROOT`
+  (`/tmp/onyx`, `server/features/build/sandbox/harness_base.py:onyx_vm_path`), which the daemon confines
+  to its onyx root with no session; `read_file` refuses every other path
+  outside the session directory. `publish_files` reads through it.
   Each chat session works in `SESSION_WORKSPACE_ROOT/<session_id>`
   (`/home/onyx/workspaces`); file calls take paths by
   `session_relative_path`. For a missing file, `read_file` raises
@@ -393,7 +413,7 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   commit): a Craft session delete
   (`backend/onyx/server/features/build/session/api.py:delete_session`)
   deletes that session's save, its directory on the running VM and its
-  exec records; its artifacts stay. A user's chat delete, hard or soft
+  exec records. A user's chat delete, hard or soft
   (`backend/onyx/server/query_and_chat/chat_backend.py:delete_chat_session_by_id`;
   `delete_all_chat_sessions` purges in a background thread) does the same for
   the chat session: no one can restore a soft-deleted chat. The API routes
@@ -402,7 +422,7 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   session the harness has no record of (save, instance mark or exec record)
   costs only cache reads. A user delete (`delete_user_from_db`
   in a background thread, `UserManager.delete`) and the last-admin tenant
-  delete stop the VM and delete every save, artifact and record of the
+  delete stop the VM and delete every save and record of the
   sandbox. At the end of each chat retention chain
   (`backend/ee/onyx/background/celery/tasks/ttl_management/tasks.py`),
   `purge_expired_harness_sessions_task` runs on the `sandbox` queue (the
@@ -410,8 +430,9 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   100 saved sessions whose chat session is gone or whose build session had
   no activity in the window.
   A purge mark makes a save in progress drop its archive instead of
-  committing. Saves and artifacts are indexed per sandbox in the tenant
-  cache.
+  committing. Saves are indexed per sandbox in the tenant cache. A chat's
+  published files are chat files, not sandbox state: a hard chat delete
+  deletes them, and a soft delete keeps them ([[chat-persistence]]).
 
 ---
 

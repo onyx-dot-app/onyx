@@ -24,7 +24,6 @@ from onyx.db.models import (
     Plugin,
     PluginSkill,
     PluginVersion,
-    Skill,
     User,
     UserGroup,
     UserPluginPreference,
@@ -62,7 +61,7 @@ NOT_AVAILABLE = PluginInstallationPolicy.NOT_AVAILABLE
 
 
 def _set_company_setting(
-    db_session: Session, skill: Skill, policy: PluginInstallationPolicy | None
+    db_session: Session, skill: Plugin, policy: PluginInstallationPolicy | None
 ) -> None:
     db_session.execute(
         update(Plugin).where(Plugin.id == skill.id).values(installation_policy=policy)
@@ -78,7 +77,7 @@ def _member_of(db_session: Session, *groups: UserGroup) -> User:
 
 
 def _states(
-    db_session: Session, users: list[User], skills: list[Skill]
+    db_session: Session, users: list[User], skills: list[Plugin]
 ) -> dict[tuple[UUID, UUID], UserPluginState]:
     db_session.expire_all()
     return {
@@ -276,17 +275,26 @@ def test_choices_under_each_setting(
     assert enabled()[NOT_AVAILABLE]
 
 
-def _add_draft_version(db_session: Session, skill: Skill) -> UUID:
+def _current_bundle_file_id(db_session: Session, plugin: Plugin) -> str | None:
+    db_session.refresh(plugin)
+    current = db_session.get(PluginVersion, plugin.current_version_id)
+    assert current is not None
+    return current.bundle_file_id
+
+
+def _add_draft_version(db_session: Session, skill: Plugin) -> UUID:
     """Version 2, which only moves current_version_id, as an edit of a
     published plugin does."""
+    current = db_session.get(PluginVersion, skill.current_version_id)
+    assert current is not None
     version_id = uuid4()
     db_session.add(
         PluginVersion(
             id=version_id,
             plugin_id=skill.id,
             version_number=2,
-            bundle_file_id=skill.bundle_file_id,
-            bundle_sha256=skill.bundle_sha256,
+            bundle_file_id=current.bundle_file_id,
+            bundle_sha256=current.bundle_sha256,
         )
     )
     db_session.flush()
@@ -403,7 +411,7 @@ def test_name_order(
 
     def runtime_ids() -> set[UUID]:
         return {
-            runtime.skill.id
+            runtime.id
             for runtime in list_runtime_skills_for_user(
                 user=user, db_session=db_session
             )
@@ -478,7 +486,7 @@ def test_plugin_with_no_skills_takes_no_name(
     assert states[plugin.id].enabled and states[plugin.id].skill_names == ()
     assert not order_skill_names(states.values()) & {skill.id, plugin.id}
     runtime = {
-        runtime.skill.id: runtime.name
+        runtime.id: runtime.name
         for runtime in list_runtime_skills_for_user(user=user, db_session=db_session)
     }
     assert runtime.get(skill.id) == name
@@ -557,8 +565,8 @@ def test_two_skills_with_one_name_do_not_stop_the_push(
 
     assert f"{name}/SKILL.md" in files
     read_ids = {call.args[0] for call in file_store.read_file.call_args_list}
-    assert published.bundle_file_id in read_ids
-    assert shared.bundle_file_id not in read_ids
+    assert _current_bundle_file_id(db_session, published) in read_ids
+    assert _current_bundle_file_id(db_session, shared) not in read_ids
 
 
 @pytest.mark.parametrize("save_fails", [False, True])
@@ -582,9 +590,10 @@ def test_name_winners_that_fail_validation_give_the_name_to_the_next_skill(
     for unvalidated in (published, own):
         set_current_version_validity(db_session, unvalidated.id, None)
     set_current_version_validity(db_session, shared.id, True)
+    shared_bundle_file_id = _current_bundle_file_id(db_session, shared)
     file_store = MagicMock(spec=FileStore)
     file_store.read_file.side_effect = lambda file_id, **_kwargs: io.BytesIO(
-        _bundle(name) if file_id == shared.bundle_file_id else b"not a zip"
+        _bundle(name) if file_id == shared_bundle_file_id else b"not a zip"
     )
     monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
 
@@ -602,6 +611,6 @@ def test_name_winners_that_fail_validation_give_the_name_to_the_next_skill(
 
     assert f"{name}/SKILL.md" in files
     read_ids = [call.args[0] for call in file_store.read_file.call_args_list]
-    assert read_ids.count(published.bundle_file_id) == 1
-    assert read_ids.count(own.bundle_file_id) == 1
-    assert shared.bundle_file_id in read_ids
+    assert read_ids.count(_current_bundle_file_id(db_session, published)) == 1
+    assert read_ids.count(_current_bundle_file_id(db_session, own)) == 1
+    assert shared_bundle_file_id in read_ids

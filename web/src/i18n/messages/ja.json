@@ -9277,7 +9277,16 @@
         "toasts": {
           "blockedBySkills": "このユーザーを削除できません",
           "openSkills": "スキルを開いて移管する",
+          "renamed": "新しい所有者は同じ名前のスキルをすでに持っていたため、移動したスキルの名前が変更されました",
           "success": "ユーザーを削除しました"
+        },
+        "transfer": {
+          "description": "<strong>{email}</strong> は {count, plural, other {# 件の非公開スキル}} を所有しています。所有権を別のユーザーに移管すると、アカウントが削除されます。",
+          "submit": {
+            "label": "すべて移管して削除"
+          },
+          "ownersLoadFailed": "スキルを受け取れるユーザーを読み込めませんでした。",
+          "retry": "再試行"
         }
       },
       "editModal": {
@@ -10520,14 +10529,17 @@
           "name": {
             "title": "ヘッダー名",
             "placeholder": "ヘッダー名を入力",
-            "error": "ヘッダー名を入力してください。"
+            "error": "ヘッダー名を入力してください。",
+            "duplicate": "各ヘッダー名は 1 回だけ使用してください。"
           },
           "value": {
             "title": "ヘッダー値",
             "description": "各認証情報を波かっこで囲みます（例: {example}）。各プレースホルダーが認証情報の入力欄になります。",
             "placeholder": "例: {example}",
             "error": "プレースホルダーを 1 つ以上追加してください（例: {example}）。"
-          }
+          },
+          "add": "ヘッダーを追加",
+          "remove": "ヘッダー {name} を削除"
         },
         "oauth": {
           "providerMode": {
@@ -10663,6 +10675,7 @@
           "useDefaults": "デフォルトを使用",
           "readOnly": "読み取りアクション ({count})",
           "write": "書き込みアクション ({count})",
+          "other": "その他のアクション ({count})",
           "empty": "この連携にはアクションがありません。",
           "connectFirst": {
             "title": "まずサーバーに接続してください",
@@ -10797,7 +10810,7 @@
         "ariaLabel": "エージェントエディターページ"
       },
       "plugins": {
-        "askHint": "確認なしで実行するには、管理者が統合でこれを許可に設定するか、各ユーザーが常に許可を選びます。",
+        "askHint": "確認なしで実行するには、エージェントの設定を変更するか、管理者が統合でこれを許可に設定するか、各ユーザーが常に許可を選びます。",
         "askHintAdminOnly": "確認なしで実行するには、管理者が統合でこれを許可に設定します。",
         "askHintAgent": "確認なしで実行するには、エージェントの設定を変更するか、各ユーザーが常に許可を選びます。",
         "askHintAgentOnly": "確認なしで実行するには、エージェントの設定を変更します。",
@@ -12251,9 +12264,6 @@
         "emptyState": {
           "text": "生成された画像はありません"
         },
-        "failedStatus": {
-          "text": "画像の生成に失敗しました"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {# 枚の画像を生成しました} other {# 枚の画像を生成しました}}"
         },
@@ -12399,21 +12409,18 @@
             "status": "プランを生成中"
           }
         },
-        "doneStep": {
-          "header": "完了"
-        },
         "expandButton": {
           "ariaLabel": "タイムラインを展開"
         },
         "fetch": {
           "reading": {
             "status": "読み取り中"
+          },
+          "read": {
+            "status": "読み込みました"
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "{total, number} 文字中 {start, number}–{end, number} 文字目"
-          },
           "read": {
             "status": "{fileName} を読み取りました ({total, number} 文字中 {start, number}–{end, number} 文字目)"
           },
@@ -12439,6 +12446,9 @@
           },
           "generatingPlan": {
             "label": "プランを生成中"
+          },
+          "queryingKnowledgeBase": {
+            "label": "ナレッジベースを照会中"
           },
           "reading": {
             "label": "読み取り中"
@@ -12475,6 +12485,9 @@
           },
           "editingFiles": {
             "label": "ファイルを編集中"
+          },
+          "publishingFiles": {
+            "label": "ファイルを公開しています"
           }
         },
         "internalSearch": {
@@ -12484,9 +12497,14 @@
           "reading": {
             "status": "読み取り中"
           },
+          "read": {
+            "label": "読み込みました"
+          },
           "header": {
             "default": "社内ドキュメントを検索中",
+            "doneDefault": "社内ドキュメントを検索しました",
             "sources": "{sources}を検索中",
+            "doneSources": "{sources}を検索しました",
             "sourcesOverflow": "{sources} 他{count}件",
             "withTimeWindow": "{header}({timeWindow})"
           },
@@ -12509,6 +12527,9 @@
           "updating": {
             "status": "メモリを更新中"
           },
+          "updated": {
+            "status": "メモリを更新しました"
+          },
           "viewMemoriesButton": {
             "tooltip": "メモリを表示"
           }
@@ -12521,21 +12542,60 @@
             "label": "メモリを更新しました"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "ナレッジベースを照会しました"
+          },
+          "querying": {
+            "status": "ナレッジベースを照会中"
+          },
+          "listed": {
+            "label": "{count, plural, one {# 件のドキュメントを一覧表示} other {# 件のドキュメントを一覧表示}}"
+          },
+          "query": {
+            "table": {
+              "document": "ドキュメント",
+              "hierarchy_node": "フォルダー",
+              "chat_session": "チャットセッション",
+              "chat_message": "チャットメッセージ",
+              "search_doc": "引用されたドキュメント"
+            },
+            "count": "件数",
+            "countBy": {
+              "source": "ソース別の件数",
+              "owner": "所有者別の件数",
+              "month": "月別の件数"
+            },
+            "titleContains": "タイトルに「{text}」を含む",
+            "nameContains": "名前に「{text}」を含む",
+            "textContains": "本文に「{text}」を含む",
+            "updated": {
+              "since": "{date} 以降に更新",
+              "before": "{date} より前に更新",
+              "between": "{start} – {end} に更新"
+            },
+            "created": {
+              "since": "{date} 以降に作成",
+              "before": "{date} より前に作成",
+              "between": "{start} – {end} に作成"
+            },
+            "sent": {
+              "since": "{date} 以降に送信",
+              "before": "{date} より前に送信",
+              "between": "{start} – {end} に送信"
+            },
+            "owner": "所有者: {owner}",
+            "folder": "フォルダー {id} 内",
+            "nodeType": "種類: {type}",
+            "author": "送信者: {author}",
+            "message": "メッセージ {id}",
+            "allRetrieved": "取得したすべて",
+            "nextPage": "次のページ"
+          }
+        },
         "python": {
-          "completed": {
-            "status": "Python の実行が完了しました"
-          },
-          "default": {
-            "status": "Python の実行"
-          },
           "error": {
             "label": "エラー:"
-          },
-          "executing": {
-            "status": "Python コードを実行中..."
-          },
-          "failed": {
-            "status": "Python の実行に失敗しました"
           },
           "generatedFiles": {
             "label": "{count, plural, one {# 件のファイルを生成しました} other {# 件のファイルを生成しました}}"
@@ -12546,6 +12606,12 @@
           "output": {
             "label": "出力:"
           },
+          "running": {
+            "status": "Python を実行中"
+          },
+          "ran": {
+            "status": "Python を実行しました"
+          },
           "runningCode": {
             "label": "コードを実行中..."
           },
@@ -12554,11 +12620,11 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "全文"
-          },
           "thinking": {
             "status": "思考中"
+          },
+          "thought": {
+            "status": "思考しました"
           }
         },
         "researchAgent": {
@@ -12580,9 +12646,6 @@
         "stepsButton": {
           "label": "{count, plural, one {# ステップ} other {# ステップ}}"
         },
-        "stoppedStep": {
-          "header": "停止しました"
-        },
         "thoughtDuration": {
           "label": "{duration} 思考しました"
         },
@@ -12599,6 +12662,7 @@
           "generateImage": "画像生成",
           "generatePlan": "プラン生成",
           "internalSearch": "社内検索",
+          "knowledgeBaseQuery": "ナレッジベースクエリ",
           "memory": "メモリ",
           "openUrls": "URL を開く",
           "researchAgent": "リサーチエージェント",
@@ -12608,11 +12672,15 @@
           "terminal": "ターミナル",
           "applyPatch": "パッチを適用",
           "editFile": "ファイルを編集",
-          "writeFile": "ファイルを書き込む"
+          "writeFile": "ファイルを書き込む",
+          "publishFiles": "ファイルを公開"
         },
         "webSearch": {
           "searching": {
             "status": "ウェブを検索中"
+          },
+          "searched": {
+            "status": "ウェブを検索しました"
           }
         },
         "sandbox": {
@@ -12654,6 +12722,14 @@
           },
           "stopped": {
             "status": "停止しました"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, other {# 件のファイルを公開しました}}"
+            },
+            "failed": {
+              "status": "公開に失敗しました"
+            }
           }
         }
       },
@@ -13295,6 +13371,16 @@
     "readiness": {
       "stopFailed": "応答を停止できませんでした。もう一度お試しください。",
       "checkFailed": "応答の完了を確認できませんでした。次のメッセージを送信する前に、もう一度確認してください。"
+    },
+    "publishedFiles": {
+      "card": {
+        "updated": {
+          "description": "更新版 · {details}"
+        },
+        "preview": {
+          "ariaLabel": "{name} をプレビュー"
+        }
+      }
     }
   },
   "common": {
@@ -14243,6 +14329,11 @@
         "label": "おすすめのモデルのみ"
       }
     },
+    "messageList": {
+      "turnFailed": {
+        "message": "ターンが失敗しました。"
+      }
+    },
     "onboarding": {
       "livingMap": {
         "examplePrompts": {
@@ -14791,9 +14882,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# 件の呼び出し} other {# 件の呼び出し}}"
-        },
         "working": {
           "label": "作業中"
         }

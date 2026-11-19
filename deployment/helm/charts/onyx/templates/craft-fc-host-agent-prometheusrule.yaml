@@ -169,6 +169,20 @@ spec:
             description: {{ `Node {{ $labels.node }} has {{ $value | humanizePercentage }} of its memory available for 15m. New VMs get CAPACITY_MEMORY.` | quote }}
             runbook_url: {{ printf "%s#craftfcnodememorylow" $runbook }}
 
+        - alert: CraftFcVMOOMKills
+          # The agent counts from its own start, so a new series is new kills.
+          expr: |
+            sum by (namespace, node) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_vm_slice_oom_kills_total{%s}` $sel) "15m") }}) > 0
+          labels:
+            severity: warning
+            {{- with $extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{ `The kernel stopped a microVM on node {{ $labels.node }} for memory` | quote }}
+            description: {{ `The kernel OOM-killed {{ $value | humanize }} microVM process(es) on node {{ $labels.node }} in 15m: a microVM used more than its memory limit, the microVMs together more than the VM slice limit, or the node ran out of memory.` | quote }}
+            runbook_url: {{ printf "%s#craftfcvmoomkills" $runbook }}
+
         - alert: CraftFcTemplateUnusable
           # template_ready is 0 before the first build from --rootfs-dir and
           # after a failed one (start-up or BuildTemplate).

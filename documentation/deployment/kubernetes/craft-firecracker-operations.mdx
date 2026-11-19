@@ -269,11 +269,12 @@ The API server deletes the Firecracker data of a session or a user when you dele
 
 - **Craft session delete.** The API server deletes the saves of the session from the file store,
   and the session directory on the running microVM. It cancels the commands of the session.
-  The artifacts that the session published stay.
 - **User delete.** The API server stops the microVM of the user. The host agent removes the microVM disk.
-  The API server deletes all saves and published artifacts of the user's sandbox from the file store.
+  The API server deletes all saves of the user's sandbox from the file store.
 - **Chat retention.** {/* depends: #17841 */} When a session had no activity for the retention window
   (`maximum_chat_retention_days`), chat retention also deletes its saves from the file store.
+- **Published files.** The files that the model published in a chat go with the messages of the chat:
+  a hard delete of the chat and chat retention delete them from the file store.
 
 A save that is in progress during the delete does not commit, and the API server deletes its archive.
 If a delete step fails,
@@ -306,6 +307,7 @@ Each alert links to its runbook below:
 | [CraftFcSessionTransferFailures](#craftfcsessiontransferfailures) | Session saves or restores fail |
 | [CraftFcRelayErrors](#craftfcrelayerrors) | microVM egress fails |
 | [CraftFcNodeMemoryLow](#craftfcnodememorylow) | A node is near its memory limit |
+| [CraftFcVMOOMKills](#craftfcvmoomkills) | The kernel stopped a microVM for memory |
 | [CraftFcTemplateUnusable](#craftfctemplateunusable) | A node cannot start microVMs for a template |
 
 ### Logs
@@ -555,8 +557,37 @@ Compare "Guest memory allocated vs node memory" on the dashboard.
 - [Drain the node](#drain-a-node) if one node stays full and other nodes have space.
 - Stop the microVMs that the API server does not know.
 
-**Contact Onyx support** when the kernel stops microVMs on the node (`EXITED` in `agent List`),
+**Contact Onyx support** when the kernel stops microVMs on the node ([CraftFcVMOOMKills](#craftfcvmoomkills)),
 or when processes other than microVMs use the memory.
+
+### CraftFcVMOOMKills
+
+**Meaning.** The kernel stopped a microVM on one node in the last 15 minutes because it ran out of memory.
+One microVM used more than its memory,
+the microVMs together used more than the limit of their host slice (`craft.hostAgent.sliceMemoryPercent`),
+or the node ran out of memory.
+
+**Check.**
+
+```bash
+agent NodeInfo   # mem_available_mib, mem_starting_mib
+agent List       # stopped microVMs are EXITED
+dmesg | grep 'oom-kill:'   # on the node
+```
+
+The `oom-kill:` line tells which limit stopped the microVM:
+
+- `constraint=CONSTRAINT_MEMCG` with `oom_memcg=/fcvms.slice/fcvm-<id>.scope`: the microVM's own memory.
+- `constraint=CONSTRAINT_MEMCG` with `oom_memcg=/fcvms.slice`: the slice limit.
+- `constraint=CONSTRAINT_NONE`: the node ran out of memory.
+
+**Fix.**
+
+- Set `craft.hostAgent.startingMemDivisor` to `1`, so that a starting microVM counts at its full memory.
+- Lower `craft.hostAgent.maxVms`, or add KVM nodes.
+- If the node ran out of memory, lower `craft.hostAgent.sliceMemoryPercent` and check what else uses node memory.
+
+**Contact Onyx support** when microVMs are still stopped with `startingMemDivisor: 1`.
 
 ### CraftFcTemplateUnusable
 

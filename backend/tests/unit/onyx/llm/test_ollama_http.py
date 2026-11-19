@@ -1,4 +1,4 @@
-"""Verify final-answer evidence through the native LiteLLM Ollama adapters."""
+"""Verify final-answer requests through the native LiteLLM Ollama adapters."""
 
 import json
 from typing import Any
@@ -23,7 +23,7 @@ from tests.unit.onyx.agents.fakes import collect_generation
 
 @pytest.mark.parametrize("provider", ["ollama", "ollama_chat"])
 @pytest.mark.parametrize("streaming", [False, True])
-def test_final_answer_preserves_evidence_without_offering_tools(
+def test_final_answer_keeps_tools_and_evidence(
     monkeypatch: pytest.MonkeyPatch, provider: str, streaming: bool
 ) -> None:
     sent: list[dict[str, Any]] = []
@@ -97,8 +97,23 @@ def test_final_answer_preserves_evidence_without_offering_tools(
     assert not result.tool_calls
     assert len(sent) == 1
     body = sent[0]
-    assert not body.get("tools")
-    assert not body.get("options", {}).get("tools")
+    # Ollama has no tool choice, so the chat route offers the declared tools.
+    # LiteLLM's generate route does not support tools on any step.
+    expected_tools = (
+        [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get weather",
+                    "parameters": {},
+                },
+            }
+        ]
+        if provider == "ollama_chat"
+        else None
+    )
+    assert body.get("tools") == expected_tools
     evidence = json.dumps(body["prompt"] if provider == "ollama" else body["messages"])
     assert all(
         value in evidence

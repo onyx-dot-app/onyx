@@ -17,7 +17,6 @@ from onyx.db.models import (
     Plugin,
     Plugin__User,
     Plugin__UserGroup,
-    Skill,
 )
 from onyx.server.features.skill.models import SkillBulkResponse
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -31,7 +30,6 @@ from tests.integration.tests.skills.conftest import (
     share_skill,
     unique_name,
 )
-from tests.utils.plugin_access import plugin_access_mismatches
 
 
 def _group(admin: DATestUser, user_ids: list[str] | None = None) -> DATestUserGroup:
@@ -97,25 +95,13 @@ def _group_rows(
         }
 
 
-def _company_settings(skill_id: UUID) -> tuple[str | None, str]:
-    """The plugin's own setting and the legacy skill setting."""
+def _company_setting(skill_id: UUID) -> str | None:
+    """The plugin's own company install setting."""
     with get_session_with_current_tenant() as db_session:
-        plugin_policy = db_session.scalar(
+        policy = db_session.scalar(
             select(Plugin.installation_policy).where(Plugin.id == skill_id)
         )
-        legacy_policy = db_session.scalar(
-            select(Skill.installation_policy).where(Skill.id == skill_id)
-        )
-        assert legacy_policy is not None
-        return (
-            plugin_policy.value if plugin_policy is not None else None,
-            legacy_policy.value,
-        )
-
-
-def _assert_rows_match(*skill_ids: UUID) -> None:
-    with get_session_with_current_tenant() as db_session:
-        assert plugin_access_mismatches(db_session, skill_ids) == []
+        return policy.value if policy is not None else None
 
 
 # --- Group install settings ------------------------------------------------
@@ -141,7 +127,6 @@ def test_bulk_share_keeps_group_install_setting(admin_user: DATestUser) -> None:
         setting_group.id: (None, PluginInstallationPolicy.DEFAULT),
         share_group.id: (SkillSharePermission.VIEWER, None),
     }
-    _assert_rows_match(skill.id)
 
 
 def test_share_keeps_group_install_setting_of_removed_share(
@@ -174,7 +159,6 @@ def test_share_keeps_group_install_setting_of_removed_share(
     # Removing the share keeps the setting, with no access.
     share_skill(admin_user, skill.id, {"group_shares": []}).raise_for_status()
     assert _group_rows(skill.id) == {group.id: (None, PluginInstallationPolicy.DEFAULT)}
-    _assert_rows_match(skill.id)
 
 
 # --- Group managers ----------------------------------------------------------
@@ -255,7 +239,7 @@ def test_group_manager_is_refused_install_settings(
 
     result = _bulk_share(manager, [skill.id], {"installation_policy": "REQUIRED"})
     assert [failure.skill_id for failure in result.failed] == [skill.id]
-    assert _company_settings(skill.id) == (None, "AVAILABLE")
+    assert _company_setting(skill.id) is None
 
 
 # --- Shares and the company install setting --------------------------------
@@ -288,7 +272,6 @@ def test_share_on_a_skill_writes_the_grant_on_its_plugin(
         )
     assert user_grants == {UUID(basic_user.id): SkillSharePermission.EDITOR}
     assert _group_rows(skill.id) == {group.id: (SkillSharePermission.VIEWER, None)}
-    _assert_rows_match(skill.id)
 
 
 def test_admin_changes_the_company_install_setting(admin_user: DATestUser) -> None:
@@ -301,20 +284,19 @@ def test_admin_changes_the_company_install_setting(admin_user: DATestUser) -> No
     ).raise_for_status()
     result = _bulk_share(admin_user, [bulk.id], {"installation_policy": "DEFAULT"})
     assert result.failed == []
-    assert _company_settings(single.id) == ("REQUIRED", "REQUIRED")
-    assert _company_settings(bulk.id) == ("DEFAULT", "DEFAULT")
+    assert _company_setting(single.id) == "REQUIRED"
+    assert _company_setting(bulk.id) == "DEFAULT"
 
     # A missing setting changes nothing.
     share_skill(admin_user, single.id, {"user_shares": []}).raise_for_status()
     result = _bulk_share(admin_user, [bulk.id], {"user_shares": []})
     assert result.failed == []
-    assert _company_settings(single.id) == ("REQUIRED", "REQUIRED")
-    assert _company_settings(bulk.id) == ("DEFAULT", "DEFAULT")
+    assert _company_setting(single.id) == "REQUIRED"
+    assert _company_setting(bulk.id) == "DEFAULT"
 
     # An explicit null takes the marketplace default.
     share_skill(admin_user, single.id, {"installation_policy": None}).raise_for_status()
     result = _bulk_share(admin_user, [bulk.id], {"installation_policy": None})
     assert result.failed == []
-    assert _company_settings(single.id) == (None, "AVAILABLE")
-    assert _company_settings(bulk.id) == (None, "AVAILABLE")
-    _assert_rows_match(single.id, bulk.id)
+    assert _company_setting(single.id) is None
+    assert _company_setting(bulk.id) is None

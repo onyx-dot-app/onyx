@@ -158,12 +158,3 @@ func TestCraftFCSmoke_podTemplateSkipsTerminatingAndUnreadyPods(t *testing.T) {
 		t.Fatalf("expected only the ready pod, got %q", out.String())
 	}
 }
-
-func TestCraftFCSmoke_needsTheContextFlag(t *testing.T) {
-	cmd := NewCraftFCCommand()
-	cmd.SetArgs([]string{"smoke"})
-	cmd.SilenceUsage, cmd.SilenceErrors = true, true
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "context") {
-		t.Fatalf("expected a required-flag error, got %v", err)
-	}
-}

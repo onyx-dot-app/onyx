@@ -29,6 +29,7 @@ from onyx.db.sso_provider import (
     fetch_sso_providers,
     sso_authorize_path,
     sso_provider_type_supported,
+    sso_supports_native_app,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -109,6 +110,7 @@ def _login_options(
                 display_name=provider.display_name,
                 provider_type=provider.provider_type,
                 authorize_url=_authorize_url(provider, workspace_token),
+                native_app_sso=sso_supports_native_app(provider),
             )
             for provider in fetch_sso_providers(db_session, enabled_only=True)
             if sso_provider_type_supported(provider.provider_type)

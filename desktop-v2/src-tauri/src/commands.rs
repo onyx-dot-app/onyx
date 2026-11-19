@@ -57,11 +57,12 @@ pub async fn get_auth_methods(state: State<'_, AppState>) -> Result<AuthMethods,
 #[tauri::command]
 pub async fn sign_in_with_sso(
     browser: bool,
+    provider: Option<String>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let server = state.server()?;
-    if browser && crate::sso::start_in_browser(&app, &server).await? {
+    if browser && crate::sso::start_in_browser(&app, &server, provider.as_deref()).await? {
         return Ok("browser".into());
     }
     crate::sso::open(&app, &server)?;
@@ -121,16 +122,19 @@ pub fn set_hotkey(
 
 async fn end_session(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
-    state.end_epoch();
-    crate::sso::cancel(app);
+    // Requests read the epoch before the token: one that starts during this
+    // either sees no token or goes stale.
     let Ok(server) = state.server() else {
+        state.end_epoch();
+        crate::sso::cancel(app);
         return Ok(());
     };
-
-    if let Some(token) = state.token(&server) {
+    let (token, cleared) = state.end_session(&server);
+    crate::sso::cancel(app);
+    if let Some(token) = token {
         state.api.logout(&server, &token).await;
     }
-    state.clear_token(&server)?;
+    cleared?;
     main_window::close(app, &server);
     windows::reset_launcher(app);
     Ok(())
@@ -162,13 +166,26 @@ pub async fn change_server(app: AppHandle, state: State<'_, AppState>) -> Result
 #[tauri::command]
 pub async fn ask(
     question: String,
+    chat_session_id: Option<String>,
     on_event: Channel<AskEvent>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let (server, token) = state.session()?;
     let epoch = state.epoch();
+    let (server, token) = state.session()?;
     let current = || state.epoch() == epoch;
-    let result = ask::run(&state.api, &server, &token, &question, &on_event, &current).await;
+    let answer = crate::aonyx::answer_started(&app);
+    let result = ask::run(
+        &state.api,
+        &server,
+        &token,
+        &question,
+        chat_session_id.as_deref(),
+        &on_event,
+        &current,
+    )
+    .await;
+    crate::aonyx::answer_finished(&app, answer, result.is_ok());
     let event = match &result {
         Ok(_) => AskEvent::Done,
         Err(message) => AskEvent::Error {
@@ -181,8 +198,8 @@ pub async fn ask(
 
 #[tauri::command]
 pub async fn search(query: String, state: State<'_, AppState>) -> Result<Vec<SearchHit>, String> {
-    let (server, token) = state.session()?;
     let epoch = state.epoch();
+    let (server, token) = state.session()?;
     let hits = state.api.search(&server, &token, &query).await?;
     // Results for a session that has since ended are dropped.
     if state.epoch() != epoch {
@@ -245,4 +262,21 @@ pub async fn open_external(
 #[tauri::command]
 pub fn hide_launcher(app: AppHandle) {
     windows::hide_launcher(&app);
+}
+
+/// The launcher logo's easter egg: brings Aonyx onto the screen or sends it away.
+#[tauri::command]
+pub fn toggle_aonyx(app: AppHandle) {
+    crate::aonyx::toggle(&app);
+}
+
+/// A click on the pet opens (or closes) the launcher.
+#[tauri::command]
+pub fn aonyx_clicked(app: AppHandle) {
+    windows::toggle_launcher(&app);
+}
+
+#[tauri::command]
+pub fn aonyx_menu(app: AppHandle) -> Result<(), String> {
+    crate::aonyx::show_menu(&app)
 }

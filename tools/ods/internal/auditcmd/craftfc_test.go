@@ -52,13 +52,3 @@ func TestRunAuditCraftFC(t *testing.T) {
 		}
 	})
 }
-
-func TestAuditCraftFCCommandDefaults(t *testing.T) {
-	cmd := newAuditCraftFCCommand()
-	if got := cmd.Flag("dockerfile").DefValue; got != audit.DefaultCraftFCDockerfile {
-		t.Fatalf("--dockerfile default = %q", got)
-	}
-	if got := cmd.Flag("fail-on").DefValue; got != "critical" {
-		t.Fatalf("--fail-on default = %q", got)
-	}
-}

@@ -419,11 +419,15 @@ termination grace period is much shorter, so it ends running turns first
     authentication (see Known issues).
 16. `stopping-tools` **The step cap disables tool execution.**
     `chat/agent.py:ChatAgent._prepare_step` uses `NONE` at the step cap.
-    Definitions remain where providers support this choice. Qwen, GLM, and
-    Bedrock omit definitions; Bedrock converts prior tool exchanges to text.
+    The request keeps the tool definitions of earlier steps
+    ([[llm-providers#none-tool-choice-keeps-tools]]). The runtime
+    (`agents/runtime.py:_complete_step`) denies a call on that step, and the run
+    takes one extra step for the answer; the full rule is in "Preparing and
+    completing steps" in `backend/onyx/agents/README.md`.
     Image generation does not remove tools, even when the image call fails.
-    The default cap is six cycles, including the final answer cycle; code mode
-    uses `CODE_MODE_MAX_LLM_CYCLES` instead.
+    The default cap is six cycles, including the final answer cycle, and the
+    extra step can make it seven; code mode uses `CODE_MODE_MAX_LLM_CYCLES`
+    instead.
 
 
 ---

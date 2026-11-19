@@ -32,6 +32,7 @@ Exec contract (Codex `exec_command` / `write_stdin`):
 import abc
 import posixpath
 from collections.abc import Generator, Iterator, Sequence
+from typing import IO
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.models import (
@@ -43,6 +44,11 @@ from onyx.server.features.build.sandbox.models import (
 
 # Parent of each chat session's working directory in the sandbox.
 SESSION_WORKSPACE_ROOT = "/home/onyx/workspaces"
+
+# Parent of the files that Onyx writes outside every session directory (for
+# example large tool results). No session save keeps them; they go when the
+# sandbox stops.
+ONYX_VM_FILES_ROOT = "/tmp/onyx"  # noqa: S108 - a path in the sandbox VM.
 
 # Most exec session records per sandbox; the least recently used goes
 # first. The guest daemon caps the running commands.
@@ -129,13 +135,21 @@ def session_relative_path(ref: HarnessSandboxRef, path: str) -> str:
             return ""
         if not normalized.startswith(root + "/"):
             raise SandboxPathError(
-                f"{path!r} is outside the session directory {root}; use "
+                f"{path!r} is outside the working directory {root}; use "
                 "exec_command elsewhere"
             )
         return normalized[len(root) + 1 :]
     if normalized == ".." or normalized.startswith("../"):
-        raise SandboxPathError(f"{path!r} leaves the session directory")
+        raise SandboxPathError(f"{path!r} leaves the working directory")
     return "" if normalized == "." else normalized
+
+
+def onyx_vm_path(path: str) -> str | None:
+    """`path` normalized when it is an absolute path under
+    ONYX_VM_FILES_ROOT, the only place outside the session directories that
+    file calls reach; else None."""
+    normalized = posixpath.normpath(path)
+    return normalized if normalized.startswith(ONYX_VM_FILES_ROOT + "/") else None
 
 
 class HarnessSandbox(abc.ABC):
@@ -171,23 +185,43 @@ class HarnessSandbox(abc.ABC):
     ) -> Generator[ExecEvent]:
         """Write to a running command, or poll it with empty chars."""
 
-    # Files: only what exec_command cannot do well. view_image needs exact
+    # Files: only what exec_command cannot do well. publish_files needs exact
     # bytes (exec output is text), and apply_patch needs exact writes of any
     # content (no shell quoting) and typed path facts. Paths are relative to
-    # the session directory, or absolute inside it.
+    # the session directory, or absolute inside it; read_file also takes,
+    # and write_onyx_file only takes, an absolute path under
+    # ONYX_VM_FILES_ROOT (onyx_vm_path). Write data is
+    # bytes, or a seekable binary file (for example a file store temp file)
+    # that is streamed whole, from its start, in chunks.
 
     @abc.abstractmethod
     def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
-        """Follows links inside the session directory. Raises
-        SandboxFileNotFoundError for a missing file and
-        SandboxFileTooLargeError over max_bytes."""
+        """Read a regular file in the session directory, or under
+        ONYX_VM_FILES_ROOT; links are followed only inside that root. Raises
+        SandboxPathError for another path, SandboxFileNotFoundError for a
+        missing file, SandboxFileTooLargeError over max_bytes, and
+        HarnessSandboxError for a path that is not a regular file or that a
+        link takes out of its root."""
 
     @abc.abstractmethod
     def write_file(
-        self, ref: HarnessSandboxRef, path: str, data: bytes, *, mode: int = 0o644
+        self,
+        ref: HarnessSandboxRef,
+        path: str,
+        data: bytes | IO[bytes],
+        *,
+        mode: int = 0o644,
     ) -> None:
         """Atomic replace (a link is replaced, not followed); creates parent
         directories. `mode`: permission bits."""
+
+    @abc.abstractmethod
+    def write_onyx_file(
+        self, ref: HarnessSandboxRef, path: str, data: bytes | IO[bytes]
+    ) -> None:
+        """Atomic replace of an absolute path under ONYX_VM_FILES_ROOT, mode
+        0644; creates parent directories. Starts the sandbox if needed but
+        sets up no session. Raises SandboxPathError for another path."""
 
     @abc.abstractmethod
     def stat_files(
@@ -201,12 +235,6 @@ class HarnessSandbox(abc.ABC):
     def delete_file(self, ref: HarnessSandboxRef, path: str) -> bool:
         """Delete a file or a link (not a directory). False when nothing was
         at the path."""
-
-    @abc.abstractmethod
-    def publish_artifact(
-        self, ref: HarnessSandboxRef, path: str, *, display_name: str | None = None
-    ) -> str:
-        """Copy a session file to the file store. Returns the file ID."""
 
     @abc.abstractmethod
     def touch(self, ref: HarnessSandboxRef) -> None:

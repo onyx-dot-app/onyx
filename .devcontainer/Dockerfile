@@ -8,7 +8,7 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS bun_source
 FROM ${BASE_IMAGE_REGISTRY}/library/node:24.16.0-trixie-slim@sha256:45fbb3ca3b6c7e6646cd2889d0ac7bf314bb180036da792221fc2f48fe4d43fb AS node_source
 
-FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db
+FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db AS integration-tests
 
 # Ubuntu 26.04 moved ARM64 packages from ports to the main archive.
 RUN if [ "$(dpkg --print-architecture)" = arm64 ]; then \
@@ -21,16 +21,75 @@ RUN if [ "$(dpkg --print-architecture)" = arm64 ]; then \
   cmake \
   curl \
   default-jre \
+  git \
+  iproute2 \
+  jq \
+  libxmlsec1-dev \
+  make \
+  nginx \
+  openssh-client \
+  pkg-config \
+  postgresql-client \
+  ripgrep \
+  socat \
+  unzip \
+  wget \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install uv (Python package manager). Python deps themselves are not
+# baked in — CI runs `uv sync` against the bind-mounted workspace, and
+# daily dev uses their own .venv. The apt block above includes the
+# system libraries `uv sync` needs to compile native extensions
+# (cmake, libxmlsec1-dev, pkg-config, postgresql-client).
+COPY --from=ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 /uv /uvx /usr/local/bin/
+
+# The gateway client fixtures install their CLIs with npm. Playwright's web
+# test workers also need Node. Recreate npm's symlinks when copying from Node.
+COPY --from=node_source /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_source /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+  && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+  && node --version
+
+# Install the apt packages Playwright needs to run headless Chromium for
+# the web-search open_url tool. The browser binary itself is downloaded
+# from the integration test conftest's _install_playwright fixture so
+# the version always matches the lockfile's playwright-python.
+RUN apt-get update \
+  && uvx --quiet --from playwright playwright install-deps chromium \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Give Playwright's browser cache a fixed, user-independent path. The default
+# (~/.cache/ms-playwright) would be shadowed by the devcontainer's per-user
+# cache volume and differ between root and dev, so revisions baked below would
+# be invisible at runtime. Test-time installs (web e2e, the integration
+# conftest) land their own revisions alongside the baked one.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+
+# Install Python 3.13 via uv into a stable, image-level path so venvs
+# created in bind-mounted workspaces survive across `docker run`s.
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
+RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
+  && ln -s python3.13 /usr/local/bin/python3 \
+  && ln -s python3.13 /usr/local/bin/python \
+  && python --version
+
+# Mark /workspace as safe for git regardless of host/container UID mismatch.
+# Daily dev sidesteps "dubious ownership" via init-dev-user.sh (UID remap or
+# rootless-root). One-shot `docker run` uses (e.g. CI) skip postStartCommand
+# entirely, so we set this system-wide.
+RUN git config --system --add safe.directory /workspace
+
+FROM integration-tests AS devcontainer
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
   dnsmasq \
   dnsutils \
   fd-find \
   fzf \
-  git \
   gobject-introspection \
-  iproute2 \
   ipset \
   iptables \
-  jq \
   less \
   libayatana-appindicator3-dev \
   libgirepository1.0-dev \
@@ -38,20 +97,10 @@ RUN if [ "$(dpkg --print-architecture)" = arm64 ]; then \
   libgtk-3-dev \
   libjavascriptcoregtk-4.1-dev \
   libwebkit2gtk-4.1-dev \
-  libxmlsec1-dev \
-  make \
   neovim \
-  nginx \
-  openssh-client \
-  pkg-config \
-  postgresql-client \
-  ripgrep \
   rust-clippy \
   rustfmt \
-  socat \
   sudo \
-  unzip \
-  wget \
   xdg-utils \
   zsh \
   && install -m 0755 -d /etc/apt/keyrings \
@@ -64,13 +113,6 @@ RUN if [ "$(dpkg --print-architecture)" = arm64 ]; then \
 
 # fd-find installs as fdfind on Debian/Ubuntu — symlink to fd
 RUN ln -sf "$(which fdfind)" /usr/local/bin/fd
-
-# Install uv (Python package manager). Python deps themselves are not
-# baked in — CI runs `uv sync` against the bind-mounted workspace, and
-# daily dev uses their own .venv. The apt block above includes the
-# system libraries `uv sync` needs to compile native extensions
-# (cmake, libxmlsec1-dev, pkg-config, postgresql-client).
-COPY --from=ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 /uv /uvx /usr/local/bin/
 
 # Install prek (https://github.com/j178/prek), the repo's hook runner for
 # `.pre-commit-config.yaml`. Keep the version equal to the prek group in
@@ -96,40 +138,6 @@ RUN set -eux; \
 COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 
-# Install Node.js. Bun is the JS package manager, but Playwright's e2e test
-# runner (web/tests/e2e) forks worker processes that require Node — running it
-# under bun alone hangs the runner. Daily JS tooling (Claude Code, opencode)
-# still runs under bun; Node is here only as the runtime for the test runner.
-# The test runner's chromium binary is installed at test time, not baked here,
-# so its version tracks web/package.json's pinned @playwright/test (the
-# chromium baked further down serves only the pinned Playwright MCP server).
-#
-# Copied from the official node image (digest-pinned in the node_source stage at the
-# top, routed through BASE_IMAGE_REGISTRY) instead of fetched from nodejs.org, so a
-# compromised mirror or MITM can't swap the binary and buildkit resolves the right arch
-# from the manifest list. npm/npx are scripts under node_modules/npm; recreate their
-# PATH symlinks since we copy the bare binary.
-COPY --from=node_source /usr/local/bin/node /usr/local/bin/node
-COPY --from=node_source /usr/local/lib/node_modules /usr/local/lib/node_modules
-RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
-  && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
-  && node --version
-
-# Install the apt packages Playwright needs to run headless Chromium for
-# the web-search open_url tool. The browser binary itself is downloaded
-# from the integration test conftest's _install_playwright fixture so
-# the version always matches the lockfile's playwright-python.
-RUN apt-get update \
-  && uvx --quiet --from playwright playwright install-deps chromium \
-  && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Give Playwright's browser cache a fixed, user-independent path. The default
-# (~/.cache/ms-playwright) would be shadowed by the devcontainer's per-user
-# cache volume and differ between root and dev, so revisions baked below would
-# be invisible at runtime. Test-time installs (web e2e, the integration
-# conftest) land their own revisions alongside the baked one.
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
-
 # Bake the chromium build for the Playwright MCP server. Playwright browser
 # builds are revision-coupled to the playwright version that installs them, so
 # resolve the exact playwright the pinned MCP bundles and install with that —
@@ -140,14 +148,6 @@ ARG PLAYWRIGHT_MCP_VERSION=0.0.78
 RUN PW_VERSION=$(npm view "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" dependencies.playwright) \
   && npx --yes "playwright@${PW_VERSION}" install chromium \
   && chmod -R 777 /opt/ms-playwright
-
-# Install Python 3.13 via uv into a stable, image-level path so venvs
-# created in bind-mounted workspaces survive across `docker run`s.
-ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
-RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
-  && ln -s python3.13 /usr/local/bin/python3 \
-  && ln -s python3.13 /usr/local/bin/python \
-  && python --version
 
 # Install the Go toolchain. Every Go module in the repo pins `go 1.27.4` in its go.mod.
 # The golangci-lint pre-commit hook builds them against this version — keep it in
@@ -188,12 +188,6 @@ ENV DEVCONTAINER=true
 
 RUN mkdir -p /workspace && \
   chown -R dev:dev /workspace
-
-# Mark /workspace as safe for git regardless of host/container UID mismatch.
-# Daily dev sidesteps "dubious ownership" via init-dev-user.sh (UID remap or
-# rootless-root). One-shot `docker run` uses (e.g. CI) skip postStartCommand
-# entirely, so we set this system-wide.
-RUN git config --system --add safe.directory /workspace
 
 WORKDIR /workspace
 

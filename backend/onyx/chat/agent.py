@@ -451,8 +451,16 @@ class ChatAgent(Agent, RestorableFeature):
             [part for item in result.tool_results for part in tool_result_parts(item)],
         )
         self._update_tool_context(result.tool_results)
-        if not result.message.tool_calls or result.step.is_last:
-            self._validate_answer(result)
+        if not result.message.tool_calls and not result.message.text:
+            raise build_empty_llm_response_error(
+                llm=self.llm,
+                message=result.message,
+                tool_choice=(
+                    ToolChoiceOptions.REQUIRED
+                    if isinstance(result.options.tool_choice, NamedToolChoice)
+                    else result.options.tool_choice
+                ),
+            )
         return bool(result.message.tool_calls)
 
     def _finalize_tool(
@@ -504,23 +512,6 @@ class ChatAgent(Agent, RestorableFeature):
             amendment.model_copy(update={"result": self._staged(amendment.result)})
             for amendment in amendments
         ]
-
-    def _validate_answer(self, result: StepResult) -> None:
-        if not result.message.text and not result.message.tool_calls:
-            raise build_empty_llm_response_error(
-                llm=self.llm,
-                message=result.message,
-                tool_choice=(
-                    ToolChoiceOptions.REQUIRED
-                    if isinstance(result.options.tool_choice, NamedToolChoice)
-                    else result.options.tool_choice
-                ),
-            )
-        if not result.message.text:
-            raise RuntimeError(
-                "The model did not return a final answer after tool execution."
-            )
-        return None
 
 
 def build_chat_agent(

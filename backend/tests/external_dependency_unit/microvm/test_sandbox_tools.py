@@ -1,9 +1,11 @@
-"""exec_command, write_stdin, apply_patch, edit and write against
-FirecrackerHarnessSandbox with a fake host agent: chat turns through the chat flow (streamed and
+"""exec_command, write_stdin, apply_patch, edit, write and publish_files
+against FirecrackerHarnessSandbox with a fake host agent: chat turns through the chat flow (streamed and
 replayed packets, code mode values, approvals, Stop, turns that offer no
-sandbox), the tools' model text and file effects, the turn lifecycle, the
-Sandbox row and the chat delete purge."""
+sandbox), the tools' model text and file effects, published files (access,
+the message's files, the chat delete), the turn lifecycle, the Sandbox row
+and the chat delete purge."""
 
+import json
 import threading
 import time
 from collections.abc import Callable, Generator, Iterator, Sequence
@@ -19,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from onyx.access.access import user_can_access_chat_file
 from onyx.agents.models import RunStatus
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import ToolInvocation, ToolProgress
@@ -26,6 +29,7 @@ from onyx.auth.users import get_anonymous_user
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat import execution, process_message
+from onyx.chat import files as chat_files
 from onyx.chat.agent import ChatAgent
 from onyx.chat.chat_processing_checker import get_processing_stream
 from onyx.chat.execution import chat_turn_work
@@ -36,7 +40,12 @@ from onyx.chat.process_message import (
     run_chat_turn,
 )
 from onyx.chat.stop_signal_checker import request_stop
-from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.configs.constants import (
+    CHAT_SESSION_ID_FILE_METADATA_KEY,
+    DEFAULT_PERSONA_ID,
+    FileOrigin,
+    MessageType,
+)
 from onyx.db import chat as db_chat
 from onyx.db.chat import (
     create_chat_session,
@@ -44,11 +53,18 @@ from onyx.db.chat import (
     delete_chat_session,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import IncognitoRecordMode, SandboxStatus
+from onyx.db.enums import (
+    ApprovalDecision,
+    ChatSessionSharedStatus,
+    IncognitoRecordMode,
+    PluginInstallationPolicy,
+    SandboxStatus,
+)
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
     ChatSession,
+    FileRecord,
     Sandbox,
     User,
 )
@@ -60,6 +76,10 @@ from onyx.db.sandbox import (
 )
 from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.agent import DeepResearchAgent
+from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.constants import CHAT_ARTIFACT_FILE_PREFIX
+from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.utils import plaintext_file_name_for_id
 from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import (
     AgentCancelled,
@@ -67,7 +87,11 @@ from onyx.llm.cancellation import (
     cancellation_scope,
 )
 from onyx.llm.interfaces import LLMConfig
-from onyx.llm.model_response import Delta
+from onyx.llm.model_response import (
+    ChatCompletionDeltaToolCall,
+    Delta,
+    ResponseFunctionCall,
+)
 from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
@@ -94,6 +118,7 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
 )
 from onyx.server.features.build.sandbox.firecracker.models import ExecSessionTable
 from onyx.server.features.build.sandbox.harness_base import (
+    ONYX_VM_FILES_ROOT,
     ExecSessionNotFoundError,
     session_workspace,
 )
@@ -108,6 +133,7 @@ from onyx.server.query_and_chat.chat_backend import (
     decide_approval,
     delete_all_chat_sessions,
     delete_chat_session_by_id,
+    fetch_chat_file,
     get_chat_session,
 )
 from onyx.server.query_and_chat.models import (
@@ -123,18 +149,24 @@ from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_implementations.code_mode import cells
 from onyx.tools.tool_implementations.sandbox import sandbox_tools
 from onyx.tools.tool_implementations.sandbox.models import (
+    PUBLISH_FILES_MAX_FILES,
     ApplyPatchFileChange,
     ApplyPatchResult,
+    PublishedFile,
+    PublishedFiles,
+    PublishFileArgument,
     SandboxExecResult,
 )
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ApplyPatchTool,
     EditTool,
     ExecCommandTool,
+    PublishFilesTool,
     WriteStdinTool,
     WriteTool,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
+from tests.external_dependency_unit.chat.test_chat_tool_approvals import ACTION
 from tests.external_dependency_unit.chat.test_parked_agent_handoff import _gated
 from tests.external_dependency_unit.chat.test_wait_agents import (
     ScriptedLLM as WaitAgentsLLM,
@@ -153,6 +185,7 @@ from tests.external_dependency_unit.db.test_chat_tool_options import (
 )
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
+    hold_in_plugin,
     make_mcp_integration,
 )
 from tests.external_dependency_unit.microvm.conftest import (
@@ -187,6 +220,7 @@ class SandboxTools(BaseModel):
     apply_patch: ApplyPatchTool
     edit: EditTool
     write: WriteTool
+    publish_files: PublishFilesTool
 
     @property
     def all(self) -> list[Tool]:
@@ -257,6 +291,7 @@ def make_tools(db_session: Session, user: User) -> MakeTools:
             apply_patch=ApplyPatchTool(turn),
             edit=EditTool(turn),
             write=WriteTool(turn),
+            publish_files=PublishFilesTool(turn),
         )
 
     return make
@@ -381,6 +416,8 @@ def _sandbox_packets(parts: Sequence[object]) -> list[packets.PacketObj]:
         packets.ExecEnd,
         packets.ApplyPatchStart,
         packets.ApplyPatchEnd,
+        packets.PublishFilesStart,
+        packets.PublishFilesEnd,
     )
     objects = [
         part.obj if isinstance(part, packets.Packet) else part
@@ -523,6 +560,10 @@ def gated_integration(db_session: Session) -> Generator[int, None, None]:
         db_session,
         server_url="https://example.com/mcp",
         name=f"sandbox_gate_{uuid4().hex[:8]}",
+        tools=[ACTION],
+    )
+    hold_in_plugin(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
     )
     integration_id = integration.id
     yield integration_id
@@ -539,7 +580,8 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     gated_integration: int,
 ) -> None:
     ended = _ended_turns(monkeypatch, sandbox)
-    gated = _gated(gated_integration, [])
+    sent: list[str] = []
+    gated = _gated(gated_integration, sent)
     real_construct_tools = construct_tools
 
     def with_gated_tool(**kwargs: Any) -> list[Tool]:
@@ -588,6 +630,9 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
 
     _wait_until(completed)
     assert chat_turn_work.wait_idle(timeout=30)
+    db_session.refresh(approval)
+    assert approval.decision is ApprovalDecision.APPROVED
+    assert sent == ["team"]
     assert len(llm.requests) == 4
     assert ended == [ref, ref]
 
@@ -1247,12 +1292,12 @@ def test_a_patch_adds_updates_moves_and_deletes_files(
         (
             "*** Begin Patch\n*** Add File: new.txt\n+n\n"
             "*** Add File: /etc/passwd\n+root\n*** End Patch",
-            "'/etc/passwd' is outside the session directory",
+            "'/etc/passwd' is outside the working directory",
         ),
         (
             "*** Begin Patch\n*** Add File: new.txt\n+n\n"
             "*** Add File: ../other/x.txt\n+x\n*** End Patch",
-            "'../other/x.txt' leaves the session directory",
+            "'../other/x.txt' leaves the working directory",
         ),
         (
             "*** Begin Patch\n*** Add File: new.txt\n+n\n"
@@ -1693,7 +1738,7 @@ def test_write_and_edit_create_change_and_keep_the_mode_of_files(
         (
             WriteTool.NAME,
             {"file_path": "../other/x.txt", "content": "q"},
-            "'../other/x.txt' leaves the session directory",
+            "'../other/x.txt' leaves the working directory",
         ),
     ],
 )
@@ -2093,3 +2138,500 @@ def test_a_bulk_delete_keeps_a_chat_created_while_it_runs(
     db_session.expire_all()
     assert db_session.get(ChatSession, first) is None
     assert db_session.get(ChatSession, created[0]) is not None
+
+
+# publish_files
+
+
+def _published_records(db_session: Session, chat_session_id: UUID) -> list[FileRecord]:
+    """The published files stamped with the chat session."""
+    db_session.expire_all()
+    return list(
+        db_session.scalars(
+            select(FileRecord).where(
+                FileRecord.file_origin == FileOrigin.CHAT_ARTIFACT,
+                FileRecord.file_metadata[CHAT_SESSION_ID_FILE_METADATA_KEY].astext
+                == str(chat_session_id),
+            )
+        )
+    )
+
+
+def _answer_file_ids(db_session: Session, chat_session_id: UUID) -> list[str]:
+    db_session.expire_all()
+    [answer] = db_session.scalars(
+        select(ChatMessage).where(
+            ChatMessage.chat_session_id == chat_session_id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    )
+    return [descriptor["id"] for descriptor in answer.files or []]
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_chat(
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+) -> None:
+    ref = chat.ref(db_session)
+    sandbox.write_file(ref, "out/report.csv", b"a,b\n1,2\n")
+    # A file in the Onyx directory outside the working directory.
+    chart = f"{ONYX_VM_FILES_ROOT}/chart.svg"
+    node.agent.files[(str(ref.sandbox_id), "", chart)] = b"<svg/>"
+    report = f"{session_workspace(chat.chat_session_id)}/out/report.csv"
+    llm = ChatLLM(
+        [
+            tool_step(
+                PublishFilesTool.NAME,
+                "publish",
+                {
+                    "files": [
+                        {"path": "out/report.csv", "title": "Report"},
+                        {"path": chart},
+                    ],
+                    "description": "The report and its chart.",
+                },
+            ),
+            # Publishing a name again adds a version.
+            tool_step(PublishFilesTool.NAME, "again", {"files": [{"path": report}]}),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat.send(llm)
+
+    live = _sandbox_packets(parts)
+    ends = [obj for obj in live if isinstance(obj, packets.PublishFilesEnd)]
+    published = [file for end in ends for file in end.files]
+    assert [
+        (file.name, file.title, file.path, file.size, file.mime_type)
+        for file in published
+    ] == [
+        ("report.csv", "Report", report, 8, "text/csv"),
+        ("chart.svg", None, chart, 6, "image/svg+xml"),
+        ("report.csv", None, report, 8, "text/csv"),
+    ]
+    assert len({file.file_id for file in published}) == 3
+    assert live == [
+        packets.PublishFilesStart(
+            files=[
+                PublishFileArgument(path="out/report.csv", title="Report"),
+                PublishFileArgument(path=chart),
+            ],
+            description="The report and its chart.",
+        ),
+        ends[0],
+        packets.SectionEnd(),
+        packets.PublishFilesStart(files=[PublishFileArgument(path=report)]),
+        ends[1],
+        packets.SectionEnd(),
+    ]
+    [replayed] = chat.replayed(db_session)
+    assert _sandbox_packets(replayed) == live
+    text = last_tool_text(llm, "publish")
+    assert text.startswith("Published.")
+    assert f"- {report}: file ID {published[0].file_id}, 8 bytes, text/csv" in text
+    assert chart in text
+
+    store = get_default_file_store()
+    for file, data in zip(
+        published, [b"a,b\n1,2\n", b"<svg/>", b"a,b\n1,2\n"], strict=True
+    ):
+        record = store.read_file_record(file.file_id)
+        assert record.file_origin == FileOrigin.CHAT_ARTIFACT
+        assert record.display_name == file.name
+        assert record.file_metadata == {
+            CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat.chat_session_id)
+        }
+        assert store.read_file(file.file_id).read() == data
+    assert _answer_file_ids(db_session, chat.chat_session_id) == [
+        file.file_id for file in published
+    ]
+
+    delete_chat_session_by_id(
+        chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
+    )
+    assert _published_records(db_session, chat.chat_session_id) == []
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_everyone_who_can_read_the_chat_can_download_a_published_file(
+    db_session: Session,
+    user: User,
+    sandbox: FirecrackerHarnessSandbox,
+    make_tools: MakeTools,
+    make_test_user: MakeTestUser,
+) -> None:
+    chat_session = create_chat_session(
+        db_session, "published", user.id, persona_id=DEFAULT_PERSONA_ID
+    )
+    tools = make_tools(chat_session.id)
+    sandbox.write_file(tools.ref, "report.md", b"# Report\n")
+    result, _ = _run(tools.publish_files, {"files": [{"path": "report.md"}]})
+    assert isinstance(result.details, PublishedFiles)
+    [file] = result.details.files
+    # Not a UUID: the download's user file lookup passes it through.
+    assert file.file_id.startswith(f"{CHAT_ARTIFACT_FILE_PREFIX}{chat_session.id}-")
+    other = make_test_user("published_viewer")
+
+    def download(reader: User) -> int:
+        return fetch_chat_file(
+            file.file_id,
+            Request({"type": "http", "headers": []}),
+            parsed=False,
+            user=reader,
+            db_session=db_session,
+        ).status_code
+
+    try:
+        # No response saved the file yet: the chat stamp alone gives access.
+        assert download(user) == 200
+        with pytest.raises(OnyxError):
+            download(other)
+        assert not user_can_access_chat_file(file.file_id, other, db_session)
+        chat_session.shared_status = ChatSessionSharedStatus.PUBLIC
+        db_session.commit()
+        assert download(other) == 200
+    finally:
+        get_default_file_store().delete_file(file.file_id)
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+@pytest.mark.parametrize(
+    ("path", "error"),
+    [
+        ("missing.md", "'missing.md' does not exist"),
+        ("out", "out is not a regular file"),
+        (f"{ONYX_VM_FILES_ROOT}/dir", "is not a regular file"),
+        ("big.bin", "'big.bin' is larger than the limit of 16 bytes"),
+        (
+            "/tmp/chart.svg",
+            "'/tmp/chart.svg' is not in the working directory or under "
+            f"{ONYX_VM_FILES_ROOT}; copy the file into the working directory first",
+        ),
+    ],
+)
+def test_a_publish_that_fails_on_one_file_publishes_none(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    make_tools: MakeTools,
+    path: str,
+    error: str,
+) -> None:
+    monkeypatch.setattr(sandbox_tools, "PUBLISH_FILES_MAX_BYTES", 16)
+    tools = make_tools()
+    sandbox.write_file(tools.ref, "report.md", b"# Report\n")
+    sandbox.write_file(tools.ref, "out/a.txt", b"a")
+    sandbox.write_file(tools.ref, "big.bin", b"x" * 17)
+    for vm_path in ("/tmp/chart.svg", f"{ONYX_VM_FILES_ROOT}/dir/a.svg"):
+        node.agent.files[(str(tools.ref.sandbox_id), "", vm_path)] = b"<svg/>"
+
+    result, _ = _run(
+        tools.publish_files, {"files": [{"path": "report.md"}, {"path": path}]}
+    )
+
+    assert result.is_error
+    assert result.text.endswith(error)
+    # The file that the call copied first is deleted again.
+    assert _published_records(db_session, tools.ref.session_id) == []
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_a_program_publishes_files_that_belong_to_the_message(
+    db_session: Session, sandbox: FirecrackerHarnessSandbox, chat: SandboxChat
+) -> None:
+    sandbox.write_file(chat.ref(db_session), "report.md", b"# Report\n")
+    llm = ChatLLM(
+        [
+            code_step(
+                "code",
+                "print(await tools.publish_files(files=[{'path': 'report.md'}]))\n",
+            ),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm, code_mode=True)
+
+    assert "Published." in last_tool_text(llm, "code")
+    [cell] = saved_cells(db_session, chat.chat_session_id)
+    [call] = cell.calls
+    assert isinstance(call.details, PublishedFiles)
+    [file] = call.details.files
+    assert _answer_file_ids(db_session, chat.chat_session_id) == [file.file_id]
+    delete_chat_session_by_id(
+        chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
+    )
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_the_non_streaming_response_lists_published_files(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    chat: SandboxChat,
+) -> None:
+    sandbox.write_file(chat.ref(db_session), "report.md", b"# Report\n")
+    llm = ChatLLM(
+        [
+            tool_step(
+                PublishFilesTool.NAME, "publish", {"files": [{"path": "report.md"}]}
+            ),
+            Delta(content="Done."),
+        ]
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
+    )
+    monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", False)
+
+    response = run_chat_turn(
+        new_msg_req=SendMessageRequest(
+            message="Work.",
+            chat_session_id=chat.chat_session_id,
+            tool_options=ToolOptions(allowed=[]),
+        ),
+        user=chat.user,
+    )
+
+    [call] = response.tool_calls
+    assert call.published_files == [
+        PublishedFile(
+            file_id=_answer_file_ids(db_session, chat.chat_session_id)[0],
+            name="report.md",
+            path=f"{session_workspace(chat.chat_session_id)}/report.md",
+            size=9,
+            mime_type="text/markdown",
+        )
+    ]
+    delete_chat_session_by_id(
+        chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
+    )
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_a_publish_in_the_step_of_a_patch_publishes_the_patched_file(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    chat: SandboxChat,
+) -> None:
+    write_file = sandbox.write_file
+    read_file = sandbox.read_file
+    publish_read = threading.Event()
+
+    def recorded_read(*args: Any, **kwargs: Any) -> bytes:
+        publish_read.set()
+        return read_file(*args, **kwargs)
+
+    def write_after_any_read(*args: Any, **kwargs: Any) -> None:
+        # Holds the patch's write while a publish beside it would read; the
+        # publish runs after the write, so it never reads during the wait.
+        assert not publish_read.wait(timeout=1)
+        write_file(*args, **kwargs)
+
+    monkeypatch.setattr(sandbox, "read_file", recorded_read)
+    monkeypatch.setattr(sandbox, "write_file", write_after_any_read)
+    llm = ChatLLM(
+        [
+            Delta(
+                tool_calls=[
+                    ChatCompletionDeltaToolCall(
+                        id=call_id,
+                        index=index,
+                        function=ResponseFunctionCall(
+                            name=name, arguments=json.dumps(arguments)
+                        ),
+                    )
+                    for index, (call_id, name, arguments) in enumerate(
+                        [
+                            ("patch", ApplyPatchTool.NAME, {"input": ADD_A}),
+                            (
+                                "publish",
+                                PublishFilesTool.NAME,
+                                {"files": [{"path": "a.txt"}]},
+                            ),
+                        ]
+                    )
+                ]
+            ),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm)
+
+    # The file tools take turns, so the publish sees the patch's file.
+    assert last_tool_text(llm, "publish").startswith("Published.")
+    [record] = _published_records(db_session, chat.chat_session_id)
+    assert get_default_file_store().read_file(record.file_id).read() == b"x\n"
+    delete_chat_session_by_id(
+        chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
+    )
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_a_later_turn_reads_no_text_of_published_files(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    chat: SandboxChat,
+) -> None:
+    sandbox.write_file(chat.ref(db_session), "report.csv", b"a,b\n1,2\n")
+    chat.send(
+        ChatLLM(
+            [
+                tool_step(
+                    PublishFilesTool.NAME,
+                    "publish",
+                    {"files": [{"path": "report.csv"}]},
+                ),
+                Delta(content="Done."),
+            ]
+        )
+    )
+    [record] = _published_records(db_session, chat.chat_session_id)
+    extracted: list[str] = []
+    extract_file_text = chat_files.extract_file_text
+
+    def recorded_extract_file_text(**kwargs: Any) -> str:
+        extracted.append(kwargs["file_name"])
+        return extract_file_text(**kwargs)
+
+    monkeypatch.setattr(chat_files, "extract_file_text", recorded_extract_file_text)
+
+    chat.send(ChatLLM([Delta(content="Still done.")]))
+
+    assert extracted == []
+    db_session.expire_all()
+    assert (
+        db_session.get(FileRecord, plaintext_file_name_for_id(record.file_id)) is None
+    )
+    delete_chat_session_by_id(
+        chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
+    )
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_a_stop_during_the_last_copy_publishes_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    make_tools: MakeTools,
+) -> None:
+    tools = make_tools()
+    sandbox.write_file(tools.ref, "report.md", b"# Report\n")
+    cancellation = CancellationSignal()
+    save_chat_output_file = sandbox_tools.save_chat_output_file
+
+    def save_then_stop(*args: Any, **kwargs: Any) -> str:
+        file_id = save_chat_output_file(*args, **kwargs)
+        cancellation.cancel()
+        return file_id
+
+    monkeypatch.setattr(sandbox_tools, "save_chat_output_file", save_then_stop)
+
+    with pytest.raises(AgentCancelled):
+        tools.publish_files.run(
+            ToolInvocation(
+                call_id="publish",
+                arguments={"files": [{"path": "report.md"}]},
+                cancellation=cancellation,
+                update=lambda _progress: None,
+            ),
+            ToolContext(),
+        )
+
+    assert _published_records(db_session, tools.ref.session_id) == []
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+@pytest.mark.parametrize("resume", [True, False])
+def test_a_parked_response_lists_its_published_file_once_and_a_chat_delete_deletes_it(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    chat: SandboxChat,
+    gated_integration: int,
+    resume: bool,
+) -> None:
+    sandbox.write_file(chat.ref(db_session), "report.md", b"# Report\n")
+    gated = _gated(gated_integration, [])
+    real_construct_tools = construct_tools
+
+    def with_gated_tool(**kwargs: Any) -> list[Tool]:
+        return [*real_construct_tools(**kwargs), gated]
+
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", with_gated_tool)
+    llm = ChatLLM(
+        [
+            tool_step(
+                PublishFilesTool.NAME, "publish", {"files": [{"path": "report.md"}]}
+            ),
+            tool_step(gated.name, "send", {"value": "team"}),
+            Delta(content="Done."),
+        ]
+    )
+    # The resumed response runs after the send returns.
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
+    )
+    assert _stops(chat.send(llm)) == [packets.AWAITING_USER]
+    approval = db_session.scalars(
+        select(ApprovalRequest).where(
+            ApprovalRequest.chat_session_id == chat.chat_session_id
+        )
+    ).one()
+    response_id = approval.chat_message_id
+    [record] = _published_records(db_session, chat.chat_session_id)
+    if not resume:
+        # No save lists the file: the chat delete finds it by its ID.
+        assert _answer_file_ids(db_session, chat.chat_session_id) == []
+        delete_chat_session_by_id(
+            chat.chat_session_id,
+            hard_delete=True,
+            user=chat.user,
+            db_session=db_session,
+        )
+        assert _published_records(db_session, chat.chat_session_id) == []
+        return
+
+    with get_session_with_current_tenant() as session:
+        decide_approval(
+            approval_id=approval.id,
+            body=ChatApprovalDecisionRequest(decision=ApprovalChoice.APPROVE_ONCE),
+            request=Request({"type": "http", "headers": []}),
+            user=chat.user,
+            db_session=session,
+        )
+
+    def completed() -> bool:
+        with get_session_with_current_tenant() as session:
+            status = session.get_one(ChatMessage, response_id).response_status
+        return status == RunStatus.COMPLETE
+
+    _wait_until(completed)
+    assert chat_turn_work.wait_idle(timeout=30)
+    assert _answer_file_ids(db_session, chat.chat_session_id) == [record.file_id]
+    delete_chat_session_by_id(
+        chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
+    )
+    assert _published_records(db_session, chat.chat_session_id) == []
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_a_publish_of_too_many_files_publishes_none(
+    db_session: Session, sandbox: FirecrackerHarnessSandbox, make_tools: MakeTools
+) -> None:
+    tools = make_tools()
+    sandbox.write_file(tools.ref, "report.md", b"# Report\n")
+
+    result, _ = _run(
+        tools.publish_files,
+        {"files": [{"path": "report.md"}] * (PUBLISH_FILES_MAX_FILES + 1)},
+    )
+
+    assert result.is_error
+    assert f"at most {PUBLISH_FILES_MAX_FILES} items" in result.text
+    assert _published_records(db_session, tools.ref.session_id) == []

@@ -1,4 +1,7 @@
 import { PointerEventsCheckLevel } from "@testing-library/user-event";
+import { act } from "@testing-library/react";
+import { useSWRConfig } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   render,
   screen,
@@ -50,6 +53,43 @@ function rowOf(name: string): HTMLElement {
 
 afterEach(() => jest.restoreAllMocks());
 
+let revalidateActions: () => Promise<unknown> = async () => undefined;
+
+/** Lets a test revalidate the actions, as a window focus does in the app. */
+function ActionsRevalidator() {
+  const { mutate } = useSWRConfig();
+  revalidateActions = () => mutate(SWR_KEYS.adminIntegrationActions(1));
+  return null;
+}
+
+test("groups actions with an unknown read-only state apart from write actions", async () => {
+  mockFetch({
+    [URL_ACTIONS]: {
+      default_policy: null,
+      actions: [
+        ...actions,
+        makeAction({
+          key: "read_wiki",
+          display_name: "Read wiki",
+          read_only: null,
+          default_policy: "ask",
+        }),
+      ],
+    },
+  });
+  render(
+    <IntegrationActionsTab
+      integration={makeDetail()}
+      onOpenConfiguration={jest.fn()}
+    />
+  );
+  expect(
+    await screen.findByText(copy.other.replace("{count}", "1"))
+  ).toBeInTheDocument();
+  expect(screen.getByText("Write Actions (1)")).toBeInTheDocument();
+  expect(screen.getByText("Read-Only Actions (2)")).toBeInTheDocument();
+});
+
 test("shows the default row, then read-only and write actions with counts", async () => {
   mockFetch({ [URL_ACTIONS]: { default_policy: null, actions } });
   render(
@@ -81,7 +121,7 @@ test("shows the default row, then read-only and write actions with counts", asyn
   ).toHaveAttribute("aria-pressed", "true");
 });
 
-test("saves the default row and each changed action", async () => {
+test("saves only the default row and the actions that changed", async () => {
   const fetchMock = mockFetch({
     [URL_ACTIONS]: { default_policy: null, actions },
     [`PUT ${URL_ACTIONS}`]: { default_policy: "ask", actions },
@@ -117,13 +157,115 @@ test("saves the default row and each changed action", async () => {
   await waitFor(() =>
     expect(requestBody(fetchMock, "PUT", URL_ACTIONS)).toEqual({
       default_policy: "ask",
-      actions: {
-        list_issues: null,
-        get_issue: "ask",
-        create_issue: "blocked",
-      },
+      actions: { get_issue: "ask" },
     })
   );
+});
+
+test("a save after a revalidation keeps the newer values of rows it did not change", async () => {
+  // Another admin blocked Get issue and allowed Create issue.
+  const newerPolicy = { get_issue: "blocked", create_issue: "allow" } as const;
+  const newer = actions.map((action) =>
+    action.key === "get_issue" || action.key === "create_issue"
+      ? {
+          ...action,
+          admin_policy: newerPolicy[action.key],
+          effective_admin_policy: newerPolicy[action.key],
+        }
+      : action
+  );
+  let loads = 0;
+  const fetchMock = mockFetch({
+    [URL_ACTIONS]: () => {
+      loads += 1;
+      return { default_policy: null, actions: loads === 1 ? actions : newer };
+    },
+    [`PUT ${URL_ACTIONS}`]: { default_policy: "ask", actions: newer },
+  });
+  const u = user();
+  render(
+    <>
+      <IntegrationActionsTab
+        integration={makeDetail()}
+        onOpenConfiguration={jest.fn()}
+      />
+      <ActionsRevalidator />
+    </>
+  );
+  await screen.findByText(copy.default.title);
+  const createIssue = () => within(rowOf("Create issue"));
+  await u.click(createIssue().getByRole("button", { name: labels.ask.label }));
+  await u.click(createIssue().getByRole("button", { name: labels.deny.label }));
+  expect(screen.getByRole("button", { name: copy.save })).toBeDisabled();
+  const defaultRow = screen.getByRole("group", { name: copy.default.title });
+  await u.click(
+    within(defaultRow).getByRole("button", { name: labels.ask.label })
+  );
+
+  await act(async () => {
+    await revalidateActions();
+  });
+  await waitFor(() =>
+    expect(
+      createIssue().getByRole("button", { name: labels.always.label })
+    ).toHaveAttribute("aria-pressed", "true")
+  );
+  expect(
+    within(rowOf("Get issue")).getByRole("button", { name: labels.deny.label })
+  ).toHaveAttribute("aria-pressed", "true");
+
+  await u.click(screen.getByRole("button", { name: copy.save }));
+  await waitFor(() =>
+    expect(requestBody(fetchMock, "PUT", URL_ACTIONS)).toEqual({
+      default_policy: "ask",
+      actions: {},
+    })
+  );
+});
+
+test("an edit that a revalidation saved does not cover a later value", async () => {
+  const withCreateIssue = (policy: "ask" | "allow") =>
+    actions.map((action) =>
+      action.key === "create_issue"
+        ? { ...action, admin_policy: policy, effective_admin_policy: policy }
+        : action
+    );
+  let loads = 0;
+  mockFetch({
+    [URL_ACTIONS]: () => {
+      loads += 1;
+      const policy = loads === 2 ? "ask" : "allow";
+      return {
+        default_policy: null,
+        actions: loads === 1 ? actions : withCreateIssue(policy),
+      };
+    },
+  });
+  const u = user();
+  render(
+    <>
+      <IntegrationActionsTab
+        integration={makeDetail()}
+        onOpenConfiguration={jest.fn()}
+      />
+      <ActionsRevalidator />
+    </>
+  );
+  await screen.findByText(copy.default.title);
+  const createIssue = () => within(rowOf("Create issue"));
+  await u.click(createIssue().getByRole("button", { name: labels.ask.label }));
+
+  for (let round = 0; round < 2; round++) {
+    await act(async () => {
+      await revalidateActions();
+    });
+  }
+  await waitFor(() =>
+    expect(
+      createIssue().getByRole("button", { name: labels.always.label })
+    ).toHaveAttribute("aria-pressed", "true")
+  );
+  expect(screen.getByRole("button", { name: copy.save })).toBeDisabled();
 });
 
 test("Use defaults clears the admin values of a group", async () => {
@@ -148,8 +290,7 @@ test("Use defaults clears the admin values of a group", async () => {
   await u.click(screen.getByRole("button", { name: copy.save }));
   await waitFor(() =>
     expect(requestBody(fetchMock, "PUT", URL_ACTIONS)).toEqual({
-      default_policy: "allow",
-      actions: { list_issues: null, get_issue: null, create_issue: null },
+      actions: { create_issue: null },
     })
   );
 });
@@ -313,8 +454,7 @@ test("locks Allow for an action that Craft always asks for, with the reason", as
   await u.click(screen.getByRole("button", { name: copy.save }));
   await waitFor(() =>
     expect(requestBody(fetchMock, "PUT", URL_ACTIONS)).toEqual({
-      default_policy: "allow",
-      actions: { list_issues: "allow", unspecified: null },
+      actions: { list_issues: "allow" },
     })
   );
 });

@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
-from onyx.configs.slack_configs import slack_url_pattern
+from onyx.configs.slack_configs import SLACK_API_URL, slack_url_pattern
 from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
@@ -262,9 +262,7 @@ def test_sandbox_calls_a_preset_app_a_custom_app_and_an_mcp_server(
     )
     add_connection(db_session, mcp, user.id, ConnectionSecret(access_token="mcp-tok"))
 
-    slack_request = _request(
-        "https://slack.com/api/chat.postMessage", b'{"channel": "C1"}'
-    )
+    slack_request = _request(f"{SLACK_API_URL}chat.postMessage", b'{"channel": "C1"}')
     matched = _evaluate(slack_request, user)
     assert isinstance(matched, AllMatchedActions)
     assert matched.target.integration_id == slack.id
@@ -841,6 +839,37 @@ def test_the_task_catalog_shows_that_a_custom_app_always_asks(
     assert action.key == WHOLE_DOMAIN_ACTION_TYPE
     assert action.integration_policy is EffectivePolicy.ASK
     assert action.locked is True
+
+
+def test_the_task_catalog_leaves_out_openapi_integrations(
+    db_session: Session, created: list[int], user: User
+) -> None:
+    host = _host()
+    openapi, _ = make_openapi_integration(
+        db_session,
+        openapi_schema={
+            "openapi": "3.0.0",
+            "info": {"title": "Orders", "description": "Orders", "version": "1"},
+            "servers": [{"url": f"https://{host}/v1"}],
+            "paths": {
+                "/orders": {
+                    "get": {"operationId": "listOrders", "summary": "List orders"}
+                }
+            },
+        },
+    )
+    created.append(openapi.id)
+    mcp = _mcp(db_session, created, f"https://{_host()}/mcp")
+    _run(db_session, [openapi])
+    _run(db_session, [mcp])
+
+    listed = {
+        integration.id
+        for view in list_task_plugin_views(db_session, user, None)
+        for integration in view.integrations
+    }
+    assert mcp.id in listed
+    assert openapi.id not in listed
 
 
 def test_the_task_catalog_ignores_the_owners_always_allow(

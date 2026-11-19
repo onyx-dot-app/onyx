@@ -48,6 +48,6 @@ class SessionSave(BaseModel):
 
 
 class IdSet(BaseModel):
-    """A set of IDs kept in one cache record (saved sessions, artifacts)."""
+    """A set of IDs kept in one cache record (saved sessions)."""
 
     ids: list[str] = []

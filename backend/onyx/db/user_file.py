@@ -118,6 +118,11 @@ def get_user_file_by_id(
 ) -> UserFile | None:
     """Fetch a UserFile row by id. Accepts str for callers whose input may not
     even be a UserFile id (e.g. a storage file_id) — those resolve to None."""
+    if isinstance(user_file_id, str):
+        try:
+            user_file_id = UUID(user_file_id)
+        except ValueError:
+            return None
     return db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
 
 

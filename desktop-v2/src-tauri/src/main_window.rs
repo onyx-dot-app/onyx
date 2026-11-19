@@ -243,8 +243,7 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
 
     if let Some(window) = app.get_webview_window(LABEL) {
         window.navigate(target).map_err(|e| e.to_string())?;
-        let _ = window.show();
-        let _ = window.set_focus();
+        crate::windows::bring_forward(app, &window);
         return Ok(());
     }
 
@@ -324,7 +323,7 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
         let _ = window.destroy();
         return Err(e);
     }
-    let _ = window.set_focus();
+    crate::windows::bring_forward(app, &window);
     Ok(())
 }
 

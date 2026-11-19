@@ -186,6 +186,7 @@ from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_deleted_chat_sessions,
 )
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
+from onyx.server.query_and_chat.acp_stream import ChatAcpTranslator
 from onyx.server.query_and_chat.chat_utils import (
     is_spreadsheet_mime_type,
     parse_spreadsheet_for_preview,
@@ -530,6 +531,27 @@ def get_chat_session(
         chat_session.user_id = user_id
         db_session.commit()
 
+    # Read admission and the approvals version before the messages. A turn
+    # saves before it releases admission, so an idle result means the page
+    # holds that turn's saves, and a request that opens meanwhile changes the
+    # version.
+    current_stream: CurrentStreamInfo | None = None
+    is_processing = True
+    try:
+        cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
+        is_processing = is_chat_session_processing(session_id, cache)
+        stream = get_processing_stream(session_id, cache)
+        if stream is not None:
+            current_stream = CurrentStreamInfo(
+                stream_id=stream.stream_id, response_ids=stream.response_ids
+            )
+    except Exception:
+        is_processing = True
+        logger.exception(
+            "An error occurred while checking if the chat session is processing"
+        )
+    version = approvals_version(db_session, session_id)
+
     page_message_ids: set[int] | None = None
     has_older_messages = False
     if limit is not None:
@@ -565,24 +587,6 @@ def get_chat_session(
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
 
-    current_stream: CurrentStreamInfo | None = None
-    is_processing = True
-    try:
-        cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
-        is_processing = is_chat_session_processing(session_id, cache)
-        stream = get_processing_stream(session_id, cache)
-        if stream is not None:
-            current_stream = CurrentStreamInfo(
-                stream_id=stream.stream_id, response_ids=stream.response_ids
-            )
-    except Exception:
-        is_processing = True
-        logger.exception(
-            "An error occurred while checking if the chat session is processing"
-        )
-
-    # Before the replay: a request that opens meanwhile changes the version.
-    version = approvals_version(db_session, session_id)
     # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
     # Each list is the set of tool calls for the given assistant message.
     tools_by_id = load_session_tools(session_messages, db_session)
@@ -1175,6 +1179,8 @@ def handle_send_chat_message(
     # Streaming path, normal Onyx UI behavior
     def stream_generator() -> Generator[str, None, None]:
         response_future = Future[ChatResponseOutcome]()
+        # v2 re-shapes each object as an ACP update (acp_stream.py).
+        acp = ChatAcpTranslator() if chat_message_req.protocol_version == 2 else None
         try:
             for obj in handle_stream_message_objects(
                 new_msg_req=chat_message_req,
@@ -1190,11 +1196,20 @@ def handle_send_chat_message(
                 response_future=response_future,
                 approval_mode=approval_mode,
             ):
-                yield get_json_line(obj.model_dump())
+                if acp is None:
+                    yield get_json_line(obj.model_dump())
+                else:
+                    for update in acp.translate(obj.model_dump()):
+                        yield get_json_line(update)
 
         except Exception as e:
             logger.exception("Error in chat message streaming")
-            yield get_json_line(unhandled_stream_error(e).model_dump())
+            error = unhandled_stream_error(e).model_dump()
+            if acp is None:
+                yield get_json_line(error)
+            else:
+                for update in acp.translate(error):
+                    yield get_json_line(update)
 
         finally:
             logger.debug("Stream generator finished")
@@ -1565,16 +1580,19 @@ def get_chat_session_processing_status(
         except ValueError as error:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND) from error
         inbox = read_chat_inbox(db_session, session_id)
+        # Read admission after input: a turn claims admission before it
+        # consumes input, so a starting turn shows as startable input or as
+        # processing.
+        cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
+        stream = get_processing_stream(session_id, cache)
+        busy = stream is not None or is_chat_session_processing(session_id, cache)
+        # Read the version after admission: a turn opens its requests before it
+        # releases admission, so an idle result carries their version.
         version = approvals_version(db_session, session_id)
-    # Read admission after input: a turn claims admission before it consumes
-    # input, so a starting turn shows as startable input or as processing.
-    cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
-    stream = get_processing_stream(session_id, cache)
     resumes_root = any(run.is_root for run in inbox.resumable_runs)
     # Decided agents wait to resume; a parked agent that still waits for the
     # user does not count.
     resumes_agents = any(not run.is_root for run in inbox.resumable_runs)
-    busy = stream is not None or is_chat_session_processing(session_id, cache)
     status = ChatSessionProcessingStatus(
         latest_response_id=inbox.selected_response_id,
         has_active_subagents=any(result.is_running for result in inbox.results)

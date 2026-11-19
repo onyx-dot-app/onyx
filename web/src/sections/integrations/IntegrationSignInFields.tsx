@@ -2,10 +2,12 @@
 
 import { useTranslations } from "next-intl";
 import {
+  Button,
   InputPasswordTypeIn,
   InputSingleSelect,
   InputTypeIn,
 } from "@opal/components";
+import { SvgPlus, SvgTrash } from "@opal/icons";
 import { InputVertical, Section } from "@opal/layouts";
 import type {
   AuthMethod,
@@ -15,6 +17,7 @@ import type {
 import {
   PROVIDER_MODES,
   signInErrors,
+  type HeaderDraft,
   type SignInDraft,
 } from "@/sections/integrations/signIn";
 
@@ -45,6 +48,14 @@ export default function IntegrationSignInFields({
 
   function update(patch: Partial<SignInDraft>) {
     onChange({ ...draft, ...patch });
+  }
+
+  function updateHeader(index: number, patch: Partial<HeaderDraft>) {
+    update({
+      headers: draft.headers.map((header, other) =>
+        other === index ? { ...header, ...patch } : header
+      ),
+    });
   }
 
   function errorFor(
@@ -105,38 +116,107 @@ export default function IntegrationSignInFields({
       )}
       {draft.authMode !== "none" && draft.authMethod === "api_key" && (
         <>
-          <InputVertical
-            title={t("header.name.title")}
-            error={errorFor("headerName", t("header.name.error"))}
-          >
-            <InputTypeIn
-              aria-label={t("header.name.title")}
-              placeholder={t("header.name.placeholder")}
-              value={draft.headerName}
-              variant={variant}
-              onChange={(event) => update({ headerName: event.target.value })}
-            />
-          </InputVertical>
-          <InputVertical
-            title={t("header.value.title")}
-            description={t("header.value.description", {
-              example: "{api_key}",
-            })}
-            error={errorFor(
-              "headerValue",
-              t("header.value.error", { example: "{api_key}" })
-            )}
-          >
-            <InputTypeIn
-              aria-label={t("header.value.title")}
-              placeholder={t("header.value.placeholder", {
-                example: "Bearer {api_key}",
-              })}
-              value={draft.headerValue}
-              variant={variant}
-              onChange={(event) => update({ headerValue: event.target.value })}
-            />
-          </InputVertical>
+          {draft.headers.map((header, index) => {
+            const suffix = index === 0 ? "" : ` ${index + 1}`;
+            const last = index === draft.headers.length - 1;
+            const name = header.name.trim().toLowerCase();
+            const repeated = draft.headers
+              .slice(0, index)
+              .some((other) => other.name.trim().toLowerCase() === name);
+            return (
+              <Section key={index} gap={2} alignItems="stretch" height="auto">
+                <InputVertical
+                  title={t("header.name.title")}
+                  error={
+                    !name
+                      ? errorFor("headerName", t("header.name.error"))
+                      : repeated
+                        ? errorFor(
+                            "headerDuplicate",
+                            t("header.name.duplicate")
+                          )
+                        : undefined
+                  }
+                >
+                  <Section
+                    flexDirection="row"
+                    gap={1}
+                    alignItems="center"
+                    height="auto"
+                  >
+                    <InputTypeIn
+                      aria-label={t("header.name.title") + suffix}
+                      placeholder={t("header.name.placeholder")}
+                      value={header.name}
+                      variant={variant}
+                      onChange={(event) =>
+                        updateHeader(index, { name: event.target.value })
+                      }
+                    />
+                    {draft.headers.length > 1 && (
+                      <Button
+                        size="sm"
+                        prominence="tertiary"
+                        icon={SvgTrash}
+                        disabled={disabled}
+                        aria-label={t("header.remove", {
+                          name: header.name || String(index + 1),
+                        })}
+                        onClick={() =>
+                          update({
+                            headers: draft.headers.filter(
+                              (_, other) => other !== index
+                            ),
+                          })
+                        }
+                      />
+                    )}
+                  </Section>
+                </InputVertical>
+                <InputVertical
+                  title={t("header.value.title")}
+                  description={
+                    last
+                      ? t("header.value.description", { example: "{api_key}" })
+                      : undefined
+                  }
+                  error={
+                    last
+                      ? errorFor(
+                          "headerValue",
+                          t("header.value.error", { example: "{api_key}" })
+                        )
+                      : undefined
+                  }
+                >
+                  <InputTypeIn
+                    aria-label={t("header.value.title") + suffix}
+                    placeholder={t("header.value.placeholder", {
+                      example: "Bearer {api_key}",
+                    })}
+                    value={header.value}
+                    variant={variant}
+                    onChange={(event) =>
+                      updateHeader(index, { value: event.target.value })
+                    }
+                  />
+                </InputVertical>
+              </Section>
+            );
+          })}
+          <Section alignItems="start" height="auto">
+            <Button
+              size="sm"
+              prominence="secondary"
+              icon={SvgPlus}
+              disabled={disabled}
+              onClick={() =>
+                update({ headers: [...draft.headers, { name: "", value: "" }] })
+              }
+            >
+              {t("header.add")}
+            </Button>
+          </Section>
         </>
       )}
       {draft.authMode !== "none" && draft.authMethod === "oauth2" && (

@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
     ExternalAppType,
-    SkillSharePermission,
 )
 from onyx.db.models import (
     ExternalApp,
@@ -87,16 +86,9 @@ def associate_built_in_skill__no_commit(
                 name=built_in_skill_id,
                 description="",
                 built_in_skill_id=built_in_skill_id,
-                bundle_file_id=None,
-                bundle_sha256=None,
-                is_valid=True,
-                public_permission=SkillSharePermission.VIEWER,
             ),
             db_session,
         )
-
-    skill.public_permission = SkillSharePermission.VIEWER
-    db_session.flush()
     return skill
 
 

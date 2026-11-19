@@ -115,16 +115,6 @@ func TestActionVersionTagPin(t *testing.T) {
 	}
 }
 
-func TestActionSeverity(t *testing.T) {
-	v := osvVuln{DatabaseSpecific: map[string]any{"severity": "HIGH"}}
-	if got := actionSeverity(v); got != SeverityHigh {
-		t.Errorf("actionSeverity = %q, want high", got)
-	}
-	if got := actionSeverity(osvVuln{}); got != SeverityUnknown {
-		t.Errorf("actionSeverity(empty) = %q, want unknown", got)
-	}
-}
-
 func TestActionFindingConfirmed(t *testing.T) {
 	ref := actionRef{Name: "tj-actions/changed-files", Ref: "45.0.7", Manifest: ".github/workflows/ci.yml"}
 	v := ecoVuln("GHSA-mrrh-fwg8-r2c3", map[string]string{"introduced": "0"}, map[string]string{"fixed": "46.0.1"})
@@ -172,34 +162,6 @@ func TestActionFindingIndeterminate(t *testing.T) {
 	// ...and the title flags why.
 	if f.Title != "unverified pin — changed-files leaks secrets" {
 		t.Errorf("title = %q", f.Title)
-	}
-}
-
-func TestDedupeRefs(t *testing.T) {
-	refs := []actionRef{
-		{Name: "a/b", Ref: "v1", Manifest: "w1.yml"},
-		{Name: "a/b", Ref: "v1", Manifest: "w2.yml"}, // dup, dropped
-		{Name: "a/b", Ref: "v2", Manifest: "w1.yml"},
-		{Name: "c/d", Ref: "v1", Manifest: "w1.yml"},
-	}
-	got := dedupeRefs(refs)
-	if len(got) != 3 {
-		t.Fatalf("dedupeRefs len = %d, want 3", len(got))
-	}
-	if got[0].Manifest != "w1.yml" {
-		t.Errorf("first manifest = %q, want w1.yml (first seen kept)", got[0].Manifest)
-	}
-}
-
-func TestUniqueActionNames(t *testing.T) {
-	refs := []actionRef{
-		{Name: "a/b", Ref: "v1"},
-		{Name: "a/b", Ref: "v2"},
-		{Name: "c/d", Ref: "v1"},
-	}
-	got := uniqueActionNames(refs)
-	if len(got) != 2 || got[0] != "a/b" || got[1] != "c/d" {
-		t.Errorf("uniqueActionNames = %v, want [a/b c/d]", got)
 	}
 }
 

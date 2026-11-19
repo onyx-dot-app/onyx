@@ -1,4 +1,5 @@
 import type { SkillLimitNotice } from "@/lib/skills/limits";
+import type { TimelineEvent } from "@/lib/timeline/events";
 
 // =============================================================================
 // Sharing Types
@@ -43,6 +44,8 @@ export interface BuildMessage {
   attachments?: BuildMessageAttachment[];
   /** Structured sandbox event data (tool calls, thinking, plans) */
   message_metadata?: Record<string, any> | null;
+  /** A consolidated turn's timeline events, from its saved packets. */
+  timelineEvents?: TimelineEvent[];
 }
 
 export interface BuildMessageAttachment {

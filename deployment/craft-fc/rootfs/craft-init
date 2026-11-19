@@ -1,7 +1,8 @@
 #!/bin/bash
 # PID 1 of a Craft Firecracker guest. Installed as /sbin/craft-init.
 #
-# 1. Mounts proc, sys, dev, cgroup2, /run, /tmp and /dev/shm.
+# 1. Mounts proc, sys, dev, cgroup2, /run, /tmp and /dev/shm, and makes the
+#    Onyx directories in /tmp.
 # 2. Attaches the scratch and managed drives (see attach.sh), unless the
 #    kernel command line has craft.scratch=defer. Then the guest daemon runs
 #    attach after a snapshot restore. If attach fails, init starts no service.
@@ -68,6 +69,12 @@ mnt /dev/shm -t tmpfs -o nosuid,nodev,mode=1777 tmpfs
 mnt /sys/fs/cgroup -t cgroup2 -o nosuid,nodev,noexec,nsdelegate cgroup2
 mnt /run -t tmpfs -o nosuid,nodev,mode=0755 tmpfs
 mnt /tmp -t tmpfs -o nosuid,nodev,mode=1777 tmpfs
+# Onyx directories for files that Onyx puts in the VM. The sandbox user owns
+# them, so commands can add and delete files there. The template boot makes
+# them and its snapshot keeps them, so every VM restored from it has them.
+if ! { mkdir -p /tmp/onyx/tool-results /tmp/onyx/search-files /tmp/onyx/artifacts && chown -R 1000:1000 /tmp/onyx; }; then
+  log "/tmp/onyx failed"
+fi
 for link in fd:/proc/self/fd stdin:/proc/self/fd/0 stdout:/proc/self/fd/1 stderr:/proc/self/fd/2; do
   [ -e "/dev/${link%%:*}" ] || ln -s "${link#*:}" "/dev/${link%%:*}"
 done
@@ -78,8 +85,11 @@ log "boot $(cut -d' ' -f1 /proc/uptime)s"
 # Kernel hardening. The guest image loads no modules (it has no
 # /lib/modules) and uses no io_uring (libuv falls back to threads).
 # modules_disabled and kexec_load_disabled cannot be set back before reboot.
-for setting in io_uring_disabled=2 kptr_restrict=2 dmesg_restrict=1 sysrq=0 kexec_load_disabled=1 modules_disabled=1; do
-  echo "${setting#*=}" >"/proc/sys/kernel/${setting%%=*}" 2>/dev/null || log "sysctl kernel.${setting} failed"
+# The fs settings stop links that the sandbox user plants in /tmp from
+# redirecting root.
+for setting in kernel/io_uring_disabled=2 kernel/kptr_restrict=2 kernel/dmesg_restrict=1 kernel/sysrq=0 \
+  kernel/kexec_load_disabled=1 kernel/modules_disabled=1 fs/protected_hardlinks=1 fs/protected_symlinks=1; do
+  echo "${setting#*=}" >"/proc/sys/${setting%%=*}" 2>/dev/null || log "sysctl ${setting} failed"
 done
 
 # Refuse to read or run anything from a writable /craft-fc. The probe write

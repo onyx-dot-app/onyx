@@ -9277,7 +9277,16 @@
         "toasts": {
           "blockedBySkills": "تعذر حذف هذا المستخدم",
           "openSkills": "افتح المهارات لنقلها",
+          "renamed": "كان لدى المالك الجديد مهارات بهذه الأسماء، لذا حصلت المهارات المنقولة على أسماء جديدة",
           "success": "تم حذف المستخدم"
+        },
+        "transfer": {
+          "description": "يمتلك <strong>{email}</strong> {count, plural, zero {# مهارة خاصة} one {مهارة خاصة واحدة} two {مهارتين خاصتين} few {# مهارات خاصة} many {# مهارة خاصة} other {# مهارة خاصة}}. انقل الملكية إلى مستخدم آخر، ثم سيتم حذف الحساب.",
+          "submit": {
+            "label": "نقل الكل والحذف"
+          },
+          "ownersLoadFailed": "تعذّر تحميل المستخدمين الذين يمكنهم استلام المهارات.",
+          "retry": "إعادة المحاولة"
         }
       },
       "editModal": {
@@ -10520,14 +10529,17 @@
           "name": {
             "title": "اسم الترويسة",
             "placeholder": "أدخل اسم الترويسة",
-            "error": "أدخل اسم الترويسة."
+            "error": "أدخل اسم الترويسة.",
+            "duplicate": "استخدم كل اسم ترويسة مرة واحدة."
           },
           "value": {
             "title": "قيمة الترويسة",
             "description": "ضع كل بيانات اعتماد بين أقواس معقوصة، مثل {example}. يصبح كل عنصر نائب حقلًا لبيانات الاعتماد.",
             "placeholder": "مثال: {example}",
             "error": "أضف عنصرًا نائبًا واحدًا على الأقل، مثل {example}."
-          }
+          },
+          "add": "إضافة ترويسة",
+          "remove": "إزالة الترويسة {name}"
         },
         "oauth": {
           "providerMode": {
@@ -10663,6 +10675,7 @@
           "useDefaults": "استخدام القيم الافتراضية",
           "readOnly": "إجراءات القراءة فقط ({count})",
           "write": "إجراءات الكتابة ({count})",
+          "other": "إجراءات أخرى ({count})",
           "empty": "لا يحتوي هذا التكامل على إجراءات.",
           "connectFirst": {
             "title": "اتصل بالخادم أولًا",
@@ -10797,7 +10810,7 @@
         "ariaLabel": "صفحة محرر الوكلاء"
       },
       "plugins": {
-        "askHint": "لتشغيل هذا دون سؤال، يضبطه أحد المسؤولين على السماح في التكامل، أو يختار كل مستخدم السماح دائمًا.",
+        "askHint": "لتشغيل هذا دون سؤال، غيّر إعداد الوكيل، أو يضبطه أحد المسؤولين على السماح في التكامل، أو يختار كل مستخدم السماح دائمًا.",
         "askHintAdminOnly": "لتشغيل هذا دون سؤال، يضبطه أحد المسؤولين على السماح في التكامل.",
         "askHintAgent": "لتشغيل هذا دون تأكيد، غيّر إعداد الوكيل، أو يختار كل مستخدم السماح دائمًا.",
         "askHintAgentOnly": "لتشغيل هذا دون تأكيد، غيّر إعداد الوكيل.",
@@ -12251,9 +12264,6 @@
         "emptyState": {
           "text": "لم يتم توليد صور"
         },
-        "failedStatus": {
-          "text": "فشل توليد الصورة"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {تم توليد صورة واحدة} other {تم توليد # صور}}"
         },
@@ -12399,21 +12409,18 @@
             "status": "جارٍ توليد الخطة"
           }
         },
-        "doneStep": {
-          "header": "تم"
-        },
         "expandButton": {
           "ariaLabel": "توسيع الخط الزمني"
         },
         "fetch": {
           "reading": {
             "status": "جارٍ القراءة"
+          },
+          "read": {
+            "status": "تمت القراءة"
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "الأحرف {start, number}–{end, number} من {total, number}"
-          },
           "read": {
             "status": "قرأ {fileName} (الأحرف {start, number}–{end, number} من {total, number})"
           },
@@ -12439,6 +12446,9 @@
           },
           "generatingPlan": {
             "label": "جارٍ توليد الخطة"
+          },
+          "queryingKnowledgeBase": {
+            "label": "جارٍ الاستعلام عن قاعدة المعرفة"
           },
           "reading": {
             "label": "جارٍ القراءة"
@@ -12475,6 +12485,9 @@
           },
           "editingFiles": {
             "label": "جارٍ تعديل الملفات"
+          },
+          "publishingFiles": {
+            "label": "جارٍ نشر الملفات"
           }
         },
         "internalSearch": {
@@ -12484,9 +12497,14 @@
           "reading": {
             "status": "جارٍ القراءة"
           },
+          "read": {
+            "label": "تمت القراءة"
+          },
           "header": {
             "default": "جارٍ البحث في المستندات الداخلية",
+            "doneDefault": "تم البحث في المستندات الداخلية",
             "sources": "جارٍ البحث في {sources}",
+            "doneSources": "تم البحث في {sources}",
             "sourcesOverflow": "{sources} +{count} أخرى",
             "withTimeWindow": "{header} ({timeWindow})"
           },
@@ -12509,6 +12527,9 @@
           "updating": {
             "status": "جارٍ تحديث الذاكرة"
           },
+          "updated": {
+            "status": "تم تحديث الذاكرة"
+          },
           "viewMemoriesButton": {
             "tooltip": "عرض الذكريات"
           }
@@ -12521,21 +12542,60 @@
             "label": "تم تحديث الذاكرة"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "تم الاستعلام عن قاعدة المعرفة"
+          },
+          "querying": {
+            "status": "جارٍ الاستعلام عن قاعدة المعرفة"
+          },
+          "listed": {
+            "label": "{count, plural, one {مستند واحد مُدرج} other {# مستندات مُدرجة}}"
+          },
+          "query": {
+            "table": {
+              "document": "المستندات",
+              "hierarchy_node": "المجلدات",
+              "chat_session": "جلسات الدردشة",
+              "chat_message": "رسائل الدردشة",
+              "search_doc": "المستندات المستشهد بها"
+            },
+            "count": "العدد",
+            "countBy": {
+              "source": "العدد حسب المصدر",
+              "owner": "العدد حسب المالك",
+              "month": "العدد حسب الشهر"
+            },
+            "titleContains": "العنوان يحتوي على «{text}»",
+            "nameContains": "الاسم يحتوي على «{text}»",
+            "textContains": "النص يحتوي على «{text}»",
+            "updated": {
+              "since": "محدَّث منذ {date}",
+              "before": "محدَّث قبل {date}",
+              "between": "محدَّث {start} – {end}"
+            },
+            "created": {
+              "since": "أُنشئ منذ {date}",
+              "before": "أُنشئ قبل {date}",
+              "between": "أُنشئ {start} – {end}"
+            },
+            "sent": {
+              "since": "أُرسل منذ {date}",
+              "before": "أُرسل قبل {date}",
+              "between": "أُرسل {start} – {end}"
+            },
+            "owner": "المالك: {owner}",
+            "folder": "في المجلد {id}",
+            "nodeType": "النوع: {type}",
+            "author": "من: {author}",
+            "message": "الرسالة {id}",
+            "allRetrieved": "كل ما تم استرجاعه",
+            "nextPage": "الصفحة التالية"
+          }
+        },
         "python": {
-          "completed": {
-            "status": "اكتمل تنفيذ Python"
-          },
-          "default": {
-            "status": "تنفيذ Python"
-          },
           "error": {
             "label": "خطأ:"
-          },
-          "executing": {
-            "status": "جارٍ تنفيذ كود Python..."
-          },
-          "failed": {
-            "status": "فشل تنفيذ Python"
           },
           "generatedFiles": {
             "label": "{count, plural, one {تم توليد ملف واحد} other {تم توليد # ملفات}}"
@@ -12546,6 +12606,12 @@
           "output": {
             "label": "الإخراج:"
           },
+          "running": {
+            "status": "جارٍ تشغيل Python"
+          },
+          "ran": {
+            "status": "تم تشغيل Python"
+          },
           "runningCode": {
             "label": "جارٍ تشغيل الكود..."
           },
@@ -12554,11 +12620,11 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "النص الكامل"
-          },
           "thinking": {
             "status": "جارٍ التفكير"
+          },
+          "thought": {
+            "status": "تم التفكير"
           }
         },
         "researchAgent": {
@@ -12580,9 +12646,6 @@
         "stepsButton": {
           "label": "{count, plural, one {خطوة واحدة} other {# خطوات}}"
         },
-        "stoppedStep": {
-          "header": "توقف"
-        },
         "thoughtDuration": {
           "label": "فكّر لمدة {duration}"
         },
@@ -12599,6 +12662,7 @@
           "generateImage": "توليد صورة",
           "generatePlan": "توليد خطة",
           "internalSearch": "بحث داخلي",
+          "knowledgeBaseQuery": "استعلام قاعدة المعرفة",
           "memory": "الذاكرة",
           "openUrls": "فتح عناوين URL",
           "researchAgent": "وكيل البحث",
@@ -12608,11 +12672,15 @@
           "terminal": "الطرفية",
           "applyPatch": "تطبيق التصحيح",
           "editFile": "تعديل ملف",
-          "writeFile": "كتابة ملف"
+          "writeFile": "كتابة ملف",
+          "publishFiles": "نشر الملفات"
         },
         "webSearch": {
           "searching": {
             "status": "جارٍ البحث في الويب"
+          },
+          "searched": {
+            "status": "تم البحث في الويب"
           }
         },
         "sandbox": {
@@ -12654,6 +12722,14 @@
           },
           "stopped": {
             "status": "تم الإيقاف"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, zero {لم يُنشر أي ملف} one {نُشر ملف واحد} two {نُشر ملفان} few {نُشرت # ملفات} many {نُشر # ملفًا} other {نُشر # ملف}}"
+            },
+            "failed": {
+              "status": "فشل النشر"
+            }
           }
         }
       },
@@ -13295,6 +13371,16 @@
     "readiness": {
       "stopFailed": "تعذر إيقاف الرد. حاول مرة أخرى.",
       "checkFailed": "تعذر التأكد من انتهاء الرد. تحقق مجددًا قبل إرسال رسالة أخرى."
+    },
+    "publishedFiles": {
+      "card": {
+        "updated": {
+          "description": "نسخة محدّثة · {details}"
+        },
+        "preview": {
+          "ariaLabel": "معاينة {name}"
+        }
+      }
     }
   },
   "common": {
@@ -14243,6 +14329,11 @@
         "label": "النماذج الموصى بها فقط"
       }
     },
+    "messageList": {
+      "turnFailed": {
+        "message": "فشل الدور."
+      }
+    },
     "onboarding": {
       "livingMap": {
         "examplePrompts": {
@@ -14791,9 +14882,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# استدعاء} other {# استدعاءات}}"
-        },
         "working": {
           "label": "قيد العمل"
         }

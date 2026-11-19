@@ -540,13 +540,20 @@ class CCPairManager:
         if result.status_code != 409:
             result.raise_for_status()
 
+        CCPairManager.sync_groups(cc_pair, user_performing_action)
+        time.sleep(2)
+
+    @staticmethod
+    def sync_groups(
+        cc_pair: DATestCCPair,
+        user_performing_action: DATestUser,
+    ) -> None:
         group_sync_result = client.post(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-groups",
             headers=user_performing_action.headers,
         )
         if group_sync_result.status_code != 409:
             group_sync_result.raise_for_status()
-        time.sleep(2)
 
     @staticmethod
     def get_doc_sync_task(
@@ -633,6 +640,7 @@ class CCPairManager:
         should_wait_for_index_sync: bool = True,
         # Docs whose permission change must reach the index before this returns
         doc_ids: Collection[str] | None = None,
+        group_sync_after: datetime | None = None,
     ) -> None:
         """after: The task register time must be after this time.
 
@@ -642,6 +650,7 @@ class CCPairManager:
         """
         doc_synced = False
         group_synced = False
+        group_start = group_sync_after or after
         start = time.monotonic()
         while True:
             # We are treating both syncs as part of one larger permission sync job
@@ -658,9 +667,13 @@ class CCPairManager:
                 print(f"permission sync complete: cc_pair={cc_pair.id}")
                 doc_synced = True
 
-            if not group_synced and group_last_synced and group_last_synced > after:
+            if (
+                not group_synced
+                and group_last_synced
+                and group_last_synced > group_start
+            ):
                 print(f"group_last_synced: {group_last_synced}")
-                print(f"sync command start time: {after}")
+                print(f"sync command start time: {group_start}")
                 print(f"group sync complete: cc_pair={cc_pair.id}")
                 group_synced = True
 

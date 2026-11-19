@@ -29,17 +29,28 @@ envsubst '$DOMAIN $SSL_CERT_FILE_NAME $SSL_CERT_KEY_FILE_NAME $ONYX_BACKEND_API_
 
 # Conditionally create MCP server configuration
 if [ "${MCP_SERVER_ENABLED}" = "True" ] || [ "${MCP_SERVER_ENABLED}" = "true" ]; then
-  echo "MCP server is enabled, creating MCP configuration..."
-  # shellcheck disable=SC2016
-  envsubst '$ONYX_MCP_SERVER_HOST' < "/etc/nginx/conf.d/mcp_upstream.conf.inc.template" > /etc/nginx/conf.d/mcp_upstream.conf.inc
-  # shellcheck disable=SC2016
-  envsubst '$ONYX_MCP_SERVER_HOST' < "/etc/nginx/conf.d/mcp.conf.inc.template" > /etc/nginx/conf.d/mcp.conf.inc
+  if [ -f /etc/nginx/conf.d/mcp_upstream.conf.inc.template ] && [ -f /etc/nginx/conf.d/mcp.conf.inc.template ]; then
+    echo "MCP server is enabled, creating MCP configuration..."
+    # shellcheck disable=SC2016
+    envsubst '$ONYX_MCP_SERVER_HOST' < "/etc/nginx/conf.d/mcp_upstream.conf.inc.template" > /etc/nginx/conf.d/mcp_upstream.conf.inc
+    # shellcheck disable=SC2016
+    envsubst '$ONYX_MCP_SERVER_HOST' < "/etc/nginx/conf.d/mcp.conf.inc.template" > /etc/nginx/conf.d/mcp.conf.inc
+  else
+    echo "WARNING: MCP server is enabled, but the MCP nginx templates are missing. Starting nginx without the MCP routes."
+    echo "# Empty file - MCP templates are missing" > /etc/nginx/conf.d/mcp_upstream.conf.inc
+    echo "# Empty file - MCP templates are missing" > /etc/nginx/conf.d/mcp.conf.inc
+  fi
 else
   echo "MCP server is disabled, removing MCP configuration..."
   # Leave empty placeholder files so nginx includes do not fail
   # These files are empty because MCP server is disabled
   echo "# Empty file - MCP server is disabled" > /etc/nginx/conf.d/mcp_upstream.conf.inc
   echo "# Empty file - MCP server is disabled" > /etc/nginx/conf.d/mcp.conf.inc
+fi
+
+if [ ! -f /etc/nginx/conf.d/webhook.conf.inc ]; then
+  echo "WARNING: webhook.conf.inc is missing. Starting nginx without the webhook routes."
+  echo "# Empty file - webhook.conf.inc is missing" > /etc/nginx/conf.d/webhook.conf.inc
 fi
 
 # Start nginx and reload every 6 hours

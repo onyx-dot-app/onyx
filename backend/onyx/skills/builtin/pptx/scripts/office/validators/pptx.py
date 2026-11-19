@@ -12,6 +12,18 @@ class PPTXSchemaValidator(BaseSchemaValidator):
         "http://schemas.openxmlformats.org/presentationml/2006/main"
     )
 
+    PART_FOLDER_SCHEMAS = dict.fromkeys(
+        (
+            "slides",
+            "slideLayouts",
+            "slideMasters",
+            "notesSlides",
+            "notesMasters",
+            "handoutMasters",
+        ),
+        "ISO-IEC29500-4_2016/pml.xsd",
+    )
+
     ELEMENT_RELATIONSHIP_TYPES = {
         "sldid": "slide",
         "sldmasterid": "slidemaster",

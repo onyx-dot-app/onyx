@@ -28,13 +28,16 @@ export const PROVIDER_MODES: Record<
   preset: ["preset"],
 };
 
+export interface HeaderDraft {
+  name: string;
+  value: string;
+}
+
 export interface SignInDraft {
   authMode: AuthMode;
   authMethod: AuthMethod | null;
-  headerName: string;
-  headerValue: string;
-  /** The saved headers other than the edited one. */
-  otherHeaders: Record<string, string>;
+  /** The header template, one row for each header, in the order shown. */
+  headers: HeaderDraft[];
   providerMode: OAuthProviderMode;
   authorizationUrl: string;
   tokenUrl: string;
@@ -53,6 +56,7 @@ export type SignInPayload = Pick<
 
 export type SignInError =
   | "headerName"
+  | "headerDuplicate"
   | "headerValue"
   | "authorizationUrl"
   | "tokenUrl"
@@ -61,9 +65,7 @@ export type SignInError =
 export const DEFAULT_SIGN_IN: SignInDraft = {
   authMode: "none",
   authMethod: null,
-  headerName: "Authorization",
-  headerValue: "Bearer {api_key}",
-  otherHeaders: {},
+  headers: [{ name: "Authorization", value: "Bearer {api_key}" }],
   providerMode: "manual",
   authorizationUrl: "",
   tokenUrl: "",
@@ -89,11 +91,9 @@ function placeholders(headers: Record<string, string>): string[] {
 }
 
 function headerTemplate(draft: SignInDraft): Record<string, string> {
-  const name = draft.headerName.trim();
-  const others = Object.fromEntries(
-    Object.entries(draft.otherHeaders).filter(([key]) => key !== name)
+  return Object.fromEntries(
+    draft.headers.map((header) => [header.name.trim(), header.value])
   );
-  return { ...others, [name]: draft.headerValue };
 }
 
 export function normalizedUrl(value: string): string | null {
@@ -118,7 +118,13 @@ export function signInErrors(draft: SignInDraft): SignInError[] {
   if (draft.authMode === "none") return [];
   const errors: SignInError[] = [];
   if (draft.authMethod === "api_key") {
-    if (!draft.headerName.trim()) errors.push("headerName");
+    const names = draft.headers.map((header) =>
+      header.name.trim().toLowerCase()
+    );
+    if (names.length === 0 || names.some((name) => !name))
+      errors.push("headerName");
+    else if (new Set(names).size !== names.length)
+      errors.push("headerDuplicate");
     if (placeholders(headerTemplate(draft)).length === 0)
       errors.push("headerValue");
   }
@@ -158,15 +164,19 @@ export function signInPayload(draft: SignInDraft): SignInPayload {
 export function signInDraftFromDetail(
   detail: AdminIntegrationDetail
 ): SignInDraft {
-  const [header, ...others] = Object.entries(detail.header_template ?? {});
+  const saved = Object.entries(detail.header_template ?? {});
   const client = detail.oauth_client;
   const providerModes = PROVIDER_MODES[detail.shape];
   return {
     authMode: detail.auth_mode,
     authMethod: detail.auth_method,
-    headerName: header?.[0] ?? DEFAULT_SIGN_IN.headerName,
-    headerValue: header?.[1] ?? DEFAULT_SIGN_IN.headerValue,
-    otherHeaders: Object.fromEntries(others),
+    // An API key sign-in with no saved template shows an empty header, not
+    // the default, so the form shows what the server has.
+    headers: saved.length
+      ? saved.map(([name, value]) => ({ name, value }))
+      : detail.auth_method === "api_key"
+        ? [{ name: "", value: "" }]
+        : DEFAULT_SIGN_IN.headers,
     providerMode:
       client && providerModes.includes(client.provider_mode)
         ? client.provider_mode

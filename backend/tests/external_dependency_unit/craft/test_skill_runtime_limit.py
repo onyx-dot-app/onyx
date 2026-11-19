@@ -23,7 +23,7 @@ from onyx.db.enums import (
     PluginInstallationPolicy,
     SkillSharePermission,
 )
-from onyx.db.models import Plugin, PluginVersion, Skill, User, UserPluginPreference
+from onyx.db.models import Plugin, PluginVersion, User, UserPluginPreference
 from onyx.db.plugin import set_plugin_preferences__no_commit
 from onyx.db.plugin_access import load_user_plugin_states
 from onyx.db.skill import (
@@ -169,7 +169,7 @@ def _at(day: int) -> datetime:
 
 def test_keep_order_when_not_every_plugin_fits(
     db_session: Session,
-    seeded_skill: Callable[..., Skill],
+    seeded_skill: Callable[..., Plugin],
     resized: list[UUID],
 ) -> None:
     """Required, then turned on (newest first, an Installed by default plugin
@@ -180,7 +180,7 @@ def test_keep_order_when_not_every_plugin_fits(
     room = _free_room(db_session, user).bytes
     tag = user.id.hex[:8]
 
-    def plugin(name: str, share: int) -> Skill:
+    def plugin(name: str, share: int) -> Plugin:
         skill = seeded_skill(f"rt-{name}-{tag}", public=True)
         _set_files(db_session, skill.id, [room * share // 100], resized)
         return skill
@@ -240,7 +240,7 @@ def test_keep_order_when_not_every_plugin_fits(
 
 def test_a_turned_on_choice_with_no_enabled_at_sorts_by_its_share_time(
     db_session: Session,
-    seeded_skill: Callable[..., Skill],
+    seeded_skill: Callable[..., Plugin],
 ) -> None:
     user = make_user(db_session, standard_account=True)
     tag = user.id.hex[:8]
@@ -354,7 +354,7 @@ class _RecordingSandboxManager:
 
 def test_omissions_are_recorded_and_a_backfilled_version_is_measured(
     db_session: Session,
-    seeded_skill: Callable[..., Skill],
+    seeded_skill: Callable[..., Plugin],
     resized: list[UUID],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -401,7 +401,7 @@ def test_omissions_are_recorded_and_a_backfilled_version_is_measured(
 
 def test_file_count_limit(
     db_session: Session,
-    seeded_skill: Callable[..., Skill],
+    seeded_skill: Callable[..., Plugin],
     resized: list[UUID],
 ) -> None:
     user = make_user(db_session, standard_account=True)
@@ -423,7 +423,7 @@ def test_file_count_limit(
 
 def test_plugin_with_no_skills_is_not_pushed_or_left_out(
     db_session: Session,
-    seeded_skill: Callable[..., Skill],
+    seeded_skill: Callable[..., Plugin],
     resized: list[UUID],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -464,7 +464,7 @@ def test_plugin_with_no_skills_is_not_pushed_or_left_out(
 
 def test_admin_read_counts_skills_that_did_not_load(
     db_session: Session,
-    seeded_skill: Callable[..., Skill],
+    seeded_skill: Callable[..., Plugin],
     resized: list[UUID],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

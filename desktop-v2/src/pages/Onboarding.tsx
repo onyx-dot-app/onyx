@@ -1,43 +1,31 @@
 import { useRef, useState, type FormEvent } from "react";
-import { Button, InputTypeIn, Text } from "@opal/components";
+import { Button, InputTypeIn } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { mount } from "@/lib/mount";
 import { ErrorText, Field, WindowFrame } from "@/lib/WindowFrame";
-import { checkServer, errorMessage, saveServer, type ServerInfo } from "@/lib/ipc";
-
-const DEFAULT_SERVER = "http://localhost:3000";
+import { checkServer, errorMessage, saveServer } from "@/lib/ipc";
 
 function Onboarding() {
-  const [url, setUrl] = useState(DEFAULT_SERVER);
+  const [url, setUrl] = useState("");
   const [checking, setChecking] = useState(false);
-  const [info, setInfo] = useState<ServerInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Each check gets an id; editing the URL starts a new one, so a check for
-  // the old URL can never enable Continue for it.
-  const checkId = useRef(0);
+  // Each attempt gets an id; editing the URL starts a new one, so a check for
+  // the old URL can never save it.
+  const attemptId = useRef(0);
 
+  // One step: Enter or Continue checks the server and, if it answers, saves it.
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
-    const id = ++checkId.current;
+    const id = ++attemptId.current;
     setChecking(true);
     setError(null);
-    setInfo(null);
     try {
-      const result = await checkServer(url);
-      if (id === checkId.current) setInfo(result);
+      const info = await checkServer(url);
+      if (id === attemptId.current) await saveServer(info.url);
     } catch (e) {
-      if (id === checkId.current) setError(errorMessage(e));
+      if (id === attemptId.current) setError(errorMessage(e));
     } finally {
-      if (id === checkId.current) setChecking(false);
-    }
-  }
-
-  async function onContinue() {
-    if (!info) return;
-    try {
-      await saveServer(info.url);
-    } catch (e) {
-      setError(errorMessage(e));
+      if (id === attemptId.current) setChecking(false);
     }
   }
 
@@ -51,31 +39,19 @@ function Onboarding() {
               value={url}
               autoFocus
               spellCheck={false}
+              autoComplete="url"
               onChange={(e) => {
-                checkId.current += 1;
+                attemptId.current += 1;
                 setUrl(e.target.value);
-                setInfo(null);
                 setChecking(false);
               }}
-              placeholder="https://cloud.onyx.app"
+              placeholder="https://your-company.onyx.app"
             />
           </Field>
           <ErrorText message={error} />
-          {info ? (
-            <Text font="secondary-body" color="text-04">
-              {`Connected to ${info.url}. Server version: ${info.backendVersion}.`}
-            </Text>
-          ) : null}
-          <Section flexDirection="row" gap={2} justifyContent="end" height="fit">
-            <Button
-              type="submit"
-              prominence={info ? "secondary" : "primary"}
-              disabled={checking || url.trim() === ""}
-            >
-              {checking ? "Checking…" : "Check server"}
-            </Button>
-            <Button disabled={!info} onClick={() => void onContinue()}>
-              Continue
+          <Section flexDirection="row" justifyContent="end" height="fit">
+            <Button type="submit" disabled={checking || url.trim() === ""}>
+              {checking ? "Connecting…" : "Continue"}
             </Button>
           </Section>
         </Section>

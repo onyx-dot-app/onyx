@@ -68,7 +68,8 @@ Set the install setting of an Organization library plugin on **Admin Panel → P
 
 ### API key
 
-Enter a **Header Name** and a **Header Value**. Put each credential in braces, for example `Bearer {api_key}`.
+Enter a **Header Name** and a **Header Value**. Click **Add Header** to send more headers.
+Put each credential in braces, for example `Bearer {api_key}`.
 Each placeholder becomes a field that the admin or each user fills in. Use `{user_email}` for the user's email address.
 
 ### OAuth
@@ -96,8 +97,9 @@ https://<your-onyx-domain>/mcp/oauth/callback
 <img className="rounded-image" src="/assets/admins/plugins/integration_actions_tab.webp" alt="The Actions tab with Default for New Actions and Allow, Ask, and Blocked for each tool"/>
 
 The **Actions** tab lists the tools of the server, in **Read-Only Actions** and **Write Actions**.
-Click **Refresh** after the server adds, removes, or changes tools. Save or discard pending changes first.
-For a server where each user signs in, Onyx lists the tools with your own connection.
+A tool that does not tell whether it changes data is in **Other Actions**. Click **Refresh** after the server adds,
+removes, or changes tools. Save or discard pending changes first. For a server where each user signs in,
+Onyx lists the tools with your own connection.
 Connect your account on the [Plugins page](/overview/core_features/plugins) first.
 
 The **Actions** tab also sets the approval policy for each tool. The policy applies in Chat, in custom agents,
@@ -222,7 +224,8 @@ and the agent gets an error that explains why:
 | **Organization Connection** | Shows only for one account for the organization. Click **Connect** to connect the account. |
 
 If you change the server URL, the sign-in method, the client, the URLs, or the scopes,
-each connection needs a reconnect. Users must connect again.
+each connection needs a reconnect. A new placeholder in the header template has the same effect.
+Users must connect again.
 
 Use the **Overview** tab to change the name and the description, to turn the server off with **Enabled**,
 and to delete it.

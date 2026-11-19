@@ -1,23 +1,28 @@
 """Unit tests for the pptx skill's layout linter (scripts/lint.py).
 
-Fixture decks are generated in-test with python-pptx — one per defect class
+Fixture decks are generated in-test with power-pptx — one per defect class
 plus a clean deck — and thresholds are validated in both directions: each
 defect is caught, and the clean deck produces zero findings.
 """
 
 import importlib.util
+import re
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
 
+# lint.py reads decks with power-pptx, a python-pptx fork with the same API.
+import power_pptx as pptx
 import pytest
-
-pptx = pytest.importorskip("pptx")
-pytest.importorskip("PIL")
-
-from pptx.dml.color import RGBColor  # noqa: E402
-from pptx.enum.text import MSO_AUTO_SIZE  # noqa: E402
-from pptx.util import (  # noqa: E402
+from power_pptx.dml.color import RGBColor
+from power_pptx.enum.text import MSO_AUTO_SIZE
+from power_pptx.presentation import Presentation as Deck
+from power_pptx.shapes.placeholder import (
+    LayoutPlaceholder,
+    SlidePlaceholder,
+)
+from power_pptx.util import (
     Inches,
     Pt,
 )
@@ -45,14 +50,14 @@ def _load_lint() -> ModuleType:
 lint = _load_lint()
 
 
-def _new_deck() -> "pptx.presentation.Presentation":
+def _new_deck() -> Deck:
     prs = pptx.Presentation()
     prs.slide_width = Inches(13.333)
     prs.slide_height = Inches(7.5)
     return prs
 
 
-def _add_blank_slide(prs: "pptx.presentation.Presentation"):
+def _add_blank_slide(prs: Deck):
     return prs.slides.add_slide(prs.slide_layouts[6])
 
 
@@ -200,6 +205,161 @@ def test_short_text_in_roomy_box_does_not_overflow() -> None:
     assert _findings_by_check(prs, "OVERFLOW") == []
 
 
+def _body_placeholder_slide(prs: Deck, bullets: int) -> SlidePlaceholder:
+    # "Title and Content": the body text size comes from the slide master.
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    body = slide.placeholders[1]
+    body.text_frame.auto_size = MSO_AUTO_SIZE.NONE
+    body.text_frame.text = "\n".join(
+        f"Bullet {i + 1}: revenue grew in every region this quarter"
+        for i in range(bullets)
+    )
+    return body
+
+
+def test_placeholder_with_inherited_size_overflow_is_caught() -> None:
+    prs = _new_deck()
+    body = _body_placeholder_slide(prs, bullets=14)
+    findings = _findings_by_check(prs, "OVERFLOW")
+    assert len(findings) == 1
+    assert findings[0].severity == "ERROR"
+    assert findings[0].shape_id == body.shape_id
+
+
+def test_placeholder_with_inherited_size_that_fits_is_clean() -> None:
+    prs = _new_deck()
+    _body_placeholder_slide(prs, bullets=2)
+    assert _findings_by_check(prs, "OVERFLOW") == []
+
+
+def _shrink_to_fit_placeholder_slide(
+    prs: Deck,
+) -> SlidePlaceholder:
+    # The layout sets shrink-to-fit; the slide placeholder inherits it.
+    layout_body = prs.slide_layouts[1].placeholders[1]
+    assert isinstance(layout_body, LayoutPlaceholder)
+    layout_body.text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    body = slide.placeholders[1]
+    body.text_frame.text = "\n".join(
+        f"Bullet {i + 1}: revenue grew in every region this quarter" for i in range(14)
+    )
+    return body
+
+
+def test_shrink_to_fit_without_a_stored_scale_overflows() -> None:
+    # PowerPoint opens the frame at its stored scale (100% here) and shrinks it
+    # only after the text is edited.
+    prs = _new_deck()
+    body = _shrink_to_fit_placeholder_slide(prs)
+    findings = _findings_by_check(prs, "OVERFLOW")
+    assert len(findings) == 1
+    assert findings[0].shape_id == body.shape_id
+
+
+def test_shrink_to_fit_with_a_stored_scale_that_fits_is_clean() -> None:
+    prs = _new_deck()
+    body = _shrink_to_fit_placeholder_slide(prs)
+    body_pr = body.text_frame._txBody.bodyPr
+    body_pr.append(
+        body_pr.makeelement(
+            "{http://schemas.openxmlformats.org/drawingml/2006/main}normAutofit",
+            {"fontScale": "40000", "lnSpcReduction": "20000"},
+        )
+    )
+    assert _findings_by_check(prs, "OVERFLOW") == []
+
+
+def test_box_shorter_than_one_line_of_its_text_is_reported() -> None:
+    prs = _new_deck()
+    slide = _add_blank_slide(prs)
+    box = _add_textbox(slide, 2.0, 2.0, 6.0, 0.2, "Label", size_pt=18)
+    findings = _findings_by_check(prs, "OVERFLOW")
+    assert len(findings) == 1
+    assert findings[0].shape_id == box.shape_id
+
+
+def test_no_wrap_text_that_is_too_wide_and_too_tall_is_error() -> None:
+    prs = _new_deck()
+    slide = _add_blank_slide(prs)
+    # The lines are further out in width than in height, so the finding
+    # reports width; the height overflow alone needs an ERROR.
+    line = "This line is much wider than its narrow box"
+    box = _add_textbox(slide, 2.0, 2.0, 2.0, 1.0, line, size_pt=36)
+    box.text_frame.word_wrap = False
+    for _ in range(4):
+        run = box.text_frame.add_paragraph().add_run()
+        run.text = line
+        run.font.size = Pt(36)
+    findings = _findings_by_check(prs, "OVERFLOW")
+    assert len(findings) == 1
+    assert "width" in findings[0].detail
+    assert findings[0].severity == "ERROR"
+    assert findings[0].shape_id == box.shape_id
+
+
+def test_overflow_measurement_failure_is_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def lint_slide(*_: object, **__: object) -> None:
+        raise ValueError("unreadable text body")
+
+    monkeypatch.setattr(lint, "lint_slide", lint_slide)
+    prs = _new_deck()
+    _add_blank_slide(prs)
+    findings = _findings_by_check(prs, "OVERFLOW")
+    assert len(findings) == 1
+    assert findings[0].severity == "WARN"
+    assert "not measured" in findings[0].detail
+
+
+def test_missing_power_pptx_prints_install_command(tmp_path: Path) -> None:
+    deck = tmp_path / "deck.pptx"
+    _new_deck().save(str(deck))
+    # Hide power-pptx, as in a sandbox started from an older image.
+    run_without_power_pptx = (
+        "import runpy, sys; sys.modules['power_pptx'] = None; "
+        f"sys.argv = ['lint.py', {str(deck)!r}]; "
+        f"runpy.run_path({str(LINT_PATH)!r}, run_name='__main__')"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", run_without_power_pptx],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 2
+    assert result.stdout.splitlines()[0] == "ERROR_MISSING_DEPENDENCY power-pptx"
+    # The install command must match the version the sandbox images pin.
+    pin = re.search(
+        r'"(power-pptx==[^"]+)"',
+        (Path(__file__).parents[5] / "pyproject.toml").read_text(),
+    )
+    assert pin is not None
+    assert f"pip install {pin.group(1)}`" in result.stdout
+
+
+def test_office_fonts_are_measured_with_installed_stand_ins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    installed = {"Carlito": "/fonts/Carlito-Regular.ttf"}
+    registered: dict[str, str | None] = {}
+
+    def find_font_file(
+        family: str, bold: bool = False, italic: bool = False
+    ) -> str | None:
+        return installed.get(family) if not (bold or italic) else None
+
+    def register_font_family(family: str, *, regular: str | None, **_: object) -> None:
+        registered[family] = regular
+
+    monkeypatch.setattr(lint, "find_font_file", find_font_file)
+    monkeypatch.setattr(lint, "register_font_family", register_font_family)
+    lint.lint_presentation(_new_deck())
+
+    assert registered == {"Calibri": "/fonts/Carlito-Regular.ttf"}
+
+
 def test_overlapping_text_frames_is_error() -> None:
     prs = _new_deck()
     slide = _add_blank_slide(prs)
@@ -255,6 +415,23 @@ def test_low_contrast_text_is_error() -> None:
     finding = findings[0]
     assert finding.severity == "ERROR"
     assert finding.shape_id == shape.shape_id
+
+
+def test_text_over_a_group_skips_contrast() -> None:
+    # The group's children paint the backdrop, so the contrast is unknown.
+    prs = _new_deck()
+    slide = _add_blank_slide(prs)
+    slide.background.fill.solid()
+    slide.background.fill.fore_color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+    group = slide.shapes.add_group_shape()
+    panel = group.shapes.add_shape(
+        1, Inches(2.0), Inches(2.0), Inches(5.0), Inches(1.5)
+    )
+    panel.fill.solid()
+    panel.fill.fore_color.rgb = RGBColor(0x1F, 0x38, 0x64)
+    box = _add_textbox(slide, 2.2, 2.2, 4.6, 1.0, "White on navy", size_pt=24)
+    box.text_frame.paragraphs[0].runs[0].font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+    assert _findings_by_check(prs, "CONTRAST") == []
 
 
 def test_high_contrast_text_passes() -> None:

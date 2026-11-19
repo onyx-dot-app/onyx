@@ -1,4 +1,4 @@
-from sqlalchemy import and_, desc, func, select, update
+from sqlalchemy import and_, delete, desc, func, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SyncStatus, SyncType
@@ -57,6 +57,11 @@ def mark_sync_records_as_cancelled(
     db_session.commit()
 
 
+def delete_sync_record(db_session: Session, sync_record_id: int) -> None:
+    db_session.execute(delete(SyncRecord).where(SyncRecord.id == sync_record_id))
+    db_session.commit()
+
+
 def _create_sync_record(
     db_session: Session,
     entity_id: int | None,
@@ -68,7 +73,8 @@ def _create_sync_record(
         sync_type=sync_type,
         sync_status=SyncStatus.IN_PROGRESS,
         num_docs_synced=0,
-        sync_start_time=func.now(),
+        # A dispatch can serve a request newer than this transaction.
+        sync_start_time=func.clock_timestamp(),
     )
     db_session.add(sync_record)
     db_session.commit()

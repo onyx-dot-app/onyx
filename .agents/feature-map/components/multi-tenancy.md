@@ -178,8 +178,7 @@ migrates only the catalog tables (`PublicBase`) in `public`.
    tenant; a cross-tenant key uses the shared client.**
    `redis/redis_pool.py:get_redis_client` returns a `TenantRedisClient` that
    prefixes every key (`redis/tenant_redis_client.py:_prefix_key`).
-   `redis/redis_pool.py:get_shared_redis_client` and
-   `cache/factory.py:get_shared_cache_backend` are cross-tenant;
+   `cache/factory.py:get_shared_cache_backend` is cross-tenant;
    use them only for data or coordination that spans tenants, such as the
    locks in `cache/locks.py`. A module-level
    `lru_cache` or dict that holds tenant data must include the tenant in its

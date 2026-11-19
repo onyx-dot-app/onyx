@@ -9277,7 +9277,16 @@
         "toasts": {
           "blockedBySkills": "无法删除此用户",
           "openSkills": "打开技能以转移",
+          "renamed": "新所有者已有同名技能，因此移动的技能已重命名",
           "success": "用户已删除"
+        },
+        "transfer": {
+          "description": "<strong>{email}</strong> 拥有 {count, plural, other {# 个私有技能}}。将所有权转移给其他用户后，该账户将被删除。",
+          "submit": {
+            "label": "全部转移并删除"
+          },
+          "ownersLoadFailed": "无法加载可以接收技能的用户。",
+          "retry": "重试"
         }
       },
       "editModal": {
@@ -10520,14 +10529,17 @@
           "name": {
             "title": "请求头名称",
             "placeholder": "添加请求头名称",
-            "error": "请添加请求头名称。"
+            "error": "请添加请求头名称。",
+            "duplicate": "每个请求头名称只能使用一次。"
           },
           "value": {
             "title": "请求头值",
             "description": "将每个凭据放在花括号中，例如 {example}。每个占位符都会成为一个凭据字段。",
             "placeholder": "例如：{example}",
             "error": "请至少添加一个占位符，例如 {example}。"
-          }
+          },
+          "add": "添加请求头",
+          "remove": "删除请求头 {name}"
         },
         "oauth": {
           "providerMode": {
@@ -10663,6 +10675,7 @@
           "useDefaults": "使用默认值",
           "readOnly": "只读操作 ({count})",
           "write": "写入操作 ({count})",
+          "other": "其他操作 ({count})",
           "empty": "此集成没有操作。",
           "connectFirst": {
             "title": "请先连接服务器",
@@ -10797,7 +10810,7 @@
         "ariaLabel": "智能体编辑器页面"
       },
       "plugins": {
-        "askHint": "要在不询问的情况下运行，管理员需在集成中将其设为允许，或每位用户选择始终允许。",
+        "askHint": "要在不询问的情况下运行，请更改智能体设置，或由管理员在集成中将其设为允许，或每位用户选择始终允许。",
         "askHintAdminOnly": "要在不询问的情况下运行，管理员需在集成中将其设为允许。",
         "askHintAgent": "要在无需确认的情况下运行，请更改智能体设置，或由每个用户选择始终允许。",
         "askHintAgentOnly": "要在无需确认的情况下运行，请更改智能体设置。",
@@ -12251,9 +12264,6 @@
         "emptyState": {
           "text": "未生成图片"
         },
-        "failedStatus": {
-          "text": "图片生成失败"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {已生成 # 张图片} other {已生成 # 张图片}}"
         },
@@ -12399,21 +12409,18 @@
             "status": "正在生成计划"
           }
         },
-        "doneStep": {
-          "header": "完成"
-        },
         "expandButton": {
           "ariaLabel": "展开时间线"
         },
         "fetch": {
           "reading": {
             "status": "正在读取"
+          },
+          "read": {
+            "status": "已读取"
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "第 {start, number}–{end, number} 个字符，共 {total, number} 个"
-          },
           "read": {
             "status": "已读取 {fileName}（第 {start, number}–{end, number} 个字符，共 {total, number} 个）"
           },
@@ -12439,6 +12446,9 @@
           },
           "generatingPlan": {
             "label": "正在生成计划"
+          },
+          "queryingKnowledgeBase": {
+            "label": "正在查询知识库"
           },
           "reading": {
             "label": "正在读取"
@@ -12475,6 +12485,9 @@
           },
           "editingFiles": {
             "label": "正在编辑文件"
+          },
+          "publishingFiles": {
+            "label": "正在发布文件"
           }
         },
         "internalSearch": {
@@ -12484,9 +12497,14 @@
           "reading": {
             "status": "正在读取"
           },
+          "read": {
+            "label": "已读取"
+          },
           "header": {
             "default": "正在搜索内部文档",
+            "doneDefault": "已搜索内部文档",
             "sources": "正在搜索 {sources}",
+            "doneSources": "已搜索 {sources}",
             "sourcesOverflow": "{sources} 及另外 {count} 个",
             "withTimeWindow": "{header}({timeWindow})"
           },
@@ -12509,6 +12527,9 @@
           "updating": {
             "status": "正在更新记忆"
           },
+          "updated": {
+            "status": "已更新记忆"
+          },
           "viewMemoriesButton": {
             "tooltip": "查看记忆"
           }
@@ -12521,21 +12542,60 @@
             "label": "已更新记忆"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "已查询知识库"
+          },
+          "querying": {
+            "status": "正在查询知识库"
+          },
+          "listed": {
+            "label": "{count, plural, one {已列出 # 个文档} other {已列出 # 个文档}}"
+          },
+          "query": {
+            "table": {
+              "document": "文档",
+              "hierarchy_node": "文件夹",
+              "chat_session": "聊天会话",
+              "chat_message": "聊天消息",
+              "search_doc": "引用的文档"
+            },
+            "count": "数量",
+            "countBy": {
+              "source": "按来源统计",
+              "owner": "按所有者统计",
+              "month": "按月统计"
+            },
+            "titleContains": "标题包含“{text}”",
+            "nameContains": "名称包含“{text}”",
+            "textContains": "正文包含“{text}”",
+            "updated": {
+              "since": "{date} 以来更新",
+              "before": "{date} 之前更新",
+              "between": "{start} – {end} 更新"
+            },
+            "created": {
+              "since": "{date} 以来创建",
+              "before": "{date} 之前创建",
+              "between": "{start} – {end} 创建"
+            },
+            "sent": {
+              "since": "{date} 以来发送",
+              "before": "{date} 之前发送",
+              "between": "{start} – {end} 发送"
+            },
+            "owner": "所有者：{owner}",
+            "folder": "在文件夹 {id} 中",
+            "nodeType": "类型：{type}",
+            "author": "发送者：{author}",
+            "message": "消息 {id}",
+            "allRetrieved": "所有检索到的",
+            "nextPage": "下一页"
+          }
+        },
         "python": {
-          "completed": {
-            "status": "Python 执行完成"
-          },
-          "default": {
-            "status": "Python 执行"
-          },
           "error": {
             "label": "错误："
-          },
-          "executing": {
-            "status": "正在执行 Python 代码..."
-          },
-          "failed": {
-            "status": "Python 执行失败"
           },
           "generatedFiles": {
             "label": "{count, plural, one {已生成 # 个文件} other {已生成 # 个文件}}"
@@ -12546,6 +12606,12 @@
           "output": {
             "label": "输出："
           },
+          "running": {
+            "status": "正在运行 Python"
+          },
+          "ran": {
+            "status": "已运行 Python"
+          },
           "runningCode": {
             "label": "正在运行代码..."
           },
@@ -12554,11 +12620,11 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "完整文本"
-          },
           "thinking": {
             "status": "思考中"
+          },
+          "thought": {
+            "status": "已思考"
           }
         },
         "researchAgent": {
@@ -12580,9 +12646,6 @@
         "stepsButton": {
           "label": "{count, plural, one {# 个步骤} other {# 个步骤}}"
         },
-        "stoppedStep": {
-          "header": "已停止"
-        },
         "thoughtDuration": {
           "label": "思考了 {duration}"
         },
@@ -12599,6 +12662,7 @@
           "generateImage": "生成图片",
           "generatePlan": "生成计划",
           "internalSearch": "内部搜索",
+          "knowledgeBaseQuery": "知识库查询",
           "memory": "记忆",
           "openUrls": "打开 URL",
           "researchAgent": "研究智能体",
@@ -12608,11 +12672,15 @@
           "terminal": "终端",
           "applyPatch": "应用补丁",
           "editFile": "编辑文件",
-          "writeFile": "写入文件"
+          "writeFile": "写入文件",
+          "publishFiles": "发布文件"
         },
         "webSearch": {
           "searching": {
             "status": "正在搜索网页"
+          },
+          "searched": {
+            "status": "已搜索网络"
           }
         },
         "sandbox": {
@@ -12654,6 +12722,14 @@
           },
           "stopped": {
             "status": "已停止"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, other {已发布 # 个文件}}"
+            },
+            "failed": {
+              "status": "发布失败"
+            }
           }
         }
       },
@@ -13295,6 +13371,16 @@
     "readiness": {
       "stopFailed": "无法停止回复。请重试。",
       "checkFailed": "无法确认回复是否已完成。请再次检查后再发送消息。"
+    },
+    "publishedFiles": {
+      "card": {
+        "updated": {
+          "description": "更新版本 · {details}"
+        },
+        "preview": {
+          "ariaLabel": "预览 {name}"
+        }
+      }
     }
   },
   "common": {
@@ -14243,6 +14329,11 @@
         "label": "仅显示推荐模型"
       }
     },
+    "messageList": {
+      "turnFailed": {
+        "message": "本轮失败。"
+      }
+    },
     "onboarding": {
       "livingMap": {
         "examplePrompts": {
@@ -14791,9 +14882,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# 次调用} other {# 次调用}}"
-        },
         "working": {
           "label": "处理中"
         }

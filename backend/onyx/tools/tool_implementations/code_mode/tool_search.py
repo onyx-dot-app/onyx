@@ -36,6 +36,10 @@ _TOKEN = re.compile(r"[^\W_]+")
 # BM25 parameters: term frequency saturation and document length normalization.
 _K1 = 1.2
 _B = 0.75
+# Parameter text counts at this weight against name, namespace and description
+# text. BM25 scores the two apart, so a large schema does not dilute a name or
+# description match.
+PARAMETER_WEIGHT = 0.5
 
 
 def _tokens(text: str) -> list[str]:
@@ -44,43 +48,64 @@ def _tokens(text: str) -> list[str]:
     return _TOKEN.findall(spaced.lower())
 
 
-class ToolIndex:
-    """BM25 ranking over the deferred functions of one program."""
+class _Bm25:
+    """BM25 scores of one text field across the deferred functions."""
 
-    def __init__(self, functions: Sequence[SearchableFunction]) -> None:
-        self._functions = list(functions)
-        self._terms = [Counter(_tokens(function.text)) for function in functions]
+    def __init__(self, texts: Sequence[str]) -> None:
+        self._terms = [Counter(_tokens(text)) for text in texts]
         self._lengths = [sum(terms.values()) for terms in self._terms]
         self._average_length = (
             sum(self._lengths) / len(self._lengths) if self._lengths else 0.0
         )
         frequencies = Counter(term for terms in self._terms for term in terms)
-        count = len(self._functions)
+        count = len(self._terms)
         self._idf = {
             term: math.log(1 + (count - frequency + 0.5) / (frequency + 0.5))
             for term, frequency in frequencies.items()
         }
 
-    def search(self, query: str, limit: int) -> list[SearchableFunction]:
-        query_terms = set(_tokens(query))
-        scored: list[tuple[float, int]] = []
+    def scores(self, query_terms: set[str]) -> list[float]:
+        result: list[float] = []
         for index, terms in enumerate(self._terms):
             length_norm = (
                 1 - _B + _B * self._lengths[index] / (self._average_length or 1.0)
             )
-            score = sum(
-                self._idf[term]
-                * terms[term]
-                * (_K1 + 1)
-                / (terms[term] + _K1 * length_norm)
-                for term in query_terms
-                if term in terms
+            result.append(
+                sum(
+                    self._idf[term]
+                    * terms[term]
+                    * (_K1 + 1)
+                    / (terms[term] + _K1 * length_norm)
+                    for term in query_terms
+                    if term in terms
+                )
             )
-            if score > 0:
-                scored.append((score, index))
+        return result
+
+
+class ToolIndex:
+    """BM25 ranking over the deferred functions of one program."""
+
+    def __init__(self, functions: Sequence[SearchableFunction]) -> None:
+        self._functions = list(functions)
+        self._main = _Bm25([function.text for function in functions])
+        self._parameters = _Bm25([function.parameter_text for function in functions])
+
+    def search(self, query: str, limit: int) -> list[SearchableFunction]:
+        query_terms = set(_tokens(query))
+        scored = [
+            (main + PARAMETER_WEIGHT * parameters, function)
+            for main, parameters, function in zip(
+                self._main.scores(query_terms),
+                self._parameters.scores(query_terms),
+                self._functions,
+                strict=True,
+            )
+            if main > 0 or parameters > 0
+        ]
         # Ties keep name order.
-        scored.sort(key=lambda item: (-item[0], self._functions[item[1]].name))
-        return [self._functions[index] for _, index in scored[:limit]]
+        scored.sort(key=lambda item: (-item[0], item[1].name))
+        return [function for _, function in scored[:limit]]
 
     def tool_search(
         self, query: object, limit: object = DEFAULT_TOOL_SEARCH_LIMIT

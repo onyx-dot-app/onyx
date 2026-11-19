@@ -23,6 +23,7 @@ ToolFactory = Callable[[], int]
 def make_tool(db_session: Session) -> Generator[ToolFactory, None, None]:
     persona = get_default_assistant(db_session)
     assert persona is not None
+    persona_id = persona.id
     original_tool_ids = {tool.id for tool in persona.tools}
     created: list[int] = []
 
@@ -46,9 +47,20 @@ def make_tool(db_session: Session) -> Generator[ToolFactory, None, None]:
         db_session.rollback()
         db_session.execute(
             delete(Persona__Tool).where(
-                Persona__Tool.persona_id == persona.id,
+                Persona__Tool.persona_id == persona_id,
                 Persona__Tool.tool_id.not_in(original_tool_ids),
             )
+        )
+        kept = set(
+            db_session.scalars(
+                select(Persona__Tool.tool_id).where(
+                    Persona__Tool.persona_id == persona_id
+                )
+            )
+        )
+        db_session.add_all(
+            Persona__Tool(persona_id=persona_id, tool_id=tool_id)
+            for tool_id in original_tool_ids - kept
         )
         db_session.execute(delete(Tool).where(Tool.id.in_(created)))
         db_session.commit()

@@ -50,6 +50,20 @@ export function countryCodeToFlag(code: string | null | undefined): string {
   return String.fromCodePoint(first, second);
 }
 
+/**
+ * Inline markdown for a code span holding any text, backticks included: the
+ * fence is one backtick longer than the longest run inside. Use inside
+ * `markdown()`, e.g. `markdown(\`Read ${codeSpan(path)}\`)`.
+ */
+export function codeSpan(text: string): string {
+  const longestRun = Math.max(
+    0,
+    ...(text.match(/`+/g) ?? []).map((run) => run.length)
+  );
+  const fence = "`".repeat(longestRun + 1);
+  return `${fence} ${text} ${fence}`;
+}
+
 export function escapeMarkdown(value: string): string {
   return value
     .replace(/[!-/:-@[-`{-~]/g, (character) => `&#${character.charCodeAt(0)};`)

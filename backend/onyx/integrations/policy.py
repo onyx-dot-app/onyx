@@ -178,6 +178,8 @@ def resolve_action_policies(
     link_settings: Sequence[ActionSettings | None],
     approval_mode: ApprovalMode,
     chat_session_id: UUID | None,
+    policy_rows: PolicyRows | None = None,
+    granted_actions: Collection[str] | None = None,
 ) -> dict[str, EffectivePolicy]:
     """The policy of each action in ``action_keys`` for one run. ``actions``
     are the stored actions of the integration. ``user_id`` is the acting
@@ -189,11 +191,19 @@ def resolve_action_policies(
     if not link_settings:
         return dict.fromkeys(action_keys, EffectivePolicy.BLOCKED)
     by_key = {action.key: action for action in actions}
-    rows = get_policy_rows(db_session, integration.id, user_id)
+    rows = (
+        policy_rows
+        if policy_rows is not None
+        else get_policy_rows(db_session, integration.id, user_id)
+    )
     granted = (
-        get_session_granted_actions(db_session, chat_session_id, integration.id)
-        if chat_session_id is not None
-        else set()
+        granted_actions
+        if granted_actions is not None
+        else (
+            get_session_granted_actions(db_session, chat_session_id, integration.id)
+            if chat_session_id is not None
+            else set()
+        )
     )
     links = [settings or ActionSettings() for settings in link_settings]
     return {
@@ -222,7 +232,11 @@ def agent_plugin_settings(
     settings of the agent for each. The default agent uses each plugin the
     user runs; another agent uses each linked plugin the user can see.
     ``published_only`` keeps only the Organization library."""
-    states = load_user_plugin_states([user_id], db_session)
+    states = load_user_plugin_states(
+        [user_id],
+        db_session,
+        plugin_ids=None if persona_id == DEFAULT_PERSONA_ID else list(links),
+    )
     if published_only:
         states = [state for state in states if state.published]
     if persona_id == DEFAULT_PERSONA_ID:

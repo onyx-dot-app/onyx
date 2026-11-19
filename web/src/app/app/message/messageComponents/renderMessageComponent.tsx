@@ -17,23 +17,25 @@ import {
 } from "@/app/app/message/messageComponents/types";
 import { MessageTextRenderer } from "@/app/app/message/messageComponents/renderers/MessageTextRenderer";
 import { ImageToolRenderer } from "@/app/app/message/messageComponents/renderers/ImageToolRenderer";
-import { PythonToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/code/PythonToolRenderer";
-import { CodingAgentRenderer } from "@/app/app/message/messageComponents/timeline/renderers/code/CodingAgentRenderer";
+import { PythonToolRenderer } from "@/lib/timeline/chat/renderers/code/PythonToolRenderer";
+import { CodingAgentRenderer } from "@/lib/timeline/chat/renderers/code/CodingAgentRenderer";
 import {
   isCodingAgentPackets,
   NestedCall,
-} from "@/app/app/message/messageComponents/timeline/packetHelpers";
-import { ReasoningRenderer } from "@/app/app/message/messageComponents/timeline/renderers/reasoning/ReasoningRenderer";
+} from "@/lib/timeline/chat/packetHelpers";
+import { ReasoningRenderer } from "@/lib/timeline/chat/renderers/reasoning/ReasoningRenderer";
 import CustomToolRenderer from "@/app/app/message/messageComponents/renderers/CustomToolRenderer";
-import { ExecToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/sandbox/ExecToolRenderer";
-import { ApplyPatchToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/sandbox/ApplyPatchToolRenderer";
-import { FileReaderToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/filereader/FileReaderToolRenderer";
-import { FetchToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/fetch/FetchToolRenderer";
-import { MemoryToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/memory/MemoryToolRenderer";
-import { DeepResearchPlanRenderer } from "@/app/app/message/messageComponents/timeline/renderers/deepresearch/DeepResearchPlanRenderer";
-import { ResearchAgentRenderer } from "@/app/app/message/messageComponents/timeline/renderers/deepresearch/ResearchAgentRenderer";
-import { WebSearchToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/search/WebSearchToolRenderer";
-import { InternalSearchToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/search/InternalSearchToolRenderer";
+import { ExecToolRenderer } from "@/lib/timeline/chat/renderers/sandbox/ExecToolRenderer";
+import { ApplyPatchToolRenderer } from "@/lib/timeline/chat/renderers/sandbox/ApplyPatchToolRenderer";
+import { PublishFilesToolRenderer } from "@/lib/timeline/chat/renderers/sandbox/PublishFilesToolRenderer";
+import { FileReaderToolRenderer } from "@/lib/timeline/chat/renderers/filereader/FileReaderToolRenderer";
+import { FetchToolRenderer } from "@/lib/timeline/chat/renderers/fetch/FetchToolRenderer";
+import { MemoryToolRenderer } from "@/lib/timeline/chat/renderers/memory/MemoryToolRenderer";
+import { PostgresToolRenderer } from "@/lib/timeline/chat/renderers/postgres/PostgresToolRenderer";
+import { DeepResearchPlanRenderer } from "@/lib/timeline/chat/renderers/deepresearch/DeepResearchPlanRenderer";
+import { ResearchAgentRenderer } from "@/lib/timeline/chat/renderers/deepresearch/ResearchAgentRenderer";
+import { WebSearchToolRenderer } from "@/lib/timeline/chat/renderers/search/WebSearchToolRenderer";
+import { InternalSearchToolRenderer } from "@/lib/timeline/chat/renderers/search/InternalSearchToolRenderer";
 
 // Different types of chat packets using discriminated unions
 interface GroupedPackets {
@@ -91,6 +93,10 @@ function isApplyPatchToolPacket(packet: Packet) {
   return packet.obj.type === PacketType.APPLY_PATCH_START;
 }
 
+function isPublishFilesToolPacket(packet: Packet) {
+  return packet.obj.type === PacketType.PUBLISH_FILES_START;
+}
+
 function isFetchToolPacket(packet: Packet) {
   return packet.obj.type === PacketType.FETCH_TOOL_START;
 }
@@ -100,6 +106,10 @@ function isMemoryToolPacket(packet: Packet) {
     packet.obj.type === PacketType.MEMORY_TOOL_START ||
     packet.obj.type === PacketType.MEMORY_TOOL_NO_ACCESS
   );
+}
+
+function isPostgresToolPacket(packet: Packet) {
+  return packet.obj.type === PacketType.POSTGRES_TOOL_START;
 }
 
 function isReasoningPacket(packet: Packet): packet is ReasoningPacket {
@@ -167,6 +177,9 @@ export function findRenderer(
   if (packets.some(isApplyPatchToolPacket)) {
     return ApplyPatchToolRenderer;
   }
+  if (packets.some(isPublishFilesToolPacket)) {
+    return PublishFilesToolRenderer;
+  }
   if (packets.some(isCustomToolPacket)) {
     return CustomToolRenderer;
   }
@@ -175,6 +188,9 @@ export function findRenderer(
   }
   if (packets.some(isMemoryToolPacket)) {
     return MemoryToolRenderer;
+  }
+  if (packets.some(isPostgresToolPacket)) {
+    return PostgresToolRenderer;
   }
   // SECTION_END and ERROR match here, so this check must stay last.
   if (packets.some(isReasoningPacket)) {

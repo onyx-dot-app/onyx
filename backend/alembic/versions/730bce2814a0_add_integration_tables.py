@@ -226,6 +226,9 @@ def _create_tables() -> None:
             name="ck_integration_auth_method",
         ),
     )
+    op.create_index(
+        "ix_integration_created_by_user_id", "integration", ["created_by_user_id"]
+    )
 
     op.create_table(
         "integration_action",
@@ -329,6 +332,11 @@ def _create_tables() -> None:
         ),
     )
     op.create_index(
+        "ix_integration_connection_integration_id",
+        "integration_connection",
+        ["integration_id"],
+    )
+    op.create_index(
         "uq_integration_connection_organization",
         "integration_connection",
         ["integration_id"],
@@ -368,6 +376,11 @@ def _create_tables() -> None:
             "policy IN ('allow', 'auto', 'ask', 'blocked')",
             name="ck_integration_action_policy_policy",
         ),
+    )
+    op.create_index(
+        "ix_integration_action_policy_integration_id",
+        "integration_action_policy",
+        ["integration_id"],
     )
     op.create_index(
         "uq_integration_action_policy_admin",
@@ -697,11 +710,7 @@ _CREATE_SOURCES = f"""
         ) is_shared
     )
     SELECT
-        coalesce(
-            adopted.plugin_id,
-            md5('integration_plugin:' || numbered.id::text)::uuid
-        ) AS plugin_id,
-        adopted.plugin_id IS NOT NULL AS adopted,
+        md5('integration_plugin:' || numbered.id::text)::uuid AS plugin_id,
         CASE placement
             WHEN 'organization_library' THEN '{ORGANIZATION_LIBRARY_ID}'::uuid
             ELSE md5('user_uploads:' || author_user_id::text)::uuid
@@ -721,19 +730,6 @@ _CREATE_SOURCES = f"""
             candidates.*
         FROM candidates
     ) numbered
-    -- An app whose only skill is a custom skill gets no plugin of its own:
-    -- the plugin of that skill holds the skill and the integration. A
-    -- built-in skill has no plugin.
-    LEFT JOIN LATERAL (
-        SELECT p.id AS plugin_id
-        FROM external_app__skill es
-        JOIN plugin p ON p.id = es.skill_id
-        WHERE es.external_app_id = numbered.external_app_id
-          AND (
-              SELECT count(*) FROM external_app__skill every
-              WHERE every.external_app_id = numbered.external_app_id
-          ) = 1
-    ) adopted ON true
 """
 
 _INSERT_ORGANIZATION_LIBRARY = f"""
@@ -757,7 +753,7 @@ _INSERT_USER_UPLOADS = """
         marketplace_id, 'user_uploads', 'My uploads', author_user_id,
         'AVAILABLE', min(created_at)
     FROM integration_source
-    WHERE placement = 'user_uploads' AND NOT adopted
+    WHERE placement = 'user_uploads'
     GROUP BY marketplace_id, author_user_id
     ON CONFLICT DO NOTHING
 """
@@ -775,7 +771,6 @@ _INSERT_PLUGINS = """
     BEGIN
         FOR pending IN
             SELECT * FROM integration_source
-            WHERE NOT adopted
             ORDER BY created_at, id
         LOOP
             base := left(pending.name, 64);
@@ -819,7 +814,6 @@ _INSERT_VERSIONS = """
         src.created_at
     FROM integration_source src
     LEFT JOIN "user" u ON u.id = src.author_user_id
-    WHERE NOT src.adopted
 """
 
 _INSERT_INTEGRATIONS = """
@@ -835,8 +829,8 @@ _INSERT_INTEGRATIONS = """
     FROM integration_source
 """
 
-# The plugin that holds each integration: the plugin that the copy made, or
-# the plugin of the one custom skill of an app.
+# Each integration is in the plugin that the copy made for it. A skill can be
+# deleted, so the plugin of a skill is never the only plugin of an integration.
 _INSERT_FIRST_PLUGIN_INTEGRATIONS = """
     INSERT INTO plugin__integration (plugin_id, integration_id)
     SELECT plugin_id, id FROM integration_source ORDER BY id
@@ -1149,14 +1143,13 @@ _INSERT_OPENAPI_DEFAULT_POLICIES = """
 """
 
 # A skill that needs an external app becomes a plugin that holds the
-# integration of that app. The one skill of an app has its row already.
+# integration of that app.
 _INSERT_PLUGIN_INTEGRATIONS = """
     INSERT INTO plugin__integration (plugin_id, integration_id)
     SELECT p.id, src.id
     FROM external_app__skill es
     JOIN integration_source src ON src.external_app_id = es.external_app_id
     JOIN plugin p ON p.id = es.skill_id
-    WHERE p.id <> src.plugin_id
     ORDER BY p.id, src.id
 """
 
@@ -1282,9 +1275,7 @@ _SET_RECORD_INTEGRATIONS = """
     WHERE gated_app_id IS NOT NULL AND integration_id IS NULL
 """
 
-# The plugin that the copy made for an integration. An MCP server and an
-# OpenAPI tool never take the plugin of a skill, so it is the plugin that
-# holds them.
+# The plugin that the copy made for an integration.
 _MADE_PLUGIN = "(md5('integration_plugin:' || i.id::text)::uuid)::text"
 
 # The old tool selection of a chat as tool options. A built-in tool stays a
@@ -1635,6 +1626,21 @@ def downgrade() -> None:
         "WHERE state ? 'tool_options'"
     )
     op.drop_column("chat_session", "tool_options")
+    # Each plugin that holds an integration goes, also one that the app made
+    # after the upgrade. The plugin of a skill stays.
+    op.execute(
+        """
+        DELETE FROM plugin p
+        USING plugin__integration pi
+        WHERE pi.plugin_id = p.id
+          AND NOT EXISTS (SELECT 1 FROM skill s WHERE s.id = p.id)
+          AND NOT EXISTS (
+              SELECT 1 FROM plugin_version v
+              JOIN plugin_skill ps ON ps.plugin_version_id = v.id
+              WHERE v.plugin_id = p.id
+          )
+        """
+    )
     for table in (
         "plugin__integration",
         "scheduled_task__plugin",
@@ -1645,14 +1651,6 @@ def downgrade() -> None:
         "integration_action",
     ):
         op.drop_table(table)
-    # Each plugin that the upgrade made goes. The plugin of a skill stays.
-    op.execute(
-        """
-        DELETE FROM plugin p
-        USING integration i
-        WHERE p.id = md5('integration_plugin:' || i.id::text)::uuid
-        """
-    )
     # A "My uploads" with no plugin left goes too. The app makes it again on
     # the first upload of its owner.
     op.execute(

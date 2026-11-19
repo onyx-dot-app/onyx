@@ -86,6 +86,7 @@ from onyx.tools.models import (
     ToolCallInfo,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.sandbox.models import PublishedFiles
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -201,6 +202,12 @@ def _tool_record(
         and isinstance(part.tool_result, CustomToolUserFileSnapshot)
         for file_id in part.tool_result.file_ids
     ] or None
+    published_files = [
+        file
+        for part in parts
+        if isinstance(part, PublishedFiles)
+        for file in part.files
+    ] or None
 
     return ToolCallInfo(
         message_id=_message_identity(output),
@@ -218,6 +225,7 @@ def _tool_record(
         generated_images=generated_images,
         generated_files=generated_files,
         generated_file_ids=generated_file_ids,
+        published_files=published_files,
     )
 
 

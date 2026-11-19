@@ -47,7 +47,6 @@
 1 backend/tests/external_dependency_unit/permission_sync/test_pause_cancels_permission_syncs.py
 3 backend/tests/external_dependency_unit/permission_sync/test_permission_sync_attempt_lease.py
 1 backend/tests/external_dependency_unit/redis/test_incognito_context.py
-1 backend/tests/external_dependency_unit/redis/test_lock_context.py
 1 backend/tests/external_dependency_unit/sandbox_proxy/test_approval_cache.py
 5 backend/tests/external_dependency_unit/sandbox_proxy/test_identity_docker_lookup.py
 1 backend/tests/external_dependency_unit/sandbox_proxy/test_informer_watch_deadline.py
@@ -162,18 +161,3 @@
 2 backend/tests/unit/sandbox_proxy/test_response_streaming.py
 1 backend/tests/unit/sandbox_proxy/test_upstream.py
 2 backend/tests/unit/server/metrics/test_indexing_pipeline_collectors.py
-3 web/tests/e2e/admin/default-agent.spec.ts
-1 web/tests/e2e/admin/disable_default_agent.spec.ts
-1 web/tests/e2e/admin/discord-bot/guilds-list.spec.ts
-1 web/tests/e2e/admin/theme/appearance_theme_settings.spec.ts
-2 web/tests/e2e/agents/create_and_edit_agent.spec.ts
-7 web/tests/e2e/agents/user_file_attachment.spec.ts
-2 web/tests/e2e/auth/password_managements.spec.ts
-1 web/tests/e2e/auth/pat_management.spec.ts
-3 web/tests/e2e/chat/current_agent.spec.ts
-7 web/tests/e2e/chat/input_bar_behaviors.spec.ts
-4 web/tests/e2e/connectors/federated_slack.spec.ts
-1 web/tests/e2e/connectors/inlineFileManagement.spec.ts
-2 web/tests/e2e/mcp/McpOAuthFlow.ts
-1 web/tests/e2e/utils/agentUtils.ts
-3 web/tests/e2e/utils/dragUtils.ts

@@ -58,6 +58,14 @@ worktree of `ODS_STACK_LIVE_ROOT_A`, starts an isolated minimal stack there, and
 worktree directory. Then it checks that `stack ls --orphaned` lists the stack, and that
 `stack down --project` stops its processes and containers and releases its port leases.
 
+To check `prune --idle` without stopping anything, answer `no` at the prompt:
+
+```sh
+echo no | "$ODS_STACK_LIVE_BINARY" stack prune --idle 6h
+```
+
+The list must not include a stack whose worktree has a running `claude` or `codex` process.
+
 After browser tests, validate real Celery processing with the default profile:
 
 ```sh

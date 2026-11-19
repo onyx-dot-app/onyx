@@ -276,8 +276,8 @@ def _known_actions(settings: ActionSettings, keys: set[str]) -> ActionSettings:
 def list_task_plugin_views(
     db_session: Session, user: User, task_id: UUID | None
 ) -> list[TaskPluginView]:
-    """Each plugin that the user runs and that holds an enabled integration,
-    and each visible plugin of the task, also one with no enabled
+    """Each plugin that the user runs and that holds an enabled integration
+    other than OpenAPI, and each visible plugin of the task, also one with no enabled
     integration, so that a save keeps its settings. ``task_id`` None gives
     the catalog for a new task: no plugin is enabled and each action
     inherits. The stored settings leave out action keys that no integration
@@ -311,7 +311,7 @@ def list_task_plugin_views(
             action_keys.setdefault(plugin_id, set()).update(
                 action.key for action in actions[integration.id]
             )
-        if integration.enabled:
+        if integration.enabled and integration.tool_id is None:
             integrations_by_plugin.setdefault(plugin_id, []).append(integration)
     names = get_plugin_names(db_session, list(integrations_by_plugin))
     views = [

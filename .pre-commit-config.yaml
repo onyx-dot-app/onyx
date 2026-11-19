@@ -376,9 +376,8 @@ repos:
         always_run: true
         stages: [pre-commit]
       - id: test-flakes
-        name: ratchet sleeps and unexplained skips in tests
+        name: ratchet sleeps and unexplained skips in Python tests
         language: python
-        additional_dependencies: [tree-sitter==0.25.2, tree-sitter-typescript==0.23.2]
         entry: python -m backend.lint.check_test_flakes
         pass_filenames: false
         always_run: true

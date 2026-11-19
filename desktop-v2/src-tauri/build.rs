@@ -15,6 +15,9 @@ const COMMANDS: &[&str] = &[
     "open_chat_in_main",
     "open_external",
     "hide_launcher",
+    "toggle_aonyx",
+    "aonyx_clicked",
+    "aonyx_menu",
 ];
 
 fn main() {
