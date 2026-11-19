@@ -76,9 +76,9 @@ def write_during_outage(store: S3BackedFileStore, content: bytes) -> tuple[str, 
     return file_id, store.read_file_record(file_id).object_key
 
 
-def object_exists(client: "S3Client", key: str) -> bool:
+def object_exists(client: "S3Client", key: str, bucket: str = BUCKET) -> bool:
     try:
-        client.head_object(Bucket=BUCKET, Key=key)
+        client.head_object(Bucket=bucket, Key=key)
         return True
     except ClientError as e:
         if is_missing_object(e):

@@ -30,7 +30,7 @@ describe("craftPacketToEvents", () => {
         rawOutput: { output: "ok" },
         _meta: { toolName: "bash" },
       },
-    ].flatMap(craftPacketToEvents);
+    ].flatMap((packet) => craftPacketToEvents(packet));
 
     const state = reduceTimelineEvents(events);
     const payload = state.entries[0]?.payload;
@@ -62,7 +62,7 @@ describe("craftPacketToEvents", () => {
         _meta: { toolName: "edit" },
       },
       { type: "agent_message", content: { type: "text", text: "Done." } },
-    ].flatMap(craftPacketToEvents);
+    ].flatMap((packet) => craftPacketToEvents(packet));
 
     expect(
       reduceTimelineEvents(events).entries.map((entry) => entry.payload.kind)

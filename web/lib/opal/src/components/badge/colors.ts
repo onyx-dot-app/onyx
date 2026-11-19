@@ -8,7 +8,7 @@ import { CONTENT_STATUS_COLORS } from "@opal/layouts/content/colors";
 import type { StatusColor } from "@opal/types";
 
 export const BADGE_COLORS: Record<StatusColor, { bg: string }> = {
-  default: { bg: "bg-background-tint-02" },
+  default: { bg: "bg-background-neutral-02" },
   info: { bg: "bg-theme-blue-01" },
   success: { bg: "bg-theme-green-01" },
   warning: { bg: "bg-status-warning-01" },

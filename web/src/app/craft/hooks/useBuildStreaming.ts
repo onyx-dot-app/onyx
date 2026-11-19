@@ -34,7 +34,10 @@ import { StreamItem, ToolCallState } from "@/app/craft/types/displayTypes";
 
 import { genId } from "@/app/craft/utils/streamItemHelpers";
 import { parsePacket } from "@/app/craft/utils/parsePacket";
-import { craftPacketToEvents } from "@/lib/timeline/craft/events";
+import {
+  craftChildSessionId,
+  craftPacketToEvents,
+} from "@/lib/timeline/craft/events";
 import { cancelIncomingRunningCalls } from "@/lib/timeline/craft/stop";
 import {
   classifySubagentEvent,
@@ -182,6 +185,9 @@ export function useBuildStreaming({
   );
   const appendTimelineEvents = useBuildSessionStore(
     (state) => state.appendTimelineEvents
+  );
+  const appendSubagentTimelineEvents = useBuildSessionStore(
+    (state) => state.appendSubagentTimelineEvents
   );
   const upsertTodoListStreamItem = useBuildSessionStore(
     (state) => state.upsertTodoListStreamItem
@@ -432,6 +438,16 @@ export function useBuildStreaming({
           useBuildSessionStore.getState().sessions.get(sessionId)
             ?.isInterrupting
         );
+        const childSessionId = craftChildSessionId(rawPacket);
+        if (childSessionId) {
+          appendSubagentTimelineEvents(
+            sessionId,
+            childSessionId,
+            craftPacketToEvents(rawPacket, {
+              subagentSessionId: childSessionId,
+            })
+          );
+        }
         if (!otherTurnCompleted && !(stopping && parsed.type === "error")) {
           const events = craftPacketToEvents(rawPacket);
           const previous =
@@ -947,6 +963,7 @@ export function useBuildStreaming({
       updateToolCallStreamItem,
       cancelLatestInFlightToolCallStreamItem,
       appendTimelineEvents,
+      appendSubagentTimelineEvents,
       upsertTodoListStreamItem,
       addArtifactToSession,
       appendMessageToSession,

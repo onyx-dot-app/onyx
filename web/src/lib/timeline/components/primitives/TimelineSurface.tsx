@@ -38,7 +38,6 @@ export function TimelineSurface({
     (background === "tint" || background === "error") && isHover
       ? "bg-background-tint-02"
       : "";
-
   return (
     <div
       className={cn(

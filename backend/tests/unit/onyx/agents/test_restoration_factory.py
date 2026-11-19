@@ -89,7 +89,6 @@ def feature(
                 ),
             ),
             llm=llm,
-            token_counter=len,
             reasoning_effort=ReasoningEffort.LOW,
             include_citations=False,
             inject_memories_in_prompt=False,
@@ -179,6 +178,13 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(
     )
     checkpoint = ExecutionCheckpoint.model_validate_json(checkpoint.model_dump_json())
     saved = checkpoint.model_copy(deep=True)
+    if name == "chat":
+        monkeypatch.setattr(
+            "onyx.llm.factory.get_llm_tokenizer_encode_func",
+            lambda _model: pytest.fail(
+                "Restored chat loaded a tokenizer for telemetry"
+            ),
+        )
     rebuilt = restore_chat_agent(
         checkpoint,
         0,
@@ -210,6 +216,10 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(
             )
         )
         request = prepared.generation_request(context.messages)
+        retained = next(
+            msg for msg in request.messages if msg.text == "Retained conversation"
+        )
+        assert retained.estimated_tokens == 6
         assert request.messages[0].text.startswith("Help {{user.role}}")
         assert (
             "The user selected these operations for this request: echo."
@@ -339,7 +349,6 @@ def _chat_agent(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
         preferred_tool=CapabilityEntry(tool_id=EchoTool().id),
         agent_id="retained-agent",
     )

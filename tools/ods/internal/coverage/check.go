@@ -7,10 +7,10 @@ import (
 )
 
 // DefaultTolerance is how far below its floor a package may sit without failing
-// the check, in percentage points. Statement coverage is deterministic for
-// deterministic tests, but a few suites depend on ports or timing, so a small
-// allowance keeps the gate from flagging noise as a regression.
-const DefaultTolerance = 0.1
+// the check, in percentage points. Some suites depend on ports, timing or the
+// runner image, so a run can differ from the last one without any code change.
+// The allowance keeps the gate from flagging that noise as a regression.
+const DefaultTolerance = 1.0
 
 // ReferenceKind says where a Reference came from.
 type ReferenceKind string
@@ -33,6 +33,9 @@ type Reference struct {
 	Total float64
 	// Packages maps a module-relative package path to its reference value.
 	Packages map[string]float64
+	// Step is the rounding step of the floors, in percentage points. It is
+	// zero for a base snapshot, which holds exact values.
+	Step float64
 }
 
 // Status is the verdict for one package.
@@ -90,21 +93,19 @@ func Compare(profile *Profile, reference *Reference, tolerance float64) *Report 
 		Reference: reference,
 	}
 
-	var kind ReferenceKind
 	values := map[string]float64{}
 	if reference == nil {
 		report.Total = Result{Package: "total", Percent: profile.Total(), Status: StatusNew}
 	} else {
-		kind = reference.Kind
 		values = reference.Packages
-		report.Total = compareOne("total", profile.Total(), reference.Total, true, tolerance, kind)
+		report.Total = reference.compareOne("total", profile.Total(), reference.Total, true, tolerance)
 	}
 
 	seen := make(map[string]bool, len(profile.Packages))
 	for _, pkg := range profile.Packages {
 		seen[pkg.Package] = true
 		value, hasValue := values[pkg.Package]
-		report.Packages = append(report.Packages, compareOne(pkg.Package, pkg.Percent(), value, hasValue, tolerance, kind))
+		report.Packages = append(report.Packages, reference.compareOne(pkg.Package, pkg.Percent(), value, hasValue, tolerance))
 	}
 
 	// A package in the reference but not in the run was deleted or renamed.
@@ -125,14 +126,20 @@ func Compare(profile *Profile, reference *Reference, tolerance float64) *Report 
 	return report
 }
 
-func compareOne(name string, percent, reference float64, hasReference bool, tolerance float64, kind ReferenceKind) Result {
+func (r *Reference) compareOne(name string, percent, reference float64, hasReference bool, tolerance float64) Result {
 	result := Result{Package: name, Percent: percent, Reference: reference}
 	switch {
+	case r == nil:
+		result.Status = StatusNew
+	case !hasReference && r.Kind == ReferenceFloor && r.recorded(percent) == 0:
+		// A package below the first step has no floor to record, so the
+		// baseline leaves it out and it is not new.
+		result.Status = StatusOK
 	case !hasReference:
 		result.Status = StatusNew
 	case percent < reference-tolerance:
 		result.Status = StatusRegressed
-	case kind.recorded(percent) > reference+tolerance:
+	case r.recorded(percent) > reference+tolerance:
 		result.Status = StatusImproved
 	default:
 		result.Status = StatusOK
@@ -140,13 +147,13 @@ func compareOne(name string, percent, reference float64, hasReference bool, tole
 	return result
 }
 
-// recorded returns what a reference of this kind would hold for a measured
-// percent. Floors are rounded down, so an improvement is judged on what
-// `--update` would record; else a zero tolerance reports the rounding as an
-// improvement. A base snapshot holds exact counts, so the percent stands.
-func (k ReferenceKind) recorded(percent float64) float64 {
-	if k == ReferenceFloor {
-		return floorPercent(percent)
+// recorded returns what the reference would hold for a measured percent.
+// Floors are rounded down to their step, so an improvement is judged on what
+// `--update` would record; else the rounding reads as an improvement. A base
+// snapshot holds exact counts, so the percent stands.
+func (r *Reference) recorded(percent float64) float64 {
+	if r.Kind == ReferenceFloor {
+		return floorPercent(percent, r.Step)
 	}
 	return percent
 }

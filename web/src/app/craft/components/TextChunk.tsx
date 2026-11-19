@@ -3,7 +3,6 @@
 import { useMemo, type ComponentPropsWithoutRef } from "react";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { MemoizedLink } from "@/app/app/message/MemoizedTextComponents";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { buildArtifactUrl } from "@/app/craft/services/apiServices";
 import { parseOutputLink } from "@/app/craft/utils/pathSanitizer";
@@ -67,12 +66,13 @@ export default function TextChunk({
   return (
     <div className="py-1">
       <MinimalMarkdown
-        content={visible}
+        // As in chat, `[*]()` renders as the cursor, inline after the last
+        // character (the link renderer hands it to MemoizedLink).
+        content={isStreaming ? `${visible} [*]() ` : visible}
         className="text-text-05"
         streaming={isStreaming}
         components={components}
       />
-      {isStreaming && <BlinkingBar />}
     </div>
   );
 }

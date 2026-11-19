@@ -129,6 +129,19 @@ model column. It is `None` on packets that no `Emitter` tagged, such as
 heartbeats. `chat/renderer.py:ResponseLayout.next_section` hands out turn and
 sub-turn indexes.
 
+**The v2 wire.** A client that sends `protocol_version=2` gets the same
+stream as ACP updates (`backend/onyx/server/query_and_chat/acp_stream.py:ChatAcpTranslator`).
+Text and reasoning become message and thought chunks. A tool's start packet
+opens a `tool_call`, later packets at its placement are updates that carry the
+v1 packet in `_meta.onyx.packet`, and `section_end` closes it, `failed` when an
+error or a result reported failure. `stop` closes the calls still open
+before its `_onyx/stop` notification: `failed` when the user stopped (with
+`cancelled`) or a deadline cut them off (`timed_out`), otherwise `completed`.
+A stream that ends on an error closes them as `failed` before its
+`_onyx/error` notification.
+`message_start` and every packet outside a call go out as `_onyx/<type>`
+notifications, so no v1 data is lost. v1 stays the default.
+
 **Packet families.**
 `backend/onyx/server/query_and_chat/streaming_models.py:StreamingType` holds every type string, and `PacketObj` is the union that `Packet.obj` is
 validated against. Families are control (`stop`, `section_end`, `error`,

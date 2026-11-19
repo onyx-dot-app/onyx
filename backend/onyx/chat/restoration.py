@@ -124,7 +124,6 @@ def restore_chat_agent(
         raise ValueError("Checkpoint has no supported chat feature state")
     state = _FEATURE_STATE.validate_python(snapshot.progress.feature_state)
     context = checkpoint.agent_state
-    token_counter = get_llm_token_counter(llm)
     if isinstance(state, ChatFeatureState):
         question_name = next(
             (
@@ -147,7 +146,6 @@ def restore_chat_agent(
             persona=state.persona,
             user_memory_context=state.memory,
             llm=llm,
-            token_counter=token_counter,
             preferred_tool=state.preferred_tool,
             user_identity=user_identity,
             reasoning_effort=state.reasoning_effort,
@@ -171,7 +169,7 @@ def restore_chat_agent(
         return ResearchAgent(
             tools=tools,
             llm=llm,
-            token_counter=token_counter,
+            token_counter=get_llm_token_counter(llm),
             user_identity=user_identity,
             language_section=state.configuration.language_section,
             reasoning_effort=state.configuration.reasoning_effort,
@@ -186,7 +184,7 @@ def restore_chat_agent(
         additional_context=state.request_context,
         context_files=state.context_files.restore() if state.context_files else None,
         llm=llm,
-        token_counter=token_counter,
+        token_counter=get_llm_token_counter(llm),
         user_identity=user_identity,
         language_section=state.language_section,
         reasoning_effort=state.reasoning_effort,

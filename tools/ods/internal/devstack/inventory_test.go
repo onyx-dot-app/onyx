@@ -231,12 +231,6 @@ func TestInventorySortsOrphansFirstThenOldest(t *testing.T) {
 	}
 }
 
-func TestComposeRootStripsComposeDirectory(t *testing.T) {
-	if got := composeRoot("/a/b/deployment/docker_compose"); got != "/a/b" {
-		t.Fatalf("composeRoot = %s", got)
-	}
-}
-
 func TestInventoryNextCommandStopsEachStack(t *testing.T) {
 	m := &fakeMachine{alivePIDs: map[int]bool{61: true}}
 	m.worktree("/repo/wt a", "a")

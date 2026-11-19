@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -105,20 +106,22 @@ func TestAuditForwardsArgs(t *testing.T) {
 	}
 }
 
-// TestRunAudit_exitCodes checks the exit code `ods audit` gates deploys on.
+// TestRunAudit_exitCodes checks the exit code `ods audit` gates deploys on,
+// and that a missing auditor prints help only when no audit flags were given.
 func TestRunAudit_exitCodes(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the fake auditor is a shell script")
 	}
 	cases := []struct {
-		name   string
-		script string
-		args   []string
-		want   int
+		name     string
+		script   string
+		args     []string
+		want     int
+		wantHelp bool
 	}{
-		{"findings pass through", "exit 3\n", []string{"--python"}, 3},
-		{"not installed exits one", "", nil, 1},
-		{"not installed with flags exits one", "", []string{"--python"}, 1},
+		{"findings pass through", "exit 3\n", []string{"--python"}, 3, false},
+		{"not installed prints help and exits one", "", nil, 1, true},
+		{"not installed with flags exits one", "", []string{"--python"}, 1, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -129,9 +132,15 @@ func TestRunAudit_exitCodes(t *testing.T) {
 				}
 			}
 			t.Setenv("PATH", dir)
+			cmd := NewAuditCommand()
+			var out bytes.Buffer
+			cmd.SetOut(&out)
 
-			if got := runAudit(NewAuditCommand(), c.args); got != c.want {
+			if got := runAudit(cmd, c.args); got != c.want {
 				t.Fatalf("expected exit code %d, got %d", c.want, got)
+			}
+			if gotHelp := strings.Contains(out.String(), "Usage:"); gotHelp != c.wantHelp {
+				t.Fatalf("expected help printed: %v, got output %q", c.wantHelp, out.String())
 			}
 		})
 	}

@@ -1,0 +1,15 @@
+@reference "#reference.css";
+
+/* The chevron points right while folded and turns down while open; the
+   button around it stays put. */
+.opal-fold-button {
+  @apply inline-flex;
+}
+
+.opal-fold-chevron {
+  @apply transition-transform duration-200 ease-in-out;
+}
+
+.opal-fold-button[data-open="true"] .opal-fold-chevron {
+  transform: rotate(90deg);
+}

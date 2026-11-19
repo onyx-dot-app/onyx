@@ -101,6 +101,9 @@ func TestRunTypeCoverage_measurementFailures(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			web := gateWebRepo(t, filepath.Join(t.TempDir(), "bun-args"), tc.measure, tc.exitCode)
 			tmp := gateTempDir(t)
+			// Keep the logged "type coverage: ..." error off stdout, where go test
+			// would read it as the package's coverage.
+			_ = dbCaptureLog(t)
 
 			if code := runTypeCoverage("ts", &TypeCoverageOptions{Update: true}); code != tc.want {
 				t.Fatalf("expected exit code %d, got %d", tc.want, code)

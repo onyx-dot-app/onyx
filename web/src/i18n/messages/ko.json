@@ -12267,9 +12267,6 @@
         "emptyState": {
           "text": "생성된 이미지 없음"
         },
-        "failedStatus": {
-          "text": "이미지 생성 실패"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {이미지 #개 생성됨} other {이미지 #개 생성됨}}"
         },
@@ -12415,21 +12412,18 @@
             "status": "계획 생성 중"
           }
         },
-        "doneStep": {
-          "header": "완료"
-        },
         "expandButton": {
           "ariaLabel": "타임라인 펼치기"
         },
         "fetch": {
           "reading": {
             "status": "읽는 중"
+          },
+          "read": {
+            "status": "읽었습니다"
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "총 {total, number}자 중 {start, number}–{end, number}자"
-          },
           "read": {
             "status": "{fileName} 읽음 (총 {total, number}자 중 {start, number}–{end, number}자)"
           },
@@ -12506,9 +12500,14 @@
           "reading": {
             "status": "읽는 중"
           },
+          "read": {
+            "label": "읽었습니다"
+          },
           "header": {
             "default": "내부 문서 검색 중",
+            "doneDefault": "내부 문서를 검색했습니다",
             "sources": "{sources} 검색 중",
+            "doneSources": "{sources}을(를) 검색했습니다",
             "sourcesOverflow": "{sources} 외 {count}개",
             "withTimeWindow": "{header} ({timeWindow})"
           },
@@ -12530,6 +12529,9 @@
           },
           "updating": {
             "status": "메모리 업데이트 중"
+          },
+          "updated": {
+            "status": "메모리를 업데이트했습니다"
           },
           "viewMemoriesButton": {
             "tooltip": "메모리 보기"
@@ -12595,20 +12597,8 @@
           }
         },
         "python": {
-          "completed": {
-            "status": "Python 실행 완료"
-          },
-          "default": {
-            "status": "Python 실행"
-          },
           "error": {
             "label": "오류:"
-          },
-          "executing": {
-            "status": "Python 코드 실행 중..."
-          },
-          "failed": {
-            "status": "Python 실행 실패"
           },
           "generatedFiles": {
             "label": "{count, plural, one {파일 #개 생성됨} other {파일 #개 생성됨}}"
@@ -12619,6 +12609,12 @@
           "output": {
             "label": "출력:"
           },
+          "running": {
+            "status": "Python 실행 중"
+          },
+          "ran": {
+            "status": "Python을 실행했습니다"
+          },
           "runningCode": {
             "label": "코드 실행 중..."
           },
@@ -12627,11 +12623,11 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "전체 텍스트"
-          },
           "thinking": {
             "status": "생각 중"
+          },
+          "thought": {
+            "status": "생각했습니다"
           }
         },
         "researchAgent": {
@@ -12652,9 +12648,6 @@
         },
         "stepsButton": {
           "label": "{count, plural, one {#단계} other {#단계}}"
-        },
-        "stoppedStep": {
-          "header": "중지됨"
         },
         "thoughtDuration": {
           "label": "{duration} 동안 생각함"
@@ -12688,6 +12681,9 @@
         "webSearch": {
           "searching": {
             "status": "웹 검색 중"
+          },
+          "searched": {
+            "status": "웹을 검색했습니다"
           }
         },
         "sandbox": {
@@ -14886,9 +14882,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {호출 #건} other {호출 #건}}"
-        },
         "working": {
           "label": "작업 중"
         }

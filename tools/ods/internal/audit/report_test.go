@@ -46,6 +46,29 @@ func TestRenderSARIF(t *testing.T) {
 		t.Errorf("driver name = %v", driver["name"])
 	}
 
+	// Each rule carries the title and the score GitHub ranks alerts by.
+	rules := map[string]map[string]any{}
+	for _, r := range driver["rules"].([]any) {
+		rm := r.(map[string]any)
+		rules[rm["id"].(string)] = rm
+	}
+	for id, want := range map[string]struct{ desc, score string }{
+		"GHSA-crit": {"crit", "9.0"},
+		"GHSA-mod":  {"mod", "4.0"},
+		"GHSA-low":  {"low", "1.0"},
+	} {
+		rule := rules[id]
+		if rule == nil {
+			t.Fatalf("missing rule %s in %v", id, driver["rules"])
+		}
+		if got := rule["shortDescription"].(map[string]any)["text"]; got != want.desc {
+			t.Errorf("%s description = %v, want %q", id, got, want.desc)
+		}
+		if got := rule["properties"].(map[string]any)["security-severity"]; got != want.score {
+			t.Errorf("%s security-severity = %v, want %q", id, got, want.score)
+		}
+	}
+
 	results := run["results"].([]any)
 	if len(results) != 3 {
 		t.Fatalf("want 3 results, got %d", len(results))
@@ -98,23 +121,24 @@ func TestRenderText(t *testing.T) {
 }
 
 func TestRenderTextNoFindings(t *testing.T) {
-	var buf bytes.Buffer
-	if err := renderText(&buf, &Result{}); err != nil {
-		t.Fatalf("renderText: %v", err)
+	cases := []struct {
+		name string
+		res  *Result
+		want string
+	}{
+		{"nothing suppressed", &Result{}, "No dependency vulnerabilities found.\n"},
+		{"suppressions reported", &Result{Ignored: []Finding{{ID: "a"}, {ID: "b"}}}, "No dependency vulnerabilities found.\n(2 suppressed by allowlist)\n"},
 	}
-	if !strings.Contains(buf.String(), "No dependency vulnerabilities found") {
-		t.Errorf("unexpected empty output: %q", buf.String())
-	}
-}
-
-func TestRenderTextNoFindingsReportsSuppressions(t *testing.T) {
-	var buf bytes.Buffer
-	if err := renderText(&buf, &Result{Ignored: []Finding{{ID: "a"}, {ID: "b"}}}); err != nil {
-		t.Fatalf("renderText: %v", err)
-	}
-	want := "No dependency vulnerabilities found.\n(2 suppressed by allowlist)\n"
-	if buf.String() != want {
-		t.Errorf("expected %q, got %q", want, buf.String())
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := renderText(&buf, tc.res); err != nil {
+				t.Fatalf("renderText: %v", err)
+			}
+			if buf.String() != tc.want {
+				t.Errorf("expected %q, got %q", tc.want, buf.String())
+			}
+		})
 	}
 }
 
@@ -126,13 +150,6 @@ func TestRenderReportReturnsWriteErrors(t *testing.T) {
 	err := renderReport(failingWriter{}, &bytes.Buffer{}, "json", sampleResult())
 	if err == nil || err.Error() != "disk full" {
 		t.Errorf("expected the write error, got %v", err)
-	}
-}
-
-func TestRenderUnknownFormat(t *testing.T) {
-	var buf bytes.Buffer
-	if err := render(&buf, "xml", sampleResult()); err == nil {
-		t.Error("render should reject unknown format")
 	}
 }
 

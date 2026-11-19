@@ -8,7 +8,6 @@ from onyx.agents.models import AgentState, CompactionCheckpoint, PreparedStep, S
 from onyx.agents.tools import ToolInvocation
 from onyx.chat.agent import ChatAgent
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
-from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.models import (
     Message,
     NamedToolChoice,
@@ -116,7 +115,6 @@ def test_followup_reuses_cached_tool_evidence_after_agent_reconstruction(
             persona=None,
             user_memory_context=None,
             llm=client,
-            token_counter=get_llm_token_counter(client),
             checkpoint=checkpoint,
             reasoning_effort=ReasoningEffort.OFF,
             include_citations=False,
