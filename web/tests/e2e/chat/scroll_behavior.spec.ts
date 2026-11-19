@@ -245,6 +245,8 @@ test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
     // Now scroll up to verify previous messages are accessible
     const scrollContainer = getScrollContainer(page);
     await scrollContainer.evaluate((el: HTMLElement) => {
+      // The chat treats an upward scroll as the user's only after input.
+      el.dispatchEvent(new WheelEvent("wheel"));
       el.scrollTo({ top: 0, behavior: "instant" });
     });
 

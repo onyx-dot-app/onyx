@@ -182,6 +182,8 @@ export class ChatPage {
 
   async scrollTo(position: "top" | "bottom"): Promise<void> {
     await this.scrollContainer.evaluate(async (el, pos) => {
+      // The chat treats an upward scroll as the user's only after input.
+      el.dispatchEvent(new WheelEvent("wheel"));
       el.scrollTo({ top: pos === "top" ? 0 : el.scrollHeight });
       await new Promise<void>((r) => requestAnimationFrame(() => r()));
     }, position);

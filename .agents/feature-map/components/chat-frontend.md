@@ -724,8 +724,12 @@ up its own branding.
     auto-scroll disabled. Scrolling up ends that window. Content observers
     update visual state without treating layout growth as a user scroll. When
     the content shrinks, an upward scroll up to the shrinkage is layout, not
-    the user, so only movement beyond it stops following. Following measures
-    "at the bottom" from the real scroll end, spacer included.
+    the user, so only movement beyond it stops following. An upward move
+    counts as the user's only within 600ms of scroll input (wheel, touch,
+    scroll keys, a held pointer); Firefox can clamp the position while
+    content briefly shrinks, and a following view is put back at the end.
+    Following measures "at the bottom" from the real scroll end, spacer
+    included.
     Every scroll baseline records the position and the content height
     together. `lib/chatScroll/components/DynamicBottomSpacer.tsx` adds space only for a
     turn sent from the page, which passes through `loading`. A run the page

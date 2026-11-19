@@ -70,6 +70,20 @@ export interface ChatScrollContainerProps {
   fullWidth?: boolean;
 }
 
+// A scroll this long after the user's last scroll input is still theirs
+// (keyboard and momentum scrolls run on after the input).
+const USER_INPUT_WINDOW_MS = 600;
+// Keys that scroll the view.
+const SCROLL_KEYS = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "PageUp",
+  "PageDown",
+  "Home",
+  "End",
+  " ",
+]);
+
 // Following new content scrolls to the real end, spacer included. So only
 // that end counts as "at bottom" for following.
 function isAtScrollEnd(container: HTMLElement, thresholdPx: number): boolean {
@@ -138,6 +152,10 @@ const ChatScrollContainer = React.memo(
       );
       const isAutoScrollingRef = useRef(false); // Prevent handleScroll from interfering during auto-scroll
       const followOpeningUntilRef = useRef(0);
+      // When the user last gave scroll input, and whether a pointer is held
+      // on the view (a scrollbar drag). Only read, never acted on directly.
+      const userInputAtRef = useRef(-Infinity);
+      const pointerHeldRef = useRef(false);
       const sessionIdRef = useRef(sessionId);
       const saveFrameRef = useRef<number | null>(null);
       // Scroll position and content height that the next scroll event is
@@ -374,7 +392,26 @@ const ChatScrollContainer = React.memo(
         // the real end: the spacer below a new message hides no content, but
         // following would still pull the user back down through it.
         const atScrollEnd = isAtScrollEnd(container, buttonThresholdPx);
-        if (scrolledUp) {
+        // An upward move counts as the user's only right after their scroll
+        // input. Firefox can clamp the position while content briefly
+        // shrinks, and that is not the user leaving the end.
+        const byUser =
+          pointerHeldRef.current ||
+          performance.now() - userInputAtRef.current < USER_INPUT_WINDOW_MS;
+        if (scrolledUp && !byUser) {
+          // Layout moved a following view off the end: put it back. The
+          // user is not scrolling, so this write interrupts nothing.
+          if (
+            isAtBottomRef.current &&
+            autoScrollRef.current &&
+            !pauseFollowingRef.current
+          ) {
+            scrollToBottom("instant");
+          }
+        } else if (scrolledUp) {
+          // A fling keeps moving past its last input; each step stays the
+          // user's.
+          userInputAtRef.current = performance.now();
           followOpeningUntilRef.current = 0;
           updateScrollState();
           isAtBottomRef.current = atScrollEnd;
@@ -387,7 +424,53 @@ const ChatScrollContainer = React.memo(
           // Update button visibility based on actual position
           onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
         }
-      }, [updateScrollState, getScrollState, buttonThresholdPx]);
+      }, [
+        updateScrollState,
+        getScrollState,
+        buttonThresholdPx,
+        scrollToBottom,
+      ]);
+
+      // Scroll input marks the next upward moves as the user's. Re-attached
+      // per session: the scroll element remounts (it is keyed by sessionId).
+      useEffect(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        const markInput = () => {
+          userInputAtRef.current = performance.now();
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+          // Keys typed into a field inside the view do not scroll it.
+          const target = event.target;
+          const typing =
+            target instanceof HTMLElement &&
+            (target.isContentEditable || target.closest("input, textarea"));
+          if (!typing && SCROLL_KEYS.has(event.key)) markInput();
+        };
+        const onPointerDown = () => {
+          pointerHeldRef.current = true;
+          markInput();
+        };
+        const onPointerUp = () => {
+          if (!pointerHeldRef.current) return;
+          pointerHeldRef.current = false;
+          markInput();
+        };
+        container.addEventListener("wheel", markInput, { passive: true });
+        container.addEventListener("touchmove", markInput, { passive: true });
+        container.addEventListener("keydown", onKeyDown);
+        container.addEventListener("pointerdown", onPointerDown);
+        window.addEventListener("pointerup", onPointerUp);
+        window.addEventListener("pointercancel", onPointerUp);
+        return () => {
+          container.removeEventListener("wheel", markInput);
+          container.removeEventListener("touchmove", markInput);
+          container.removeEventListener("keydown", onKeyDown);
+          container.removeEventListener("pointerdown", onPointerDown);
+          window.removeEventListener("pointerup", onPointerUp);
+          window.removeEventListener("pointercancel", onPointerUp);
+        };
+      }, [sessionId]);
 
       // MutationObserver (structural) + ResizeObserver (height growth).
       // Re-attached per session: the scroll element remounts on a session
