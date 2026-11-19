@@ -86,6 +86,7 @@ import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSuggestedQuestions } from "@/lib/suggestedQuestions/hooks";
+import { isFilePending } from "@/lib/projects/utils";
 import { OnboardingFlow } from "@/lib/onboarding/components";
 import { OnboardingStep } from "@/lib/onboarding/types";
 import { STEP_CONFIG } from "@/lib/onboarding/constants";
@@ -629,6 +630,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const isSearch =
     state.phase === "searching" || state.phase === "search-results";
+  // Search mode before a search runs too, as for the model selector.
+  const isSearchMode =
+    isSearch || (state.phase === "idle" && state.appMode === "search");
 
   // 1. Reset the app-mode back to the user's default when navigating back to the "New Sessions" tab.
   // 2. If we're navigating away from the "New Session" tab after performing a search, we reset the app-input-bar.
@@ -1229,13 +1233,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   <Fade
                     show={
                       (appPosition.isNewSession() || appPosition.isAgent()) &&
-                      !isSearch &&
+                      !isSearchMode &&
                       (hasAgentStarterMessages || hasSuggestedQuestions)
                     }
                     className="h-full flex-1 w-full max-w-(--app-page-main-content-width)"
                   >
                     <Spacer rem={0.5} />
-                    <Suggestions onChat={onChat} />
+                    <Suggestions
+                      onChat={onChat}
+                      disabled={
+                        currentChatState !== "input" ||
+                        currentMessageFiles.some((file) =>
+                          isFilePending(file.status)
+                        )
+                      }
+                    />
                   </Fade>
 
                   {/* SearchUI */}

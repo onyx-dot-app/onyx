@@ -11,10 +11,14 @@ import type { ShownQuestion } from "@/lib/suggestedQuestions/types";
 import { Text } from "@opal/components";
 import { Interactive } from "@opal/core";
 import { Content } from "@opal/layouts";
+import type { RichStr } from "@opal/types";
 
 export interface SuggestionsProps {
   /** The input bar's send, so a click keeps the chosen models and options. */
   onChat: (composed: ComposedMessage) => void;
+  /** Sending is blocked, as for the input bar: an answer is in progress or a
+   * file is still uploading. A click then does nothing. */
+  disabled?: boolean;
 }
 
 /**
@@ -22,19 +26,25 @@ export interface SuggestionsProps {
  * win. On the Playground's default agent, the person gets questions written
  * from their own documents, or one line while those are being prepared.
  */
-export default function Suggestions({ onChat }: SuggestionsProps) {
+export default function Suggestions({
+  onChat,
+  disabled = false,
+}: SuggestionsProps) {
   const t = useTranslations("chat.suggestedQuestions");
   const activeAgent = useActiveAgent();
   const { suggestions, isLoading, mutate } = useSuggestedQuestions(
     activeAgent?.id ?? null
   );
 
-  function send(message: string) {
+  // A blocked send would still clear the draft and mark the question used.
+  function send(message: string): boolean {
+    if (disabled) return false;
     onChat({ message, mentions: [] });
+    return true;
   }
 
   function handleQuestionClick(question: ShownQuestion, position: number) {
-    send(question.message);
+    if (!send(question.message)) return;
     track(AnalyticsEvent.CLICKED_SUGGESTED_QUESTION, {
       position,
       private: question.private,
@@ -97,7 +107,7 @@ export default function Suggestions({ onChat }: SuggestionsProps) {
 }
 
 interface SuggestionsLineProps {
-  text: string;
+  text: string | RichStr;
 }
 
 /** One line in place of the buttons, while there are none to show. */

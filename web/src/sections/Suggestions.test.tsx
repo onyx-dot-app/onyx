@@ -130,6 +130,21 @@ describe("suggested questions on the default agent", () => {
     logged.mockRestore();
   });
 
+  test("a click does nothing while sending is blocked", async () => {
+    const onChat = jest.fn();
+    mockSuggestions = suggestions("ready", [
+      { id: "q1", message: "What are our Q3 goals?", private: true },
+    ]);
+    render(<Suggestions onChat={onChat} disabled />);
+
+    await setupUser().click(screen.getByText("What are our Q3 goals?"));
+
+    expect(onChat).not.toHaveBeenCalled();
+    expect(mockMarkUsed).not.toHaveBeenCalled();
+    expect(mockTrack).not.toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+
   test("shows the preparing line while the first request is pending", () => {
     mockIsLoading = true;
     render(<Suggestions onChat={jest.fn()} />);
