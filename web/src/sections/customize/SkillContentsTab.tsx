@@ -188,12 +188,9 @@ export default function SkillContentsTab({
   }
 
   function reload(): void {
-    // The page's detail is the newest version after `onSaved`.
-    void onSaved().finally(() => {
-      setBase(null);
-      setDraft(null);
-      setStale(false);
-    });
+    // The page's detail is the newest version after `onSaved`. Staged files
+    // are dropped too: they were based on the version that was refused.
+    void onSaved().finally(reset);
   }
 
   function entriesOf(upload: PreparedSkillFilesUpload): string[] {
