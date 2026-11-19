@@ -42,11 +42,10 @@ from onyx.deep_research.models import (
 )
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.deep_research.tool_definitions import (
+    GENERATE_REPORT_TOOL_DESCRIPTION,
     GENERATE_REPORT_TOOL_NAME,
-    RESEARCH_AGENT_TOOL_NAME,
-    THINK_TOOL_RESPONSE_MESSAGE,
+    RESEARCH_AGENT_TOOL_DESCRIPTION,
     get_clarification_tool_definitions,
-    get_orchestrator_tools,
 )
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
 from onyx.llm.cancellation import AgentCancelled
@@ -71,7 +70,6 @@ from onyx.prompts.deep_research.orchestration_layer import (
     INTERNAL_SEARCH_CLARIFICATION_GUIDANCE,
     INTERNAL_SEARCH_RESEARCH_TASK_GUIDANCE,
     ORCHESTRATOR_PROMPT,
-    ORCHESTRATOR_PROMPT_REASONING,
     RESEARCH_PLAN_PROMPT,
     RESEARCH_PLAN_REMINDER,
     USER_FINAL_REPORT_QUERY,
@@ -134,12 +132,12 @@ class DeepResearchAgent(Agent, RestorableFeature):
         )
         self.started = time.monotonic()
         self.skip_clarification = skip_clarification
-        self.is_reasoning_model = model_is_reasoning_model(
+        is_reasoning_model = model_is_reasoning_model(
             llm.config.model_name, llm.config.model_provider
         )
         self.max_orchestrator_cycles = (
             MAX_ORCHESTRATOR_CYCLES_REASONING
-            if self.is_reasoning_model
+            if is_reasoning_model
             else MAX_ORCHESTRATOR_CYCLES
         )
         self.max_steps = self.max_orchestrator_cycles + (1 if skip_clarification else 2)
@@ -154,18 +152,13 @@ class DeepResearchAgent(Agent, RestorableFeature):
         ]
         research_tools = [
             AgentTool(
-                definition=definition,
+                definition=RESEARCH_AGENT_TOOL_DESCRIPTION,
                 execute=self._research,
                 result_from_children=self._research_result_from_children,
-            )
-            if definition.name == RESEARCH_AGENT_TOOL_NAME
-            else self._control_tool(
-                definition,
-                "Ready to produce the final report."
-                if definition.name == GENERATE_REPORT_TOOL_NAME
-                else THINK_TOOL_RESPONSE_MESSAGE,
-            )
-            for definition in get_orchestrator_tools(not self.is_reasoning_model)
+            ),
+            self._control_tool(
+                GENERATE_REPORT_TOOL_DESCRIPTION, "Ready to produce the final report."
+            ),
         ]
         research_tools += [
             tool.bind(ToolContext)
@@ -275,12 +268,7 @@ class DeepResearchAgent(Agent, RestorableFeature):
             system_prompt = RESEARCH_PLAN_PROMPT.format(current_datetime=now)
             reminder = RESEARCH_PLAN_REMINDER
         elif phase == ResearchPhase.RESEARCH:
-            template = (
-                ORCHESTRATOR_PROMPT_REASONING
-                if self.is_reasoning_model
-                else ORCHESTRATOR_PROMPT
-            )
-            system_prompt = template.format(
+            system_prompt = ORCHESTRATOR_PROMPT.format(
                 current_datetime=now,
                 max_cycles=self.max_orchestrator_cycles,
                 research_plan=plan,
@@ -307,7 +295,6 @@ class DeepResearchAgent(Agent, RestorableFeature):
             self.citation_mapping.update(received.new_citations)
             sources = dict(self.citation_mapping)
         output_metadata = ResearchMessageMetadata(
-            is_reasoning_model=self.is_reasoning_model,
             phase=phase,
             sources=sources,
             elapsed_seconds=time.monotonic() - self.started,

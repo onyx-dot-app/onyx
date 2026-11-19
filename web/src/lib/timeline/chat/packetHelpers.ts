@@ -87,16 +87,6 @@ export function nextCodeModeProgram(
 // The step-kind checks below take a step's own packets (GroupedPacket.packets),
 // which exclude the packets of nested calls.
 
-// Parent-level packet types that identify a coding agent group. The agent's
-// bash calls and thinking stream as nested sections of the same group.
-export const CODING_AGENT_PACKET_TYPES = new Set<PacketType>([
-  PacketType.CODING_AGENT_START,
-  PacketType.CODING_AGENT_FINAL,
-]);
-
-export const isCodingAgentPackets = (packets: Packet[]): boolean =>
-  packets.some((p) => CODING_AGENT_PACKET_TYPES.has(p.obj.type as PacketType));
-
 // Parent-level packets that identify a code mode group: the streamed program
 // (argument deltas), its start, and its output deltas.
 export const isCodeModePacket = (packet: Packet): boolean =>

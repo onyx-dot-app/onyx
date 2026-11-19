@@ -1,5 +1,4 @@
 from onyx.access.models import ExternalAccess
-from onyx.connectors.onedrive.access import prefix_onedrive_external_groups
 from onyx.connectors.onedrive.models import (
     GraphLinkScope,
     GraphSharePointIdentitySet,
@@ -37,7 +36,6 @@ def map_onedrive_permissions(
     permissions: list[OneDrivePermission],
     owner_email: str,
     treat_organization_link_as_public: bool,
-    add_prefix: bool,
 ) -> ExternalAccess:
     user_emails: set[str] = {owner_email.lower()}
     group_ids: set[str] = set()
@@ -67,9 +65,8 @@ def map_onedrive_permissions(
                 group_ids.add(group_id)
             _check_principal_limit(user_emails, group_ids)
 
-    access = ExternalAccess(
+    return ExternalAccess(
         external_user_emails=user_emails,
         external_user_group_ids=group_ids,
         is_public=is_public,
     )
-    return prefix_onedrive_external_groups(access) if add_prefix else access

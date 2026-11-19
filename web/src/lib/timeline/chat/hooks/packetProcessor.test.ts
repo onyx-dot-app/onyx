@@ -1602,7 +1602,6 @@ describe("nested packet ownership", () => {
   const parents = [
     ["research agent", PacketType.RESEARCH_AGENT_START, { research_task: "R" }],
     ["code mode", PacketType.CODE_MODE_START, { code: "" }],
-    ["coding agent", PacketType.CODING_AGENT_START, { query: "q", repo: "r" }],
   ] as const;
   test.each(
     parents.flatMap(([name, type, fields]) =>

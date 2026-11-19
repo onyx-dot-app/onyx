@@ -17,8 +17,7 @@ import requests
 from pydantic import ValidationError
 
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_domain_group_id, build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
+from onyx.access.utils import build_domain_group_id
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.models import (
     APPROVED_REGISTRANT_STATUS,
@@ -155,15 +154,9 @@ def resolve_recording_access(
     treat_link_access_as_public: bool,
     rule_grant: Callable[[str], RuleGrant | None],
     owner_email: str | None,
-    add_prefix: bool,
 ) -> ExternalAccess:
     """Raises ZoomAccessListUnavailable rather than answering with an empty
     list, which would read as nobody having access.
-
-    add_prefix is True on the indexing path, whose group ids reach the index as
-    written, and False on the doc-sync path, where upsert_document_external_perms
-    adds the source prefix itself. Prefixed twice, an id matches no group the
-    group sync filled.
     """
     try:
         settings = _recording_settings(client, recording.uuid)
@@ -195,8 +188,6 @@ def resolve_recording_access(
             approved_registrant_emails(registrants),
         )
     groups = {build_domain_group_id(d) for d in grant.domains}
-    if add_prefix:
-        groups = {build_ext_group_name_for_onyx(g, DocumentSource.ZOOM) for g in groups}
 
     if not emails and not groups and not grant.public:
         raise ZoomAccessListUnavailable(

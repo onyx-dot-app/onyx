@@ -12,15 +12,23 @@ pre-upgrade logical expiry, so deploying this format signs nobody out.
 bearer transport and legitimately miss in Redis), so the classification is
 stashed in a request-scoped ContextVar and turned into a reasoned ``OnyxError``
 only where authentication has conclusively failed for the request.
+
+A rejected token with no or an unreadable Redis value also expires the cookie.
+Accepted race: a late 403 from a stale in-flight request can clear a cookie that
+another tab just set; the window is one round trip and the user logs in again.
 """
 
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
+from fastapi import Response
+from fastapi_users.authentication import CookieTransport
 from pydantic import AwareDatetime, BaseModel, ConfigDict, ValidationError
 
 from onyx.auth.constants import API_KEY_PREFIX, DEPRECATED_API_KEY_PREFIX, PAT_PREFIX
+from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS, WEB_DOMAIN
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -30,6 +38,15 @@ logger = setup_logger()
 # How long an entry outlives its logical expiry (and how long a tombstone
 # lingers); past this, rejections classify as NOT_FOUND.
 SESSION_TOKEN_GRACE_PERIOD_SECONDS = 60 * 60
+
+# The cookie outlives the logical expiry by the grace window so a dead token is
+# still presented and can be classified (expired/terminated) instead of the
+# browser silently dropping it.
+cookie_transport = CookieTransport(
+    cookie_max_age=SESSION_EXPIRE_TIME_SECONDS + SESSION_TOKEN_GRACE_PERIOD_SECONDS,
+    cookie_secure=WEB_DOMAIN.startswith("https"),
+    cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
+)
 
 
 class SessionTokenValue(BaseModel):
@@ -190,6 +207,36 @@ def get_session_rejection() -> SessionRejection | None:
     return _SESSION_REJECTION.get()
 
 
+def _session_cookie_clear_header() -> str | None:
+    """
+    The `/auth/logout` Set-Cookie value when this request's recorded rejection
+    is unrecognized, else None. A missing (NOT_FOUND) or unreadable (MALFORMED)
+    token can never be accepted, so the browser should stop presenting it.
+    Expired and terminated cookies stay for the grace window so other tabs can
+    still name the reason.
+    """
+    rejection = _SESSION_REJECTION.get()
+    if (
+        rejection is None
+        or _REASON_TO_ERROR_CODE[rejection.reason] != OnyxErrorCode.SESSION_UNRECOGNIZED
+    ):
+        return None
+    # The same cookie as the transport's async get_logout_response, built
+    # synchronously so sync endpoints can send it.
+    logout_response = Response()
+    logout_response.set_cookie(
+        cookie_transport.cookie_name,
+        "",
+        max_age=0,
+        path=cookie_transport.cookie_path,
+        domain=cookie_transport.cookie_domain,
+        secure=cookie_transport.cookie_secure,
+        httponly=cookie_transport.cookie_httponly,
+        samesite=cookie_transport.cookie_samesite,
+    )
+    return logout_response.headers["set-cookie"]
+
+
 def build_session_rejection_error() -> OnyxError | None:
     """
     Turns the request's recorded rejection (if any) into a reasoned
@@ -220,7 +267,23 @@ def build_session_rejection_error() -> OnyxError | None:
             "the grace window, or Redis dropped the key (restart/eviction/flush)."
         )
 
+    clear_cookie_header = _session_cookie_clear_header()
     return OnyxError(
         _REASON_TO_ERROR_CODE[rejection.reason],
         _REASON_TO_DETAIL[rejection.reason],
+        headers=(
+            {"set-cookie": clear_cookie_header}
+            if clear_cookie_header is not None
+            else None
+        ),
     )
+
+
+def clear_unrecognized_session_cookie(response: Response) -> None:
+    """
+    Expires the session cookie when this request presented an unrecognized
+    token, for paths that fall back to the anonymous user instead of raising.
+    """
+    clear_cookie_header = _session_cookie_clear_header()
+    if clear_cookie_header is not None:
+        response.headers.append("set-cookie", clear_cookie_header)

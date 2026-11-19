@@ -190,7 +190,6 @@ export const ResearchAgentRenderer: MessageRenderer<
                 key={latestGroup.subTurnIndex}
                 packets={latestGroup.packets}
                 nestedCalls={CALLS_OF_A_NESTED_CALL}
-                streamPackets={latestGroup.packets}
                 chatState={state}
                 animate={!stopPacketSeen && !latestGroup.complete}
                 stopPacketSeen={stopPacketSeen}
@@ -289,7 +288,6 @@ export const ResearchAgentRenderer: MessageRenderer<
               key={group.subTurnIndex}
               packets={group.packets}
               nestedCalls={CALLS_OF_A_NESTED_CALL}
-              streamPackets={group.packets}
               chatState={state}
               animate={!stopPacketSeen && !group.complete}
               stopPacketSeen={stopPacketSeen}

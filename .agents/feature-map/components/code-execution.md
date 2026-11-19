@@ -1,7 +1,7 @@
 # Code Execution
 
-> Runs code for the user: `run_python` and the coding agent's `bash` send code
-> to an external Code Interpreter service, code mode's `execute_code` runs
+> `run_python` sends Python code to an external Code Interpreter service.
+> Code mode's `execute_code` runs
 > a Python program that calls the other chat tools in local Monty sandbox
 > workers, and the sandbox tools run commands, edit files and publish files
 > in the user's Firecracker VM.
@@ -17,9 +17,6 @@
   assistant writes Python, the user sees the code, then the output as it
   streams. Files that the code writes, such as a chart or a CSV, appear as
   downloads. Files that the user attached to the chat are available to the code.
-- **An end user** asks a question about a public GitHub repository. The coding
-  agent downloads the repository and runs shell commands to explore it. The
-  user sees its thinking and bash steps, then an answer.
 - **With code mode on** (`CODE_MODE_ENABLED=true`), the chat model gets the
   `execute_code` and `wait_code` tools instead of the tools it can nest, when
   it has any. Deep research does not use code mode. A
@@ -42,8 +39,7 @@
   service is reachable and healthy, and has a switch that turns code execution
   off for the whole deployment.
 - **When the admin switch is off, the service is unreachable, or the URL is
-  set to an empty value**, the model is not offered `run_python` or the coding
-  agent. The user sees no error. When code fails or
+  set to an empty value**, the model cannot call `run_python`. When code fails or
   times out, the user sees the error output and the turn continues.
 - **With harness sandboxes** (`SANDBOX_RUNTIME=firecracker` and
   `SANDBOX_FC_TEMPLATE`), every chat agent gives the model `exec_command`,
@@ -64,9 +60,8 @@
 
 ## Scope
 
-This component owns `PythonTool`, `BashTool`, the Code Interpreter client and
-its version gates, the one-row settings table with its admin API and page, the
-meaning of `BASH_TOOL_SENTINEL_ID`, and code mode: its sandbox driver, tool
+This component owns `PythonTool`, the Code Interpreter client, the settings
+table with its admin API and page, and code mode's sandbox driver, tool
 stubs, program store, model-facing text, `CodeModeTool` and its result
 details, and the sandbox tools (`exec_command`, `write_stdin`,
 `apply_patch`, `edit`, `write`, `publish_files`). Code mode's packets and replay belong to [[streaming-protocol]], and
@@ -76,9 +71,6 @@ It does not own:
 - The Code Interpreter service. It is a separate deployment with its own
   release line. This repository has only the client and a pinned image tag in
   the Docker Compose files.
-- The coding-agent loop and its wrapper tool `CodingAgentTool`
-  ([[tools-framework]]). This document describes only the session that the loop
-  creates for bash.
 - Access to generated files. They use the chat-session stamp that
   [[file-store-and-user-files]] defines.
 - The Craft sandboxes ([[craft-sandboxes]]). They are a separate system and do
@@ -99,17 +91,6 @@ run_python (stateless, one call = one execution)
     per output event                 invocation.update(ToolProgress(details=PythonExecutionDelta))
     generated files                  download -> file store (session stamp)
                                      -> delete the service copy
-
-bash (one session per coding-agent call)
-  CodingAgentTool._run               tools/tool_implementations/coding_agent/
-    coding_sandbox_session           download HEAD archive -> upload -> create_session
-                                     (1 h TTL) -> extract -> session_id
-    CodingAgent(BashTool(BASH_TOOL_SENTINEL_ID, session_id))
-    spawn_agent -> ChildRunWait      the child run calls bash, one call at a time
-    add_completion_cleanup           after the child's first run completes or releases
-                                     and its workers drain: mark the agent's sandbox
-                                     unavailable, delete_session; best effort, the
-                                     TTL is the backstop
 ```
 
 ```
@@ -327,10 +308,7 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
 
 **Availability.** `PythonTool.is_available` needs three things: a non-empty
 `CODE_INTERPRETER_BASE_URL`, `CodeInterpreterServer.server_enabled`, and a
-healthy service. `BashTool.is_available` adds a version check:
-`client.supports(...)` compares the service version with the `@requires`
-minimum of the session methods. `CodingAgentTool.is_available` returns
-`BashTool.is_available`. The health result is cached for 30 seconds per base
+healthy service. The process caches the health result for 30 seconds per base
 URL in the process (`_HEALTH_CACHE_TTL_SECONDS`). The admin health endpoint
 makes a live check, and every live check refreshes that cache.
 
@@ -354,35 +332,25 @@ the files of its nested searches the same way
 count, total bytes and parallel uploads. When files are dropped, the model gets
 a `staging_notice` in the result.
 
-**Busy service.** Execution, session creation and session bash calls go through
+**Busy service.** Python execution requests go through
 `CodeInterpreterClient._send_with_admission_retry`. It retries HTTP 429 and 503,
 follows `Retry-After`, and stays inside the call's time budget. Then it raises
-`CodeInterpreterBusyError`. File upload, download, delete, session delete and
-health calls are not retried.
+`CodeInterpreterBusyError`. The client sends file and health requests once.
 
 ---
 
 ## Contracts and traps
 
-1. `isolation-is-service-job` **Isolation of `run_python` and `bash` is the
-   service's job, not Onyx's.** Nothing in `backend/onyx` sandboxes the code
-   that they send or checks that the service does. Code mode programs are
-   different: Onyx runs them in its own sandbox
-   ([[#code-mode-sandbox-is-language-level]]).
-   Onyx trusts the URL in `CODE_INTERPRETER_BASE_URL`. The "no network access"
-   rule for bash sessions exists only as text. The model reads it in
-   `coding_agent/tool_definitions.py:BASH_TOOL_DESCRIPTION` and the coding-agent
-   prompt (`prompts/coding_agent/coding_agent.py:CODING_AGENT_PROMPT`).
-   `BashTool.DESCRIPTION` is not sent to the model, because `CodingAgent`
-   registers its own bash definition. Treat a change to what that URL may point
-   at as a security change.
+1. `isolation-is-service-job` **The Code Interpreter service isolates Python execution.**
+   Onyx trusts the service at `CODE_INTERPRETER_BASE_URL`. Changing this URL changes where user code runs.
+   Code mode runs programs in its own sandbox ([[#code-mode-sandbox-is-language-level]]).
 2. `default-url-not-empty` **The default URL is not empty.**
    `CODE_INTERPRETER_BASE_URL` defaults to `http://localhost:8000` in
-   `configs/app_configs.py`. Only an explicit empty value turns the tools off
+   `configs/app_configs.py`. Only an explicit empty value turns the tool off
    without a network call. An unset value makes every turn depend on the health
    check, which fails when nothing listens.
 3. `truncate-before-model` **Truncate output before it reaches the model.**
-   `run_python` and `bash` pass stdout and stderr through
+   `run_python` passes stdout and stderr through
    `tools/tool_implementations/utils.py:truncate_output`, each capped at
    `CODE_INTERPRETER_MAX_OUTPUT_LENGTH`. Only the live `PythonExecutionDelta`
    stream is complete. The saved `details` hold the truncated output, so a
@@ -391,18 +359,15 @@ health calls are not retried.
    stdout and stderr and only the new file IDs, so the client must keep the
    deltas it already has.
 4. `errors-are-results` **Execution errors are results, not exceptions.**
-   `PythonTool._run` and `BashTool._run` catch client errors and return the result JSON with
+   `PythonTool._run` catches client errors and returns result JSON with
    `exit_code=-1` and `error` set. The model sees the failure and can fix its
-   code. `Tool.run` is a second guard for both
-   ([[tools-framework#run-errors-become-results]]): the coding agent calls
-   `BashTool.run` from `coding_agent/agent.py:CodingAgent._bash`.
+   code. `Tool.run` also handles exceptions ([[tools-framework#run-errors-become-results]]).
 5. `run-python-result-json` **`LlmPythonExecutionResult` is saved in two
    forms.** `tools/models.py:LlmPythonExecutionResult` is the model text, as
    JSON in `content`, and the typed `details` that chat saves in
    `ToolCall.result` and in checkpoints. Checkpoints store `details` under a
    tag in `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES` that comes from the
-   `type` literal (`result.python_execution.v1`, `result.bash_execution.v1`,
-   `result.coding_result.v1`). Register a new details type in
+   `type` literal (`result.python_execution.v1`). Register a new details type in
    `db/models.py:SavedToolResultDetails`, or saving and checkpoint restore fail.
    `server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`
    parses the JSON for messages saved before response items existed. Both
@@ -416,24 +381,6 @@ health calls are not retried.
    `tools/tool_constructor.py:_require_chat_session_id` raises when a caller
    builds the tool without one. The access rule is in
    [[file-store-and-user-files]].
-7. `bash-tool-sentinel` **`BashTool` exists only inside the coding agent.** It
-   has no `Tool` row and is not in `BUILT_IN_TOOL_MAP`.
-   `tools/tool_implementations/coding_agent/coding_agent_tool.py:CodingAgentTool._run`
-   builds it with `BASH_TOOL_SENTINEL_ID = 0`. Its calls are saved with the
-   coding agent's child run and replay on reload, but they have no `tool_id`.
-   Persona attachment, `Tool.enabled` and the tool options act on
-   `CodingAgentTool`, not on `bash`.
-8. `bash-calls-sequential` **Bash calls in one coding-agent call share a file
-   system and run in order.** `coding_agent/agent.py:CodingAgent` registers
-   bash with `ToolExecutionMode.SEQUENTIAL` on purpose. Do not make it
-   parallel.
-9. `coding-sandbox-one-run` **The coding sandbox lives for one child run.**
-   `CodingAgentTool._run` registers the sandbox cleanup with
-   `add_completion_cleanup` on the first run. The cleanup sets
-   `CodingAgent.is_sandbox_available` to false, and
-   `coding_agent/agent.py:CodingAgent._prepare_step` then rejects a new run. Before
-   a feature sends a follow-up run to a coding agent, tie the cleanup to the
-   agent's lifetime. Only a locally owned child run can register the cleanup.
 10. `run-python-stateless` **`run_python` has no state between calls.** Each call
    is a new execution, and variables do not carry over. `run_python` is a
    `PARALLEL` tool, so the calls of one model step run at the same time on one
@@ -449,14 +396,6 @@ health calls are not retried.
 11. `keep-run-python-name` **Do not rename `run_python` to `python`.** OpenAI
     rejects a function named `python` (the comment on
     `tools/tool_implementations/python/python_tool.py:PythonTool`).
-12. `version-gate-new-routes` **A new service route needs a version gate.** The
-    service ships on its own release line, and a deployment can run an older
-    image. Mark a client method that needs a newer service with
-    `@requires("x.y.z")`
-    (`tools/tool_implementations/python/code_interpreter_client.py:requires`),
-    and check it with `CodeInterpreterClient.supports` in `is_available`. Otherwise an older service makes the tool appear and then
-    fail on every call. `execute_streaming` shows the other pattern: it falls
-    back to `/v1/execute` when the service answers 404.
 13. `code-mode-sandbox-is-language-level` **The code mode sandbox is Monty,
     not a container.** `pydantic-monty` runs programs in its own worker
     processes (`tools/tool_implementations/code_mode/sandbox.py:sandbox_pool`,
@@ -551,8 +490,7 @@ health calls are not retried.
     `IMMEDIATE` (a function whose stub the description lists: the built-in
     tools) or `DEFERRED` (a callable function that the description omits; the
     model finds it with `tool_search(query)`: MCP and OpenAPI tools). A tool
-    that waits for a child run (`Tool.result_from_children`, as the coding
-    agent does) must be `DIRECT`;
+    that waits for a child run (`Tool.result_from_children`) must be `DIRECT`.
     `tools/tool_implementations/code_mode/code_mode_tool.py:with_code_mode`
     raises otherwise. The code mode tools are `DIRECT` too. MCP functions are
     named from `mcp__<server id>__<server>__<tool>`
@@ -632,8 +570,7 @@ health calls are not retried.
     the cells raises `agents/models.py:ReleaseFailed` from the run's finish or
     suspend hook, and the run fails. Nested calls run in the program's
     cancellation scope: the program's end, timeout or Stop cancels their model
-    work and the HTTP work of tools that observe cancellation; `run_python` and
-    `bash` do not (see Known issues). Calls to a sequential tool run one at a time, and the wait
+    work and the HTTP work of tools that observe cancellation. Python execution continues until its next output chunk (see Known issues). Calls to a sequential tool run one at a time, and the wait
     for that lock is cancellable. Each `CodeModeCall` has a `state` (`ok`,
     `error`, `unfinished`, or `running` for a call that had not ended when an
     observation returned); `is_error` derives from it and is False for
@@ -741,7 +678,7 @@ health calls are not retried.
 17. `single-settings-row` **The settings table has exactly one row.**
     `db/code_interpreter.py:fetch_code_interpreter_server` uses `.one()`. A
     migration seeds the row with `server_enabled=true`. Without the row,
-    `is_available` raises and `run_python` and the coding agent are hidden.
+    `is_available` raises and the model cannot call `run_python`.
 18. `code-mode-interrupted-run` **A stopped or interrupted program keeps its
     calls and never runs twice.** On Stop, the observation that is attached to
     the cell returns no result (`AgentCancelled`) and stays attached. At the
@@ -815,11 +752,6 @@ health calls are not retried.
   store lives in saved tool results, so it follows edits and regenerations
   and needs no memory in the API server. Codex code mode makes the same
   choice; its store lives in process memory, this one in the conversation.
-- **`run_python` is stateless and `bash` has a session.** A Python call is one
-  self-contained script, so no session cleanup is needed. The coding agent
-  explores a repository over many commands, so it needs a file system that stays
-  between calls. The session TTL removes the pod if Onyx crashes before it
-  deletes the session.
 
 ---
 
@@ -827,20 +759,8 @@ health calls are not retried.
 
 - **Uploaded input files stay on the service.** `PythonTool` does not delete
   staged files, because its upload cache reuses their IDs.
-  `coding_agent/agent.py:coding_sandbox_session` does not delete the uploaded
-  repository archive (up to 500 MB). The service's own file TTL removes them.
+  The service removes these files when their TTL expires.
   Onyx cannot see that TTL.
-- **The coding agent reaches only public repositories.**
-  `tools/tool_constructor.py:_construct_tools_impl` builds `CodingAgentTool`
-  without a `github_token`, so `coding_sandbox_session` downloads without
-  credentials.
-- **Nothing resumes an interrupted coding-agent call.** After a process stops,
-  the next read of the turn marks it ERROR
-  (`chat/run_store.py:ChatRunStore._load_status` calls
-  `db/chat_checkpoint.py:interrupt_response__no_commit`). The cleanup never
-  runs, so the sandbox stays until its 1 h TTL. Also,
-  `chat/restoration.py:restore_subagent` raises for a coding
-  agent: the coding child is saved without a restoration configuration.
 - **Code mode limits.** Monty's `asyncio.gather` takes no keyword arguments,
   so the tool description teaches a `try`/`except` wrapper instead of
   `return_exceptions=True`. Parallel `internal_search` calls in one program
@@ -864,10 +784,8 @@ health calls are not retried.
   content (incognito) saves no tool results, so its writes last only for that
   response. Responses saved without response items replay without `details`
   and contribute nothing.
-- **Stop does not abort a running `run_python` or `bash` execution.** Neither
-  tool cancels its HTTP request. A bash call blocks until the service returns, up to
-  `CODE_INTERPRETER_DEFAULT_TIMEOUT_MS` plus 10 s, and the sandbox delete waits
-  for it. A `run_python` stream stops at its next output chunk. The result is
+- **Stop takes effect at the next Python output chunk.**
+  `run_python` waits for the next chunk before it stops reading. The result is
   discarded, and generated files that `PythonTool` already saved belong to no
   `ToolCall`.
 
@@ -875,10 +793,9 @@ health calls are not retried.
 
 ## Dependencies
 
-- [[tools-framework]]: the `Tool` interface, construction, and the coding
-  agent.
+- [[tools-framework]]: the `Tool` interface and tool construction.
 - [[file-store-and-user-files]]: generated files and their session stamp.
-- [[streaming-protocol]]: the Python, bash and coding-agent packets.
+- [[streaming-protocol]]: Python execution packets.
 - [[authorization]]: `require_permission(FULL_ADMIN_PANEL_ACCESS)` guards the admin
   API.
 
@@ -896,23 +813,15 @@ health calls are not retried.
 - `investigate-python-not-run` **Investigate "the model never runs Python".** Check, in order: that
   `CODE_INTERPRETER_BASE_URL` is set and not empty
   ([[#default-url-not-empty]]); that the admin switch is on
-  ([[#single-settings-row]]); that the admin health endpoint reports healthy;
-  for the coding agent, that the service version supports the session routes
-  ([[#version-gate-new-routes]]). The agent and per-message gates are in
+  ([[#single-settings-row]]) and that the admin health endpoint reports healthy. The agent and per-message gates are in
   [[tools-framework#investigate-tool-not-called]].
-- `client-method-new-route` **A client method for a new service route.** Copy
-  `CodeInterpreterClient.create_session`: a `@requires` minimum version and a
-  call through `_send_with_admission_retry` when the service can be busy. List
-  the current methods in `CodeInterpreterClient`. Add the method to the
-  `client.supports(...)` check of each tool that uses it.
 
 ---
 
 ## Verification
 
-- Unit tests: `backend/tests/unit/onyx/tools/` (the Python tool availability and
-  coding-agent files) and the `python/`, `bash/` and `coding_agent/` folders
-  under `backend/tests/unit/onyx/tools/tool_implementations/`.
+- Unit tests cover Python tool availability in `backend/tests/unit/onyx/tools/` and execution in
+  `backend/tests/unit/onyx/tools/tool_implementations/python/`.
 - External dependency unit tests, against a running service:
   `backend/tests/external_dependency_unit/tools/`.
 - Integration: `backend/tests/integration/tests/code_interpreter/`.

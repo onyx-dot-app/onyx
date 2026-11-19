@@ -53,10 +53,6 @@ function toolStart(packet: Packet): ToolStart | null {
       return { toolType: "deep_research_plan", kind: "think" };
     case PacketType.RESEARCH_AGENT_START:
       return { toolType: "research_agent", kind: "other" };
-    case PacketType.CODING_AGENT_START:
-      return { toolType: "coding_agent", kind: "execute" };
-    case PacketType.BASH_TOOL_START:
-      return { toolType: "bash", kind: "execute" };
     default:
       return null;
   }
@@ -217,10 +213,7 @@ export function createChatEventAdapter(): ChatEventAdapter {
         const start = toolStart(packet);
         if (!start || started.has(toolCallId)) return events;
         started.add(toolCallId);
-        if (
-          start.toolType === "research_agent" ||
-          start.toolType === "coding_agent"
-        ) {
+        if (start.toolType === "research_agent") {
           agentSections.add(section);
         }
         open.set(toolCallId, turn);

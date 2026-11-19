@@ -55,7 +55,6 @@ export const ChatStep = React.memo(function ChatStep({
     <TimelineRendererComponent
       packets={step.packets}
       nestedCalls={step.nestedCalls}
-      streamPackets={step.streamPackets}
       chatState={chatState}
       animate={!stopPacketSeen}
       stopPacketSeen={stopPacketSeen}

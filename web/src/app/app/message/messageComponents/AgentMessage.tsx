@@ -589,7 +589,6 @@ const AgentMessage = React.memo(function AgentMessage({
                               <RendererComponent
                                 packets={group.packets}
                                 nestedCalls={group.nestedCalls}
-                                streamPackets={group.streamPackets}
                                 chatState={effectiveChatState}
                                 messageNodeId={nodeId}
                                 hasTimelineThinking={

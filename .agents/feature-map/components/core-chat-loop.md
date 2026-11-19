@@ -190,9 +190,8 @@ suspended root resumes later on a runtime thread, so the control loop waits for
 a terminal, idle run, not for the response thread. Child agents and
 parallel tools use more threads ([[agent-runtime]]). Deep research
 (`deep_research/agent.py:DeepResearchAgent`) replaces `ChatAgent` for a
-single-model deep research request. The research step and the coding agent tool
-start child agents (`deep_research/research_agent.py:ResearchAgent`,
-`coding_agent/agent.py:CodingAgent`) through the runtime's child API.
+single-model deep research request. The research step starts a child agent
+(`deep_research/research_agent.py:ResearchAgent`) through the runtime's child API.
 
 **Delivery.** All responses share one `chat/stream_buffer.py:ChatDelivery`. One
 event-dispatch thread renders runtime events into packets
@@ -404,8 +403,8 @@ termination grace period is much shorter, so it ends running turns first
     (`chat/execution.py:host_agent_work`) when no running child remains.
 13. `shared-loop-pieces` **Shared runtime pieces have several callers.** A change
     to `agents/runtime.py`, to `chat/prompt_utils.py:prepare_prompt` or to
-    `Placement` handling also reaches deep research, the research agent and the
-    coding agent ([[context-assembly#history-builder-callers]]).
+    `Placement` handling also reaches deep research and its research agents
+    ([[context-assembly#history-builder-callers]]).
 14. `three-message-types` **Three message types exist.** `ChatMessage` is the DB
     row; `ChatResponseItem` holds the steps of a saved response.
     `llm/models.py:Message` is the SDK conversation type that agents and

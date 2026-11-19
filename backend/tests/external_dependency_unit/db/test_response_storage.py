@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel
-from sqlalchemy import delete, event, func, inspect, select, update
+from sqlalchemy import delete, event, func, inspect, select, text, update
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.unitofwork import UOWTransaction
 
@@ -62,6 +62,7 @@ from onyx.chat.models import (
     ChatResponseSnapshot,
     CheckpointBinding,
     MessageRendering,
+    PresentationMode,
     ResponseCheckpoint,
     ResponseRecord,
     accepted_input_messages,
@@ -72,7 +73,6 @@ from onyx.chat.process_message import read_repaired_chat_inbox
 from onyx.chat.response import response_record, response_snapshot
 from onyx.chat.run_store import ChatRunStore
 from onyx.chat.tool_results import tool_result_sources
-from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
 from onyx.db import chat_subagents
@@ -172,7 +172,6 @@ from onyx.server.query_and_chat.session_loading import (
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     CitationInfo,
-    CodingAgentFinal,
     ImageGenerationFinal,
     MemoryToolDelta,
     Packet,
@@ -185,7 +184,6 @@ from onyx.tools.models import (
     CustomToolUserFileSnapshot,
     FileReadResult,
     GeneratedImage,
-    LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryOperation,
     MemoryUpdated,
@@ -193,9 +191,6 @@ from onyx.tools.models import (
     PythonExecutionFile,
     ToolCallInfo,
     ToolExecutionError,
-)
-from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
-    CodingAgentTool,
 )
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -824,7 +819,6 @@ def test_metadata_sources_survive_storage_without_search_results(
     )
     snapshot.child_runs[0].steps[0].message.metadata = ResearchMessageMetadata(
         phase=ResearchPhase.REPORT,
-        is_reasoning_model=False,
         sources={2: documents[1]},
     )
     projected = project_response(
@@ -1083,7 +1077,6 @@ def test_thinking_preserves_signed_content_and_final_display_text(
         LlmPythonExecutionResult(
             stdout="hello", stderr="", exit_code=0, timed_out=False, generated_files=[]
         ),
-        LlmBashExecutionResult(stdout="hello", stderr="", exit_code=0, timed_out=False),
         MemoryUpdated(
             memory_text="Prefers tea", operation=MemoryOperation.ADD, memory_id=12
         ),
@@ -1094,7 +1087,6 @@ def test_thinking_preserves_signed_content_and_final_display_text(
             end_char=5,
             total_chars=5,
         ),
-        CodingAgentCallResult(answer="Done"),
         ResearchAgentCallResult(intermediate_report="Report", citation_mapping={}),
         FinalImageGenerationResponse(
             generated_images=[
@@ -1659,7 +1651,9 @@ def test_empty_generation_retains_outcome_and_rendering(
         record,
         db_session=db_session,
         persist_content=True,
-        presentation={"empty-generation": MessageRendering(text_as_thinking=True)},
+        presentation={
+            "empty-generation": MessageRendering(mode=PresentationMode.RESEARCH)
+        },
     )
     db_session.expire(response)
     restored = (
@@ -1675,7 +1669,7 @@ def test_empty_generation_retains_outcome_and_rendering(
     assert restored.steps[0].generation_status == generation_status
     execution = read_chat_execution(response)
     assert execution is not None
-    assert execution.presentation["empty-generation"].text_as_thinking
+    assert execution.presentation["empty-generation"].mode == PresentationMode.RESEARCH
     saved_settings = response.response_items[0].rendering
     assert saved_settings is not None
     assert "run_id" not in saved_settings and "step_index" not in saved_settings
@@ -1831,6 +1825,64 @@ def test_content_free_response_does_not_write_items(
         )
         == 0
     )
+
+
+def test_unavailable_tool_result_keeps_the_outer_answer(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    _child_record(db_session, record, uuid4(), "Private child output")
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[
+                    TextContent(text="Private intermediate text"),
+                    ToolCall(
+                        id="delegate",
+                        name="delegate",
+                        arguments={"query": "Private input"},
+                    ),
+                ]
+            ),
+            ToolResultMessage(
+                tool_call_id="delegate", tool_name="delegate", content="Private output"
+            ),
+            AssistantMessage(content=[TextContent(text="Saved answer")]),
+        ],
+    )
+    record.answer_step_index = 1
+    _save(db_session, response, record)
+    db_session.execute(
+        text("""
+            UPDATE tool_call SET result = jsonb_set(result, '{details}', '{"type":"unavailable"}')
+            WHERE parent_chat_message_id = :id
+        """),
+        {"id": response.id},
+    )
+    db_session.execute(
+        update(ChatResponseItem)
+        .where(
+            ChatResponseItem.chat_message_id == response.id,
+            ChatResponseItem.step_index == 0,
+        )
+        .values(rendering={"mode": "unavailable"})
+    )
+    db_session.expire_all()
+
+    packets = translate_assistant_message_to_packets(response, {}, db_session)
+    assert [
+        p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
+    ] == ["Saved answer"]
+    assert "Private" not in "".join(p.model_dump_json() for p in packets)
+    history = messages_from_steps(read_response_steps(response))
+    assert not any(
+        isinstance(m, ToolResultMessage)
+        or (isinstance(m, AssistantMessage) and m.tool_calls)
+        for m in history
+    )
+    assert history[-1].text == "Saved answer"
 
 
 def test_old_rows_keep_the_legacy_reader(
@@ -2382,7 +2434,7 @@ def test_response_reservation_preserves_model_order_and_active_branch(
 
 
 @pytest.mark.parametrize(
-    "tool_kind", ["python", "coding", "image", "memory", "search", "search_empty"]
+    "tool_kind", ["python", "image", "memory", "search", "search_empty"]
 )
 def test_completed_tool_display_matches_reload_without_duplicate_streamed_output(
     db_session: Session, conversation: ChatSession, tool_record: Tool, tool_kind: str
@@ -2454,7 +2506,7 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
         )
         progress = ToolProgress(details=result.details)
         implementation = SearchTool.__name__
-    elif tool_kind == "memory":
+    else:
         call = ToolCall(
             id="call", name=MemoryTool.NAME, arguments={"memory": "Prefers tea"}
         )
@@ -2464,18 +2516,6 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
         result = ToolResult(content=memory.model_dump_json(), details=memory)
         progress = ToolProgress(details=result.details)
         implementation = MemoryTool.__name__
-    else:
-        call = ToolCall(
-            id="call",
-            name=CodingAgentTool.NAME,
-            arguments={"query": "task", "github_repo": "repo"},
-        )
-        result = ToolResult(
-            content="coding answer",
-            details=CodingAgentCallResult(answer="coding answer"),
-        )
-        progress = ToolProgress(details=CodingAgentCallResult(answer="partial answer"))
-        implementation = CodingAgentTool.__name__
     session = conversation
     tool = tool_record
     tool.name = call.name
@@ -2648,7 +2688,7 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
                 for query in packet.obj.queries
             ] == ["forecast"]
         assert len(row.search_docs) == 1
-    elif tool_kind == "memory":
+    else:
         for packets in (live, saved):
             memories = [
                 packet.obj
@@ -2659,18 +2699,6 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
             assert memories[0].memory_text == "Prefers tea"
             assert memories[0].operation == "add"
             assert memories[0].memory_id == 12
-    else:
-        live_answers = [
-            packet.obj.answer
-            for packet in live
-            if isinstance(packet.obj, CodingAgentFinal)
-        ]
-        saved_answers = [
-            packet.obj.answer
-            for packet in saved
-            if isinstance(packet.obj, CodingAgentFinal)
-        ]
-        assert live_answers[-1] == saved_answers[-1] == "coding answer"
 
 
 def test_new_summary_replaces_previous_summary_on_selected_branch(

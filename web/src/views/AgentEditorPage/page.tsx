@@ -45,7 +45,6 @@ import {
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
-  CODING_AGENT_TOOL_ID,
 } from "@/lib/tools/constants";
 import { Collapsible, Text } from "@opal/components";
 import { InputSwitchField } from "@opal/form";
@@ -525,9 +524,6 @@ export default function AgentEditorPage({
   const codeInterpreterTool = availableTools?.find(
     (t) => t.in_code_tool_id === PYTHON_TOOL_ID
   );
-  const codingAgentTool = availableTools?.find(
-    (t) => t.in_code_tool_id === CODING_AGENT_TOOL_ID
-  );
   const isImageGenerationAvailable = !!imageGenTool;
   const imageGenerationDisabledTooltip = isImageGenerationAvailable
     ? undefined
@@ -603,12 +599,6 @@ export default function AgentEditorPage({
       !!codeInterpreterTool &&
       (existingAgent?.tools?.some(
         (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
-      ) ??
-        false),
-    coding_agent:
-      !!codingAgentTool &&
-      (existingAgent?.tools?.some(
-        (tool) => tool.in_code_tool_id === CODING_AGENT_TOOL_ID
       ) ??
         false),
     integrations: (existingAgent?.integrations ?? []).map(draftFromLink),
@@ -705,9 +695,6 @@ export default function AgentEditorPage({
       }
       if (values.code_interpreter && codeInterpreterTool) {
         toolIds.push(codeInterpreterTool.id);
-      }
-      if (values.coding_agent && codingAgentTool) {
-        toolIds.push(codingAgentTool.id);
       }
 
       // Build submission data
@@ -1455,24 +1442,6 @@ export default function AgentEditorPage({
                                 <InputSwitchField
                                   name="code_interpreter"
                                   disabled={!codeInterpreterTool}
-                                />
-                              </InputHorizontal>
-                            </Card>
-                          </Disabled>
-
-                          <Disabled disabled={!codingAgentTool}>
-                            <Card border="solid" rounding={4}>
-                              <InputHorizontal
-                                withLabel="coding_agent"
-                                title={t("editor.actions.codingAgent.title")}
-                                description={t(
-                                  "editor.actions.codingAgent.description"
-                                )}
-                                disabled={!codingAgentTool}
-                              >
-                                <InputSwitchField
-                                  name="coding_agent"
-                                  disabled={!codingAgentTool}
                                 />
                               </InputHorizontal>
                             </Card>

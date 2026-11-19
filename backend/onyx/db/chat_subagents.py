@@ -38,6 +38,7 @@ from onyx.chat.models import (
     ResponseLink,
     SavedAgentContext,
     SessionAncestor,
+    read_message_rendering,
 )
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc
@@ -251,7 +252,7 @@ def read_agent_completions(
     sources = _cited_sources(
         db_session,
         [
-            (response.id, MessageRendering.model_validate(item.rendering))
+            (response.id, read_message_rendering(item.rendering))
             for response, item in rows
             if item is not None and item.rendering is not None
         ],
@@ -523,7 +524,7 @@ def _load_history(
     for sources in _cited_sources(
         db_session,
         [
-            (response.id, MessageRendering.model_validate(item.rendering))
+            (response.id, read_message_rendering(item.rendering))
             for response in reversed(responses)
             for item in response.response_items
             if item.rendering

@@ -47,7 +47,6 @@ function renderStatus(
     <CustomToolRenderer
       packets={toolPackets}
       nestedCalls={[]}
-      streamPackets={toolPackets}
       state={{}}
       onComplete={jest.fn()}
       renderType={RenderType.FULL}

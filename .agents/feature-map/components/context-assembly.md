@@ -31,8 +31,8 @@
   Project images stay beside project text in the fixed preamble. A project that is too
   large is searched instead ([[projects]]).
 - **Long chats** keep working. When a request reaches about 85% of the model's
-  usable input, older history is summarized before the model call. Research and
-  coding child agents do the same. The user does not see the summary.
+  usable input, older history is summarized before the model call. Research child agents
+  do the same. The user does not see the summary.
 - **Admins** edit the default system prompt, which is the default assistant's
   `system_prompt`. An agent can replace the base prompt fully.
 - **Images and model switches.** When a chat has images and the user switches
@@ -184,8 +184,8 @@ The selected Action appears in a request-only trailing reminder, outside the cac
 prefix. When project files replace retrieval, preparation omits an enabled,
 configured, allowed Search preference and its reminder. Chat's final step uses `NONE` and
 keeps the same tool definitions and system prompt; the cache effect depends on the
-provider ([[llm-providers#none-tool-choice-keeps-tools]]). The coding and research
-agents change their system prompt on the final step, so their prefix changes there.
+provider ([[llm-providers#none-tool-choice-keeps-tools]]). Research agents change
+their system prompt on the final step, so their prefix changes there.
 
 **Custom agent prompt.** `chat/process_message.py:prepare_chat_turn` labels
 project and agent instructions when both exist, and tells the model to follow
@@ -299,13 +299,10 @@ counts what is sent, not the stored token counts.
    every file was staged for it). A notice that names a missing tool makes the
    model guess or search the web.
 8. `history-builder-callers` **`chat/prompt_utils.py:prepare_prompt` has
-   several callers.** `ChatAgent`, `DeepResearchAgent`, `ResearchAgent` and
-   `CodingAgent` call it with their own arguments, such as no custom agent
+   several callers.** `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`
+   call it with their own arguments, such as no custom agent
    prompt. Only `ChatAgent` passes `available_tool_names`, so a deep research
-   file notice names no tool. The coding agent's final-step reminder has no
-   `is_reminder` flag, so it is sent as a plain user message without the
-   `<system-reminder>` wrap. Check all callers after you change the signature or
-   order.
+   file notice names no tool. Check all callers after you change the signature or order.
 9. `replace-base-drops-user-block` **Replacing the base prompt drops the
    per-user block.** With `replace_base_system_prompt`, or with an empty default
    prompt, `build_chat_prompt` builds no user-information message, so memories

@@ -10,7 +10,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.azure_datalake.access import (
     AzureDataLakeAccessWalker,
     build_access_walker,
-    prefix_azure_datalake_external_groups,
 )
 from onyx.connectors.azure_datalake.models import (
     AzureDataLakeCheckpoint,
@@ -313,18 +312,14 @@ class AzureDataLakeConnector(
         each with who may list it."""
         container: HierarchyNode = self._container_node()
         if walker is not None:
-            container.external_access = prefix_azure_datalake_external_groups(
-                walker.container_access()
-            )
+            container.external_access = walker.container_access()
         nodes: list[HierarchyNode] = [container]
         for directory in self._ancestor_directories(
             f"{self.path_prefix}/" if self.path_prefix else ""
         ):
             node: HierarchyNode = self._directory_node(directory)
             if walker is not None:
-                node.external_access = prefix_azure_datalake_external_groups(
-                    walker.directory_access(directory)
-                )
+                node.external_access = walker.directory_access(directory)
             nodes.append(node)
         return nodes
 
@@ -368,9 +363,7 @@ class AzureDataLakeConnector(
                 if path.is_directory:
                     node: HierarchyNode = self._directory_node(path.name)
                     if path_access is not None:
-                        node.external_access = prefix_azure_datalake_external_groups(
-                            path_access
-                        )
+                        node.external_access = path_access
                     batch.append(node)
                     continue
                 batch.append(

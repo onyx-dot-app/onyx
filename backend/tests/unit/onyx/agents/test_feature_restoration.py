@@ -1,9 +1,6 @@
 """Restore feature state and tool execution through JSON."""
 
-from collections.abc import Callable, Generator
-from contextlib import contextmanager
 from io import BytesIO
-from threading import Event
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -24,7 +21,6 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.agents.runtime import Agent
 from onyx.agents.tools import (
     HumanToolAnswer,
     InputDecision,
@@ -41,8 +37,6 @@ from onyx.chat.models import (
     ResponseCheckpoint,
 )
 from onyx.chat.restoration import persist_checkpoint_files
-from onyx.coding_agent.agent import CodingAgent
-from onyx.coding_agent.tool_definitions import BASH_TOOL_NAME
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchCycle, SearchDoc
 from onyx.deep_research.agent import DeepResearchAgent
@@ -53,7 +47,7 @@ from onyx.deep_research.tool_definitions import (
 )
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, ExtractedContextFiles
 from onyx.llm.cancellation import CancellationSignal
-from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
+from onyx.llm.interfaces import LLM
 from onyx.llm.model_response import Delta
 from onyx.llm.models import (
     AssistantMessage,
@@ -66,10 +60,6 @@ from onyx.llm.models import (
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, ToolContext
-from onyx.tools.tool_implementations.bash.bash_tool import BashTool
-from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
-    CodingAgentTool,
-)
 from onyx.tools.tool_implementations.search.models import (
     SearchContext,
     SearchPlanningResult,
@@ -78,7 +68,6 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
 )
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
-from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage, SavedCheckpoint
 from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient, ScriptedLLM
 from tests.unit.onyx.agents.test_feature_agents import tool_delta
@@ -505,93 +494,6 @@ def test_research_restores_search_context_and_resets_it_for_new_run() -> None:
     assert run.wait_for_idle(timeout=5)
     assert restored.search_context == SearchContext()
     assert original.search_context.search_cycles[0].queries == ["facts"]
-
-
-def test_coding_delegation_releases_parent_worker_without_deleting_waiting_workspace(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-
-    deleted = Event()
-    children: list[CodingAgent] = []
-
-    @contextmanager
-    def sandbox(repo: str, github_token: str | None) -> Generator[str, None, None]:
-        assert repo == "org/repo" and github_token is None
-        yield "waiting-workspace"
-        deleted.set()
-
-    def child_feature(
-        *,
-        repo: str,
-        llm: LLM,
-        token_counter: Callable[[str], int],
-        user_identity: LLMUserIdentity | None,
-        bash_tool: BashTool,
-    ) -> CodingAgent:
-        child = CodingAgent(
-            repo=repo,
-            llm=llm,
-            token_counter=token_counter,
-            user_identity=user_identity,
-            bash_tool=bash_tool,
-        )
-        child.before_tool_call = lambda _context: PendingToolInput(
-            request_id="allow-bash",
-            prompt="Run command?",
-            mode=InputMode.EXECUTE,
-        )
-        children.append(child)
-        return child
-
-    module = "onyx.tools.tool_implementations.coding_agent.coding_agent_tool"
-    monkeypatch.setattr(f"{module}.coding_sandbox_session", sandbox)
-    monkeypatch.setattr(f"{module}.CodingAgent", child_feature)
-    monkeypatch.setattr(f"{module}.get_llm_token_counter", lambda _llm: len)
-    monkeypatch.setattr(
-        BashTool,
-        "_run",
-        lambda _self, _invocation, _context: ToolResult(content="files"),
-    )
-    child_model = ScriptedLLM(
-        [
-            tool_delta(BASH_TOOL_NAME, '{"cmd":"ls"}'),
-            Delta(content="Investigation done"),
-            Delta(content="Child answer"),
-        ],
-        128000,
-    )
-    tool = CodingAgentTool(1, child_model)
-    parent_model = ScriptedLLM(
-        [
-            tool_delta(tool.name, '{"query":"Read code","github_repo":"org/repo"}'),
-            Delta(content="Parent answer"),
-        ],
-        128000,
-    )
-    coordinator = AgentCoordinator()
-    parent = Agent(
-        parent_model,
-        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-        tools=[tool.bind(lambda: ToolContext())],
-    )
-    run = parent.start(max_steps=2, coordinator=coordinator)
-    try:
-        assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
-        assert run.wait_for_idle(timeout=5)
-        child = coordinator.newest_run(children[0].id)
-        assert child is not None
-        assert child.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
-        assert child.wait_for_idle(timeout=5)
-        assert not deleted.is_set()
-        child.submit(
-            HumanToolAnswer(request_id="allow-bash", decision=InputDecision.APPROVE)
-        )
-        assert run.result(timeout=5).output.text == "Parent answer"
-        assert run.wait_for_idle(timeout=5)
-        assert deleted.wait(5)
-        assert not children[0].is_sandbox_available
-    finally:
-        assert coordinator.close(timeout=5)
 
 
 def test_checkpoint_file_storage_preserves_binary_feature_data() -> None:

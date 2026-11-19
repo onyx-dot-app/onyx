@@ -78,18 +78,6 @@ OPEN_URL_TOOL = {
     },
 }
 
-THINK_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "think_tool",
-        "parameters": {
-            "type": "object",
-            "properties": {"reasoning": {"type": "string"}},
-            "required": ["reasoning"],
-        },
-    },
-}
-
 
 def complete(
     model: str = "mock-ttft0-itl0-len20",
@@ -353,7 +341,7 @@ def test_dr_plan_call_is_plain_text() -> None:
 def test_dr_orchestrator_first_cycle_spawns_research_agents() -> None:
     choice = complete(
         model="mock-agents2-ttft0-itl0",
-        tools=[RESEARCH_AGENT_TOOL, GENERATE_REPORT_TOOL, THINK_TOOL],
+        tools=[RESEARCH_AGENT_TOOL, GENERATE_REPORT_TOOL],
         tool_choice="required",
     )
     assert choice["finish_reason"] == "tool_calls"
@@ -376,7 +364,7 @@ def test_dr_orchestrator_second_cycle_generates_report() -> None:
     ]
     choice = complete(
         messages=messages,
-        tools=[RESEARCH_AGENT_TOOL, GENERATE_REPORT_TOOL, THINK_TOOL],
+        tools=[RESEARCH_AGENT_TOOL, GENERATE_REPORT_TOOL],
         tool_choice="required",
     )
     assert choice["finish_reason"] == "tool_calls"
@@ -384,7 +372,7 @@ def test_dr_orchestrator_second_cycle_generates_report() -> None:
 
 
 def test_dr_research_agent_searches_then_reports() -> None:
-    agent_tools = [INTERNAL_SEARCH_TOOL, GENERATE_REPORT_TOOL, THINK_TOOL]
+    agent_tools = [INTERNAL_SEARCH_TOOL, GENERATE_REPORT_TOOL]
     first = complete(tools=agent_tools, tool_choice="required")
     assert first["message"]["tool_calls"][0]["function"]["name"] == "internal_search"
 

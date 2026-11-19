@@ -6,8 +6,6 @@ from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TASK_KEY,
     RESEARCH_AGENT_TOOL_NAME,
-    THINK_TOOL_NAME,
-    THINK_TOOL_RESPONSE_MESSAGE,
 )
 from onyx.server.query_and_chat.models import ChatSessionDetailResponse
 from onyx.server.query_and_chat.streaming_models import ReasoningDelta, StreamingType
@@ -17,15 +15,12 @@ from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.mock_services.mock_llm_server.models import (
-    RecordedRequest,
     Reply,
     RequestConditions,
     ToolCall,
 )
 
 _RESEARCH_CALL_ID = "call_research_agent"
-_CHILD_THINK_CALL_ID = "call_child_think"
-_ORCHESTRATOR_THINK_CALL_ID = "call_orchestrator_think"
 
 _RESEARCH_TASK = "Investigate the history of the alpha protocol."
 # Escapes and final characters must survive streaming and replay.
@@ -43,14 +38,6 @@ def _streamed_reasoning(packets: list[dict[str, Any]], in_research_agent: bool) 
         if packet["obj"]["type"] == StreamingType.REASONING_DELTA.value
         and (packet["placement"].get("sub_turn_index") is not None) == in_research_agent
     )
-
-
-def _replayed_think_reasoning(request: RecordedRequest, tool_call_id: str) -> str:
-    for message in request.messages:
-        for call in message.tool_calls:
-            if call.id == tool_call_id:
-                return call.arguments["reasoning"]
-    raise AssertionError(f"tool call {tool_call_id} was not replayed")
 
 
 def _script_deep_research(mock_llm: MockLLMScript) -> None:
@@ -77,45 +64,27 @@ def _script_deep_research(mock_llm: MockLLMScript) -> None:
             ],
         ),
         Reply(
-            tool_calls=[
-                ToolCall(
-                    id=_ORCHESTRATOR_THINK_CALL_ID,
-                    name=THINK_TOOL_NAME,
-                    arguments={"reasoning": _ORCHESTRATOR_REASONING},
-                )
-            ],
-            conditions=RequestConditions(has_results_for=[_RESEARCH_CALL_ID]),
-        ),
-        Reply(
+            reasoning=_ORCHESTRATOR_REASONING,
             tool_calls=[
                 ToolCall(id="call_final_report", name=GENERATE_REPORT_TOOL_NAME)
             ],
-            conditions=RequestConditions(has_results_for=[_ORCHESTRATOR_THINK_CALL_ID]),
+            conditions=RequestConditions(has_results_for=[_RESEARCH_CALL_ID]),
         ),
         conditions=RequestConditions(
-            offers=[RESEARCH_AGENT_TOOL_NAME, THINK_TOOL_NAME],
+            offers=[RESEARCH_AGENT_TOOL_NAME],
             tool_choice="required",
         ),
     )
     mock_llm.conversation(
         "research_agent",
         Reply(
-            tool_calls=[
-                ToolCall(
-                    id=_CHILD_THINK_CALL_ID,
-                    name=THINK_TOOL_NAME,
-                    arguments={"reasoning": _CHILD_REASONING},
-                )
-            ],
-        ),
-        Reply(
+            reasoning=_CHILD_REASONING,
             tool_calls=[
                 ToolCall(id="call_intermediate_report", name=GENERATE_REPORT_TOOL_NAME)
             ],
-            conditions=RequestConditions(has_results_for=[_CHILD_THINK_CALL_ID]),
         ),
         conditions=RequestConditions(
-            offers=[GENERATE_REPORT_TOOL_NAME, THINK_TOOL_NAME],
+            offers=[GENERATE_REPORT_TOOL_NAME],
             does_not_offer=[RESEARCH_AGENT_TOOL_NAME],
             tool_choice="required",
         ),
@@ -127,22 +96,22 @@ def _script_deep_research(mock_llm: MockLLMScript) -> None:
         Reply(
             text=_INTERMEDIATE_REPORT,
             conditions=RequestConditions(
-                offers=[GENERATE_REPORT_TOOL_NAME, THINK_TOOL_NAME],
+                offers=[GENERATE_REPORT_TOOL_NAME],
                 tool_choice="none",
-                has_results_for=[_CHILD_THINK_CALL_ID],
+                has_results_for=["call_intermediate_report"],
             ),
         ),
         Reply(
             text=_FINAL_REPORT,
             conditions=RequestConditions(
                 has_tools=False,
-                has_results_for=[_RESEARCH_CALL_ID, _ORCHESTRATOR_THINK_CALL_ID],
+                has_results_for=[_RESEARCH_CALL_ID],
             ),
         ),
     )
 
 
-def test_think_tool_reasoning_is_streamed_and_saved_in_full(
+def test_model_reasoning_is_streamed_and_saved_in_full(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     _script_deep_research(mock_llm)
@@ -193,27 +162,3 @@ def test_think_tool_reasoning_is_streamed_and_saved_in_full(
             )
             == expected
         )
-
-    # Each think call goes back to the model with its full reasoning and the
-    # acknowledgement as its tool result.
-    _, child_report_call = mock_llm.requests_in("research_agent")
-    assert child_report_call.tool_result(_CHILD_THINK_CALL_ID) == (
-        THINK_TOOL_RESPONSE_MESSAGE
-    )
-    assert _replayed_think_reasoning(child_report_call, _CHILD_THINK_CALL_ID) == (
-        _CHILD_REASONING
-    )
-
-    _, orchestrator_think_call, orchestrator_report_call = mock_llm.requests_in(
-        "orchestrator"
-    )
-    assert orchestrator_think_call.tool_result(_RESEARCH_CALL_ID) == (
-        _INTERMEDIATE_REPORT
-    )
-    assert orchestrator_report_call.tool_result(_ORCHESTRATOR_THINK_CALL_ID) == (
-        THINK_TOOL_RESPONSE_MESSAGE
-    )
-    assert (
-        _replayed_think_reasoning(orchestrator_report_call, _ORCHESTRATOR_THINK_CALL_ID)
-        == _ORCHESTRATOR_REASONING
-    )

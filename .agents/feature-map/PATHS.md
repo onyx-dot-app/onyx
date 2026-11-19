@@ -62,13 +62,12 @@ covers new files that match it.
 | `backend/onyx/tools/tool_implementations/search/`, `backend/onyx/tools/tool_implementations/search_like_tool_utils.py` | internal-search |
 | `backend/onyx/tools/tool_implementations/web_search/`, `backend/onyx/tools/tool_implementations/open_url/` | web-search |
 | `backend/onyx/tools/tool_implementations/images/` | image-generation |
-| `backend/onyx/tools/tool_implementations/bash/`, `backend/onyx/tools/tool_implementations/python/`, `backend/onyx/tools/tool_implementations/code_mode/` | code-execution |
+| `backend/onyx/tools/tool_implementations/python/`, `backend/onyx/tools/tool_implementations/code_mode/` | code-execution |
 | `backend/onyx/tools/tool_implementations/sandbox/`, `backend/onyx/prompts/sandbox_tools.py` | code-execution |
 | `backend/onyx/tools/tool_implementations/mcp/`, `backend/onyx/tools/tool_implementations/custom/` | mcp-and-custom-tools |
 | `backend/onyx/tools/tool_implementations/memory/`, `backend/onyx/db/memory.py`, `backend/onyx/context/models.py` | chat-preferences |
 | `backend/onyx/tools/tool_implementations/file_reader/` | file-store-and-user-files |
 | `backend/onyx/tools/file_snapshot.py` | file-store-and-user-files, chat-persistence |
-| `backend/onyx/tools/tool_implementations/coding_agent/`, `backend/onyx/coding_agent/` | tools-framework |
 
 ## Backend: search and index
 

@@ -14,7 +14,7 @@ from onyx.db.chat import (
     translate_db_message_to_chat_message_detail,
 )
 from onyx.db.models import ChatMessage, ChatResponseItem
-from onyx.llm.models import AssistantMessage, TextContent, ThinkingContent, ToolCall
+from onyx.llm.models import AssistantMessage, TextContent, ThinkingContent
 
 
 @pytest.mark.parametrize(
@@ -86,29 +86,22 @@ def test_detail_selects_the_same_thinking_as_saved_display(
 
 
 @pytest.mark.parametrize(
-    ("text_as_thinking", "think_tool", "expected"),
+    ("mode", "expected"),
     [
-        (False, None, "Model thinking. "),
-        (False, "think", "Model thinking. Tool reasoning. "),
-        (True, None, "Model thinking. Text reasoning."),
-        (True, "think", "Model thinking. Text reasoning.Tool reasoning. "),
+        (PresentationMode.ANSWER, "Model thinking. "),
+        (PresentationMode.RESEARCH, "Model thinking. Text reasoning."),
     ],
 )
 def test_detail_preserves_thinking_display_settings(
-    text_as_thinking: bool, think_tool: str | None, expected: str
+    mode: PresentationMode, expected: str
 ) -> None:
-    settings = MessageRendering(
-        text_as_thinking=text_as_thinking, think_tool=think_tool
-    )
+    settings = MessageRendering(mode=mode)
     message = AssistantMessage(
         id="answer",
         metadata=settings,
         content=[
             ThinkingContent(text="Model thinking. "),
             TextContent(text="Text reasoning."),
-            ToolCall(
-                id="think-1", name="think", arguments={"reasoning": "Tool reasoning. "}
-            ),
         ],
     )
     projected = project_response(

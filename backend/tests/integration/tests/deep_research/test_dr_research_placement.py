@@ -12,7 +12,6 @@ from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TASK_KEY,
     RESEARCH_AGENT_TOOL_NAME,
-    THINK_TOOL_NAME,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -27,12 +26,11 @@ from tests.integration.mock_services.mock_llm_server.models import (
 )
 
 _RESEARCH_CALL_ID = "call_dr_research"
-_THINK_CALL_ID = "call_child_think"
 _SEARCH_CALL_ID = "call_child_search"
 _CHILD_REPORT_CALL_ID = "call_child_report"
 _PARENT_REPORT_CALL_ID = "call_dr_report"
 _RESEARCH_TASK = "Investigate the zebra quartz launch timeline."
-_THINK_TEXT = "I should search the internal docs for the launch timeline first."
+_REASONING = "I should search the internal docs for the launch timeline first."
 _FINAL_REPORT = "The zebra quartz launch is scheduled for spring."
 
 _SEARCH_PACKET_TYPES = {
@@ -69,7 +67,7 @@ def _script_deep_research(mock_llm: MockLLMScript) -> None:
                 )
             ],
             conditions=RequestConditions(
-                offers=[RESEARCH_AGENT_TOOL_NAME, THINK_TOOL_NAME],
+                offers=[RESEARCH_AGENT_TOOL_NAME],
                 tool_choice="required",
             ),
         ),
@@ -92,24 +90,7 @@ def _script_deep_research(mock_llm: MockLLMScript) -> None:
     mock_llm.conversation(
         "research",
         Reply(
-            tool_calls=[
-                ToolCall(
-                    id=_THINK_CALL_ID,
-                    name=THINK_TOOL_NAME,
-                    arguments={"reasoning": _THINK_TEXT},
-                )
-            ],
-            conditions=RequestConditions(
-                offers=[
-                    SearchTool.NAME,
-                    THINK_TOOL_NAME,
-                    GENERATE_REPORT_TOOL_NAME,
-                ],
-                does_not_offer=[RESEARCH_AGENT_TOOL_NAME],
-                tool_choice="required",
-            ),
-        ),
-        Reply(
+            reasoning=_REASONING,
             tool_calls=[
                 ToolCall(
                     id=_SEARCH_CALL_ID,
@@ -119,7 +100,7 @@ def _script_deep_research(mock_llm: MockLLMScript) -> None:
             ],
             conditions=RequestConditions(
                 offers=[SearchTool.NAME],
-                has_results_for=[_THINK_CALL_ID],
+                does_not_offer=[RESEARCH_AGENT_TOOL_NAME],
             ),
         ),
         Reply(
@@ -151,11 +132,10 @@ def _placement(packet: dict[str, Any]) -> tuple[int, int, int | None]:
     )
 
 
-def test_research_think_step_takes_one_sub_turn(
+def test_research_reasoning_precedes_search(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
-    """A research child that thinks before it searches places the search one
-    sub-turn after the think reasoning, in the stream and in the saved tool call."""
+    """One model step emits separate reasoning and search sections."""
     # internal_search is only offered when a non-default connector exists.
     CCPairManager.create_from_scratch(
         source=DocumentSource.INGESTION_API,
@@ -172,31 +152,29 @@ def test_research_think_step_takes_one_sub_turn(
     )
     assert response.error is None, f"Unexpected stream error: {response.error}"
     assert response.full_message == _FINAL_REPORT
-    assert [r.reply_index for r in mock_llm.requests_in("research")] == [0, 1, 2, 3]
+    assert [r.reply_index for r in mock_llm.requests_in("research")] == [0, 1, 2]
 
-    # The think arguments stream as the child's only reasoning section.
     child_reasoning = [
         packet
         for packet in response.packets
         if packet["obj"]["type"] == StreamingType.REASONING_DELTA.value
         and _placement(packet)[2] is not None
     ]
-    assert child_reasoning, "The think step streamed no reasoning"
-    think_placements = {_placement(packet) for packet in child_reasoning}
-    assert len(think_placements) == 1
-    [(turn_index, tab_index, think_sub_turn)] = think_placements
-    assert think_sub_turn is not None
-    assert "".join(p["obj"]["reasoning"] for p in child_reasoning) == _THINK_TEXT
+    assert child_reasoning, "Expected reasoning before the search"
+    reasoning_placements = {_placement(packet) for packet in child_reasoning}
+    assert len(reasoning_placements) == 1
+    [(turn_index, tab_index, reasoning_sub_turn)] = reasoning_placements
+    assert reasoning_sub_turn is not None
+    assert "".join(p["obj"]["reasoning"] for p in child_reasoning) == _REASONING
 
-    # The search runs on the sub-turn right after the think reasoning.
+    # The search runs on the sub-turn right after the model reasoning.
     search_placements = {
         _placement(packet)
         for packet in response.packets
         if packet["obj"]["type"] in _SEARCH_PACKET_TYPES
     }
-    assert search_placements == {(turn_index, tab_index, think_sub_turn + 1)}
+    assert search_placements == {(turn_index, tab_index, reasoning_sub_turn + 1)}
 
-    # Child history retains the think step before its search invocation.
     with get_session_with_current_tenant() as db_session:
         tool_calls = {
             tool_call.tool_call_id: tool_call
@@ -227,7 +205,8 @@ def test_research_think_step_takes_one_sub_turn(
             )
         )
         assert search_call is not None
-        assert search_call.turn_number == think_sub_turn + 1
+        # Both sections came from the first model step.
+        assert search_call.turn_number == 0
         steps = read_response_steps(child_response)
-        assert steps[0].message.tool_calls[0].arguments["reasoning"] == _THINK_TEXT
-        assert steps[1].message.tool_calls[0].id == _SEARCH_CALL_ID
+        assert steps[0].message.thinking == _REASONING
+        assert steps[0].message.tool_calls[0].id == _SEARCH_CALL_ID

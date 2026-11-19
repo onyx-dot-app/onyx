@@ -11,7 +11,6 @@ import {
 } from "@/chat/streamingModels";
 import SvgBookOpen from "@/icons/book-open";
 import SvgCircle from "@/icons/circle";
-import SvgCode from "@/icons/code";
 import SvgCpu from "@/icons/cpu";
 import SvgGlobe from "@/icons/globe";
 import SvgImage from "@/icons/image";
@@ -46,8 +45,6 @@ export function getToolIcon(packets: Packet[]): IconFunctionComponent {
       return SvgTextLinesSmall;
     case PacketType.RESEARCH_AGENT_START:
       return SvgUser;
-    case PacketType.CODING_AGENT_START:
-      return SvgCode;
     case PacketType.REASONING_START:
       return SvgSlowTime;
     case PacketType.MEMORY_TOOL_START:

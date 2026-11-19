@@ -29,7 +29,8 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.orm import Session
 
 from onyx.auth.mobile_sso.code_store import consume_sso_code
-from onyx.auth.users import cookie_transport, generate_pkce_pair
+from onyx.auth.session_tokens import cookie_transport
+from onyx.auth.users import generate_pkce_pair
 from onyx.db.enums import AccountType, SSOProviderType
 from onyx.db.models import ScimUserMapping, SSOProvider, User, User__UserGroup
 from onyx.db.sso_provider import create_sso_provider

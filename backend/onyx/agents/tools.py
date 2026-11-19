@@ -1,7 +1,6 @@
 """Executable tools and their invocation-scoped services."""
 
 from collections.abc import Callable, Collection, Mapping, Sequence
-from concurrent.futures import Future
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, Protocol
 
@@ -162,10 +161,6 @@ class AgentControl(Protocol):
         max_steps: int,
         total_timeout_s: float | None = None,
     ) -> "AgentMessageReceipt": ...
-
-    def add_completion_cleanup(
-        self, run_id: str, callback: Callable[[], None]
-    ) -> Future[None]: ...
 
     @property
     def agent_id(self) -> str:

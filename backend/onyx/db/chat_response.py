@@ -34,6 +34,7 @@ from onyx.chat.models import (
     ToolRecordReference,
     ToolReplayData,
     accepted_input_messages,
+    read_message_rendering,
     recorded_mentions,
     skill_message_id,
 )
@@ -75,6 +76,7 @@ from onyx.db.models import (
     QuestionRequest,
     StoredToolResult,
     ToolCall,
+    UnavailableStoredToolResult,
 )
 from onyx.db.question_request import get_response_question_requests
 from onyx.file_processing.file_types import guess_mime_type
@@ -85,6 +87,7 @@ from onyx.llm.models import (
     Message,
     UserMessage,
 )
+from onyx.llm.models import ToolCall as ModelToolCall
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
@@ -465,6 +468,8 @@ def _load_child_responses(
             invocation = response_invocation(row)
             if invocation is None or invocation.parent_chat_message_id is None:
                 raise ValueError("Child response has no parent invocation")
+            if isinstance(invocation.result, UnavailableStoredToolResult):
+                continue
             children.setdefault(invocation.parent_chat_message_id, []).append(row)
             visited.add(row.id)
             parents.append(row.id)
@@ -500,8 +505,10 @@ def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
         message_ids_by_tool: dict[int, str] = {}
         for row in response.response_items:
             if row.rendering:
-                presentation[row.id] = MessageRendering.model_validate(row.rendering)
+                presentation[row.id] = read_message_rendering(row.rendering)
         for tool in response.tool_calls or []:
+            if isinstance(tool.result, UnavailableStoredToolResult):
+                continue
             assistant_message_id = message_ids_by_step[tool.turn_number]
             message_ids_by_tool[tool.id] = assistant_message_id
             tool_records.append(
@@ -913,6 +920,13 @@ def read_response_steps(response: ChatMessage) -> list[StepRecord]:
                 or result.tool_name != call.name
             ):
                 raise ValueError("Response tool result has no matching call")
+            if isinstance(result, UnavailableStoredToolResult):
+                step.message.content = [
+                    part
+                    for part in step.message.content
+                    if not (isinstance(part, ModelToolCall) and part.id == call.id)
+                ]
+                continue
             if tool.operation_status is not None:
                 step.tools[call.id] = ToolExecutionRecord(
                     status=tool.operation_status,
@@ -1237,7 +1251,7 @@ def read_response__no_commit(
             for doc in saved.search_docs or []
         },
         {
-            item.id: MessageRendering.model_validate(item.rendering)
+            item.id: read_message_rendering(item.rendering)
             for item in response.response_items
             if item.rendering is not None
         },
