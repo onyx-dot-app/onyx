@@ -10,6 +10,7 @@ import {
   PublishFilesToolPacket,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/app/app/message/messageComponents/types";
+import { stripBidiControls } from "@/lib/bidiControls";
 import {
   SandboxCallContent,
   SandboxCallError,
@@ -95,16 +96,19 @@ export function PublishFilesToolRenderer({
               gap={0.5}
               height="fit"
             >
-              <Text font="secondary-action" color="text-04">
-                {row.label}
+              {/* dir isolates the sandbox's text, so it cannot reorder the
+                  text around it; a path is always LTR. */}
+              <Text dir="auto" font="secondary-action" color="text-04">
+                {stripBidiControls(row.label)}
               </Text>
               {row.path !== row.label && (
                 <Text
+                  dir="ltr"
                   font="secondary-mono"
                   color="text-03"
                   wordWrap="break-all"
                 >
-                  {row.path}
+                  {stripBidiControls(row.path)}
                 </Text>
               )}
             </Section>

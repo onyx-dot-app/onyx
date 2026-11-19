@@ -55,8 +55,13 @@ const at =
 
 const sectionEnd: ObjTypes = { type: PacketType.SECTION_END };
 
-// Sandbox text (paths, errors) shows in Unicode isolates.
-const isolated = (text: string) => `\u2068${text}\u2069`;
+/** Matches the element whose whole text, its children's included, is `text`:
+ * a status names its path in a code element. */
+function wholeText(text: string) {
+  return (_content: string, element: Element | null) =>
+    element?.textContent === text &&
+    Array.from(element.children).every((child) => child.textContent !== text);
+}
 
 function answer(turn_index: number): Packet[] {
   const packet = at({ turn_index, tab_index: 0 });
@@ -278,15 +283,11 @@ test("session input shows typed keys, and polls show the session state", async (
     expect(screen.getByText("Checked session 7")).toBeInTheDocument();
     expect(screen.getByText("Stopped by a signal")).toBeInTheDocument();
     expect(screen.getByText("Command failed")).toBeInTheDocument();
-    expect(
-      screen.getByText(isolated("Sandbox is unavailable"))
-    ).toBeInTheDocument();
+    expect(screen.getByText("Sandbox is unavailable")).toBeInTheDocument();
     expect(
       screen.getByText("Could not send input to session 9")
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(isolated("Session 9 has ended"))
-    ).toBeInTheDocument();
+    expect(screen.getByText("Session 9 has ended")).toBeInTheDocument();
     // A command still running at its end has only started.
     expect(screen.getByText("Started command")).toBeInTheDocument();
     expect(screen.getByText("Still running (session 12)")).toBeInTheDocument();
@@ -331,16 +332,16 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
   try {
     await expandTimeline();
     expect(screen.getByText("Edited 2 files")).toBeInTheDocument();
-    expect(screen.getByText(isolated("new.py"))).toBeInTheDocument();
+    expect(screen.getByText("new.py")).toBeInTheDocument();
     expect(
-      screen.getByText(`${isolated("old.py")} → ${isolated("moved.py")}`)
+      screen.getByText(wholeText("old.py → moved.py"))
     ).toBeInTheDocument();
     // The card lays out only the head of each patch.
     expect(screen.getAllByText(/\+print\('hi'\)/)).toHaveLength(2);
     expect(screen.queryByText(/\+a = 2/)).not.toBeInTheDocument();
     expect(screen.getByText("Edit failed")).toBeInTheDocument();
     expect(
-      screen.getByText(isolated("Failed to find expected lines in old.py"))
+      screen.getByText("Failed to find expected lines in old.py")
     ).toBeInTheDocument();
   } finally {
     view.unmount();
@@ -394,7 +395,7 @@ test("a write shows its progress while it streams, then the replayed card", asyn
 
   const view = render(renderMessage(streaming));
   try {
-    const progress = `Writing ${isolated("report.md")}… 120 lines`;
+    const progress = wholeText("Writing report.md… 120 lines");
     expect((await screen.findAllByText(progress)).length).toBeGreaterThan(0);
     // The run header names the activity before the start packet arrives.
     expect(screen.getAllByText("Editing files").length).toBeGreaterThan(0);
@@ -438,8 +439,8 @@ test("a patch names its files while it streams, then matches its replay", async 
   try {
     await screen.findAllByText("Patching 2 files…");
     await openRun();
-    expect(screen.getByText(isolated("new.py"))).toBeInTheDocument();
-    expect(screen.getByText(isolated("old.py"))).toBeInTheDocument();
+    expect(screen.getByText("new.py")).toBeInTheDocument();
+    expect(screen.getByText("old.py")).toBeInTheDocument();
   } finally {
     view.unmount();
   }
@@ -458,7 +459,7 @@ test("an edit names its file and the lines of its new text", async () => {
   );
   try {
     expect(
-      (await screen.findAllByText(`Editing ${isolated("src/app.py")}… 3 lines`))
+      (await screen.findAllByText(wholeText("Editing src/app.py… 3 lines")))
         .length
     ).toBeGreaterThan(0);
   } finally {
@@ -481,11 +482,12 @@ test("a call names its file only once the path arrives", async () => {
   }
 });
 
-test("bidi controls in a path cannot reorder the text around it", async () => {
-  // A path that closes its isolate early, then overrides the direction.
+test("sandbox text is isolated in markup, and paths show without bidi controls", async () => {
+  // A path that closes an isolate early, then overrides the direction.
   const path = "a\u2069\u202Eb.py";
   const streaming = at({ turn_index: 0, tab_index: 0 });
   const patched = at({ turn_index: 1, tab_index: 0 });
+  const published = at({ turn_index: 2, tab_index: 0 });
   const view = render(
     renderMessage([
       patched({
@@ -499,23 +501,38 @@ test("bidi controls in a path cannot reorder the text around it", async () => {
         error: `Could not write ${path}`,
       }),
       patched(sectionEnd),
+      published({
+        type: PacketType.PUBLISH_FILES_START,
+        files: [{ path: `out/${path}`, title: "\u202Bnotes" }],
+        description: null,
+      }),
       streaming(fileProgress("write", [path], 1)),
     ])
   );
   try {
+    // Displayed paths and labels drop their bidi controls, and markup
+    // isolates them, so copied text has no hidden characters.
     expect(
-      (await screen.findAllByText(`Writing ${isolated("ab.py")}… 1 line`))
-        .length
+      (await screen.findAllByText(wholeText("Writing ab.py… 1 line"))).length
     ).toBeGreaterThan(0);
+    for (const code of screen.getAllByText("ab.py", { selector: "code" })) {
+      expect(code).toHaveAttribute("dir", "ltr");
+    }
     await openRun();
-    expect(screen.getByText(isolated("ab.py"))).toBeInTheDocument();
+    expect(screen.getByText("ab.py", { selector: "span" })).toHaveAttribute(
+      "dir",
+      "ltr"
+    );
+    expect(screen.getByText("out/ab.py")).toHaveAttribute("dir", "ltr");
+    expect(screen.getByText("notes")).toHaveAttribute("dir", "auto");
+    // The patch and the error keep the sandbox's text, inside an isolate.
     expect(
-      screen.getByText(`*** Add File: ${isolated("ab.py")}`)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(isolated("Could not write ab.py"))
-    ).toBeInTheDocument();
-    expect(view.container.textContent).not.toMatch(/\u202E/);
+      screen.getByText(`*** Add File: ${path}`).closest("[dir]")
+    ).toHaveAttribute("dir", "ltr");
+    expect(screen.getByText(`Could not write ${path}`)).toHaveAttribute(
+      "dir",
+      "ltr"
+    );
   } finally {
     view.unmount();
   }
@@ -533,7 +550,7 @@ test("a patch stopped while it streams shows only that it stopped, as on replay"
   try {
     await openRun();
     expect((await screen.findAllByText("Stopped")).length).toBeGreaterThan(0);
-    expect(screen.queryByText(isolated("new.py"))).not.toBeInTheDocument();
+    expect(screen.queryByText("new.py")).not.toBeInTheDocument();
     expect(screen.queryByText(/Patching/)).not.toBeInTheDocument();
   } finally {
     view.unmount();
@@ -576,7 +593,7 @@ test("a write whose call fails after its progress shows the error", async () => 
   try {
     await expandTimeline();
     expect(screen.getByText("Edit failed")).toBeInTheDocument();
-    expect(screen.getByText(isolated("Permission denied"))).toBeInTheDocument();
+    expect(screen.getByText("Permission denied")).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent("Writing");
   } finally {
     view.unmount();
@@ -710,7 +727,7 @@ test("sandbox calls of a code mode program show as their own steps", async () =>
     expect(screen.getByText("3 passed")).toBeInTheDocument();
     expect(screen.getByText("Exit code 0")).toBeInTheDocument();
     expect(screen.getByText("Edited 1 file")).toBeInTheDocument();
-    expect(screen.getByText(isolated("gone.py"))).toBeInTheDocument();
+    expect(screen.getByText("gone.py")).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent(/await run/);
   } finally {
     view.unmount();
@@ -979,9 +996,7 @@ test("published files show in the timeline and as download cards after the answe
       screen.getAllByText("/home/onyx/workspaces/abc/out/report.csv")
     ).toHaveLength(2);
     expect(screen.getByText("Publish failed")).toBeInTheDocument();
-    expect(
-      screen.getByText(isolated("missing.pdf is not a file"))
-    ).toBeInTheDocument();
+    expect(screen.getByText("missing.pdf is not a file")).toBeInTheDocument();
     expect(screen.getByText("missing.pdf")).toBeInTheDocument();
   } finally {
     view.unmount();
@@ -1009,9 +1024,7 @@ test("a publish_files call with invalid arguments still shows its step and error
   try {
     await expandTimeline();
     expect(screen.getByText("Publish failed")).toBeInTheDocument();
-    expect(
-      screen.getByText(isolated("files: field required"))
-    ).toBeInTheDocument();
+    expect(screen.getByText("files: field required")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Preview / })
     ).not.toBeInTheDocument();

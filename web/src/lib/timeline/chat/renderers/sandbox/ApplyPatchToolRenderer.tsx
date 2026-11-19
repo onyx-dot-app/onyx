@@ -2,21 +2,20 @@ import { type ComponentProps, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { Text, type TextColor } from "@opal/components";
+import { codeSpan, markdown, richNodes } from "@opal/utils";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import {
   ApplyPatchEnd,
   ApplyPatchFileChange,
   ApplyPatchStart,
   ApplyPatchToolPacket,
-  FileToolName,
   FileToolProgress,
   PacketType,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/app/app/message/messageComponents/types";
-import type { TimelineTranslate } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
+import { stripBidiControls } from "@/lib/bidiControls";
 import {
-  isolateText,
   SandboxCallContent,
   SandboxCallError,
 } from "@/lib/timeline/chat/renderers/sandbox/sandboxCall";
@@ -36,15 +35,6 @@ const COLLAPSED_PATCH_LINES = 6;
 // Lines that get their own colored element. The rest of a larger patch shows
 // as one plain block, so even a 1 MiB patch opens quickly.
 const MAX_COLORED_PATCH_LINES = 2000;
-// Patch lines that name a file; the name follows the marker.
-const FILE_HEADER =
-  /^(\*\*\* (?:Add File|Update File|Delete File|Move to): )(.*)$/;
-
-function patchLineText(line: string): string {
-  const header = FILE_HEADER.exec(line);
-  return header ? `${header[1]}${isolateText(header[2] ?? "")}` : line;
-}
-
 function renderPatchLines(text: string) {
   const patch = text.endsWith("\n") ? text.slice(0, -1) : text;
   const coloredLines = patch.split("\n", MAX_COLORED_PATCH_LINES);
@@ -52,7 +42,9 @@ function renderPatchLines(text: string) {
     coloredLines.reduce((length, line) => length + line.length + 1, 0)
   );
   return (
-    <div className="whitespace-pre-wrap wrap-break-word">
+    // dir="ltr": a patch is code, and the attribute isolates it, so the
+    // sandbox's text cannot reorder the text around it.
+    <div dir="ltr" className="whitespace-pre-wrap wrap-break-word">
       {coloredLines.map((line, index) => (
         <Text
           key={index}
@@ -67,7 +59,7 @@ function renderPatchLines(text: string) {
                   : "text-04"
           }
         >
-          {`${patchLineText(line)}\n`}
+          {`${line}\n`}
         </Text>
       ))}
       {plainRest && (
@@ -77,25 +69,6 @@ function renderPatchLines(text: string) {
       )}
     </div>
   );
-}
-
-const PROGRESS_STATUS = {
-  apply_patch: "sandbox.patch.progress.patching.status",
-  edit: "sandbox.patch.progress.editing.status",
-  write: "sandbox.patch.progress.writing.status",
-} as const satisfies Record<FileToolName, string>;
-
-function progressStatus(
-  progress: FileToolProgress,
-  t: TimelineTranslate
-): string {
-  const [path] = progress.paths;
-  return t(PROGRESS_STATUS[progress.tool_name], {
-    count: progress.paths.length,
-    named: path === undefined ? "false" : "true",
-    path: isolateText(path ?? ""),
-    lines: progress.lines,
-  });
 }
 
 interface FileRow {
@@ -126,10 +99,20 @@ function FileList({ files }: { files: FileRow[] }) {
               {CHANGE_MARKERS[file.change].marker}
             </Text>
           )}
+          {/* Each path in its own LTR isolate: the sandbox's text cannot
+              reorder the text around it. */}
           <Text font="secondary-mono" color="text-04" wordWrap="break-all">
-            {file.movePath === null
-              ? isolateText(file.path)
-              : `${isolateText(file.path)} → ${isolateText(file.movePath)}`}
+            {richNodes(
+              <>
+                <span dir="ltr">{stripBidiControls(file.path)}</span>
+                {file.movePath !== null && (
+                  <>
+                    {" → "}
+                    <span dir="ltr">{stripBidiControls(file.movePath)}</span>
+                  </>
+                )}
+              </>
+            )}
           </Text>
         </Section>
       ))}
@@ -189,6 +172,12 @@ export function ApplyPatchToolRenderer({
   // start packet replaces it with the card that replay shows. A call that
   // ends without a start shows only how it ended.
   const liveProgress = start !== null || isComplete ? null : progress;
+  const [progressPath] = liveProgress?.paths ?? [];
+  // The path reads as code, isolated from the words around it.
+  const pathCode =
+    progressPath === undefined
+      ? null
+      : codeSpan(stripBidiControls(progressPath));
 
   const status = stopped
     ? t("sandbox.stopped.status")
@@ -196,9 +185,27 @@ export function ApplyPatchToolRenderer({
       ? t("sandbox.patch.failed.status")
       : end !== null
         ? t("sandbox.patch.edited.status", { count: end.files.length })
-        : liveProgress !== null
-          ? progressStatus(liveProgress, t)
-          : t("header.editingFiles.label");
+        : liveProgress === null
+          ? t("header.editingFiles.label")
+          : liveProgress.tool_name === "apply_patch"
+            ? t("sandbox.patch.progress.patching.status", {
+                count: liveProgress.paths.length,
+              })
+            : pathCode === null
+              ? liveProgress.tool_name === "write"
+                ? t("sandbox.patch.progress.writing.unnamed")
+                : t("sandbox.patch.progress.editing.unnamed")
+              : markdown(
+                  liveProgress.tool_name === "write"
+                    ? t("sandbox.patch.progress.writing.named", {
+                        path: pathCode,
+                        lines: liveProgress.lines,
+                      })
+                    : t("sandbox.patch.progress.editing.named", {
+                        path: pathCode,
+                        lines: liveProgress.lines,
+                      })
+                );
 
   const content = (
     <SandboxCallContent renderType={renderType}>
