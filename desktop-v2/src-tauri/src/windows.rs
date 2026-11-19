@@ -145,6 +145,9 @@ pub fn reset_launcher(app: &AppHandle) {
 
 /// Bound to the global shortcut: shows the launcher over any app, or hides it.
 pub fn toggle_launcher(app: &AppHandle) {
+    if app.state::<AppState>().policy().disable_launcher {
+        return;
+    }
     crate::launcher::toggle(app, route);
 }
 

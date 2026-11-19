@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use tauri::menu::MenuItem;
-use tauri::{AppHandle, Wry};
+use tauri::{AppHandle, Manager, Wry};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 /// The feed has macOS builds only. Until it has signed Windows and Linux
@@ -36,6 +36,8 @@ pub enum Outcome {
     UpToDate,
     Ready(String),
     Busy,
+    /// Turned off by managed policy (`DisableAutoUpdate`).
+    Disabled,
 }
 
 pub fn register_menu_item(item: MenuItem<Wry>) {
@@ -64,6 +66,13 @@ const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10 *
 
 /// Checks the feed and downloads a newer version if there is one.
 pub async fn check_and_download(app: &AppHandle) -> Result<Outcome, String> {
+    if app
+        .state::<crate::state::AppState>()
+        .policy()
+        .disable_auto_update
+    {
+        return Ok(Outcome::Disabled);
+    }
     if let Some(version) = ready_version() {
         return Ok(Outcome::Ready(version));
     }
@@ -177,6 +186,11 @@ pub fn on_menu(app: &AppHandle) {
             ),
             Ok(Outcome::Ready(version)) => offer_restart(&app, &version),
             Ok(Outcome::Busy) => {}
+            Ok(Outcome::Disabled) => show_message(
+                &app,
+                "Updates are managed by your organization",
+                "Ask your IT team for the latest version of Onyx.",
+            ),
             Err(e) => {
                 log::warn!("update check failed: {e}");
                 show_message(

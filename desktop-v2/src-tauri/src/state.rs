@@ -3,11 +3,13 @@ use std::sync::Mutex;
 
 use crate::api::Api;
 use crate::config::ConfigStore;
+use crate::policy::Policy;
 use crate::session_store;
 
 pub struct AppState {
     pub config: ConfigStore,
     pub api: Api,
+    policy: Mutex<Policy>,
     // Cached so the keychain is read once per run.
     token: Mutex<Option<(String, String)>>,
     /// Bumped when a session ends (sign-out, server change). Work that started
@@ -18,10 +20,11 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(config: ConfigStore) -> Self {
+    pub fn new(config: ConfigStore, policy: Policy) -> Self {
         Self {
             config,
             api: Api::new(),
+            policy: Mutex::new(policy),
             token: Mutex::new(None),
             epoch: AtomicU64::new(0),
             cookie_name: Mutex::new(None),
@@ -83,11 +86,27 @@ impl AppState {
         }
     }
 
+    pub fn policy(&self) -> Policy {
+        self.policy
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
+    }
+
+    pub fn set_policy(&self, policy: Policy) {
+        *self.policy.lock().unwrap_or_else(|p| p.into_inner()) = policy;
+    }
+
+    /// The server in use; a managed one wins as `Policy::server` says.
     pub fn server(&self) -> Result<String, String> {
-        self.config
-            .get()
-            .server_url
+        self.policy()
+            .server(self.config.get().server_url)
             .ok_or_else(|| "No server is configured.".to_string())
+    }
+
+    /// The launcher shortcut to register, or `None` if the launcher is off.
+    pub fn hotkey(&self) -> Option<String> {
+        self.policy().hotkey(self.config.get().hotkey())
     }
 
     pub fn token(&self, server: &str) -> Option<String> {

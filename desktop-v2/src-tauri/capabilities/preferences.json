@@ -9,6 +9,7 @@
     "core:window:allow-set-size",
     "allow-get-prefs",
     "allow-set-hotkey",
+    "allow-set-launch-at-login",
     "allow-change-server",
     "allow-sign-out"
   ]

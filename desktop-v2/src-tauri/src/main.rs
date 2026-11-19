@@ -13,6 +13,7 @@ mod macos_cookies;
 mod macos_dialogs;
 mod main_window;
 mod menu;
+mod policy;
 mod qa;
 mod session_store;
 mod shortcut;
@@ -35,6 +36,7 @@ fn main() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         // Remember the main window's size and position; small windows stay centred.
@@ -49,9 +51,10 @@ fn main() {
     let app = builder
         .setup(|app| {
             let config_path = app.path().app_config_dir()?.join("config.json");
-            app.manage(AppState::new(ConfigStore::load(config_path)));
-
             let handle = app.handle();
+            let policy = policy::read(handle);
+            policy::apply_launch_at_login(handle, &policy);
+            app.manage(AppState::new(ConfigStore::load(config_path), policy));
 
             // Windows and Linux: the main window gets its own menu (main_window.rs).
             #[cfg(target_os = "macos")]
@@ -59,11 +62,12 @@ fn main() {
             app.on_menu_event(|app, event| menu::handle(app, event.id().as_ref()));
             menu::build_tray(handle)?;
 
-            let hotkey = app.state::<AppState>().config.get().hotkey();
-            if let Err(e) = shortcut::register(handle, &hotkey) {
-                log::warn!("{e}");
+            if let Some(hotkey) = app.state::<AppState>().hotkey() {
+                if let Err(e) = shortcut::register(handle, &hotkey) {
+                    log::warn!("{e}");
+                }
+                launcher::preload(handle);
             }
-            launcher::preload(handle);
 
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
@@ -97,6 +101,7 @@ fn main() {
             commands::sign_in_with_sso,
             commands::get_prefs,
             commands::set_hotkey,
+            commands::set_launch_at_login,
             commands::change_server,
             commands::sign_out,
             commands::ask,

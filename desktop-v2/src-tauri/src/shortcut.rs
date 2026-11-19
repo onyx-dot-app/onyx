@@ -61,3 +61,16 @@ pub fn rebind(app: &AppHandle, old: &str, new: &str) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// Swaps one launcher shortcut (or none) for another (or none).
+pub fn replace(app: &AppHandle, old: Option<&str>, new: Option<&str>) -> Result<(), String> {
+    match (old, new) {
+        (Some(old), Some(new)) => rebind(app, old, new),
+        (Some(old), None) => {
+            let _ = app.global_shortcut().unregister(old);
+            Ok(())
+        }
+        (None, Some(new)) => register(app, new),
+        (None, None) => Ok(()),
+    }
+}

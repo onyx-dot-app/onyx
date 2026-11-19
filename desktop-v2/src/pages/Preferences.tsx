@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Button, Card, Text } from "@opal/components";
+import { Button, Card, InputSwitch, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { mount } from "@/lib/mount";
 import { IS_MAC } from "@/lib/platform";
@@ -9,6 +9,7 @@ import {
   errorMessage,
   getPrefs,
   setHotkey,
+  setLaunchAtLogin,
   signOut,
   type Prefs,
 } from "@/lib/ipc";
@@ -28,6 +29,14 @@ function PrefSection({ title, children }: PrefSectionProps) {
         {children}
       </Section>
     </Card>
+  );
+}
+
+function ManagedNote() {
+  return (
+    <Text font="secondary-body" color="text-03">
+      Managed by your organization
+    </Text>
   );
 }
 
@@ -120,11 +129,12 @@ function displayShortcut(accelerator: string): string {
 
 interface ShortcutRecorderProps {
   value: string | null;
+  disabled: boolean;
   onRecord: (accelerator: string) => void;
 }
 
 // Click, then press the new keys.
-function ShortcutRecorder({ value, onRecord }: ShortcutRecorderProps) {
+function ShortcutRecorder({ value, disabled, onRecord }: ShortcutRecorderProps) {
   const [recording, setRecording] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -160,7 +170,8 @@ function ShortcutRecorder({ value, onRecord }: ShortcutRecorderProps) {
       type="button"
       id="hotkey"
       aria-label="Launcher shortcut"
-      className="h-9 rounded-08 border border-border-02 bg-background-neutral-00 px-3 text-start font-main-ui-body text-text-04 focus:border-border-05 focus:outline-none"
+      disabled={disabled}
+      className="h-9 rounded-08 border border-border-02 bg-background-neutral-00 px-3 text-start font-main-ui-body text-text-04 focus:border-border-05 focus:outline-none disabled:cursor-default disabled:text-text-03"
       onClick={() => {
         buttonRef.current?.focus();
         setRecording(true);
@@ -178,6 +189,7 @@ function Preferences() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Each open reads managed policy again.
   useEffect(() => {
     void getPrefs().then(setPrefs);
   }, []);
@@ -205,6 +217,13 @@ function Preferences() {
     });
   }
 
+  async function onLaunchAtLogin(enabled: boolean) {
+    await run(async () => {
+      await setLaunchAtLogin(enabled);
+      setPrefs((p) => (p ? { ...p, launchAtLogin: enabled } : p));
+    });
+  }
+
   return (
     <WindowFrame title="Preferences" subtitle="Settings for this device">
       <Section gap={4} alignItems="stretch" height="fit">
@@ -212,16 +231,30 @@ function Preferences() {
           <Text font="main-ui-body" color="text-04">
             {prefs?.serverUrl ?? "Not connected"}
           </Text>
-          <Section flexDirection="row" justifyContent="start" height="fit">
-            <Button prominence="secondary" onClick={() => void run(changeServer)}>
-              Change server
-            </Button>
-          </Section>
+          {prefs?.serverManaged ? <ManagedNote /> : null}
+          {prefs?.serverLocked ? null : (
+            <Section flexDirection="row" justifyContent="start" height="fit">
+              <Button prominence="secondary" onClick={() => void run(changeServer)}>
+                Change server
+              </Button>
+            </Section>
+          )}
         </PrefSection>
         <PrefSection title="Launcher Shortcut">
-          <Field label="Shows the launcher from any app" inputId="hotkey">
-            <ShortcutRecorder value={prefs?.hotkey ?? null} onRecord={(a) => void onRecordHotkey(a)} />
-          </Field>
+          {prefs?.launcherDisabled ? (
+            <Text font="main-ui-body" color="text-04">
+              The launcher is turned off.
+            </Text>
+          ) : (
+            <Field label="Shows the launcher from any app" inputId="hotkey">
+              <ShortcutRecorder
+                value={prefs?.hotkey ?? null}
+                disabled={prefs?.hotkeyManaged ?? false}
+                onRecord={(a) => void onRecordHotkey(a)}
+              />
+            </Field>
+          )}
+          {prefs?.hotkeyManaged ? <ManagedNote /> : null}
           {prefs?.shortcutNotice ? (
             <Text font="secondary-body" color="text-03">
               {prefs.shortcutNotice}
@@ -230,6 +263,32 @@ function Preferences() {
           {saved ? (
             <Text font="secondary-body" color="text-03">
               Saved
+            </Text>
+          ) : null}
+        </PrefSection>
+        <PrefSection title="Startup">
+          <Section
+            flexDirection="row"
+            justifyContent="between"
+            alignItems="center"
+            height="fit"
+          >
+            <label htmlFor="launch-at-login">
+              <Text font="main-ui-body" color="text-04">
+                Launch at login
+              </Text>
+            </label>
+            <InputSwitch
+              id="launch-at-login"
+              checked={prefs?.launchAtLogin ?? false}
+              disabled={!prefs || prefs.launchAtLoginManaged}
+              onCheckedChange={(enabled) => void onLaunchAtLogin(enabled)}
+            />
+          </Section>
+          {prefs?.launchAtLoginManaged ? <ManagedNote /> : null}
+          {prefs?.autoUpdateDisabled ? (
+            <Text font="secondary-body" color="text-03">
+              Automatic updates are turned off by your organization.
             </Text>
           ) : null}
         </PrefSection>

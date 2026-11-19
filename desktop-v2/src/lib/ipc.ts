@@ -12,6 +12,14 @@ export interface Prefs {
   signedIn: boolean;
   // Why the launcher shortcut may not work, or null.
   shortcutNotice: string | null;
+  launchAtLogin: boolean;
+  // Settings that managed policy (MDM or Group Policy) sets.
+  serverManaged: boolean;
+  serverLocked: boolean;
+  hotkeyManaged: boolean;
+  launcherDisabled: boolean;
+  launchAtLoginManaged: boolean;
+  autoUpdateDisabled: boolean;
 }
 
 export interface SearchHit {
@@ -76,6 +84,9 @@ export const getPrefs = (): Promise<Prefs> => invoke("get_prefs");
 
 export const setHotkey = (hotkey: string): Promise<void> =>
   invoke("set_hotkey", { hotkey });
+
+export const setLaunchAtLogin = (enabled: boolean): Promise<void> =>
+  invoke("set_launch_at_login", { enabled });
 
 export const changeServer = (): Promise<void> => invoke("change_server");
 
