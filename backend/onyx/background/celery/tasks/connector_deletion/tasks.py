@@ -639,7 +639,7 @@ def monitor_connector_deletion_taskset(
             db_session.commit()
             # Here, not at the end: a later step can raise, and the deleted
             # pair is not monitored again. This call never raises.
-            drop_orphaned_questions(tenant_id)
+            drop_orphaned_questions()
 
             # The pair's doc permission sync checkpoint is a file, not a row
             fetch_versioned_implementation_with_fallback(

@@ -17,6 +17,7 @@ from onyx.server.features.suggested_questions.models import (
     QuestionKind,
     QuestionPool,
     UseCase,
+    UserRecord,
 )
 from onyx.utils.special_types import JSON_ro
 
@@ -174,6 +175,66 @@ def test_record_topup_forgets_topups_outside_the_window() -> None:
     store.record_topup(user_id, NOW - timedelta(hours=30), window)
     store.record_topup(user_id, NOW, window)
     assert store.load_user_record(user_id).topups == [NOW]
+
+
+def _stored_record(kv: _FakeKvStore, user_id: object) -> UserRecord:
+    return UserRecord.model_validate(
+        kv.data[KV_SUGGESTED_QUESTIONS_USER_KEY.format(user_id)]
+    )
+
+
+def test_private_shelf_keeps_the_newest_and_drops_used_old_and_deleted(
+    kv: _FakeKvStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(store, "SQ_PRIVATE_SHELF", 3)
+    user_id = uuid4()
+    used, kept = _question("used", age_minutes=10), _question("kept", age_minutes=30)
+    expired = _question("expired", age_minutes=8 * 24 * 60)
+    deleted = _question("deleted", age_minutes=5)
+    store.mark_used(user_id, used.id)
+    store.record_seen(user_id, NOW)
+    store._update_user_record(
+        user_id,
+        lambda record: record.model_copy(
+            update={"questions": [used, kept, expired, deleted]}
+        ),
+    )
+    live = {"used", "kept", "expired", "new-1", "new-2", "newest"}
+
+    store.save_private_questions(
+        user_id, [_question("new-1", age_minutes=1), _question("new-2")], live, NOW
+    )
+    after_first = _stored_record(kv, user_id)
+    store.save_private_questions(
+        user_id, [_question("newest", age_minutes=-1)], live, NOW
+    )
+
+    assert [q.document_id for q in after_first.questions] == ["new-2", "new-1", "kept"]
+    # Full: the newer question pushes out the oldest.
+    assert [q.document_id for q in _stored_record(kv, user_id).questions] == [
+        "newest",
+        "new-2",
+        "new-1",
+    ]
+    # The rest of the record is kept.
+    assert after_first.used == [used.id]
+    assert after_first.last_seen_at == NOW
+
+
+@pytest.mark.usefixtures("kv")
+def test_load_private_shelves_skips_people_without_questions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    alice, bob = _user(), _user()
+    monkeypatch.setattr(store, "get_all_users", lambda *_a, **_kw: [alice, bob])
+    store.save_private_questions(alice.id, [_question("doc")], {"doc"}, NOW)
+    store.record_seen(bob.id, NOW)
+
+    shelves = store.load_private_shelves(MagicMock(spec=Session))
+
+    assert {
+        user_id: [q.document_id for q in qs] for user_id, qs in shelves.items()
+    } == {alice.id: ["doc"]}
 
 
 def _user(
