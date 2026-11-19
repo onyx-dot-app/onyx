@@ -2402,6 +2402,20 @@ class OpenSearchIndexClient(OpenSearchClient):
             )
         return found
 
+    def analyze(self, text: str, field: str) -> list[str]:
+        """Runs a field's search analyzer on text.
+
+        Raises:
+            Exception: There was an error analyzing the text.
+
+        Returns:
+            The terms the analyzer produces, in order.
+        """
+        result: dict[str, Any] = self._client.indices.analyze(
+            index=self._index_name, body={"field": field, "text": text}
+        )
+        return [token["token"] for token in result["tokens"]]
+
     @log_function_time(debug_only=True)
     def refresh_index(self) -> None:
         """Refreshes the index to make recent changes searchable.
