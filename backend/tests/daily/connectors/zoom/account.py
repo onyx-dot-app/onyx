@@ -13,8 +13,7 @@ from enum import Enum
 from typing import NamedTuple
 
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_domain_group_id, build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
+from onyx.access.utils import build_domain_group_id
 from onyx.connectors.zoom.recordings.models import ZoomSessionType
 
 # Every recording is younger than this.
@@ -82,13 +81,7 @@ def expected_access(grant: Grant, owner: str) -> ExternalAccess:
     """What indexing attaches: the owner is always named, and a public
     recording is public as well."""
     groups = (
-        {
-            build_ext_group_name_for_onyx(
-                build_domain_group_id(domain_of(owner)), DocumentSource.ZOOM
-            )
-        }
-        if grant is Grant.DOMAIN
-        else set()
+        {build_domain_group_id(domain_of(owner))} if grant is Grant.DOMAIN else set()
     )
     return ExternalAccess(
         external_user_emails={owner},

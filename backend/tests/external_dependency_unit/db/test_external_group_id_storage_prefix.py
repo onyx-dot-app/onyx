@@ -3,6 +3,7 @@ group sync stores, `<source>_<id>` lowercased, for the sources on
 `SOURCES_YIELDING_BARE_GROUP_IDS`."""
 
 from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -310,29 +311,38 @@ def test_indexing_after_a_doc_sync_stub_keeps_one_form(synced: Seed) -> None:
     assert stub_groups == synced.doc(doc_id).external_user_group_ids
 
 
-def test_group_member_matches_indexed_doc_and_node(synced: Seed) -> None:
-    """The stored ids are the ones group sync gives the member."""
-    email = f"prefix-member-{uuid4().hex}@example.com"
-    synced.user_emails.append(email)
-    upsert_external_groups(
-        synced.db_session,
-        synced.cc_pair.id,
-        [ExternalUserGroup(id="Eng-Team", user_emails=[email])],
-        BARE_SOURCE,
-    )
-    doc_id = synced.new_doc_id()
-    synced.index_doc(doc_id, _access({"Eng-Team"}))
-    raw_id = synced.new_node_raw_id()
-    synced.upsert_node(raw_id, _access({"Eng-Team"}))
+LISTED_SOURCES: list[DocumentSource] = sorted(
+    SOURCES_YIELDING_BARE_GROUP_IDS, key=lambda source: source.value
+)
 
-    member = get_user_by_email(email, synced.db_session)
-    assert member is not None
-    member_groups = {
-        row.external_user_group_id
-        for row in fetch_external_groups_for_user(synced.db_session, member.id)
-    }
-    assert set(synced.doc(doc_id).external_user_group_ids or []) <= member_groups
-    assert set(synced.node(raw_id).external_user_group_ids or []) <= member_groups
+
+@pytest.mark.parametrize(
+    "source", LISTED_SOURCES, ids=[source.value for source in LISTED_SOURCES]
+)
+def test_every_writer_stores_the_id_group_sync_gives_a_member(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    source: DocumentSource,
+) -> None:
+    with contextmanager(_seed)(db_session, source, AccessType.SYNC) as seed:
+        email = f"prefix-member-{uuid4().hex}@example.com"
+        seed.user_emails.append(email)
+        upsert_external_groups(
+            db_session,
+            seed.cc_pair.id,
+            [ExternalUserGroup(id="Eng-Team", user_emails=[email])],
+            source,
+        )
+        member = get_user_by_email(email, db_session)
+        assert member is not None
+        member_groups = {
+            row.external_user_group_id
+            for row in fetch_external_groups_for_user(db_session, member.id)
+        }
+
+        for name, writer in WRITERS.items():
+            stored = writer(seed, _access({"Eng-Team"}))
+            assert set(stored or []) == member_groups, name
 
 
 @pytest.fixture

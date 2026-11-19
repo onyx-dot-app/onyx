@@ -18,8 +18,6 @@ from ee.onyx.external_permissions.youtrack.access import (
     visibility_group_id,
 )
 from ee.onyx.external_permissions.youtrack.group_sync import project_groups
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import HierarchyNode, SlimDocument
 from onyx.connectors.youtrack.connector import YouTrackConnector
 from onyx.connectors.youtrack.models import (
@@ -269,11 +267,8 @@ def test_perm_sync_walk_yields_the_project_node_once_with_access(
     node, *docs = batch
     assert isinstance(node, HierarchyNode)
     assert node.external_access is not None
-    # Stored as given, so it must match the prefixed id of the group's rows.
     assert node.external_access.external_user_group_ids == {
-        build_ext_group_name_for_onyx(
-            project_group_id(_INSTANCE, "0-1"), DocumentSource.YOUTRACK
-        )
+        project_group_id(_INSTANCE, "0-1")
     }
     assert [d.id for d in docs if isinstance(d, SlimDocument)] == [
         f"{_BASE_URL}/api/issues/2-1",
