@@ -19,6 +19,14 @@ export class AdminSkillsPage {
     await expect(this.page.getByTestId("SkillsPage/container")).toBeVisible();
   }
 
+  /** Opens the publish requests list from the banner above the skills. */
+  async openRequests(): Promise<void> {
+    await this.page
+      .getByRole("button", { name: "Review", exact: true })
+      .click();
+    await expect(this.requests).toBeVisible();
+  }
+
   async expectRequest(name: string, kind: string): Promise<void> {
     const row = this.requests.getByRole("row").filter({ hasText: name });
     await expect(row).toBeVisible();

@@ -108,6 +108,7 @@ test.describe("skill publishing", () => {
 
       const adminSkills = new AdminSkillsPage(adminPage);
       await adminSkills.goto();
+      await adminSkills.openRequests();
       await adminSkills.expectRequest(
         name,
         `v${saved.current_version_number} · Update from v${created.current_version_number}`

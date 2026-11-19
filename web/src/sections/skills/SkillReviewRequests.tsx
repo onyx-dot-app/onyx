@@ -80,7 +80,8 @@ export default function SkillReviewRequests({
       toast.error(err instanceof Error ? err.message : t("failedToast"));
     } finally {
       setBusy(false);
-      await refreshRequests();
+      const remaining = await refreshRequests();
+      if (!remaining?.length) setListOpen(false);
     }
   }
 
