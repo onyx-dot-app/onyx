@@ -59,6 +59,8 @@ import {
 } from "@/sections/chat/PublishedFileViews";
 
 interface ChatRightPanelProps {
+  // The chat whose panel this is
+  sessionId: string | null;
   open: boolean;
   state: ChatRightPanelState;
   dispatch: (action: ChatRightPanelAction) => void;
@@ -80,6 +82,7 @@ interface ChatRightPanelProps {
  * back on its tile, then closes the panel.
  */
 export const ChatRightPanel = memo(function ChatRightPanel({
+  sessionId,
   open,
   state,
   dispatch,
@@ -189,6 +192,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
       () => dispatch({ type: "setMode", mode: "medium" }),
       [dispatch]
     ),
+    sessionId,
   });
 
   // Files listed when the panel first shows them count as seen
@@ -457,6 +461,7 @@ interface CurrentChatRightPanelProps {
  * panel's state renders only the panel, not the app chrome.
  */
 export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
+  const sessionId = useChatSessionStore((store) => store.currentSessionId);
   const state = useCurrentRightPanelState();
   const dispatch = useChatSessionStore.getState().updateCurrentRightPanel;
   const files = useCurrentPublishedFiles();
@@ -464,6 +469,7 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
   return (
     <ChatRightPanel
       {...props}
+      sessionId={sessionId}
       state={state}
       dispatch={dispatch}
       files={files}
