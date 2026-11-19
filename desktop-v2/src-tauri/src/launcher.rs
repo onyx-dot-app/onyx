@@ -1,7 +1,9 @@
 //! The launcher panel. On macOS it is a non-activating `NSPanel`, like
 //! Spotlight: the global shortcut shows it over whatever app is in front (also
 //! full-screen apps and on every Space), it takes keystrokes without bringing
-//! Onyx's other windows forward, and it hides when it loses focus.
+//! Onyx's other windows forward, and it hides when it loses focus. On Windows
+//! and Linux it is a borderless, always-on-top window with no taskbar entry
+//! that takes focus when shown and hides when it loses focus.
 
 use tauri::{AppHandle, Manager, WebviewUrl};
 
@@ -225,6 +227,9 @@ mod platform {
             .inner_size(720.0, 460.0)
             .decorations(false)
             .transparent(true)
+            // The page draws its own rounded frame; a native shadow would
+            // outline the transparent corners on Windows.
+            .shadow(false)
             .always_on_top(true)
             .skip_taskbar(true)
             .visible_on_all_workspaces(true)

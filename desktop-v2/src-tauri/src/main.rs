@@ -52,6 +52,8 @@ fn main() {
 
             let handle = app.handle();
 
+            // Windows and Linux: the main window gets its own menu (main_window.rs).
+            #[cfg(target_os = "macos")]
             app.set_menu(menu::build(handle)?)?;
             app.on_menu_event(|app, event| menu::handle(app, event.id().as_ref()));
             menu::build_tray(handle)?;
@@ -64,6 +66,12 @@ fn main() {
 
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
+                // Installers register onyx:// on Windows and Linux; AppImage
+                // and dev builds need it at runtime.
+                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                if let Err(e) = app.deep_link().register_all() {
+                    log::warn!("could not register onyx:// links: {e}");
+                }
                 let link_app = handle.clone();
                 app.deep_link().on_open_url(move |event| {
                     for url in event.urls() {

@@ -10,6 +10,7 @@ import {
 } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { mount } from "@/lib/mount";
+import { hasPrimaryModifier, primaryShortcut } from "@/lib/platform";
 import {
   ask,
   errorMessage,
@@ -217,11 +218,11 @@ function Launcher() {
       event.preventDefault();
       event.stopPropagation();
       void hideLauncher();
-    } else if (event.key === "Enter" && event.metaKey) {
+    } else if (event.key === "Enter" && hasPrimaryModifier(event)) {
       event.preventDefault();
       event.stopPropagation();
       void openChatInMain(chatSessionId);
-    } else if (event.key.toLowerCase() === "n" && event.metaKey) {
+    } else if (event.key.toLowerCase() === "n" && hasPrimaryModifier(event)) {
       event.preventDefault();
       event.stopPropagation();
       newChat();
@@ -274,7 +275,7 @@ function Launcher() {
     } else if (event.key === "Tab") {
       event.preventDefault();
       setMode((m) => (m === "ask" ? "search" : "ask"));
-    } else if (event.key === "Enter" && !event.metaKey && query.trim() !== "") {
+    } else if (event.key === "Enter" && !hasPrimaryModifier(event) && query.trim() !== "") {
       event.preventDefault();
       // The server takes no new message while an answer waits for approval:
       // keep the draft; ⌘↵ approves in the window, ⌘N starts a new chat.
@@ -326,7 +327,7 @@ function Launcher() {
             </Button>
             <Section flexDirection="row" justifyContent="end" height="fit">
               <Text font="secondary-body" color="text-02">
-                Tab switches · ⌘N new chat · ⌘↵ opens in window · Esc closes
+                {`Tab switches · ${primaryShortcut("N")} new chat · ${primaryShortcut("Enter")} opens in window · Esc closes`}
               </Text>
             </Section>
           </Section>
@@ -346,7 +347,7 @@ function Launcher() {
               mode === "search"
                 ? "Search your company's knowledge…"
                 : awaitingApproval
-                  ? "Approve with ⌘↵ in the Onyx window, or ⌘N for a new chat"
+                  ? `Approve with ${primaryShortcut("Enter")} in the Onyx window, or ${primaryShortcut("N")} for a new chat`
                   : turns.length > 0
                   ? "Ask a follow-up…"
                   : "Ask Onyx anything…"
@@ -432,7 +433,7 @@ function TurnView({ turn }: { turn: Turn }) {
       ) : null}
       {turn.approval ? (
         <Text font="main-ui-body" color="text-03">
-          {`Onyx needs your approval to use ${turn.approval.tool ?? "a tool"}. Press ⌘↵ to continue in the Onyx window.`}
+          {`Onyx needs your approval to use ${turn.approval.tool ?? "a tool"}. Press ${primaryShortcut("Enter")} to continue in the Onyx window.`}
         </Text>
       ) : null}
       {turn.citations.length > 0 ? (

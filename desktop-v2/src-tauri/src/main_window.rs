@@ -13,6 +13,7 @@ use crate::state::AppState;
 
 pub const LABEL: &str = "main";
 static POPUP_COUNTER: AtomicUsize = AtomicUsize::new(0);
+#[cfg(target_os = "macos")]
 const DESKTOP_CHROME_JS: &str = include_str!("desktop_chrome.js");
 const LINK_SHIM_JS: &str = include_str!("link_shim.js");
 
@@ -228,6 +229,8 @@ fn hand_over_session(
 ) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let result = crate::macos_cookies::set_session_cookie(window, server_url, name, token);
+    // WebView2 and WebKitGTK: wry's cookie API. The cookie and the first page
+    // load are queued on the main thread in that order.
     #[cfg(not(target_os = "macos"))]
     let result = window
         .set_cookie(session_cookie(server_url, name, token)?)
@@ -262,7 +265,6 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
         .min_inner_size(800.0, 600.0)
         .center()
         .initialization_script(LINK_SHIM_JS)
-        .initialization_script(DESKTOP_CHROME_JS)
         .on_page_load(|window, payload| {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                 sync_chrome(window.app_handle());
@@ -284,10 +286,14 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
         .on_download(|_webview, event| handle_download(event));
 
     // Overlay title bar: the traffic lights float over the web UI's sidebar.
+    // Other platforms keep the native title bar and the page's own layout.
     #[cfg(target_os = "macos")]
     let builder = builder
+        .initialization_script(DESKTOP_CHROME_JS)
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true);
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.menu(crate::menu::build_window_menu(app).map_err(|e| e.to_string())?);
 
     let window = builder.build().map_err(|e| e.to_string())?;
     // Entering or leaving full screen resizes the window.
@@ -298,6 +304,7 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
         }
     });
 
+    // WebView2 and WebKitGTK show alert(), confirm() and prompt() themselves.
     #[cfg(target_os = "macos")]
     crate::macos_dialogs::install(&window);
 

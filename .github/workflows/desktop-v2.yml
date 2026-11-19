@@ -103,6 +103,130 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+  # Same checks on Windows and Linux, plus unsigned installers for reviewers.
+  check-and-build-windows-linux:
+    name: Check and build (${{ matrix.name }})
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            platform: windows-latest
+            artifact: windows-x64
+            bundles: nsis,msi
+            bundle-paths: |
+              desktop-v2/src-tauri/target/release/bundle/nsis/*.exe
+              desktop-v2/src-tauri/target/release/bundle/msi/*.msi
+          - name: Linux x64
+            platform: ubuntu-24.04
+            artifact: linux-x64
+            bundles: appimage,deb
+            bundle-paths: |
+              desktop-v2/src-tauri/target/release/bundle/appimage/*.AppImage
+              desktop-v2/src-tauri/target/release/bundle/deb/*.deb
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            file \
+            libayatana-appindicator3-dev \
+            libdbus-1-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            pkg-config
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning]
+        with:
+          bun-version: "1.3.13"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # zizmor: ignore[cache-poisoning]
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            desktop-v2/src-tauri/target/
+          key: ${{ runner.os }}-desktop-v2-cargo-${{ hashFiles('desktop-v2/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-v2-cargo-
+
+      - name: Install web dependencies
+        working-directory: ./web
+        run: bun install --frozen-lockfile
+
+      - name: Install desktop-v2 dependencies
+        working-directory: ./desktop-v2
+        run: bun install --frozen-lockfile
+
+      - name: Build the local windows
+        working-directory: ./desktop-v2
+        run: bun run vite:build
+
+      - name: Check Rust formatting
+        working-directory: ./desktop-v2/src-tauri
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        working-directory: ./desktop-v2/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run Rust tests
+        working-directory: ./desktop-v2/src-tauri
+        run: cargo test
+
+      - name: Type-check the local windows
+        working-directory: ./desktop-v2
+        run: bun run typecheck
+
+      # Unsigned. Windows SmartScreen warns on first launch: More info > Run anyway.
+      # APPIMAGE_EXTRACT_AND_RUN: the runner has no FUSE for linuxdeploy.
+      # NO_STRIP: linuxdeploy's strip cannot read Ubuntu 24.04's libraries.
+      - name: Build installers
+        working-directory: ./desktop-v2
+        env:
+          BUNDLES: ${{ matrix.bundles }}
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          NO_STRIP: "true"
+        run: bun run tauri build --bundles "${BUNDLES}"
+
+      - name: Upload installers
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: onyx-desktop-v2-${{ matrix.artifact }}-${{ github.run_id }}
+          path: ${{ matrix.bundle-paths }}
+          retention-days: 14
+          if-no-files-found: error
+
+  # macOS only for now. Windows and Linux releases will reuse v1's pipeline
+  # (deployment.yml, build-desktop): v1 ships them unsigned today, so a
+  # Windows code-signing step (Authenticode) and the "windows-x86_64" and
+  # "linux-x86_64" entries in latest.json are still to add.
   release:
     name: Release (signed universal DMG)
     if: github.event_name == 'workflow_dispatch'

@@ -36,6 +36,13 @@
     "macOS": {
       "minimumSystemVersion": "13.0"
     },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libayatana-appindicator3-1"
+        ]
+      }
+    },
     "createUpdaterArtifacts": false
   },
   "plugins": {

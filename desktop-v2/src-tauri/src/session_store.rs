@@ -5,8 +5,10 @@
 //! once. An unsigned dev build gets a new signature on every rebuild, and macOS
 //! would ask for the user's password each time, so debug builds keep the token
 //! in a file only the user can read (mode 600) in the app's support folder.
+//! Windows and Linux always use the OS store (Credential Manager, Secret
+//! Service), which does not depend on the code signature.
 
-#[cfg(not(all(debug_assertions, unix)))]
+#[cfg(not(all(debug_assertions, target_os = "macos")))]
 mod backend {
     use keyring::Entry;
 
@@ -34,7 +36,7 @@ mod backend {
     }
 }
 
-#[cfg(all(debug_assertions, unix))]
+#[cfg(all(debug_assertions, target_os = "macos"))]
 mod backend {
     use std::collections::BTreeMap;
     use std::fs;

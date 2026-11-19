@@ -4,7 +4,11 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(target_os = "macos")]
 pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Shift+Space";
+// Windows and some Linux desktops already use Ctrl+Shift+Space (IME switch).
+#[cfg(not(target_os = "macos"))]
+pub const DEFAULT_HOTKEY: &str = "Control+Alt+Space";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

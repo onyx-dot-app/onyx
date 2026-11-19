@@ -1,17 +1,19 @@
 # Onyx Desktop v2 (preview)
 
-A native macOS app for Onyx, built with Tauri 2.12. It lives beside `desktop/`, which keeps
-shipping unchanged and stays the default desktop app. v2 has its own bundle ID
+A native desktop app for Onyx, built with Tauri 2.12. macOS is the main platform. Windows and
+Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It lives beside
+`desktop/`, which keeps shipping unchanged and stays the default desktop app. v2 has its own bundle ID
 (`app.onyx.desktop.v2`) and name ("Onyx v2"), so both apps can be installed at the same time.
 
 ## What it does
 
 - Native onboarding: enter a server URL. The app checks `GET /api/version`.
 - Native sign-in with email and password through `POST /api/auth/mobile/login`. Release builds
-  keep the session token in the macOS keychain (service `app.onyx.desktop.v2`, one entry per
-  server). Debug builds keep it in `~/Library/Application Support/app.onyx.desktop.v2/
-  dev-session-tokens.json` (mode 600): an unsigned dev build gets a new code signature on every
-  rebuild, and macOS would ask for your password each time.
+  keep the session token in the OS credential store (service `app.onyx.desktop.v2`, one entry per
+  server): the macOS keychain, Windows Credential Manager, or the Linux Secret Service (GNOME
+  Keyring, KWallet). macOS debug builds keep it in `~/Library/Application Support/
+  app.onyx.desktop.v2/dev-session-tokens.json` (mode 600): an unsigned dev build gets a new code
+  signature on every rebuild, and macOS would ask for your password each time.
 - The main window shows the server's own web UI. The shell sets the session cookie in the
   window before the first page load, so the web login page never shows. On macOS the cookie
   is built natively as a host-only, HttpOnly cookie (`src-tauri/src/macos_cookies.rs`):
@@ -62,6 +64,8 @@ sprite sheets in `public/aonyx/` are played faster than the pack's timing.
 
 ## Keyboard shortcuts
 
+On macOS. For Windows and Linux, see [Windows and Linux](#windows-and-linux).
+
 | Shortcut | Action |
 |---|---|
 | `Cmd+Shift+Space` (global, configurable) | Show or hide the launcher |
@@ -90,8 +94,18 @@ sprite sheets in `public/aonyx/` are played faster than the pack's timing.
 
 ## Run it
 
-Prerequisites: Rust 1.90+, Bun 1.3+, Xcode Command Line Tools (full Xcode is not needed),
-and a dependency install in `web/` (`desktop-v2` builds Opal from `web/lib/opal/src`).
+Prerequisites: Rust 1.90+, Bun 1.3+, and a dependency install in `web/` (`desktop-v2` builds
+Opal from `web/lib/opal/src`). Also, per platform:
+
+- macOS: Xcode Command Line Tools (full Xcode is not needed).
+- Windows: Microsoft C++ Build Tools ("Desktop development with C++") and the WebView2 runtime
+  (included in Windows 10 and 11).
+- Linux (Debian or Ubuntu):
+
+  ```bash
+  sudo apt-get install build-essential file libayatana-appindicator3-dev libdbus-1-dev \
+    libgtk-3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev libxdo-dev patchelf pkg-config
+  ```
 
 ```bash
 cd desktop-v2
@@ -119,10 +133,42 @@ cargo test --manifest-path src-tauri/Cargo.toml
 - On pull requests that touch `desktop-v2/`, CI runs the checks and builds an unsigned
   universal (Apple silicon and Intel) DMG as a workflow artifact for reviewers. macOS blocks
   an unsigned app on first launch: right-click it, choose **Open**, then **Open** again.
+- The same pull requests also run the checks on Windows and Linux, and build unsigned x64
+  installers as artifacts: NSIS (`.exe`) and MSI on Windows, AppImage and `.deb` on Linux.
+  Windows SmartScreen warns about an unsigned installer: choose **More info**, then **Run
+  anyway**.
 - Run the workflow by hand with a version (for example `0.2.0`) to publish a signed and
   notarized universal DMG, its update archive and `latest.json`. They go to a GitHub
   pre-release tagged `desktop-v2-v<version>`, which is never marked as the latest release, so
-  v1's downloads and auto-update are not affected.
+  v1's downloads and auto-update are not affected. Releases are macOS only for now.
+
+## Windows and Linux
+
+To build installers locally (unsigned, in `src-tauri/target/release/bundle/`):
+
+```bash
+bun run tauri build --bundles nsis,msi      # Windows
+bun run tauri build --bundles appimage,deb  # Linux
+```
+
+How the app differs from macOS:
+
+- The launcher shortcut is `Ctrl+Alt+Space` by default (`Ctrl+Shift+Space` often switches the
+  input language). The launcher is a borderless, always-on-top window with no taskbar entry. It
+  takes focus when it shows and hides when you click away or press `Esc`. In the launcher,
+  `Ctrl+Enter` opens the chat in the window and `Ctrl+N` starts a new chat.
+- The main window keeps the native title bar and has its own menu bar: **File** (New Chat
+  `Ctrl+N`, Open Launcher, Preferences `Ctrl+,`, Close Window `Ctrl+W`, Quit `Ctrl+Q`), **View**
+  (Reload `Ctrl+R`, Back `Alt+Left`, Forward `Alt+Right`, zoom `Ctrl+0`/`Ctrl+=`/`Ctrl+-`, Full
+  Screen `F11`) and **Help** (About). Other windows have no menu bar. **Check for Updates…** is
+  in the tray menu.
+- The session cookie goes in through wry's cookie API. WebView2 and WebKitGTK show `alert()`,
+  `confirm()` and `prompt()` themselves; other native dialogs use `rfd`.
+- `onyx://` sign-in links are registered by the installer, and again at launch (for AppImage and
+  dev builds).
+- Linux needs a tray host for the tray icon (`libayatana-appindicator3-1`; GNOME needs the
+  AppIndicator extension) and a Secret Service (GNOME Keyring or KWallet) to keep you signed in.
+  The launcher's transparent corners need a compositing window manager.
 
 ## Auto-update
 
@@ -173,6 +219,9 @@ need the physical mouse or keyboard).
 - Browser SSO needs a server with the native-app sign-in pass-through in its web OAuth
   callback. v1 also registers the `onyx://` scheme; with both apps installed, macOS sends the
   sign-in link to whichever app registered it last.
-- macOS only for now. The code builds on other platforms, but the launcher panel, native
-  cookies and dialogs are macOS-specific.
+- Windows and Linux are a preview: no signed builds, no auto-update feed, and no QA harness
+  input (it posts AppKit events). Aonyx is a plain always-on-top window there, so clicking it
+  can take focus from the app you are in.
+- On Windows, if the launcher opens while another app holds the foreground lock, Windows can
+  refuse it focus. Click the launcher once to type.
 - The shell-side React and Opal dependencies resolve from `web/node_modules`.

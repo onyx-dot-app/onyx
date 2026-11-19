@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Card, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { mount } from "@/lib/mount";
+import { IS_MAC } from "@/lib/platform";
 import { ErrorText, Field, WindowFrame } from "@/lib/WindowFrame";
 import {
   changeServer,
@@ -70,7 +71,8 @@ function acceleratorFor(event: KeyPress): string | null {
     (/^F([1-9]|1[0-9]|2[0-4])$/.test(code) ? code : null);
   if (!key || !(event.metaKey || event.ctrlKey || event.altKey)) return null;
   const parts: string[] = [];
-  if (event.metaKey) parts.push("CommandOrControl");
+  // CommandOrControl is Control on Windows and Linux; the Windows key is Super.
+  if (event.metaKey) parts.push(IS_MAC ? "CommandOrControl" : "Super");
   if (event.ctrlKey) parts.push("Control");
   if (event.altKey) parts.push("Alt");
   if (event.shiftKey) parts.push("Shift");
@@ -95,8 +97,21 @@ const SYMBOLS: Record<string, string> = {
   Right: "→",
 };
 
-// "CommandOrControl+Shift+Space" as macOS shows it: "⌘⇧Space".
+const OTHER_LABELS: Record<string, string> = {
+  CommandOrControl: "Ctrl",
+  CmdOrCtrl: "Ctrl",
+  Control: "Ctrl",
+};
+
+// "CommandOrControl+Shift+Space" as macOS shows it: "⌘⇧Space". Windows and
+// Linux show "Ctrl+Shift+Space".
 function displayShortcut(accelerator: string): string {
+  if (!IS_MAC) {
+    return accelerator
+      .split("+")
+      .map((part) => OTHER_LABELS[part] ?? part)
+      .join("+");
+  }
   return accelerator
     .split("+")
     .map((part) => SYMBOLS[part] ?? part)
@@ -215,7 +230,7 @@ function Preferences() {
         <PrefSection title="Account">
           <Text font="main-ui-body" color="text-04">
             {prefs?.signedIn
-              ? "Signed in. The session token is in the macOS keychain."
+              ? `Signed in. The session token is in the ${IS_MAC ? "macOS keychain" : "system credential store"}.`
               : "Signed out"}
           </Text>
           <Section flexDirection="row" justifyContent="start" height="fit">
