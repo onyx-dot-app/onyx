@@ -310,7 +310,14 @@ are plain `AgentTool` objects with no `Tool` row, and
    `chat/agent.py:ChatAgent._update_tool_context` gathers documents and files
    from it, `ToolRenderer` draws it, and chat saves it. Put what the model needs
    in `content`. Some saved model text is itself a contract, such as the
-   `run_python` result JSON ([[code-execution#run-python-result-json]]).
+   `run_python` result JSON ([[code-execution#run-python-result-json]]). A
+   tool whose `content` cuts its value sets `full_value` too: a code mode
+   program receives it
+   (`tools/tool_implementations/code_mode/stubs.py:program_value`). Only
+   `ToolResult`, what a tool returns, has the field; the recorded
+   `ToolResultMessage` shares the other fields
+   (`llm/models.py:ToolResultFields`), so nothing saves it. Code that takes
+   any result or message checks `ToolResultFields`.
 5. `run-errors-become-results` **`Tool._run` must not let errors stop the
    turn, and must let cancellation through.** `Tool.run` is final and wraps
    `_run` in `tools/interface.py:_invoke_tool`. A `ToolCallException` becomes an

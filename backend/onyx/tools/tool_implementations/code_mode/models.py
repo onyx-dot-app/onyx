@@ -340,8 +340,8 @@ class SandboxLimits(BaseModel):
     lifetime_seconds: float = Field(default=900.0, gt=0)
     max_tool_calls: int = Field(default=100, gt=0)
     # Characters of printed text, the result and the error collected for one
-    # observation, cut in the middle; bounds host memory and the text that the
-    # output budget tokenizes. About 16 times the default output budget.
+    # observation, cut in the middle; bounds host memory. 16 times the default
+    # output budget (tools/constants.py:DEFAULT_MAX_OUTPUT_CHARS).
     max_output_chars: int = Field(default=640_000, gt=0)
     # Bytes of compact JSON in the host copy of the last expression's value;
     # bounds host memory before the copy's repr() is cut to max_output_chars.
@@ -594,13 +594,13 @@ class CellObserver(BaseModel):
 
     invocation: ToolInvocation
     number: int
-    # Tokens of output that the observation returns.
-    max_tokens: int
+    # Characters of output that the observation returns.
+    max_chars: int
 
 
 class ObservationCut(BaseModel):
     """An ended observation, taken under the cell lock and formatted after it, so
-    tokenizing large output does not hold up the cell."""
+    cutting large output does not hold up the cell."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -608,7 +608,7 @@ class ObservationCut(BaseModel):
     # The parts as collected; `saved` holds them cut for saving.
     details: CodeModeExecutionResult
     saved: CodeModeExecutionResult
-    max_tokens: int
+    max_chars: int
     # Every call of the cell, earlier observations' included, in index order.
     cell_calls: list[CodeModeCall]
     # Set when the observation reports the program's end.
@@ -623,7 +623,7 @@ class SavedObserver(BaseModel):
 
     call_id: str
     number: int
-    max_tokens: int
+    max_chars: int
 
 
 class SavedCodeCell(BaseModel):

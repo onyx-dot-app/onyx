@@ -168,10 +168,11 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         a sentence that names where its saved results
                                         hold its end (tools/tool_implementations/code_mode/prompt.py:closed_cell_text)
   each observation                      taken under the cell lock, formatted after it:
-                                        prompt.py:format_content (model text, cut once in the
-                                        middle to max_output_tokens, 10,000 by
-                                        default) and CodeModeExecutionResult (each part cut to
-                                        about 4 characters per budget token): a CellWindow
+                                        prompt.py:format_content (model text, cut once
+                                        in the middle to max_output_chars, 40,000 by
+                                        default, at most 160,000) and
+                                        CodeModeExecutionResult (each part cut to the
+                                        same budget): a CellWindow
                                         (stdout, calls, commit at the program's end,
                                         tool_call_count) with cell_id, observation and status
                                         (running while the cell runs)

@@ -242,7 +242,7 @@ Two optional tool callbacks cover interception and enrichment:
 
 Callbacks receive copies, except `prepare_tool_result`. Its `ToolResultContext`, like `ToolInvocation.recorded_results`, references the run's objects, since results can be large: the hook must not change them and returns a new result instead.
 `Run.record_tool_results` calls it for every result, one at a time in the order the calls complete, with the results of the step that the run recorded before.
-Its result is what the live `tool_update` event, the saved history and the model get.
+Its result is what the live `tool_update` event, the saved history and the model get. `ToolResult.full_value` reaches the hook; the recorded `ToolResultMessage` has no such field (both share `ToolResultFields`).
 The amendments of the finish and suspend hooks go through it too, with `amended=True`.
 A batch that completes after the run closed reaches neither the hook nor the record.
 It runs under the run's result lock: while it works, the run's other results, and Stop handling on the execution thread, wait for it.

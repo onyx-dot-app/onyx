@@ -41,7 +41,7 @@ from onyx.llm.models import (
     ToolCall,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
-    ToolResult,
+    ToolResultFields,
 )
 from onyx.server.features.build.sandbox.models import (
     ExecOutputDelta as SandboxOutputDelta,
@@ -916,7 +916,7 @@ class ToolRenderer:
             )
         return [packets.Packet(placement=self.placement, obj=obj)]
 
-    def complete(self, result: ToolResult | None) -> list[packets.Packet]:
+    def complete(self, result: ToolResultFields | None) -> list[packets.Packet]:
         """Render the result and end the call's section.
 
         The part of the result that an amendment added follows the section end,
@@ -943,7 +943,7 @@ class ToolRenderer:
             output.extend(self._amendment_packets(result))
         return output
 
-    def _result_packets(self, result: ToolResult | None) -> list[packets.Packet]:
+    def _result_packets(self, result: ToolResultFields | None) -> list[packets.Packet]:
         """The packets of a final result of the call, before its section end."""
         if (
             result is not None
@@ -979,7 +979,7 @@ class ToolRenderer:
             )
         return []
 
-    def amend(self, result: ToolResult) -> list[packets.Packet]:
+    def amend(self, result: ToolResultFields) -> list[packets.Packet]:
         """Render the result that a release hook set for the call.
 
         An ended call renders only what the amendment added. Any other call
@@ -989,7 +989,7 @@ class ToolRenderer:
             return self.complete(result)
         return self._amendment_packets(result)
 
-    def _amendment_packets(self, result: ToolResult) -> list[packets.Packet]:  # noqa: ARG002
+    def _amendment_packets(self, result: ToolResultFields) -> list[packets.Packet]:  # noqa: ARG002
         """What a release hook added to the result after the call ended.
 
         The generic display cannot tell an amendment apart from the result it
@@ -1039,7 +1039,7 @@ class QuestionToolRenderer(ToolRenderer):
         return []
 
     @override
-    def complete(self, result: ToolResult | None) -> list[packets.Packet]:
+    def complete(self, result: ToolResultFields | None) -> list[packets.Packet]:
         if self._finished:
             return []
         self._finished = True
@@ -1143,7 +1143,7 @@ class CodeModeRenderer(ToolRenderer):
             for packet in self._children[index].complete(None)
         ]
 
-    def _result_packets(self, result: ToolResult | None) -> list[packets.Packet]:
+    def _result_packets(self, result: ToolResultFields | None) -> list[packets.Packet]:
         """Close nested calls, then send the program output and the final status.
 
         Replay has no progress events, so the saved calls render here.
@@ -1204,7 +1204,7 @@ class CodeModeRenderer(ToolRenderer):
         return output
 
     @override
-    def _amendment_packets(self, result: ToolResult) -> list[packets.Packet]:
+    def _amendment_packets(self, result: ToolResultFields) -> list[packets.Packet]:
         """The cell's closing record: what the cell did after the observation, up
         to the end of the response."""
         details = result.details
