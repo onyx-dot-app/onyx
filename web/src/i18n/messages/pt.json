@@ -10377,7 +10377,7 @@
       },
       "library": {
         "organization": "Biblioteca da organização",
-        "personal": "Meus uploads de {owner}"
+        "personal": "Envio pessoal"
       },
       "installationSelect": "Configuração de instalação de {name}",
       "installationSaved": "{name} agora é {policy}.",
@@ -10526,7 +10526,8 @@
         "none": "Fora de plugins",
         "many": "{count, plural, one {# plugin} other {# plugins}}",
         "organization": "{plugin} (Biblioteca da organização)",
-        "personal": "{plugin} (Meus uploads de {owner})"
+        "personal": "{plugin} ({owner})",
+        "personalOwner": "envio pessoal"
       },
       "status": {
         "needsSetup": "Requer configuração",

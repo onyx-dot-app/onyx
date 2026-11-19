@@ -10377,7 +10377,7 @@
       },
       "library": {
         "organization": "مكتبة المؤسسة",
-        "personal": "«مرفوعاتي» لـ {owner}"
+        "personal": "تحميل شخصي"
       },
       "installationSelect": "إعداد التثبيت لـ {name}",
       "installationSaved": "أصبح {name} الآن {policy}.",
@@ -10526,7 +10526,8 @@
         "none": "ليس ضمن أي إضافة",
         "many": "{count, plural, zero {لا توجد إضافات} one {إضافة واحدة} two {إضافتان} few {# إضافات} many {# إضافة} other {# إضافة}}",
         "organization": "{plugin} (مكتبة المؤسسة)",
-        "personal": "{plugin} («مرفوعاتي» لـ {owner})"
+        "personal": "{plugin} ({owner})",
+        "personalOwner": "تحميل شخصي"
       },
       "status": {
         "needsSetup": "يحتاج إلى إعداد",

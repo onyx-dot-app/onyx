@@ -10377,7 +10377,7 @@
       },
       "library": {
         "organization": "Bibliothèque de l’organisation",
-        "personal": "Mes importations de {owner}"
+        "personal": "Importation personnelle"
       },
       "installationSelect": "Paramètre d'installation de {name}",
       "installationSaved": "{name} est maintenant {policy}.",
@@ -10526,7 +10526,8 @@
         "none": "Dans aucune extension",
         "many": "{count, plural, one {# extension} other {# extensions}}",
         "organization": "{plugin} (Bibliothèque de l’organisation)",
-        "personal": "{plugin} (Mes importations de {owner})"
+        "personal": "{plugin} ({owner})",
+        "personalOwner": "importation personnelle"
       },
       "status": {
         "needsSetup": "Configuration requise",

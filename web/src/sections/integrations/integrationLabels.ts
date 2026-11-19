@@ -40,7 +40,7 @@ export function useIntegrationLabels() {
         ? t("access.organization", { plugin: first.plugin_name })
         : t("access.personal", {
             plugin: first.plugin_name,
-            owner: first.owner_email ?? "",
+            owner: first.owner_email ?? t("access.personalOwner"),
           });
     },
     status: (

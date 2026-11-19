@@ -10377,7 +10377,7 @@
       },
       "library": {
         "organization": "組織ライブラリ",
-        "personal": "{owner} のマイアップロード"
+        "personal": "個人のアップロード"
       },
       "installationSelect": "{name} のインストール設定",
       "installationSaved": "{name} は {policy} になりました。",
@@ -10526,7 +10526,8 @@
         "none": "プラグインに含まれていません",
         "many": "{count, plural, one {# 個のプラグイン} other {# 個のプラグイン}}",
         "organization": "{plugin}（組織ライブラリ）",
-        "personal": "{plugin}（{owner} のマイアップロード）"
+        "personal": "{plugin}（{owner}）",
+        "personalOwner": "個人のアップロード"
       },
       "status": {
         "needsSetup": "要セットアップ",

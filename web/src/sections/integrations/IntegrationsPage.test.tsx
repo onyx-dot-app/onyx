@@ -131,7 +131,7 @@ test("shows each integration with its type, sign-in, access and status", async (
   expect(reportsRow.getByText(copy.shape.openapi)).toBeInTheDocument();
   expect(reportsRow.getByText("Organization API key")).toBeInTheDocument();
   expect(
-    reportsRow.getByText("Reports (My uploads of owner@example.com)")
+    reportsRow.getByText("Reports (owner@example.com)")
   ).toBeInTheDocument();
   expect(reportsRow.getByText(copy.status.needsSetup)).toBeInTheDocument();
 });

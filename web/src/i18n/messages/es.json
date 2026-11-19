@@ -10377,7 +10377,7 @@
       },
       "library": {
         "organization": "Biblioteca de la organización",
-        "personal": "Mis subidas de {owner}"
+        "personal": "Subida personal"
       },
       "installationSelect": "Configuración de instalación de {name}",
       "installationSaved": "{name} ahora es {policy}.",
@@ -10526,7 +10526,8 @@
         "none": "No está en ningún complemento",
         "many": "{count, plural, one {# complemento} other {# complementos}}",
         "organization": "{plugin} (Biblioteca de la organización)",
-        "personal": "{plugin} (Mis subidas de {owner})"
+        "personal": "{plugin} ({owner})",
+        "personalOwner": "subida personal"
       },
       "status": {
         "needsSetup": "Requiere configuración",

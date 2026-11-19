@@ -10377,7 +10377,7 @@
       },
       "library": {
         "organization": "조직 라이브러리",
-        "personal": "{owner}의 내 업로드"
+        "personal": "개인 업로드"
       },
       "installationSelect": "{name}의 설치 설정",
       "installationSaved": "{name}이(가) 이제 {policy}입니다.",
@@ -10526,7 +10526,8 @@
         "none": "플러그인에 없음",
         "many": "{count, plural, one {플러그인 #개} other {플러그인 #개}}",
         "organization": "{plugin}(조직 라이브러리)",
-        "personal": "{plugin}({owner}의 내 업로드)"
+        "personal": "{plugin} ({owner})",
+        "personalOwner": "개인 업로드"
       },
       "status": {
         "needsSetup": "설정 필요",

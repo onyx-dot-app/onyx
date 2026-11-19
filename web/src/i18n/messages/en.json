@@ -10377,7 +10377,7 @@
       },
       "library": {
         "organization": "Organization library",
-        "personal": "My uploads of {owner}"
+        "personal": "Personal upload"
       },
       "installationSelect": "Install setting of {name}",
       "installationSaved": "{name} is now {policy}.",
@@ -10526,7 +10526,8 @@
         "none": "Not in a plugin",
         "many": "{count, plural, one {# plugin} other {# plugins}}",
         "organization": "{plugin} (Organization library)",
-        "personal": "{plugin} (My uploads of {owner})"
+        "personal": "{plugin} ({owner})",
+        "personalOwner": "personal upload"
       },
       "status": {
         "needsSetup": "Needs setup",

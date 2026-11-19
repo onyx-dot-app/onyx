@@ -73,7 +73,7 @@ test("lists each plugin once with the integrations it holds", async () => {
   expect(rows).toHaveLength(2);
   const mine = within(rows[0] as HTMLElement);
   expect(mine.getByText("My Sentry")).toBeInTheDocument();
-  expect(mine.getByText("My uploads of me@example.com")).toBeInTheDocument();
+  expect(mine.getByText("me@example.com")).toBeInTheDocument();
   expect(mine.queryByRole("combobox")).not.toBeInTheDocument();
   const work = within(rows[1] as HTMLElement);
   expect(work.getByText("Workspace tools")).toBeInTheDocument();

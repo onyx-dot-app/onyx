@@ -126,7 +126,7 @@ export default function AdminPluginsPage() {
         <Text font="main-ui-body" color="text-03" maxLines={1}>
           {row.plugin.scope === "organization"
             ? t("library.organization")
-            : t("library.personal", { owner: row.plugin.owner_email ?? "" })}
+            : (row.plugin.owner_email ?? t("library.personal"))}
         </Text>
       ),
     },

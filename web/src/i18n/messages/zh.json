@@ -10377,7 +10377,7 @@
       },
       "library": {
         "organization": "组织库",
-        "personal": "{owner} 的“我的上传”"
+        "personal": "个人上传"
       },
       "installationSelect": "{name} 的安装设置",
       "installationSaved": "{name} 现在为 {policy}。",
@@ -10526,7 +10526,8 @@
         "none": "不在任何插件中",
         "many": "{count, plural, one {# 个插件} other {# 个插件}}",
         "organization": "{plugin}（组织库）",
-        "personal": "{plugin}（{owner} 的“我的上传”）"
+        "personal": "{plugin}（{owner}）",
+        "personalOwner": "个人上传"
       },
       "status": {
         "needsSetup": "需要设置",
