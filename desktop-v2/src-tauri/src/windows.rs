@@ -229,8 +229,10 @@ pub fn route_to(app: &AppHandle, path: &str) {
                 if matches!(state.clear_rejected_token(&server, &token), Ok(false)) {
                     return;
                 }
-                // The rejected account's answers must not reach the next one.
+                // The rejected account's answers and pages (a main window
+                // kept hidden during an outage) must not reach the next one.
                 reset_launcher(&app);
+                main_window::close(&app, &server);
                 let _ = open_login(&app);
             }
             // Unreachable is not signed out: the session is kept, and

@@ -2,6 +2,7 @@
 //! hands in the session cookie and decides where links, popups and downloads go.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, MutexGuard};
 
 use tauri::webview::cookie::{Cookie, SameSite};
 use tauri::webview::{DownloadEvent, NewWindowFeatures, NewWindowResponse};
@@ -13,6 +14,12 @@ use crate::state::AppState;
 
 pub const LABEL: &str = "main";
 static POPUP_COUNTER: AtomicUsize = AtomicUsize::new(0);
+/// The token last handed to the main window's cookie store.
+static WINDOW_TOKEN: Mutex<Option<String>> = Mutex::new(None);
+
+fn window_token() -> MutexGuard<'static, Option<String>> {
+    WINDOW_TOKEN.lock().unwrap_or_else(|p| p.into_inner())
+}
 #[cfg(target_os = "macos")]
 const DESKTOP_CHROME_JS: &str = include_str!("desktop_chrome.js");
 const LINK_SHIM_JS: &str = include_str!("link_shim.js");
@@ -268,7 +275,9 @@ fn hand_over_session(
     let result = window
         .set_cookie(session_cookie(server_url, name, token)?)
         .map_err(|e| e.to_string());
-    result.map_err(|e| format!("Could not hand the session to the window: {e}"))
+    result.map_err(|e| format!("Could not hand the session to the window: {e}"))?;
+    *window_token() = Some(token.to_string());
+    Ok(())
 }
 
 /// Opens (or reuses) the main window logged in as `token`, at `path` on the server.
@@ -295,6 +304,21 @@ pub async fn open_url(
     }
 
     if let Some(window) = app.get_webview_window(LABEL) {
+        // A sign-in since the window got its cookie (for example after the
+        // session expired) must reach it; a stale caller token must not.
+        let state = app.state::<AppState>();
+        let changed = window_token().as_deref() != Some(token)
+            && state.token(server).as_deref() == Some(token);
+        if changed {
+            let cookie_name = state
+                .cookie_name(server)
+                .await
+                .map_err(|e| format!("Could not read the server's sign-in settings: {e}"))?;
+            if state.epoch() != epoch {
+                return Err("The session ended while Onyx was opening.".to_string());
+            }
+            hand_over_session(&window, &server_url, &cookie_name, token)?;
+        }
         window.navigate(target).map_err(|e| e.to_string())?;
         crate::windows::bring_forward(app, &window);
         return Ok(());
@@ -398,6 +422,7 @@ pub fn close(app: &AppHandle, server: &str) {
     let Some(window) = app.get_webview_window(LABEL) else {
         return;
     };
+    *window_token() = None;
     if let Ok(server_url) = Url::parse(server) {
         let name = app.state::<AppState>().cached_cookie_name(server);
         #[cfg(target_os = "macos")]
