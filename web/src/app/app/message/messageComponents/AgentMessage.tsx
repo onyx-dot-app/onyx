@@ -605,7 +605,7 @@ const AgentMessage = React.memo(function AgentMessage({
                     );
                   case "files":
                     return (
-                      <div key="files" className={cn(!fullWidthChat && "px-3")}>
+                      <div key="files">
                         <PublishedFileCards files={section.publishedFiles} />
                       </div>
                     );
