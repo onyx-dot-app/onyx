@@ -12727,14 +12727,8 @@
             },
             "title": "패치",
             "progress": {
-              "writing": {
-                "named": "{path} 쓰는 중… {lines, plural, one {#줄} other {#줄}}",
-                "unnamed": "파일 쓰는 중…"
-              },
-              "editing": {
-                "named": "{path} 편집 중… {lines, plural, one {#줄} other {#줄}}",
-                "unnamed": "파일 편집 중…"
-              },
+              "named": "{tool, select, write {{path} 쓰는 중… {lines, plural, one {#줄} other {#줄}}} other {{path} 편집 중… {lines, plural, one {#줄} other {#줄}}}}",
+              "unnamed": "{tool, select, write {파일 쓰는 중…} other {파일 편집 중…}}",
               "patching": {
                 "status": "{count, plural, =0 {파일 패치 중…} one {파일 #개 패치 중…} other {파일 #개 패치 중…}}"
               }

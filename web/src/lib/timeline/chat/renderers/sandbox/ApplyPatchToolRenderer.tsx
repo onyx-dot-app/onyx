@@ -2,7 +2,7 @@ import { type ComponentProps, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { Text, type TextColor } from "@opal/components";
-import { codeSpan, markdown, richNodes } from "@opal/utils";
+import { codeSpan, markdown, richNodes, stripBidiControls } from "@opal/utils";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import {
   ApplyPatchEnd,
@@ -14,7 +14,6 @@ import {
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/app/app/message/messageComponents/types";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
-import { stripBidiControls } from "@/lib/bidiControls";
 import {
   SandboxCallContent,
   SandboxCallError,
@@ -35,6 +34,7 @@ const COLLAPSED_PATCH_LINES = 6;
 // Lines that get their own colored element. The rest of a larger patch shows
 // as one plain block, so even a 1 MiB patch opens quickly.
 const MAX_COLORED_PATCH_LINES = 2000;
+
 function renderPatchLines(text: string) {
   const patch = text.endsWith("\n") ? text.slice(0, -1) : text;
   const coloredLines = patch.split("\n", MAX_COLORED_PATCH_LINES);
@@ -192,19 +192,15 @@ export function ApplyPatchToolRenderer({
                 count: liveProgress.paths.length,
               })
             : pathCode === null
-              ? liveProgress.tool_name === "write"
-                ? t("sandbox.patch.progress.writing.unnamed")
-                : t("sandbox.patch.progress.editing.unnamed")
+              ? t("sandbox.patch.progress.unnamed", {
+                  tool: liveProgress.tool_name,
+                })
               : markdown(
-                  liveProgress.tool_name === "write"
-                    ? t("sandbox.patch.progress.writing.named", {
-                        path: pathCode,
-                        lines: liveProgress.lines,
-                      })
-                    : t("sandbox.patch.progress.editing.named", {
-                        path: pathCode,
-                        lines: liveProgress.lines,
-                      })
+                  t("sandbox.patch.progress.named", {
+                    tool: liveProgress.tool_name,
+                    path: pathCode,
+                    lines: liveProgress.lines,
+                  })
                 );
 
   const content = (

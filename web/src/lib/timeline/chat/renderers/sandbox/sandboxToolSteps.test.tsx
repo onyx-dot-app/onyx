@@ -529,10 +529,10 @@ test("sandbox text is isolated in markup, and paths show without bidi controls",
     expect(
       screen.getByText(`*** Add File: ${path}`).closest("[dir]")
     ).toHaveAttribute("dir", "ltr");
-    expect(screen.getByText(`Could not write ${path}`)).toHaveAttribute(
-      "dir",
-      "ltr"
-    );
+    const error = screen.getByText(`Could not write ${path}`);
+    expect(error).toHaveAttribute("dir", "ltr");
+    // The error's paragraph keeps the page's direction.
+    expect(error.closest("p")).not.toHaveAttribute("dir");
   } finally {
     view.unmount();
   }
@@ -595,6 +595,37 @@ test("a write whose call fails after its progress shows the error", async () => 
     expect(screen.getByText("Edit failed")).toBeInTheDocument();
     expect(screen.getByText("Permission denied")).toBeInTheDocument();
     expect(view.container).not.toHaveTextContent("Writing");
+  } finally {
+    view.unmount();
+  }
+});
+
+test("an edit with wrong-typed arguments shows only that it failed and why", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      call({
+        type: PacketType.APPLY_PATCH_START,
+        patch: "",
+        tool_name: "edit",
+      }),
+      call({
+        type: PacketType.APPLY_PATCH_END,
+        files: [],
+        error: "file_path: Input should be a valid string",
+      }),
+      call(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(screen.getByText("Edit failed")).toBeInTheDocument();
+    expect(
+      screen.getByText("file_path: Input should be a valid string")
+    ).toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent("*** Add File:");
+    expect(screen.queryByText("Patch")).not.toBeInTheDocument();
   } finally {
     view.unmount();
   }
@@ -947,7 +978,8 @@ test("published files show in the timeline and as download cards after the answe
       }),
       first({
         type: PacketType.PUBLISH_FILES_END,
-        files: [report("file-1", "Q3 report")],
+        // The card shows the title without its bidi controls.
+        files: [report("file-1", "\u202EQ3 report")],
         error: null,
       }),
       first(sectionEnd),

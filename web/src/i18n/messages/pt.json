@@ -12727,14 +12727,8 @@
             },
             "title": "Patch",
             "progress": {
-              "writing": {
-                "named": "Escrevendo {path}… {lines, plural, one {# linha} other {# linhas}}",
-                "unnamed": "Escrevendo um arquivo…"
-              },
-              "editing": {
-                "named": "Editando {path}… {lines, plural, one {# linha} other {# linhas}}",
-                "unnamed": "Editando um arquivo…"
-              },
+              "named": "{tool, select, write {Escrevendo {path}… {lines, plural, one {# linha} other {# linhas}}} other {Editando {path}… {lines, plural, one {# linha} other {# linhas}}}}",
+              "unnamed": "{tool, select, write {Escrevendo um arquivo…} other {Editando um arquivo…}}",
               "patching": {
                 "status": "{count, plural, =0 {Aplicando patch aos arquivos…} one {Aplicando patch a # arquivo…} other {Aplicando patch a # arquivos…}}"
               }

@@ -138,7 +138,8 @@ Supported syntax: `**bold**`, `*italic*`, `` `code` ``, `[link](url)`, `~~strike
 
 Markdown rendering uses `react-markdown` internally, restricted to inline elements only.
 `http(s)` links open in a new tab; `mailto:` and `tel:` links open natively. Inline code
-inherits the parent font size and switches to the monospace family.
+inherits the parent font size and switches to the monospace family. It renders as an LTR
+isolate (`dir="ltr"`), so a path in right-to-left text cannot reorder the words around it.
 
 Newlines (`\n`) are converted to `<br />` elements that inherit the parent's line-height,
 so line spacing is proportional to the font size. For full block-level markdown (code blocks,

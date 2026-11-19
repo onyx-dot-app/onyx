@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Text } from "@opal/components";
+import { stripBidiControls } from "@opal/utils";
 
 /**
  * Shared behavior for segmented numeric fields (InputTime, InputDatePicker,
@@ -33,10 +34,7 @@ export function toAsciiDigits(text: string): string {
  * direction marks some locales put around numbers (Arabic's "\u200F١٢٫٥٠ US$").
  */
 export function cleanPastedText(text: string): string {
-  return toAsciiDigits(text).replace(
-    /[\s\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g,
-    ""
-  );
+  return stripBidiControls(toAsciiDigits(text)).replace(/\s/g, "");
 }
 
 /**
