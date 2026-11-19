@@ -53,10 +53,25 @@ pub fn set_mood(app: &AppHandle, mood: Mood) {
 
 /// The launcher's current answer; only it sets the pet's mood or notifies.
 static ANSWER: AtomicU64 = AtomicU64::new(0);
+/// Held while `ANSWER` changes and by `while_latest`, so a notification is
+/// never sent for an answer that a new chat just replaced.
+static ANSWER_LOCK: Mutex<()> = Mutex::new(());
+
+fn next_answer() -> u64 {
+    let _guard = ANSWER_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    ANSWER.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+/// Runs `f` only if answer `id` is still the latest, and keeps it the latest
+/// until `f` returns.
+pub fn while_latest<T>(id: u64, f: impl FnOnce() -> T) -> Option<T> {
+    let _guard = ANSWER_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    is_latest_answer(id).then(f)
+}
 
 /// An answer started: the pet thinks. Returns its id for `answer_finished`.
 pub fn answer_started(app: &AppHandle) -> u64 {
-    let id = ANSWER.fetch_add(1, Ordering::SeqCst) + 1;
+    let id = next_answer();
     set_mood(app, Mood::Thinking);
     id
 }
@@ -68,7 +83,7 @@ pub fn is_latest_answer(id: u64) -> bool {
 
 /// The launcher started a new chat, so its answer, finished or not, is gone.
 pub fn answer_discarded(app: &AppHandle) {
-    ANSWER.fetch_add(1, Ordering::SeqCst);
+    next_answer();
     set_mood(app, Mood::Idle);
 }
 

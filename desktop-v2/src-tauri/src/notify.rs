@@ -148,19 +148,18 @@ pub fn answer_finished(app: &AppHandle, answer: Answer, outcome: Outcome) {
     };
     // Checked again: a sign-out or new chat during the checks above suppresses it.
     let shown = state.while_current(answer.epoch, || {
-        if !crate::aonyx::is_latest_answer(answer.id) {
-            return Ok(());
-        }
-        app.notification()
-            .builder()
-            .id((answer.id % i32::MAX as u64) as i32)
-            .title(title)
-            .body(body)
-            .extra(ANSWER_KEY, answer.id)
-            .extra(EPOCH_KEY, answer.epoch)
-            .show()
+        crate::aonyx::while_latest(answer.id, || {
+            app.notification()
+                .builder()
+                .id((answer.id % i32::MAX as u64) as i32)
+                .title(title)
+                .body(body)
+                .extra(ANSWER_KEY, answer.id)
+                .extra(EPOCH_KEY, answer.epoch)
+                .show()
+        })
     });
-    if let Some(Err(e)) = shown {
+    if let Some(Some(Err(e))) = shown {
         log::warn!("could not show the answer notification: {e}");
     }
 }
