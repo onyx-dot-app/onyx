@@ -308,7 +308,9 @@ def _save(
     private shelf of each person whose bucket chose its document. Questions
     whose document is gone and those too old to show leave the shelves. A
     top-up passes no pool. Refuses to save when the pool lock may have expired,
-    so a late run cannot overwrite newer shelves."""
+    so a late run cannot overwrite newer shelves. The pool, which records the
+    run, is saved last: if a private shelf fails to save, the run is not yet
+    recorded, so its retry is not refused by the gap after this run."""
     owners = {c.document_id: c.owner_ids for c in candidates}
     shared_added = [q for q in added if not owners.get(q.document_id)]
     private_added: dict[UUID, list[PoolQuestion]] = defaultdict(list)
@@ -326,14 +328,14 @@ def _save(
     with get_session_with_current_tenant() as db_session:
         live = get_live_document_ids(db_session, list(ids))
     clock.check_lock()
+    for owner_id, questions in private_added.items():
+        save_private_questions(owner_id, questions, live, now)
     if pool is not None:
         save_pool(
             pool.model_copy(
                 update={"questions": merge_questions(kept, shared_added, live)}
             )
         )
-    for owner_id, questions in private_added.items():
-        save_private_questions(owner_id, questions, live, now)
 
 
 class _RunClock:
