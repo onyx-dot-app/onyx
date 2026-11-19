@@ -95,6 +95,20 @@ describe("loadSelectedBranch", () => {
     expect(pageSwitch()).toBeNull();
   });
 
+  test("a switch whose page never applies drops the old branch's file list", async () => {
+    useChatSessionStore.getState().updateSessionData(SESSION, {
+      branchPublishedFiles: { files: [], throughMessageId: 7 },
+    });
+    await loadSelectedBranch(
+      SESSION,
+      Promise.resolve(new Response(null, { status: 500 })),
+      true
+    );
+    expect(
+      useChatSessionStore.getState().sessions.get(SESSION)?.branchPublishedFiles
+    ).toBeNull();
+  });
+
   test("clears the mark when the save or the reload throws", async () => {
     await expect(
       loadSelectedBranch(SESSION, Promise.reject(new Error("offline")), true)

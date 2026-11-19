@@ -241,9 +241,12 @@ export async function loadSelectedBranch(
   reloadsPage: boolean
 ): Promise<boolean> {
   const switchId = ++branchSwitchCount;
-  useChatSessionStore
-    .getState()
-    .updateSessionData(sessionId, { latestPageSwitch: switchId });
+  // The old branch's list does not cover the new branch; until this switch's
+  // page applies, the loaded messages' packets show its files.
+  useChatSessionStore.getState().updateSessionData(sessionId, {
+    latestPageSwitch: switchId,
+    branchPublishedFiles: null,
+  });
   try {
     const response = await saved;
     if (!response.ok) {

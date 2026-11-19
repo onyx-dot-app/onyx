@@ -8,9 +8,9 @@ const columnsClassMap = {
 } as const;
 
 /**
- * A grid of cards, like the provider cards on the Language Models page: one
- * column, and two once the grid itself is wide enough. It measures its own
- * width (a container query), not the viewport's, so it fits any column.
+ * A grid of cards, like the provider cards on the Language Models page. Its
+ * column count grows with the grid's own width (a container query), not the
+ * viewport's, so it fits any column; `columns` picks the steps.
  */
 interface CardGridProps {
   children?: React.ReactNode;
