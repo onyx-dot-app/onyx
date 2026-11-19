@@ -165,9 +165,10 @@ def save_private_questions(
 ) -> None:
     """Merge a run's questions into one person's private shelf. Questions the
     person used, questions too old to show and questions whose document is gone
-    leave it; the newest SQ_PRIVATE_SHELF stay, one per document. Saved under
-    the person's record lock, so a click saved at the same moment is not lost.
-    Callers hold the pool lock, so no other run changes the shelf meanwhile."""
+    leave it; merge_questions keeps one per document and the newest
+    SQ_PRIVATE_SHELF. Saved under the person's record lock, so a click saved at
+    the same moment is not lost. Callers hold the pool lock, so no other run
+    changes the shelf meanwhile."""
 
     def merge(record: UserRecord) -> UserRecord:
         kept = [

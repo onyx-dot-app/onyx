@@ -327,10 +327,12 @@ def _save(
     }
     with get_session_with_current_tenant() as db_session:
         live = get_live_document_ids(db_session, list(ids))
-    clock.check_lock()
+    # Checked before each write: a write can wait for a person's record lock.
     for owner_id, questions in private_added.items():
+        clock.check_lock()
         save_private_questions(owner_id, questions, live, now)
     if pool is not None:
+        clock.check_lock()
         save_pool(
             pool.model_copy(
                 update={"questions": merge_questions(kept, shared_added, live)}
