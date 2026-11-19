@@ -6,6 +6,7 @@ import { useAppPosition } from "@/lib/navigation/hooks";
 import AgentsCatalogLoading from "@/views/AgentsCatalogPage/loading";
 import AgentEditorLoading from "@/views/AgentEditorPage/loading";
 import PluginsLoading from "@/views/PluginsPage/loading";
+import SettingsLoading from "@/views/SettingsPage/loading";
 
 /**
  * The loading screen of the URL's page: `AppChrome`'s `PendingRoute` loader,
@@ -20,6 +21,7 @@ export function AppChromeLoader() {
   if (pathname === "/app/agents") return <AgentsCatalogLoading />;
   if (pathname.startsWith("/app/agents/")) return <AgentEditorLoading />;
   if (pathname === "/app/plugins") return <PluginsLoading />;
+  if (position.isUserSettings()) return <SettingsLoading />;
   if (
     position.isChat() ||
     position.isNewSession() ||

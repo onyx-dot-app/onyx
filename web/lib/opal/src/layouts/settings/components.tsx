@@ -387,7 +387,7 @@ function SettingsBody({ gap = 8, children, ...props }: SettingsBodyProps) {
 
 type SettingsLoadingProps = Pick<
   SettingsHeaderProps,
-  "icon" | "title" | "description"
+  "icon" | "title" | "description" | "divider"
 > &
   Pick<SettingsRootProps, "width">;
 
@@ -399,11 +399,17 @@ function SettingsLoading({
   icon,
   title,
   description,
+  divider,
   width,
 }: SettingsLoadingProps) {
   return (
     <SettingsRoot width={width} loading>
-      <SettingsHeader icon={icon} title={title} description={description} />
+      <SettingsHeader
+        icon={icon}
+        title={title}
+        description={description}
+        divider={divider}
+      />
       <SettingsBody />
     </SettingsRoot>
   );
