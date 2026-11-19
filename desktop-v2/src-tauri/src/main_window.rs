@@ -299,7 +299,7 @@ pub async fn open_url(
     if target.origin() != server_url.origin() {
         return Err("That link is not on your Onyx server.".into());
     }
-    if crate::offline::defer_open(app, &target[url::Position::BeforePath..]) {
+    if crate::offline::defer_open(app, &crate::offline::path_of(&target)) {
         return Ok(());
     }
 

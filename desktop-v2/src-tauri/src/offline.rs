@@ -311,17 +311,16 @@ fn recover(app: &AppHandle, id: u64) {
     windows::route_to(app, &path);
 }
 
-/// The path, query and fragment of `url`. Leading slashes collapse to one,
-/// so the path cannot name another host.
-fn path_of(url: &Url) -> String {
-    let mut path = format!("/{}", url.path().trim_start_matches(['/', '\\']));
-    if let Some(query) = url.query() {
-        path = format!("{path}?{query}");
+/// The path, query and fragment of `url`, as a path that
+/// `main_window::server_url_join` resolves to the same URL. A path that starts
+/// with `//` gets a `/.` prefix, so it is not read as another host.
+pub fn path_of(url: &Url) -> String {
+    let path = &url[url::Position::BeforePath..];
+    if path.starts_with("//") {
+        format!("/.{path}")
+    } else {
+        path.to_string()
     }
-    if let Some(fragment) = url.fragment() {
-        path = format!("{path}#{fragment}");
-    }
-    path
 }
 
 /// Called for each main-window navigation to the server. While the page has
@@ -355,6 +354,9 @@ pub fn watch_load(app: &AppHandle, url: &Url) {
             }
             tokio::time::sleep(RECHECK_DELAY).await;
             let Err(reason) = state.api.health(&server).await else {
+                if offline.loads().has_finished(load) || Instant::now() >= deadline {
+                    return;
+                }
                 continue;
             };
             if !current() {
@@ -384,6 +386,7 @@ pub fn load_finished(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{path_of, Loads};
+    use crate::main_window::server_url_join;
     use url::Url;
 
     #[test]
@@ -393,11 +396,17 @@ mod tests {
     }
 
     #[test]
-    fn collapses_leading_slashes() {
-        let url = Url::parse("https://onyx.example//evil.example/login?a=1").unwrap();
-        assert_eq!(path_of(&url), "/evil.example/login?a=1");
-        let url = Url::parse("https://onyx.example/\\evil.example/").unwrap();
-        assert_eq!(path_of(&url), "/evil.example/");
+    fn leading_slashes_reopen_the_same_page() {
+        let server = Url::parse("https://onyx.example").unwrap();
+        for raw in [
+            "https://onyx.example//reports/7?a=1#b",
+            "https://onyx.example//evil.example/login",
+            "https://onyx.example/\\evil.example/",
+        ] {
+            let url = Url::parse(raw).unwrap();
+            let joined = server_url_join(&server, &path_of(&url)).unwrap();
+            assert_eq!(joined, url);
+        }
     }
 
     #[test]

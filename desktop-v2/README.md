@@ -433,6 +433,9 @@ need the physical mouse or keyboard).
 
 - wry calls the navigation hook for iframes too, so a cross-origin iframe in the web UI
   opens in the browser instead of rendering inline.
+- Tauri does not give the app the HTTP status or load error of a main-window page. The
+  offline window uses the health checks only. If one page fails while `GET /api/version`
+  and `GET /` answer, the main window keeps that failed page.
 - Browser SSO needs a server with the native-app sign-in pass-through in its web OAuth
   callback. v1 also registers the `onyx://` scheme; with both apps installed, macOS sends the
   sign-in link to whichever app registered it last.

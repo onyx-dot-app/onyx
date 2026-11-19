@@ -180,14 +180,11 @@ fn open_failed(app: &AppHandle, title: &str, error: &str) {
 
 /// A message with an OK button, over the app's windows.
 pub fn notify(app: &AppHandle, title: &str, text: &str) {
-    let (title, text) = (title.to_string(), text.to_string());
-    let _ = app.run_on_main_thread(move || {
-        rfd::MessageDialog::new()
-            .set_title(&title)
-            .set_description(&text)
-            .set_buttons(rfd::MessageButtons::Ok)
-            .show();
-    });
+    let dialog = rfd::MessageDialog::new()
+        .set_title(title)
+        .set_description(text)
+        .set_buttons(rfd::MessageButtons::Ok);
+    crate::dialog::show(app, dialog, |_, _| {});
 }
 
 pub fn route(app: &AppHandle) {
