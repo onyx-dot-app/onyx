@@ -1,4 +1,4 @@
-"""The ACP translation of a file tool call whose progress precedes its start."""
+"""The ACP translation of calls whose pre-start packets precede their start."""
 
 from typing import Any
 
@@ -9,7 +9,9 @@ from onyx.server.query_and_chat.streaming_models import (
     FileToolProgress,
     Packet,
     PacketObj,
+    PythonToolStart,
     SectionEnd,
+    ToolCallArgumentDelta,
 )
 
 
@@ -40,3 +42,27 @@ def test_file_tool_progress_opens_the_call_that_its_start_continues() -> None:
     assert (started["toolCallId"], started["title"]) == (call_id, "Editing files")
     [ended] = translate(SectionEnd())
     assert (ended["toolCallId"], ended["status"]) == (call_id, "completed")
+
+
+def test_streamed_python_code_opens_a_call_that_its_start_renames() -> None:
+    translator = ChatAcpTranslator()
+
+    def translate(obj: PacketObj) -> list[dict[str, Any]]:
+        packet = Packet(placement=Placement(turn_index=0), obj=obj)
+        return list(translator.translate(packet.model_dump(mode="json")))
+
+    [opened] = translate(
+        ToolCallArgumentDelta(
+            tool_type="run_python", argument_deltas={"code": "print(1)"}
+        )
+    )
+    assert (opened["sessionUpdate"], opened["kind"], opened["title"]) == (
+        "tool_call",
+        "execute",
+        "Writing code",
+    )
+    [started] = translate(PythonToolStart(code="print(1)"))
+    assert (started["sessionUpdate"], started["title"]) == (
+        "tool_call_update",
+        "Running Python",
+    )

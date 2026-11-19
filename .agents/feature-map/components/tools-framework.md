@@ -347,9 +347,12 @@ are plain `AgentTool` objects with no `Tool` row, and
    a successful result only. An error shows no text unless its details are
    `ToolExecutionError`. Return typed `details`: with `details=None`, the live
    stream sends the text twice, because both the result update and the
-   completion emit it. Streamed argument
-   deltas go only to `run_python` and `execute_code`
-   (`chat/renderer.py:MessageRenderer.consume`). Code mode calls render with
+   completion emit it. Streamed arguments
+   show live only for some tools (`chat/renderer.py:MessageRenderer.consume`):
+   `run_python` and `execute_code` stream argument deltas, the file tools
+   (`write`, `edit`, `apply_patch`) report `file_tool_progress`, and the
+   reasoning tool streams reasoning. Every stream is throttled
+   ([[streaming-protocol]]). Code mode calls render with
    `chat/renderer.py:CodeModeRenderer`, a `ToolRenderer` that
    `tool_renderer` picks by tool name; question calls render only their card
    (`chat/renderer.py:QuestionToolRenderer`: `tool_question_request` and

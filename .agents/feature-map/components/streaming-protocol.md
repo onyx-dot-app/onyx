@@ -209,13 +209,18 @@ response from its `approval_request` row, and a suspended response ends with
 model writes it, with the tool name as `tool_type`. Native model reasoning streams
 as reasoning packets.
 
-Streamed arguments report at most once per
+Each call's streamed arguments report at most once per
 `chat/renderer.py:ARGUMENT_REPORT_INTERVAL_SECONDS`. The first fragment
-reports, and later fragments wait for the interval. The call's end reports the
-rest: the complete arguments, or, for invalid arguments, what the fragments
-parse to. A stream that stops without an end reports the rest when its message
-completes or its agent ends (`MessageRenderer.complete`,
-`MessageRenderer.finish`). The file tools (`write`, `edit`, `apply_patch`)
+reports. A later fragment that arrives within the interval is held. There is
+no timer: held fragments report with the next fragment that arrives after the
+interval, at the next content block boundary, or at the call's end. A block
+boundary is the start of another content block of the message (another call,
+text or thinking), so held reasoning shows before the next call, as on replay.
+The call's end is the end of the model's stream, which ends every call of the
+message (`ToolCallEndEvent`). It reports the complete arguments, or, for
+invalid arguments, what the fragments parse to. A stream that stops without an
+end reports the held fragments when its message completes or its agent ends
+(`MessageRenderer.complete`, `MessageRenderer.finish`). The file tools (`write`, `edit`, `apply_patch`)
 report `file_tool_progress` instead of their arguments: `tool_name`, the whole
 `paths` so far without repeats, and the `lines` of the file text or patch
 (`chat/renderer.py:file_tool_progress`). A report that changes nothing sends
@@ -223,7 +228,7 @@ no packet. Replay sends no progress.
 
 Pre-start packets: `tool_call_argument_delta` and `file_tool_progress` open a
 call before its start packet, and clients do not count them as its start
-(`server/query_and_chat/acp_stream.py:_PRE_START_TYPES`,
+(`server/query_and_chat/acp_stream.py:_PRE_STARTS`,
 `web/src/lib/timeline/chat/hooks/packetProcessor.ts`). The call's start
 packet, such as `apply_patch_start`, follows them at the same placement.
 
@@ -258,12 +263,15 @@ before a restore, the live stream has no tab for it, so the closing record
 follows the observation's packets and section end in a new tab. The sandbox
 tools ([[code-execution]]) start with `exec_command_start`, `write_stdin_start`
 or `apply_patch_start`, stream the command output in `exec_output_delta`, and
-end with `exec_end` or `apply_patch_end`. An `edit` or `write` call also
+end with `exec_end` or `apply_patch_end`. A tool with its own end packet
+(`chat/renderer.py:OWN_END_TOOL_NAMES`: the sandbox tools and `publish_files`)
+always sends its own start packet. When its arguments are not valid, for
+example cut off or of a wrong type, the start packet has empty values, so the
+end packet never lands on a generic card (`ToolRenderer.start`). An `edit` or `write` call also
 renders as a patch card: `chat/renderer.py` builds `apply_patch_start.patch`
 from its arguments (`patch.display_patch`: an update of the old lines to the
 new ones, or an added file), live and on replay, and its `apply_patch_end`
-says whether `write` added or updated the file. A missing or wrong-typed
-argument reads as empty, so every file tool call gets a patch card. `apply_patch_start.tool_name`
+says whether `write` added or updated the file. `apply_patch_start.tool_name`
 names the file tool. `exec_end.output` is the output
 that the model got (cut to its character budget), which replaces the streamed
 preview. When the output went to a file in the sandbox VM, it is the head and
@@ -271,8 +279,7 @@ tail of the output with a plain note instead ([[code-execution]]); `session_id` 
 output) when the call failed. A replayed call sends the start and `exec_end`
 only (`chat/renderer.py:ToolRenderer._sandbox_packets`). A `publish_files`
 call starts with `publish_files_start`: `files`, the `{path, title}` entries
-as the model wrote them, and `description` (`files` is empty when the
-arguments are not valid, so the card still shows). It ends with
+as the model wrote them, and `description`. It ends with
 `publish_files_end`:
 `files`, one `PublishedFile` per entry in the same order, or `error` and no
 files when the call published none (it publishes all or none). A
