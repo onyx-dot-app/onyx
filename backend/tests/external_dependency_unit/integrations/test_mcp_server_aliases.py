@@ -25,7 +25,7 @@ from onyx.db.integration import (
     get_integration_by_kind_row,
 )
 from onyx.db.integration_connection import get_connection
-from onyx.db.integration_policy import list_persona_plugin_links
+from onyx.db.integration_policy import list_persona_integration_links
 from onyx.db.models import (
     Integration,
     MCPServer,
@@ -396,7 +396,7 @@ def test_a_private_user_list_round_trips_and_clears(
     assert mcp_api.get_mcp_server_alias(server_id, db_session, admin).users == []
 
 
-def test_agent_tool_ids_round_trip_through_the_plugin_links(
+def test_agent_tool_ids_round_trip_through_the_integration_links(
     db_session: Session, admin: User, created: list[int]
 ) -> None:
     tool = tool_api.create_custom_tool(
@@ -431,11 +431,11 @@ def test_agent_tool_ids_round_trip_through_the_plugin_links(
     assert [
         t.id for t in persona_api.get_persona(agent.id, admin, db_session).tools
     ] == [tool.id]
-    assert len(list_persona_plugin_links(db_session, agent.id)) == 1
+    assert len(list_persona_integration_links(db_session, agent.id)) == 1
 
     updated = persona_api.update_persona(agent.id, request([], name), admin, db_session)
     assert updated.tools == []
-    assert list_persona_plugin_links(db_session, agent.id) == []
+    assert list_persona_integration_links(db_session, agent.id) == []
     # The integration stays; only the link of the agent goes.
     assert db_session.get(Integration, integration.id) is not None
 
@@ -466,7 +466,7 @@ def test_agent_mcp_tool_ids_round_trip_and_change_the_selection(
     def links() -> list[dict[str, Any] | None]:
         return [
             row.action_settings
-            for row in list_persona_plugin_links(db_session, agent.id)
+            for row in list_persona_integration_links(db_session, agent.id)
         ]
 
     name = f"agent-{uuid4().hex[:8]}"

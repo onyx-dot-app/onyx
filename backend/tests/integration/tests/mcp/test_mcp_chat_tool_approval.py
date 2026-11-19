@@ -120,7 +120,9 @@ def new_chat(
             tool_ids=[],
             user_performing_action=admin_user,
         )
-        link_persona(persona.id, connected_mcp_server.plugin_id, only_actions(names))
+        link_persona(
+            persona.id, connected_mcp_server.integration_id, only_actions(names)
+        )
         chat = ChatSessionManager.create(
             persona_id=persona.id, user_performing_action=admin_user
         )
@@ -618,7 +620,9 @@ def test_a_tool_the_agent_blocks_while_its_call_waits_is_disabled(
         tool_ids=[],
         user_performing_action=admin_user,
     )
-    link_persona(persona.id, connected_mcp_server.plugin_id, only_actions(["hello"]))
+    link_persona(
+        persona.id, connected_mcp_server.integration_id, only_actions(["hello"])
+    )
     chat = ChatSessionManager.create(
         persona_id=persona.id, user_performing_action=admin_user
     )
@@ -627,7 +631,9 @@ def test_a_tool_the_agent_blocks_while_its_call_waits_is_disabled(
         _packet: Packet, request: ToolApprovalRequest
     ) -> httpx.Response | None:
         link_persona(
-            persona.id, connected_mcp_server.plugin_id, only_actions(["get_ticket"])
+            persona.id,
+            connected_mcp_server.integration_id,
+            only_actions(["get_ticket"]),
         )
         return _decide(
             admin_user, request.approval_id, "approve_once"
@@ -1242,7 +1248,9 @@ def test_only_bots_that_cannot_show_requests_lose_ask_actions(
         tool_ids=[],
         user_performing_action=admin_user,
     )
-    link_persona(persona.id, connected_mcp_server.plugin_id, only_actions(["hello"]))
+    link_persona(
+        persona.id, connected_mcp_server.integration_id, only_actions(["hello"])
+    )
     try:
         response = _send_as(sender, persona.id, new_chat(), admin_user)
     finally:
@@ -1278,7 +1286,7 @@ def test_a_bot_runs_an_action_its_agent_allows(
     )
     link_persona(
         persona.id,
-        connected_mcp_server.plugin_id,
+        connected_mcp_server.integration_id,
         {"default": "blocked", "actions": {"hello": "allow"}},
     )
     chat = ChatSessionManager.create(

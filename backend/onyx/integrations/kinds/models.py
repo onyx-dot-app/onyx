@@ -30,5 +30,3 @@ class ChatToolContext(BaseModel):
     mcp_headers: dict[str, str] | None = None
     # The approval scope of an action that asks, None for one that runs.
     approval_for: Callable[[str], ToolApprovalScope | None] = _no_approval
-    # The plugins of the turn that hold the integration.
-    plugin_ids: frozenset[UUID] = frozenset()

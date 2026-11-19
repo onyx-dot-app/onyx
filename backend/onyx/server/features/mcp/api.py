@@ -28,7 +28,6 @@ from onyx.db.integration import (
     count_integration_actions,
     get_integration_by_kind_row,
     get_mcp_server_for_integration,
-    list_integration_plugin_rows,
 )
 from onyx.db.integration_access import load_integration_shares
 from onyx.db.integration_connection import get_connection
@@ -37,14 +36,14 @@ from onyx.db.models import Integration, User
 from onyx.db.models import MCPServer as DbMCPServer
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.connection_models import read_connection_secret
-from onyx.integrations.connections import (
-    header_field_keys,
-)
-from onyx.integrations.plugin_settings import (
+from onyx.integrations.access import (
     publish_integration__no_commit,
     set_company_policy__no_commit,
     share_integration__no_commit,
+)
+from onyx.integrations.connection_models import read_connection_secret
+from onyx.integrations.connections import (
+    header_field_keys,
 )
 from onyx.integrations.service import (
     craft_users_of_integration,
@@ -270,9 +269,7 @@ def _apply_access(
             affected |= share_integration__no_commit(
                 user, integration, [], [], db_session
             )
-            affected |= publish_integration__no_commit(
-                user, integration, db_session, token_may_manage=True
-            )
+            affected |= publish_integration__no_commit(user, integration, db_session)
         return affected
     if not is_private(integration):
         affected |= set_company_policy__no_commit(
@@ -300,7 +297,6 @@ def _shares(
 
 def _admin_view(integration: Integration, db_session: Session) -> MCPServerAdminView:
     server = _server_row(integration, db_session)
-    rows = list_integration_plugin_rows([integration.id], db_session)[integration.id]
     is_public = not is_private(integration)
     users, groups = ([], []) if is_public else _shares(integration, db_session)
     auth_type, auth_performer = _legacy_auth(integration)
@@ -319,7 +315,7 @@ def _admin_view(integration: Integration, db_session: Session) -> MCPServerAdmin
         groups=groups,
         users=users,
         available_in_craft=server.available_in_craft,
-        plugin_ids=[row.plugin_id for row in rows],
+        integration_id=integration.id,
         last_refreshed_at=server.last_refreshed_at,
         tool_count=count_integration_actions([integration.id], db_session)[
             integration.id

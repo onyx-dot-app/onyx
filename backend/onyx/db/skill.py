@@ -1010,7 +1010,7 @@ def _check_pending(plugin: Plugin, version_id: UUID, db_session: Session) -> Non
 
 
 def approve_skill_review__no_commit(
-    plugin: Plugin, version_id: UUID, approver: User, db_session: Session
+    plugin: Plugin, version_id: UUID, db_session: Session
 ) -> set[UUID]:
     """Publish the pending version of a skill. A first publish moves the skill
     to the Organization library, and a name clash there is refused with
@@ -1018,9 +1018,7 @@ def approve_skill_review__no_commit(
     users."""
     _check_pending(plugin, version_id, db_session)
     before = affected_user_ids_for_plugins([plugin.id], db_session)
-    publish_or_request_review__no_commit(
-        plugin, version_id, None, "raise", db_session, approver=approver
-    )
+    publish_or_request_review__no_commit(plugin, version_id, None, "raise", db_session)
     return before | affected_user_ids_for_plugins([plugin.id], db_session)
 
 

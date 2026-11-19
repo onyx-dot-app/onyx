@@ -97,6 +97,15 @@ through `POST /admin/mcp/probe` to suggest the sign-in, and uses
 `PolicyEditor` and `PolicyToggle`, which take the API values
 `allow|ask|blocked`.
 
+**Web is behind the backend.** The backend names an integration by its id:
+`PUT /integrations/{id}/enabled`, `GET`/`PUT /integrations/{id}/access`,
+`POST /integrations/{id}/publish`,
+`PUT /admin/integrations/{id}/installation-policy` and
+`GET /integrations/agents/{id}`, and each integration row carries `access`
+in place of `plugins` ([[mcp-and-custom-tools]]). The web code that this
+section describes still calls the `/plugins/{id}` routes and reads the
+`plugins` refs, which the backend no longer has.
+
 **Member flow.** `web/src/sections/plugins/MemberPluginsPage.tsx` and
 `web/src/sections/plugins/MemberPluginDetailPage.tsx` read only member endpoints: the user's skills
 (`GET /skills`, as the Skills page) and `GET /integrations`.
@@ -147,7 +156,8 @@ keeps one that another client saved, and pinning a built-in tool releases it.
 (`tool_options`, held in the chat session store). The composer keeps built-in
 tool states by tool id and plugin states by plugin id. The plugins are the
 agent's (`lib/plugins/hooks.ts:useAgentPluginIds`): `GET /plugins/agents/{id}`
-(`integrations/plugin_settings.py:agent_plugin_ids`) returns the plugins that
+(the backend route is now `GET /integrations/agents/{id}`,
+`integrations/access.py:agent_integration_ids_for_user`) returns the integrations that
 chat tool construction reads (`integrations/policy.py:agent_link_settings_by_integration`). A failed read
 leaves the list null, not empty, so the composer never sends an allow-list
 that leaves out every plugin. The agent viewer passes its own agent id, and
@@ -248,7 +258,7 @@ only the configuration of a chat that does not exist yet.
     `/action-policies/integration/{id}` (`server/features/integrations/api.py`),
     which checks plugin visibility but not Craft. The Craft catalog list
     (`/build/action-policies`) and task choices cover the integrations of the
-    plugins the user runs (`integrations/craft.py:list_task_plugin_views`). The
+    user has on (`integrations/craft.py:list_task_integration_views`). The
     plugin UI must not show
     read or write badges to members.
 
@@ -295,7 +305,7 @@ only the configuration of a chat that does not exist yet.
 - Web unit tests sit next to the code in `web/src/sections/plugins/`,
   `web/src/sections/actions/` and `web/src/lib/plugins/`.
 - Backend: `backend/tests/external_dependency_unit/integrations/test_integrations_api.py`,
-  `backend/tests/external_dependency_unit/integrations/test_plugin_settings_api.py`
+  `backend/tests/external_dependency_unit/integrations/test_integration_access_api.py`
   and `backend/tests/integration/tests/integrations/test_integrations_api.py`.
 - Playwright: `web/tests/e2e/mcp/`: the default agent, connecting from a
   plugin page and from the chat prompt (API key and OAuth), plugin access, and

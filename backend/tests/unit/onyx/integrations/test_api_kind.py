@@ -28,7 +28,7 @@ from onyx.sandbox_proxy.usable_integrations import (
     app_match_target,
     openapi_match_target,
 )
-from onyx.tools.models import PluginAction, ToolApprovalScope
+from onyx.tools.models import IntegrationActionRef, ToolApprovalScope
 from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
@@ -396,12 +396,10 @@ def test_openapi_build_chat_tools_keys_actions_by_the_unsubstituted_operation_id
     monkeypatch.setattr(api_kind, "get_openapi_tool_for_integration", lambda *_: tool)
     integration = _integration(tool_id=tool.id, external_app_id=None)
     scope = ToolApprovalScope(integration_id=21, action_id="get_USER_ID")
-    plugin_id = uuid4()
     ctx = ChatToolContext(
         user_id=uuid4(),
         credentials=_credentials({}),
         approval_for=lambda key: scope if key == "get_USER_ID" else None,
-        plugin_ids=frozenset({plugin_id}),
     )
 
     tools = HANDLER.build_chat_tools(
@@ -411,8 +409,8 @@ def test_openapi_build_chat_tools_keys_actions_by_the_unsubstituted_operation_id
     assert len(tools) == 1
     assert isinstance(tools[0], CustomTool)
     assert tools[0].approval == scope
-    assert tools[0].plugin_action == PluginAction(
-        plugin_ids=frozenset({plugin_id}), action="get_USER_ID"
+    assert tools[0].integration_action == IntegrationActionRef(
+        integration_id=integration.id, action="get_USER_ID"
     )
 
 

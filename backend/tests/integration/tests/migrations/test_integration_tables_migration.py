@@ -24,6 +24,7 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.providers.registry import get_endpoint_catalog
+from onyx.tools.models import ToolOptions
 from onyx.utils.encryption import encrypt_string_to_bytes
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
@@ -1574,25 +1575,31 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         )
 
         # The old tool selection of a chat, as tool options.
-        assert conn.execute(
+        tool_options = conn.execute(
             text("SELECT tool_options FROM chat_session WHERE id = :id"),
             {"id": seeded.chat_session},
-        ).scalar_one() == {
+        ).scalar_one()
+        assert tool_options == {
             "allowed": [
                 {"type": "capability", "tool_id": seeded.built_in_tool},
                 {
-                    "type": "plugin",
-                    "plugin_id": str(public.plugin_id),
+                    "type": "integration",
+                    "integration_id": public.id,
                     "actions": ["list_issues"],
                 },
-                {"type": "plugin", "plugin_id": str(custom["shared"].plugin_id)},
+                {"type": "integration", "integration_id": custom["shared"].id},
             ],
             "preferred": {
                 "type": "action",
-                "plugin_id": str(public.plugin_id),
+                "integration_id": public.id,
                 "action": "list_issues",
             },
             "internal_search_filters": {"source_type": ["web"]},
+        }
+        # The app reads the stored value: its models forbid an unknown key.
+        assert ToolOptions.model_validate(tool_options).allowed_integrations() == {
+            public.id: frozenset({"list_issues"}),
+            custom["shared"].id: None,
         }
         assert _has_tool_selection(conn) is False
 

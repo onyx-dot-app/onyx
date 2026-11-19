@@ -30,13 +30,13 @@ from onyx.configs.constants import PUBLIC_API_TAGS, FileOrigin, MilestoneRecordT
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, PermissionAuthority, PersonaSharePermission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
-from onyx.db.integration_access import get_plugin_ids_of_accessible_integrations
+from onyx.db.integration_access import load_user_integration_states
 from onyx.db.integration_policy import (
+    list_persona_integration_snapshots,
     list_persona_mcp_tools,
     list_persona_openapi_tools,
-    list_persona_plugin_snapshots,
 )
-from onyx.db.models import Integration, Tool, User
+from onyx.db.models import User
 from onyx.db.persona import (
     can_delete_persona,
     can_edit_persona,
@@ -757,18 +757,25 @@ def get_persona(
         ) from e
 
     snapshot = FullPersonaSnapshot.from_model(persona)
-    snapshot.plugins = list_persona_plugin_snapshots(persona.id, db_session)
-    # Old custom and MCP tool ids come from the plugin links, so they
+    snapshot.integrations = list_persona_integration_snapshots(persona.id, db_session)
+    # Old custom and MCP tool ids come from the integration links, so they
     # round-trip through tool_ids. A tool of an integration that the viewer
     # has no access to keeps its id and gives nothing else of the tool.
-    visible_plugins = (
+    visible_integrations = (
         None
         if has_global_permission(user, Permission.MANAGE_ACTIONS)
-        else get_plugin_ids_of_accessible_integrations(user.id, db_session)
+        else {
+            state.integration_id
+            for state in load_user_integration_states(
+                [user.id],
+                db_session,
+                [link.integration_id for link in snapshot.integrations],
+            )
+        }
     )
 
-    def viewer_snapshot(plugin_id: UUID, tool: ToolSnapshot) -> ToolSnapshot:
-        if visible_plugins is None or plugin_id in visible_plugins:
+    def viewer_snapshot(integration_id: int, tool: ToolSnapshot) -> ToolSnapshot:
+        if visible_integrations is None or integration_id in visible_integrations:
             return tool
         return tool.model_copy(
             update={
@@ -779,38 +786,27 @@ def get_persona(
             }
         )
 
-    custom_tools: dict[int, tuple[UUID, Tool, Integration]] = {}
-    for plugin_id, tool, integration in list_persona_openapi_tools(
-        persona.id, db_session
-    ):
-        if tool.id not in custom_tools or (
-            visible_plugins is not None
-            and custom_tools[tool.id][0] not in visible_plugins
-            and plugin_id in visible_plugins
-        ):
-            custom_tools[tool.id] = (plugin_id, tool, integration)
+    custom_tools = list_persona_openapi_tools(persona.id, db_session)
     custom_snapshots = [
-        viewer_snapshot(plugin_id, tool_snapshot)
-        for (plugin_id, _, _), tool_snapshot in zip(
-            custom_tools.values(),
-            openapi_tool_snapshots(
-                [(tool, integration) for _, tool, integration in custom_tools.values()],
-                db_session,
-            ),
-            strict=True,
+        viewer_snapshot(integration.id, tool_snapshot)
+        for (_, integration), tool_snapshot in zip(
+            custom_tools, openapi_tool_snapshots(custom_tools, db_session), strict=True
         )
     ]
-    mcp_tools = {
-        tool.id: viewer_snapshot(
-            plugin_id, ToolSnapshot.from_model(tool, plugin_ids=[plugin_id])
+    mcp_tools = [
+        viewer_snapshot(
+            integration_id,
+            ToolSnapshot.from_model(tool, integration_id=integration_id),
         )
-        for plugin_id, tool, selected in list_persona_mcp_tools(persona.id, db_session)
+        for integration_id, tool, selected in list_persona_mcp_tools(
+            persona.id, db_session
+        )
         if selected
-    }
+    ]
     snapshot.tools = (
         [tool for tool in snapshot.tools if tool.in_code_tool_id is not None]
         + custom_snapshots
-        + list(mcp_tools.values())
+        + mcp_tools
     )
     # Hide a pinned model this viewer cannot use. The check is viewer-relative, so
     # it changes only the response, never the stored agent.

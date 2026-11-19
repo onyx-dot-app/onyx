@@ -22,8 +22,6 @@ from onyx.db.enums import (
 from onyx.db.models import (
     Integration,
     Integration__User,
-    Plugin,
-    Plugin__User,
     User,
     UserIntegrationPreference,
 )
@@ -38,9 +36,9 @@ from onyx.llm.interfaces import LLM
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
     IntegrationChatRequest,
+    IntegrationEntry,
+    IntegrationLinkConfiguration,
     PersonaToolConfiguration,
-    PluginEntry,
-    PluginLinkConfiguration,
     ToolApprovalScope,
     ToolOptions,
 )
@@ -50,7 +48,7 @@ from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     make_mcp_integration,
     make_openapi_integration,
     set_policy,
@@ -69,7 +67,7 @@ BLOCKED = IntegrationActionPolicyValue.BLOCKED
 def test_chat_tool_query_count_is_constant(
     db_session: Session, user: User, integration_ids: list[int], kind: str
 ) -> None:
-    links: list[PluginLinkConfiguration] = []
+    links: list[IntegrationLinkConfiguration] = []
     counts: list[int] = []
     expected_configs: dict[int, IntegrationConfig] = {}
     actual_configs: dict[int, IntegrationConfig | None] = {}
@@ -89,18 +87,18 @@ def test_chat_tool_query_count_is_constant(
                 None,
                 ConnectionSecret(fields={"api_key": "shared-key"}),
             )
-            plugin = _plugin(db_session, [integration])
+            _access(db_session, [integration])
             expected_configs[integration.id] = get_kind_handler(
                 integration.kind
             ).load_config(integration, db_session)
             links.append(
-                PluginLinkConfiguration(
-                    plugin_id=plugin.id, action_settings=ActionSettings()
+                IntegrationLinkConfiguration(
+                    integration_id=integration.id, action_settings=ActionSettings()
                 )
             )
         request = IntegrationChatRequest(
             persona_id=AGENT_ID,
-            plugin_links=links,
+            integration_links=links,
             approval_mode=ApprovalMode.INTERACTIVE,
             chat_session_id=uuid4(),
         )
@@ -132,7 +130,7 @@ def test_chat_tools_without_linked_integrations(
             user,
             IntegrationChatRequest(
                 persona_id=AGENT_ID,
-                plugin_links=[],
+                integration_links=[],
                 approval_mode=ApprovalMode.INTERACTIVE,
             ),
         )
@@ -202,18 +200,16 @@ def _openapi(db_session: Session, created: list[int], **kwargs: Any) -> Integrat
     return integration
 
 
-def _plugin(
+def _access(
     db_session: Session,
     integrations: list[Integration],
     policy: PluginInstallationPolicy = PluginInstallationPolicy.DEFAULT,
-) -> Plugin:
-    return hold_in_plugin(
-        db_session, integrations, published=True, installation_policy=policy
-    )
+) -> None:
+    give_access(db_session, integrations, published=True, installation_policy=policy)
 
 
 def _configuration(
-    links: dict[UUID, dict[str, Any]], persona_id: int = AGENT_ID
+    links: dict[int, dict[str, Any]], persona_id: int = AGENT_ID
 ) -> PersonaToolConfiguration:
     return PersonaToolConfiguration(
         persona_id=persona_id,
@@ -225,12 +221,12 @@ def _configuration(
             attached_document_ids=[],
             hierarchy_node_ids=[],
         ),
-        plugin_links=[
-            PluginLinkConfiguration(
-                plugin_id=plugin_id,
+        integration_links=[
+            IntegrationLinkConfiguration(
+                integration_id=integration_id,
                 action_settings=ActionSettings.model_validate(settings),
             )
-            for plugin_id, settings in links.items()
+            for integration_id, settings in links.items()
         ],
     )
 
@@ -255,14 +251,14 @@ def _build(
     return {tool.name: tool for tool in tools}
 
 
-def test_an_agent_offers_the_mcp_and_openapi_actions_of_its_plugins(
+def test_an_agent_offers_the_mcp_and_openapi_actions_of_its_integrations(
     db_session: Session, user: User, integration_ids: list[int]
 ) -> None:
     mcp = _mcp(db_session, integration_ids)
     api = _openapi(db_session, integration_ids)
-    plugin = _plugin(db_session, [mcp, api])
+    _access(db_session, [mcp, api])
 
-    tools = _build(db_session, user, _configuration({plugin.id: {}}))
+    tools = _build(db_session, user, _configuration({mcp.id: {}, api.id: {}}))
 
     assert set(tools) == {
         f"mcp__{mcp.id}__crm__search",
@@ -291,13 +287,13 @@ def test_blocked_by_the_agent_or_the_admin_is_not_offered(
     db_session: Session, user: User, integration_ids: list[int]
 ) -> None:
     mcp = _mcp(db_session, integration_ids, tools=("search", "update", "delete"))
-    plugin = _plugin(db_session, [mcp])
+    _access(db_session, [mcp])
     set_policy(db_session, mcp.id, "delete", BLOCKED)
 
     tools = _build(
         db_session,
         user,
-        _configuration({plugin.id: {"actions": {"update": "blocked"}}}),
+        _configuration({mcp.id: {"actions": {"update": "blocked"}}}),
     )
 
     assert set(tools) == {f"mcp__{mcp.id}__crm__search"}
@@ -308,13 +304,13 @@ def test_an_agent_default_of_blocked_offers_only_listed_actions(
 ) -> None:
     """The shape the migration writes for an agent with some MCP tools."""
     mcp = _mcp(db_session, integration_ids, tools=("search", "update", "delete"))
-    plugin = _plugin(db_session, [mcp])
+    _access(db_session, [mcp])
 
     tools = _build(
         db_session,
         user,
         _configuration(
-            {plugin.id: {"default": "blocked", "actions": {"update": "inherit"}}}
+            {mcp.id: {"default": "blocked", "actions": {"update": "inherit"}}}
         ),
     )
 
@@ -344,9 +340,9 @@ def test_the_user_token_wins_over_a_literal_authorization_header(
         add_connection(
             db_session, integration, user.id, ConnectionSecret(access_token="mine")
         )
-    plugin = _plugin(db_session, [literal, templated])
+    _access(db_session, [literal, templated])
 
-    tools = _build(db_session, user, _configuration({plugin.id: {}}))
+    tools = _build(db_session, user, _configuration({literal.id: {}, templated.id: {}}))
 
     literal_tool = tools[f"custom__{literal.id}__listOrders"]
     templated_tool = tools[f"custom__{templated.id}__listOrders"]
@@ -373,8 +369,8 @@ def test_an_integration_with_no_usable_credential_offers_nothing(
         auth_method=IntegrationAuthMethod.API_KEY,
         header_template={"X-Key": "{api_key}"},
     )
-    plugin = _plugin(db_session, [individual, shared])
-    configuration = _configuration({plugin.id: {}})
+    _access(db_session, [individual, shared])
+    configuration = _configuration({individual.id: {}, shared.id: {}})
 
     assert _build(db_session, user, configuration) == {}
 
@@ -398,36 +394,36 @@ def test_a_disabled_integration_offers_nothing(
     mcp = _mcp(db_session, integration_ids)
     mcp.enabled = False
     db_session.commit()
-    plugin = _plugin(db_session, [mcp])
+    _access(db_session, [mcp])
 
-    assert _build(db_session, user, _configuration({plugin.id: {}})) == {}
+    assert _build(db_session, user, _configuration({mcp.id: {}})) == {}
 
 
-def test_a_plugin_the_user_cannot_see_gives_no_actions(
+def test_an_integration_with_no_access_gives_no_actions(
     db_session: Session, user: User, integration_ids: list[int]
 ) -> None:
     mcp = _mcp(db_session, integration_ids)
-    hidden = _plugin(db_session, [mcp], PluginInstallationPolicy.NOT_AVAILABLE)
+    _access(db_session, [mcp], PluginInstallationPolicy.NOT_AVAILABLE)
 
-    assert _build(db_session, user, _configuration({hidden.id: {}})) == {}
+    assert _build(db_session, user, _configuration({mcp.id: {}})) == {}
 
 
-def test_an_agent_plugin_the_user_turned_off_still_gives_its_actions(
+def test_an_agent_integration_the_user_turned_off_still_gives_its_actions(
     db_session: Session, user: User, integration_ids: list[int]
 ) -> None:
     """The on/off choice applies only to the default agent."""
     mcp = _mcp(db_session, integration_ids)
-    plugin = _plugin(db_session, [mcp], PluginInstallationPolicy.AVAILABLE)
+    _access(db_session, [mcp], PluginInstallationPolicy.AVAILABLE)
 
-    assert len(_build(db_session, user, _configuration({plugin.id: {}}))) == 2
+    assert len(_build(db_session, user, _configuration({mcp.id: {}}))) == 2
 
 
 def test_ask_actions_follow_the_approval_mode(
     db_session: Session, user: User, integration_ids: list[int]
 ) -> None:
     api = _openapi(db_session, integration_ids)
-    plugin = _plugin(db_session, [api])
-    configuration = _configuration({plugin.id: {}})
+    _access(db_session, [api])
+    configuration = _configuration({api.id: {}})
     create = f"custom__{api.id}__createOrder"
 
     interactive = _build(db_session, user, configuration)
@@ -449,9 +445,9 @@ def test_a_new_openapi_operation_asks_while_a_migrated_one_runs(
     migrated = _openapi(db_session, integration_ids)
     set_policy(db_session, migrated.id, "", ALLOW)
     new = _openapi(db_session, integration_ids)
-    plugin = _plugin(db_session, [migrated, new])
+    _access(db_session, [migrated, new])
 
-    tools = _build(db_session, user, _configuration({plugin.id: {}}))
+    tools = _build(db_session, user, _configuration({migrated.id: {}, new.id: {}}))
 
     assert tools[f"custom__{migrated.id}__createOrder"].approval is None
     assert tools[f"custom__{new.id}__createOrder"].approval == ToolApprovalScope(
@@ -474,12 +470,17 @@ def test_a_slack_channel_run_uses_shared_sign_in_and_the_bot_freeze(
         auth_method=IntegrationAuthMethod.API_KEY,
         header_template={"X-Key": "{api_key}"},
     )
-    plugin = _plugin(db_session, [shared, individual])
+    _access(db_session, [shared, individual])
 
     tools = _build(
         db_session,
         anonymous,
-        _configuration({plugin.id: {"actions": {"update": "allow"}}}),
+        _configuration(
+            {
+                shared.id: {"actions": {"update": "allow"}},
+                individual.id: {"actions": {"update": "allow"}},
+            }
+        ),
         ApprovalMode.NO_APPROVER,
     )
 
@@ -493,23 +494,19 @@ def test_a_slack_channel_run_uses_shared_sign_in_and_the_bot_freeze(
 def test_a_share_of_the_integration_gives_its_actions_on_an_agent(
     db_session: Session,
     user: User,
-    # Set up first so the private plugin goes before its owner.
     make_test_user: MakeTestUser,
     integration_ids: list[int],
 ) -> None:
     """On an agent that links a private integration, a user with a share of
     the integration gets its actions. A user of the same agent with no access
-    gets none, also when the user can see the plugin that names it."""
+    gets none: the agent gives no access."""
     owner = make_test_user("chat_share_owner")
-    plugin_viewer = make_test_user("chat_share_plugin_viewer")
+    no_access = make_test_user("chat_share_no_access")
     mcp = _mcp(db_session, integration_ids)
-    private = hold_in_plugin(
-        db_session, [mcp], published=False, author_user_id=owner.id
-    )
+    give_access(db_session, [mcp], published=False, owner_user_id=owner.id)
     db_session.add(Integration__User(integration_id=mcp.id, user_id=user.id))
-    db_session.add(Plugin__User(plugin_id=private.id, user_id=plugin_viewer.id))
     db_session.commit()
-    configuration = _configuration({private.id: {}})
+    configuration = _configuration({mcp.id: {}})
 
     def actions(member: User, on: PersonaToolConfiguration) -> set[str]:
         return {
@@ -520,38 +517,33 @@ def test_a_share_of_the_integration_gives_its_actions_on_an_agent(
         f"mcp__{mcp.id}__crm__search",
         f"mcp__{mcp.id}__crm__update",
     }
-    assert actions(plugin_viewer, configuration) == set()
+    assert actions(no_access, configuration) == set()
     # The share gives Available, which is off on the default agent until the
     # user turns it on.
     assert actions(user, _configuration({}, persona_id=DEFAULT_PERSONA_ID)) == set()
 
 
-def test_an_anonymous_user_sees_only_organization_plugins(
+def test_an_anonymous_user_gets_only_organization_integrations(
     db_session: Session,
-    # Set up first so the private plugin goes before its owner.
     make_test_user: MakeTestUser,
     integration_ids: list[int],
 ) -> None:
     owner = make_test_user("anonymous_private_owner")
     mcp = _mcp(db_session, integration_ids)
-    private = hold_in_plugin(
-        db_session, [mcp], published=False, author_user_id=owner.id
-    )
+    give_access(db_session, [mcp], published=False, owner_user_id=owner.id)
 
-    assert (
-        _build(db_session, get_anonymous_user(), _configuration({private.id: {}})) == {}
-    )
+    assert _build(db_session, get_anonymous_user(), _configuration({mcp.id: {}})) == {}
 
 
-def test_the_default_agent_uses_the_plugins_the_user_runs(
+def test_the_default_agent_uses_the_integrations_that_are_on(
     db_session: Session, user: User, integration_ids: list[int]
 ) -> None:
     on = _mcp(db_session, integration_ids)
     off = _openapi(db_session, integration_ids)
     available = _openapi(db_session, integration_ids)
-    on_plugin = _plugin(db_session, [on])
-    _plugin(db_session, [off])
-    _plugin(db_session, [available], PluginInstallationPolicy.AVAILABLE)
+    _access(db_session, [on])
+    _access(db_session, [off])
+    _access(db_session, [available], PluginInstallationPolicy.AVAILABLE)
     db_session.add(
         UserIntegrationPreference(user_id=user.id, integration_id=off.id, enabled=False)
     )
@@ -560,9 +552,9 @@ def test_the_default_agent_uses_the_plugins_the_user_runs(
     tools = _build(
         db_session,
         user,
-        # The persona 0 link holds the bot freeze of the plugin.
+        # The persona 0 link holds the bot freeze of the integration.
         _configuration(
-            {on_plugin.id: {"actions": {"update": "blocked"}}},
+            {on.id: {"actions": {"update": "blocked"}}},
             persona_id=DEFAULT_PERSONA_ID,
         ),
     )
@@ -573,65 +565,39 @@ def test_the_default_agent_uses_the_plugins_the_user_runs(
     assert not any(f"__{available.id}__" in name for name in tools)
 
 
-def test_two_plugins_of_one_integration_keep_the_strictest_setting(
-    db_session: Session, user: User, integration_ids: list[int]
-) -> None:
-    mcp = _mcp(db_session, integration_ids)
-    loose = _plugin(db_session, [mcp])
-    strict = _plugin(db_session, [mcp])
-
-    tools = _build(
-        db_session,
-        user,
-        _configuration(
-            {
-                loose.id: {"actions": {"update": "allow"}},
-                strict.id: {"actions": {"update": "blocked"}},
-            }
-        ),
-    )
-
-    assert set(tools) == {f"mcp__{mcp.id}__crm__search"}
-
-
 def test_tool_options_cannot_drop_a_blocked_agent_link(
     db_session: Session, user: User, integration_ids: list[int]
 ) -> None:
     mcp = _mcp(db_session, integration_ids)
-    loose = _plugin(db_session, [mcp])
-    strict = _plugin(db_session, [mcp])
-    configuration = _configuration(
-        {
-            loose.id: {"actions": {"update": "allow"}},
-            strict.id: {"actions": {"update": "blocked"}},
-        }
-    )
+    _access(db_session, [mcp])
 
     tools = _build(
         db_session,
         user,
-        configuration,
-        tool_options=ToolOptions(allowed=[PluginEntry(plugin_id=loose.id)]),
+        _configuration({mcp.id: {"actions": {"update": "blocked"}}}),
+        tool_options=ToolOptions(
+            allowed=[IntegrationEntry(integration_id=mcp.id, actions=["update"])]
+        ),
     )
 
-    assert set(tools) == {f"mcp__{mcp.id}__crm__search"}
+    assert not any(f"__{mcp.id}__" in name for name in tools)
 
 
-def test_tool_options_cannot_drop_a_required_plugin(
+def test_tool_options_cannot_drop_a_required_integration(
     db_session: Session, user: User, integration_ids: list[int]
 ) -> None:
-    """A member cannot turn a Required plugin off, so tool options that leave
+    """A member cannot turn a Required integration off, so tool options that leave
     it out still give its actions."""
     required = _mcp(db_session, integration_ids)
     other = _openapi(db_session, integration_ids)
-    required_plugin = _plugin(db_session, [required], PluginInstallationPolicy.REQUIRED)
-    other_plugin = _plugin(db_session, [other])
+    _access(db_session, [required], PluginInstallationPolicy.REQUIRED)
+    _access(db_session, [other])
 
     tools = _build(
         db_session,
         user,
-        _configuration({required_plugin.id: {}, other_plugin.id: {}}),
-        tool_options=ToolOptions(allowed=[PluginEntry(plugin_id=other_plugin.id)]),
+        _configuration({required.id: {}, other.id: {}}),
+        tool_options=ToolOptions(allowed=[IntegrationEntry(integration_id=other.id)]),
     )
 
     assert any(f"__{required.id}__" in name for name in tools)
@@ -647,8 +613,8 @@ def test_an_onyx_login_integration_sends_the_login_token(
         auth_mode=IntegrationAuthMode.INDIVIDUAL,
         auth_method=IntegrationAuthMethod.ONYX_LOGIN,
     )
-    plugin = _plugin(db_session, [api])
-    configuration = _configuration({plugin.id: {}})
+    _access(db_session, [api])
+    configuration = _configuration({api.id: {}})
 
     login_account = patch(
         "onyx.integrations.connections._live_login_account", return_value=MagicMock()

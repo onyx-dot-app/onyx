@@ -1,5 +1,5 @@
 """The integration API against a live stack: the admin and member routes,
-the permissions, the agent plugins, the public tool aliases and the removed
+the permissions, the agent integrations, the public tool aliases and the removed
 routes."""
 
 from collections.abc import Generator
@@ -54,7 +54,7 @@ def test_admin_create_read_update_delete(
     detail = IntegrationManager.create(_openapi_body(), admin_user)
     created.append(detail.id)
     assert detail.shape.value == "openapi"
-    assert detail.plugins[0].scope == "organization"
+    assert detail.access.shared_with_everyone is True
     assert detail.action_count == 2
     assert detail.needs_setup is True
 
@@ -214,10 +214,9 @@ def test_member_routes(
     )
 
     catalog = {
-        option.plugin_id: option
-        for option in IntegrationManager.agent_catalog(basic_user)
+        option.id: option for option in IntegrationManager.agent_catalog(basic_user)
     }
-    assert detail.plugins[0].plugin_id in catalog
+    assert detail.id in catalog
 
 
 def test_personal_integration_is_private(
@@ -227,24 +226,26 @@ def test_personal_integration_is_private(
         _openapi_body(for_organization=False), admin_user
     )
     created.append(detail.id)
-    assert detail.plugins[0].scope == "personal"
+    assert detail.access.shared_with_everyone is False
     assert IntegrationManager.get_member_raw(detail.id, basic_user).status_code == 404
 
 
-def _persona_body(tool_ids: list[int], plugins: list[dict[str, Any]] | None) -> dict:
+def _persona_body(
+    tool_ids: list[int], integrations: list[dict[str, Any]] | None
+) -> dict:
     return {
         "name": f"agent-{uuid4().hex[:8]}",
         "description": "",
         "document_set_ids": [],
         "tool_ids": tool_ids,
-        "plugins": plugins,
+        "integrations": integrations,
         "system_prompt": "",
         "task_prompt": "",
         "datetime_aware": False,
     }
 
 
-def test_persona_plugins_and_legacy_custom_tool_ids(
+def test_persona_integrations_and_legacy_custom_tool_ids(
     admin_user: DATestUser, created: list[int]
 ) -> None:
     tool = client.post(
@@ -264,7 +265,6 @@ def test_persona_plugins_and_legacy_custom_tool_ids(
         if view.name == tool.json()["name"]
     )
     created.append(detail.id)
-    plugin_id = str(detail.plugins[0].plugin_id)
 
     response = client.post(
         f"{API_SERVER_URL}/persona",
@@ -277,13 +277,15 @@ def test_persona_plugins_and_legacy_custom_tool_ids(
         persona = client.get(
             f"{API_SERVER_URL}/persona/{persona_id}", headers=admin_user.headers
         ).json()
-        assert [link["plugin_id"] for link in persona["plugins"]] == [plugin_id]
+        assert [link["integration_id"] for link in persona["integrations"]] == [
+            detail.id
+        ]
 
         body = _persona_body(
             [],
             [
                 {
-                    "plugin_id": plugin_id,
+                    "integration_id": detail.id,
                     "action_settings": {
                         "default": "inherit",
                         "actions": {"set_alert": "blocked"},
@@ -299,7 +301,7 @@ def test_persona_plugins_and_legacy_custom_tool_ids(
         persona = client.get(
             f"{API_SERVER_URL}/persona/{persona_id}", headers=admin_user.headers
         ).json()
-        assert persona["plugins"][0]["action_settings"]["actions"] == {
+        assert persona["integrations"][0]["action_settings"]["actions"] == {
             "set_alert": "blocked"
         }
     finally:
@@ -329,22 +331,26 @@ TOOL_SNAPSHOT_KEYS = {
     "agent_creation_selectable",
     "default_enabled",
     "default_action_policy",
-    # Added for chat plugin toggles; new fields keep old callers working.
+    # Added for chat integration toggles; new fields keep old callers working.
+    "integration_id",
+    # The integration id as text, for the released mobile app.
     "plugin_ids",
 }
 
 
-def test_agent_hides_the_tools_of_a_plugin_the_viewer_cannot_see(
+def test_agent_hides_the_tools_of_an_integration_the_viewer_has_no_access_to(
     admin_user: DATestUser, basic_user: DATestUser, created: list[int]
 ) -> None:
     detail = IntegrationManager.create(
         _openapi_body(for_organization=False), admin_user
     )
     created.append(detail.id)
-    plugin_id = str(detail.plugins[0].plugin_id)
     response = client.post(
         f"{API_SERVER_URL}/persona",
-        json={**_persona_body([], [{"plugin_id": plugin_id}]), "is_public": True},
+        json={
+            **_persona_body([], [{"integration_id": detail.id}]),
+            "is_public": True,
+        },
         headers=admin_user.headers,
     )
     assert response.status_code == 200, response.text
@@ -360,11 +366,11 @@ def test_agent_hides_the_tools_of_a_plugin_the_viewer_cannot_see(
                 if tool["in_code_tool_id"] is None
             ]
 
-        assert [tool["plugin_ids"] for tool in custom_tools(admin_user)] == [
-            [plugin_id]
+        assert [tool["integration_id"] for tool in custom_tools(admin_user)] == [
+            detail.id
         ]
         hidden = custom_tools(basic_user)
-        assert [tool["plugin_ids"] for tool in hidden] == [[plugin_id]]
+        assert [tool["integration_id"] for tool in hidden] == [detail.id]
         assert hidden[0]["definition"] is None
         assert hidden[0]["custom_headers"] is None
         assert hidden[0]["user_id"] is None
@@ -459,32 +465,37 @@ def test_public_tool_aliases_keep_their_shapes(
     )
 
 
-def _plugin_enabled_for(user: DATestUser, plugin_id: str) -> bool | None:
+def _enabled_for(user: DATestUser, integration_id: int) -> bool | None:
     for integration in IntegrationManager.list_member(user):
-        for ref in integration.plugins:
-            if str(ref.plugin_id) == plugin_id:
-                return ref.enabled
+        if integration.id == integration_id:
+            return integration.access.user_enabled
     return None
 
 
-def test_plugin_switch_and_install_setting(
+def test_integration_switch_and_install_setting(
     admin_user: DATestUser, basic_user: DATestUser, created: list[int]
 ) -> None:
     detail = IntegrationManager.create(_openapi_body(), admin_user)
     created.append(detail.id)
-    plugin_id = str(detail.plugins[0].plugin_id)
-    assert _plugin_enabled_for(basic_user, plugin_id) is False
+    assert _enabled_for(basic_user, detail.id) is False
 
-    switch = client.put(
-        f"{API_SERVER_URL}/plugins/{plugin_id}/enabled",
-        json={"enabled": True},
-        headers=basic_user.headers,
-    )
+    enabled_url = f"{API_SERVER_URL}/integrations/{detail.id}/enabled"
+    switch = client.put(enabled_url, json={"enabled": True}, headers=basic_user.headers)
     assert switch.status_code == 200, switch.text
-    assert switch.json()["enabled"] is True
-    assert _plugin_enabled_for(basic_user, plugin_id) is True
+    assert switch.json()["access"]["user_enabled"] is True
+    assert _enabled_for(basic_user, detail.id) is True
+    agent_ids = client.get(
+        f"{API_SERVER_URL}/integrations/agents/0", headers=basic_user.headers
+    )
+    assert agent_ids.status_code == 200, agent_ids.text
+    assert detail.id in agent_ids.json()
+    # The released mobile app reads the same ids as text.
+    mobile_ids = client.get(
+        f"{API_SERVER_URL}/plugins/agents/0", headers=basic_user.headers
+    )
+    assert mobile_ids.json() == [str(value) for value in agent_ids.json()]
 
-    policy_url = f"{API_SERVER_URL}/admin/plugins/{plugin_id}/installation-policy"
+    policy_url = f"{API_SERVER_URL}/admin/integrations/{detail.id}/installation-policy"
     body = {"installation_policy": "REQUIRED"}
     assert client.put(
         policy_url, json=body, headers=basic_user.headers
@@ -492,50 +503,54 @@ def test_plugin_switch_and_install_setting(
     assert client.put(
         policy_url, json=body, headers=admin_user.headers
     ).status_code == (200)
-    off = client.put(
-        f"{API_SERVER_URL}/plugins/{plugin_id}/enabled",
-        json={"enabled": False},
-        headers=basic_user.headers,
-    )
+    off = client.put(enabled_url, json={"enabled": False}, headers=basic_user.headers)
     assert off.status_code == 400
 
 
-def test_owner_shares_and_publishes_a_private_plugin(
+def test_owner_shares_and_publishes_a_private_integration(
     admin_user: DATestUser, basic_user: DATestUser, created: list[int]
 ) -> None:
     detail = IntegrationManager.create(
         _openapi_body(for_organization=False), admin_user
     )
     created.append(detail.id)
-    plugin_id = str(detail.plugins[0].plugin_id)
-    access_url = f"{API_SERVER_URL}/plugins/{plugin_id}/access"
-    assert client.get(access_url, headers=basic_user.headers).status_code == 404
+    access_url = f"{API_SERVER_URL}/integrations/{detail.id}/access"
+    publish_url = f"{API_SERVER_URL}/integrations/{detail.id}/publish"
+    # The share routes need Manage actions.
+    assert client.get(access_url, headers=basic_user.headers).status_code == 403
+    assert (
+        client.put(
+            f"{API_SERVER_URL}/integrations/{detail.id}/enabled",
+            json={"enabled": True},
+            headers=basic_user.headers,
+        ).status_code
+        == 404
+    )
 
     shared = client.put(
         access_url,
-        json={
-            "user_shares": [{"user_id": basic_user.id, "permission": "VIEWER"}],
-            "group_shares": [],
-        },
+        json={"user_ids": [basic_user.id], "group_ids": []},
         headers=admin_user.headers,
     )
     assert shared.status_code == 200, shared.text
     assert [share["email"] for share in shared.json()["user_shares"]] == [
         basic_user.email
     ]
-    assert _plugin_enabled_for(basic_user, plugin_id) is False
+    assert _enabled_for(basic_user, detail.id) is False
     assert (
-        client.post(
-            f"{API_SERVER_URL}/plugins/{plugin_id}/publish", headers=basic_user.headers
+        client.put(
+            access_url,
+            json={"user_ids": [], "group_ids": []},
+            headers=basic_user.headers,
         ).status_code
         == 403
     )
+    assert client.post(publish_url, headers=basic_user.headers).status_code == 403
 
-    published = client.post(
-        f"{API_SERVER_URL}/plugins/{plugin_id}/publish", headers=admin_user.headers
-    )
+    published = client.post(publish_url, headers=admin_user.headers)
     assert published.status_code == 200, published.text
-    assert published.json()["plugin_id"] == str(plugin_id)
-    assert IntegrationManager.get_admin(detail.id, admin_user).plugins[0].scope == (
-        "organization"
+    assert published.json() == {"installation_policy": "AVAILABLE"}
+    assert (
+        IntegrationManager.get_admin(detail.id, admin_user).access.shared_with_everyone
+        is True
     )

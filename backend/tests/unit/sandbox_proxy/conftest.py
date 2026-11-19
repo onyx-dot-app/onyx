@@ -343,6 +343,4 @@ def make_tls_context(tmp_path: Path, hostname: str) -> tuple[ssl.SSLContext, Pat
 def usable_ids(*integration_ids: int) -> UsableIntegrationIds:
     """Integrations that the user turned on and can see."""
     ids = frozenset(integration_ids)
-    return UsableIntegrationIds(
-        on=ids, accessible=ids, accessible_by_plugin={uuid4(): ids}
-    )
+    return UsableIntegrationIds(on=ids, accessible=ids)

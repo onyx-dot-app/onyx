@@ -23,7 +23,6 @@ from onyx.db.integration import (
     get_mcp_tool_with_integration,
     get_openapi_tool_for_integration,
     get_openapi_tool_with_integration,
-    list_integration_plugin_rows,
     list_mcp_tools_with_integration,
     list_openapi_tools_with_integration,
 )
@@ -50,7 +49,6 @@ from onyx.integrations.connections import (
     literal_headers,
     render_headers,
 )
-from onyx.integrations.models import IntegrationPluginRow
 from onyx.integrations.service import (
     create_integration__no_commit,
     delete_integration_for_user__no_commit,
@@ -223,7 +221,6 @@ def _alias_snapshot(
     tool: Tool,
     integration: Integration,
     organization: IntegrationConnection | None,
-    plugins: list[IntegrationPluginRow],
 ) -> ToolSnapshot:
     return ToolSnapshot(
         id=tool.id,
@@ -247,7 +244,7 @@ def _alias_snapshot(
         oauth_config_name=None,
         enabled=integration.enabled,
         default_chat_enabled=integration.installation_policy in _DEFAULT_CHAT_POLICIES,
-        plugin_ids=[plugin.plugin_id for plugin in plugins],
+        integration_id=integration.id,
     )
 
 
@@ -270,15 +267,9 @@ def openapi_tool_snapshots(
     tools: Sequence[tuple[Tool, Integration]], db_session: Session
 ) -> list[ToolSnapshot]:
     integration_ids = [integration.id for _, integration in tools]
-    plugins = list_integration_plugin_rows(integration_ids, db_session)
     connections = list_connections(db_session, integration_ids, None)
     return [
-        _alias_snapshot(
-            tool,
-            integration,
-            connections.get((integration.id, None)),
-            plugins[integration.id],
-        )
+        _alias_snapshot(tool, integration, connections.get((integration.id, None)))
         for tool, integration in tools
     ]
 
@@ -421,16 +412,12 @@ def _openapi_snapshots(
     *,
     include_managed: bool,
 ) -> list[ToolSnapshot]:
-    plugin_rows = list_integration_plugin_rows(
-        [integration.id for _, integration, _ in tools], db_session
-    )
     states = {
         state.integration_id: state
         for state in load_user_integration_states([user.id], db_session)
     }
     snapshots: list[ToolSnapshot] = []
     for tool, integration, organization in tools:
-        plugins = plugin_rows[integration.id]
         state = states.get(integration.id)
         can_manage = manages_integration(user, integration)
         if state is None and not (include_managed and can_manage):
@@ -438,15 +425,9 @@ def _openapi_snapshots(
         if not include_managed and not integration.enabled:
             continue
         if tool.mcp_server_id is not None:
-            snapshot = ToolSnapshot.from_model(tool)
-            snapshot.plugin_ids = [plugin.plugin_id for plugin in plugins]
+            snapshot = ToolSnapshot.from_model(tool, integration_id=integration.id)
         else:
-            snapshot = _alias_snapshot(
-                tool,
-                integration,
-                organization,
-                plugins,
-            )
+            snapshot = _alias_snapshot(tool, integration, organization)
         snapshot.user_enabled_in_chat = state.turned_on if state is not None else True
         snapshot.default_chat_enabled = (
             integration.installation_policy in _DEFAULT_CHAT_POLICIES

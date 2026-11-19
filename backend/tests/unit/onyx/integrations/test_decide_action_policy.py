@@ -188,7 +188,7 @@ def test_each_step_of_the_policy_order(name: str) -> None:
             user=_rows(case.user_action, case.user_default),
         ),
         users_can_save_always_allow=case.users_can_save,
-        links=[link],
+        link=link,
         granted=case.chat_grant,
         approval_mode=case.mode,
     )
@@ -197,34 +197,25 @@ def test_each_step_of_the_policy_order(name: str) -> None:
 
 
 def _decide(
-    action: IntegrationAction | None, links: list[ActionSettings]
+    action: IntegrationAction | None, link: ActionSettings | None
 ) -> EffectivePolicy:
     return decide_action_policy(
         ACTION,
         action,
         PolicyRows(admin={}, user={}),
         users_can_save_always_allow=True,
-        links=links,
+        link=link,
         granted=False,
         approval_mode=ApprovalMode.INTERACTIVE,
     )
 
 
 def test_an_action_with_no_stored_row_asks() -> None:
-    assert _decide(None, [ActionSettings()]) is E_ASK
-
-
-def test_the_strictest_link_wins() -> None:
-    allow = ActionSettings(default=LinkValue.ALLOW)
-    blocked = ActionSettings(default=LinkValue.BLOCKED)
-
-    assert _decide(None, [allow]) is E_ALLOW
-    assert _decide(None, [allow, ActionSettings()]) is E_ASK
-    assert _decide(None, [allow, blocked]) is E_BLOCKED
+    assert _decide(None, ActionSettings()) is E_ASK
 
 
 def test_no_link_blocks() -> None:
-    assert _decide(None, []) is E_BLOCKED
+    assert _decide(None, None) is E_BLOCKED
 
 
 def test_stored_settings_parse_and_a_bad_row_blocks() -> None:

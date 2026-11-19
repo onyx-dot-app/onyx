@@ -185,7 +185,7 @@ from tests.external_dependency_unit.db.test_chat_tool_options import (
 )
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     make_mcp_integration,
 )
 from tests.external_dependency_unit.microvm.conftest import (
@@ -562,7 +562,7 @@ def gated_integration(db_session: Session) -> Generator[int, None, None]:
         name=f"sandbox_gate_{uuid4().hex[:8]}",
         tools=[ACTION],
     )
-    hold_in_plugin(
+    give_access(
         db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
     )
     integration_id = integration.id

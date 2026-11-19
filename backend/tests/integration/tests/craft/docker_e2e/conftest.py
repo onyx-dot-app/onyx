@@ -5,10 +5,9 @@ from __future__ import annotations
 import subprocess
 import time
 from typing import NamedTuple, Protocol
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
-from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import (
@@ -29,11 +28,7 @@ from onyx.db.integration_connection import upsert_connection__no_commit
 from onyx.db.models import (
     Integration,
     IntegrationActionPolicy,
-    Plugin,
-    Plugin__Integration,
-    PluginVersion,
 )
-from onyx.db.plugin import get_or_create_organization_library__no_commit
 from onyx.integrations.connection_models import ConnectionSecret
 from onyx.server.features.build.sandbox.docker.docker_sandbox_manager import (
     SANDBOX_EXEC_ENV,
@@ -205,28 +200,6 @@ def provision_sandbox() -> ProvisionSandbox:
     return _provision_sandbox
 
 
-def _hold_in_default_plugin(db: Session, integration_id: int) -> None:
-    """A plugin that names the integration. It gives no access: the install
-    setting of the integration does."""
-    plugin_id = uuid4()
-    version_id = uuid4()
-    db.add(
-        Plugin(
-            id=plugin_id,
-            name=f"slack-{plugin_id.hex[:8]}",
-            description="",
-            marketplace_id=get_or_create_organization_library__no_commit(db),
-            installation_policy=PluginInstallationPolicy.DEFAULT,
-            current_version_id=version_id,
-            published_version_id=version_id,
-        )
-    )
-    db.flush()
-    db.add(PluginVersion(id=version_id, plugin_id=plugin_id, version_number=1))
-    db.add(Plugin__Integration(plugin_id=plugin_id, integration_id=integration_id))
-    db.flush()
-
-
 @pytest.fixture(scope="module")
 def slack_external_app() -> None:
     """
@@ -278,6 +251,5 @@ def slack_external_app() -> None:
                     policy=IntegrationActionPolicyValue.ASK,
                 )
             )
-            _hold_in_default_plugin(db, integration.id)
             associate_built_in_skill__no_commit(db, app)
             db.commit()

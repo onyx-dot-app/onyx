@@ -1546,14 +1546,11 @@ _SET_RECORD_INTEGRATIONS = """
     WHERE gated_app_id IS NOT NULL AND integration_id IS NULL
 """
 
-# The plugin that the copy made for an integration.
-_MADE_PLUGIN = "(md5('integration_plugin:' || i.id::text)::uuid)::text"
-
 # The old tool selection of a chat as tool options. A built-in tool stays a
-# capability. An MCP tool becomes its action in the plugin of its server, and
-# an OpenAPI tool its whole plugin. A deleted tool is left out. Run after the
-# commit, in the transaction that drops tool_selection.
-_FILL_TOOL_OPTIONS = f"""
+# capability. An MCP tool becomes its action in the integration of its server,
+# and an OpenAPI tool its whole integration. A deleted tool is left out. Run
+# after the commit, in the transaction that drops tool_selection.
+_FILL_TOOL_OPTIONS = """
     UPDATE chat_session c
     SET tool_options = jsonb_build_object(
         'allowed',
@@ -1571,11 +1568,11 @@ _FILL_TOOL_OPTIONS = f"""
                         'type', 'capability', 'tool_id', t.id
                     )
                     WHEN i.mcp_server_id IS NOT NULL THEN jsonb_build_object(
-                        'type', 'plugin', 'plugin_id', {_MADE_PLUGIN},
+                        'type', 'integration', 'integration_id', i.id,
                         'actions', jsonb_build_array(t.name)
                     )
                     WHEN i.tool_id IS NOT NULL THEN jsonb_build_object(
-                        'type', 'plugin', 'plugin_id', {_MADE_PLUGIN}
+                        'type', 'integration', 'integration_id', i.id
                     )
                 END AS value
             ) entry
@@ -1589,7 +1586,7 @@ _FILL_TOOL_OPTIONS = f"""
                     'type', 'capability', 'tool_id', t.id
                 )
                 WHEN i.mcp_server_id IS NOT NULL THEN jsonb_build_object(
-                    'type', 'action', 'plugin_id', {_MADE_PLUGIN},
+                    'type', 'action', 'integration_id', i.id,
                     'action', t.name
                 )
             END

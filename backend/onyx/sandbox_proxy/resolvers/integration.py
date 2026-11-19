@@ -100,7 +100,7 @@ class IntegrationResolver(CredentialResolver):
             sandbox_detail=(
                 "This host belongs to an MCP server configured in Onyx, but "
                 "the request is outside an MCP endpoint that you can use, so "
-                "it was blocked. Turn on a plugin that holds the server, or "
+                "it was blocked. Turn on the integration of the server, or "
                 "use the configured MCP endpoint."
             ),
         )

@@ -55,7 +55,7 @@ def test_mcp_json_tool_result_reaches_llm_encoded_once(
     )
     persona = PersonaManager.create(tool_ids=[], user_performing_action=admin_user)
     link_persona(
-        persona.id, connected_mcp_server.plugin_id, only_actions(["get_ticket"])
+        persona.id, connected_mcp_server.integration_id, only_actions(["get_ticket"])
     )
     chat_session = ChatSessionManager.create(
         persona_id=persona.id, user_performing_action=admin_user

@@ -13,7 +13,6 @@ from onyx.db.enums import (
     IntegrationOAuthProviderMode,
     MCPTransport,
     PluginInstallationPolicy,
-    SkillSharePermission,
 )
 from onyx.integrations.connection_models import IntegrationStatus
 from onyx.integrations.models import EffectivePolicy
@@ -34,17 +33,41 @@ class CredentialField(BaseModel):
     secret: bool
 
 
-class IntegrationPluginRef(BaseModel):
-    plugin_id: UUID
-    plugin_name: str
-    scope: Literal["organization", "personal"]
+class MemberIntegrationState(str, Enum):
+    """What one user gets from an integration. The first that applies, in
+    this order."""
+
+    # The user has no access. Only a user who manages the integration gets
+    # such a row.
+    NO_ACCESS = "no_access"
+    # An admin turned the integration off for each user.
+    TURNED_OFF = "turned_off"
+    # The user has access and the integration is off for the user.
+    TURN_ON = "turn_on"
+    # On for the user, with no working connection: the user must sign in,
+    # or an admin must finish the setup (``status`` gives which).
+    SIGN_IN = "sign_in"
+    ON = "on"
+
+
+class IntegrationAccess(BaseModel):
+    """The access facts of one integration for the user who reads it."""
+
+    state: MemberIntegrationState
+    # The install setting for the user, with the group settings and the
+    # owner and share floor. The company setting when the user has no access.
+    installation_policy: PluginInstallationPolicy
+    # The saved on/off choice of the user. None: the user made no choice.
+    user_choice: bool | None
+    # The choice under the install setting. A Required integration is on,
+    # and a Default one is on until the user turns it off.
+    user_enabled: bool
     owner_email: str | None
-    installation_policy: PluginInstallationPolicy | None
-
-
-class MemberPluginRef(IntegrationPluginRef):
-    # The user's own on/off choice for the plugin.
-    enabled: bool
+    is_owner: bool
+    # The user can change the integration, its shares and its actions.
+    can_manage: bool
+    # The company setting is above Not available, so each user has access.
+    shared_with_everyone: bool
 
 
 class IntegrationActionView(BaseModel):
@@ -75,7 +98,7 @@ class MemberIntegration(BaseModel):
     auth_method: IntegrationAuthMethod | None
     credential_fields: list[CredentialField]
     status: IntegrationStatus
-    plugins: list[MemberPluginRef]
+    access: IntegrationAccess
     users_can_save_always_allow: bool
     credential_values: dict[str, str]
     external_app_id: int | None
@@ -160,7 +183,10 @@ class AdminIntegration(BaseModel):
     enabled: bool
     auth_mode: IntegrationAuthMode
     auth_method: IntegrationAuthMethod | None
-    plugins: list[IntegrationPluginRef]
+    # The company install setting.
+    installation_policy: PluginInstallationPolicy
+    # What the user who reads the row gets from the integration.
+    access: IntegrationAccess
     created_by_email: str | None
     action_count: int
     needs_setup: bool
@@ -242,6 +268,7 @@ class ActionGrantsUpdate(BaseModel):
 class AgentIntegrationOption(BaseModel):
     id: int
     name: str
+    description: str | None
     kind: IntegrationKind
     shape: IntegrationShape
     # False: the agent cannot set Allow over an Ask of the admin.
@@ -249,64 +276,37 @@ class AgentIntegrationOption(BaseModel):
     actions: list[IntegrationActionView]
 
 
-class AgentPluginOption(BaseModel):
-    plugin_id: UUID
-    plugin_name: str
-    description: str
-    integrations: list[AgentIntegrationOption]
-
-
-class PluginEnableRequest(BaseModel):
+class IntegrationEnableRequest(BaseModel):
     enabled: bool
 
 
-class MemberPluginState(BaseModel):
-    plugin_id: UUID
-    enabled: bool
-    # The install setting for the user, with the group settings and the
-    # owner and share floor.
+class IntegrationInstallationPolicy(BaseModel):
+    # The company install setting.
     installation_policy: PluginInstallationPolicy
 
 
-class PluginPublishResponse(BaseModel):
-    plugin_id: UUID
-    # The name of the plugin. A publish does not change it.
-    name: str
+class IntegrationSharesUpdate(BaseModel):
+    """The new set of shares. A share that is not in the lists is removed.
+    A share gives use of the integration only."""
+
+    user_ids: list[UUID]
+    group_ids: list[int]
 
 
-class PluginInstallationPolicyUpdate(BaseModel):
-    installation_policy: PluginInstallationPolicy
-
-
-class PluginUserShare(BaseModel):
+class IntegrationUserShare(BaseModel):
     user_id: UUID
-    permission: SkillSharePermission
-
-
-class PluginGroupShare(BaseModel):
-    group_id: int
-    permission: SkillSharePermission
-
-
-class PluginAccessUpdate(BaseModel):
-    """The new set of shares. A share that is not in the lists is removed."""
-
-    user_shares: list[PluginUserShare]
-    group_shares: list[PluginGroupShare]
-
-
-class PluginUserShareView(PluginUserShare):
     email: str
 
 
-class PluginGroupShareView(PluginGroupShare):
+class IntegrationGroupShare(BaseModel):
+    group_id: int
     group_name: str
 
 
-class PluginAccessView(BaseModel):
-    plugin_id: UUID
-    user_shares: list[PluginUserShareView]
-    group_shares: list[PluginGroupShareView]
+class IntegrationSharesView(BaseModel):
+    integration_id: int
+    user_shares: list[IntegrationUserShare]
+    group_shares: list[IntegrationGroupShare]
 
 
 class IntegrationOAuthStartRequest(BaseModel):

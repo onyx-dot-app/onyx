@@ -32,7 +32,7 @@ from onyx.db.models import (
     Integration,
     IntegrationAction,
     Persona,
-    Persona__Plugin,
+    Persona__Integration,
     User,
     UserIntegrationPreference,
 )
@@ -51,7 +51,7 @@ from tests.external_dependency_unit.db.agent_sharing_helpers import (
 )
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     link_persona,
     make_mcp_integration,
     set_policy,
@@ -180,7 +180,7 @@ def _resolve(
     user_id: UUID | None,
     chat_session_id: UUID | None = None,
     action_key: str = ACTION,
-    link_settings: list[ActionSettings | None] | None = None,
+    linked: bool = True,
 ) -> EffectivePolicy:
     return resolve_action_policies(
         db_session,
@@ -188,7 +188,7 @@ def _resolve(
         actions=list_integration_actions(integration.id, db_session),
         action_keys=[action_key],
         user_id=user_id,
-        link_settings=[None] if link_settings is None else link_settings,
+        link_settings=ActionSettings() if linked else None,
         approval_mode=ApprovalMode.INTERACTIVE,
         chat_session_id=chat_session_id,
     )[action_key]
@@ -258,9 +258,7 @@ def test_an_unknown_action_key_asks_and_no_link_blocks(
     integration = _integration(db_session, integrations, Rows(), world)
 
     assert _resolve(db_session, integration, user_id=None, action_key="x") is E_ASK
-    assert _resolve(db_session, integration, user_id=None, link_settings=[]) is (
-        E_BLOCKED
-    )
+    assert _resolve(db_session, integration, user_id=None, linked=False) is E_BLOCKED
 
 
 def _recheck(
@@ -296,9 +294,7 @@ def test_the_approval_recheck_reads_the_integrations_the_user_can_use(
     and an integration with no access is Blocked."""
     user = make_test_user("policy_recheck")
 
-    def integration_in_plugin(
-        policy: PluginInstallationPolicy,
-    ) -> tuple[Integration, UUID]:
+    def integration_with(policy: PluginInstallationPolicy) -> Integration:
         integration, _ = make_mcp_integration(
             db_session,
             server_url="https://mcp.example.test/mcp",
@@ -306,15 +302,11 @@ def test_the_approval_recheck_reads_the_integrations_the_user_can_use(
             tools=("update",),
         )
         integrations.append(integration.id)
-        plugin = hold_in_plugin(db_session, [integration], installation_policy=policy)
-        return integration, plugin.id
+        give_access(db_session, [integration], installation_policy=policy)
+        return integration
 
-    turned_off, turned_off_plugin = integration_in_plugin(
-        PluginInstallationPolicy.DEFAULT
-    )
-    no_access, no_access_plugin = integration_in_plugin(
-        PluginInstallationPolicy.NOT_AVAILABLE
-    )
+    turned_off = integration_with(PluginInstallationPolicy.DEFAULT)
+    no_access = integration_with(PluginInstallationPolicy.NOT_AVAILABLE)
     db_session.add(
         UserIntegrationPreference(
             user_id=user.id, integration_id=turned_off.id, enabled=False
@@ -323,8 +315,8 @@ def test_the_approval_recheck_reads_the_integrations_the_user_can_use(
     db_session.commit()
     persona = create_test_persona(db_session, user)
     try:
-        link_persona(db_session, persona.id, turned_off_plugin)
-        link_persona(db_session, persona.id, no_access_plugin)
+        link_persona(db_session, persona.id, turned_off.id)
+        link_persona(db_session, persona.id, no_access.id)
 
         assert _recheck(db_session, turned_off, user, persona.id) is (
             EffectivePolicy.ASK
@@ -341,7 +333,7 @@ def test_the_approval_recheck_reads_the_integrations_the_user_can_use(
         db_session.commit()
 
 
-def test_the_approval_recheck_blocks_when_no_plugin_holds_the_integration(
+def test_the_approval_recheck_blocks_when_the_agent_has_no_link(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     integrations: list[int],
@@ -355,19 +347,19 @@ def test_the_approval_recheck_blocks_when_no_plugin_holds_the_integration(
         tools=("update",),
     )
     integrations.append(integration.id)
-    plugin = hold_in_plugin(
+    give_access(
         db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
     )
     persona = create_test_persona(db_session, user)
     try:
-        link_persona(db_session, persona.id, plugin.id)
+        link_persona(db_session, persona.id, integration.id)
         assert _recheck(db_session, integration, user, persona.id) is (
             EffectivePolicy.ASK
         )
 
-        # The plugin is removed from the agent while an approval waits.
-        db_session.query(Persona__Plugin).filter(
-            Persona__Plugin.persona_id == persona.id
+        # The integration is removed from the agent while an approval waits.
+        db_session.query(Persona__Integration).filter(
+            Persona__Integration.persona_id == persona.id
         ).delete()
         db_session.commit()
         assert _recheck(db_session, integration, user, persona.id) is (

@@ -527,10 +527,10 @@ def test_turns_the_server_starts_use_the_saved_tool_options(
         },
         admin_user,
     )
-    integration_id, plugin_id = created.id, created.plugins[0].plugin_id
+    integration_id = created.id
     tool_name = normalize_external_tool_name(f"custom__{integration_id}__ping")
     persona = PersonaManager.create(tool_ids=[], user_performing_action=admin_user)
-    link_persona(persona.id, plugin_id, {})
+    link_persona(persona.id, integration_id, {})
     mock_llm.conversation(
         nonce,
         Reply(text="Answer without the tool."),
@@ -559,7 +559,13 @@ def test_turns_the_server_starts_use_the_saved_tool_options(
         for message, allowed, answer in (
             (
                 enabled,
-                [{"type": "plugin", "plugin_id": str(plugin_id), "actions": ["ping"]}],
+                [
+                    {
+                        "type": "integration",
+                        "integration_id": integration_id,
+                        "actions": ["ping"],
+                    }
+                ],
                 "Answer with the tool.",
             ),
             (blocked, [], "Answer without the tool again."),

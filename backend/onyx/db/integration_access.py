@@ -20,10 +20,6 @@ The rule, once:
   (integration.enabled). An integration that an admin turned off keeps its
   access.
 
-The id of a plugin that holds an integration (plugin__integration) is only a
-handle: the API, the agent and task links and the tool options name an
-integration by it.
-
 The write functions flush and never commit.
 """
 
@@ -43,7 +39,6 @@ from onyx.db.models import (
     Integration,
     Integration__User,
     Integration__UserGroup,
-    Plugin__Integration,
     Sandbox,
     User,
     UserGroup,
@@ -233,27 +228,6 @@ def user_can_use_integration(
     or an admin turned it off."""
     pairs = _user_integration_pairs(User.__table__.c.id == user_id, [integration_id])
     return db_session.scalar(select(pairs.c.integration_id).limit(1)) is not None
-
-
-def plugin_ids_of_accessible_integrations(user_id: UUID) -> Select[tuple[UUID]]:
-    """The plugins that hold an integration the user has access to, as a
-    subquery for ``in_``. An agent or task link can name such a plugin."""
-    return select(Plugin__Integration.plugin_id).where(
-        Plugin__Integration.integration_id.in_(accessible_integration_ids(user_id))
-    )
-
-
-def get_plugin_ids_of_accessible_integrations(
-    user_id: UUID, db_session: Session, plugin_ids: Collection[UUID] | None = None
-) -> set[UUID]:
-    """``plugin_ids_of_accessible_integrations``, or only those of
-    ``plugin_ids``."""
-    stmt = plugin_ids_of_accessible_integrations(user_id)
-    if plugin_ids is not None:
-        if not plugin_ids:
-            return set()
-        stmt = stmt.where(Plugin__Integration.plugin_id.in_(plugin_ids))
-    return set(db_session.scalars(stmt).all())
 
 
 def affected_user_ids_for_integrations(

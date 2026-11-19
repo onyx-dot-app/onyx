@@ -875,7 +875,7 @@ def approve_skill_review(
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
     skill = _editable_skill(skill_id, user, db_session, lock_for_update=True)
-    affected = approve_skill_review__no_commit(skill, version_id, user, db_session)
+    affected = approve_skill_review__no_commit(skill, version_id, db_session)
     db_session.commit()
     db_session.expire(skill)
     push_skills_and_commit(affected, db_session)

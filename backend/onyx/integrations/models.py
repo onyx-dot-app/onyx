@@ -134,8 +134,8 @@ class ApprovalMode(str, Enum):
 
 
 class ActionSettings(BaseModel):
-    """The ``action_settings`` of a ``persona__plugin`` or
-    ``scheduled_task__plugin`` row. ``{}`` inherits each action."""
+    """The ``action_settings`` of a ``persona__integration`` or
+    ``scheduled_task__integration`` row. ``{}`` inherits each action."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -186,28 +186,14 @@ class UsableIntegrationIds(BaseModel):
     on: frozenset[int]
     # The integrations that the user has access to, on or off.
     accessible: frozenset[int]
-    # The accessible integrations by each plugin that holds them. A task link
-    # names its integrations by such a plugin.
-    accessible_by_plugin: dict[UUID, frozenset[int]]
 
 
-class PersonaPluginLink(BaseModel):
-    """A plugin on an agent (``persona__plugin``)."""
+class PersonaIntegrationLink(BaseModel):
+    """An integration on an agent (``persona__integration``)."""
 
-    plugin_id: UUID
+    integration_id: int
     action_settings: ActionSettings = ActionSettings()
 
 
-class PersonaPluginSnapshot(PersonaPluginLink):
-    plugin_name: str
-
-
-class IntegrationPluginRow(BaseModel):
-    """One plugin that is the handle of an integration."""
-
-    model_config = ConfigDict(frozen=True)
-
-    integration_id: int
-    plugin_id: UUID
-    plugin_name: str
-    plugin_description: str
+class PersonaIntegrationSnapshot(PersonaIntegrationLink):
+    integration_name: str

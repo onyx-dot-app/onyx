@@ -16,7 +16,7 @@ from onyx.server.features.tool.api import (
 from onyx.server.features.tool.models import ToolUserPreferences
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.integration_helpers import (
-    hold_in_plugin,
+    give_access,
     make_mcp_integration,
 )
 
@@ -33,7 +33,7 @@ def _legacy_mcp_tool(db_session: Session) -> Tool:
     )
     db_session.add(tool)
     db_session.commit()
-    hold_in_plugin(db_session, [integration])
+    give_access(db_session, [integration])
     return tool
 
 

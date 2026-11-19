@@ -35,7 +35,7 @@ from onyx.db.utils import UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_oauth_client
-from onyx.integrations.models import IntegrationActionSpec, IntegrationPluginRow
+from onyx.integrations.models import IntegrationActionSpec
 
 
 def get_integration_by_id(
@@ -440,43 +440,6 @@ def holds_only_integrations() -> ColumnElement[bool]:
     )
 
 
-def list_integration_plugin_rows(
-    integration_ids: Collection[int], db_session: Session
-) -> dict[int, list[IntegrationPluginRow]]:
-    """The plugins that are the handle of each integration, in plugin name
-    order: each plugin that holds the integration and no skill. Their ids
-    stand for the integration in the API, in agent and task links and in tool
-    options. They give no access."""
-    rows: dict[int, list[IntegrationPluginRow]] = {
-        integration_id: [] for integration_id in integration_ids
-    }
-    if not integration_ids:
-        return rows
-    for integration_id, plugin_id, name, description in db_session.execute(
-        select(
-            Plugin__Integration.integration_id,
-            Plugin.id,
-            Plugin.name,
-            Plugin.description,
-        )
-        .join(Plugin, Plugin.id == Plugin__Integration.plugin_id)
-        .where(
-            Plugin__Integration.integration_id.in_(integration_ids),
-            holds_only_integrations(),
-        )
-        .order_by(Plugin.name, Plugin.id)
-    ).tuples():
-        rows[integration_id].append(
-            IntegrationPluginRow(
-                integration_id=integration_id,
-                plugin_id=plugin_id,
-                plugin_name=name,
-                plugin_description=description,
-            )
-        )
-    return rows
-
-
 def list_integrations_by_ids(
     integration_ids: Collection[int], db_session: Session
 ) -> list[Integration]:
@@ -488,17 +451,6 @@ def list_integrations_by_ids(
             .where(Integration.id.in_(integration_ids))
             .order_by(Integration.id)
         ).all()
-    )
-
-
-def plugin_holds_integration(plugin_id: UUID, db_session: Session) -> bool:
-    return (
-        db_session.scalar(
-            select(Plugin__Integration.integration_id)
-            .where(Plugin__Integration.plugin_id == plugin_id)
-            .limit(1)
-        )
-        is not None
     )
 
 

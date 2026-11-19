@@ -84,7 +84,7 @@ from tests.external_dependency_unit.chat.test_wait_agents import (
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     make_mcp_integration,
 )
 from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool
@@ -229,7 +229,7 @@ def turns(
         name=f"continuations_{uuid4().hex[:8]}",
         tools=[ACTION],
     )
-    hold_in_plugin(
+    give_access(
         db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
     )
     chat = ChatSession(

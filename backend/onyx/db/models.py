@@ -5061,6 +5061,7 @@ class Assistant__UserSpecificConfig(Base):
     disabled_tool_ids: Mapped[list[int]] = mapped_column(
         postgresql.ARRAY(Integer), nullable=False
     )
+    # No code reads it. disabled_integration_ids holds the choices.
     disabled_plugin_ids: Mapped[list[UUID]] = mapped_column(
         postgresql.ARRAY(PGUUID(as_uuid=True)), nullable=False, server_default="{}"
     )
@@ -6378,6 +6379,8 @@ class IntegrationActionPolicy(Base):
 
 
 class Persona__Plugin(Base):
+    """No code reads it. ``persona__integration`` holds the agent links."""
+
     __tablename__ = "persona__plugin"
 
     persona_id: Mapped[int] = mapped_column(
@@ -6396,8 +6399,8 @@ class Persona__Plugin(Base):
 
 
 class Persona__Integration(Base):
-    """An integration on an agent. No code reads it yet: the agent links are
-    still ``persona__plugin`` rows."""
+    """An integration on an agent. The link gives no access: each user of
+    the agent needs access to the integration."""
 
     __tablename__ = "persona__integration"
 
@@ -6417,9 +6420,9 @@ class Persona__Integration(Base):
 
 
 class Plugin__Integration(Base):
-    """An integration that a plugin holds. Several plugins can hold one
-    integration. The plugin gives no access to the integration: its id is
-    only the handle that agent links, task links and tool options carry."""
+    """An integration that a plugin holds. The plugin gives no access to the
+    integration, and no code names an integration by it. Only the code that
+    makes and deletes the plugin of a new integration writes it."""
 
     __tablename__ = "plugin__integration"
 
@@ -6436,6 +6439,9 @@ class Plugin__Integration(Base):
 
 
 class ScheduledTask__Plugin(Base):
+    """No code reads it. ``scheduled_task__integration`` holds the task
+    links."""
+
     __tablename__ = "scheduled_task__plugin"
 
     scheduled_task_id: Mapped[UUID] = mapped_column(
@@ -6456,8 +6462,7 @@ class ScheduledTask__Plugin(Base):
 
 
 class ScheduledTask__Integration(Base):
-    """An integration on a task. No code reads it yet: the task links are
-    still ``scheduled_task__plugin`` rows."""
+    """An integration on a task."""
 
     __tablename__ = "scheduled_task__integration"
 

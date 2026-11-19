@@ -1,7 +1,6 @@
 """The tool options saved on a chat, checked against Postgres."""
 
 from unittest.mock import patch
-from uuid import uuid4
 
 import pytest
 from pydantic import JsonValue
@@ -36,7 +35,7 @@ from onyx.server.query_and_chat.chat_backend import (
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.models import (
     CapabilityEntry,
-    PluginEntry,
+    IntegrationEntry,
     ToolOptions,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -46,7 +45,7 @@ from tests.unit.onyx.agents.fakes import FakeModelClient
 SAVED = ToolOptions(
     allowed=[
         CapabilityEntry(tool_id=3),
-        PluginEntry(plugin_id=uuid4(), actions=["hello"]),
+        IntegrationEntry(integration_id=7, actions=["hello"]),
     ],
     preferred=CapabilityEntry(tool_id=3),
     internal_search_filters=BaseFilters(tags=[]),
@@ -198,8 +197,8 @@ def test_filters_naming_an_inaccessible_document_set_are_rejected(
         ),
         ToolOptions(
             allowed=[
-                PluginEntry(
-                    plugin_id=uuid4(),
+                IntegrationEntry(
+                    integration_id=7,
                     actions=[str(i) for i in range(MAX_TOOL_OPTIONS_ITEMS + 1)],
                 )
             ]
@@ -228,7 +227,7 @@ def test_a_partial_update_is_rejected_when_the_merged_options_are_too_large(
 ) -> None:
     chat_session = _chat(db_session, owner)
     half = "x" * (MAX_TOOL_OPTIONS_BYTES // 2 + 1)
-    saved = ToolOptions(allowed=[PluginEntry(plugin_id=uuid4(), actions=[half])])
+    saved = ToolOptions(allowed=[IntegrationEntry(integration_id=7, actions=[half])])
     update_chat_tool_options(chat_session.id, saved, owner, db_session)
     with pytest.raises(OnyxError) as raised:
         update_chat_tool_options(

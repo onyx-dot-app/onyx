@@ -36,7 +36,7 @@ from onyx.db.enums import (
     PluginPublishingPolicy,
     SkillSharePermission,
 )
-from onyx.db.integration import holds_only_integrations, plugin_holds_integration
+from onyx.db.integration import holds_only_integrations
 from onyx.db.models import (
     Marketplace,
     Plugin,
@@ -585,15 +585,6 @@ def create_integration_plugin__no_commit(
     return plugin
 
 
-def plugin_holds_only_integrations(plugin_id: UUID, db_session: Session) -> bool:
-    return (
-        db_session.scalar(
-            select(Plugin.id).where(Plugin.id == plugin_id, holds_only_integrations())
-        )
-        is not None
-    )
-
-
 def _skill_name_is_taken(
     marketplace_id: UUID, skill_name: str, plugin_id: UUID, db_session: Session
 ) -> bool:
@@ -776,17 +767,12 @@ def publish_or_request_review__no_commit(
     actor: User | None,
     on_name_clash: NameClashAction,
     db_session: Session,
-    approver: User | None = None,
 ) -> None:
     """Publish a version of a locked plugin, or make it the pending request
     (replacing any older one) when the Publishing setting requires review for
     ``actor``; OFF raises. The one place the setting applies. ``actor`` None
     is a system or approved publish and always publishes. An organization-wide
-    plugin manager always publishes. A publish clears the pending request.
-
-    A plugin that holds an integration publishes only for an organization-wide
-    action manager: ``actor``, or ``approver`` when an admin approves a
-    request."""
+    plugin manager always publishes. A publish clears the pending request."""
     if actor is not None and not has_global_permission(
         actor, Permission.MANAGE_PLUGINS
     ):
@@ -802,17 +788,6 @@ def publish_or_request_review__no_commit(
             plugin.pending_version_id = version_id
             db_session.flush()
             return
-    publisher = actor or approver
-    if (
-        publisher is not None
-        and not has_global_permission(publisher, Permission.MANAGE_ACTIONS)
-        and plugin_holds_integration(plugin.id, db_session)
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only an organization-wide action manager can publish a plugin "
-            "that holds an integration.",
-        )
     publish_plugin__no_commit(plugin.id, on_name_clash, db_session)
     plugin.published_version_id = version_id
     plugin.pending_version_id = None

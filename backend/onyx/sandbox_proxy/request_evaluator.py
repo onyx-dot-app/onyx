@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ActionPolicy, IntegrationActionPolicyValue, IntegrationKind
 from onyx.db.integration import list_enabled_integrations_by_id
-from onyx.db.integration_policy import list_task_plugin_links
+from onyx.db.integration_policy import list_task_integration_links
 from onyx.db.models import Integration
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -105,9 +105,9 @@ def _pick(
 
 
 class IntegrationRequestEvaluator(RequestEvaluator):
-    """Matches a request against the integrations of the plugins that the
-    sandbox owner turned on. A scheduled run matches only the task plugins
-    that the owner can see, also one the owner turned off. The gate applies
+    """Matches a request against the integrations that the sandbox owner
+    turned on. A scheduled run matches only the task integrations that the
+    owner has access to, also one the owner turned off. The gate applies
     the stored policies.
 
     * an MCP protocol message gives ``McpProtocolRequest``;
@@ -139,9 +139,10 @@ class IntegrationRequestEvaluator(RequestEvaluator):
             if scheduled_task_id is None:
                 ids = set(usable.on)
             else:
-                ids = set()
-                for link in list_task_plugin_links(db, scheduled_task_id):
-                    ids |= usable.accessible_by_plugin.get(link.plugin_id, frozenset())
+                ids = usable.accessible & {
+                    link.integration_id
+                    for link in list_task_integration_links(db, scheduled_task_id)
+                }
             candidates = [c for c in candidates if c.integration_id in ids]
             if not candidates:
                 return None

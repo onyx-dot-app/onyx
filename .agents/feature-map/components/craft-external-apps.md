@@ -108,7 +108,7 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
 **Recognition.** `sandbox_proxy/request_evaluator.py:IntegrationRequestEvaluator`
 loads the integrations the sandbox owner can use. These are the integrations
 that are on for the user ([[mcp-and-custom-tools]] has the access rule). A
-scheduled run uses only the enabled integrations of the task plugins that the
+scheduled run uses only the enabled integrations of the task that the
 owner has access to, also those the owner turned off. `GateAddon._running_task_id` finds the task from the
 session tag in one query. `sandbox_proxy/usable_integrations.py:UsableIntegrations`
 caches the integration ids of each user for 30 seconds, and the evaluator and
@@ -139,13 +139,13 @@ name.
 **Policy precedence.** `integrations/craft.py:resolve_craft_action_policies`
 calls the one policy function (`integrations/policy.py:resolve_action_policies`)
 with the interactive approval mode and the stored actions, so Ask keeps the
-approval wait. An interactive session and the task catalog pass one `None`
-link, which inherits each action; an empty list would block each action. A
-scheduled run uses the
-`action_settings` of each `scheduled_task__plugin` row whose plugin holds the
-integration, and the strictest result wins; an integration that no plugin of
-the task holds is Blocked. `integrations/craft.py:load_task_plugins` reads the
-task plugins and their integrations once; the Craft MCP config uses that one
+approval wait. An interactive session and the task catalog pass empty link
+settings, which inherit each action; no link (`None`) would block each
+action. A scheduled run uses the
+`action_settings` of the `scheduled_task__integration` row of the
+integration; an integration that the task does not have is Blocked.
+`integrations/craft.py:load_task_integrations` reads the
+task integrations once; the Craft MCP config uses that one
 `TaskPlugins` for its integration list and the settings of each integration. The gate maps Allow, Ask and Blocked to the
 `ActionPolicy` values that approval rows store (`sandbox_proxy/addons/gate.py:resolve_gate_policies`),
 then forces `unspecified` on an API integration to Ask unless it resolved to
@@ -186,7 +186,7 @@ permission on the sandbox: allow for connected, reject for declined.
 `server/features/build/sandbox/util/mcp_config.py:resolve_craft_mcp_servers`
 writes the MCP integrations whose `integration_status` is connected (or that
 have no sign-in) into the opencode config, with each Blocked action as a
-disabled tool. A session of a scheduled run gets only the task plugins,
+disabled tool. A session of a scheduled run gets only the task integrations,
 also one that the owner turned off ([[craft-scheduled-tasks]]). The web reads
 the Craft apps and MCP servers from the member list (`GET /integrations`,
 `web/src/lib/integrations/craft.ts`), and

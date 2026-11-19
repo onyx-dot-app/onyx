@@ -5,7 +5,6 @@ import uuid
 from collections.abc import Callable
 from io import BytesIO, StringIO
 from typing import Any, Dict, List
-from uuid import UUID
 
 import requests
 from pydantic import JsonValue, TypeAdapter
@@ -28,7 +27,7 @@ from onyx.tools.models import (
     CustomToolErrorInfo,
     CustomToolUserFileSnapshot,
     DynamicSchemaInfo,
-    PluginAction,
+    IntegrationActionRef,
     ToolApprovalScope,
     ToolCallException,
     ToolContext,
@@ -100,13 +99,12 @@ class CustomTool(Tool):
         base_url: str,
         custom_headers: list[HeaderItemDict] | None = None,
         approval: ToolApprovalScope | None = None,
-        plugin_ids: frozenset[UUID] = frozenset(),
         # The operationId before placeholder substitution.
         action_key: str | None = None,
     ) -> None:
         self.approval = approval
-        self.plugin_action = PluginAction(
-            plugin_ids=plugin_ids, action=action_key or method_spec.raw_name
+        self.integration_action = IntegrationActionRef(
+            integration_id=integration_id, action=action_key or method_spec.raw_name
         )
         self._base_url = base_url
         self._method_spec = method_spec
@@ -347,7 +345,6 @@ def build_custom_tools_from_openapi_schema_and_headers(
     custom_headers: list[HeaderItemDict] | None = None,
     dynamic_schema_info: DynamicSchemaInfo | None = None,
     approval_for: Callable[[str], ToolApprovalScope | None] | None = None,
-    plugin_ids: frozenset[UUID] = frozenset(),
 ) -> list[CustomTool]:
     """Build CustomTool instances from an OpenAPI schema.
 
@@ -406,7 +403,6 @@ def build_custom_tools_from_openapi_schema_and_headers(
                 base_url=url,
                 custom_headers=custom_headers,
                 approval=approval_for(action_key) if approval_for else None,
-                plugin_ids=plugin_ids,
                 action_key=action_key,
             )
         )
