@@ -43,7 +43,10 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/types";
 import { Text } from "@opal/components";
 import { AgentTimeline } from "@/lib/timeline/chat/AgentTimeline";
-import { AnswerText } from "@/lib/timeline/components/AnswerText";
+import {
+  Response,
+  type ResponseItem,
+} from "@/lib/timeline/components/Response";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
@@ -509,6 +512,38 @@ const AgentMessage = React.memo(function AgentMessage({
     };
   }, [nodeId, resetTTS]);
 
+  // The last section's closing line when the user stopped it or it timed out.
+  const statusLines = (isLastSection: boolean): ResponseItem[] => {
+    if (!isLastSection) return [];
+    const lines: ResponseItem[] = [];
+    if (
+      sections.at(-1)!.displayGroups.length === 0 &&
+      stopReason === StopReason.USER_CANCELLED
+    ) {
+      lines.push({
+        kind: "text",
+        key: "stopped",
+        node: (
+          <Text as="p" font="secondary-body" color="text-04">
+            {t("agentMessage.stoppedGeneration.text")}
+          </Text>
+        ),
+      });
+    }
+    if (stopPacketSeen && stopReason === StopReason.TIMED_OUT) {
+      lines.push({
+        kind: "text",
+        key: "timed-out",
+        node: (
+          <Text as="p" font="secondary-body" color="text-04">
+            {t("agentMessage.timedOut.text")}
+          </Text>
+        ),
+      });
+    }
+    return lines;
+  };
+
   // Copy joins the text blocks of every section, in order.
   let nextAnswerRef = 0;
 
@@ -530,150 +565,164 @@ const AgentMessage = React.memo(function AgentMessage({
               </Section>
             )}
 
-            {buildSectionSegments(section, toolTurnGroups).map(
-              (segment, index, segments) => {
-                switch (segment.kind) {
-                  case "text": {
-                    const textIndex = nextAnswerRef++;
-                    const { group } = segment;
-                    return (
-                      <AnswerText key={`text-${segment.key}`}>
-                        <div
-                          ref={(element) => {
-                            answerRefs.current[textIndex] = element;
-                          }}
-                          className="overflow-x-visible focus:outline-hidden select-text cursor-text"
-                          onCopy={(e) => {
-                            handleCopy(e, { current: e.currentTarget });
-                          }}
-                        >
-                          <RendererComponent
-                            packets={group.packets}
-                            nestedCalls={group.nestedCalls}
-                            streamPackets={group.streamPackets}
-                            chatState={effectiveChatState}
-                            messageNodeId={nodeId}
-                            hasTimelineThinking={section.toolGroups.length > 0}
-                            onComplete={() => {
-                              // The hook checks finalAnswerComing itself.
-                              if (group === lastAnswerGroup) onRenderComplete();
-                            }}
-                            restoredTextLength={visibleGroups.get(segment.key)}
-                            animate={!stopPacketSeen && isLastSection}
-                            stopPacketSeen={stopPacketSeen}
-                            stopReason={stopReason}
-                          >
-                            {(results) => (
-                              <>
-                                {results.map((r, i) => (
-                                  <div key={i}>{r.content}</div>
-                                ))}
-                              </>
-                            )}
-                          </RendererComponent>
-                        </div>
-                      </AnswerText>
-                    );
-                  }
-                  case "record":
-                    return segment.record.kind === "approval" ? (
-                      <div key={segment.record.request.approval_id}>
-                        <ToolApprovalCard approval={segment.record} />
-                      </div>
-                    ) : (
-                      <div key={segment.record.request.question_request_id}>
-                        <ToolQuestionCard question={segment.record} />
-                      </div>
-                    );
-                  case "extras":
-                    return (
-                      <div key="extras">
-                        <div className="flex flex-col gap-3">
-                          {/* Generated images lead the answer. */}
-                          {section.images.length > 0 && (
-                            <GeneratedImageGrid images={section.images} />
-                          )}
-                          {section.authErrors.map((authError, i) => (
-                            <CustomToolAuthCard
-                              key={`auth-error-${i}`}
-                              toolName={authError.toolName}
-                              toolId={authError.toolId}
+            <Response
+              items={[
+                ...buildSectionSegments(section, toolTurnGroups).map(
+                  (segment, index, segments): ResponseItem => {
+                    switch (segment.kind) {
+                      case "text": {
+                        const textIndex = nextAnswerRef++;
+                        const { group } = segment;
+                        return {
+                          kind: "text",
+                          key: `text-${segment.key}`,
+                          node: (
+                            <div
+                              ref={(element) => {
+                                answerRefs.current[textIndex] = element;
+                              }}
+                              className="overflow-x-visible focus:outline-hidden select-text cursor-text"
+                              onCopy={(e) => {
+                                handleCopy(e, { current: e.currentTarget });
+                              }}
+                            >
+                              <RendererComponent
+                                packets={group.packets}
+                                nestedCalls={group.nestedCalls}
+                                streamPackets={group.streamPackets}
+                                chatState={effectiveChatState}
+                                messageNodeId={nodeId}
+                                hasTimelineThinking={
+                                  section.toolGroups.length > 0
+                                }
+                                onComplete={() => {
+                                  // The hook checks finalAnswerComing itself.
+                                  if (group === lastAnswerGroup)
+                                    onRenderComplete();
+                                }}
+                                restoredTextLength={visibleGroups.get(
+                                  segment.key
+                                )}
+                                animate={!stopPacketSeen && isLastSection}
+                                stopPacketSeen={stopPacketSeen}
+                                stopReason={stopReason}
+                              >
+                                {(results) => (
+                                  <>
+                                    {results.map((r, i) => (
+                                      <div key={i}>{r.content}</div>
+                                    ))}
+                                  </>
+                                )}
+                              </RendererComponent>
+                            </div>
+                          ),
+                        };
+                      }
+                      case "record":
+                        return {
+                          kind: "card",
+                          key:
+                            segment.record.kind === "approval"
+                              ? segment.record.request.approval_id
+                              : segment.record.request.question_request_id,
+                          node:
+                            segment.record.kind === "approval" ? (
+                              <ToolApprovalCard approval={segment.record} />
+                            ) : (
+                              <ToolQuestionCard question={segment.record} />
+                            ),
+                        };
+                      case "extras":
+                        return {
+                          kind: "card",
+                          key: "extras",
+                          node: (
+                            <div className="flex flex-col gap-3">
+                              {/* Generated images lead the answer. */}
+                              {section.images.length > 0 && (
+                                <GeneratedImageGrid images={section.images} />
+                              )}
+                              {section.authErrors.map((authError, i) => (
+                                <CustomToolAuthCard
+                                  key={`auth-error-${i}`}
+                                  toolName={authError.toolName}
+                                  toolId={authError.toolId}
+                                />
+                              ))}
+                            </div>
+                          ),
+                        };
+                      case "files":
+                        return {
+                          kind: "card",
+                          key: "files",
+                          node: (
+                            <PublishedFileCards
+                              files={section.publishedFiles}
                             />
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  case "files":
-                    return (
-                      <div key="files">
-                        <PublishedFileCards files={section.publishedFiles} />
-                      </div>
-                    );
-                  case "run": {
-                    const isLiveRun =
-                      segments.findLastIndex((s) => s.kind === "run") === index;
-                    if (!isLiveRun) {
-                      // A run that text follows has settled.
-                      return (
-                        <AgentTimeline
-                          key={`run-${segment.key}`}
-                          turnGroups={segment.turnGroups}
-                          chatState={effectiveChatState}
-                          stopPacketSeen
-                          hasDisplayContent
-                          finalAnswerComing
-                        />
-                      );
+                          ),
+                        };
+                      case "run": {
+                        const isLiveRun =
+                          segments.findLastIndex((s) => s.kind === "run") ===
+                          index;
+                        if (!isLiveRun) {
+                          // A run that text follows has settled.
+                          return {
+                            kind: "run",
+                            key: `run-${segment.key}`,
+                            node: (
+                              <AgentTimeline
+                                turnGroups={segment.turnGroups}
+                                chatState={effectiveChatState}
+                                stopPacketSeen
+                                hasDisplayContent
+                                finalAnswerComing
+                              />
+                            ),
+                          };
+                        }
+                        return {
+                          kind: "run",
+                          key: `run-${segment.key}`,
+                          node: (
+                            <AgentTimeline
+                              turnGroups={segment.turnGroups}
+                              chatState={effectiveChatState}
+                              stopPacketSeen={stopPacketSeen || !isLastSection}
+                              stopReason={
+                                isLastSection ? stopReason : undefined
+                              }
+                              // The empty run of a text-only section comes after
+                              // the text, which still counts.
+                              hasDisplayContent={(segment.turnGroups.length ===
+                              0
+                                ? segments
+                                : segments.slice(index + 1)
+                              ).some((s) => s.kind === "text")}
+                              processingDurationSeconds={
+                                processingDurationSeconds
+                              }
+                              generatedImageCount={section.images.length}
+                              finalAnswerComing={
+                                !isLastSection || pacedFinalAnswerComing
+                              }
+                              toolProcessingDuration={toolProcessingDuration}
+                              codeModeWorking={isLastSection && codeModeWorking}
+                              awaitingUser={
+                                isLastSection ? toolRequests.awaiting : null
+                              }
+                            />
+                          ),
+                        };
+                      }
                     }
-                    return (
-                      <AgentTimeline
-                        key={`run-${segment.key}`}
-                        turnGroups={segment.turnGroups}
-                        chatState={effectiveChatState}
-                        stopPacketSeen={stopPacketSeen || !isLastSection}
-                        stopReason={isLastSection ? stopReason : undefined}
-                        // The empty run of a text-only section comes after
-                        // the text, which still counts.
-                        hasDisplayContent={(segment.turnGroups.length === 0
-                          ? segments
-                          : segments.slice(index + 1)
-                        ).some((s) => s.kind === "text")}
-                        processingDurationSeconds={processingDurationSeconds}
-                        generatedImageCount={section.images.length}
-                        finalAnswerComing={
-                          !isLastSection || pacedFinalAnswerComing
-                        }
-                        toolProcessingDuration={toolProcessingDuration}
-                        codeModeWorking={isLastSection && codeModeWorking}
-                        awaitingUser={
-                          isLastSection ? toolRequests.awaiting : null
-                        }
-                      />
-                    );
                   }
-                }
-              }
-            )}
-
-            {/* Show stopped message when user cancelled and no display content */}
-            {isLastSection &&
-              section.displayGroups.length === 0 &&
-              stopReason === StopReason.USER_CANCELLED && (
-                <AnswerText>
-                  <Text as="p" font="secondary-body" color="text-04">
-                    {t("agentMessage.stoppedGeneration.text")}
-                  </Text>
-                </AnswerText>
-              )}
-            {isLastSection &&
-              stopPacketSeen &&
-              stopReason === StopReason.TIMED_OUT && (
-                <AnswerText>
-                  <Text as="p" font="secondary-body" color="text-04">
-                    {t("agentMessage.timedOut.text")}
-                  </Text>
-                </AnswerText>
-              )}
+                ),
+                ...statusLines(isLastSection),
+              ]}
+            />
           </React.Fragment>
         );
       })}

@@ -155,9 +155,13 @@ status sets the spinner, the alert icon and the failed tint). `CraftTimeline`
 and chat's `AgentTimeline` only map their steps onto them. Each step is an
 Opal `Log` line (as in the connector check card): icon, title, a detail such as
 a command, and a chevron; the whole line folds the step's body, and a failed
-step is an `error-heavy` line. Answer text (`AnswerText`) lines
-up with the run header's text. Every block folds, even with one entry, once
-a text reply follows.
+step is an `error-heavy` line. Every block folds, even with one entry, once
+a text reply follows. A whole response is laid out by the shared `Response`
+(`web/src/lib/timeline/components/Response.tsx`): `BuildMessageList` and chat's
+`AgentMessage` only build its items (runs, text, cards) in arrival order, and
+`Response` spaces them and lines text up with the run header. The message list
+uses chat's frame from `web/src/lib/chat/layout.ts` (`CHAT_GUTTER`,
+`CHAT_COLUMN_ROW`), not a Craft-only width.
 
 ---
 
