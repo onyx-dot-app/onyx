@@ -1170,6 +1170,19 @@ DOCCONVERSION_WINDOW_BATCHES = max(
     1, 32 if _docconversion_window_batches is None else _docconversion_window_batches
 )
 
+# The kill switch of the conversion stage. When true, docfetching lists a
+# source that supports it and stores stub batches, and the docconversion
+# worker fetches and parses the documents. Deploy that worker before you set it.
+ENABLE_CONVERSION_STAGE = (
+    os.environ.get("ENABLE_CONVERSION_STAGE", "").lower() == "true"
+)
+# The watchdog checks the conversion chain of an attempt when no task has
+# dispatched stub batches for this long.
+_docconversion_stall_seconds = _int_env("DOCCONVERSION_STALL_SECONDS", 300)
+DOCCONVERSION_STALL_SECONDS = max(
+    1, 300 if _docconversion_stall_seconds is None else _docconversion_stall_seconds
+)
+
 CELERY_WORKER_PRIMARY_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_PRIMARY_CONCURRENCY") or 4
 )

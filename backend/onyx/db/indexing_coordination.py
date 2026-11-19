@@ -1,7 +1,7 @@
 """Database-based indexing coordination to replace Redis fencing."""
 
 from pydantic import BaseModel
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -242,16 +242,56 @@ class IndexingCoordination:
         return stored
 
     @staticmethod
+    def start_stub_batches(
+        db_session: Session,
+        index_attempt_id: int,
+        first_batch_num: int,
+        stored_batches: int,
+    ) -> None:
+        """Marks the attempt as one that lists stub batches, and sets its
+        counters before the listing starts. `first_batch_num` is the
+        attempt's first stub batch number. `stored_batches` stub batches,
+        taken over from an earlier attempt, have the numbers from there up."""
+        db_session.execute(
+            update(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .values(
+                uses_conversion_stage=True,
+                stub_batches_stored=first_batch_num + stored_batches,
+                stub_batches_sent=first_batch_num,
+                stub_batches_converted=first_batch_num,
+            )
+        )
+        db_session.commit()
+
+    @staticmethod
     def claim_stub_batches(
-        db_session: Session, index_attempt_id: int, window: int
+        db_session: Session,
+        index_attempt_id: int,
+        window: int,
+        task_id: str | None = None,
     ) -> list[int]:
         """Claims the next stored stub batches for conversion and returns their
         numbers. It claims no more than are stored and not sent, and keeps
         the batches sent but not converted at or under `window`.
 
         One statement: the CTE locks the row and reads `sent` before the
-        update, so concurrent callers never get the same number. It is built
-        from the model, so a tenant session's schema applies to it."""
+        update, so concurrent callers never get the same number. When it
+        claims a batch, the same statement records the caller as the last task
+        that dispatched. A caller with no task of its own (the watchdog) keeps
+        the task id and moves the time. A claim of nothing changes neither: a
+        restart that sends nothing must not look like a healthy chain. It is
+        built from the model, so a tenant session's schema applies to it."""
+        claimed = func.greatest(
+            0,
+            func.least(
+                IndexAttempt.stub_batches_stored - IndexAttempt.stub_batches_sent,
+                window
+                - (
+                    IndexAttempt.stub_batches_sent - IndexAttempt.stub_batches_converted
+                ),
+            ),
+        )
         before = (
             select(
                 IndexAttempt.id.label("id"),
@@ -265,19 +305,18 @@ class IndexingCoordination:
             update(IndexAttempt)
             .where(IndexAttempt.id == before.c.id)
             .values(
-                stub_batches_sent=IndexAttempt.stub_batches_sent
-                + func.greatest(
-                    0,
-                    func.least(
-                        IndexAttempt.stub_batches_stored
-                        - IndexAttempt.stub_batches_sent,
-                        window
-                        - (
-                            IndexAttempt.stub_batches_sent
-                            - IndexAttempt.stub_batches_converted
-                        ),
+                stub_batches_sent=IndexAttempt.stub_batches_sent + claimed,
+                last_dispatch_task_id=case(
+                    (
+                        claimed > 0,
+                        func.coalesce(task_id, IndexAttempt.last_dispatch_task_id),
                     ),
-                )
+                    else_=IndexAttempt.last_dispatch_task_id,
+                ),
+                last_dispatch_at=case(
+                    (claimed > 0, func.now()),
+                    else_=IndexAttempt.last_dispatch_at,
+                ),
             )
             .returning(before.c.sent, IndexAttempt.stub_batches_sent)
         )
@@ -333,6 +372,45 @@ class IndexingCoordination:
             )
         db_session.commit()
         return converted
+
+    @staticmethod
+    def settle_stub_batches_converted(
+        db_session: Session, index_attempt_id: int
+    ) -> int:
+        """Counts every sent stub batch as converted and returns how many
+        that added. Call it only when no conversion task of the attempt exists
+        and no sent stub batch is in the store: a task that stopped after it
+        deleted its stub batch never counted it. It is built from the model,
+        so a tenant session's schema applies to it."""
+        before = (
+            select(
+                IndexAttempt.id.label("id"),
+                IndexAttempt.stub_batches_converted.label("converted"),
+            )
+            .where(IndexAttempt.id == index_attempt_id)
+            .with_for_update()
+            .cte("before")
+        )
+        settle = (
+            update(IndexAttempt)
+            .where(IndexAttempt.id == before.c.id)
+            .values(stub_batches_converted=IndexAttempt.stub_batches_sent)
+            .returning(IndexAttempt.stub_batches_sent - before.c.converted)
+        )
+        added = db_session.execute(settle).scalar_one_or_none()
+        db_session.commit()
+        return max(0, added or 0)
+
+    @staticmethod
+    def record_heartbeat(db_session: Session, index_attempt_id: int) -> None:
+        """Counts progress that no worker heartbeat shows, for example a
+        send by the watchdog."""
+        db_session.execute(
+            update(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .values(heartbeat_counter=IndexAttempt.heartbeat_counter + 1)
+        )
+        db_session.commit()
 
     @staticmethod
     def _get_stub_batches_converted(db_session: Session, index_attempt_id: int) -> int:

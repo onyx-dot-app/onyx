@@ -15,6 +15,7 @@ the side that is behind gets the next send.
 import threading
 import time
 from typing import Any
+from uuid import uuid4
 
 from celery import Celery
 from pydantic import BaseModel, ConfigDict
@@ -63,7 +64,12 @@ from onyx.file_store.document_batch_storage import (
 )
 from onyx.file_store.staging import build_raw_file_callback
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_docprocessing import BatchStage, RedisDocprocessing
+from onyx.redis.redis_docprocessing import (
+    BatchStage,
+    RedisDocprocessing,
+    claim_conversion_batch,
+    release_conversion_batch_claim,
+)
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
@@ -265,13 +271,17 @@ def dispatch_stub_batches(
     cc_pair_id: int,
     tenant_id: str,
     is_backfill: bool,
+    task_id: str | None = None,
 ) -> list[int]:
     """Claims the stub batches that can go to conversion now and sends a
     task for each. Returns their numbers. The claim is one atomic update, so
-    callers that run at the same time never send one batch twice."""
+    callers that run at the same time never send one batch twice.
+
+    `task_id` is the caller's Celery task. The attempt keeps it as the last
+    task that dispatched, for the watchdog."""
     with get_session_with_current_tenant() as db_session:
         batch_nums = IndexingCoordination.claim_stub_batches(
-            db_session, index_attempt_id, DOCCONVERSION_WINDOW_BATCHES
+            db_session, index_attempt_id, DOCCONVERSION_WINDOW_BATCHES, task_id
         )
     for batch_num in batch_nums:
         send_docconversion_batch(
@@ -393,6 +403,7 @@ def convert_stub_batch(
     batch_num: int,
     enqueue_time_ms: int | None = None,
     is_backfill: bool = False,
+    task_id: str | None = None,
 ) -> None:
     """Converts one stub batch into a document batch and sends it to
     docprocessing.
@@ -401,7 +412,8 @@ def convert_stub_batch(
     stub batch is deleted when the document batch is stored, before the
     docprocessing send. So a stub batch that exists was never sent on, and a
     second run can convert it again. A second run that finds no stub batch
-    does nothing."""
+    does nothing. A claim keeps two runs from converting one batch at the
+    same time: a recovery resend can overlap a run that still converts."""
     if enqueue_time_ms is not None:
         safe_record_single_event(
             IndexAttemptStage.CONVERSION_QUEUE_WAIT,
@@ -416,6 +428,43 @@ def convert_stub_batch(
         )
         return
 
+    redis_client = get_redis_client(tenant_id=tenant_id)
+    claim_owner = task_id or uuid4().hex
+    if not claim_conversion_batch(
+        redis_client, index_attempt_id, batch_num, claim_owner
+    ):
+        logger.info(
+            "Conversion skipped: attempt=%s batch_num=%s converts in another run",
+            index_attempt_id,
+            batch_num,
+        )
+        return
+    try:
+        _convert_claimed_stub_batch(
+            app,
+            index_attempt_id=index_attempt_id,
+            cc_pair_id=cc_pair_id,
+            tenant_id=tenant_id,
+            batch_num=batch_num,
+            is_backfill=is_backfill,
+            task_id=task_id,
+        )
+    finally:
+        release_conversion_batch_claim(
+            redis_client, index_attempt_id, batch_num, claim_owner
+        )
+
+
+def _convert_claimed_stub_batch(
+    app: Celery,
+    *,
+    index_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+    batch_num: int,
+    is_backfill: bool,
+    task_id: str | None,
+) -> None:
     context = get_conversion_context(index_attempt_id, cc_pair_id, tenant_id)
     connector = context.connector
     if not isinstance(connector, Resolver):
@@ -440,6 +489,7 @@ def convert_stub_batch(
             cc_pair_id=cc_pair_id,
             tenant_id=tenant_id,
             is_backfill=is_backfill,
+            task_id=task_id,
         )
         return
 
@@ -560,4 +610,5 @@ def convert_stub_batch(
             cc_pair_id=cc_pair_id,
             tenant_id=tenant_id,
             is_backfill=is_backfill,
+            task_id=task_id,
         )

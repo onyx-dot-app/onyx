@@ -43,6 +43,10 @@ from onyx.background.indexing.checkpointing_utils import (
     cleanup_checkpoint,
     get_index_attempts_with_old_checkpoints,
 )
+from onyx.background.indexing.conversion_recovery import (
+    ConversionChainState,
+    check_conversion_chain,
+)
 from onyx.background.indexing.index_attempt_utils import (
     cleanup_index_attempts,
     get_old_index_attempt_ids,
@@ -139,7 +143,11 @@ from onyx.file_store.document_batch_storage import (
 )
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_docprocessing import BatchStage, RedisDocprocessing
+from onyx.redis.redis_docprocessing import (
+    RedisDocprocessing,
+    incr_conversion_recovery_misses,
+    reset_conversion_recovery_misses,
+)
 from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import (
     SCAN_ITER_COUNT_DEFAULT,
@@ -168,6 +176,7 @@ from shared_configs.configs import (
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
     INDEX_ATTEMPT_INFO_CONTEXTVAR,
+    get_current_tenant_id,
 )
 
 logger = setup_logger()
@@ -175,6 +184,9 @@ logger = setup_logger()
 # Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead.
 # This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s).
 HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+# The watchdog fails an attempt with a stuck conversion chain after this many
+# runs in a row in which a restart sent nothing.
+CONVERSION_RECOVERY_MAX_MISSES = 2
 # How long a NOT_STARTED attempt must sit before we scan the broker.
 # After this window we check Redis directly — if the task is still there we
 # leave it alone, so this threshold does not cause false positives for
@@ -229,6 +241,27 @@ def validate_active_indexing_attempts(
             if not fresh_attempt or fresh_attempt.status.is_terminal():
                 continue
 
+            # A conversion chain that broke is started again here. The
+            # restart counts as a heartbeat.
+            chain_state = ConversionChainState.IDLE
+            if fresh_attempt.uses_conversion_stage:
+                try:
+                    chain_state = check_conversion_chain(
+                        current_app,
+                        celery_get_broker_client(current_app),
+                        index_attempt_id=fresh_attempt.id,
+                        tenant_id=get_current_tenant_id(),
+                    )
+                    if chain_state != ConversionChainState.STUCK:
+                        reset_conversion_recovery_misses(
+                            get_redis_client(), fresh_attempt.id
+                        )
+                except Exception:
+                    task_logger.exception(
+                        f"Failed to check the conversion chain of attempt {fresh_attempt.id}"
+                    )
+                db_session.refresh(fresh_attempt)
+
             # Check if this attempt has been updated with heartbeat tracking
             if fresh_attempt.last_heartbeat_time is None:
                 # First time seeing this attempt - initialize heartbeat tracking
@@ -275,6 +308,26 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
+            if chain_state in (
+                ConversionChainState.HEALTHY,
+                ConversionChainState.BUSY,
+            ):
+                # The task that sends the next stub batches still exists, or
+                # a conversion task of the attempt runs or waits in a queue.
+                continue
+            if chain_state == ConversionChainState.STUCK:
+                # Stub batches wait and a restart sent nothing. Fail only
+                # when that repeats, so one bad read does not end the attempt.
+                misses = incr_conversion_recovery_misses(
+                    get_redis_client(), fresh_attempt.id
+                )
+                if misses < CONVERSION_RECOVERY_MAX_MISSES:
+                    task_logger.warning(
+                        f"Conversion chain of attempt {fresh_attempt.id} is stuck: "
+                        f"miss {misses} of {CONVERSION_RECOVERY_MAX_MISSES}"
+                    )
+                    continue
+
             # Heartbeat is stale. If docfetching has finished (total_batches is
             # set), use the Redis counters to decide whether to invalidate:
             #
@@ -284,17 +337,24 @@ def validate_active_indexing_attempts(
             #
             # If total_batches is not set yet, docfetching is still running;
             # fall through to immediate invalidation (base timeout elapsed).
-            if fresh_attempt.total_batches is not None:
+            #
+            # The conversion chain check above judges the conversion stage
+            # by its live entries and queued tasks. Its counters can be left
+            # by killed workers or expired tasks, so they do not count here.
+            if chain_state == ConversionChainState.STUCK:
+                # The restarts sent nothing in each try. A pending count that
+                # an expired task left must not keep the attempt waiting.
+                failure_reason = (
+                    f"Heartbeat stale for {heartbeat_timeout_seconds}s and the "
+                    f"conversion chain could not be restarted"
+                )
+            elif fresh_attempt.total_batches is not None:
                 in_flight = 0
                 pending = 0
                 try:
-                    r = get_redis_client()
-                    # Conversion and docprocessing batches both count: a
-                    # batch in either stage is work the attempt still has.
-                    for stage in BatchStage:
-                        rd = RedisDocprocessing(fresh_attempt.id, r, stage)
-                        in_flight += rd.in_flight()
-                        pending += rd.pending()
+                    rd = RedisDocprocessing(fresh_attempt.id, get_redis_client())
+                    in_flight = rd.in_flight()
+                    pending = rd.pending()
                 except Exception:
                     task_logger.exception(
                         f"Failed to read batch counters for attempt {fresh_attempt.id}, "

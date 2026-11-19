@@ -16,6 +16,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.background.celery.tasks.docconversion.tasks import docconversion_task
 from onyx.background.celery.tasks.docprocessing import tasks as docprocessing_tasks
 from onyx.background.celery.tasks.docprocessing.tasks import _docprocessing_task
 from onyx.background.indexing import run_docconversion
@@ -55,7 +56,14 @@ from onyx.file_store.document_batch_storage import (
     get_stub_batch_storage,
 )
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_docprocessing import BatchStage, RedisDocprocessing
+from onyx.redis.redis_docprocessing import (
+    BatchStage,
+    RedisDocprocessing,
+    claim_conversion_batch,
+    conversion_batch_is_claimed,
+    release_conversion_batch_claim,
+)
+from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.indexing_helpers import (
@@ -227,7 +235,10 @@ def run(
                 DBHierarchyNode.raw_node_id == run.connector.folder_id
             ).delete(synchronize_session="fetch")
             db_session.commit()
+            source = pair.connector.source
             cleanup_cc_pair(db_session, pair)
+            # The node rows are gone, so the cache must not name them.
+            invalidate_hierarchy_cache_for_source(get_redis_client(), source)
 
 
 def test_a_task_converts_a_stub_batch_and_sends_it_to_docprocessing(run: _Run) -> None:
@@ -538,3 +549,49 @@ def test_batches_whose_documents_fail_fail_the_conversion(
         run.convert(batch_num)
     with pytest.raises(RuntimeError, match="failed for 4 of 5 stub batches"):
         run.convert(4)
+
+
+def test_a_task_whose_batch_raises_leaves_the_attempt_running(run: _Run) -> None:
+    doc_ids = run.store_stub_batch(0, ["raise"])
+    run.dispatch()
+
+    kwargs: dict[str, Any] = {
+        "index_attempt_id": run.attempt_id,
+        "cc_pair_id": run.pair.id,
+        "tenant_id": run.tenant_id,
+        "batch_num": 0,
+    }
+    # The task sends with its own app. Patch the send so no broker is needed.
+    with patch.object(docconversion_task.app, "send_task"):
+        docconversion_task.run(**kwargs)
+
+    assert run.attempt().status == IndexingStatus.IN_PROGRESS
+    errors = run.db_session.scalars(
+        select(IndexAttemptError).where(
+            IndexAttemptError.index_attempt_id == run.attempt_id
+        )
+    ).all()
+    assert [error.document_id for error in errors] == doc_ids
+
+
+def test_a_batch_that_another_run_converts_is_not_converted_again(run: _Run) -> None:
+    """A recovery resend can overlap a run that still converts the batch.
+    The run that does not hold the claim converts nothing."""
+    run.store_stub_batch(0, ["document"])
+    run.dispatch()
+    r = get_redis_client()
+    assert claim_conversion_batch(r, run.attempt_id, 0, "another run")
+    try:
+        run.convert(0)
+
+        assert run.connector.calls == []
+        assert run.stubs.get_batch(0, _Payload) is not None
+        assert run.sends(OnyxCeleryTask.DOCPROCESSING_TASK) == []
+        assert run.attempt().stub_batches_converted == 0
+    finally:
+        release_conversion_batch_claim(r, run.attempt_id, 0, "another run")
+
+    # With the claim gone, the batch converts, and the run releases its claim.
+    run.convert(0)
+    assert len(run.sends(OnyxCeleryTask.DOCPROCESSING_TASK)) == 1
+    assert not conversion_batch_is_claimed(r, run.attempt_id, 0)
