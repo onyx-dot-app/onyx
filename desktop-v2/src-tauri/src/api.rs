@@ -928,7 +928,7 @@ impl Api {
         // A follow-up goes after the chat's latest message (-1); a new chat starts at the root.
         follow_up: bool,
         files: &[AttachedFile],
-    ) -> Result<Response, String> {
+    ) -> Result<Response, SendError> {
         let file_descriptors: Vec<serde_json::Value> =
             files.iter().map(AttachedFile::descriptor).collect();
         // Bounds the wait for the response headers only; the streamed answer
@@ -948,10 +948,21 @@ impl Api {
             .send();
         let response = tokio::time::timeout(Duration::from_secs(120), request)
             .await
-            .map_err(|_| "The server did not start answering.".to_string())?
-            .map_err(|e| reachability::describe(server, &e))?;
+            .map_err(|_| SendError {
+                message: "The server did not start answering.".into(),
+                not_sent: false,
+            })?
+            .map_err(|e| SendError {
+                message: reachability::describe(server, &e),
+                // A connection that never opened carried no question.
+                not_sent: e.is_connect(),
+            })?;
         if !response.status().is_success() {
-            return Err(error_detail(response).await);
+            // The server answered and refused the question (for example a usage limit).
+            return Err(SendError {
+                message: error_detail(response).await,
+                not_sent: true,
+            });
         }
         Ok(response)
     }
@@ -1010,6 +1021,13 @@ impl Api {
             })
             .collect())
     }
+}
+
+/// Why `send_message` failed, and whether the server surely did not take
+/// the question (so its attachments can go back to the user).
+pub struct SendError {
+    pub message: String,
+    pub not_sent: bool,
 }
 
 #[cfg(test)]

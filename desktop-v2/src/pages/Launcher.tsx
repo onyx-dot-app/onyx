@@ -380,6 +380,8 @@ function Launcher() {
         { chatSessionId: followUp ? chatSessionId : null, agentId, files },
         (event) => {
           if (event.kind === "session") sending = true;
+          // A refused question (for example a usage limit) gets its files back.
+          else if (event.kind === "notSent") sending = false;
           else if (event.kind === "error") notSent();
           if (id !== askId.current) return;
           if (event.kind === "session") {
@@ -406,6 +408,8 @@ function Launcher() {
                 return { ...t, approval: { tool: event.tool } };
               case "done":
                 return { ...t, streaming: false, status: null };
+              case "notSent":
+                return t;
               case "error":
                 return { ...t, streaming: false, status: null, error: event.message };
             }

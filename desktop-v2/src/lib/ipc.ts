@@ -53,6 +53,8 @@ export type AskEvent =
   | { kind: "citations"; docs: Citation[] }
   | { kind: "needsApproval"; tool: string | null }
   | { kind: "done" }
+  // The server surely did not take the question; an error follows.
+  | { kind: "notSent" }
   | { kind: "error"; message: string };
 
 export const checkServer = (url: string): Promise<ServerInfo> =>

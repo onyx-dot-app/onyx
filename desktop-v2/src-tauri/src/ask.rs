@@ -51,6 +51,8 @@ pub enum AskEvent {
         tool: Option<String>,
     },
     Done,
+    /// The server surely did not take the question; an `Error` follows.
+    NotSent,
     Error {
         message: String,
     },
@@ -300,7 +302,13 @@ pub async fn run(
             follow_up_of.is_some(),
             question.files,
         )
-        .await?;
+        .await
+        .map_err(|e| {
+            if e.not_sent {
+                let _ = channel.send(AskEvent::NotSent);
+            }
+            e.message
+        })?;
     let mut stream = response.bytes_stream();
     let mut buffer: Vec<u8> = Vec::new();
     let mut state = StreamState::default();
