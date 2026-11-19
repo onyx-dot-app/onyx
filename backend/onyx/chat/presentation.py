@@ -62,7 +62,6 @@ from onyx.chat.tool_results import (
     tool_result_parts,
     tool_result_sources,
 )
-from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage, UserMessage
@@ -228,19 +227,11 @@ def _tool_record(
     )
 
 
-def message_presentation(
-    metadata: BaseModel | None,
-    *,
-    parent_tool_name: str | None = None,
-) -> MessageRendering:
+def message_presentation(metadata: BaseModel | None) -> MessageRendering:
     """Resolve feature metadata into display settings retained for history replay."""
     if isinstance(metadata, MessageRendering):
         return metadata.model_copy(deep=True)
-    presentation = MessageRendering(
-        mode=PresentationMode.CODING_THINKING
-        if parent_tool_name == CODING_AGENT_TOOL_NAME
-        else PresentationMode.ANSWER,
-    )
+    presentation = MessageRendering()
     if isinstance(metadata, ChatMessageMetadata):
         presentation.citation_mode = (
             CitationMode.HYPERLINK
@@ -347,20 +338,13 @@ def _project_response_display(
     record = response.response
     if record is None:
         raise ValueError("Saved response content is required for display projection")
-    pending: list[tuple[RunState, str | None]] = [(snapshot, None)]
+    pending = [snapshot]
     while pending:
-        node, parent_tool_name = pending.pop()
-        call_names: dict[tuple[str, str], str] = {}
+        node = pending.pop()
         for step_index, step in enumerate(node.steps):
             message = step.message
             message_id = _message_identity(message)
-            call_names.update(
-                {(message_id, call.id): call.name for call in message.tool_calls}
-            )
-            setting = message_presentation(
-                message.metadata,
-                parent_tool_name=parent_tool_name,
-            )
+            setting = message_presentation(message.metadata)
             presentation[message_id] = setting
             if node is not snapshot or setting.mode not in (
                 PresentationMode.ANSWER,
@@ -390,15 +374,7 @@ def _project_response_display(
                     and not message.tool_calls,
                 }
             )
-        pending.extend(
-            (
-                child,
-                call_names.get(
-                    (child.parent_message_id or "", child.parent_tool_call_id or "")
-                ),
-            )
-            for child in node.child_runs
-        )
+        pending.extend(node.child_runs)
     return response.model_copy(update={"presentation": presentation})
 
 
@@ -485,10 +461,7 @@ class ResponsePresenter:
             if parent is not None:
                 parent.has_child_output = True
             self.renderers[event.run_id] = MessageRenderer(
-                message_presentation(
-                    event.metadata,
-                    parent_tool_name=parent.call.name if parent else None,
-                ),
+                message_presentation(event.metadata),
                 message_documents(event.metadata),
                 self.layout,
                 parent.placement if parent else None,
@@ -580,7 +553,6 @@ def replay_response(
     documents: Mapping[str, SearchDoc],
     layout: ResponseLayout | None = None,
     parent: Placement | None = None,
-    default_mode: PresentationMode = PresentationMode.ANSWER,
     *,
     approvals: Mapping[tuple[str, str], Sequence[SavedToolApproval]] = _NO_APPROVALS,
     agent_approvals: Mapping[
@@ -610,7 +582,7 @@ def replay_response(
         packets.extend(user_message_packets(step.input_messages, layout, parent))
         message = step.message
         message_id = _message_identity(message)
-        setting = settings.get(message_id) or MessageRendering(mode=default_mode)
+        setting = settings.get(message_id) or MessageRendering()
         renderer = MessageRenderer(setting, documents, layout, parent)
         packets.extend(renderer.complete(message))
         calls = [call for call in message.tool_calls if call.name not in HIDDEN_TOOLS]
@@ -714,11 +686,6 @@ def replay_response(
                 ):
                     continue
                 renderer_of_call.has_child_output = True
-                child_mode = (
-                    PresentationMode.CODING_THINKING
-                    if call.name == CODING_AGENT_TOOL_NAME
-                    else PresentationMode.ANSWER
-                )
                 packets.extend(
                     replay_response(
                         child,
@@ -727,7 +694,6 @@ def replay_response(
                         documents,
                         layout,
                         tool_placement,
-                        child_mode,
                         approvals=approvals,
                     )
                 )

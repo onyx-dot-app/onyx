@@ -61,13 +61,6 @@ export enum PacketType {
   INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta",
   INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs",
 
-  CODING_AGENT_START = "coding_agent_start",
-  CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta",
-  CODING_AGENT_FINAL = "coding_agent_final",
-
-  BASH_TOOL_START = "bash_tool_start",
-  BASH_TOOL_DELTA = "bash_tool_delta",
-
   CODE_MODE_START = "code_mode_start",
   CODE_MODE_DELTA = "code_mode_delta",
 
@@ -329,35 +322,6 @@ export interface IntermediateReportCitedDocs extends BaseObj {
   cited_docs: SearchDoc[] | null;
 }
 
-export interface CodingAgentStart extends BaseObj {
-  type: "coding_agent_start";
-  query: string;
-  repo: string | null;
-}
-
-export interface CodingAgentThinkingDelta extends BaseObj {
-  type: "coding_agent_thinking_delta";
-  content: string;
-}
-
-export interface CodingAgentFinal extends BaseObj {
-  type: "coding_agent_final";
-  answer: string;
-}
-
-export interface BashToolStart extends BaseObj {
-  type: "bash_tool_start";
-  cmd: string;
-}
-
-export interface BashToolDelta extends BaseObj {
-  type: "bash_tool_delta";
-  stdout: string;
-  stderr: string;
-  exit_code: number | null;
-  timed_out: boolean;
-}
-
 export type CodeModeStatus =
   "running" | "completed" | "failed" | "timed_out" | "terminated" | "cancelled";
 
@@ -514,15 +478,6 @@ export type ResearchAgentObj =
   | IntermediateReportCitedDocs
   | SectionEnd;
 
-export type CodingAgentObj =
-  | CodingAgentStart
-  | CodingAgentThinkingDelta
-  | CodingAgentFinal
-  | BashToolStart
-  | BashToolDelta
-  | SectionEnd
-  | PacketError;
-
 export type ObjTypes =
   | ChatObj
   | NewToolObj
@@ -535,7 +490,6 @@ export type ObjTypes =
   | CitationObj
   | DeepResearchPlanObj
   | ResearchAgentObj
-  | CodingAgentObj
   | CodeModeStart
   | CodeModeDelta
   | ToolApprovalObj

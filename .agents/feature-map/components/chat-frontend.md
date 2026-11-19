@@ -201,8 +201,7 @@
 - **The incognito start button** appears only on the new chat page when
   incognito is available and unlocked.
 - **A user in incognito** cannot turn incognito on or off once the session
-  exists, and answers show no rating buttons. Deep Research and the Coding
-  Agent are greyed out and never sent. Leaving the chat, reloading or
+  exists, and answers show no rating buttons. Deep Research is unavailable. Leaving the chat, reloading or
   closing the tab ends it. If an explicit exit fails, an error shows and the user stays in
   the chat to retry.
 - **When a send fails**, the partial answer stays and an error banner follows
@@ -370,7 +369,7 @@ cell's end cut off, so the call renders as stopped. A command whose
 `exec_end` has `completion` `canceled` (Ctrl-C through `write_stdin`)
 renders as Canceled. Parallel
 tools share a `turn_index` and differ by `tab_index`. The child packets of a
-subagent, a coding agent (its bash calls and thinking) or a code mode program
+subagent or a code mode program
 carry the parent's key plus `sub_turn_index`, so they join the parent group,
 and their `SECTION_END` or `ERROR` does not close it. A nested `MESSAGE_START`
 does not start the answer.
@@ -385,11 +384,7 @@ step with a nested search is a research step, not a search step.
 Each `NestedCall` holds one call's packets placed at parent level, so the tool's
 own renderer reads it as a direct call. The snapshot reuses the object of each
 unchanged call, so memoized renderers of finished calls do not redraw.
-`GroupedPacket.streamPackets` holds every packet in stream order. Every renderer
-receives all three as required props. `ResearchAgentRenderer` draws each entry
-of `nestedCalls` with the renderer of its tool. `CodingAgentRenderer` reads
-`streamPackets`, because its thinking and bash sections interleave in stream
-order.
+`ResearchAgentRenderer` draws each entry of `nestedCalls` with the renderer of its tool.
 After the answer starts, a tool packet of a group whose tool has not started
 is a new tool call and sets `finalAnswerComing` back to false. The tool starts
 with its first tool packet other than a streamed argument, so a call whose
@@ -406,7 +401,7 @@ The mobile app copies the group end and step-kind rules in
 `mobile/src/chat/timeline/packetHelpers.ts` and
 `mobile/src/chat/messageProcessor.ts` ([[mobile-app]]); change both. Its
 `GroupedPacket.packets` also holds only the group's own packets. Mobile has
-`nestedCalls` for code mode steps, but no `streamPackets`.
+`nestedCalls` for code mode steps.
 
 **Code mode steps.** Code mode runs behind the scenes: the timeline shows the
 tool calls a program makes, not the program.

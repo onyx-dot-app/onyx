@@ -235,8 +235,6 @@ class PresentationMode(str, Enum):
     RESEARCH = "research"
     PLAN = "plan"
     REPORT = "report"
-    CODING_THINKING = "coding_thinking"
-    CODING_ANSWER = "coding_answer"
     SILENT = "silent"
 
 
@@ -258,6 +256,14 @@ class MessageRendering(BaseModel):
     citation_documents: dict[int, str] = Field(default_factory=dict)
     document_ids: list[str] = Field(default_factory=list)
     pre_answer_seconds: float | None = None
+
+
+def read_message_rendering(value: dict[str, JsonValue]) -> MessageRendering:
+    """Hide text with an unknown display mode when replaying stored chat steps."""
+    mode = value.get("mode")
+    if isinstance(mode, str) and mode not in PresentationMode:
+        value = {**value, "mode": PresentationMode.SILENT}
+    return MessageRendering.model_validate(value)
 
 
 class ResponseRecord(BaseModel):

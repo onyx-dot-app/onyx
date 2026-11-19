@@ -142,7 +142,7 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
-from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
+from onyx.tools.constants import CODE_MODE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext, ToolOptions
 from onyx.tools.tool_constructor import construct_tools
@@ -1770,16 +1770,19 @@ def test_a_failed_edit_or_write_changes_nothing(
 # The turn
 
 
+@pytest.mark.parametrize("code_mode", [False, True])
 @pytest.mark.usefixtures("node")
 def test_a_subagent_that_ends_during_a_root_call_leaves_the_turn_to_the_root(
     monkeypatch: pytest.MonkeyPatch,
     db_session: Session,
     sandbox: FirecrackerHarnessSandbox,
     chat: SandboxChat,
+    code_mode: bool,
 ) -> None:
     """Subagents share the root's sandbox tools. A subagent run whose work
     drains while the root's sandbox call runs ends no turn; the root's run
     ends it once."""
+    monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", code_mode)
     ended = _ended_turns(monkeypatch, sandbox)
     child_drained = threading.Event()
     start = Agent.start
@@ -1820,7 +1823,11 @@ def test_a_subagent_that_ends_during_a_root_call_leaves_the_turn_to_the_root(
                     arguments={"name": "helper", "instruction": "Task helper"},
                 ),
                 ToolCall(
-                    id="exec", name=ExecCommandTool.NAME, arguments={"cmd": "echo hi"}
+                    id="exec",
+                    name=CODE_MODE_TOOL_NAME if code_mode else ExecCommandTool.NAME,
+                    arguments={"code": "await tools.exec_command(cmd='echo hi')"}
+                    if code_mode
+                    else {"cmd": "echo hi"},
                 ),
             ]
         )

@@ -36,7 +36,7 @@ owns the rules.
   `openapi_schema` or `mcp_server_id`. See [[tools-framework]].
 - `backend/onyx/agents/tools.py:AgentTool` is the tool the shared runtime runs.
   A chat `Tool` becomes one through `Tool.bind`. The control tools of the
-  research and coding agents, such as `generate_report`, are
+  research agents, such as `generate_report`, are
   `AgentTool` objects only, with no `Tool` class and no table row. See
   [[tools-framework]].
 
@@ -59,8 +59,8 @@ owns the rules.
   See [[chat-persistence]].
 
 **"Agent"** means three things: a `Persona`; an `agents/runtime.py:Agent` of
-the shared runtime, such as `ChatAgent`, the deep research agent, the research
-agent or the coding agent ([[agent-runtime]]); or the AI assistant in general.
+the shared runtime, such as `ChatAgent`, `DeepResearchAgent` or `ResearchAgent`
+([[agent-runtime]]); or the AI assistant in general.
 
 **"Flow"** means two things.
 - `LLMModelFlowType` (`backend/onyx/db/enums.py`) and the `LLMModelFlow`
@@ -204,12 +204,11 @@ mobile code checks for it. See [[streaming-protocol]].
 | Custom agent prompt | The agent's instructions, normally sent as a fixed user message before conversation history. With an empty base prompt and no base-prompt replacement, they become the system message. See [[context-assembly]]. |
 | Fence (chat) | A per-session cache flag. The stop fence (`chat/stop_signal_checker.py`, keyed by session and stream ID) means the user pressed Stop. The processing fence holds 0 after admission, and the live stream ID with the response IDs it writes after `ChatTurnAdmission.publish` (`chat/chat_processing_checker.py:get_processing_stream`). The admission owner key, not a fence, marks a busy session. The per-response keys in `chat/run_store.py:ChatRunStore` are not fences: `chat_response_owner` is the execution lease, and `chat_response_stop` is the flag that `cancel_run` sets when a parent cancels a child agent. See [[core-chat-loop#session-admission]]. |
 | Last cycle | The final allowed chat step offers no tools and must answer. Image generation does not end tool use early. See [[core-chat-loop#stopping-tools]]. |
-| `BASH_TOOL_SENTINEL_ID` | The id that the coding agent gives its in-memory `BashTool`. See [[code-execution#bash-tool-sentinel]]. |
 | Message types | `ChatMessage` (the row), `ChatResponseItem` (the saved steps of a response), `llm/models.py:Message` (the conversation type the runtime uses) and `llm/model_request.py:ChatCompletionMessage` (the provider wire form). See [[core-chat-loop#three-message-types]]. |
 | Active branch | The chain of `latest_child_message_id` pointers from a session's root message. See [[chat-persistence]]. |
 | Reserved message | An assistant `ChatMessage` row created with placeholder text before streaming starts. See [[chat-persistence]]. |
 | Incognito and record mode | `IncognitoRecordMode` is fixed on a session and decides what the database keeps. See [[chat-persistence]]. |
-| Child session | A `ChatSession` with `spawned_by_message_id` set. Research and coding child agents get one in a session that keeps content. See [[chat-persistence]]. |
+| Child session | A `ChatSession` with `spawned_by_message_id` set. Research and background subagents get one in a session that keeps content. See [[chat-persistence]]. |
 | Not wired | A part of the shared runtime that no product path reaches: explicit suspension (`Run.suspend`). Suspension on `ChildRunWait`, on chat tool approvals and on tool questions is live, and so are checkpoint handoff and resume: a run whose waits are all on people parks and resumes on any pod ([[mcp-and-custom-tools#chat-approval-durable-wait]]). See [[agent-runtime#wire-module]]. |
 | Tool question | A question that the root chat agent's question tool asks the user (`QuestionRequest`, `question_request`), not the user's chat message, which code also calls a question. Its run waits like an approval. See [[tools-framework]]. |
 | `use_memories` vs `enable_memory_tool` | `use_memories` controls whether memories reach the prompt. `enable_memory_tool` controls whether the memory tool can write them. See [[chat-preferences]]. |

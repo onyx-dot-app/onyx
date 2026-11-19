@@ -468,7 +468,6 @@ const AppInputBar = React.memo(
       requestedToolId: toolConfiguration.preferredToolId,
       requestedAction: toolConfiguration.preferredAction,
       agent: activeAgent,
-      incognito: incognitoEnabled,
       isPluginEnabled: toolConfiguration.isPluginEnabled,
     });
     const preferredToolId =

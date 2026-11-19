@@ -10,7 +10,6 @@ import pytest
 
 from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.chat.models import PendingChatMessage
-from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.configs.constants import MessageType
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import (
@@ -664,4 +663,4 @@ def test_incognito_chat_has_no_child_agents(
         ).raise_for_status()
     normal_request, private_request = mock_llm.requests_in(nonce)
     assert SUBAGENT_TOOLS <= set(normal_request.tools)
-    assert not {*SUBAGENT_TOOLS, CODING_AGENT_TOOL_NAME} & set(private_request.tools)
+    assert not SUBAGENT_TOOLS & set(private_request.tools)

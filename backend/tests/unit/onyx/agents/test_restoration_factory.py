@@ -295,7 +295,7 @@ def test_factory_rejects_checkpoint_without_supported_feature_state() -> None:
         agent_state=AgentState(),
         run_state=RunState(
             run_id="unsupported-run",
-            agent_id="coding-agent",
+            agent_id="unsupported-agent",
             status=RunStatus.SUSPENDED,
             steps=[],
             progress=RunProgress(step_limit=3),

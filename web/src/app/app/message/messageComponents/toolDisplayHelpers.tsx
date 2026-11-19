@@ -107,8 +107,6 @@ export function getToolName(packets: Packet[], t: TimelineTranslate): string {
       return t("toolNames.generatePlan");
     case PacketType.RESEARCH_AGENT_START:
       return t("toolNames.researchAgent");
-    case PacketType.CODING_AGENT_START:
-      return t("toolNames.codingAgent");
     case PacketType.REASONING_START:
       return t("toolNames.thinking");
     case PacketType.MEMORY_TOOL_START:

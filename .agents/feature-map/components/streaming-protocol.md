@@ -146,8 +146,8 @@ notifications, so no v1 data is lost. v1 stays the default.
 `backend/onyx/server/query_and_chat/streaming_models.py:StreamingType` holds every type string, and `PacketObj` is the union that `Packet.obj` is
 validated against. Families are control (`stop`, `section_end`, `error`,
 `chat_heartbeat`), reasoning, answer (`message_start`, `message_delta`),
-citations, one family per tool, tool approval, tool question, deep research,
-and the coding agent with the bash tool. `tool_approval_request` and `tool_approval_resolved`
+citations, one family per tool, tool approval, tool question, and deep research.
+`tool_approval_request` and `tool_approval_resolved`
 come from the runtime's `input_required` and `input_ended` events
 (`chat/renderer.py:ToolRenderer.consume`) at the call's placement, only for
 requests that `ToolApprovals` opened (`PendingToolInput.approval`). A

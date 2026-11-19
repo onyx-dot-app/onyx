@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "Ajouter des connecteurs"
       },
-      "codingAgentIncognito": {
-        "tooltip": "L'agent de code n'est pas disponible en mode incognito"
-      },
       "configure": {
         "tooltip": "Configurer"
       },
@@ -266,9 +263,6 @@
       },
       "addMemory": {
         "label": "Ajouter à la mémoire"
-      },
-      "codingAgent": {
-        "label": "Agent de code"
       }
     },
     "toolsPopover": {
@@ -323,9 +317,6 @@
       "tooltips": {
         "askAdminSuffix": {
           "text": "Demandez à un administrateur de le configurer."
-        },
-        "codingAgent": {
-          "description": "Explore un dépôt GitHub et répond aux questions sur son code."
         },
         "configureSuffix": {
           "text": "Appuyez sur la roue dentée des réglages pour l'activer."
@@ -1506,10 +1497,6 @@
         "codeInterpreter": {
           "description": "Générez et exécutez du code.",
           "title": "Interpréteur de code"
-        },
-        "codingAgent": {
-          "description": "Explorez un dépôt GitHub et répondez à des questions sur son code.",
-          "title": "Agent de code"
         },
         "description": "Outils et fonctionnalités que la discussion peut utiliser. Cela ne s'applique pas aux agents.",
         "pluginsNote": "Gérez les serveurs MCP et les applications OpenAPI dans [Intégrations]({url}).",
@@ -10747,10 +10734,6 @@
           "description": "Générez et exécutez du code.",
           "title": "Interpréteur de code"
         },
-        "codingAgent": {
-          "description": "Explorez un dépôt GitHub et répondez aux questions sur son code.",
-          "title": "Agent de codage"
-        },
         "description": "Outils et capacités que cet agent peut utiliser.",
         "imageGeneration": {
           "description": "Générez et manipulez des images à l'aide d'outils basés sur l'IA.",
@@ -12350,41 +12333,6 @@
         }
       },
       "timeline": {
-        "codingAgent": {
-          "bashExit": {
-            "header": "Bash · sortie {exitCode}"
-          },
-          "bashFailed": {
-            "header": "Bash · échec"
-          },
-          "bashRequest": {
-            "label": "Requête"
-          },
-          "bashResponse": {
-            "label": "Réponse"
-          },
-          "bashRunning": {
-            "header": "Bash · en cours…"
-          },
-          "bashTimedOut": {
-            "header": "Bash · délai dépassé"
-          },
-          "noOutput": {
-            "text": "Aucune sortie"
-          },
-          "response": {
-            "header": "Réponse"
-          },
-          "task": {
-            "header": "Tâche de code"
-          },
-          "taskWithRepo": {
-            "text": "{query}\n\nDépôt : {repo}"
-          },
-          "thinking": {
-            "header": "Réflexion"
-          }
-        },
         "collapseButton": {
           "ariaLabel": "Réduire la chronologie"
         },
@@ -12647,7 +12595,6 @@
         },
         "toolNames": {
           "codeInterpreter": "Interpréteur de code",
-          "codingAgent": "Agent de code",
           "customTool": "Outil personnalisé",
           "generateImage": "Générer une image",
           "generatePlan": "Générer un plan",

@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "コネクタを追加"
       },
-      "codingAgentIncognito": {
-        "tooltip": "シークレットモードではコーディングエージェントを使用できません"
-      },
       "configure": {
         "tooltip": "設定"
       },
@@ -266,9 +263,6 @@
       },
       "addMemory": {
         "label": "メモリに追加"
-      },
-      "codingAgent": {
-        "label": "コーディングエージェント"
       }
     },
     "toolsPopover": {
@@ -323,9 +317,6 @@
       "tooltips": {
         "askAdminSuffix": {
           "text": "管理者に設定を依頼してください。"
-        },
-        "codingAgent": {
-          "description": "GitHubリポジトリを調査し、そのコードに関する質問に答えます。"
         },
         "configureSuffix": {
           "text": "有効にするには設定の歯車を押してください。"
@@ -1506,10 +1497,6 @@
         "codeInterpreter": {
           "description": "コードを生成して実行します。",
           "title": "コードインタープリター"
-        },
-        "codingAgent": {
-          "description": "GitHub リポジトリを調査し、そのコードに関する質問に回答します。",
-          "title": "コーディングエージェント"
         },
         "description": "チャットで使用できるツールと機能です。エージェントには適用されません。",
         "pluginsNote": "MCP サーバーと OpenAPI アプリは[連携]({url})で管理します。",
@@ -10747,10 +10734,6 @@
           "description": "コードを生成して実行します。",
           "title": "コードインタープリター"
         },
-        "codingAgent": {
-          "description": "GitHubリポジトリを調査し、そのコードに関する質問に回答します。",
-          "title": "コーディングエージェント"
-        },
         "description": "このエージェントが使用できるツールと機能です。",
         "imageGeneration": {
           "description": "AI搭載ツールで画像を生成・加工します。",
@@ -12350,41 +12333,6 @@
         }
       },
       "timeline": {
-        "codingAgent": {
-          "bashExit": {
-            "header": "Bash · 終了コード {exitCode}"
-          },
-          "bashFailed": {
-            "header": "Bash · 失敗"
-          },
-          "bashRequest": {
-            "label": "リクエスト"
-          },
-          "bashResponse": {
-            "label": "レスポンス"
-          },
-          "bashRunning": {
-            "header": "Bash · 実行中…"
-          },
-          "bashTimedOut": {
-            "header": "Bash · タイムアウト"
-          },
-          "noOutput": {
-            "text": "出力なし"
-          },
-          "response": {
-            "header": "レスポンス"
-          },
-          "task": {
-            "header": "コーディングタスク"
-          },
-          "taskWithRepo": {
-            "text": "{query}\n\nリポジトリ: {repo}"
-          },
-          "thinking": {
-            "header": "思考中"
-          }
-        },
         "collapseButton": {
           "ariaLabel": "タイムラインを折りたたむ"
         },
@@ -12647,7 +12595,6 @@
         },
         "toolNames": {
           "codeInterpreter": "コードインタープリター",
-          "codingAgent": "コーディングエージェント",
           "customTool": "カスタムツール",
           "generateImage": "画像生成",
           "generatePlan": "プラン生成",

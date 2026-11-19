@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "Konnektoren hinzufügen"
       },
-      "codingAgentIncognito": {
-        "tooltip": "Der Coding-Agent ist im Inkognito-Modus nicht verfügbar"
-      },
       "configure": {
         "tooltip": "Konfigurieren"
       },
@@ -266,9 +263,6 @@
       },
       "addMemory": {
         "label": "Erinnerung hinzufügen"
-      },
-      "codingAgent": {
-        "label": "Coding-Agent"
       }
     },
     "toolsPopover": {
@@ -323,9 +317,6 @@
       "tooltips": {
         "askAdminSuffix": {
           "text": "Bitten Sie einen Admin um die Konfiguration."
-        },
-        "codingAgent": {
-          "description": "Untersucht ein GitHub-Repository und beantwortet Fragen zu dessen Code."
         },
         "configureSuffix": {
           "text": "Zum Aktivieren auf das Zahnrad tippen."
@@ -1506,10 +1497,6 @@
         "codeInterpreter": {
           "description": "Code erzeugen und ausführen.",
           "title": "Code-Interpreter"
-        },
-        "codingAgent": {
-          "description": "Ein GitHub-Repository untersuchen und Fragen zu seinem Code beantworten.",
-          "title": "Coding-Agent"
         },
         "description": "Tools und Funktionen, die der Chat verwenden kann. Dies gilt nicht für Agenten.",
         "pluginsNote": "Verwalten Sie MCP-Server und OpenAPI-Apps unter [Integrationen]({url}).",
@@ -10747,10 +10734,6 @@
           "description": "Generieren und führen Sie Code aus.",
           "title": "Code-Interpreter"
         },
-        "codingAgent": {
-          "description": "Untersuchen Sie ein GitHub-Repository und beantworten Sie Fragen zu dessen Code.",
-          "title": "Coding-Agent"
-        },
         "description": "Tools und Fähigkeiten, die dieser Agent nutzen kann.",
         "imageGeneration": {
           "description": "Erstellen und bearbeiten Sie Bilder mit KI-gestützten Tools.",
@@ -12350,41 +12333,6 @@
         }
       },
       "timeline": {
-        "codingAgent": {
-          "bashExit": {
-            "header": "Bash · Exit {exitCode}"
-          },
-          "bashFailed": {
-            "header": "Bash · fehlgeschlagen"
-          },
-          "bashRequest": {
-            "label": "Anfrage"
-          },
-          "bashResponse": {
-            "label": "Antwort"
-          },
-          "bashRunning": {
-            "header": "Bash · läuft…"
-          },
-          "bashTimedOut": {
-            "header": "Bash · Zeitüberschreitung"
-          },
-          "noOutput": {
-            "text": "Keine Ausgabe"
-          },
-          "response": {
-            "header": "Antwort"
-          },
-          "task": {
-            "header": "Programmieraufgabe"
-          },
-          "taskWithRepo": {
-            "text": "{query}\n\nRepository: {repo}"
-          },
-          "thinking": {
-            "header": "Denkt nach"
-          }
-        },
         "collapseButton": {
           "ariaLabel": "Zeitleiste einklappen"
         },
@@ -12647,7 +12595,6 @@
         },
         "toolNames": {
           "codeInterpreter": "Code-Interpreter",
-          "codingAgent": "Coding-Agent",
           "customTool": "Benutzerdefiniertes Werkzeug",
           "generateImage": "Bild generieren",
           "generatePlan": "Plan erstellen",

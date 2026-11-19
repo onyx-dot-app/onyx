@@ -1,7 +1,7 @@
 # Agent runtime
 
-`onyx/agents` runs tool-using LLM agents. Chat, deep research, and the coding agent are all
-built on it. A feature brings a system prompt, a set of tools, and an optional next-step decision. The runtime
+`onyx/agents` runs tool-using LLM agents for chat and deep research.
+A feature brings a system prompt, a set of tools, and an optional next-step decision. The runtime
 handles the rest: the generation loop, tool execution, subagents, context compaction,
 streaming events, cancellation, and record-keeping.
 
@@ -413,17 +413,14 @@ Chat's root can also end its turn with `wait_agents` and get one follow-up for t
 `.agents/feature-map/components/chat-persistence.md` describes the wait rule.
 Foreground tools retain their `ChildRunWait` result path.
 
-Use `add_completion_cleanup(run_id, callback)` for resources that must survive suspension, such as a coding workspace.
-Register cleanup immediately after spawning the child. It runs after local execution finishes or releases ownership, once its workers drain.
-Its returned future reports cleanup failures. Foreground parent cleanup and coordinator shutdown both retain this work.
 Application integration uses `Run.add_idle_callback` and `Run.wait_for_idle` to observe when local work has drained.
-A suspended run can be idle without being complete. Tool authors use `add_completion_cleanup` for resource cleanup.
+A suspended run can be idle without being complete.
 A terminal run permits agent reuse only after its owned work drains and ownership is released.
 Coordinator shutdown waits for these workers too, including those from earlier runs.
 
 Subscribe to a run for progress. Foreground child events also reach its ancestors; background runs require their own subscription.
 `completion(run_id)` returns a future for terminal handling and preserves storage failures.
-Resource cleanup has its own future and can finish later. `run(run_id)` retains the logical control handle after execution ends.
+`run(run_id)` retains the logical control handle after execution ends.
 These interfaces work even when the spawning parent no longer observes the child.
 
 Reuse a coordinator to retain children across root runs. Create a fresh `view` when parent resources or branch bindings change.
@@ -438,7 +435,7 @@ It cannot replace a running or suspended child with another owner.
 
 Call `Run.handoff` after suspension to release local execution. Resume the saved state with a new `Agent`.
 Resumption creates a new `Run` object with the same ID, accepted input, and remaining step budget.
-Parent dependencies use run IDs and completion records. Local resource cleanup waits for workers after execution is released.
+Parent dependencies use run IDs and completion records.
 A coordinator rejects competing local owners, including while ownership release is in progress.
 The application uses an atomic storage claim to exclude other API pods.
 A new coordinator can load terminal child states through `read_run`.
@@ -446,7 +443,7 @@ A parent transfers while each pending foreground child executes elsewhere, for e
 A foreground child that still executes locally blocks transfer. Rejected transfers leave the local owner intact.
 A released parent stops observing the runs it waited for, unless another local run waits for them.
 
-`close()` cancels all owned runs and waits for execution, terminal handling, and resource cleanup.
+`close()` cancels all owned runs and waits for execution and terminal handling.
 A timeout leaves unfinished work owned. The coordinator is process-local; storage and cross-pod control belong to the application.
 
 Chat creates coordination per response. Its directory rebuilds saved children from their feature configuration,
@@ -604,8 +601,6 @@ The shared Onyx factory reconstructs feature configuration from these saved valu
 | Research child | Selected configuration, citation mappings, and search-tool decisions. |
 
 Keep callbacks, credentials, and clients out of feature payload schemas. Application code reconstructs live resources.
-Coding runs use temporary sandboxes and do not support checkpoint reconstruction.
-The live coding task retains its sandbox until its workers finish after completion or cancellation.
 
 ### Chat archive
 
@@ -716,7 +711,7 @@ A suspended run can release its response worker without finishing the response.
 `Agent` supplies configuration and history. `Run` owns each execution's state and controls.
 The response worker executes the run directly; these objects do not each create a thread.
 
-`ChatAgent`, `ResearchAgent`, `DeepResearchAgent`, and `CodingAgent` extend `Agent`.
+`ChatAgent`, `ResearchAgent`, and `DeepResearchAgent` extend `Agent`.
 Their constructors register feature callbacks; callers use `start()`, `resume()`, and `state` directly.
 Restorable features also register their state capture and restoration capability.
 `application_tools` contains application tool objects; inherited `tools` contains bound SDK tools.
@@ -763,8 +758,8 @@ Admission is claimed before loading history. Another tab or pod cannot start a t
 The browser checks session readiness after stream errors and reloads; stream closure alone does not confirm completion.
 Execution leases remain separate and retain ownership until work drains or is explicitly transferred.
 
-`AgentCoordinator` keeps each run's execution handle, coordination, completion, cleanup work, and remote observer in one internal record.
-Handoff releases the local execution while retaining completion and cleanup tracking. Branch permissions remain separate from that record.
+`AgentCoordinator` keeps each run's execution handle, coordination, completion, and remote observer in one internal record.
+Handoff releases the local execution while retaining completion tracking. Branch permissions remain separate from that record.
 
 Its application interfaces provide access to saved data and execution ownership:
 
@@ -822,7 +817,6 @@ Completion removes the checkpoint while preserving chat history.
 
 Live inspection snapshots are not transferable checkpoints. An in-flight tool must finish before ownership transfers.
 The application must supply matching input history and supported feature reconstruction; snapshotting a Python client is not supported.
-Coding's temporary sandbox has no cross-process reconstruction factory.
 
 ### Delivery and failure boundaries
 
