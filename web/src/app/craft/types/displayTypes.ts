@@ -6,6 +6,7 @@
  */
 
 import type { RateLimitDetails } from "@/app/app/types";
+import type { TimelineEvent } from "@/lib/timeline/events";
 
 export type ToolCallKind =
   | "search"
@@ -182,8 +183,10 @@ export interface SubagentTurn {
   thinking: string | null;
   /** The subagent's response for this turn (null until complete). */
   response: string | null;
-  /** FIFO stream items rendered with the same BuildMessageList path as parent chat. */
+  /** FIFO stream items, kept for settlement; the view renders `timelineEvents`. */
   streamItems: StreamItem[];
+  /** This turn's timeline events, from the subagent's own packets. */
+  timelineEvents: TimelineEvent[];
 }
 
 export interface SubagentState {

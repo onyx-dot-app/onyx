@@ -111,11 +111,14 @@ scheduled run settles on its saved run status instead.
 **Live timeline.** The stream processor also turns each packet into ACP
 timeline events (`web/src/lib/timeline/craft/events.ts:craftPacketToEvents`)
 and appends them to the session's `timelineEvents`. `BuildMessageList` renders
-the in-progress turn from the reducer (`web/src/lib/timeline/reducer.ts`) when
-it receives `timelineEvents`. A saved assistant message renders from its own
-`timelineEvents` (set from the saved rows, or kept at turn end); subagent views
-still render from `streamItems`. Both live states are cleared and restored
-together, so a change to one must change the other.
+the in-progress turn from the reducer (`web/src/lib/timeline/reducer.ts`). A
+saved assistant message renders from its own `timelineEvents` (set from the
+saved rows, or kept at turn end). A subagent's packets go to its own turn's
+`timelineEvents` (`appendSubagentTimelineEvents`, filtered by
+`craftChildSessionId`), and `SubagentView` renders them the same way.
+`streamItems` is still kept for queue, settlement and stop logic, but nothing
+renders it. Both live states are cleared and restored together, so a change to
+one must change the other.
 
 **The queue.** `enqueueMessage` adds to `queuedMessages`. The dispatcher in
 `web/src/app/craft/hooks/useBuildStreaming.ts` subscribes to the store and
@@ -141,10 +144,10 @@ keyed by path, inventory revision and an explicit reload counter.
 `web/src/app/craft/components/OutputPanel.tsx` keeps a few recent file viewers
 mounted but hidden and `inert`, so switching tabs does not fetch them again.
 
-**Transcript timeline.** `web/src/lib/timeline/craft/timelineEntries.ts:buildCraftTranscript`
-splits a turn's stream items into rail blocks (consecutive tool calls and
-thinking) and inline items (text, to-do list, notices). An entry is keyed by
-tool-call id or stream item id, so a late update changes it in place.
+**Transcript timeline.** `BuildMessageList` splits a turn's reducer entries
+into rail blocks (consecutive tool calls and thinking) and inline items
+(messages, notices), in arrival order. An entry is keyed by tool-call id or
+part id, so a late update changes it in place.
 `web/src/lib/timeline/craft/components/CraftTimeline.tsx` draws a block on the rail that
 chat uses (`web/src/lib/timeline/`, [[chat-frontend]]). A block with more than
 one entry gets a "Working" header that folds it once a text reply follows.
