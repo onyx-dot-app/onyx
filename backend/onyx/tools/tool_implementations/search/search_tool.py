@@ -944,8 +944,7 @@ class SearchTool(Tool):
 
         connected_sources: list[DocumentSource] = []
 
-        # Pre-fetch all DB data in a single short-lived session so that
-        # parallel search workers need zero DB connections.
+        # Load search configuration and access filters before starting the workers.
         with get_session_with_current_tenant() as db_session:
             # ACL filters
             acl_filters: UserAccessFilters = build_access_filters_for_user(
