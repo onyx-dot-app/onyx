@@ -673,6 +673,27 @@ export class ChatPage {
       .click();
   }
 
+  async selectNextHumanMessage(index = 0): Promise<void> {
+    await this.humanMessage(index)
+      .getByTestId("MessageSwitcher/container")
+      .getByRole("button")
+      .last()
+      .click();
+  }
+
+  /** Switches a human message's version and waits for the branch to load. */
+  async switchHumanMessageVersion(
+    direction: "previous" | "next",
+    index = 0
+  ): Promise<void> {
+    const branchLoaded = this.page.waitForResponse((response) =>
+      response.url().includes("/api/chat/get-chat-session/")
+    );
+    if (direction === "previous") await this.selectPreviousHumanMessage(index);
+    else await this.selectNextHumanMessage(index);
+    await branchLoaded;
+  }
+
   async editHumanMessage(text: string, index = 0): Promise<void> {
     const message = this.humanMessage(index);
     await message.hover();

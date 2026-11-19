@@ -528,6 +528,29 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     updateCurrentRightPanel,
   ]);
 
+  // Files closes when the branch has no published files, for example after a
+  // branch switch, and stays closed until the user opens it. The page owns
+  // this, as the panel is not mounted for an agent without search and no
+  // files. While a switched branch's page loads, its files are not known yet.
+  const branchSwitchPending = useChatSessionStore(
+    (state) =>
+      (state.sessions.get(state.currentSessionId ?? "")?.latestPageSwitch ??
+        null) !== null
+  );
+  useEffect(() => {
+    if (
+      publishedFilesPanelOpen &&
+      !branchSwitchPending &&
+      publishedFiles.length === 0
+    )
+      updateCurrentRightPanel({ type: "hideFiles" });
+  }, [
+    publishedFilesPanelOpen,
+    branchSwitchPending,
+    publishedFiles.length,
+    updateCurrentRightPanel,
+  ]);
+
   const handleResubmitLastMessage = useCallback(() => {
     // Grab the last user-type message
     const lastUserMsg = messageHistory

@@ -1,8 +1,10 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "@tests/e2e/chat/fixtures";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import {
   buildMockPublishFilesStream,
+  buildMockStream,
   MockPublishedFile,
   mockChatEndpoint,
   publishFilesPackets,
@@ -293,6 +295,60 @@ test.describe("Published files", () => {
 
     await chatPage.publishedFilesButton.click();
     await expect(chatPage.publishedFilesPanel).toBeHidden();
+  });
+
+  test("for an agent without search, Files stays closed after a switch to a branch without files and back", async ({
+    page,
+    chatPage,
+    browser,
+  }) => {
+    const file = report("published-file-9", "Q3 report");
+    const agentName = `No search ${Date.now()}`;
+    // Only an admin can create a public agent
+    const admin = await browser.newContext({
+      storageState: "admin_auth.json",
+    });
+    const adminApi = new OnyxApiClient(admin.request);
+    const agentId = await adminApi.createAgent(agentName);
+    try {
+      await chatPage.gotoAgent(agentId, agentName);
+      await mockFile(page, file);
+      // The server takes each selected branch
+      await page.route("**/api/chat/set-message-as-latest", (route) =>
+        route.fulfill({ json: {} })
+      );
+      await mockChatEndpoint(
+        page,
+        buildMockPublishFilesStream([file], MESSAGE)
+      );
+      await sendMessage(page, "Write the quarterly report");
+      await expect(chatPage.answerText(MESSAGE)).toBeVisible();
+
+      // An edit starts a branch without files
+      const plainAnswer = "Here is a summary.";
+      await mockChatEndpoint(page, buildMockStream(plainAnswer));
+      await chatPage.editHumanMessage("Summarize the quarter");
+      await chatPage.submitHumanMessageEdit();
+      await expect(chatPage.answerText(plainAnswer)).toBeVisible();
+
+      await chatPage.switchHumanMessageVersion("previous");
+      await expect(chatPage.answerText(MESSAGE)).toBeVisible();
+      await chatPage.publishedFilesButton.click();
+      await expect(chatPage.publishedFilesPanel).toBeVisible();
+
+      // The page does not show the panel on the branch without files
+      await chatPage.switchHumanMessageVersion("next");
+      await expect(chatPage.answerText(plainAnswer)).toBeVisible();
+      await expect(chatPage.publishedFilesPanel).toBeHidden();
+
+      await chatPage.switchHumanMessageVersion("previous");
+      await expect(chatPage.answerText(MESSAGE)).toBeVisible();
+      await expect(chatPage.publishedFilesButton).toBeVisible();
+      await expect(chatPage.publishedFilesPanel).toBeHidden();
+    } finally {
+      await adminApi.deleteAgent(agentId);
+      await admin.close();
+    }
   });
 
   test("the panel keeps its tabs and width, and Escape leaves full screen, then closes tabs, then the panel", async ({

@@ -32,7 +32,6 @@ import {
   RIGHT_PANEL_FILES_TAB,
   RIGHT_PANEL_SOURCES_TAB,
   rightPanelFileTab,
-  showsFiles,
   type ChatRightPanelAction,
   type ChatRightPanelState,
 } from "@/lib/chat/rightPanel";
@@ -461,19 +460,6 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
   const dispatch = useChatSessionStore.getState().updateCurrentRightPanel;
   const files = useCurrentPublishedFiles();
   const openFiles = useCurrentOpenPublishedFiles();
-  const latestPagePending = useChatSessionStore(
-    (store) =>
-      (store.sessions.get(store.currentSessionId ?? "")?.latestPageSwitch ??
-        null) !== null
-  );
-  // Files closes when the branch has no published files, for example after a
-  // branch switch, and stays closed until the user opens it. While the new
-  // branch's page loads, its files are not known yet.
-  const filesShown = showsFiles(state);
-  useEffect(() => {
-    if (filesShown && !latestPagePending && files.length === 0)
-      dispatch({ type: "hideFiles" });
-  }, [filesShown, latestPagePending, files.length, dispatch]);
   return (
     <ChatRightPanel
       {...props}
