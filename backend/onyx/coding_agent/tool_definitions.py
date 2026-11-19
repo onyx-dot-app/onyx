@@ -1,4 +1,3 @@
-from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.models import ToolDefinition
 
 CODING_AGENT_IN_CODE_ID = "CodingAgent"
@@ -51,27 +50,5 @@ GENERATE_ANSWER_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
         "additionalProperties": False,
         "properties": {},
         "required": [],
-    },
-)
-
-
-CODING_AGENT_THINK_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
-    name=THINK_TOOL_NAME,
-    description=(
-        "Use this for reasoning between bash calls. Reflect on what you "
-        "have learned about the codebase, identify knowledge gaps, and "
-        "plan the next set of bash commands."
-    ),
-    strict=True,
-    parameters={
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "reasoning": {
-                "type": "string",
-                "description": "Your chain of thought reasoning.",
-            }
-        },
-        "required": ["reasoning"],
     },
 )

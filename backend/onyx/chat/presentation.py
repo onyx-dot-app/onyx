@@ -47,6 +47,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.renderer import (
     HIDDEN_TOOLS,
+    LEGACY_THINK_TOOL_NAME,
     MessageRenderer,
     ResponseLayout,
     ToolRenderer,
@@ -65,7 +66,6 @@ from onyx.chat.tool_results import (
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
-from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage, UserMessage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -241,9 +241,6 @@ def message_presentation(
         mode=PresentationMode.CODING_THINKING
         if parent_tool_name == CODING_AGENT_TOOL_NAME
         else PresentationMode.ANSWER,
-        think_tool=THINK_TOOL_NAME
-        if parent_tool_name == CODING_AGENT_TOOL_NAME
-        else None,
     )
     if isinstance(metadata, ChatMessageMetadata):
         presentation.citation_mode = (
@@ -263,9 +260,8 @@ def message_presentation(
             presentation.mode = PresentationMode.PLAN
         elif metadata.phase == ResearchPhase.RESEARCH:
             presentation.text_as_thinking = True
-            presentation.think_tool = (
-                THINK_TOOL_NAME if not metadata.is_reasoning_model else None
-            )
+            if metadata.is_reasoning_model is False:
+                presentation.think_tool = LEGACY_THINK_TOOL_NAME
         elif metadata.phase == ResearchPhase.REPORT:
             presentation.mode = (
                 PresentationMode.REPORT

@@ -283,7 +283,7 @@ with tool execution disabled on the last step, after a `generate_answer` call, o
 with no tool calls. Definitions remain advertised on that step
 ([[llm-providers#none-tool-choice-keeps-tools]]), and the runtime handles any call
 ([[core-chat-loop#stopping-tools]]).
-Their control functions, such as `think_tool`, `generate_report` and
+Their control functions, such as `generate_report` and
 `generate_answer`, are plain `AgentTool` objects with no `Tool` row, and
 `chat/renderer.py:HIDDEN_TOOLS` keeps them out of the stream.
 

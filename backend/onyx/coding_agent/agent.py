@@ -13,13 +13,8 @@ from onyx.chat.models import MessageRendering, PresentationMode, PromptMetadata
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.coding_agent.tool_definitions import (
     BASH_TOOL_DESCRIPTION,
-    CODING_AGENT_THINK_TOOL_DESCRIPTION,
     GENERATE_ANSWER_TOOL_DESCRIPTION,
     GENERATE_ANSWER_TOOL_NAME,
-)
-from onyx.deep_research.tool_definitions import (
-    THINK_TOOL_NAME,
-    THINK_TOOL_RESPONSE_MESSAGE,
 )
 from onyx.llm.cancellation import (
     CancellationSignal,
@@ -159,13 +154,6 @@ class CodingAgent(Agent):
                 execute=self._request_answer,
             ),
         ]
-        if not self.is_reasoning_model:
-            tools.append(
-                AgentTool(
-                    definition=CODING_AGENT_THINK_TOOL_DESCRIPTION,
-                    execute=self._think,
-                )
-            )
         super().__init__(
             llm,
             tools=tools,
@@ -224,7 +212,6 @@ class CodingAgent(Agent):
                 mode=PresentationMode.CODING_ANSWER
                 if is_final_step
                 else PresentationMode.CODING_THINKING,
-                think_tool=THINK_TOOL_NAME if not self.is_reasoning_model else None,
             ),
             assemble_messages=partial(
                 prepare_prompt,
@@ -258,7 +245,3 @@ class CodingAgent(Agent):
     @staticmethod
     def _request_answer(_invocation: ToolInvocation) -> ToolResult:
         return ToolResult(content="Ready to produce the final answer.")
-
-    @staticmethod
-    def _think(_invocation: ToolInvocation) -> ToolResult:
-        return ToolResult(content=THINK_TOOL_RESPONSE_MESSAGE)

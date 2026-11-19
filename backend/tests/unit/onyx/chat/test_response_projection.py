@@ -101,9 +101,7 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
         StreamingClient(lambda *_: AssistantMessage()),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         prepare_step=lambda _input: PreparedStep(
-            output_metadata=ResearchMessageMetadata(
-                phase=ResearchPhase.CLARIFICATION, is_reasoning_model=False
-            )
+            output_metadata=ResearchMessageMetadata(phase=ResearchPhase.CLARIFICATION)
         ),
     )
 
@@ -134,6 +132,29 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
     assert project_response(
         started.result(timeout=2).snapshot(), tool_ids={}
     ).is_clarification
+
+
+def test_reprojecting_an_old_research_step_preserves_its_reasoning() -> None:
+    message = AssistantMessage(
+        id="research-step",
+        content=[
+            ToolCall(
+                id="old-call",
+                name="think_tool",
+                arguments={"reasoning": "Look for evidence."},
+            )
+        ],
+        metadata=ResearchMessageMetadata.model_validate(
+            {"phase": "research", "is_reasoning_model": False}
+        ),
+    )
+    snapshot = RunState(
+        run_id="research",
+        status=RunStatus.RUNNING,
+        steps=[StepRecord(message=message, generation_status=ExecutionStatus.COMPLETE)],
+    )
+    projected = project_response(snapshot, tool_ids={})
+    assert projected.reasoning == "Look for evidence."
 
 
 def test_snapshot_does_not_wait_for_slow_stream_observer() -> None:

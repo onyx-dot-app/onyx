@@ -46,7 +46,6 @@ from onyx.deep_research.research_agent import ResearchAgent
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
-    THINK_TOOL_NAME,
 )
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.exceptions import LLMTimeoutError
@@ -178,12 +177,14 @@ def test_cancel_after_coding_tools_prevents_final_model_call() -> None:
 
 
 @pytest.mark.parametrize("render", [True, False])
-def test_research_think_steps_are_bounded_and_report_is_generated(render: bool) -> None:
+def test_research_search_steps_are_bounded_and_report_is_generated(
+    render: bool,
+) -> None:
     runs: list[Run] = []
     llm = ScriptedLLM(
         [
-            tool_delta(THINK_TOOL_NAME, '{"reasoning":"inspect"}'),
-            tool_delta(THINK_TOOL_NAME, '{"reasoning":"compare"}'),
+            tool_delta(WebSearchTool.NAME, '{"value":"inspect"}'),
+            tool_delta(WebSearchTool.NAME, '{"value":"compare"}'),
             Delta(content="Report"),
         ],
         128000,
@@ -191,7 +192,9 @@ def test_research_think_steps_are_bounded_and_report_is_generated(render: bool) 
     presentation = (
         ResponsePresenter(Emitter(queue.Queue[Packet]().put_nowait)) if render else None
     )
-    feature = ResearchAgent([], llm, len, None, "", ReasoningEffort.LOW)
+    feature = ResearchAgent(
+        [ResearchWebSearchStub()], llm, len, None, "", ReasoningEffort.LOW
+    )
     result = run_agent(
         feature,
         runs=runs,

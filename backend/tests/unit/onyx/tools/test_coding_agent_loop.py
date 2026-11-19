@@ -4,6 +4,7 @@ import json
 from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
+import pytest
 from pydantic import JsonValue
 
 from onyx.agents.models import RunResult, RunStatus
@@ -18,12 +19,8 @@ from onyx.coding_agent.tool_definitions import (
     GENERATE_ANSWER_TOOL_NAME,
 )
 from onyx.configs.chat_configs import LLM_SOCKET_READ_TIMEOUT
-from onyx.deep_research.tool_definitions import (
-    THINK_TOOL_NAME,
-    THINK_TOOL_RESPONSE_MESSAGE,
-)
 from onyx.llm.interfaces import LLMConfig, LLMUserIdentity
-from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, ToolMessage
+from onyx.llm.model_request import ChatCompletionMessage, ToolMessage
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -42,7 +39,6 @@ from onyx.llm.models import (
 from onyx.llm.multi_llm import LitellmLLM, ProviderOperation
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
-    BashToolStart,
     CodingAgentThinkingDelta,
     Packet,
     ReasoningStart,
@@ -96,10 +92,6 @@ def tool_call(
 
 def bash(call_id: str, cmd: str) -> list[ModelResponseStream]:
     return tool_call(0, call_id, BASH_TOOL_NAME, {"cmd": cmd})
-
-
-def think(call_id: str, thought: str) -> list[ModelResponseStream]:
-    return tool_call(0, call_id, THINK_TOOL_NAME, {"reasoning": thought})
 
 
 def generate_answer() -> list[ModelResponseStream]:
@@ -186,6 +178,10 @@ def run_agent(
             user_identity=None,
             bash_tool=bash_tool,
         )
+        assert {tool.name for tool in feature.tools} == {
+            BASH_TOOL_NAME,
+            GENERATE_ANSWER_TOOL_NAME,
+        }
         run = feature.start(
             max_steps=max_steps or len(steps),
             messages=[UserMessage(content="How does chat work?")],
@@ -197,12 +193,6 @@ def run_agent(
         result = run.result(timeout=5)
         assert run.wait_for_idle(5)
     return Run(llm, packets, result)
-
-
-def system_prompt(prompt: list[ChatCompletionMessage]) -> str:
-    first = prompt[0]
-    assert isinstance(first, SystemMessage)
-    return first.content
 
 
 def thinking_sub_turns(packets: list[Packet]) -> list[int | None]:
@@ -219,77 +209,18 @@ def reasoning_sub_turns(packets: list[Packet]) -> list[int | None]:
     ]
 
 
-class TestThinkPlacement:
-    def test_think_tool_reasoning_advances_sub_turn(self) -> None:
-        run = run_agent(
-            [
-                think("t1", "I should look at the repo layout first"),
-                text("narration") + bash("b1", "ls"),
-                generate_answer(),
-                FINAL_ANSWER,
-            ],
-            is_reasoning_model=False,
-        )
-
-        assert reasoning_sub_turns(run.packets) == []
-        thinking = [
-            p.obj.content
-            for p in run.packets
-            if isinstance(p.obj, CodingAgentThinkingDelta)
-        ]
-        assert thinking == ["I should look at the repo layout first", "narration"]
-        assert thinking_sub_turns(run.packets) == [0, 1]
-        assert "you are on cycle 1" in system_prompt(run.llm.prompts[1])
-
-        tool_msgs = [m for m in run.llm.prompts[1] if isinstance(m, ToolMessage)]
-        assert [(m.tool_call_id, m.content) for m in tool_msgs] == [
-            ("t1", THINK_TOOL_RESPONSE_MESSAGE)
-        ]
-        assert run.result.output.text == "The final answer."
-
-    def test_silent_think_keeps_sub_turn(self) -> None:
-        run = run_agent(
-            [
-                think("t1", "plan"),
-                text("narration") + bash("b1", "ls"),
-                text("more") + generate_answer(),
-                FINAL_ANSWER,
-            ],
-            is_reasoning_model=True,
-        )
-
-        prompts = [system_prompt(r) for r in run.llm.prompts[:3]]
-        assert "you are on cycle 0" in prompts[0]
-        assert "you are on cycle 1" in prompts[1]
-        assert "you are on cycle 2" in prompts[2]
-        assert thinking_sub_turns(run.packets) == [0, 2]
-        assert [
-            packet.placement.sub_turn_index
-            for packet in run.packets
-            if isinstance(packet.obj, BashToolStart)
-        ] == [1]
-
-    def test_think_with_narration_advances_sub_turn(self) -> None:
-        run = run_agent(
-            [
-                text("let me plan") + think("t1", "plan"),
-                text("narration") + bash("b1", "ls"),
-                generate_answer(),
-                FINAL_ANSWER,
-            ],
-            is_reasoning_model=True,
-        )
-
-        assert thinking_sub_turns(run.packets) == [0, 1]
-
-    def test_narration_after_reasoning_follows_reasoning(self) -> None:
+class TestCodingPlacement:
+    @pytest.mark.parametrize("reasoning_model", [True, False])
+    def test_narration_after_reasoning_follows_reasoning(
+        self, reasoning_model: bool
+    ) -> None:
         run = run_agent(
             [
                 reasoning("hmm") + text("narration") + bash("b1", "ls"),
                 text("more") + generate_answer(),
                 FINAL_ANSWER,
             ],
-            is_reasoning_model=True,
+            is_reasoning_model=reasoning_model,
         )
 
         assert reasoning_sub_turns(run.packets) == []

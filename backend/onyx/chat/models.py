@@ -253,6 +253,7 @@ class MessageRendering(BaseModel):
 
     mode: PresentationMode = PresentationMode.ANSWER
     text_as_thinking: bool = False
+    # Older response steps stored reasoning as tool arguments.
     think_tool: str | None = None
     is_clarification: bool = False
     citation_mode: CitationMode | None = None

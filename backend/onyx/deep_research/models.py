@@ -33,9 +33,10 @@ class ResearchPhase(str, Enum):
 class ResearchMessageMetadata(BaseModel):
     """Research phase and source references attached to a generated message."""
 
+    # Pre-removal checkpoints used this flag to render reasoning from tool calls.
+    is_reasoning_model: bool | None = None
     phase: ResearchPhase
     is_intermediate: bool = False
-    is_reasoning_model: bool
     sources: dict[int, SearchDoc] = Field(default_factory=dict)
     elapsed_seconds: float = 0
 

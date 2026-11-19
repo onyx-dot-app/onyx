@@ -36,7 +36,6 @@ from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_NAME,
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
-    THINK_TOOL_NAME,
 )
 from onyx.llm.models import (
     AssistantMessage,
@@ -116,12 +115,13 @@ from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearch
 from onyx.utils.logger import setup_logger
 from onyx.utils.streaming_json import appended_text, parse_partial_object
 
+LEGACY_THINK_TOOL_NAME = "think_tool"
 HIDDEN_TOOLS = frozenset(
     {
         GENERATE_PLAN_TOOL_NAME,
         GENERATE_REPORT_TOOL_NAME,
         GENERATE_ANSWER_TOOL_NAME,
-        THINK_TOOL_NAME,
+        LEGACY_THINK_TOOL_NAME,
     }
 )
 
@@ -319,10 +319,7 @@ class MessageRenderer:
             self._raw_thinking += event.text
             return self._append(event.text, thinking=True)
         if isinstance(event, ToolCallStartEvent):
-            if (
-                event.tool_name in CODE_ARGUMENT_TOOLS
-                or event.tool_name == self.settings.think_tool
-            ):
+            if event.tool_name in CODE_ARGUMENT_TOOLS:
                 self._argument_streams[event.content_index] = ToolCall(
                     id=event.tool_call_id,
                     name=event.tool_name,
@@ -357,10 +354,6 @@ class MessageRenderer:
             arguments = event.tool_call.arguments
         deltas = appended_text(call.arguments, arguments)
         call.arguments = arguments
-        if call.name == self.settings.think_tool:
-            text = deltas.get("reasoning", "")
-            self._raw_thinking += text
-            return self._append(text, thinking=True)
         if not deltas:
             return []
         return [
