@@ -16,6 +16,9 @@ interface ChatSidePanelProps {
   focusOnOpen?: boolean;
   // Animates width changes; off while the user drags the panel's edge
   animate?: boolean;
+  // What the panel shows, such as its active tab. An element outside the
+  // panel that switches it becomes the element that closing focuses.
+  shows?: string;
   // Where the panel sits, when its host does not place it
   className?: string;
   children: ReactNode;
@@ -25,7 +28,7 @@ interface ChatSidePanelProps {
  * A chat side panel (Sources, Files) that slides open. A closed panel is
  * inert and hidden once it has slid shut: not focusable and not announced.
  * Escape in it calls `onEscape`, and closing returns focus to the element
- * that had it when the panel opened.
+ * that had it when the panel opened, or that last switched what it shows.
  */
 export function ChatSidePanel({
   open,
@@ -33,12 +36,14 @@ export function ChatSidePanel({
   width = "default",
   focusOnOpen = true,
   animate = true,
+  shows,
   className,
   children,
 }: ChatSidePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const wasOpenRef = useRef(open);
+  const shownRef = useRef(shows);
 
   // A layout effect, so it records the opener before a host's layout effect
   // moves focus into the panel, as a panel that covers the page does
@@ -46,7 +51,21 @@ export function ChatSidePanel({
     const panel = panelRef.current;
     const wasOpen = wasOpenRef.current;
     wasOpenRef.current = open;
-    if (!panel || open === wasOpen) return;
+    const switched = shownRef.current !== shows;
+    shownRef.current = shows;
+    if (!panel) return;
+    if (open === wasOpen) {
+      const focused = document.activeElement;
+      if (
+        open &&
+        switched &&
+        focused instanceof HTMLElement &&
+        focused !== document.body &&
+        !panel.contains(focused)
+      )
+        openerRef.current = focused;
+      return;
+    }
     if (open) {
       const focused = document.activeElement;
       openerRef.current = focused instanceof HTMLElement ? focused : null;
@@ -63,7 +82,7 @@ export function ChatSidePanel({
     ) {
       opener.focus({ preventScroll: true });
     }
-  }, [open, focusOnOpen]);
+  }, [open, focusOnOpen, shows]);
 
   // Esc closes only the top layer: a dialog that the panel opened first.
   useEscapeInterrupt({
