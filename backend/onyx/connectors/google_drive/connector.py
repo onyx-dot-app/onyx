@@ -955,6 +955,10 @@ class GoogleDriveConnector(
         try:
             members = list_drive_members(self.ops, drive_id)
         except GoogleDriveHttpError as error:
+            # Only a denial means "no members to try". A rate limit or a
+            # server error raises, or the files would go to weaker readers.
+            if not error.access_denied:
+                raise
             logger.warning("Cannot read members of drive %s: %s", drive_id, error)
             return []
         emails = self._domain_user_emails(members)
@@ -1043,6 +1047,10 @@ class GoogleDriveConnector(
                     resource_key=drive_file.get(DRIVE_RESOURCE_KEY_FIELD),
                 )
             except GoogleDriveHttpError as error:
+                # get_file answers None for a denial. A rate limit or a
+                # server error that outlasted the retries raises.
+                if not error.access_denied:
+                    raise
                 logger.warning(
                     "Cannot read the parent of Drive file %s as %s: %s",
                     file_id,

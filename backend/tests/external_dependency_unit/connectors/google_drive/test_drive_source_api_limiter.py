@@ -12,7 +12,7 @@ import pytest
 from prometheus_client import REGISTRY
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.google_drive import parallel_listing
+from onyx.connectors.google_drive import parallel_listing, source_operations
 from onyx.connectors.google_drive.quota import DriveQuotaApi
 from onyx.connectors.google_drive.source_operations import GoogleDriveHttpError
 from onyx.connectors.interfaces import SourceApiLimiter
@@ -22,6 +22,7 @@ from onyx.connectors.source_api_limiter import (
 )
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.metrics.source_api_metrics import RequestOutcome
+from onyx.utils.retry_wrapper import retry_builder
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
 from tests.external_dependency_unit.connectors.google_drive.test_checkpointed_slim_listing import (
     list_with_resume,
@@ -188,11 +189,23 @@ class _RecordingLimiter(SourceApiLimiter):
 
 
 def test_a_batch_spends_each_request_and_reports_refused_files(
-    own_mock_drive: MockDrive,
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A batch read spends one request for each file in it. Google refuses
     some files of the batch for the project's rate, and the gateway reports
-    them in one report with their count."""
+    them in one report with their count. The refused files go again in a new
+    batch, which spends for them."""
+    # Two tries with no wait.
+    monkeypatch.setattr(
+        source_operations,
+        "_retry_transient_batch_calls",
+        retry_builder(
+            tries=2,
+            delay=0,
+            jitter=0,
+            exceptions=source_operations._TransientBatchCalls,
+        ),
+    )
     own_mock_drive.patch_config(
         {
             "quota": {
@@ -214,11 +227,20 @@ def test_a_batch_spends_each_request_and_reports_refused_files(
         fields="id",
     )
 
-    assert [call[3] for call in limiter.acquired] == [len(file_ids)]
+    batches = [call[3] for call in limiter.acquired]
+    assert len(batches) == 2 and batches[0] == len(file_ids)
+    # The first report counts the files that the second batch sends again.
+    assert limiter.reports[0] == (DriveQuotaApi.DRIVE.value, admin, False, batches[1])
     refused = [
         error
         for error in result.errors.values()
         if isinstance(error, GoogleDriveHttpError) and error.rate_limited
     ]
+    # The quota allows 5 a minute: the second batch is refused too.
     assert refused
-    assert limiter.reports == [(DriveQuotaApi.DRIVE.value, admin, False, len(refused))]
+    assert limiter.reports[1] == (
+        DriveQuotaApi.DRIVE.value,
+        admin,
+        False,
+        len(refused),
+    )
