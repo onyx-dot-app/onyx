@@ -42,7 +42,7 @@ export interface FullChatState {
 export interface RendererResult {
   icon: IconFunctionComponent | null;
   /** The header while the step runs, and after it fails or is stopped. */
-  status: string | null;
+  status: string | RichStr | null;
   /** The header once the step is done. Defaults to `status`. */
   doneStatus?: string | RichStr | null;
   content: JSX.Element;

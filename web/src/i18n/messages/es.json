@@ -12728,10 +12728,12 @@
             "title": "Parche",
             "progress": {
               "writing": {
-                "status": "{named, select, true {Escribiendo {path}… {lines, plural, one {# línea} other {# líneas}}} other {Escribiendo un archivo…}}"
+                "named": "Escribiendo {path}… {lines, plural, one {# línea} other {# líneas}}",
+                "unnamed": "Escribiendo un archivo…"
               },
               "editing": {
-                "status": "{named, select, true {Editando {path}… {lines, plural, one {# línea} other {# líneas}}} other {Editando un archivo…}}"
+                "named": "Editando {path}… {lines, plural, one {# línea} other {# líneas}}",
+                "unnamed": "Editando un archivo…"
               },
               "patching": {
                 "status": "{count, plural, =0 {Aplicando parche a archivos…} one {Aplicando parche a # archivo…} other {Aplicando parche a # archivos…}}"

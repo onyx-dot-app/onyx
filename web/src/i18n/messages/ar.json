@@ -12728,10 +12728,12 @@
             "title": "التصحيح",
             "progress": {
               "writing": {
-                "status": "{named, select, true {جارٍ كتابة {path}… {lines, plural, zero {# سطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}} other {جارٍ كتابة ملف…}}"
+                "named": "جارٍ كتابة {path}… {lines, plural, zero {# سطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}",
+                "unnamed": "جارٍ كتابة ملف…"
               },
               "editing": {
-                "status": "{named, select, true {جارٍ تعديل {path}… {lines, plural, zero {# سطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}} other {جارٍ تعديل ملف…}}"
+                "named": "جارٍ تعديل {path}… {lines, plural, zero {# سطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}",
+                "unnamed": "جارٍ تعديل ملف…"
               },
               "patching": {
                 "status": "{count, plural, =0 {جارٍ تصحيح الملفات…} one {جارٍ تصحيح ملف واحد…} two {جارٍ تصحيح ملفين…} few {جارٍ تصحيح # ملفات…} many {جارٍ تصحيح # ملفًا…} other {جارٍ تصحيح # ملف…}}"

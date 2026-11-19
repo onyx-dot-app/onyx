@@ -12728,10 +12728,12 @@
             "title": "パッチ",
             "progress": {
               "writing": {
-                "status": "{named, select, true {{path} を書き込み中… {lines, plural, one {# 行} other {# 行}}} other {ファイルを書き込み中…}}"
+                "named": "{path} を書き込み中… {lines, plural, one {# 行} other {# 行}}",
+                "unnamed": "ファイルを書き込み中…"
               },
               "editing": {
-                "status": "{named, select, true {{path} を編集中… {lines, plural, one {# 行} other {# 行}}} other {ファイルを編集中…}}"
+                "named": "{path} を編集中… {lines, plural, one {# 行} other {# 行}}",
+                "unnamed": "ファイルを編集中…"
               },
               "patching": {
                 "status": "{count, plural, =0 {ファイルにパッチを適用中…} one {# 個のファイルにパッチを適用中…} other {# 個のファイルにパッチを適用中…}}"

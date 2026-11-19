@@ -12728,10 +12728,12 @@
             "title": "Patch",
             "progress": {
               "writing": {
-                "status": "{named, select, true {Schreibe {path}… {lines, plural, one {# Zeile} other {# Zeilen}}} other {Schreibe eine Datei…}}"
+                "named": "Schreibe {path}… {lines, plural, one {# Zeile} other {# Zeilen}}",
+                "unnamed": "Schreibe eine Datei…"
               },
               "editing": {
-                "status": "{named, select, true {Bearbeite {path}… {lines, plural, one {# Zeile} other {# Zeilen}}} other {Bearbeite eine Datei…}}"
+                "named": "Bearbeite {path}… {lines, plural, one {# Zeile} other {# Zeilen}}",
+                "unnamed": "Bearbeite eine Datei…"
               },
               "patching": {
                 "status": "{count, plural, =0 {Patche Dateien…} one {Patche # Datei…} other {Patche # Dateien…}}"
