@@ -10678,7 +10678,11 @@
         "title": "Configuração de Instalação",
         "description": "Quem recebe esta integração. Não disponível a mantém privada: somente o proprietário e as pessoas com quem foi compartilhada a usam."
       },
-      "ownedBy": "Proprietário: {owner}"
+      "ownedBy": "Proprietário: {owner}",
+      "groupAccess": {
+        "saved": "Configurações de grupo de {name} salvas.",
+        "saveFailed": "Não foi possível salvar a configuração de grupo."
+      }
     }
   },
   "agents": {

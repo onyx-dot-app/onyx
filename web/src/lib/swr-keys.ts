@@ -269,6 +269,8 @@ export const SWR_KEYS = {
     `/api/admin/integrations/${integrationId}/actions`,
   adminIntegrationInstallationPolicy: (integrationId: number) =>
     `/api/admin/integrations/${integrationId}/installation-policy`,
+  adminIntegrationGroupSettings: (integrationId: number) =>
+    `/api/admin/integrations/${integrationId}/group-settings`,
   integrations: "/api/integrations",
   integration: (integrationId: number) => `/api/integrations/${integrationId}`,
   agentIntegrationIds: (agentId: number) =>

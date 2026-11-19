@@ -2,7 +2,7 @@
 company install setting, the shares and publishing. Each function flushes
 and never commits."""
 
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ from onyx.db.integration_access import (
     load_integration_shares,
     load_user_integration_states,
     replace_integration_shares__no_commit,
+    set_integration_group_settings__no_commit,
     set_integration_preferences__no_commit,
 )
 from onyx.db.models import Integration, User
@@ -79,6 +80,20 @@ def set_company_policy__no_commit(
     before = affected_user_ids_for_integrations([integration.id], db_session)
     integration.installation_policy = policy
     db_session.flush()
+    return before | affected_user_ids_for_integrations([integration.id], db_session)
+
+
+def set_group_settings__no_commit(
+    user: User,
+    integration: Integration,
+    settings: Mapping[int, PluginInstallationPolicy | None],
+    db_session: Session,
+) -> set[UUID]:
+    """Set the install setting of groups on a locked integration. The most
+    open setting of a user's groups and the company setting wins. Returns the
+    affected users."""
+    before = affected_user_ids_for_integrations([integration.id], db_session)
+    set_integration_group_settings__no_commit(integration, settings, user, db_session)
     return before | affected_user_ids_for_integrations([integration.id], db_session)
 
 

@@ -8,6 +8,7 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DEFAULT_PERSONA_ID
@@ -16,7 +17,7 @@ from onyx.db.enums import (
     IntegrationAuthMode,
     PluginInstallationPolicy,
 )
-from onyx.db.models import Integration, Persona, User
+from onyx.db.models import Integration, Persona, User, User__UserGroup, UserGroup
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.models import ActionSettings, LinkValue
 from onyx.integrations.policy import agent_link_settings_by_integration
@@ -25,6 +26,8 @@ from onyx.server.features.integrations.models import (
     IntegrationAccess,
     IntegrationCreate,
     IntegrationEnableRequest,
+    IntegrationGroupSettingChange,
+    IntegrationGroupSettingsUpdate,
     IntegrationInstallationPolicy,
     IntegrationSharesUpdate,
     IntegrationUpdate,
@@ -32,6 +35,10 @@ from onyx.server.features.integrations.models import (
     OpenApiConfigInput,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
+    make_group,
+)
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     link_persona,
@@ -560,3 +567,152 @@ def test_publish_needs_an_organization_wide_action_manager(
     )
     db_session.rollback()
     assert _status(lambda: publish(admin)) == 400
+
+
+@pytest.fixture
+def group(db_session: Session, member: User) -> Generator[UserGroup, None, None]:
+    """A group with ``member`` in it, deleted after the test."""
+    made = make_group(db_session)
+    add_user_to_group(db_session, member, made)
+    db_session.commit()
+    try:
+        yield made
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(User__UserGroup).where(User__UserGroup.user_group_id == made.id)
+        )
+        db_session.execute(delete(UserGroup).where(UserGroup.id == made.id))
+        db_session.commit()
+
+
+def _set_group_setting(
+    user: User,
+    integration_id: int,
+    group_id: int,
+    policy: PluginInstallationPolicy | None,
+    db_session: Session,
+) -> None:
+    admin_api.set_integration_group_settings(
+        integration_id,
+        IntegrationGroupSettingsUpdate(
+            group_settings=[
+                IntegrationGroupSettingChange(
+                    group_id=group_id, installation_policy=policy
+                )
+            ]
+        ),
+        user,
+        db_session,
+    )
+
+
+def _member_state(
+    user: User, integration_id: int, db_session: Session
+) -> MemberIntegrationState | None:
+    access = _member_access(user, integration_id, db_session)
+    return access.state if access is not None else None
+
+
+def test_a_group_setting_gives_the_group_access_and_others_see_no_access(
+    db_session: Session,
+    admin: User,
+    member: User,
+    other: User,
+    group: UserGroup,
+    created: list[int],
+) -> None:
+    integration_id = _create(admin, db_session, created, for_organization=False)
+    assert _member_state(member, integration_id, db_session) is None
+    assert _member_state(other, integration_id, db_session) is None
+
+    _set_group_setting(
+        admin, integration_id, group.id, PluginInstallationPolicy.AVAILABLE, db_session
+    )
+    detail = admin_api.get_integration_admin(integration_id, admin, db_session)
+    assert [
+        (setting.group_id, setting.installation_policy)
+        for setting in detail.group_settings
+    ] == [(group.id, PluginInstallationPolicy.AVAILABLE)]
+    assert (
+        _member_state(member, integration_id, db_session)
+        is MemberIntegrationState.TURN_ON
+    )
+    assert (
+        _member_state(other, integration_id, db_session)
+        is MemberIntegrationState.NO_ACCESS
+    )
+
+    _set_group_setting(admin, integration_id, group.id, None, db_session)
+    assert (
+        admin_api.get_integration_admin(
+            integration_id, admin, db_session
+        ).group_settings
+        == []
+    )
+    assert _member_state(member, integration_id, db_session) is None
+    assert _member_state(other, integration_id, db_session) is None
+
+
+def test_a_group_setting_keeps_the_shares(
+    db_session: Session,
+    admin: User,
+    other: User,
+    group: UserGroup,
+    created: list[int],
+) -> None:
+    integration_id = _create(admin, db_session, created, for_organization=False)
+    _share(admin, integration_id, [other.id], db_session)
+
+    _set_group_setting(
+        admin, integration_id, group.id, PluginInstallationPolicy.DEFAULT, db_session
+    )
+
+    assert [
+        share.user_id
+        for share in api.get_integration_shares(
+            integration_id, admin, db_session
+        ).user_shares
+    ] == [other.id]
+    assert (
+        _member_state(other, integration_id, db_session)
+        is MemberIntegrationState.TURN_ON
+    )
+
+
+def test_a_group_share_of_a_private_integration_stays_hidden(
+    db_session: Session,
+    admin: User,
+    other: User,
+    group: UserGroup,
+    created: list[int],
+) -> None:
+    integration_id = _create(admin, db_session, created, for_organization=False)
+    api.set_integration_shares(
+        integration_id,
+        IntegrationSharesUpdate(user_ids=[], group_ids=[group.id]),
+        admin,
+        db_session,
+    )
+    assert _member_state(other, integration_id, db_session) is None
+
+
+def test_only_an_organization_wide_manager_sets_a_group_setting(
+    db_session: Session,
+    scoped: User,
+    group: UserGroup,
+    created: list[int],
+) -> None:
+    integration_id = _create(scoped, db_session, created, for_organization=False)
+    assert (
+        _status(
+            lambda: _set_group_setting(
+                scoped,
+                integration_id,
+                group.id,
+                PluginInstallationPolicy.AVAILABLE,
+                db_session,
+            )
+        )
+        == 403
+    )

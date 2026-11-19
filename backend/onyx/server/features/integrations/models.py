@@ -195,6 +195,29 @@ class AdminIntegration(BaseModel):
     can_manage: bool
 
 
+class IntegrationGroupShare(BaseModel):
+    group_id: int
+    group_name: str
+
+
+class IntegrationGroupSettingView(BaseModel):
+    group_id: int
+    group_name: str
+    installation_policy: PluginInstallationPolicy
+
+
+class IntegrationGroupSettingChange(BaseModel):
+    group_id: int
+    # None removes the setting; the group then gets the company setting.
+    installation_policy: PluginInstallationPolicy | None
+
+
+class IntegrationGroupSettingsUpdate(BaseModel):
+    """The groups to change. A group left out keeps its setting."""
+
+    group_settings: list[IntegrationGroupSettingChange]
+
+
 class AdminIntegrationDetail(AdminIntegration):
     config: IntegrationConfigView
     credential_fields: list[CredentialField]
@@ -203,6 +226,9 @@ class AdminIntegrationDetail(AdminIntegration):
     oauth_client: OAuthClientView | None
     # False when the user cannot manage it, or when Onyx provides the app.
     can_delete: bool
+    group_settings: list[IntegrationGroupSettingView]
+    # The groups with a share. A shared group cannot be Not available.
+    group_shares: list[IntegrationGroupShare]
 
 
 class PresetView(BaseModel):
@@ -296,11 +322,6 @@ class IntegrationSharesUpdate(BaseModel):
 class IntegrationUserShare(BaseModel):
     user_id: UUID
     email: str
-
-
-class IntegrationGroupShare(BaseModel):
-    group_id: int
-    group_name: str
 
 
 class IntegrationSharesView(BaseModel):

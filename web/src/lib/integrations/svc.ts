@@ -6,6 +6,7 @@ import type {
   IntegrationActionsResponse,
   IntegrationActionsUpdate,
   IntegrationCreate,
+  IntegrationGroupSettingChange,
   IntegrationOAuthCallbackResult,
   IntegrationStatus,
   IntegrationUpdate,
@@ -22,6 +23,7 @@ type RequestBody =
   | { fields: Record<string, string> }
   | { organization: boolean; return_path: string }
   | { installation_policy: InstallationPolicy }
+  | { group_settings: IntegrationGroupSettingChange[] }
   | { enabled: boolean }
   | IntegrationSharesUpdate
   | { code: string; state: string }
@@ -126,6 +128,18 @@ export async function setIntegrationInstallationPolicy(
   await request(SWR_KEYS.adminIntegrationInstallationPolicy(id), "PUT", {
     installation_policy: installationPolicy,
   });
+}
+
+/** Set the install setting of some groups. A group left out keeps its
+ * setting. */
+export async function setIntegrationGroupSettings(
+  id: number,
+  groupSettings: IntegrationGroupSettingChange[]
+): Promise<AdminIntegrationDetail> {
+  const res = await request(SWR_KEYS.adminIntegrationGroupSettings(id), "PUT", {
+    group_settings: groupSettings,
+  });
+  return res.json();
 }
 
 export function startOrganizationOAuth(

@@ -6,14 +6,16 @@ import { ContentAction, Section } from "@opal/layouts";
 import type { AdminIntegrationDetail } from "@/lib/integrations/types";
 import { DetailOverview } from "@/sections/customize/CustomizeDetailLayout";
 import { useIntegrationLabels } from "@/sections/integrations/integrationLabels";
+import IntegrationGroupAccess from "@/sections/integrations/IntegrationGroupAccess";
 import IntegrationInstallSetting from "@/sections/integrations/IntegrationInstallSetting";
 
 interface IntegrationOverviewTabProps {
   integration: AdminIntegrationDetail;
 }
 
-/** The description beside the facts of the integration and its company
- * install setting. The page header edits, switches and deletes it. */
+/** The description beside the facts of the integration, its company
+ * install setting and its group settings. The page header edits, switches
+ * and deletes it. */
 export default function IntegrationOverviewTab({
   integration,
 }: IntegrationOverviewTabProps) {
@@ -62,6 +64,7 @@ export default function IntegrationOverviewTab({
           />
         }
       />
+      <IntegrationGroupAccess integration={integration} />
     </Section>
   );
 }

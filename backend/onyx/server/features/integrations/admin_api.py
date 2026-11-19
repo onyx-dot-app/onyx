@@ -9,7 +9,10 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.integration_connection import delete_connection__no_commit
 from onyx.db.models import User
-from onyx.integrations.access import set_company_policy__no_commit
+from onyx.integrations.access import (
+    set_company_policy__no_commit,
+    set_group_settings__no_commit,
+)
 from onyx.integrations.connections import (
     IntegrationStatus,
 )
@@ -37,6 +40,7 @@ from onyx.server.features.integrations.models import (
     IntegrationActionsResponse,
     IntegrationActionsUpdate,
     IntegrationCreate,
+    IntegrationGroupSettingsUpdate,
     IntegrationInstallationPolicy,
     IntegrationUpdate,
     PresetView,
@@ -132,6 +136,30 @@ def set_integration_installation_policy(
     db_session.commit()
     reload_craft_sessions(affected, db_session)
     return request
+
+
+@router.put("/{integration_id}/group-settings")
+def set_integration_group_settings(
+    integration_id: int,
+    request: IntegrationGroupSettingsUpdate,
+    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    db_session: Session = Depends(get_session),
+) -> AdminIntegrationDetail:
+    integration = get_manageable_integration(
+        user, integration_id, db_session, lock=True
+    )
+    affected = set_group_settings__no_commit(
+        user,
+        integration,
+        {
+            setting.group_id: setting.installation_policy
+            for setting in request.group_settings
+        },
+        db_session,
+    )
+    db_session.commit()
+    reload_craft_sessions(affected, db_session)
+    return admin_detail(user, integration, db_session)
 
 
 @router.get("/{integration_id}/actions")

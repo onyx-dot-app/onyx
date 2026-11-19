@@ -26,9 +26,13 @@ Group or user restriction needs EE.
   in the list and on the Overview tab) is the company setting; a global action
   manager changes it through `PUT /admin/integrations/{id}/installation-policy`.
   Not available keeps the integration private: its owner and its shares use it.
-  There is no admin Plugins page: a plugin holds skills only. The web has no
-  control for group install settings of an integration (the backend has no
-  route for them). The detail page
+  There is no admin Plugins page: a plugin holds skills only. Group Access on
+  the Overview tab (`sections/integrations/IntegrationGroupAccess.tsx`, reusing
+  `SkillGroupAccess`) sets a group install setting through
+  `PUT /admin/integrations/{id}/group-settings`; only a global action manager
+  sees it. The member list shows an integration with a group setting as No
+  access to a user outside those groups, below the usable ones; a private
+  integration stays hidden. The detail page
   `/admin/integrations/[id]` has Overview (name, description, owner, install
   setting, switch),
   Configuration (sign-in settings, the preset account settings and the

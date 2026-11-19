@@ -54,6 +54,8 @@ export function makeDetail(
       has_client_secret: true,
     },
     can_delete: true,
+    group_settings: [],
+    group_shares: [],
     ...overrides,
   };
 }

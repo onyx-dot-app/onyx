@@ -10678,7 +10678,11 @@
         "title": "설치 설정",
         "description": "이 통합을 받는 사용자입니다. 사용할 수 없음으로 두면 비공개로 유지되어 소유자와 공유받은 사용자만 사용합니다."
       },
-      "ownedBy": "소유자: {owner}"
+      "ownedBy": "소유자: {owner}",
+      "groupAccess": {
+        "saved": "{name}의 그룹 설정을 저장했습니다.",
+        "saveFailed": "그룹 설정을 저장할 수 없습니다."
+      }
     }
   },
   "agents": {

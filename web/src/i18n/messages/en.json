@@ -10678,7 +10678,11 @@
         "title": "Install Setting",
         "description": "Who gets this integration. Not available keeps it private: only its owner and the people it is shared with use it."
       },
-      "ownedBy": "Owned by {owner}"
+      "ownedBy": "Owned by {owner}",
+      "groupAccess": {
+        "saved": "Group settings of {name} saved.",
+        "saveFailed": "Could not save the group setting."
+      }
     }
   },
   "agents": {

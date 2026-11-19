@@ -80,3 +80,33 @@ test("each member row shows its state as Claude does", async () => {
     screen.queryByRole("switch", { name: "Use Excel" })
   ).not.toBeInTheDocument();
 });
+
+test("no access rows go below every integration the user can use", async () => {
+  window.history.replaceState(null, "", "/app/customize/integrations");
+  const noAccess = makeAccess({
+    state: "no_access",
+    user_enabled: false,
+    shared_with_everyone: false,
+  });
+  mockFetch({
+    "/api/integrations": [
+      makeMemberIntegration({ id: 1, name: "Asana", access: noAccess }),
+      makeMemberIntegration({
+        id: 2,
+        name: "Zendesk",
+        status: connected,
+        access: makeAccess({ state: "on" }),
+      }),
+      makeMemberIntegration({ id: 3, name: "Box", access: noAccess }),
+    ],
+  });
+  render(<CustomizeIntegrationsPage />);
+
+  await screen.findByRole("switch", { name: "Use Zendesk" });
+  const names = ["Asana", "Box", "Zendesk"];
+  const order = screen
+    .getAllByRole("row")
+    .map((row) => names.find((name) => row.textContent?.includes(name)))
+    .filter((name) => name !== undefined);
+  expect(order).toEqual(["Zendesk", "Asana", "Box"]);
+});

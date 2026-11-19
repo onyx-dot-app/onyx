@@ -968,11 +968,13 @@ def check_access_change(
     change: PluginAccessChange,
     actor: User | None,
     db_session: Session,
+    manage_permission: Permission = Permission.MANAGE_PLUGINS,
 ) -> None:
     """The checks that apply to the whole set of plugins or integrations.
-    They raise before any write."""
+    They raise before any write. ``manage_permission`` is MANAGE_ACTIONS for
+    integrations."""
     is_global_manager = actor is not None and has_global_permission(
-        actor, Permission.MANAGE_PLUGINS
+        actor, manage_permission
     )
     if actor is not None and not is_global_manager:
         if is_set(change.company_installation_policy):
@@ -1033,7 +1035,7 @@ def check_access_change(
                 "manager to change that group's access before you share with it.",
             )
 
-    # A change to a plugin's group shares is a MANAGE_PLUGINS action. The
+    # A change to group shares is a ``manage_permission`` action. The
     # current shares come from the database, never the request, so a
     # reassignment cannot escape scope. Re-sending the current set is no change.
     changed = [
@@ -1047,7 +1049,7 @@ def check_access_change(
     assert_within_scope(
         actor,
         db_session,
-        permission=Permission.MANAGE_PLUGINS,
+        permission=manage_permission,
         current_group_ids=sorted(
             {
                 group_id

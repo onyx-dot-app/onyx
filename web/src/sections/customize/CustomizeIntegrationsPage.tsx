@@ -47,8 +47,12 @@ export default function CustomizeIntegrationsPage() {
   const canAdd = isGlobalHolder || isScopedManager;
   const [query, setQuery] = useState("");
 
-  const integrations = [...(data ?? [])].sort((a, b) =>
-    a.name.localeCompare(b.name, locale, { sensitivity: "base" })
+  // No access goes below every integration the user can use.
+  const integrations = [...(data ?? [])].sort(
+    (a, b) =>
+      Number(a.access.state === "no_access") -
+        Number(b.access.state === "no_access") ||
+      a.name.localeCompare(b.name, locale, { sensitivity: "base" })
   );
   const search = query.trim().toLocaleLowerCase(locale);
   const shown = integrations.filter((integration) =>
@@ -58,6 +62,8 @@ export default function CustomizeIntegrationsPage() {
   );
 
   function open(integration: MemberIntegration): void {
+    // The detail page is only for an integration the user has access to.
+    if (integration.access.state === "no_access") return;
     navigation.go(integrationHref(integration.id));
   }
 

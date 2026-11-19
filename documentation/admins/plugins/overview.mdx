@@ -108,6 +108,12 @@ or on the **Overview** tab of the integration.
 
 Only users with the organization-wide **Manage Actions** permission can change the install setting.
 
+On the Enterprise plan, a group can have its own install setting. Set it in **Group Access** on the **Overview** tab.
+A group setting replaces the company setting for the members of the group, also when it is stricter.
+A group with no setting uses the company setting.
+A user in more than one group gets the most open setting of those groups. In **Customize → Integrations**,
+a user outside the groups sees the integration below the others, with **No access**.
+
 Each user has one on/off choice for each integration. When an integration is on,
 the user can use it in Chat and in Craft. The default agent uses only the integrations that a user has on.
 A custom agent uses each integration that it links to, if the user has access to the integration and is signed in.
@@ -130,7 +136,7 @@ Click an integration to open its detail page.
 
 | Tab | Settings |
 | --- | --- |
-| **Overview** | Name, description, type, sign-in, owner, **Install Setting**, **Enabled**, and **Delete** |
+| **Overview** | Name, description, type, sign-in, owner, **Install Setting**, **Group Access**, **Enabled**, and **Delete** |
 | **Configuration** | Server URL, OpenAPI schema, or URL patterns, sign-in mode and method, OAuth client, header template, **Users Can Save Always Allow**, and the organization connection |
 | **Actions** | **Default for New Actions**, then the read-only actions and the write actions, each with **Allow**, **Ask**, or **Blocked** |
 

@@ -23,7 +23,7 @@ The rule, once:
 The write functions flush and never commit.
 """
 
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Mapping
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -34,7 +34,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import KeyedColumnElement
 from sqlalchemy.sql.selectable import Select, Subquery
 
-from onyx.db.enums import PluginInstallationPolicy, SandboxStatus, SkillSharePermission
+from onyx.db.enums import (
+    Permission,
+    PluginInstallationPolicy,
+    SandboxStatus,
+    SkillSharePermission,
+)
 from onyx.db.models import (
     Integration,
     Integration__User,
@@ -49,6 +54,7 @@ from onyx.db.plugin import (
     PluginAccessChange,
     PluginGroupGrant,
     PluginGroupRow,
+    PluginGroupSetting,
     PluginUserGrant,
     check_access_change,
     new_group_rows,
@@ -327,6 +333,59 @@ def load_integration_shares(
     )
 
 
+class IntegrationGroupSetting(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    group_id: int
+    group_name: str
+    installation_policy: PluginInstallationPolicy
+
+
+def load_integration_group_settings(
+    integration_id: int, db_session: Session
+) -> list[IntegrationGroupSetting]:
+    """The groups with their own install setting for the integration."""
+    return [
+        IntegrationGroupSetting(
+            group_id=group_id, group_name=name, installation_policy=policy
+        )
+        for group_id, name, policy in db_session.execute(
+            select(
+                Integration__UserGroup.user_group_id,
+                UserGroup.name,
+                Integration__UserGroup.installation_policy,
+            )
+            .join(UserGroup, UserGroup.id == Integration__UserGroup.user_group_id)
+            .where(
+                Integration__UserGroup.integration_id == integration_id,
+                Integration__UserGroup.installation_policy.is_not(None),
+            )
+            .order_by(UserGroup.name, UserGroup.id)
+        )
+    ]
+
+
+def group_limited_integration_ids(user_id: UUID, db_session: Session) -> list[int]:
+    """The integrations an admin made available to some groups, which the
+    user has no access to. Members see them as No access. A private
+    integration (only the owner and the shares) stays hidden."""
+    not_available = PluginInstallationPolicy.NOT_AVAILABLE
+    return list(
+        db_session.scalars(
+            select(Integration__UserGroup.integration_id)
+            .where(
+                Integration__UserGroup.installation_policy.is_not(None),
+                Integration__UserGroup.installation_policy != not_available,
+                Integration__UserGroup.integration_id.notin_(
+                    accessible_integration_ids(user_id)
+                ),
+            )
+            .distinct()
+            .order_by(Integration__UserGroup.integration_id)
+        )
+    )
+
+
 def replace_integration_shares__no_commit(
     integration: Integration,
     user_ids: Collection[UUID],
@@ -341,16 +400,52 @@ def replace_integration_shares__no_commit(
     managed group scope, no default group, and no share for a group whose
     setting is NOT_AVAILABLE."""
     viewer = SkillSharePermission.VIEWER
-    change = PluginAccessChange(
-        user_grants=tuple(
-            PluginUserGrant(user_id=user_id, permission=viewer)
-            for user_id in sorted(set(user_ids))
+    _apply_access_change__no_commit(
+        integration,
+        PluginAccessChange(
+            user_grants=tuple(
+                PluginUserGrant(user_id=user_id, permission=viewer)
+                for user_id in sorted(set(user_ids))
+            ),
+            group_grants=tuple(
+                PluginGroupGrant(group_id=group_id, permission=viewer)
+                for group_id in sorted(set(group_ids))
+            ),
         ),
-        group_grants=tuple(
-            PluginGroupGrant(group_id=group_id, permission=viewer)
-            for group_id in sorted(set(group_ids))
-        ),
+        actor,
+        db_session,
     )
+
+
+def set_integration_group_settings__no_commit(
+    integration: Integration,
+    settings: Mapping[int, PluginInstallationPolicy | None],
+    actor: User,
+    db_session: Session,
+) -> None:
+    """Set the install setting of each group in ``settings`` on a locked
+    integration. None removes the setting of the group. The shares stay. Only
+    an organization-wide action manager sets a group setting."""
+    _apply_access_change__no_commit(
+        integration,
+        PluginAccessChange(
+            group_settings=tuple(
+                PluginGroupSetting(group_id=group_id, installation_policy=policy)
+                for group_id, policy in sorted(settings.items())
+            )
+        ),
+        actor,
+        db_session,
+    )
+
+
+def _apply_access_change__no_commit(
+    integration: Integration,
+    change: PluginAccessChange,
+    actor: User,
+    db_session: Session,
+) -> None:
+    viewer = SkillSharePermission.VIEWER
     group_rows = {
         group_id: PluginGroupRow(permission=permission, installation_policy=policy)
         for group_id, permission, policy in db_session.execute(
@@ -361,25 +456,32 @@ def replace_integration_shares__no_commit(
             ).where(Integration__UserGroup.integration_id == integration.id)
         )
     }
+    user_grants = dict.fromkeys(
+        db_session.scalars(
+            select(Integration__User.user_id).where(
+                Integration__User.integration_id == integration.id
+            )
+        ),
+        viewer,
+    )
     rows = AccessRows(
         published=integration.installation_policy
         != PluginInstallationPolicy.NOT_AVAILABLE,
-        user_grants=dict.fromkeys(
-            db_session.scalars(
-                select(Integration__User.user_id).where(
-                    Integration__User.integration_id == integration.id
-                )
-            ),
-            viewer,
-        ),
+        user_grants=user_grants,
         group_rows=group_rows,
-        new_user_grants=dict.fromkeys(set(user_ids), viewer),
+        new_user_grants=(
+            None
+            if change.user_grants is None
+            else {grant.user_id: viewer for grant in change.user_grants}
+        ),
         new_group_rows=new_group_rows(group_rows, change),
     )
-    check_access_change([rows], change, actor, db_session)
+    check_access_change(
+        [rows], change, actor, db_session, manage_permission=Permission.MANAGE_ACTIONS
+    )
     try:
         with db_session.begin_nested():
-            _write_shares(integration.id, rows, db_session)
+            _write_rows(integration.id, rows, db_session)
     except IntegrityError as exc:
         if is_fk_violation(exc):
             raise OnyxError(
@@ -389,26 +491,32 @@ def replace_integration_shares__no_commit(
         raise
 
 
-def _write_shares(integration_id: int, rows: AccessRows, db_session: Session) -> None:
-    users = sorted(rows.new_user_grants or {})
-    groups = rows.new_group_rows or {}
-    db_session.execute(
-        delete(Integration__User).where(
-            Integration__User.integration_id == integration_id,
-            Integration__User.user_id.notin_(users),
-        )
-    )
-    if users:
+def _write_rows(integration_id: int, rows: AccessRows, db_session: Session) -> None:
+    """Write the user and group rows after a change. A field that does not
+    change is None and keeps its rows."""
+    if rows.new_user_grants is not None:
+        users = sorted(rows.new_user_grants)
         db_session.execute(
-            insert(Integration__User)
-            .values(
-                [
-                    {"integration_id": integration_id, "user_id": user_id}
-                    for user_id in users
-                ]
+            delete(Integration__User).where(
+                Integration__User.integration_id == integration_id,
+                Integration__User.user_id.notin_(users),
             )
-            .on_conflict_do_nothing()
         )
+        if users:
+            db_session.execute(
+                insert(Integration__User)
+                .values(
+                    [
+                        {"integration_id": integration_id, "user_id": user_id}
+                        for user_id in users
+                    ]
+                )
+                .on_conflict_do_nothing()
+            )
+    if rows.new_group_rows is None:
+        db_session.flush()
+        return
+    groups = rows.new_group_rows
     db_session.execute(
         delete(Integration__UserGroup).where(
             Integration__UserGroup.integration_id == integration_id,

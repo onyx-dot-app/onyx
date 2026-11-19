@@ -49,6 +49,9 @@ from onyx.db.integration import (
 from onyx.db.integration_access import (
     UserIntegrationState,
     affected_user_ids_for_integrations,
+    group_limited_integration_ids,
+    load_integration_group_settings,
+    load_integration_shares,
     load_user_integration_states,
     set_integration_preferences__no_commit,
     user_can_use_integration,
@@ -129,6 +132,8 @@ from onyx.server.features.integrations.models import (
     IntegrationConfigInput,
     IntegrationConfigView,
     IntegrationCreate,
+    IntegrationGroupSettingView,
+    IntegrationGroupShare,
     IntegrationShape,
     IntegrationUpdate,
     McpServerConfigInput,
@@ -1360,6 +1365,16 @@ def admin_detail(
             else _oauth_client_view(get_oauth_client(db_session, integration.id))
         ),
         can_delete=view.can_manage and not managed,
+        group_settings=[
+            IntegrationGroupSettingView(**setting.model_dump())
+            for setting in load_integration_group_settings(integration.id, db_session)
+        ],
+        group_shares=[
+            IntegrationGroupShare(group_id=share.group_id, group_name=share.group_name)
+            for share in load_integration_shares(
+                integration.id, db_session
+            ).group_shares
+        ],
     )
 
 
@@ -1526,10 +1541,12 @@ def list_member_integrations(
     user: User, db_session: Session
 ) -> list[MemberIntegration]:
     """Each integration the user has access to, also one that an admin
-    turned off (``access.state`` is ``turned_off``)."""
+    turned off (``access.state`` is ``turned_off``), and each one an admin
+    made available only to groups the user is not in (``no_access``)."""
     states = _integration_states(user, db_session)
+    ids = [*states, *group_limited_integration_ids(user.id, db_session)]
     return _member_views(
-        user, list_integrations_by_ids(list(states), db_session), states, db_session
+        user, list_integrations_by_ids(ids, db_session), states, db_session
     )
 
 

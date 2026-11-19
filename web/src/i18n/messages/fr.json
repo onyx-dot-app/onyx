@@ -10678,7 +10678,11 @@
         "title": "Paramètre d'Installation",
         "description": "Qui reçoit cette intégration. Non disponible la garde privée : seuls son propriétaire et les personnes avec qui elle est partagée l'utilisent."
       },
-      "ownedBy": "Propriété de {owner}"
+      "ownedBy": "Propriété de {owner}",
+      "groupAccess": {
+        "saved": "Paramètres de groupe de {name} enregistrés.",
+        "saveFailed": "Impossible d’enregistrer le paramètre de groupe."
+      }
     }
   },
   "agents": {

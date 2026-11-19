@@ -10678,7 +10678,11 @@
         "title": "安装设置",
         "description": "谁会获得此集成。“不可用”会使其保持私有：只有其所有者和被共享的人可以使用。"
       },
-      "ownedBy": "所有者：{owner}"
+      "ownedBy": "所有者：{owner}",
+      "groupAccess": {
+        "saved": "已保存 {name} 的群组设置。",
+        "saveFailed": "无法保存群组设置。"
+      }
     }
   },
   "agents": {

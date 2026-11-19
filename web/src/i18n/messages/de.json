@@ -10678,7 +10678,11 @@
         "title": "Installationseinstellung",
         "description": "Wer diese Integration erhält. Mit „Nicht verfügbar“ bleibt sie privat: Nur der Eigentümer und die Personen, mit denen sie geteilt wurde, verwenden sie."
       },
-      "ownedBy": "Eigentümer: {owner}"
+      "ownedBy": "Eigentümer: {owner}",
+      "groupAccess": {
+        "saved": "Gruppeneinstellungen für {name} gespeichert.",
+        "saveFailed": "Die Gruppeneinstellung konnte nicht gespeichert werden."
+      }
     }
   },
   "agents": {

@@ -149,6 +149,22 @@ export interface AdminIntegrationDetail extends AdminIntegration {
   oauth_client: OAuthClientView | null;
   /** False when the user cannot manage it, or when Onyx provides the app. */
   can_delete: boolean;
+  /** The groups with their own install setting. */
+  group_settings: IntegrationGroupSetting[];
+  /** The groups with a share. A shared group cannot be Not available. */
+  group_shares: { group_id: number; group_name: string }[];
+}
+
+export interface IntegrationGroupSetting {
+  group_id: number;
+  group_name: string;
+  installation_policy: InstallationPolicy;
+}
+
+/** One group to change. Null removes the setting of the group. */
+export interface IntegrationGroupSettingChange {
+  group_id: number;
+  installation_policy: InstallationPolicy | null;
 }
 
 export interface IntegrationPreset {
