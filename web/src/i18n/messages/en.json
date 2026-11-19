@@ -17087,7 +17087,8 @@
           "location": "Location",
           "owner": "Owner",
           "skills": "Skills",
-          "integrations": "Integrations"
+          "integrations": "Integrations",
+          "description": "Description"
         },
         "skills": {
           "off": "Off",
@@ -17157,7 +17158,9 @@
         },
         "retry": {
           "label": "Try again"
-        }
+        },
+        "readOnlyTitle": "Actions",
+        "readOnlyDescription": "Your admin sets how each action runs."
       },
       "oauthCallback": {
         "processing": "Connecting your account…",
@@ -17394,6 +17397,33 @@
       "required": {
         "label": "Required",
         "tooltip": "Your admin requires this skill, so you cannot turn it off."
+      }
+    },
+    "integrationPage": {
+      "title": "Integration",
+      "back": "Integrations",
+      "loadFailed": "This integration is not available to you.",
+      "tabs": {
+        "overview": "Overview",
+        "configuration": "Configuration",
+        "actions": "Actions"
+      },
+      "overview": {
+        "description": "Description",
+        "noDescription": "No description.",
+        "type": "Type",
+        "signIn": "Sign-in",
+        "url": "Server URL",
+        "plugins": "In plugins"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {Your connection to this integration. Only you use it.} shared {The account of this integration. Everyone with access uses it.} other {This integration needs no sign-in.}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "Skills · {count}",
+        "integrations": "Integrations · {count}"
       }
     },
     "search": "Search"

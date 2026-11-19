@@ -50,8 +50,13 @@ Group or user restriction needs EE.
   with the app's integration (migration `730bce2814a0`). Integrations
   (`sections/customize/CustomizeIntegrationsPage.tsx`) is a table: Integration,
   Type, Authorization and Status (a check, Connect, Reconnect or "Ask your
-  admin" from `sections/plugins/IntegrationConnectButton.tsx`); a row opens its
-  plugin. A plugin page (`/app/customize/plugins/[pluginId]`) has Overview,
+  admin" from `sections/plugins/IntegrationConnectButton.tsx`); a row opens
+  `/app/customize/integrations/[id]` (`sections/customize/CustomizeIntegrationPage.tsx`):
+  the status and Connect in the header, then Overview (type, sign-in, the
+  plugins that hold it), Configuration (the user's connection, Disconnect)
+  and Actions (each action with the admin's Allow, Ask or Blocked, and the
+  user's Always allow switch when the admin allows it). The admin sets the
+  policy only on `/admin/integrations/[id]`. A plugin page (`/app/customize/plugins/[pluginId]`) has Overview,
   Skills, Integrations and Versions; a tab with nothing to show is hidden, and a
   plugin that is one skill and no integration replaces itself with the skill
   page. The Integrations tab shows one status
@@ -59,7 +64,7 @@ Group or user restriction needs EE.
   reason and Reconnect) or Not set up ("Ask your admin"). When the admin lets
   users save it, each action that asks offers "Always allow". A member with
   manage:actions adds a personal integration ("For me" only) from the Add menu;
-  its plugin shows under Created by you. The Overview tab has the user's on/off switch ("Use this
+  its plugin shows under Created by you. The page header has the user's on/off switch ("Use this
   plugin"), off with a reason when the plugin is Required. The owner of a
   private plugin that holds only integrations gets Share and Publish; Publish
   is off for a user without global manage:actions.

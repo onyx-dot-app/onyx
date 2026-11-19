@@ -17087,7 +17087,8 @@
           "location": "الموقع",
           "owner": "المالك",
           "skills": "المهارات",
-          "integrations": "التكاملات"
+          "integrations": "التكاملات",
+          "description": "الوصف"
         },
         "skills": {
           "off": "متوقفة",
@@ -17157,7 +17158,9 @@
         },
         "retry": {
           "label": "حاول مرة أخرى"
-        }
+        },
+        "readOnlyTitle": "الإجراءات",
+        "readOnlyDescription": "يحدد المسؤول طريقة تشغيل كل إجراء."
       },
       "oauthCallback": {
         "processing": "جارٍ ربط حسابك…",
@@ -17394,6 +17397,33 @@
       "required": {
         "label": "مطلوبة",
         "tooltip": "يتطلب المسؤول هذه المهارة، لذا لا يمكنك إيقافها."
+      }
+    },
+    "integrationPage": {
+      "title": "تكامل",
+      "back": "عمليات التكامل",
+      "loadFailed": "هذا التكامل غير متاح لك.",
+      "tabs": {
+        "overview": "نظرة عامة",
+        "configuration": "الإعداد",
+        "actions": "الإجراءات"
+      },
+      "overview": {
+        "description": "الوصف",
+        "noDescription": "لا يوجد وصف.",
+        "type": "النوع",
+        "signIn": "تسجيل الدخول",
+        "url": "عنوان URL للخادم",
+        "plugins": "ضمن الإضافات"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {اتصالك بهذا التكامل. أنت فقط من يستخدمه.} shared {حساب هذا التكامل. يستخدمه كل من لديه صلاحية الوصول.} other {لا يحتاج هذا التكامل إلى تسجيل الدخول.}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "المهارات · {count}",
+        "integrations": "عمليات التكامل · {count}"
       }
     },
     "search": "بحث"

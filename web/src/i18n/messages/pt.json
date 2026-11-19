@@ -17087,7 +17087,8 @@
           "location": "Local",
           "owner": "Proprietário",
           "skills": "Habilidades",
-          "integrations": "Integrações"
+          "integrations": "Integrações",
+          "description": "Descrição"
         },
         "skills": {
           "off": "Desativada",
@@ -17157,7 +17158,9 @@
         },
         "retry": {
           "label": "Tentar novamente"
-        }
+        },
+        "readOnlyTitle": "Ações",
+        "readOnlyDescription": "Seu administrador define como cada ação é executada."
       },
       "oauthCallback": {
         "processing": "Conectando sua conta…",
@@ -17394,6 +17397,33 @@
       "required": {
         "label": "Obrigatória",
         "tooltip": "Seu administrador exige esta habilidade, então você não pode desativá-la."
+      }
+    },
+    "integrationPage": {
+      "title": "Integração",
+      "back": "Integrações",
+      "loadFailed": "Esta integração não está disponível para você.",
+      "tabs": {
+        "overview": "Visão geral",
+        "configuration": "Configuração",
+        "actions": "Ações"
+      },
+      "overview": {
+        "description": "Descrição",
+        "noDescription": "Sem descrição.",
+        "type": "Tipo",
+        "signIn": "Login",
+        "url": "URL do servidor",
+        "plugins": "Nos plugins"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {Sua conexão com esta integração. Só você a usa.} shared {A conta desta integração. Todos com acesso a usam.} other {Esta integração não precisa de login.}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "Habilidades · {count}",
+        "integrations": "Integrações · {count}"
       }
     },
     "search": "Pesquisar"

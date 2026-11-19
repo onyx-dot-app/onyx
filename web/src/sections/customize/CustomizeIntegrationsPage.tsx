@@ -14,7 +14,7 @@ import { SvgCheck, SvgPlug, SvgPlus, SvgSettings } from "@opal/icons";
 import { SvgUnPlugged } from "@opal/illustrations";
 import { useScreenSize } from "@opal/hooks";
 import { useNavigation } from "@opal/navigation";
-import { customizeTabHref, pluginHref } from "@/lib/customize/paths";
+import { customizeTabHref, integrationHref } from "@/lib/customize/paths";
 import { useMemberIntegrations } from "@/lib/integrations/hooks";
 import type { MemberIntegration } from "@/lib/integrations/types";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -78,8 +78,7 @@ export default function CustomizeIntegrationsPage() {
   );
 
   function open(integration: MemberIntegration): void {
-    const plugin = integration.plugins[0];
-    if (plugin) navigation.go(pluginHref(plugin.plugin_id, "integrations"));
+    navigation.go(integrationHref(integration.id));
   }
 
   const detailColumns: TableColumn<MemberIntegration>[] = [
@@ -196,12 +195,10 @@ export default function CustomizeIntegrationsPage() {
           onClose={() => setAdding(false)}
           onCreated={(created) => {
             setAdding(false);
-            // The plugin page reads the new plugin from the list.
-            void mutate().finally(() => {
-              const plugin = created.plugins[0];
-              if (plugin)
-                navigation.go(pluginHref(plugin.plugin_id, "integrations"));
-            });
+            // The integration page reads the new integration from the list.
+            void mutate().finally(() =>
+              navigation.go(integrationHref(created.id, "configuration"))
+            );
           }}
         />
       )}
