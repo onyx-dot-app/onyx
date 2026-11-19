@@ -90,7 +90,7 @@ from tests.integration.mock_services.mock_llm_server.models import (
     RequestConditions,
     ToolCall,
 )
-from tests.integration.tests.mcp.conftest import ConnectedMCPServer
+from tests.integration.tests.mcp.conftest import ConnectedMCPServer, release_hold
 
 CALL_ID = "call_hello"
 # Called for each request that a stream left waiting; returns the decision
@@ -252,12 +252,13 @@ def _converse(
     request: SendMessageRequest,
     on_request: OnRequest,
     on_continued: Callable[[], None] = lambda: None,
+    on_packet: Callable[[Packet], None] = lambda _packet: None,
 ) -> list[list[Packet]]:
     """Send a message over a real HTTP stream, as a client does. A stream that
     stops to wait for approval calls `on_request` for each request it left
     waiting; then the client follows the continuation that a decision named,
-    or else the one that the chat's status names, from cursor 0. Returns each
-    stream's packets."""
+    or else the one that the chat's status names, from cursor 0. Each packet
+    goes to `on_packet` as it arrives. Returns each stream's packets."""
     assert request.chat_session_id is not None
     streams: list[list[Packet]] = []
     with httpx.Client(
@@ -269,7 +270,7 @@ def _converse(
         with http.stream(
             "POST", "/chat/send-chat-message", json=request.model_dump(mode="json")
         ) as response:
-            streams.append(list(_packets(response)))
+            streams.append(_read(response, on_packet))
         ended_streams: set[int] = set()
         while _stop_reason(streams[-1]) == AWAITING_USER:
             continuation: dict[str, object] | None = None
@@ -297,8 +298,18 @@ def _converse(
                 params={"cursor": 0, "stream_id": stream.stream_id},
             ) as continued:
                 on_continued()
-                streams.append(list(_packets(continued)))
+                streams.append(_read(continued, on_packet))
     return streams
+
+
+def _read(
+    response: httpx.Response, on_packet: Callable[[Packet], None]
+) -> list[Packet]:
+    packets: list[Packet] = []
+    for packet in _packets(response):
+        packets.append(packet)
+        on_packet(packet)
+    return packets
 
 
 def _response_of(approval_id: str) -> int:
@@ -1139,7 +1150,7 @@ def test_a_cell_that_runs_while_a_program_waits_keeps_its_result(
     streaming_api: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Cell 1 runs a slow call in the background while cell 2 waits for
+    """Cell 1 holds a call in the background while cell 2 waits for
     approval. Decided after the stop, the answer stopped only after cell 1
     ended, and its result is in cell 1's record. Decided while cell 1 runs,
     the approved call runs at once and the answer never stops to wait."""
@@ -1147,20 +1158,22 @@ def test_a_cell_that_runs_while_a_program_waits_keeps_its_result(
     _set_policies(
         connected_mcp_server,
         admin_user,
-        action_policies={"slow": ActionPolicy.ALWAYS.value},
+        action_policies={"hold": ActionPolicy.ALWAYS.value},
     )
-    slow_function, hello_function = (
+    hold_function, hello_function = (
         function_name(connected_mcp_server.callable_name(name))
-        for name in ("slow", "hello")
+        for name in ("hold", "hello")
     )
+    key = uuid4().hex
     cell1, cell2, wait1 = _cells(
-        f"print('slow', await tools.{slow_function}(seconds=4))\n",
+        f"print('held', await tools.{hold_function}(key='{key}'))\n",
         f"print(await tools.{hello_function}(name='team'))\n",
     )
     mock_llm.conversation("chat", *_one_call_per_reply([cell1, cell2, wait1]))
-    chat_session_id = new_chat(["hello", "slow"])
+    chat_session_id = new_chat(["hello", "hold"])
 
     if decide == "after_the_stop":
+        # Cell 1 ends once the request shows, so the answer stops after it.
         first, _continued = _converse(
             streaming_api,
             admin_user,
@@ -1168,11 +1181,24 @@ def test_a_cell_that_runs_while_a_program_waits_keeps_its_result(
             lambda _packet, request: _decide(
                 admin_user, request.approval_id, "approve_once"
             ).raise_for_status(),
+            on_packet=lambda packet: (
+                release_hold(key)
+                if isinstance(packet.obj, ToolApprovalRequest)
+                else None
+            ),
         )
         assert _stop_reason(first) == AWAITING_USER
     else:
+        # Cell 1 runs until the decision applies.
         decisions, live = _decide_while_streaming(
-            streaming_api, admin_user, chat_session_id
+            streaming_api,
+            admin_user,
+            chat_session_id,
+            on_packet=lambda packet: (
+                release_hold(key)
+                if isinstance(packet.obj, ToolApprovalResolved)
+                else None
+            ),
         )
         [decision] = decisions
         assert decision.raise_for_status().json()["continuation"] is None
@@ -1195,7 +1221,7 @@ def test_a_cell_that_runs_while_a_program_waits_keeps_its_result(
         assert "Cell 1 completed after this output, before the run paused." in (
             cell1_result
         )
-        assert "slept" in cell1_result
+        assert "held {'result': 'released'}" in cell1_result
         assert (
             "Cell 1 completed before the run paused; its output and result are "
             "in its earlier result."
@@ -1203,7 +1229,7 @@ def test_a_cell_that_runs_while_a_program_waits_keeps_its_result(
     else:
         # Cell 1 was still live after the approved call ran.
         assert "Execution completed in cell 1" in wait_result
-        assert "slept" in wait_result
+        assert "held {'result': 'released'}" in wait_result
 
 
 def test_a_background_cell_keeps_its_own_approval_request(
@@ -2109,28 +2135,35 @@ def test_a_decision_during_the_live_wait_continues_in_the_same_stream(
     _set_policies(
         connected_mcp_server,
         admin_user,
-        action_policies={"slow": ActionPolicy.ALWAYS.value},
+        action_policies={"hold": ActionPolicy.ALWAYS.value},
     )
     hello = _hello(connected_mcp_server, CALL_ID, "team")
-    slow = ToolCall(
-        id="call_slow",
-        name=connected_mcp_server.callable_name("slow"),
-        arguments={"seconds": 3},
+    key = uuid4().hex
+    held = ToolCall(
+        id="call_held",
+        name=connected_mcp_server.callable_name("hold"),
+        arguments={"key": key},
     )
     mock_llm.conversation(
         "chat",
         Reply(
-            tool_calls=[hello, slow],
-            conditions=RequestConditions(offers=[hello.name, slow.name]),
+            tool_calls=[hello, held],
+            conditions=RequestConditions(offers=[hello.name, held.name]),
         ),
         Reply(
             text="Done.",
-            conditions=RequestConditions(has_results_for=[CALL_ID, slow.id]),
+            conditions=RequestConditions(has_results_for=[CALL_ID, held.id]),
         ),
     )
-    chat_session_id = new_chat(["hello", "slow"])
+    chat_session_id = new_chat(["hello", "hold"])
+    # The held call runs until the decision applies.
     decisions, live = _decide_while_streaming(
-        streaming_api, admin_user, chat_session_id
+        streaming_api,
+        admin_user,
+        chat_session_id,
+        on_packet=lambda packet: (
+            release_hold(key) if isinstance(packet.obj, ToolApprovalResolved) else None
+        ),
     )
 
     [decision] = decisions
@@ -2147,10 +2180,14 @@ def test_a_decision_during_the_live_wait_continues_in_the_same_stream(
 
 
 def _decide_while_streaming(
-    streaming_api: str, user: DATestUser, chat_session_id: UUID
+    streaming_api: str,
+    user: DATestUser,
+    chat_session_id: UUID,
+    on_packet: Callable[[Packet], None] = lambda _packet: None,
 ) -> tuple[list[httpx.Response], list[Packet]]:
     """Send a message and approve each request as soon as its packet arrives.
-    Returns the decisions and the stream's packets."""
+    Each packet goes to `on_packet` after that. Returns the decisions and the
+    stream's packets."""
     decisions: list[httpx.Response] = []
     live: list[Packet] = []
     with httpx.Client(
@@ -2170,6 +2207,7 @@ def _decide_while_streaming(
                     decisions.append(
                         _decide(user, packet.obj.approval_id, "approve_once")
                     )
+                on_packet(packet)
     return decisions, live
 
 
