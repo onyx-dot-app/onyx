@@ -524,6 +524,11 @@ def test_a_private_server_lists_each_group_with_access(
             db_session,
         )
 
+        # A public server lists no groups, so a Terraform plan with
+        # groups=[] converges.
+        server = mcp_api.get_mcp_server_alias(server_id, db_session, admin)
+        assert (server.is_public, server.groups) == (True, [])
+
         mcp_api.update_mcp_server_alias(
             server_id,
             MCPServerSimpleUpdateRequest(is_public=False),
