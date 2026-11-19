@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Section } from "@opal/layouts";
@@ -25,8 +25,6 @@ import TodoListCard from "@/app/craft/components/TodoListCard";
 import HumanMessage from "@/app/app/message/HumanMessage";
 import CraftMessageAttachments from "@/app/craft/components/CraftMessageAttachments";
 import TurnOutputCards from "@/app/craft/components/TurnOutputCards";
-import { chatScrollRowProps } from "@/lib/chatScroll/components";
-import { craftMessageRowId } from "@/app/craft/utils/rowIds";
 import {
   BuildMessage,
   type OutputCard,
@@ -50,6 +48,13 @@ interface BuildMessageListProps {
   timelineEvents: TimelineEvent[];
   isStreaming?: boolean;
   isFinalizing?: boolean;
+  /** Whether auto-scroll is enabled (user is at bottom) */
+  autoScrollEnabled?: boolean;
+  /**
+   * Scrollable container wrapping this list. Auto-scroll moves it directly
+   * rather than via scrollIntoView, which scrolls every ancestor.
+   */
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   /**
    * Trailing content attached to the last assistant block — either the
    * in-progress streaming area (if visible) or the last saved assistant
@@ -78,6 +83,8 @@ export default function BuildMessageList({
   timelineEvents,
   isStreaming = false,
   isFinalizing = false,
+  autoScrollEnabled = true,
+  scrollContainerRef,
   trailingAssistantSlot,
   outputCards,
   onOutputOpen,
@@ -101,6 +108,19 @@ export default function BuildMessageList({
         turns.set(message.turn_index, message.id);
     return turns;
   }, [messages]);
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (autoScrollEnabled && container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    }
+  }, [
+    messages.length,
+    timelineEvents.length,
+    outputCards,
+    autoScrollEnabled,
+    scrollContainerRef,
+  ]);
+
   // Resolve a connect card's app (oauth-vs-form, credential fields) by ID.
   const { data: connectableApps } = useUserExternalApps();
   const appsById = useMemo(
@@ -326,7 +346,6 @@ export default function BuildMessageList({
     return (
       <Section
         key={message.id}
-        {...chatScrollRowProps(craftMessageRowId(message.id))}
         gap={3}
         alignItems="stretch"
         height="fit"
@@ -441,10 +460,7 @@ export default function BuildMessageList({
                   ? outputsByTurn.get(turnIndex)
                   : undefined;
               return (
-                <div
-                  key={message.id}
-                  {...chatScrollRowProps(craftMessageRowId(message.id))}
-                >
+                <div key={message.id}>
                   <div className="py-4">
                     {sessionId && message.attachments && (
                       <CraftMessageAttachments

@@ -61,6 +61,12 @@ function thought(content: string): TimelineEvent {
 
 const endTurn: TimelineEvent = { type: "stop", stopReason: "end_turn" };
 
+function scrollRef() {
+  const el = document.createElement("div");
+  el.scrollTo = jest.fn();
+  return { current: el };
+}
+
 // Opens a folded run card. Its fold button is named by the step count.
 function openRun() {
   const fold = screen.queryByRole("button", { name: /^\d+ steps?$/ });
@@ -86,6 +92,8 @@ function renderList(props: {
         messages={props.messages ?? []}
         timelineEvents={props.timelineEvents ?? []}
         isStreaming={props.isStreaming}
+        autoScrollEnabled={false}
+        scrollContainerRef={scrollRef()}
       />
     </TooltipProvider>
   );
@@ -122,6 +130,8 @@ test("shows a cursor after refresh with only completed tools until the turn sett
     sessionId: "session-1",
     messages: [],
     timelineEvents,
+    scrollContainerRef: scrollRef(),
+    autoScrollEnabled: false,
   };
   const { rerender } = render(<BuildMessageList {...props} isStreaming />);
   expect(screen.getByTestId("blinking-bar")).toBeInTheDocument();
@@ -172,6 +182,8 @@ test("renders a settled output-only turn but never places its cards before a liv
     outputCards: [output],
     onOutputOpen: jest.fn(),
     onTurnOutputsOpen: jest.fn(),
+    scrollContainerRef: scrollRef(),
+    autoScrollEnabled: false,
   };
   const { rerender } = render(<BuildMessageList {...props} isStreaming />);
   expect(
@@ -209,6 +221,8 @@ test("moves a file card to its latest persisted turn and retains an output-only 
     sessionId: "session-1",
     messages,
     timelineEvents: [],
+    autoScrollEnabled: false,
+    scrollContainerRef: scrollRef(),
     onOutputOpen,
     onTurnOutputsOpen: jest.fn(),
   };
@@ -356,6 +370,8 @@ test("keeps a finalization cursor when attachment completes before any assistant
       sessionId="session-1"
       messages={messages}
       timelineEvents={[]}
+      scrollContainerRef={scrollRef()}
+      autoScrollEnabled={false}
       isStreaming
       isFinalizing
     />
@@ -369,6 +385,8 @@ test("keeps one assistant cursor during finalization and removes it when finaliz
     sessionId: "session-1",
     messages: [savedAssistantMessage],
     timelineEvents: [],
+    scrollContainerRef: scrollRef(),
+    autoScrollEnabled: false,
   };
   const { rerender } = render(
     <TooltipProvider>
@@ -410,6 +428,8 @@ it.each(["report.docx", "table.xlsx", "archive.zip"])(
         ]}
         timelineEvents={[]}
         isStreaming={false}
+        autoScrollEnabled={false}
+        scrollContainerRef={scrollRef()}
         onFileOpen={onFileOpen}
       />
     );
