@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use url::Url;
 
+use crate::reachability::{self, Unreachable};
+
 const USER_AGENT: &str = concat!("OnyxDesktop/", env!("CARGO_PKG_VERSION"));
 
 pub struct Api {
@@ -266,7 +268,7 @@ impl Api {
             .timeout(Duration::from_secs(15))
             .send()
             .await
-            .map_err(|e| format!("Could not reach {server}: {e}"))?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if !response.status().is_success() {
             return Err(format!(
                 "{server} does not look like an Onyx server ({}).",
@@ -290,7 +292,7 @@ impl Api {
             .timeout(Duration::from_secs(5))
             .send()
             .await
-            .map_err(|e| format!("Could not reach {server}: {e}"))?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if !response.status().is_success() {
             return Err(error_detail(response).await);
         }
@@ -312,7 +314,7 @@ impl Api {
             .timeout(Duration::from_secs(15))
             .send()
             .await
-            .map_err(|e| format!("Could not reach the server: {e}"))?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if !response.status().is_success() {
             return Err(error_detail(response).await);
         }
@@ -359,7 +361,7 @@ impl Api {
             .timeout(Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| format!("Could not reach the server: {e}"))?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if response.status() == StatusCode::NOT_FOUND {
             return Err(
                 "This server does not support desktop sign-in. Update it to v4.2 or later.".into(),
@@ -375,8 +377,23 @@ impl Api {
             .map_err(|e| format!("Unexpected sign-in response: {e}"))
     }
 
+    /// Whether the server answers `GET /api/version` (no sign-in needed).
+    pub async fn health(&self, server: &str) -> Result<(), Unreachable> {
+        let response = self
+            .http
+            .get(format!("{server}/api/version"))
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await
+            .map_err(|e| Unreachable::from_reqwest(&e).unwrap_or(Unreachable::Unknown))?;
+        match Unreachable::from_status(response.status()) {
+            Some(reason) => Err(reason),
+            None => Ok(()),
+        }
+    }
+
     /// `Ok(false)` means the server rejected the stored token.
-    pub async fn session_valid(&self, server: &str, token: &str) -> Result<bool, String> {
+    pub async fn session_valid(&self, server: &str, token: &str) -> Result<bool, Unreachable> {
         let response = self
             .http
             .get(format!("{server}/api/me"))
@@ -385,11 +402,11 @@ impl Api {
             .timeout(Duration::from_secs(5))
             .send()
             .await
-            .map_err(|e| format!("Could not reach {server}: {e}"))?;
+            .map_err(|e| Unreachable::from_reqwest(&e).unwrap_or(Unreachable::Unknown))?;
         match response.status() {
             s if s.is_success() => Ok(true),
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Ok(false),
-            s => Err(format!("The server returned {s}.")),
+            s => Err(Unreachable::ServerError { status: s.as_u16() }),
         }
     }
 
@@ -432,7 +449,7 @@ impl Api {
             .timeout(Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if !response.status().is_success() {
             return Err(error_detail(response).await);
         }
@@ -470,7 +487,7 @@ impl Api {
         let response = tokio::time::timeout(Duration::from_secs(120), request)
             .await
             .map_err(|_| "The server did not start answering.".to_string())?
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if !response.status().is_success() {
             return Err(error_detail(response).await);
         }
@@ -496,7 +513,7 @@ impl Api {
             .timeout(Duration::from_secs(60))
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if response.status() == StatusCode::NOT_FOUND || response.status() == StatusCode::FORBIDDEN
         {
             return Err("Knowledge search is not available on this server.".into());

@@ -14,8 +14,10 @@ mod macos_cookies;
 mod macos_dialogs;
 mod main_window;
 mod menu;
+mod offline;
 mod policy;
 mod qa;
+mod reachability;
 mod session_store;
 mod shortcut;
 mod sso;
@@ -42,7 +44,7 @@ fn main() {
         // Remember the main window's size and position; small windows stay centred.
         .plugin(
             tauri_plugin_window_state::Builder::default()
-                .with_denylist(&["onboarding", "login", "preferences", "launcher"])
+                .with_denylist(&["onboarding", "login", "preferences", "launcher", "offline"])
                 .build(),
         );
     // Launcher as a non-activating NSPanel (see launcher.rs); macOS only.
@@ -54,6 +56,7 @@ fn main() {
     let app = builder
         .setup(|app| {
             let config_path = app.path().app_config_dir()?.join("config.json");
+            app.manage(offline::Offline::default());
             let handle = app.handle();
             let policy = policy::read(handle);
             policy::apply_launch_at_login(handle, &policy);
@@ -114,6 +117,8 @@ fn main() {
             commands::toggle_aonyx,
             commands::aonyx_clicked,
             commands::aonyx_menu,
+            commands::get_offline_status,
+            commands::retry_connection,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the Onyx desktop app");

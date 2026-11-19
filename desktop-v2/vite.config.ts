@@ -77,6 +77,7 @@ export default defineConfig({
         launcher: path.resolve(root, "launcher.html"),
         preferences: path.resolve(root, "preferences.html"),
         aonyx: path.resolve(root, "aonyx.html"),
+        offline: path.resolve(root, "offline.html"),
       },
     },
   },

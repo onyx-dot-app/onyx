@@ -1,4 +1,4 @@
-//! Local (bundled) windows: onboarding, login, preferences and the launcher panel.
+//! Local (bundled) windows: onboarding, login, preferences, offline and the launcher panel.
 
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
@@ -11,6 +11,7 @@ pub const ONBOARDING: &str = "onboarding";
 pub const LOGIN: &str = "login";
 pub const PREFERENCES: &str = "preferences";
 pub const LAUNCHER: &str = "launcher";
+pub const OFFLINE: &str = "offline";
 
 /// Local windows may only show bundled pages; anything else opens in the browser.
 pub(crate) fn local_navigation_allowed(app: &AppHandle, url: &Url) -> bool {
@@ -127,6 +128,10 @@ pub fn open_preferences(app: &AppHandle) -> Result<WebviewWindow, String> {
     )
 }
 
+pub fn open_offline(app: &AppHandle) -> Result<WebviewWindow, String> {
+    local_window(app, OFFLINE, "offline.html", "Onyx", (460.0, 300.0))
+}
+
 pub fn close(app: &AppHandle, label: &str) {
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.destroy();
@@ -173,6 +178,11 @@ fn open_failed(app: &AppHandle, title: &str, error: &str) {
 }
 
 pub fn route(app: &AppHandle) {
+    route_to(app, "/app");
+}
+
+/// Like `route`, but a signed-in session opens `path` on the server.
+pub fn route_to(app: &AppHandle, path: &str) {
     let state = app.state::<AppState>();
     let Ok(server) = state.server() else {
         let _ = open_onboarding(app);
@@ -183,13 +193,17 @@ pub fn route(app: &AppHandle) {
         return;
     };
     let app = app.clone();
+    let path = path.to_string();
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
         match state.api.session_valid(&server, &token).await {
             Ok(true) => {
-                if let Err(e) = main_window::open(&app, &server, &token, "/app").await {
+                if let Err(e) = main_window::open(&app, &server, &token, &path).await {
                     log::warn!("could not open main window: {e}");
-                    open_failed(&app, "Could not open Onyx", &e);
+                    match state.api.health(&server).await {
+                        Err(reason) => crate::offline::show(&app, &path, reason),
+                        Ok(()) => open_failed(&app, "Could not open Onyx", &e),
+                    }
                 }
                 // After the window is up, so a slow refresh never delays it.
                 // The renewed token reaches the window only if this session
@@ -207,17 +221,15 @@ pub fn route(app: &AppHandle) {
             }
             // Unreachable is not signed out: the session is kept, and
             // Sign in is only for a rejected session or the user's choice.
-            Err(e) => {
-                log::warn!("server check failed: {e}");
-                open_failed(&app, "Could not reach the server", &e);
-            }
+            Err(reason) => crate::offline::show(&app, &path, reason),
         }
     });
 }
 
 /// Dock click, tray "Open Onyx" and second launches.
 pub fn show_primary(app: &AppHandle) {
-    for label in [main_window::LABEL, ONBOARDING, LOGIN] {
+    // The main window is hidden while the offline window shows.
+    for label in [OFFLINE, main_window::LABEL, ONBOARDING, LOGIN] {
         if let Some(window) = app.get_webview_window(label) {
             bring_forward(app, &window);
             return;

@@ -51,6 +51,15 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   `native_app_sso`. SAML, cloud workspaces and older servers use the web login page in an app
   window.
 - The app renews the session on launch and every 12 hours, so regular use never signs you out.
+- Offline window (`src-tauri/src/offline.rs`, `src/pages/Offline.tsx`). If the server cannot
+  be reached at launch, or a main-window page does not load and the server then fails two
+  health checks (`GET /api/version`), the main window hides and a small window shows "Can't
+  reach <host>" with the reason: no network, DNS, TLS certificate, timeout, connection refused
+  or a 5xx error. It checks again after 2, 4, 8, 15, 30, then every 60 seconds, at once when
+  the network comes back, and on **Retry**. When the server answers, the main window loads the
+  page again. A page that already loaded stays when the network drops for a short time.
+  Closing the window stops the checks. The launcher shows one line for the same errors:
+  "Can't reach <host>. Check your connection." (`src-tauri/src/reachability.rs`).
 
 Closing the main window keeps the app running in the menu bar; the Dock icon, the tray's
 **Open Onyx** or a second launch brings it back.
@@ -254,7 +263,7 @@ On macOS. For Windows and Linux, see [Windows and Linux](#windows-and-linux).
 
 ## Security boundary
 
-- Only the bundled windows (onboarding, login, preferences, launcher, aonyx)
+- Only the bundled windows (onboarding, login, preferences, launcher, aonyx, offline)
   can call app commands. Every app command needs an explicit permission (`build.rs` app
   manifest). Each window has its own capability in `src-tauri/capabilities/` (file name =
   window label) that grants only the commands its page uses. The remote main window gets no

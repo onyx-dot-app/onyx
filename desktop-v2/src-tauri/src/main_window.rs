@@ -286,6 +286,9 @@ pub async fn open_url(
     if target.origin() != server_url.origin() {
         return Err("That link is not on your Onyx server.".into());
     }
+    if crate::offline::defer_open(app, &target[url::Position::BeforePath..]) {
+        return Ok(());
+    }
 
     if let Some(window) = app.get_webview_window(LABEL) {
         window.navigate(target).map_err(|e| e.to_string())?;
@@ -310,13 +313,19 @@ pub async fn open_url(
         .initialization_script(LINK_SHIM_JS)
         .on_page_load(|window, payload| {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                crate::offline::load_finished(window.app_handle());
                 sync_chrome(window.app_handle());
             }
         })
         // Let the web page receive dropped files (chat attachments).
         .disable_drag_drop_handler()
         .on_navigation(move |url| match classify(url, &nav_origin) {
-            LinkAction::Allow => true,
+            LinkAction::Allow => {
+                if matches!(url.scheme(), "http" | "https") {
+                    crate::offline::watch_load(&nav_app, url);
+                }
+                true
+            }
             LinkAction::External => {
                 open_external(&nav_app, url.as_str());
                 false

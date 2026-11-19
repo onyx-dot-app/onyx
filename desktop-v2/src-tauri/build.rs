@@ -19,6 +19,8 @@ const COMMANDS: &[&str] = &[
     "toggle_aonyx",
     "aonyx_clicked",
     "aonyx_menu",
+    "get_offline_status",
+    "retry_connection",
 ];
 
 fn main() {

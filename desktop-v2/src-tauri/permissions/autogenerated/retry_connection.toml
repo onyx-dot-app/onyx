@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-retry-connection"
+description = "Enables the retry_connection command without any pre-configured scope."
+commands.allow = ["retry_connection"]
+
+[[permission]]
+identifier = "deny-retry-connection"
+description = "Denies the retry_connection command without any pre-configured scope."
+commands.deny = ["retry_connection"]
