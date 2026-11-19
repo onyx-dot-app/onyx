@@ -1,18 +1,20 @@
 import {
   draftFromLink,
   effectiveSetting,
-  toPluginInput,
-  type AgentPluginDraft,
-} from "@/lib/agents/plugins";
+  toIntegrationInput,
+  type AgentIntegrationDraft,
+} from "@/lib/agents/integrations";
 import type {
   AgentCatalogIntegration,
   IntegrationAction,
 } from "@/lib/integrations/types";
 
-function draft(overrides: Partial<AgentPluginDraft> = {}): AgentPluginDraft {
+function draft(
+  overrides: Partial<AgentIntegrationDraft> = {}
+): AgentIntegrationDraft {
   return {
-    plugin_id: "p1",
-    plugin_name: "Linear",
+    integration_id: 1,
+    integration_name: "Linear",
     default: "inherit",
     actions: {},
     ...overrides,
@@ -33,6 +35,7 @@ const action: IntegrationAction = {
 const integration: AgentCatalogIntegration = {
   id: 1,
   name: "Linear",
+  description: null,
   kind: "mcp",
   shape: "mcp_server",
   users_can_save_always_allow: true,
@@ -42,8 +45,8 @@ const integration: AgentCatalogIntegration = {
 test("loads stored settings and keeps inherit entries", () => {
   expect(
     draftFromLink({
-      plugin_id: "p1",
-      plugin_name: "Linear",
+      integration_id: 1,
+      integration_name: "Linear",
       action_settings: {
         default: "blocked",
         actions: { a: "inherit", b: "allow" },
@@ -54,8 +57,8 @@ test("loads stored settings and keeps inherit entries", () => {
   );
   expect(
     draftFromLink({
-      plugin_id: "p1",
-      plugin_name: "Linear",
+      integration_id: 1,
+      integration_name: "Linear",
       action_settings: {},
     })
   ).toEqual(draft());
@@ -63,32 +66,32 @@ test("loads stored settings and keeps inherit entries", () => {
 
 test("a migrated link saves back unchanged", () => {
   const migrated = {
-    plugin_id: "p1",
-    plugin_name: "Linear",
+    integration_id: 1,
+    integration_name: "Linear",
     action_settings: {
       default: "blocked" as const,
       actions: { hello: "inherit" as const },
     },
   };
-  expect(toPluginInput(draftFromLink(migrated))).toEqual({
-    plugin_id: "p1",
+  expect(toIntegrationInput(draftFromLink(migrated))).toEqual({
+    integration_id: 1,
     action_settings: { default: "blocked", actions: { hello: "inherit" } },
   });
 });
 
 test("leaves an inherit default out of the request", () => {
-  expect(toPluginInput(draft())).toEqual({
-    plugin_id: "p1",
+  expect(toIntegrationInput(draft())).toEqual({
+    integration_id: 1,
     action_settings: {},
   });
-  expect(toPluginInput(draft({ actions: { a: "blocked" } }))).toEqual({
-    plugin_id: "p1",
+  expect(toIntegrationInput(draft({ actions: { a: "blocked" } }))).toEqual({
+    integration_id: 1,
     action_settings: { actions: { a: "blocked" } },
   });
   expect(
-    toPluginInput(draft({ default: "ask", actions: { a: "allow" } }))
+    toIntegrationInput(draft({ default: "ask", actions: { a: "allow" } }))
   ).toEqual({
-    plugin_id: "p1",
+    integration_id: 1,
     action_settings: { default: "ask", actions: { a: "allow" } },
   });
 });

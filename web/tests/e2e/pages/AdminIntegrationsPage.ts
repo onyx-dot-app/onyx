@@ -188,4 +188,35 @@ export class AdminIntegrationsPage {
     await this.row(name).click();
     await expect(this.page).toHaveURL(/\/admin\/integrations\/\d+(?:\?.*)?$/);
   }
+
+  /** A manager with no access of their own sees the reason on the row. */
+  async expectNoAccess(name: string): Promise<void> {
+    await expect(this.row(name).getByText(/^No access:/)).toBeVisible();
+  }
+
+  installSetting(name: string): Locator {
+    return this.page.getByRole("combobox", {
+      name: `Install setting of ${name}`,
+      exact: true,
+    });
+  }
+
+  /** Sets the company install setting from the list, for example
+   * "Required" or "Available to install". */
+  async setInstallSetting(name: string, label: string): Promise<void> {
+    const select = this.installSetting(name);
+    await expect(select).toBeEnabled();
+    const response = this.page.waitForResponse(
+      (candidate) =>
+        /\/api\/admin\/integrations\/\d+\/installation-policy$/.test(
+          new URL(candidate.url()).pathname
+        ) && candidate.request().method() === "PUT"
+    );
+    await select.click();
+    await this.page
+      .getByRole("option", { name: new RegExp(`^${label}`) })
+      .click();
+    expect((await response).ok()).toBeTruthy();
+    await expect(select).toHaveValue(label);
+  }
 }

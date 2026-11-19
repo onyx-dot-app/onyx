@@ -73,8 +73,8 @@ import { useAgents, useAgentLabels } from "@/lib/agents/hooks";
 import { createAgent, updateAgent } from "@/lib/agents/svc";
 import { AgentUpsertParameters } from "@/lib/agents/types";
 import { useAvailableTools } from "@/lib/tools/hooks";
-import AgentPluginsSection from "@/sections/agents/AgentPluginsSection";
-import { draftFromLink, toPluginInput } from "@/lib/agents/plugins";
+import AgentIntegrationsSection from "@/sections/agents/AgentIntegrationsSection";
+import { draftFromLink, toIntegrationInput } from "@/lib/agents/integrations";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { isDateInFuture } from "@/lib/dateUtils";
 import {
@@ -601,7 +601,7 @@ export default function AgentEditorPage({
         (tool) => tool.in_code_tool_id === PYTHON_TOOL_ID
       ) ??
         false),
-    plugins: (existingAgent?.plugins ?? []).map(draftFromLink),
+    integrations: (existingAgent?.integrations ?? []).map(draftFromLink),
 
     // Sharing
     shared_user_ids: existingAgent?.users?.map((user) => user.id) ?? [],
@@ -714,7 +714,7 @@ export default function AgentEditorPage({
           values.default_model_configuration_id ?? null,
         starter_messages: finalAgentStarterMessages,
         tool_ids: toolIds,
-        plugins: values.plugins.map(toPluginInput),
+        integrations: values.integrations.map(toIntegrationInput),
         // uploaded_image: null, // Already uploaded separately
         remove_image: values.remove_image ?? false,
         uploaded_image_id: values.uploaded_image_id,
@@ -1451,11 +1451,12 @@ export default function AgentEditorPage({
                             paddingPerpendicular={1}
                             paddingParallel={0}
                           />
-                          <AgentPluginsSection
-                            value={values.plugins}
-                            onChange={(plugins) =>
-                              setFieldValue("plugins", plugins)
+                          <AgentIntegrationsSection
+                            value={values.integrations}
+                            onChange={(integrations) =>
+                              setFieldValue("integrations", integrations)
                             }
+                            sharingStatus={sharingStatus}
                           />
                         </Section>
                       </Collapsible>

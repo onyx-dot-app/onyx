@@ -77,7 +77,7 @@ A [custom App](#custom-apps) gives Craft credentials and network access for any 
   </Step>
 
   <Step title="Test as a user">
-    Connect a test account from the [Plugins page](/overview/core_features/craft_apps#connect-an-app).
+    Connect a test account in [Customize → Integrations](/overview/core_features/craft_apps#connect-an-app).
     Test one read and one write.
   </Step>
 </Steps>
@@ -207,8 +207,8 @@ They cannot turn on an action that you set to **Blocked**.
 
 A [Scheduled Task](/overview/core_features/craft_scheduled_tasks) runs without a user present,
 so it cannot show an approval card.
-The task owner turns on the plugins that the task can use in the task's **Plugins** section.
-A run can use only the integrations of those plugins. Each action starts with the integration setting,
+The task owner turns on the integrations that the task can use in the task's **Integrations** section.
+A run can use only those integrations. Each action starts with the integration setting,
 and the owner can set it to **Allow**, **Ask** or **Blocked** for that task only.
 
 - If users cannot save **Always allow** on the integration, **Allow** in a task does not change your setting.
@@ -219,8 +219,7 @@ and the owner can set it to **Allow**, **Ask** or **Blocked** for that task only
 ## Skills for Apps
 
 Each built-in App comes with a built-in [Skill](/admins/managing_features/craft_skills)
-that teaches Craft how to use it.
-A user gets this Skill only through a plugin that the user can run and that holds the App, while the App is enabled.
+that teaches Craft how to use it. A user gets this Skill only while the user has the App on and the App is enabled.
 The user gets the Skill also before they connect an account.
 
 To teach Craft more about an App, for example which Slack channels to read first,
@@ -330,8 +329,8 @@ Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off **Enabled** instead.
   </Accordion>
 
   <Accordion title="An enabled app does not appear to users">
-    Confirm that **Enabled** is on, that the user can see a plugin that holds the App,
-    and that the user has Craft access.
+    Confirm that **Enabled** is on, that the user has access to the App (check its install setting and shares),
+    that the user turned the App on, and that the user has Craft access.
   </Accordion>
 
   <Accordion title="A user connected successfully but an action is blocked">
@@ -341,7 +340,7 @@ Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off **Enabled** instead.
   </Accordion>
 
   <Accordion title="A Scheduled Task is awaiting approval">
-    Confirm that the task owner is still connected to the app and that a plugin of the task holds the app.
+    Confirm that the task owner is still connected to the app and that the task has the app on.
     Then check for a **Blocked** policy, or a different app than the prompt was expected to use.
     Correct the task and use **Run now**. The blocked run does not resume automatically.
   </Accordion>

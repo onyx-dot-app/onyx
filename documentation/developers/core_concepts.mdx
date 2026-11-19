@@ -18,13 +18,13 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
     <BuiltInActionsTable />
 
     Custom Actions let an agent call your own systems.
-    Admins add custom Actions in **Admin Panel** > **Plugins** from an [MCP server](/admins/plugins/mcp)
+    Admins add custom Actions in **Admin Panel** > **Integrations** from an [MCP server](/admins/plugins/mcp)
     or an [OpenAPI schema](/admins/plugins/openapi). Each MCP tool or OpenAPI operation becomes one Action.
     The [Actions](/developers/api_reference/actions/list_tools) endpoints list and manage them.
   </Accordion>
 
-  <Accordion title="Plugins" icon="puzzle-piece">
-    Plugins are everything an admin connects to Onyx under **Admin Panel** > **Plugins**:
+  <Accordion title="Integrations" icon="puzzle-piece">
+    Integrations are everything an admin connects to Onyx under **Admin Panel** > **Integrations**:
     - **MCP servers**: Each tool the server exposes becomes an Action.
     - **OpenAPI Actions**: Each operation in the schema becomes an Action.
     - **Apps**: External apps that [Craft](/admins/plugins/craft_apps) sessions can use.
@@ -35,7 +35,7 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
   <Accordion title="MCP" icon="handshake">
     Model Context Protocol (MCP) is an open standard that lets AI assistants access external data sources and tools.
     Onyx works in both directions:
-    - **Onyx as an MCP client**: Admins connect external MCP servers as [Plugins](/admins/plugins/mcp).
+    - **Onyx as an MCP client**: Admins connect external MCP servers as [integrations](/admins/plugins/mcp).
     Their tools become Actions your Agents can call. OAuth, API key, and no-auth servers are supported.
     - **Onyx as an MCP server**: External clients such as Claude, ChatGPT, or Codex connect to `https://your-onyx-domain.com/mcp/`
     with OAuth, a Personal Access Token, or an API Key, and search your Onyx knowledge.

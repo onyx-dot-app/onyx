@@ -42,9 +42,9 @@ export interface ToolSnapshot {
   // If this is an MCP tool, which server it belongs to
   mcp_server_id?: number | null;
   user_id?: string | null;
-  // The plugins that hold the integration of an OpenAPI or MCP tool; chat tool
-  // options name them. Only the tool list sets it.
-  plugin_ids?: string[];
+  // The integration of an OpenAPI or MCP tool; chat tool options name it.
+  // Only the tool list sets it.
+  integration_id?: number | null;
 
   // Whether the tool is enabled
   enabled: boolean;
@@ -92,24 +92,26 @@ export interface ChatSearchFilters {
   timeRange: { from: string } | null;
 }
 
-/** A built-in tool by its id, or a plugin with the action keys to keep. */
+/** A built-in tool by its id, or an integration with the action keys to
+ * keep. */
 export type ToolOptionsEntry =
   | { type: "capability"; tool_id: number }
-  | { type: "plugin"; plugin_id: string; actions?: string[] | null };
+  | { type: "integration"; integration_id: number; actions?: string[] | null };
 
-/** A built-in tool, or one action of a plugin. */
+/** A built-in tool, or one action of an integration. */
 export type ToolPreference =
   | { type: "capability"; tool_id: number }
-  | { type: "action"; plugin_id: string; action: string };
+  | { type: "action"; integration_id: number; action: string };
 
-/** A preferred plugin action. The web keeps it but has no control for it. */
+/** A preferred integration action. The web keeps it but has no control for
+ * it. */
 export type ActionPreference = Extract<ToolPreference, { type: "action" }>;
 
 /**
- * The tools, plugins and search filters of a chat. A send carries them, and
+ * The tools, integrations and search filters of a chat. A send carries them, and
  * the server saves them on an existing chat: the chat-session detail returns
  * them, and the tool-options PATCH is their only writer. Turns the server
- * starts use them. `allowed` null means every tool and plugin of the agent.
+ * starts use them. `allowed` null means every tool and integration of the agent.
  */
 export interface ChatToolOptions {
   allowed: ToolOptionsEntry[] | null;

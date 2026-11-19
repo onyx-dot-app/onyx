@@ -79,15 +79,7 @@ const reports = makeIntegration({
   auth_method: "api_key",
   needs_setup: true,
   setup_reason: "Connect the organization account",
-  plugins: [
-    {
-      plugin_id: "plugin-reports",
-      plugin_name: "Reports",
-      scope: "personal",
-      owner_email: "owner@example.com",
-      installation_policy: null,
-    },
-  ],
+  installation_policy: "NOT_AVAILABLE",
 });
 
 function mockList(extra: Parameters<typeof mockFetch>[0] = {}) {

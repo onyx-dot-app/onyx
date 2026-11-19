@@ -79,8 +79,8 @@ chat/presentation.py:ResponsePresenter       tool events -> chat/renderer.py:Too
 
 **Captured configuration.** `db/tools.py:capture_persona_tool_configuration`
 copies the agent's built-in `Tool` rows into frozen `ToolConfiguration` models,
-and its `persona__plugin` rows into `PluginLinkConfiguration` models (plugin id
-and parsed `action_settings`), before the run starts. The MCP and OpenAPI
+and its `persona__integration` rows into `IntegrationLinkConfiguration` models
+(integration id and parsed `action_settings`), before the run starts. The MCP and OpenAPI
 `Tool` rows of the agent are not copied. `construct_tools` opens its own short
 DB session, so no session stays open for a turn that can last minutes.
 
@@ -93,12 +93,12 @@ order and applies these gates:
 1. A tool with `enabled=False` is skipped.
 2. `tool_options.allowed` (`tools/models.py:ToolOptions`), the per-message
    choice that the client sends or the chat saved. A capability entry keeps a
-   built-in tool by its id. A plugin entry keeps the plugin, and its optional
-   `actions` keep only those action keys
-   (`tools/models.py:IntegrationChatRequest.allowed_plugins`). The options
-   only pick integrations and actions: the settings of every agent link that
-   holds an integration still apply, so a request cannot drop a Blocked link.
-   NULL keeps every tool and plugin of the agent. The web composer
+   built-in tool by its id. An integration entry keeps the integration, and
+   its optional `actions` keep only those action keys
+   (`tools/models.py:IntegrationChatRequest.allowed_integrations`). The options
+   only pick integrations and actions: the settings of the agent link of
+   an integration still apply, so a request cannot drop a Blocked link.
+   NULL keeps every tool and integration of the agent. The web composer
    (`web/src/lib/tools/hooks.ts`) sends a saved `actions` list back unchanged,
    and it does not rewrite the allow-list while a plugin catalog request has
    failed.
@@ -542,7 +542,8 @@ are plain `AgentTool` objects with no `Tool` row, and
   issues).
 - `force-tool-call` **Prefer an Action for the current request.** Send
   `tool_options.preferred` with the message: a capability (a built-in tool id) or
-  an action (a plugin id and an action key, matched by `Tool.plugin_action`).
+  an action (an integration id and an action key, matched by
+  `Tool.integration_action`).
   The trailing reminder names that Action's
   operations on every model step. The model may call another tool or answer directly;
   the preference does not change tool definitions or execution permissions.

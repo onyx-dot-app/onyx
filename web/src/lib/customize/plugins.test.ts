@@ -12,8 +12,6 @@ function entry(over: Partial<MemberPluginEntry>): MemberPluginEntry {
     section: "shared",
     ownerEmail: null,
     skills: [customFixture({ enabled: true })],
-    integrations: [],
-    ref: null,
     ...over,
   };
 }

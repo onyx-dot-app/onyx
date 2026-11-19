@@ -250,7 +250,7 @@ class MCPServerAdminView(BaseModel):
     groups: list[int]
     users: list[UUID]
     available_in_craft: bool
-    plugin_ids: list[UUID]
+    integration_id: int
     last_refreshed_at: datetime.datetime | None
     tool_count: int
     auth_template: MCPAuthTemplate | None

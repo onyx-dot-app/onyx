@@ -22,32 +22,32 @@ from onyx.db.enums import (
     MCPAuthenticationType,
     MCPTransport,
     Permission,
-    SkillSharePermission,
+    PluginInstallationPolicy,
 )
 from onyx.db.integration import (
     count_integration_actions,
     get_integration_by_kind_row,
     get_mcp_server_for_integration,
-    list_integration_plugin_rows,
+)
+from onyx.db.integration_access import (
+    load_integration_group_settings,
+    load_integration_shares,
 )
 from onyx.db.integration_connection import get_connection
 from onyx.db.mcp import get_mcp_server_by_id
 from onyx.db.models import Integration, User
 from onyx.db.models import MCPServer as DbMCPServer
-from onyx.db.plugin import (
-    add_author_share__no_commit,
-    unpublish_integration_plugin__no_commit,
-)
-from onyx.db.plugin_access import load_plugin_access
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.access import (
+    publish_integration__no_commit,
+    set_company_policy__no_commit,
+    set_group_settings__no_commit,
+    share_integration__no_commit,
+)
 from onyx.integrations.connection_models import read_connection_secret
 from onyx.integrations.connections import (
     header_field_keys,
-)
-from onyx.integrations.plugin_settings import (
-    publish_plugin_for_user__no_commit,
-    share_plugin__no_commit,
 )
 from onyx.integrations.service import (
     craft_users_of_integration,
@@ -55,6 +55,7 @@ from onyx.integrations.service import (
     delete_integration_for_user__no_commit,
     get_manageable_integration,
     get_viewable_integration,
+    is_private,
     masked_header_template,
     reload_craft_sessions,
     save_connection_fields__no_commit,
@@ -64,9 +65,6 @@ from onyx.server.features.integrations.models import (
     IntegrationCreate,
     IntegrationUpdate,
     McpServerConfigInput,
-    PluginAccessUpdate,
-    PluginGroupShare,
-    PluginUserShare,
 )
 from onyx.server.features.mcp.client_metadata import (
     router as client_metadata_router,
@@ -263,90 +261,81 @@ def _apply_access(
     user_ids: list[UUID] | None,
     db_session: Session,
 ) -> set[UUID]:
-    """Public is the Organization library. Private is the owner's "My
-    uploads" with the users and groups as shares. Returns the affected
+    """Public is Available to the organization, with no shares. Private has
+    the users and groups as its shares. ``group_ids`` is the full set of
+    groups with access; ``None`` keeps the groups. The caller locked the
+    integration and checked that the user manages it. Returns the affected
     users."""
     if is_public is None and group_ids is None and user_ids is None:
         return set()
     affected: set[UUID] = set()
-    for row in list_integration_plugin_rows([integration.id], db_session)[
-        integration.id
-    ]:
-        if row.in_organization_library if is_public is None else is_public:
-            if not row.in_organization_library:
-                affected |= share_plugin__no_commit(
-                    user,
-                    row.plugin_id,
-                    PluginAccessUpdate(user_shares=[], group_shares=[]),
-                    db_session,
-                    token_may_manage=True,
-                )
-                _, published = publish_plugin_for_user__no_commit(
-                    user,
-                    row.plugin_id,
-                    db_session,
-                    token_may_manage=True,
-                    on_name_clash="rename",
-                )
-                affected |= published
-            continue
-        if row.in_organization_library:
-            affected |= unpublish_integration_plugin__no_commit(
-                row.plugin_id, db_session
+    public = is_public if is_public is not None else not is_private(integration)
+    if public:
+        if is_private(integration):
+            affected |= share_integration__no_commit(
+                user, integration, [], [], db_session
             )
-        users, groups = _shares(row.plugin_id, user, db_session)
-        users = list(user_ids) if user_ids is not None else users
-        groups = list(group_ids) if group_ids is not None else groups
-        affected |= share_plugin__no_commit(
-            user,
-            row.plugin_id,
-            PluginAccessUpdate(
-                user_shares=[
-                    PluginUserShare(
-                        user_id=user_id, permission=SkillSharePermission.VIEWER
-                    )
-                    for user_id in users
-                ],
-                group_shares=[
-                    PluginGroupShare(
-                        group_id=group_id, permission=SkillSharePermission.VIEWER
-                    )
-                    for group_id in groups
-                ],
-            ),
-            db_session,
-            token_may_manage=True,
+            affected |= publish_integration__no_commit(user, integration, db_session)
+        return affected
+    if not is_private(integration):
+        affected |= set_company_policy__no_commit(
+            integration, PluginInstallationPolicy.NOT_AVAILABLE, db_session
         )
-        if row.author_user_id is not None and row.author_user_id in users:
-            add_author_share__no_commit(row.plugin_id, row.author_user_id, db_session)
-    return affected
-
-
-def _shares(
-    plugin_id: UUID, user: User, db_session: Session
-) -> tuple[list[UUID], list[int]]:
-    access = load_plugin_access([plugin_id], user.id, db_session).get(plugin_id)
-    if access is None:
-        return [], []
-    return (
-        [share.user_id for share in access.user_shares],
-        [share.group_id for share in access.group_shares],
+    if group_ids is not None:
+        # The legacy groups are each group with access (_admin_view). A
+        # group left out loses the setting that gives it access, too.
+        dropped = {
+            setting.group_id: None
+            for setting in load_integration_group_settings(integration.id, db_session)
+            if setting.installation_policy != PluginInstallationPolicy.NOT_AVAILABLE
+            and setting.group_id not in group_ids
+        }
+        if dropped:
+            affected |= set_group_settings__no_commit(
+                user, integration, dropped, db_session
+            )
+    users, groups = _shares(integration, db_session)
+    return affected | share_integration__no_commit(
+        user,
+        integration,
+        user_ids if user_ids is not None else users,
+        group_ids if group_ids is not None else groups,
+        db_session,
     )
 
 
-def _admin_view(
-    user: User, integration: Integration, db_session: Session
-) -> MCPServerAdminView:
+def _shares(
+    integration: Integration, db_session: Session
+) -> tuple[list[UUID], list[int]]:
+    shares = load_integration_shares(integration.id, db_session)
+    return (
+        [share.user_id for share in shares.user_shares],
+        [share.group_id for share in shares.group_shares],
+    )
+
+
+def _private_access(
+    integration: Integration, db_session: Session
+) -> tuple[list[UUID], list[int]]:
+    """The users and groups of a private server in the legacy view. A group
+    with its own setting above Not available also has access, and the legacy
+    view has no group settings, so it lists such a group too. A public server
+    lists none: each user has access."""
+    users, groups = _shares(integration, db_session)
+    return users, sorted(
+        set(groups)
+        | {
+            setting.group_id
+            for setting in load_integration_group_settings(integration.id, db_session)
+            if setting.installation_policy != PluginInstallationPolicy.NOT_AVAILABLE
+        }
+    )
+
+
+def _admin_view(integration: Integration, db_session: Session) -> MCPServerAdminView:
     server = _server_row(integration, db_session)
-    rows = list_integration_plugin_rows([integration.id], db_session)[integration.id]
-    is_public = any(row.in_organization_library for row in rows)
-    users: list[UUID] = []
-    groups: list[int] = []
-    if not is_public:
-        for row in rows:
-            row_users, row_groups = _shares(row.plugin_id, user, db_session)
-            users += [user_id for user_id in row_users if user_id not in users]
-            groups += [group_id for group_id in row_groups if group_id not in groups]
+    is_public = not is_private(integration)
+    users, groups = ([], []) if is_public else _private_access(integration, db_session)
     auth_type, auth_performer = _legacy_auth(integration)
     template = masked_header_template(integration.header_template)
     return MCPServerAdminView(
@@ -363,7 +352,7 @@ def _admin_view(
         groups=groups,
         users=users,
         available_in_craft=server.available_in_craft,
-        plugin_ids=[row.plugin_id for row in rows],
+        integration_id=integration.id,
         last_refreshed_at=server.last_refreshed_at,
         tool_count=count_integration_actions([integration.id], db_session)[
             integration.id
@@ -477,7 +466,7 @@ def get_mcp_server_alias(
     integration = get_viewable_integration(
         user, _alias_integration(server_id, db_session).id, db_session
     )
-    return _admin_view(user, integration, db_session)
+    return _admin_view(integration, db_session)
 
 
 @admin_router.patch("/server/{server_id}")
@@ -519,7 +508,7 @@ def update_mcp_server_alias(
     reload_craft_sessions(
         affected | craft_users_of_integration(integration.id, db_session), db_session
     )
-    return _admin_view(user, integration, db_session)
+    return _admin_view(integration, db_session)
 
 
 @admin_router.delete("/server/{server_id}")

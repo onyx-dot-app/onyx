@@ -5,7 +5,7 @@ import {
 } from "@/lib/connectors/types/source";
 import { flushToolOptions, useToolConfiguration } from "@/lib/tools/hooks";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
-import { effectiveChatPreference } from "@/lib/plugins/chat";
+import { effectiveChatPreference } from "@/lib/tools/chat";
 import type { MinimalAgent } from "@/lib/agents/types";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import type { ChatToolOptions, ToolSnapshot } from "@/lib/tools/types";
@@ -53,24 +53,28 @@ const SIGNED_IN: Pick<User, "id" | "email" | "is_anonymous_user"> = {
 };
 let mockUser: Pick<User, "id" | "email" | "is_anonymous_user"> | null =
   SIGNED_IN;
-// The agent's plugins and the plugins the user turned off for it.
-let mockPluginIds: string[] | null = [];
-let mockDisabledPluginIds: string[] | null = [];
-// The agents whose plugins and preferences the composer read.
+// The agent's integrations and the integrations the user turned off for it.
+let mockIntegrationIds: number[] | null = [];
+let mockDisabledIntegrationIds: number[] | null = [];
+// The agents whose integrations and preferences the composer read.
 let mockReadAgentIds: (number | undefined)[] = [];
-const mockSetPluginsDisabled = jest.fn(() => Promise.resolve());
-jest.mock("@/lib/plugins/hooks", () => ({
-  useAgentPluginIds: (agentId: number | undefined) => {
+const mockSetIntegrationsDisabled = jest.fn(() => Promise.resolve());
+jest.mock("@/lib/integrations/hooks", () => ({
+  useAgentIntegrationIds: (agentId: number | undefined) => {
     mockReadAgentIds.push(agentId);
-    return { pluginIds: mockPluginIds, isLoading: false, error: undefined };
+    return {
+      integrationIds: mockIntegrationIds,
+      isLoading: false,
+      error: undefined,
+    };
   },
-  useAgentPluginPreferences: () => ({
-    loaded: mockDisabledPluginIds !== null,
-    disabledPluginIds: (agentId: number) => {
+  useAgentIntegrationPreferences: () => ({
+    loaded: mockDisabledIntegrationIds !== null,
+    disabledIntegrationIds: (agentId: number) => {
       mockReadAgentIds.push(agentId);
-      return mockDisabledPluginIds;
+      return mockDisabledIntegrationIds;
     },
-    setPluginsDisabled: mockSetPluginsDisabled,
+    setIntegrationsDisabled: mockSetIntegrationsDisabled,
   }),
 }));
 jest.mock("@/providers/UserProvider", () => ({
@@ -83,10 +87,10 @@ beforeEach(() => {
   mockIncognitoEnabled = false;
   mockActiveAgent = undefined;
   mockUser = SIGNED_IN;
-  mockPluginIds = [];
-  mockDisabledPluginIds = [];
+  mockIntegrationIds = [];
+  mockDisabledIntegrationIds = [];
   mockReadAgentIds = [];
-  mockSetPluginsDisabled.mockClear();
+  mockSetIntegrationsDisabled.mockClear();
   echoSaves();
 });
 
@@ -285,12 +289,12 @@ describe("useToolConfiguration: an existing chat", () => {
     });
   });
 
-  test("keeps the saved selection for a send while the plugin catalogs load", () => {
-    mockPluginIds = null;
+  test("keeps the saved selection for a send while the integration catalogs load", () => {
+    mockIntegrationIds = null;
     const saved: ChatToolOptions = {
       allowed: [
         { type: "capability", tool_id: 1 },
-        { type: "plugin", plugin_id: "plugin-1" },
+        { type: "integration", integration_id: 1 },
       ],
       preferred: null,
       internal_search_filters: { ...NO_FILTERS, source_type: ["notion"] },
@@ -601,9 +605,9 @@ test("a tool change saves only the tools, so the saved filters stay as they are"
   expect(result.current.filters.documentSets).toEqual(["Handbook"]);
 });
 
-test("a chat with no saved allow-list follows the agent's plugin choice", () => {
-  mockPluginIds = ["plugin-1", "plugin-2"];
-  mockDisabledPluginIds = ["plugin-1"];
+test("a chat with no saved allow-list follows the agent's integration choice", () => {
+  mockIntegrationIds = [1, 2];
+  mockDisabledIntegrationIds = [1];
   openSavedChats({
     abc: {
       allowed: null,
@@ -614,18 +618,18 @@ test("a chat with no saved allow-list follows the agent's plugin choice", () => 
   const { result } = renderHook(() => useToolConfiguration());
 
   expect(result.current.ready).toBe(true);
-  expect(result.current.isPluginEnabled("plugin-1")).toBe(false);
-  expect(result.current.isPluginEnabled("plugin-2")).toBe(true);
+  expect(result.current.isIntegrationEnabled(1)).toBe(false);
+  expect(result.current.isIntegrationEnabled(2)).toBe(true);
   expect(result.current.allowed).toEqual([
     { type: "capability", tool_id: 1 },
     { type: "capability", tool_id: 2 },
-    { type: "plugin", plugin_id: "plugin-2" },
+    { type: "integration", integration_id: 2 },
   ]);
 });
 
-test("a chat with no saved allow-list waits for the agent's plugin choice", () => {
-  mockPluginIds = ["plugin-1"];
-  mockDisabledPluginIds = null;
+test("a chat with no saved allow-list waits for the agent's integration choice", () => {
+  mockIntegrationIds = [1];
+  mockDisabledIntegrationIds = null;
   openSavedChats({
     abc: {
       allowed: null,
@@ -637,13 +641,13 @@ test("a chat with no saved allow-list waits for the agent's plugin choice", () =
   expect(result.current.ready).toBe(false);
 });
 
-test("a failed plugin catalog leaves the saved plugins of a chat alone", async () => {
-  mockPluginIds = null;
+test("a failed integration catalog leaves the saved integrations of a chat alone", async () => {
+  mockIntegrationIds = null;
   const saved: ChatToolOptions = {
     allowed: [
       { type: "capability", tool_id: 1 },
       { type: "capability", tool_id: 2 },
-      { type: "plugin", plugin_id: "plugin-mcp" },
+      { type: "integration", integration_id: 13 },
     ],
     preferred: null,
     internal_search_filters: NO_FILTERS,
@@ -693,11 +697,11 @@ test("a tool change keeps a saved preferred tool that the composer cannot offer"
   });
 });
 
-test("a saved preferred action stays through a plugin switch and a tool pin releases it", async () => {
-  mockPluginIds = ["plugin-a", "plugin-b"];
+test("a saved preferred action stays through a integration switch and a tool pin releases it", async () => {
+  mockIntegrationIds = [11, 12];
   const action = {
     type: "action",
-    plugin_id: "plugin-a",
+    integration_id: 11,
     action: "create_issue",
   } as const;
   const saved: ChatToolOptions = {
@@ -710,7 +714,7 @@ test("a saved preferred action stays through a plugin switch and a tool pin rele
   const { result } = renderHook(() => useToolConfiguration());
   expect(result.current.preferredAction).toEqual(action);
 
-  act(() => result.current.setPluginEnabled(["plugin-b"], false));
+  act(() => result.current.setIntegrationEnabled([12], false));
   await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
   expect(JSON.parse(String(patchesOf(fetchSpy)[0]![1].body)).preferred).toEqual(
     action
@@ -724,11 +728,11 @@ test("a saved preferred action stays through a plugin switch and a tool pin rele
   expect(result.current.preferredAction).toBeNull();
 });
 
-test("a plugin that is no longer on the agent is off, so its saved action is not sent", () => {
-  mockPluginIds = ["plugin-b"];
+test("a integration that is no longer on the agent is off, so its saved action is not sent", () => {
+  mockIntegrationIds = [12];
   const action = {
     type: "action",
-    plugin_id: "plugin-a",
+    integration_id: 11,
     action: "create_issue",
   } as const;
   openSavedChats({
@@ -739,14 +743,14 @@ test("a plugin that is no longer on the agent is off, so its saved action is not
     },
   });
   const { result } = renderHook(() => useToolConfiguration());
-  expect(result.current.isPluginEnabled("plugin-a")).toBe(false);
-  expect(result.current.isPluginEnabled("plugin-b")).toBe(true);
+  expect(result.current.isIntegrationEnabled(11)).toBe(false);
+  expect(result.current.isIntegrationEnabled(12)).toBe(true);
   expect(
     effectiveChatPreference({
       requestedToolId: result.current.preferredToolId,
       requestedAction: result.current.preferredAction,
       agent: mockActiveAgent,
-      isPluginEnabled: result.current.isPluginEnabled,
+      isIntegrationEnabled: result.current.isIntegrationEnabled,
     })
   ).toBeNull();
 });
@@ -997,62 +1001,91 @@ test("an incognito chat sends its selection and keeps it when the server stores 
   expect(reopened.result.current.disabledToolIds).toEqual([2]);
 });
 
-describe("useToolConfiguration: plugins of the agent", () => {
-  test("a new chat starts with the plugins the user turned off for the agent", () => {
+describe("useToolConfiguration: integrations of the agent", () => {
+  test("a new chat starts with the integrations the user turned off for the agent", () => {
     mockChatId = null;
     mockActiveAgent = AGENT;
-    mockPluginIds = ["plugin-a", "plugin-b"];
-    mockDisabledPluginIds = ["plugin-b"];
+    mockIntegrationIds = [11, 12];
+    mockDisabledIntegrationIds = [12];
     const { result } = renderHook(() => useToolConfiguration(7));
 
     expect(result.current.ready).toBe(true);
-    expect(result.current.isPluginEnabled("plugin-a")).toBe(true);
-    expect(result.current.isPluginEnabled("plugin-b")).toBe(false);
+    expect(result.current.isIntegrationEnabled(11)).toBe(true);
+    expect(result.current.isIntegrationEnabled(12)).toBe(false);
     expect(result.current.allowed).toEqual([
       { type: "capability", tool_id: 1 },
       { type: "capability", tool_id: 2 },
-      { type: "plugin", plugin_id: "plugin-a" },
+      { type: "integration", integration_id: 11 },
     ]);
   });
 
-  test("a new chat holds a send until the saved plugin switches load", () => {
+  test("a send waits until the agent's integrations load", () => {
     mockChatId = null;
     mockActiveAgent = AGENT;
-    mockPluginIds = ["plugin-a"];
-    mockDisabledPluginIds = null;
+    mockIntegrationIds = null;
+    mockDisabledIntegrationIds = [];
     const { result, rerender } = renderHook(() => useToolConfiguration(7));
     expect(result.current.optionsLoaded).toBe(false);
 
-    mockDisabledPluginIds = ["plugin-a"];
+    mockIntegrationIds = [11];
     rerender();
     expect(result.current.optionsLoaded).toBe(true);
-    expect(result.current.isPluginEnabled("plugin-a")).toBe(false);
   });
 
-  test("an agent preview reads and saves the plugins of the previewed agent", () => {
+  test("an anonymous visitor's allow-list keeps the agent's integrations", () => {
+    mockUser = { ...SIGNED_IN, is_anonymous_user: true };
     mockChatId = null;
     mockActiveAgent = AGENT;
-    mockPluginIds = ["plugin-a"];
+    mockIntegrationIds = [11];
+    const { result } = renderHook(() => useToolConfiguration(7));
+    expect(result.current.optionsLoaded).toBe(true);
+    expect(mockReadAgentIds).toContain(7);
+    // Turning off a built-in tool makes an allow-list.
+    act(() => result.current.setToolState(2, () => "disabled"));
+    expect(result.current.allowed).toContainEqual({
+      type: "integration",
+      integration_id: 11,
+    });
+  });
+
+  test("a new chat holds a send until the saved integration switches load", () => {
+    mockChatId = null;
+    mockActiveAgent = AGENT;
+    mockIntegrationIds = [11];
+    mockDisabledIntegrationIds = null;
+    const { result, rerender } = renderHook(() => useToolConfiguration(7));
+    expect(result.current.optionsLoaded).toBe(false);
+
+    mockDisabledIntegrationIds = [11];
+    rerender();
+    expect(result.current.optionsLoaded).toBe(true);
+    expect(result.current.isIntegrationEnabled(11)).toBe(false);
+  });
+
+  test("an agent preview reads and saves the integrations of the previewed agent", () => {
+    mockChatId = null;
+    mockActiveAgent = AGENT;
+    mockIntegrationIds = [11];
     const previewId = AGENT.id + 100;
     const { result } = renderHook(() => useToolConfiguration(previewId));
 
-    act(() => result.current.setPluginEnabled(["plugin-a"], false));
-    expect(mockSetPluginsDisabled).toHaveBeenCalledWith(
+    act(() => result.current.setIntegrationEnabled([11], false));
+    expect(mockSetIntegrationsDisabled).toHaveBeenCalledWith(
       previewId,
-      ["plugin-a"],
+      [11],
       true
     );
     expect(new Set(mockReadAgentIds)).toEqual(new Set([previewId]));
   });
 
-  test("a tool change sends a saved actions list of a plugin back unchanged", async () => {
-    mockPluginIds = ["plugin-a", "plugin-b"];
+  test("a tool change sends a saved actions list of a integration back unchanged", async () => {
+    mockIntegrationIds = [11, 12];
     const saved: ChatToolOptions = {
       allowed: [
         { type: "capability", tool_id: 1 },
         { type: "capability", tool_id: 2 },
-        { type: "plugin", plugin_id: "plugin-a", actions: ["listOrders"] },
-        { type: "plugin", plugin_id: "plugin-b" },
+        { type: "integration", integration_id: 11, actions: ["listOrders"] },
+        { type: "integration", integration_id: 12 },
       ],
       preferred: null,
       internal_search_filters: NO_FILTERS,
@@ -1067,21 +1100,21 @@ describe("useToolConfiguration: plugins of the agent", () => {
     const [, init] = patchesOf(fetchSpy)[0]!;
     expect(JSON.parse(String(init.body)).allowed).toEqual([
       { type: "capability", tool_id: 1 },
-      { type: "plugin", plugin_id: "plugin-a", actions: ["listOrders"] },
-      { type: "plugin", plugin_id: "plugin-b" },
+      { type: "integration", integration_id: 11, actions: ["listOrders"] },
+      { type: "integration", integration_id: 12 },
     ]);
   });
 
   test("a switch in a chat saves the agent choice and the chat's tool options", async () => {
-    mockPluginIds = ["plugin-a", "plugin-b"];
+    mockIntegrationIds = [11, 12];
     const fetchSpy = echoSaves();
     openSavedChats();
     const { result } = renderHook(() => useToolConfiguration());
 
-    act(() => result.current.setPluginEnabled(["plugin-a"], false));
-    expect(mockSetPluginsDisabled).toHaveBeenCalledWith(
+    act(() => result.current.setIntegrationEnabled([11], false));
+    expect(mockSetIntegrationsDisabled).toHaveBeenCalledWith(
       AGENT.id,
-      ["plugin-a"],
+      [11],
       true
     );
     await waitFor(() => expect(patchesOf(fetchSpy)).toHaveLength(1));
@@ -1090,7 +1123,7 @@ describe("useToolConfiguration: plugins of the agent", () => {
     expect(JSON.parse(String(init.body)).allowed).toEqual([
       { type: "capability", tool_id: 1 },
       { type: "capability", tool_id: 2 },
-      { type: "plugin", plugin_id: "plugin-b" },
+      { type: "integration", integration_id: 12 },
     ]);
   });
 });

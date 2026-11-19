@@ -42,7 +42,6 @@ from onyx.skills.models import SkillUsage, UserPastWriteLimit
 from onyx.skills.push import UserSkillsPayload
 from tests.external_dependency_unit.craft.db_helpers import (
     make_sandbox,
-    make_skillless_plugin,
     make_user,
     share_plugin_with_user,
 )
@@ -419,47 +418,6 @@ def test_file_count_limit(
     ]
     assert omission.reason == "files"
     assert omission.files == room.files + 1
-
-
-def test_plugin_with_no_skills_is_not_pushed_or_left_out(
-    db_session: Session,
-    seeded_skill: Callable[..., Plugin],
-    resized: list[UUID],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A user past the limits with a turned-on plugin that has no skills: the
-    push sends nothing for it and the "did not load" list does not name it."""
-    user = make_user(db_session, standard_account=True)
-    db_session.commit()
-    room = _free_room(db_session, user)
-    tag = user.id.hex[:8]
-    filler = seeded_skill(f"rt-nf-filler-{tag}", author_user_id=user.id)
-    left_out = seeded_skill(f"rt-nf-left-{tag}", author_user_id=user.id)
-    plugin = make_skillless_plugin(
-        db_session, author_user_id=user.id, name=f"rt-nf-plugin-{tag}"
-    )
-    _turn_on(db_session, user, plugin.id, _at(4))
-    _turn_on(db_session, user, filler.id, _at(3))
-    _turn_on(db_session, user, left_out.id, _at(2))
-    _set_files(db_session, filler.id, [room.bytes - 50], resized)
-    _set_files(db_session, left_out.id, [1024], resized)
-    sandbox = make_sandbox(db_session, user)
-    db_session.commit()
-    monkeypatch.setattr(push, "get_sandbox_manager", lambda: _RecordingSandboxManager())
-
-    push.push_skills_for_users({user.id}, db_session)
-    db_session.commit()
-
-    db_session.refresh(sandbox)
-    recorded = {item.plugin_id for item in sandbox.skill_omissions}
-    assert left_out.id in recorded
-    assert plugin.id not in recorded
-    payload = push.build_user_skills_payload(user, db_session)
-    assert not any(path.startswith(f"{plugin.name}/") for path in payload.files)
-    [listed] = [
-        item for item in users_past_write_limit(db_session) if item.user_id == user.id
-    ]
-    assert listed.skills_not_loaded == len(recorded)
 
 
 def test_admin_read_counts_skills_that_did_not_load(

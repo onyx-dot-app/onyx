@@ -79,7 +79,7 @@ from onyx.server.query_and_chat.models import (
     ChatMessageDetail,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
-from onyx.tools.models import PluginEntry, ToolOptions
+from onyx.tools.models import IntegrationEntry, ToolOptions
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -1074,7 +1074,7 @@ def set_chat_session_tool_options__no_commit(
         *(
             entry.actions
             for entry in tool_options.allowed or []
-            if isinstance(entry, PluginEntry)
+            if isinstance(entry, IntegrationEntry)
         ),
         filters.source_type if filters else None,
         filters.document_set if filters else None,

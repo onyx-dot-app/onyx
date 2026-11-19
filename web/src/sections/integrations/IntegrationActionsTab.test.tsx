@@ -401,7 +401,7 @@ test("tells the admin to connect an own account for an individual MCP server", a
     screen.queryByRole("button", { name: copy.connectFirst.open })
   ).not.toBeInTheDocument();
   expect(
-    screen.getByRole("button", { name: copy.connectFirst.openPlugins })
+    screen.getByRole("button", { name: copy.connectFirst.openIntegration })
   ).toBeInTheDocument();
 });
 

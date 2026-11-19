@@ -150,7 +150,7 @@ message, and only when the incognito mode allows hooks
 ([[hooks]]). A rejection raises `QUERY_REJECTED`. A regeneration reuses the saved
 user message. A send never changes the chat's saved tool options:
 `chat_session.tool_options` (`tools/models.py:ToolOptions`: `allowed`
-capability and plugin entries, `preferred`, `internal_search_filters`; NULL
+capability and integration entries, `preferred`, `internal_search_filters`; NULL
 means the agent's tools) has one writer, the
 `PATCH /chat/chat-session/{session_id}/tool-options` route
 (`db/chat.py:set_chat_session_tool_options__no_commit`). It checks

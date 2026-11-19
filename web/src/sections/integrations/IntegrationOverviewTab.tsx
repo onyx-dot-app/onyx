@@ -2,23 +2,25 @@
 
 import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
-import { Content, Section } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import type { AdminIntegrationDetail } from "@/lib/integrations/types";
 import { DetailOverview } from "@/sections/customize/CustomizeDetailLayout";
 import { useIntegrationLabels } from "@/sections/integrations/integrationLabels";
+import IntegrationGroupAccess from "@/sections/integrations/IntegrationGroupAccess";
+import IntegrationInstallSetting from "@/sections/integrations/IntegrationInstallSetting";
 
 interface IntegrationOverviewTabProps {
   integration: AdminIntegrationDetail;
 }
 
-/** The description beside the facts of the integration and the plugins that
- * hold it. The page header edits, switches and deletes it. */
+/** The description beside the facts of the integration, its company
+ * install setting and its group settings. The page header edits, switches
+ * and deletes it. */
 export default function IntegrationOverviewTab({
   integration,
 }: IntegrationOverviewTabProps) {
   const t = useTranslations("admin.integrations.detail.overview");
-  const access = useTranslations("admin.integrations.access");
-  const libraryCopy = useTranslations("admin.plugins.library");
+  const installation = useTranslations("admin.integrations.installation");
   const labels = useIntegrationLabels();
 
   return (
@@ -37,6 +39,9 @@ export default function IntegrationOverviewTab({
           ...(integration.created_by_email
             ? [{ label: t("createdBy"), value: integration.created_by_email }]
             : []),
+          ...(integration.access.owner_email
+            ? [{ label: t("owner"), value: integration.access.owner_email }]
+            : []),
           ...(integration.needs_setup
             ? [
                 {
@@ -47,32 +52,19 @@ export default function IntegrationOverviewTab({
             : []),
         ]}
         footer={
-          <Section gap={1} alignItems="stretch" height="auto">
-            <Text as="p" font="secondary-body" color="text-03">
-              {t("plugins.title")}
-            </Text>
-            {integration.plugins.length === 0 ? (
-              <Text as="p" font="main-ui-body" color="text-04">
-                {access("none")}
-              </Text>
-            ) : (
-              integration.plugins.map((plugin) => (
-                <Content
-                  key={plugin.plugin_id}
-                  title={plugin.plugin_name}
-                  description={
-                    plugin.scope === "organization"
-                      ? t("plugins.organization", {
-                          policy: plugin.installation_policy ?? "none",
-                        })
-                      : (plugin.owner_email ?? libraryCopy("personal"))
-                  }
-                />
-              ))
-            )}
-          </Section>
+          <ContentAction
+            font="main-ui-action"
+            title={installation("title")}
+            description={installation("description")}
+            padding={0}
+            fillRight
+            rightChildren={
+              <IntegrationInstallSetting integration={integration} />
+            }
+          />
         }
       />
+      <IntegrationGroupAccess integration={integration} />
     </Section>
   );
 }

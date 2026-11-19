@@ -30,6 +30,8 @@ from onyx.db.models import (
     DocumentSet,
     DocumentSet__UserGroup,
     Integration,
+    Integration__User,
+    Integration__UserGroup,
     LLMProvider,
     LLMProvider__UserGroup,
     MCPServer,
@@ -39,10 +41,8 @@ from onyx.db.models import (
     Persona__UserFile,
     Persona__UserGroup,
     Plugin,
-    Plugin__Integration,
     Plugin__UserGroup,
     PluginSkill,
-    PluginVersion,
     TokenRateLimit,
     User,
     User__UserGroup,
@@ -50,10 +50,6 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.plugin import (
-    get_or_create_organization_library__no_commit,
-    get_or_create_user_uploads__no_commit,
-)
 from onyx.db.skill import replace_skill_shares, set_skill_public_permission
 from onyx.db.users import (
     DEFAULT_ADMIN_GROUP_NAME,
@@ -356,131 +352,109 @@ def test_group_shared_skill_is_published_with_a_free_name_on_a_clash(
         db_session.rollback()
 
 
+def _group_shared_integration(
+    db_session: Session, group: UserGroup, owner: User | None
+) -> Integration:
+    """A private MCP integration that is shared with the group."""
+    server = MCPServer(
+        owner=owner.email if owner is not None else "gone@example.com",
+        name=f"downgrade-{uuid4().hex[:8]}",
+        server_url="https://example.com/mcp",
+        is_public=False,
+    )
+    db_session.add(server)
+    db_session.flush()
+    integration = Integration(
+        kind=IntegrationKind.MCP,
+        name="downgrade-mcp",
+        auth_mode=IntegrationAuthMode.NONE,
+        mcp_server_id=server.id,
+        owner_user_id=owner.id if owner is not None else None,
+    )
+    db_session.add(integration)
+    db_session.flush()
+    db_session.add(
+        Integration__UserGroup(
+            integration_id=integration.id,
+            user_group_id=group.id,
+            permission=SkillSharePermission.VIEWER,
+        )
+    )
+    db_session.flush()
+    return integration
+
+
+def _user_shares(db_session: Session, integration: Integration) -> set[UUID]:
+    return set(
+        db_session.scalars(
+            select(Integration__User.user_id).where(
+                Integration__User.integration_id == integration.id
+            )
+        )
+    )
+
+
 @pytest.mark.usefixtures("tenant_context")
-def test_group_shared_integration_is_published(db_session: Session) -> None:
-    """A plugin that holds only integrations has no skill row. Shared with a
-    group, it is published too, so the members keep the integration."""
+@pytest.mark.parametrize("has_owner", [True, False])
+@pytest.mark.parametrize(
+    "company",
+    [PluginInstallationPolicy.NOT_AVAILABLE, PluginInstallationPolicy.AVAILABLE],
+)
+def test_group_shared_integration_gives_its_members_a_share(
+    db_session: Session, has_owner: bool, company: PluginInstallationPolicy
+) -> None:
+    """The members of a removed group keep the integration through a user
+    share. The company setting does not change, so an integration that an
+    admin closed stays closed and none opens to the organization."""
     try:
         owner = _make_user(db_session, in_basic=True)
-        group = _make_group(db_session, [owner])
-        plugin_id = uuid4()
-        db_session.add(
-            Plugin(
-                id=plugin_id,
-                name=f"downgrade-mcp-{plugin_id.hex[:8]}",
-                description="",
-                marketplace_id=get_or_create_user_uploads__no_commit(
-                    owner.id, db_session
-                ),
-                author_user_id=owner.id,
-                current_version_id=plugin_id,
-            )
+        member = _make_user(db_session, in_basic=True)
+        group = _make_group(db_session, [member])
+        integration = _group_shared_integration(
+            db_session, group, owner if has_owner else None
         )
-        db_session.flush()
-        db_session.add(
-            PluginVersion(id=plugin_id, plugin_id=plugin_id, version_number=1)
-        )
-        server = MCPServer(
-            owner=owner.email,
-            name=f"downgrade-{plugin_id.hex[:8]}",
-            server_url="https://example.com/mcp",
-            is_public=False,
-        )
-        db_session.add(server)
-        db_session.flush()
-        integration = Integration(
-            kind=IntegrationKind.MCP,
-            name="downgrade-mcp",
-            auth_mode=IntegrationAuthMode.NONE,
-            mcp_server_id=server.id,
-        )
-        db_session.add(integration)
-        db_session.flush()
-        db_session.add(
-            Plugin__Integration(plugin_id=plugin_id, integration_id=integration.id)
-        )
-        db_session.add(
-            Plugin__UserGroup(
-                plugin_id=plugin_id,
-                user_group_id=group.id,
-                permission=SkillSharePermission.VIEWER,
-            )
-        )
+        integration.installation_policy = company
         db_session.flush()
 
         remove_custom_user_groups__no_commit(db_session)
 
-        plugin = db_session.get(Plugin, plugin_id)
-        assert plugin is not None
-        db_session.refresh(plugin)
-        assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
-        assert plugin.published_version_id == plugin.current_version_id
+        db_session.refresh(integration)
+        assert integration.installation_policy == company
+        assert _user_shares(db_session, integration) == {member.id}
     finally:
         db_session.rollback()
 
 
 @pytest.mark.usefixtures("tenant_context")
-def test_group_shared_library_integration_stays_not_available(
-    db_session: Session,
-) -> None:
-    """A Not available integration in the Organization library stays Not
-    available when its groups go. The downgrade does not open it to the
-    whole organization."""
+def test_a_group_setting_gives_its_members_a_share(db_session: Session) -> None:
+    """A group row with no share but an Available setting gave its members
+    access, so they keep it. A Not available setting gives none."""
     try:
-        owner = _make_user(db_session, in_basic=True)
-        group = _make_group(db_session, [owner])
-        plugin_id = uuid4()
+        member = _make_user(db_session, in_basic=True)
+        open_group = _make_group(db_session, [member])
+        closed_member = _make_user(db_session, in_basic=True)
+        closed_group = _make_group(db_session, [closed_member])
+        integration = _group_shared_integration(db_session, open_group, None)
+        db_session.query(Integration__UserGroup).filter_by(
+            integration_id=integration.id
+        ).update(
+            {
+                "permission": None,
+                "installation_policy": PluginInstallationPolicy.AVAILABLE,
+            }
+        )
         db_session.add(
-            Plugin(
-                id=plugin_id,
-                name=f"downgrade-mcp-{plugin_id.hex[:8]}",
-                description="",
-                marketplace_id=get_or_create_organization_library__no_commit(
-                    db_session
-                ),
+            Integration__UserGroup(
+                integration_id=integration.id,
+                user_group_id=closed_group.id,
                 installation_policy=PluginInstallationPolicy.NOT_AVAILABLE,
-                current_version_id=plugin_id,
-                published_version_id=plugin_id,
-            )
-        )
-        db_session.flush()
-        db_session.add(
-            PluginVersion(id=plugin_id, plugin_id=plugin_id, version_number=1)
-        )
-        server = MCPServer(
-            owner=owner.email,
-            name=f"downgrade-{plugin_id.hex[:8]}",
-            server_url="https://example.com/mcp",
-            is_public=False,
-        )
-        db_session.add(server)
-        db_session.flush()
-        integration = Integration(
-            kind=IntegrationKind.MCP,
-            name="downgrade-mcp",
-            auth_mode=IntegrationAuthMode.NONE,
-            mcp_server_id=server.id,
-        )
-        db_session.add(integration)
-        db_session.flush()
-        db_session.add(
-            Plugin__Integration(plugin_id=plugin_id, integration_id=integration.id)
-        )
-        db_session.add(
-            Plugin__UserGroup(
-                plugin_id=plugin_id,
-                user_group_id=group.id,
-                permission=SkillSharePermission.VIEWER,
             )
         )
         db_session.flush()
 
         remove_custom_user_groups__no_commit(db_session)
 
-        plugin = db_session.get(Plugin, plugin_id)
-        assert plugin is not None
-        db_session.refresh(plugin)
-        assert plugin.installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
+        assert _user_shares(db_session, integration) == {member.id}
     finally:
         db_session.rollback()
 

@@ -102,10 +102,32 @@ class AuthConfigResponse(BaseModel):
 
 
 class UserSpecificAssistantPreference(BaseModel):
-    # The built-in tools and the plugins that the user turned off for the
-    # agent. None on a write keeps the saved list.
+    # The built-in tools and the integrations that the user turned off for
+    # the agent. None on a write keeps the saved list.
     disabled_tool_ids: list[int] | None = None
-    disabled_plugin_ids: list[UUID] | None = None
+    disabled_integration_ids: list[int] | None = None
+    # The integration ids as text, for the released mobile app. A write
+    # reads it when disabled_integration_ids is not sent and each value is
+    # an integration id.
+    disabled_plugin_ids: list[str] | None = None
+
+    @model_validator(mode="after")
+    def _one_list_of_integrations(self) -> "UserSpecificAssistantPreference":
+        # A plugin id from before the upgrade (a UUID) maps to no integration.
+        # Then the write keeps the saved list rather than replace it in part.
+        if (
+            self.disabled_integration_ids is None
+            and self.disabled_plugin_ids is not None
+            and all(value.isdecimal() for value in self.disabled_plugin_ids)
+        ):
+            self.disabled_integration_ids = [
+                int(value) for value in self.disabled_plugin_ids
+            ]
+        if self.disabled_integration_ids is not None:
+            self.disabled_plugin_ids = [
+                str(value) for value in self.disabled_integration_ids
+            ]
+        return self
 
 
 UserSpecificAssistantPreferences = dict[int, UserSpecificAssistantPreference]

@@ -10359,47 +10359,16 @@
         }
       }
     },
-    "plugins": {
-      "title": "Plugins",
-      "description": "A plugin packages skills and integrations that people turn on together. This list shows the plugins that hold integrations. Manage skills on the Skills page.",
-      "search": "Search plugins",
-      "loadFailed": "Could not load the plugins.",
-      "columns": {
-        "name": "Plugin",
-        "library": "Library",
-        "installation": "Install Setting",
-        "integrations": "Integrations"
-      },
-      "library": {
-        "organization": "Organization library",
-        "personal": "Personal upload"
-      },
-      "installationSelect": "Install setting of {name}",
-      "installationSaved": "{name} is now {policy}.",
-      "installationSaveFailed": "Could not save the install setting.",
-      "openIntegration": "Open {name}",
-      "empty": {
-        "title": "No plugins with integrations",
-        "description": "Add an integration. Onyx makes a plugin that holds it."
-      },
-      "contents": "{count, plural, one {# integration} other {# integrations}}",
-      "filters": {
-        "label": "Library",
-        "all": "All libraries",
-        "organization": "Organization library",
-        "personal": "Personal uploads"
-      }
-    },
     "integrations": {
       "title": "Integrations",
-      "description": "Connect MCP servers and apps. A plugin holds each integration and gives people access to it.",
+      "description": "Connect MCP servers and apps. Each integration has an owner, an install setting and its own shares.",
       "search": "Search integrations",
       "open": "Open {name}",
       "loadFailed": "Could not load the integrations.",
       "add": {
         "label": "Add",
         "title": "Add an Integration",
-        "description": "Connect a service so people can use it in chat and Craft. Onyx puts each integration in its own plugin.",
+        "description": "Connect a service so people can use it in chat and Craft.",
         "created": "Added {name}.",
         "createFailed": "Could not add the integration.",
         "openapi": {
@@ -10462,8 +10431,8 @@
           "title": "Owner",
           "personal": "For me",
           "organization": "For the organization",
-          "personalDescription": "Onyx puts the integration in a plugin in your My uploads. You can share the plugin later.",
-          "organizationDescription": "Onyx puts the integration in a plugin in the Organization library."
+          "personalDescription": "Only you can use the integration. You can share it later.",
+          "organizationDescription": "Each user in the organization can turn the integration on."
         },
         "submit": "Add",
         "adding": "Adding…",
@@ -10501,8 +10470,8 @@
         "name": "Name",
         "type": "Type",
         "signIn": "Sign-in",
-        "access": "Access",
-        "status": "Status"
+        "status": "Status",
+        "installation": "Install Setting"
       },
       "empty": {
         "title": "No integrations",
@@ -10517,13 +10486,6 @@
         "custom": "Custom app"
       },
       "signInSummary": "{mode, select, none {No sign-in} shared {{method, select, oauth2 {Organization account (OAuth)} api_key {Organization API key} onyx_login {Onyx login} managed {Managed by Onyx} other {Organization account}}} individual {{method, select, oauth2 {Each user (OAuth)} api_key {Each user (API key)} onyx_login {Onyx login} managed {Managed by Onyx} other {Each user}}} other {Unknown}}",
-      "access": {
-        "none": "Not in a plugin",
-        "many": "{count, plural, one {# plugin} other {# plugins}}",
-        "organization": "{plugin} (Organization library)",
-        "personal": "{plugin} ({owner})",
-        "personalOwner": "personal upload"
-      },
       "status": {
         "needsSetup": "Needs setup",
         "off": "Off",
@@ -10603,10 +10565,6 @@
           "createdBy": "Added by",
           "needsSetup": "Needs setup",
           "needsSetupDefault": "Finish the sign-in settings on the Configuration tab.",
-          "plugins": {
-            "title": "Plugins",
-            "organization": "{policy, select, REQUIRED {Organization library, required} DEFAULT {Organization library, on by default} AVAILABLE {Organization library, available} NOT_AVAILABLE {Organization library, not available} other {Organization library}}"
-          },
           "enabled": {
             "title": "Enabled",
             "description": "When this is off, no agent or user can use the integration."
@@ -10614,7 +10572,7 @@
           "delete": {
             "label": "Delete",
             "confirmTitle": "Delete {name}?",
-            "confirmDescription": "Onyx removes the integration from each plugin and deletes its connections and action settings. You cannot undo this.",
+            "confirmDescription": "Onyx deletes the integration with its connections and action settings, and removes it from each agent and task. You cannot undo this.",
             "confirm": "Delete"
           },
           "deleted": "Deleted {name}.",
@@ -10632,7 +10590,8 @@
             "saveFailed": "Could not save the name and description."
           },
           "description": "Description",
-          "menu": "More actions"
+          "menu": "More actions",
+          "owner": "Owner"
         },
         "configuration": {
           "readOnly": "You can see this integration. You cannot change it.",
@@ -10702,10 +10661,23 @@
             "title": "Connect the server first",
             "description": "Onyx loads the actions of an MCP server after the server is connected.",
             "open": "Open Configuration",
-            "individualDescription": "Each user signs in to this server. Connect your own account on the Plugins page, then click Refresh.",
-            "openPlugins": "Open Plugins"
+            "individualDescription": "Each user signs in to this server. Connect your own account on the integration page, then click Refresh.",
+            "openIntegration": "Open Integration"
           }
         }
+      },
+      "installation": {
+        "select": "Install setting of {name}",
+        "saved": "{name} is now {policy}.",
+        "saveFailed": "Could not save the install setting.",
+        "title": "Install Setting",
+        "description": "Who gets this integration. Not available keeps it private: only its owner, the people it is shared with and the groups with their own setting use it. Remove those group settings to limit it to the owner and the shares.",
+        "notAvailable": "Private. Only the owner, the people it is shared with and the groups with their own setting use it."
+      },
+      "ownedBy": "Owned by {owner}",
+      "groupAccess": {
+        "saved": "Group settings of {name} saved.",
+        "saveFailed": "Could not save the group setting."
       }
     }
   },
@@ -10826,52 +10798,6 @@
       "page": {
         "ariaLabel": "Agents Editor Page"
       },
-      "plugins": {
-        "askHint": "To run this with no prompt, change the agent setting, an admin sets it to Allow on the integration, or each user picks Always allow.",
-        "askHintAdminOnly": "To run this with no prompt, an admin sets it to Allow on the integration.",
-        "askHintAgent": "To run this with no prompt, change the agent setting, or each user picks Always allow.",
-        "askHintAgentOnly": "To run this with no prompt, change the agent setting.",
-        "choice": {
-          "inherit": "Use the integration setting",
-          "agentDefault": "Use the agent default"
-        },
-        "default": {
-          "description": "Applies to each action with no setting of its own, also to actions that the integration adds later.",
-          "title": "Default for Other Actions"
-        },
-        "description": "Give the agent plugins. Each action uses the integration setting unless you pick another one.",
-        "effective": "{policy, select, allow {Allows} ask {Asks} other {Blocked}} ({source, select, integration {integration setting} agentDefault {agent default} other {agent setting}})",
-        "empty": "No plugins with integrations are available to you.",
-        "loadFailed": "Could not load the plugins.",
-        "lock": {
-          "adminBlocked": "Allow is not available: an admin blocked this action.",
-          "alwaysAsks": "Allow is not available: Craft asks for approval for each of these requests.",
-          "adminFinal": "Allow is not available: the admin setting of this integration is final.",
-          "defaultFinal": "Allow is not available: the admin settings of these integrations are final."
-        },
-        "noActions": "This integration has no actions yet.",
-        "notVisible": "You cannot see the actions of this plugin. Its settings stay as they are.",
-        "title": "Plugins",
-        "add": {
-          "placeholder": "Add a plugin"
-        },
-        "remove": {
-          "ariaLabel": "Remove {plugin}"
-        },
-        "retry": {
-          "label": "Try again"
-        },
-        "actionSetting": {
-          "label": "Setting for {action}"
-        },
-        "defaultSetting": {
-          "label": "Default setting for {plugin}"
-        },
-        "openIntegration": {
-          "label": "Open {integration} actions"
-        },
-        "stricterPlugin": "The {plugin} plugin of this agent sets a stricter setting for this action."
-      },
       "prompts": {
         "instructions": {
           "description": "Add instructions to tailor the response for this agent.",
@@ -10963,6 +10889,51 @@
       },
       "warnings": {
         "openUrl": "Web Search without the ability to open URLs can lead to significantly worse web based results."
+      },
+      "integrations": {
+        "askHint": "To run this with no prompt, change the agent setting, an admin sets it to Allow on the integration, or each user picks Always allow.",
+        "askHintAdminOnly": "To run this with no prompt, an admin sets it to Allow on the integration.",
+        "askHintAgent": "To run this with no prompt, change the agent setting, or each user picks Always allow.",
+        "askHintAgentOnly": "To run this with no prompt, change the agent setting.",
+        "choice": {
+          "inherit": "Use the integration setting",
+          "agentDefault": "Use the agent default"
+        },
+        "default": {
+          "description": "Applies to each action with no setting of its own, also to actions that the integration adds later.",
+          "title": "Default for Other Actions"
+        },
+        "description": "Give the agent integrations. Each action uses the integration setting unless you pick another one.",
+        "effective": "{policy, select, allow {Allows} ask {Asks} other {Blocked}} ({source, select, integration {integration setting} agentDefault {agent default} other {agent setting}})",
+        "empty": "No integrations are available to you.",
+        "loadFailed": "Could not load the integrations.",
+        "lock": {
+          "adminBlocked": "Allow is not available: an admin blocked this action.",
+          "alwaysAsks": "Allow is not available: Craft asks for approval for each of these requests.",
+          "adminFinal": "Allow is not available: the admin setting of this integration is final."
+        },
+        "noActions": "This integration has no actions yet.",
+        "notVisible": "You cannot see the actions of this integration. Its settings stay as they are.",
+        "title": "Integrations",
+        "add": {
+          "placeholder": "Add an integration"
+        },
+        "remove": {
+          "ariaLabel": "Remove {integration}"
+        },
+        "retry": {
+          "label": "Try again"
+        },
+        "actionSetting": {
+          "label": "Setting for {action}"
+        },
+        "defaultSetting": {
+          "label": "Default setting for {integration}"
+        },
+        "openIntegration": {
+          "label": "Open {integration} actions"
+        },
+        "sharedWider": "Some people who can use this agent cannot use {integration}. Their chats run without it. Share {integration} with them to give them access."
       }
     },
     "filters": {
@@ -11103,7 +11074,8 @@
           "empty": {
             "title": "No Actions"
           },
-          "title": "Actions & Tools"
+          "title": "Actions & Tools",
+          "noAccess": "You cannot use this integration. A chat with this agent runs without it."
         },
         "conversationStarters": {
           "title": "Conversation Starters"
@@ -15106,7 +15078,7 @@
       "appTitle": "{name} Approval settings",
       "title": "Approval settings",
       "personalDescription": "These settings control whether actions run automatically or require approval in Craft conversations, new tasks, and MCP tool calls in chat; existing tasks keep their own settings.",
-      "taskDescription": "Choose the plugins this task can use, then manage which actions run automatically. Changes apply only to this task.",
+      "taskDescription": "Choose the integrations this task can use, then manage which actions run automatically. Changes apply only to this task.",
       "userManagement": "Let users manage approval settings",
       "userManagementDescription": "Users can change approval settings for available actions.",
       "loading": "Loading approval settings…",
@@ -15120,9 +15092,9 @@
       "enableAppForTask": "Enable {app} for this task",
       "enabledForTask": "Enabled for this task",
       "disabledForTask": "Disabled for this task",
-      "taskAppsTitle": "Plugins",
-      "taskAccessTitle": "Plugin access",
-      "noEnabledApps": "No plugins enabled for this task.",
+      "taskAppsTitle": "Integrations",
+      "taskAccessTitle": "Integration Access",
+      "noEnabledApps": "No integrations turned on for this task.",
       "actionPolicies": "Approval settings",
       "manageActions": "Manage actions",
       "taskModalDescription": "Changes apply when you save the task. Workspace restrictions always apply.",
@@ -15133,8 +15105,6 @@
       "saveChanges": "Save changes",
       "resetDefaults": "Reset all to defaults",
       "resetAll": "Reset all to workspace defaults",
-      "newTaskPluginsDescription": "Turn on the plugins this task can use. Each action uses its integration setting until you change it.",
-      "emptyPlugins": "No plugins with integrations are available.",
       "needsSignIn": "{name} needs sign-in.",
       "taskPolicyCounts": "{allow} allow · {ask} ask · {blocked} blocked",
       "actionSetting": "Setting for {action}",
@@ -15144,7 +15114,10 @@
         "allow": "Allow",
         "ask": "Ask",
         "blocked": "Blocked"
-      }
+      },
+      "newTaskIntegrationsDescription": "Turn on the integrations this task can use. Each action uses its integration setting until you change it.",
+      "emptyIntegrations": "No integrations are available.",
+      "notRunnable": "Craft cannot run {name} now, so the task skips it."
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, one {# skill did not load} other {# skills did not load}}",
@@ -16125,9 +16098,6 @@
         "llmGateway": {
           "label": "LLM Gateway"
         },
-        "plugins": {
-          "label": "Plugins"
-        },
         "plansAndBilling": {
           "label": "Plans & Billing"
         },
@@ -16978,7 +16948,6 @@
         "tabs": {
           "overview": "Overview",
           "skills": "Skills",
-          "integrations": "Integrations",
           "versions": "Versions"
         },
         "overview": {
@@ -16986,7 +16955,6 @@
           "location": "Location",
           "owner": "Owner",
           "skills": "Skills",
-          "integrations": "Integrations",
           "description": "Description"
         },
         "skills": {
@@ -16998,20 +16966,8 @@
           "description": "When this is on, the default agent can use this plugin.",
           "label": "Use {name}",
           "required": "Your admin made this plugin required. You cannot turn it off.",
-          "notAvailable": "Your admin made this plugin not available.",
           "unavailable": "You cannot turn this plugin on or off.",
           "failed": "Could not change the plugin."
-        },
-        "share": {
-          "label": "Share"
-        },
-        "publish": {
-          "label": "Publish",
-          "blocked": "Only a user with the organization-wide Manage Actions permission can publish a plugin that holds an integration.",
-          "confirmTitle": "Publish {name}?",
-          "confirmMessage": "The plugin moves to the Organization library. You cannot undo this. Admins then set its install setting.",
-          "done": "{name} is now in the Organization library.",
-          "failed": "Could not publish the plugin."
         }
       },
       "connection": {
@@ -17070,49 +17026,30 @@
         "invalidLink": "This sign-in link is not valid. Start the sign-in again.",
         "failed": "The sign-in did not finish. Try again.",
         "back": {
-          "label": "Back to plugins"
+          "label": "Back to integrations"
         }
-      },
-      "search": {
-        "placeholder": "Search plugins"
-      },
-      "share": {
-        "title": "Share {name}",
-        "description": "Give people and groups access to this plugin.",
-        "sharedSignIn": "{names} uses one account. People with access use the account that you connected.",
-        "loadFailed": "Could not load the people with access.",
-        "empty": "Only you have access.",
-        "remove": {
-          "label": "Remove {name}"
-        },
-        "cancel": {
-          "label": "Cancel"
-        },
-        "submit": {
-          "label": "Save",
-          "pendingLabel": "Saving..."
-        },
-        "saved": "Saved the access of {name}.",
-        "failed": "Could not save the access."
       }
     },
     "chat": {
       "popover": {
-        "empty": "This agent has no plugins with integrations.",
-        "searchEmpty": "No plugins match your search.",
-        "loading": "Loading plugins",
-        "loadError": "Some plugins could not load. Try again.",
+        "empty": "This agent has no integrations.",
+        "searchEmpty": "No integrations match your search.",
+        "loading": "Loading integrations",
+        "loadError": "Some integrations could not load. Try again.",
         "trigger": {
-          "label": "Plugins"
+          "label": "Integrations"
         },
         "retry": {
           "label": "Try again"
         },
         "browse": {
-          "label": "Browse plugins"
+          "label": "Browse integrations"
         },
         "toggle": {
           "label": "Use {name} with this agent"
+        },
+        "search": {
+          "placeholder": "Search integrations"
         }
       },
       "connectPrompt": {
@@ -17130,7 +17067,63 @@
     }
   },
   "integrations": {
-    "connectionState": "{state, select, connected {Connected} not_connected {Not connected} needs_reconnect {Needs reconnect} not_set_up {Not set up} other {Unknown}}"
+    "connectionState": "{state, select, connected {Connected} not_connected {Not connected} needs_reconnect {Needs reconnect} not_set_up {Not set up} other {Unknown}}",
+    "share": {
+      "title": "Share {name}",
+      "description": "Give specific people access to use this integration. A share gives use only.",
+      "sharedSignIn": "{name} uses one account. People with access use the account that you connected.",
+      "loadFailed": "Could not load the people with access.",
+      "empty": "Only you have access.",
+      "remove": {
+        "label": "Remove {name}"
+      },
+      "cancel": {
+        "label": "Cancel"
+      },
+      "submit": {
+        "label": "Save",
+        "pendingLabel": "Saving..."
+      },
+      "saved": "Saved the access of {name}.",
+      "failed": "Could not save the access."
+    },
+    "memberState": {
+      "on": {
+        "label": "On"
+      },
+      "turn_on": {
+        "label": "Turn on"
+      },
+      "sign_in": {
+        "label": "Sign in"
+      },
+      "no_access": {
+        "label": "No access",
+        "reason": "No access: this integration is not shared with you.",
+        "reasonOwner": "No access: {owner} has not shared it with you."
+      },
+      "turned_off": {
+        "label": "Turned off",
+        "reason": "Turned off by an admin."
+      },
+      "switch": {
+        "label": "Use {name}",
+        "required": "Your admin made this integration required. You cannot turn it off.",
+        "failed": "Could not change the integration."
+      }
+    },
+    "menu": {
+      "label": "More actions for {name}",
+      "share": "Share",
+      "publish": {
+        "label": "Publish to Org",
+        "blocked": "Only a user with the organization-wide Manage Actions permission can publish an integration.",
+        "confirmTitle": "Publish {name} to the organization?",
+        "confirmMessage": "Each user in the organization can then turn it on. Admins set its install setting. The people you shared it with keep access.",
+        "done": "{name} is now available to the organization.",
+        "failed": "Could not publish the integration."
+      }
+    }
   },
   "customize": {
     "title": "Customize",
@@ -17225,22 +17218,20 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, =0 {} one {1 skill} other {{skills} skills}}{both, select, yes { · } other {}}{integrations, plural, =0 {} one {1 integration} other {{integrations} integrations}}",
-      "needsSignIn": "{count, plural, one {# needs sign-in} other {# need sign-in}}",
+      "contents": "{skills, plural, one {1 skill} other {{skills} skills}}",
       "loadFailed": "Could not load your plugins.",
-      "switchFailed": "Could not change the plugin.",
       "filter": {
         "all": "All plugins"
       },
       "empty": {
         "title": "No plugins yet",
-        "description": "Create a skill or add an integration. Each one is a plugin."
+        "description": "Create a skill. Each skill is a plugin."
       },
       "noMatches": {
         "title": "No matching plugins",
         "clear": "Show all plugins"
       },
-      "intro": "A plugin packages skills and integrations that you turn on together. Each skill and integration you add comes in its own plugin."
+      "intro": "A plugin packages skills that you turn on together. Each skill you add comes in its own plugin. Integrations are on the Integrations tab."
     },
     "skillPage": {
       "title": "Skill",
@@ -17315,7 +17306,14 @@
         "type": "Type",
         "signIn": "Sign-in",
         "url": "Server URL",
-        "plugins": "In plugins"
+        "owner": "Owner",
+        "organization": "Organization",
+        "status": "Status",
+        "switch": {
+          "title": "Use This Integration",
+          "description": "When this is on, you can use it in chats and in Craft.",
+          "required": "Your admin made this integration required. You cannot turn it off."
+        }
       },
       "configuration": {
         "description": "{mode, select, individual {Your connection to this integration. Only you use it.} shared {The account of this integration. Everyone with access uses it.} other {This integration needs no sign-in.}}"
@@ -17323,8 +17321,7 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "Skills · {count}",
-        "integrations": "Integrations · {count}"
+        "skills": "Skills · {count}"
       }
     },
     "search": "Search"

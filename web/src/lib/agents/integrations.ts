@@ -1,4 +1,7 @@
-import type { AgentPluginInput, AgentPluginLink } from "@/lib/agents/types";
+import type {
+  AgentIntegrationInput,
+  AgentIntegrationLink,
+} from "@/lib/agents/types";
 import type {
   AgentCatalogIntegration,
   IntegrationAction,
@@ -6,29 +9,33 @@ import type {
   PolicyValue,
 } from "@/lib/integrations/types";
 
-/** One plugin of the agent editor form. `actions` holds the actions with a
+/** One integration of the agent editor form. `actions` holds the actions with a
  * setting of their own; an action with no entry uses `default`. An entry of
  * `inherit` is not the same as no entry: a migrated agent has a `blocked`
  * default with `inherit` for the tools it used. */
-export interface AgentPluginDraft {
-  plugin_id: string;
-  plugin_name: string;
+export interface AgentIntegrationDraft {
+  integration_id: number;
+  integration_name: string;
   default: LinkValue;
   actions: Record<string, LinkValue>;
 }
 
-export function draftFromLink(link: AgentPluginLink): AgentPluginDraft {
+export function draftFromLink(
+  link: AgentIntegrationLink
+): AgentIntegrationDraft {
   return {
-    plugin_id: link.plugin_id,
-    plugin_name: link.plugin_name,
+    integration_id: link.integration_id,
+    integration_name: link.integration_name,
     default: link.action_settings.default ?? "inherit",
     actions: { ...link.action_settings.actions },
   };
 }
 
-export function toPluginInput(draft: AgentPluginDraft): AgentPluginInput {
+export function toIntegrationInput(
+  draft: AgentIntegrationDraft
+): AgentIntegrationInput {
   return {
-    plugin_id: draft.plugin_id,
+    integration_id: draft.integration_id,
     action_settings: {
       ...(draft.default !== "inherit" && { default: draft.default }),
       ...(Object.keys(draft.actions).length > 0 && { actions: draft.actions }),
@@ -39,7 +46,7 @@ export function toPluginInput(draft: AgentPluginDraft): AgentPluginInput {
 /** The action's own setting in the draft, if any. An action key can name an
  * Object member, such as `constructor`. */
 export function ownSetting(
-  draft: AgentPluginDraft,
+  draft: AgentIntegrationDraft,
   key: string
 ): LinkValue | undefined {
   return Object.hasOwn(draft.actions, key) ? draft.actions[key] : undefined;
@@ -65,18 +72,12 @@ export interface EffectiveSetting {
   source: SettingSource;
 }
 
-const STRICTNESS: Record<PolicyValue, number> = {
-  allow: 0,
-  ask: 1,
-  blocked: 2,
-};
-
 /** The value that applies to the action for this agent, before the saved
  * choice of a user. Follows the backend policy order. */
 export function effectiveSetting(
   integration: AgentCatalogIntegration,
   action: IntegrationAction,
-  draft: AgentPluginDraft
+  draft: AgentIntegrationDraft
 ): EffectiveSetting {
   const own = ownSetting(draft, action.key);
   const link = own ?? draft.default;
@@ -98,26 +99,4 @@ export function effectiveSetting(
         ? fromIntegration
         : { policy: "allow", source };
   }
-}
-
-/** The plugin of the agent whose setting is stricter for the action than
- * the setting of `draft`, if any. The backend applies the strictest link of
- * the plugins that hold the integration. */
-export function stricterPlugin(
-  integration: AgentCatalogIntegration,
-  action: IntegrationAction,
-  draft: AgentPluginDraft,
-  others: readonly AgentPluginDraft[]
-): { draft: AgentPluginDraft; setting: EffectiveSetting } | null {
-  let strictest: { draft: AgentPluginDraft; setting: EffectiveSetting } | null =
-    null;
-  let floor = STRICTNESS[effectiveSetting(integration, action, draft).policy];
-  for (const other of others) {
-    const setting = effectiveSetting(integration, action, other);
-    if (STRICTNESS[setting.policy] > floor) {
-      strictest = { draft: other, setting };
-      floor = STRICTNESS[setting.policy];
-    }
-  }
-  return strictest;
 }

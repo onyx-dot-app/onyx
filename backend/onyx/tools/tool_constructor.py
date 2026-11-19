@@ -411,13 +411,15 @@ def _construct_tools_impl(
         user,
         IntegrationChatRequest(
             persona_id=configuration.persona_id,
-            plugin_links=configuration.plugin_links,
+            integration_links=configuration.integration_links,
             approval_mode=approval_mode,
             chat_session_id=custom_tool_config.chat_session_id,
             message_id=custom_tool_config.message_id,
             additional_headers=custom_tool_config.additional_headers or {},
             mcp_headers=custom_tool_config.mcp_headers,
-            allowed_plugins=tool_options.allowed_plugins() if tool_options else None,
+            allowed_integrations=(
+                tool_options.allowed_integrations() if tool_options else None
+            ),
         ),
     )
     return tools + integration_tools

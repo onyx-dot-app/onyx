@@ -106,10 +106,10 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
 ```
 
 **Recognition.** `sandbox_proxy/request_evaluator.py:IntegrationRequestEvaluator`
-loads the integrations the sandbox owner can use. These are the enabled
-integrations of the plugins that the user can see and has turned on. A
-scheduled run uses only the integrations of the task plugins that the owner
-can see, on or off. `GateAddon._running_task_id` finds the task from the
+loads the integrations the sandbox owner can use. These are the integrations
+that are on for the user ([[mcp-and-custom-tools]] has the access rule). A
+scheduled run uses only the enabled integrations of the task that the
+owner has access to, also those the owner turned off. `GateAddon._running_task_id` finds the task from the
 session tag in one query. `sandbox_proxy/usable_integrations.py:UsableIntegrations`
 caches the integration ids of each user for 30 seconds, and the evaluator and
 the resolver share it. It also caches, for 30 seconds per tenant, one
@@ -139,13 +139,13 @@ name.
 **Policy precedence.** `integrations/craft.py:resolve_craft_action_policies`
 calls the one policy function (`integrations/policy.py:resolve_action_policies`)
 with the interactive approval mode and the stored actions, so Ask keeps the
-approval wait. An interactive session and the task catalog pass one `None`
-link, which inherits each action; an empty list would block each action. A
-scheduled run uses the
-`action_settings` of each `scheduled_task__plugin` row whose plugin holds the
-integration, and the strictest result wins; an integration that no plugin of
-the task holds is Blocked. `integrations/craft.py:load_task_plugins` reads the
-task plugins and their integrations once; the Craft MCP config uses that one
+approval wait. An interactive session and the task catalog pass empty link
+settings, which inherit each action; no link (`None`) would block each
+action. A scheduled run uses the
+`action_settings` of the `scheduled_task__integration` row of the
+integration; an integration that the task does not have is Blocked.
+`integrations/craft.py:load_task_integrations` reads the
+task integrations once; the Craft MCP config uses that one
 `TaskPlugins` for its integration list and the settings of each integration. The gate maps Allow, Ask and Blocked to the
 `ActionPolicy` values that approval rows store (`sandbox_proxy/addons/gate.py:resolve_gate_policies`),
 then forces `unspecified` on an API integration to Ask unless it resolved to
@@ -181,11 +181,12 @@ request and stashes the context to answer it in the cache
 `backend/onyx/server/features/build/external_apps/api.py:resolve_connect_app_request` answers the
 permission on the sandbox: allow for connected, reject for declined.
 
-**Craft catalog.** Craft uses the integrations of the plugins the user runs.
+**Craft catalog.** Craft uses the integrations that are on for the user
+(`integrations/craft.py:list_runnable_integrations`).
 `server/features/build/sandbox/util/mcp_config.py:resolve_craft_mcp_servers`
 writes the MCP integrations whose `integration_status` is connected (or that
 have no sign-in) into the opencode config, with each Blocked action as a
-disabled tool. A session of a scheduled run gets only the task plugins,
+disabled tool. A session of a scheduled run gets only the task integrations,
 also one that the owner turned off ([[craft-scheduled-tasks]]). The web reads
 the Craft apps and MCP servers from the member list (`GET /integrations`,
 `web/src/lib/integrations/craft.ts`), and
@@ -210,7 +211,7 @@ refresh reads the tenant from the context. It checks again that
 the integration is enabled and that the request still matches the endpoint in
 its kind row, because the gate matched against cached targets. Otherwise, or on
 a connection problem, it refuses with `CredentialUnavailableError`. An internal MCP host is reachable only
-when the server belongs to a plugin that the user can see
+when the user has access to the integration of the server
 (`IntegrationResolver.allows_destination`).
 
 **OAuth connect.** `backend/onyx/integrations/oauth.py` binds each
@@ -354,7 +355,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
   (`integrations/kinds/mcp_server.py:mcp_action_default_policy`). The proxy and
   chat tool construction read it from the `integration_action` row.
 - The evaluator loads the kind rows of each integration the user can use on
-  each request. A change to the plugins of a user reaches the proxy after up
+  each request. A change to the access or the on/off choice of a user reaches the proxy after up
   to 30 seconds.
 - An external app or MCP server that the old admin routes create has no
   integration row until the integration routes replace them, so the proxy does

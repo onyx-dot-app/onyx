@@ -8,7 +8,7 @@ import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import type {
   TaskActionSettings,
   TaskActionView,
-  TaskPluginView,
+  TaskIntegrationView,
 } from "@/app/craft/v1/tasks/types";
 import type { LinkValue, PolicyValue } from "@/lib/integrations/types";
 
@@ -20,41 +20,36 @@ function runPolicy(value: LinkValue, action: TaskActionView): PolicyValue {
   return value;
 }
 
-interface TaskPluginCardProps {
-  plugin: TaskPluginView;
+interface TaskIntegrationCardProps {
+  integration: TaskIntegrationView;
   enabled: boolean;
   settings: TaskActionSettings;
   onEdit: () => void;
   onToggle: (enabled: boolean) => void;
 }
 
-export default function TaskPluginCard({
-  plugin,
+export default function TaskIntegrationCard({
+  integration,
   enabled,
   settings,
   onEdit,
   onToggle,
-}: TaskPluginCardProps) {
+}: TaskIntegrationCardProps) {
   const t = useTranslations("craft.actionPolicies");
   const counts: Record<PolicyValue, number> = {
     allow: 0,
     ask: 0,
     blocked: 0,
   };
-  for (const integration of plugin.integrations) {
-    for (const action of integration.actions) {
-      counts[
-        runPolicy(settings.actions[action.key] ?? settings.default, action)
-      ]++;
-    }
+  for (const action of integration.actions) {
+    counts[
+      runPolicy(settings.actions[action.key] ?? settings.default, action)
+    ]++;
   }
-  const signInProblem = plugin.integrations.find(
-    (integration) => integration.status.state !== "connected"
-  );
-  const appType = plugin.integrations.find(
-    (integration) => integration.app_type !== null
-  )?.app_type;
-  const PluginIcon = appType ? getAppTypeLogo(appType) : SvgPlug;
+  const signInProblem = integration.status.state !== "connected";
+  const IntegrationIcon = integration.app_type
+    ? getAppTypeLogo(integration.app_type)
+    : SvgPlug;
   return (
     <SelectCard
       state={enabled ? "filled" : "empty"}
@@ -63,7 +58,7 @@ export default function TaskPluginCard({
       border="solid"
       rounding={4}
       role="group"
-      aria-label={plugin.plugin_name}
+      aria-label={integration.name}
     >
       <Section height="full" alignItems="stretch" gap={0}>
         <Section
@@ -75,7 +70,7 @@ export default function TaskPluginCard({
         >
           <Section width="fit" height="auto" className="shrink-0">
             <Card padding={2} border="solid" rounding={3}>
-              <PluginIcon size={24} className="text-text-03" />
+              <IntegrationIcon size={24} className="text-text-03" />
             </Card>
           </Section>
           <Section
@@ -99,7 +94,7 @@ export default function TaskPluginCard({
               >
                 <Content
                   font="main-content-emphasis"
-                  title={plugin.plugin_name}
+                  title={integration.name}
                 />
                 {signInProblem && (
                   <span
@@ -127,21 +122,21 @@ export default function TaskPluginCard({
                 <InputSwitch
                   checked={enabled}
                   aria-label={t("enableAppForTask", {
-                    app: plugin.plugin_name,
+                    app: integration.name,
                   })}
                   onCheckedChange={onToggle}
                 />
               </Section>
             </Section>
-            <Text font="secondary-body" color="text-03">
-              {plugin.integrations
-                .map((integration) => integration.name)
-                .join(", ")}
-            </Text>
             {signInProblem && (
               <Text font="secondary-body" color="status-warning-05">
-                {signInProblem.status.reason ??
-                  t("needsSignIn", { name: signInProblem.name })}
+                {integration.status.reason ??
+                  t("needsSignIn", { name: integration.name })}
+              </Text>
+            )}
+            {!integration.runnable && (
+              <Text font="secondary-body" color="status-warning-05">
+                {t("notRunnable", { name: integration.name })}
               </Text>
             )}
           </Section>

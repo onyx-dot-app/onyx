@@ -32,21 +32,10 @@ export function newSkillHref(
     : "/app/customize/skills/new";
 }
 
-export type PluginPageTab = "overview" | "skills" | "integrations" | "versions";
-
 export function pluginHref(
-  pluginId: string,
-  tab?: PluginPageTab
+  pluginId: string
 ): `/app/customize/plugins/${string}` {
-  return tab && tab !== "overview"
-    ? `/app/customize/plugins/${pluginId}?tab=${tab}`
-    : `/app/customize/plugins/${pluginId}`;
-}
-
-export function parsePluginPageTab(value: string | null): PluginPageTab {
-  return value === "skills" || value === "integrations" || value === "versions"
-    ? value
-    : "overview";
+  return `/app/customize/plugins/${pluginId}`;
 }
 
 export type IntegrationPageTab = "overview" | "configuration" | "actions";

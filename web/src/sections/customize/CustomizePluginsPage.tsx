@@ -8,32 +8,19 @@ import {
   Text,
   type DropdownMenuItem,
 } from "@opal/components";
-import { toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
-import {
-  SvgBlocks,
-  SvgCheckCircle,
-  SvgPlug,
-  SvgShare,
-  SvgXCircle,
-} from "@opal/icons";
+import { SvgCheckCircle, SvgShare, SvgXCircle } from "@opal/icons";
 import { useNavigation } from "@opal/navigation";
-import type { IconFunctionComponent } from "@opal/types";
 import useUserSkills from "@/hooks/useUserSkills";
 import {
   PLUGIN_GROUPS,
   groupPlugins,
   type PluginGroup,
 } from "@/lib/customize/plugins";
-import { NEW_INTEGRATION_PATH, pluginHref } from "@/lib/customize/paths";
+import { pluginHref } from "@/lib/customize/paths";
 import type { SkillStatusFilter } from "@/lib/customize/skills";
-import { useMemberIntegrations } from "@/lib/integrations/hooks";
-import { setPluginEnabled } from "@/lib/integrations/svc";
-import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import {
   memberPluginEntries,
-  ownsPrivateIntegrationPlugin,
-  pendingIntegrations,
   pluginSwitch,
   type MemberPluginEntry,
 } from "@/lib/plugins/directory";
@@ -42,7 +29,6 @@ import {
   type SkillEnablement,
   useRefreshSkillLists,
 } from "@/lib/skills/hooks";
-import { Permission } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import CustomizeLayout from "@/sections/customize/CustomizeLayout";
 import AddSkillMenu from "@/sections/customize/AddSkillMenu";
@@ -55,48 +41,32 @@ import {
 import { skillIcon } from "@/sections/customize/skillIcon";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
-import SharePluginModal from "@/sections/plugins/SharePluginModal";
-
-function pluginIcon(entry: MemberPluginEntry): IconFunctionComponent {
-  const [skill] = entry.skills;
-  if (skill && entry.integrations.length === 0) return skillIcon(skill);
-  return entry.skills.length === 0 ? SvgPlug : SvgBlocks;
-}
 
 interface PluginRowProps {
   entry: MemberPluginEntry;
   group: PluginGroup;
-  userEmail: string | null;
   enablement: SkillEnablement;
   onSwitch: (entry: MemberPluginEntry, enabled: boolean) => void;
-  switching: boolean;
   onShare: (entry: MemberPluginEntry) => void;
 }
 
 function PluginRow({
   entry,
   group,
-  userEmail,
   enablement,
   onSwitch,
-  switching,
   onShare,
 }: PluginRowProps) {
   const t = useTranslations("customize");
   const navigation = useNavigation();
   const [skill] = entry.skills;
   const { blocked } = pluginSwitch(entry);
-  const enabled = skill
-    ? enablement.enabledOf(skill)
-    : pluginSwitch(entry).enabled;
-  const busy = switching || (skill ? enablement.isPending(skill.id) : false);
+  const enabled = skill ? enablement.enabledOf(skill) : false;
+  const busy = skill ? enablement.isPending(skill.id) : false;
   const canToggle = blocked === null;
-  const pending = pendingIntegrations(entry.integrations).length;
   const canShare =
-    ownsPrivateIntegrationPlugin(entry, userEmail) ||
-    (skill !== undefined &&
-      (skill.user_permission === "OWNER" ||
-        skill.user_permission === "EDITOR"));
+    skill !== undefined &&
+    (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR");
   const source =
     group === "mine"
       ? t("skills.source.mine")
@@ -105,12 +75,7 @@ function PluginRow({
         : entry.ownerEmail
           ? t("skills.source.sharedBy", { email: entry.ownerEmail })
           : t("skills.source.shared");
-  const contents = t("plugins.contents", {
-    skills: entry.skills.length,
-    integrations: entry.integrations.length,
-    both:
-      entry.skills.length > 0 && entry.integrations.length > 0 ? "yes" : "no",
-  });
+  const contents = t("plugins.contents", { skills: entry.skills.length });
   const menu: DropdownMenuItem[] = [
     ...(canToggle
       ? [
@@ -138,7 +103,7 @@ function PluginRow({
   ];
   return (
     <LineItemButton
-      icon={pluginIcon(entry)}
+      icon={skill ? skillIcon(skill) : undefined}
       title={entry.name}
       titleMaxLines={1}
       description={t("skills.subtitle", { source, description: contents })}
@@ -146,14 +111,9 @@ function PluginRow({
       badge={
         !enabled
           ? { title: t("skills.tag.off") }
-          : pending > 0
-            ? {
-                title: t("plugins.needsSignIn", { count: pending }),
-                color: "warning",
-              }
-            : blocked === "required"
-              ? { title: t("skills.tag.required"), color: "info" }
-              : undefined
+          : blocked === "required"
+            ? { title: t("skills.tag.required"), color: "info" }
+            : undefined
       }
       aria-label={t("skills.open", { name: entry.name })}
       onClick={() => navigation.go(pluginHref(entry.id))}
@@ -179,24 +139,16 @@ function PluginRow({
 export default function CustomizePluginsPage() {
   const t = useTranslations("customize");
   const locale = useLocale();
-  const navigation = useNavigation();
   const { user } = useUser();
   const revalidate = useRefreshSkillLists();
   const skills = useUserSkills();
-  const integrations = useMemberIntegrations();
-  const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
-    Permission.MANAGE_ACTIONS
-  );
-  const canAddIntegration = isGlobalHolder || isScopedManager;
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<SkillStatusFilter>("all");
-  const [switching, setSwitching] = useState<ReadonlySet<string>>(new Set());
   const [sharing, setSharing] = useState<MemberPluginEntry | null>(null);
 
   const userEmail = user?.email ?? null;
   const entries = memberPluginEntries(
     skills.data?.customs ?? [],
-    integrations.data ?? [],
     userEmail,
     locale
   );
@@ -209,33 +161,6 @@ export default function CustomizePluginsPage() {
     (count, group) => count + groups[group].length,
     0
   );
-  const loading = skills.isLoading || integrations.isLoading;
-
-  async function switchPlugin(
-    entry: MemberPluginEntry,
-    enabled: boolean
-  ): Promise<void> {
-    const [skill] = entry.skills;
-    if (skill) {
-      await enablement.setEnabled(skill, enabled);
-      return;
-    }
-    setSwitching((current) => new Set([...current, entry.id]));
-    try {
-      await setPluginEnabled(entry.id, enabled);
-      await integrations.mutate();
-    } catch (failure) {
-      toast.error(
-        failure instanceof Error ? failure.message : t("plugins.switchFailed")
-      );
-    } finally {
-      setSwitching((current) => {
-        const next = new Set(current);
-        next.delete(entry.id);
-        return next;
-      });
-    }
-  }
 
   const controls = (
     <>
@@ -244,21 +169,7 @@ export default function CustomizePluginsPage() {
         onChange={setStatus}
         allLabel={t("plugins.filter.all")}
       />
-      <AddSkillMenu
-        extraItems={
-          canAddIntegration
-            ? [
-                {
-                  kind: "action",
-                  id: "integration",
-                  icon: SvgPlug,
-                  title: t("integrations.add.integration"),
-                  onSelect: () => navigation.go(NEW_INTEGRATION_PATH),
-                },
-              ]
-            : []
-        }
-      />
+      <AddSkillMenu />
     </>
   );
 
@@ -268,10 +179,8 @@ export default function CustomizePluginsPage() {
       query={query}
       onQueryChange={setQuery}
       controls={controls}
-      loading={loading}
-      error={
-        skills.error || integrations.error ? t("plugins.loadFailed") : false
-      }
+      loading={skills.isLoading}
+      error={skills.error ? t("plugins.loadFailed") : false}
     >
       <Text as="p" font="secondary-body" color="text-03">
         {t("plugins.intro")}
@@ -311,12 +220,11 @@ export default function CustomizePluginsPage() {
                 key={entry.id}
                 entry={entry}
                 group={group}
-                userEmail={userEmail}
                 enablement={enablement}
-                switching={switching.has(entry.id)}
-                onSwitch={(target, enabled) =>
-                  void switchPlugin(target, enabled)
-                }
+                onSwitch={(target, enabled) => {
+                  const [skill] = target.skills;
+                  if (skill) void enablement.setEnabled(skill, enabled);
+                }}
                 onShare={setSharing}
               />
             ))}
@@ -333,17 +241,6 @@ export default function CustomizePluginsPage() {
           open
           onClose={() => setSharing(null)}
           onSaved={revalidate}
-        />
-      )}
-      {sharing && sharing.skills.length === 0 && (
-        <SharePluginModal
-          pluginId={sharing.id}
-          pluginName={sharing.name}
-          sharedSignIn={sharing.integrations
-            .filter((integration) => integration.auth_mode === "shared")
-            .map((integration) => integration.name)}
-          onClose={() => setSharing(null)}
-          onSaved={() => setSharing(null)}
         />
       )}
     </CustomizeLayout>

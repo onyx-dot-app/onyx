@@ -24,7 +24,7 @@ from onyx.tools.models import (
     CodeModeExposure,
     CodeModeFunctionName,
     CodeModeResultSpec,
-    PluginAction,
+    IntegrationActionRef,
     ToolApprovalScope,
     ToolCallException,
     ToolContext,
@@ -200,7 +200,7 @@ class Tool(abc.ABC):
     # Set on tools whose calls follow an action policy; see onyx/chat/tool_approvals.py.
     approval: ToolApprovalScope | None = None
     # Set on the tool of an integration action; a preference names it.
-    plugin_action: PluginAction | None = None
+    integration_action: IntegrationActionRef | None = None
 
     @property
     def execution_mode(self) -> ToolExecutionMode:
@@ -215,9 +215,9 @@ class Tool(abc.ABC):
         if isinstance(preference, CapabilityEntry):
             return self.id == preference.tool_id
         return (
-            self.plugin_action is not None
-            and preference.plugin_id in self.plugin_action.plugin_ids
-            and self.plugin_action.action == preference.action
+            self.integration_action is not None
+            and self.integration_action.integration_id == preference.integration_id
+            and self.integration_action.action == preference.action
         )
 
     def operation_names(self, preference: ToolPreference) -> list[str]:

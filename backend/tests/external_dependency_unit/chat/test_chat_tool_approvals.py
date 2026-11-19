@@ -127,7 +127,7 @@ from tests.external_dependency_unit.chat.test_run_store import (
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     make_mcp_integration,
     set_policy,
 )
@@ -249,7 +249,7 @@ def chat(
         tools=[ACTION],
     )
     # The default agent uses each plugin the user runs.
-    hold_in_plugin(
+    give_access(
         db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
     )
     chat_session = ChatSession(

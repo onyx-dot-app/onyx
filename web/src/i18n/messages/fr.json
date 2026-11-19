@@ -10359,47 +10359,16 @@
         }
       }
     },
-    "plugins": {
-      "title": "Extensions",
-      "description": "Une extension regroupe des compétences et des intégrations que les personnes activent ensemble. Cette liste affiche les extensions qui contiennent des intégrations. Gérez les compétences sur la page Compétences.",
-      "search": "Rechercher des extensions",
-      "loadFailed": "Impossible de charger les extensions.",
-      "columns": {
-        "name": "Extension",
-        "library": "Bibliothèque",
-        "installation": "Installation",
-        "integrations": "Intégrations"
-      },
-      "library": {
-        "organization": "Bibliothèque de l’organisation",
-        "personal": "Importation personnelle"
-      },
-      "installationSelect": "Paramètre d'installation de {name}",
-      "installationSaved": "{name} est maintenant {policy}.",
-      "installationSaveFailed": "Impossible d'enregistrer le paramètre d'installation.",
-      "openIntegration": "Ouvrir {name}",
-      "empty": {
-        "title": "Aucune extension avec des intégrations",
-        "description": "Ajoutez une intégration. Onyx crée une extension qui la contient."
-      },
-      "contents": "{count, plural, one {# intégration} other {# intégrations}}",
-      "filters": {
-        "label": "Bibliothèque",
-        "all": "Toutes les bibliothèques",
-        "organization": "Bibliothèque de l’organisation",
-        "personal": "Importations personnelles"
-      }
-    },
     "integrations": {
       "title": "Intégrations",
-      "description": "Connectez des serveurs MCP et des applications. Une extension contient chaque intégration et en donne l’accès aux utilisateurs.",
+      "description": "Connectez des serveurs MCP et des applications. Chaque intégration a un propriétaire, un paramètre d'installation et ses propres partages.",
       "search": "Rechercher des intégrations",
       "open": "Ouvrir {name}",
       "loadFailed": "Impossible de charger les intégrations.",
       "add": {
         "label": "Ajouter",
         "title": "Ajouter une intégration",
-        "description": "Connectez un service pour que les personnes puissent l’utiliser dans le chat et dans Craft. Onyx place chaque intégration dans sa propre extension.",
+        "description": "Connectez un service pour que les utilisateurs puissent l'utiliser dans le chat et dans Craft.",
         "created": "{name} a été ajoutée.",
         "createFailed": "Impossible d’ajouter l’intégration.",
         "openapi": {
@@ -10462,8 +10431,8 @@
           "title": "Propriétaire",
           "personal": "Pour moi",
           "organization": "Pour l’organisation",
-          "personalDescription": "Onyx place l’intégration dans une extension de vos Mes importations. Vous pourrez partager l’extension plus tard.",
-          "organizationDescription": "Onyx place l’intégration dans une extension de la Bibliothèque de l’organisation."
+          "personalDescription": "Vous seul pouvez utiliser l'intégration. Vous pourrez la partager plus tard.",
+          "organizationDescription": "Chaque utilisateur de l'organisation peut activer l'intégration."
         },
         "submit": "Ajouter",
         "adding": "Ajout…",
@@ -10501,8 +10470,8 @@
         "name": "Nom",
         "type": "Type",
         "signIn": "Connexion",
-        "access": "Accès",
-        "status": "Statut"
+        "status": "Statut",
+        "installation": "Installation"
       },
       "empty": {
         "title": "Aucune intégration",
@@ -10517,13 +10486,6 @@
         "custom": "Application personnalisée"
       },
       "signInSummary": "{mode, select, none {Aucune connexion} shared {{method, select, oauth2 {Compte de l’organisation (OAuth)} api_key {Clé API de l’organisation} onyx_login {Connexion Onyx} managed {Géré par Onyx} other {Compte de l’organisation}}} individual {{method, select, oauth2 {Chaque utilisateur (OAuth)} api_key {Chaque utilisateur (clé API)} onyx_login {Connexion Onyx} managed {Géré par Onyx} other {Chaque utilisateur}}} other {Inconnu}}",
-      "access": {
-        "none": "Dans aucune extension",
-        "many": "{count, plural, one {# extension} other {# extensions}}",
-        "organization": "{plugin} (Bibliothèque de l’organisation)",
-        "personal": "{plugin} ({owner})",
-        "personalOwner": "importation personnelle"
-      },
       "status": {
         "needsSetup": "Configuration requise",
         "off": "Désactivée",
@@ -10603,10 +10565,6 @@
           "createdBy": "Ajoutée par",
           "needsSetup": "Configuration requise",
           "needsSetupDefault": "Terminez les paramètres de connexion dans l’onglet Configuration.",
-          "plugins": {
-            "title": "Extensions",
-            "organization": "{policy, select, REQUIRED {Bibliothèque de l’organisation, obligatoire} DEFAULT {Bibliothèque de l’organisation, activée par défaut} AVAILABLE {Bibliothèque de l’organisation, disponible} NOT_AVAILABLE {Bibliothèque de l’organisation, non disponible} other {Bibliothèque de l’organisation}}"
-          },
           "enabled": {
             "title": "Activée",
             "description": "Si ce paramètre est désactivé, aucun agent ni utilisateur ne peut utiliser l’intégration."
@@ -10614,7 +10572,7 @@
           "delete": {
             "label": "Supprimer",
             "confirmTitle": "Supprimer {name} ?",
-            "confirmDescription": "Onyx retire l’intégration de chaque extension et supprime ses connexions et les paramètres de ses actions. Cette opération est irréversible.",
+            "confirmDescription": "Onyx supprime l'intégration avec ses connexions et paramètres d'action, et la retire de chaque agent et tâche. Cette action est irréversible.",
             "confirm": "Supprimer"
           },
           "deleted": "{name} a été supprimée.",
@@ -10632,7 +10590,8 @@
             "saveFailed": "Impossible d’enregistrer le nom et la description."
           },
           "description": "Description",
-          "menu": "Plus d’actions"
+          "menu": "Plus d’actions",
+          "owner": "Propriétaire"
         },
         "configuration": {
           "readOnly": "Vous pouvez voir cette intégration, mais pas la modifier.",
@@ -10702,10 +10661,23 @@
             "title": "Connectez d’abord le serveur",
             "description": "Onyx charge les actions d’un serveur MCP une fois le serveur connecté.",
             "open": "Ouvrir la configuration",
-            "individualDescription": "Chaque utilisateur se connecte à ce serveur. Connectez votre propre compte sur la page Plugins, puis cliquez sur Actualiser.",
-            "openPlugins": "Ouvrir Plugins"
+            "individualDescription": "Chaque utilisateur se connecte à ce serveur. Connectez votre propre compte sur la page de l'intégration, puis cliquez sur Actualiser.",
+            "openIntegration": "Ouvrir l'Intégration"
           }
         }
+      },
+      "installation": {
+        "select": "Paramètre d'installation de {name}",
+        "saved": "{name} est maintenant {policy}.",
+        "saveFailed": "Impossible d'enregistrer le paramètre d'installation.",
+        "title": "Paramètre d'Installation",
+        "description": "Qui reçoit cette intégration. Non disponible la garde privée : seuls son propriétaire, les personnes avec qui elle est partagée et les groupes qui ont leur propre paramètre l’utilisent. Supprimez ces paramètres de groupe pour la limiter au propriétaire et aux partages.",
+        "notAvailable": "Privée. Seuls le propriétaire, les personnes avec qui elle est partagée et les groupes qui ont leur propre paramètre l’utilisent."
+      },
+      "ownedBy": "Propriété de {owner}",
+      "groupAccess": {
+        "saved": "Paramètres de groupe de {name} enregistrés.",
+        "saveFailed": "Impossible d’enregistrer le paramètre de groupe."
       }
     }
   },
@@ -10826,52 +10798,6 @@
       "page": {
         "ariaLabel": "Page de l'éditeur d'agents"
       },
-      "plugins": {
-        "askHint": "Pour l'exécuter sans demande, modifiez le paramètre de l'agent, un administrateur la règle sur Autoriser dans l'intégration, ou chaque utilisateur choisit Toujours autoriser.",
-        "askHintAdminOnly": "Pour l'exécuter sans demande, un administrateur la règle sur Autoriser dans l'intégration.",
-        "askHintAgent": "Pour exécuter ceci sans confirmation, modifiez le paramètre de l'agent, ou chaque utilisateur choisit Toujours autoriser.",
-        "askHintAgentOnly": "Pour exécuter ceci sans confirmation, modifiez le paramètre de l'agent.",
-        "choice": {
-          "inherit": "Utiliser le réglage de l'intégration",
-          "agentDefault": "Utiliser la valeur par défaut de l'agent"
-        },
-        "default": {
-          "description": "S'applique à chaque action sans réglage propre, y compris aux actions que l'intégration ajoutera plus tard.",
-          "title": "Par Défaut pour les Autres Actions"
-        },
-        "description": "Attribuez des plugins à l'agent. Chaque action utilise le réglage de l'intégration, sauf si vous en choisissez un autre.",
-        "effective": "{policy, select, allow {Autorise} ask {Demande} other {Bloquée}} ({source, select, integration {réglage de l'intégration} agentDefault {défaut de l'agent} other {réglage de l'agent}})",
-        "empty": "Aucun plugin avec des intégrations n'est disponible pour vous.",
-        "loadFailed": "Impossible de charger les plugins.",
-        "lock": {
-          "adminBlocked": "Autoriser n'est pas disponible : un administrateur a bloqué cette action.",
-          "alwaysAsks": "Autoriser n'est pas disponible : Craft demande une approbation pour chacune de ces requêtes.",
-          "adminFinal": "Autoriser n'est pas disponible : le réglage administrateur de cette intégration est définitif.",
-          "defaultFinal": "Autoriser n'est pas disponible : les réglages administrateur de ces intégrations sont définitifs."
-        },
-        "noActions": "Cette intégration n'a pas encore d'actions.",
-        "notVisible": "Vous ne pouvez pas voir les actions de ce plugin. Ses réglages restent inchangés.",
-        "title": "Plugins",
-        "add": {
-          "placeholder": "Ajouter un plugin"
-        },
-        "remove": {
-          "ariaLabel": "Retirer {plugin}"
-        },
-        "retry": {
-          "label": "Réessayer"
-        },
-        "actionSetting": {
-          "label": "Réglage pour {action}"
-        },
-        "defaultSetting": {
-          "label": "Réglage par défaut pour {plugin}"
-        },
-        "openIntegration": {
-          "label": "Ouvrir les actions de {integration}"
-        },
-        "stricterPlugin": "Le plugin {plugin} de cet agent définit un paramètre plus strict pour cette action."
-      },
       "prompts": {
         "instructions": {
           "description": "Ajoutez des instructions pour adapter les réponses de cet agent.",
@@ -10963,6 +10889,51 @@
       },
       "warnings": {
         "openUrl": "La recherche Web sans la possibilité d'ouvrir des URL peut donner des résultats Web nettement moins bons."
+      },
+      "integrations": {
+        "askHint": "Pour l'exécuter sans demande, modifiez le paramètre de l'agent, un administrateur la règle sur Autoriser dans l'intégration, ou chaque utilisateur choisit Toujours autoriser.",
+        "askHintAdminOnly": "Pour l'exécuter sans demande, un administrateur la règle sur Autoriser dans l'intégration.",
+        "askHintAgent": "Pour exécuter ceci sans confirmation, modifiez le paramètre de l'agent, ou chaque utilisateur choisit Toujours autoriser.",
+        "askHintAgentOnly": "Pour exécuter ceci sans confirmation, modifiez le paramètre de l'agent.",
+        "choice": {
+          "inherit": "Utiliser le réglage de l'intégration",
+          "agentDefault": "Utiliser la valeur par défaut de l'agent"
+        },
+        "default": {
+          "description": "S'applique à chaque action sans réglage propre, y compris aux actions que l'intégration ajoutera plus tard.",
+          "title": "Par Défaut pour les Autres Actions"
+        },
+        "description": "Donnez des intégrations à l'agent. Chaque action utilise le paramètre de l'intégration, sauf si vous en choisissez un autre.",
+        "effective": "{policy, select, allow {Autorise} ask {Demande} other {Bloquée}} ({source, select, integration {réglage de l'intégration} agentDefault {défaut de l'agent} other {réglage de l'agent}})",
+        "empty": "Aucune intégration ne vous est disponible.",
+        "loadFailed": "Impossible de charger les intégrations.",
+        "lock": {
+          "adminBlocked": "Autoriser n'est pas disponible : un administrateur a bloqué cette action.",
+          "alwaysAsks": "Autoriser n'est pas disponible : Craft demande une approbation pour chacune de ces requêtes.",
+          "adminFinal": "Autoriser n'est pas disponible : le réglage administrateur de cette intégration est définitif."
+        },
+        "noActions": "Cette intégration n'a pas encore d'actions.",
+        "notVisible": "Vous ne pouvez pas voir les actions de cette intégration. Ses paramètres restent inchangés.",
+        "title": "Intégrations",
+        "add": {
+          "placeholder": "Ajouter une intégration"
+        },
+        "remove": {
+          "ariaLabel": "Retirer {integration}"
+        },
+        "retry": {
+          "label": "Réessayer"
+        },
+        "actionSetting": {
+          "label": "Réglage pour {action}"
+        },
+        "defaultSetting": {
+          "label": "Paramètre par défaut de {integration}"
+        },
+        "openIntegration": {
+          "label": "Ouvrir les actions de {integration}"
+        },
+        "sharedWider": "Certaines personnes qui peuvent utiliser cet agent ne peuvent pas utiliser {integration}. Leurs chats fonctionnent sans elle. Partagez {integration} avec elles pour leur donner accès."
       }
     },
     "filters": {
@@ -11103,7 +11074,8 @@
           "empty": {
             "title": "Aucune action"
           },
-          "title": "Actions et outils"
+          "title": "Actions et outils",
+          "noAccess": "Vous ne pouvez pas utiliser cette intégration. Un chat avec cet agent fonctionne sans elle."
         },
         "conversationStarters": {
           "title": "Amorces de conversation"
@@ -15106,7 +15078,7 @@
       "appTitle": "Paramètres d’approbation de {name}",
       "title": "Paramètres d’approbation",
       "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft, les nouvelles tâches et les appels d’outils MCP dans le chat ; les tâches existantes conservent leurs propres paramètres.",
-      "taskDescription": "Choisissez les plugins de cette tâche et les actions à exécuter automatiquement. Les modifications concernent uniquement cette tâche.",
+      "taskDescription": "Choisissez les intégrations que cette tâche peut utiliser, puis gérez les actions exécutées automatiquement. Les modifications s'appliquent uniquement à cette tâche.",
       "userManagement": "Autoriser les utilisateurs à gérer les paramètres d’approbation",
       "userManagementDescription": "Les utilisateurs peuvent modifier les approbations des actions disponibles.",
       "loading": "Chargement des paramètres d’approbation…",
@@ -15120,9 +15092,9 @@
       "enableAppForTask": "Activer {app} pour cette tâche",
       "enabledForTask": "Activée pour cette tâche",
       "disabledForTask": "Désactivée pour cette tâche",
-      "taskAppsTitle": "Plugins",
-      "taskAccessTitle": "Accès aux plugins",
-      "noEnabledApps": "Aucun plugin activé pour cette tâche.",
+      "taskAppsTitle": "Intégrations",
+      "taskAccessTitle": "Accès aux Intégrations",
+      "noEnabledApps": "Aucune intégration n'est activée pour cette tâche.",
       "actionPolicies": "Paramètres d’approbation",
       "manageActions": "Gérer les actions",
       "taskModalDescription": "Les modifications s’appliquent lorsque vous enregistrez la tâche. Les restrictions de l’espace de travail s’appliquent toujours.",
@@ -15133,8 +15105,6 @@
       "saveChanges": "Enregistrer",
       "resetDefaults": "Tout rétablir par défaut",
       "resetAll": "Tout réinitialiser aux valeurs de l’espace de travail",
-      "newTaskPluginsDescription": "Activez les plugins que cette tâche peut utiliser. Chaque action utilise le paramètre de son intégration jusqu'à ce que vous le modifiiez.",
-      "emptyPlugins": "Aucun plugin avec des intégrations n'est disponible.",
       "needsSignIn": "{name} nécessite une connexion.",
       "taskPolicyCounts": "{allow} autoriser · {ask} demander · {blocked} bloquées",
       "actionSetting": "Paramètre pour {action}",
@@ -15144,7 +15114,10 @@
         "allow": "Autoriser",
         "ask": "Demander",
         "blocked": "Bloquée"
-      }
+      },
+      "newTaskIntegrationsDescription": "Activez les intégrations que cette tâche peut utiliser. Chaque action utilise le paramètre de son intégration jusqu'à ce que vous le modifiiez.",
+      "emptyIntegrations": "Aucune intégration disponible.",
+      "notRunnable": "Craft ne peut pas exécuter {name} pour le moment : la tâche l’ignore."
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, one {# skill n’a pas été chargé} other {# skills n’ont pas été chargés}}",
@@ -16125,9 +16098,6 @@
         "llmGateway": {
           "label": "LLM Gateway"
         },
-        "plugins": {
-          "label": "Plugins"
-        },
         "plansAndBilling": {
           "label": "Forfaits et facturation"
         },
@@ -16978,7 +16948,6 @@
         "tabs": {
           "overview": "Aperçu",
           "skills": "Compétences",
-          "integrations": "Intégrations",
           "versions": "Versions"
         },
         "overview": {
@@ -16986,7 +16955,6 @@
           "location": "Emplacement",
           "owner": "Propriétaire",
           "skills": "Compétences",
-          "integrations": "Intégrations",
           "description": "Description"
         },
         "skills": {
@@ -16998,20 +16966,8 @@
           "description": "Lorsque cette option est activée, l'agent par défaut peut utiliser ce plugin.",
           "label": "Utiliser {name}",
           "required": "Votre administrateur a rendu ce plugin obligatoire. Vous ne pouvez pas le désactiver.",
-          "notAvailable": "Votre administrateur a rendu ce plugin non disponible.",
           "unavailable": "Vous ne pouvez pas activer ou désactiver ce plugin.",
           "failed": "Impossible de modifier le plugin."
-        },
-        "share": {
-          "label": "Partager"
-        },
-        "publish": {
-          "label": "Publier",
-          "blocked": "Seul un utilisateur disposant de l'autorisation Gérer les actions pour toute l'organisation peut publier un plugin qui contient une intégration.",
-          "confirmTitle": "Publier {name} ?",
-          "confirmMessage": "Le plugin passe dans la bibliothèque de l'organisation. Cette action est irréversible. Les administrateurs définissent ensuite son paramètre d'installation.",
-          "done": "{name} est maintenant dans la bibliothèque de l'organisation.",
-          "failed": "Impossible de publier le plugin."
         }
       },
       "connection": {
@@ -17070,49 +17026,30 @@
         "invalidLink": "Ce lien de connexion n’est pas valide. Recommencez la connexion.",
         "failed": "La connexion n’a pas abouti. Réessayez.",
         "back": {
-          "label": "Retour aux plugins"
+          "label": "Retour aux intégrations"
         }
-      },
-      "search": {
-        "placeholder": "Rechercher des plugins"
-      },
-      "share": {
-        "title": "Partager {name}",
-        "description": "Donnez accès à ce plugin à des personnes et des groupes.",
-        "sharedSignIn": "{names} utilise un seul compte. Les personnes ayant accès utilisent le compte que vous avez connecté.",
-        "loadFailed": "Impossible de charger les personnes ayant accès.",
-        "empty": "Vous seul avez accès.",
-        "remove": {
-          "label": "Retirer {name}"
-        },
-        "cancel": {
-          "label": "Annuler"
-        },
-        "submit": {
-          "label": "Enregistrer",
-          "pendingLabel": "Enregistrement..."
-        },
-        "saved": "L'accès à {name} a été enregistré.",
-        "failed": "Impossible d'enregistrer l'accès."
       }
     },
     "chat": {
       "popover": {
-        "empty": "Cet agent n’a aucun plugin avec des intégrations.",
-        "searchEmpty": "Aucun plugin ne correspond à votre recherche.",
-        "loading": "Chargement des plugins",
-        "loadError": "Certains plugins n’ont pas pu être chargés. Réessayez.",
+        "empty": "Cet agent n'a aucune intégration.",
+        "searchEmpty": "Aucune intégration ne correspond à votre recherche.",
+        "loading": "Chargement des intégrations",
+        "loadError": "Certaines intégrations n'ont pas pu être chargées. Réessayez.",
         "trigger": {
-          "label": "Plugins"
+          "label": "Intégrations"
         },
         "retry": {
           "label": "Réessayer"
         },
         "browse": {
-          "label": "Parcourir les plugins"
+          "label": "Parcourir les intégrations"
         },
         "toggle": {
           "label": "Utiliser {name} avec cet agent"
+        },
+        "search": {
+          "placeholder": "Rechercher des intégrations"
         }
       },
       "connectPrompt": {
@@ -17130,7 +17067,63 @@
     }
   },
   "integrations": {
-    "connectionState": "{state, select, connected {Connectée} not_connected {Non connectée} needs_reconnect {Reconnexion requise} not_set_up {Non configurée} other {Inconnu}}"
+    "connectionState": "{state, select, connected {Connectée} not_connected {Non connectée} needs_reconnect {Reconnexion requise} not_set_up {Non configurée} other {Inconnu}}",
+    "share": {
+      "title": "Partager {name}",
+      "description": "Donnez à des personnes précises l'accès pour utiliser cette intégration. Un partage donne uniquement l'utilisation.",
+      "sharedSignIn": "{name} utilise un seul compte. Les personnes ayant accès utilisent le compte que vous avez connecté.",
+      "loadFailed": "Impossible de charger les personnes ayant accès.",
+      "empty": "Vous seul avez accès.",
+      "remove": {
+        "label": "Retirer {name}"
+      },
+      "cancel": {
+        "label": "Annuler"
+      },
+      "submit": {
+        "label": "Enregistrer",
+        "pendingLabel": "Enregistrement..."
+      },
+      "saved": "L'accès à {name} a été enregistré.",
+      "failed": "Impossible d'enregistrer l'accès."
+    },
+    "memberState": {
+      "on": {
+        "label": "Activée"
+      },
+      "turn_on": {
+        "label": "Activer"
+      },
+      "sign_in": {
+        "label": "Se connecter"
+      },
+      "no_access": {
+        "label": "Aucun accès",
+        "reason": "Aucun accès : cette intégration n'a pas été partagée avec vous.",
+        "reasonOwner": "Aucun accès : {owner} ne l'a pas partagée avec vous."
+      },
+      "turned_off": {
+        "label": "Désactivée",
+        "reason": "Désactivée par un administrateur."
+      },
+      "switch": {
+        "label": "Utiliser {name}",
+        "required": "Votre administrateur a rendu cette intégration obligatoire. Vous ne pouvez pas la désactiver.",
+        "failed": "Impossible de modifier l'intégration."
+      }
+    },
+    "menu": {
+      "label": "Plus d'actions pour {name}",
+      "share": "Partager",
+      "publish": {
+        "label": "Publier dans l'organisation",
+        "blocked": "Seul un utilisateur disposant de l'autorisation Gérer les actions pour toute l'organisation peut publier une intégration.",
+        "confirmTitle": "Publier {name} dans l'organisation ?",
+        "confirmMessage": "Chaque utilisateur de l'organisation peut ensuite l'activer. Les administrateurs définissent son paramètre d'installation. Les personnes avec qui vous l'avez partagée gardent l'accès.",
+        "done": "{name} est maintenant disponible pour l'organisation.",
+        "failed": "Impossible de publier l'intégration."
+      }
+    }
   },
   "customize": {
     "title": "Personnaliser",
@@ -17225,22 +17218,20 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, =0 {} one {1 compétence} other {{skills} compétences}}{both, select, yes { · } other {}}{integrations, plural, =0 {} one {1 intégration} other {{integrations} intégrations}}",
-      "needsSignIn": "{count, plural, one {# nécessite une connexion} other {# nécessitent une connexion}}",
+      "contents": "{skills, plural, one {1 compétence} other {{skills} compétences}}",
       "loadFailed": "Impossible de charger vos plugins.",
-      "switchFailed": "Impossible de modifier le plugin.",
       "filter": {
         "all": "Tous les plugins"
       },
       "empty": {
         "title": "Aucun plugin pour le moment",
-        "description": "Créez une compétence ou ajoutez une intégration. Chacune est un plugin."
+        "description": "Créez une compétence. Chaque compétence est un plugin."
       },
       "noMatches": {
         "title": "Aucun plugin correspondant",
         "clear": "Afficher tous les plugins"
       },
-      "intro": "Un plugin regroupe des compétences et des intégrations que vous activez ensemble. Chaque compétence et chaque intégration que vous ajoutez vient dans son propre plugin."
+      "intro": "Un plugin regroupe des compétences que vous activez ensemble. Chaque compétence ajoutée a son propre plugin. Les intégrations se trouvent dans l'onglet Intégrations."
     },
     "skillPage": {
       "title": "Compétence",
@@ -17315,7 +17306,14 @@
         "type": "Type",
         "signIn": "Connexion",
         "url": "URL du serveur",
-        "plugins": "Dans les plugins"
+        "owner": "Propriétaire",
+        "organization": "Organisation",
+        "status": "Statut",
+        "switch": {
+          "title": "Utiliser Cette Intégration",
+          "description": "Lorsque cette option est activée, vous pouvez l'utiliser dans les chats et dans Craft.",
+          "required": "Votre administrateur a rendu cette intégration obligatoire. Vous ne pouvez pas la désactiver."
+        }
       },
       "configuration": {
         "description": "{mode, select, individual {Votre connexion à cette intégration. Vous seul l’utilisez.} shared {Le compte de cette intégration. Toutes les personnes qui y ont accès l’utilisent.} other {Cette intégration ne nécessite pas de connexion.}}"
@@ -17323,8 +17321,7 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "Compétences · {count}",
-        "integrations": "Intégrations · {count}"
+        "skills": "Compétences · {count}"
       }
     },
     "search": "Rechercher"

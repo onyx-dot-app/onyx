@@ -30,8 +30,8 @@ off, set the sign-in and the organization connection, and set a policy per
 action: Allow, Ask or Blocked. A switch decides whether users may save Always
 allow over Ask. When the agent later tries a Blocked action, the call fails
 with a policy error. When it tries an Ask action, the user gets an approval
-card in the session. The Plugins page (`/admin/plugins`) lists the plugins
-that hold integrations and changes their install setting. On Onyx Cloud, the
+card in the session. The same list sets the install setting of each
+integration. On Onyx Cloud, the
 admin cannot see or edit the sign-in of an Onyx-managed built-in app, and
 cannot add a second one or delete it. The admin can change its name,
 description, switch, Always allow setting and action policies.
@@ -63,7 +63,7 @@ Neighbours own the rest:
   of workspace, personal and task choices, the action catalogs, and OAuth.
 - [[mcp-and-custom-tools]]: the MCP server admin routes. They write the same
   policy tables ([[#two-gates-one-policy-table]]).
-- [[plugins]]: the admin Integrations and Plugins pages, which edit apps, MCP
+- [[plugins]]: the admin Integrations page, which edits apps, MCP
   servers and OpenAPI tools as integrations.
 - [[chat-preferences]]: the workspace `Settings` store, which holds the Craft
   default and the organization instructions. The admin writes them through
@@ -109,8 +109,8 @@ default changes (`web/src/views/admin/CraftPage/AccessCell.tsx`).
 (`backend/onyx/integrations/service.py:set_admin_actions__no_commit`), which
 writes the admin rows of `integration_action_policy`. After the commit,
 `backend/onyx/integrations/service.py:reload_craft_sessions` restamps
-`mcp_config_hash` and pushes the skills of the users who can see a plugin that
-holds the integration. A built-in app skill lists the actions the admin
+`mcp_config_hash` and pushes the skills of the users who have access to the
+integration. A built-in app skill lists the actions the admin
 blocked as unavailable (`skills/rendering.py:build_action_availability_section`,
 from `backend/onyx/integrations/policy.py:admin_blocked_actions`).
 
@@ -155,8 +155,8 @@ then the chat default.
    differently.** The external-app PATCH commits, then calls
    `skills/push.py:push_skills_for_users` so the skill file lists DENY actions as
    unavailable (`skills/rendering.py:build_action_availability_section`).
-   The PATCH and the delete push to the users who can see a plugin that holds
-   the app's integration,
+   The PATCH and the delete push to the users who have access to the app's
+   integration,
    because only they get its built-in skill ([[skills#built-in-app-skill-rule]]).
    Built-in create and app delete push before commit, so a push failure rolls
    the write back. Custom create pushes nothing. The MCP routes only restamp

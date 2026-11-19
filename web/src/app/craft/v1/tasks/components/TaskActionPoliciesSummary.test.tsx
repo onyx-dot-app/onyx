@@ -1,45 +1,49 @@
 import { render, screen } from "@tests/setup/test-utils";
 import TaskActionPoliciesSummary from "@/app/craft/v1/tasks/components/TaskActionPoliciesSummary";
-import type { TaskPluginView } from "@/app/craft/v1/tasks/types";
+import type { TaskIntegrationView } from "@/app/craft/v1/tasks/types";
 
-function plugin(
-  pluginId: string,
+function integration(
+  id: number,
   name: string,
   enabled: boolean
-): TaskPluginView {
+): TaskIntegrationView {
   return {
-    plugin_id: pluginId,
-    plugin_name: name,
+    id,
+    name,
+    kind: "mcp",
+    app_type: null,
+    status: { state: "connected", reason: null },
+    actions: [],
     enabled,
     action_settings: enabled ? { default: "inherit", actions: {} } : null,
-    integrations: [],
+    runnable: true,
   };
 }
 
-let mockData: TaskPluginView[] = [];
+let mockData: TaskIntegrationView[] = [];
 jest.mock("swr", () => ({
   ...jest.requireActual("swr"),
   __esModule: true,
   default: () => ({ data: mockData, mutate: jest.fn() }),
 }));
 
-it("lists only enabled plugins as passive task context", () => {
+it("lists only enabled integrations as passive task context", () => {
   mockData = [
-    plugin("a", "Slack", true),
-    plugin("b", "Disabled plugin", false),
+    integration(1, "Slack", true),
+    integration(2, "Disabled app", false),
   ];
   render(<TaskActionPoliciesSummary taskId="task" />);
   expect(screen.getByText("Slack")).toBeInTheDocument();
-  expect(screen.queryByText("Disabled plugin")).not.toBeInTheDocument();
+  expect(screen.queryByText("Disabled app")).not.toBeInTheDocument();
   expect(screen.queryByRole("switch")).not.toBeInTheDocument();
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
 
-it("shows an explicit empty state when no plugins are enabled", () => {
-  mockData = [plugin("a", "Slack", false)];
+it("shows an explicit empty state when no integrations are enabled", () => {
+  mockData = [integration(1, "Slack", false)];
   render(<TaskActionPoliciesSummary taskId="task" />);
   expect(
-    screen.getByText("No plugins enabled for this task.")
+    screen.getByText("No integrations turned on for this task.")
   ).toBeInTheDocument();
   expect(screen.queryByText("Slack")).not.toBeInTheDocument();
 });

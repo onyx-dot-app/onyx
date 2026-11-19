@@ -54,9 +54,9 @@ function openApiSpec(title: string): Record<string, unknown> {
   };
 }
 
-test.describe("Agent plugin action settings", () => {
+test.describe("Agent integration action settings", () => {
   let integrationId: number | null = null;
-  let pluginName: string;
+  let integrationName: string;
   let agentId: number | null = null;
 
   test.beforeAll(async ({ browser }) => {
@@ -77,7 +77,7 @@ test.describe("Agent plugin action settings", () => {
       config: { shape: "openapi", openapi_spec: openApiSpec(name) },
     });
     integrationId = integration.id;
-    pluginName = integration.plugins[0]?.plugin_name ?? name;
+    integrationName = integration.name;
     await client.setIntegrationActionPolicies(integration.id, {
       [ARCHIVE_ACTION]: "blocked",
     });
@@ -102,8 +102,8 @@ test.describe("Agent plugin action settings", () => {
 
     const editor = new AgentEditorPage(page);
     await editor.goto();
-    await editor.fill({ name: `PW Plugin Agent ${Date.now()}` });
-    await editor.addPlugin(pluginName);
+    await editor.fill({ name: `PW Integration Agent ${Date.now()}` });
+    await editor.addIntegration(integrationName);
     await editor.expectActionSetting(
       ARCHIVE_ACTION,
       "Use the agent default",
@@ -115,11 +115,11 @@ test.describe("Agent plugin action settings", () => {
 
     const client = new OnyxApiClient(page.request);
     const agent = await client.getAssistant(agentId);
-    expect(agent.plugins).toHaveLength(1);
-    expect(agent.plugins[0]?.action_settings.actions).toEqual({
+    expect(agent.integrations).toHaveLength(1);
+    expect(agent.integrations[0]?.action_settings.actions).toEqual({
       [DELETE_ACTION]: "blocked",
     });
-    expect(agent.plugins[0]?.action_settings.default ?? "inherit").toBe(
+    expect(agent.integrations[0]?.action_settings.default ?? "inherit").toBe(
       "inherit"
     );
 

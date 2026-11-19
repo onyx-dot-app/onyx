@@ -36,12 +36,10 @@ from onyx.db.models import (
     Integration,
     IntegrationActionPolicy,
     MCPServer,
-    Plugin,
     ScheduledTask,
-    ScheduledTask__Plugin,
+    ScheduledTask__Integration,
     ScheduledTaskRun,
     User,
-    UserPluginPreference,
 )
 from onyx.db.scheduled_task import get_scheduled_task_id_for_session
 from onyx.external_apps.matching.engine import (
@@ -49,7 +47,7 @@ from onyx.external_apps.matching.engine import (
     AllMatchedActions,
 )
 from onyx.integrations.connection_models import ConnectionSecret
-from onyx.integrations.craft import list_task_plugin_views
+from onyx.integrations.craft import list_task_integration_views
 from onyx.integrations.models import EffectivePolicy, LinkValue
 from onyx.sandbox_proxy.addons.gate import GateAddon
 from onyx.sandbox_proxy.credential_injection import (
@@ -71,10 +69,11 @@ from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     make_app_integration,
     make_mcp_integration,
     make_openapi_integration,
+    turn_off_integrations,
 )
 from tests.external_dependency_unit.integrations.conftest import add_connection
 from tests.unit.sandbox_proxy.conftest import StubResolver, make_flow
@@ -103,9 +102,9 @@ def _host() -> str:
     return f"api-{uuid4().hex[:8]}.example.com"
 
 
-def _run(db_session: Session, integrations: list[Integration]) -> Plugin:
-    """A published plugin that each user runs by default."""
-    return hold_in_plugin(
+def _run(db_session: Session, integrations: list[Integration]) -> None:
+    """Each user has the integrations on by default."""
+    give_access(
         db_session,
         integrations,
         published=True,
@@ -442,11 +441,8 @@ def test_an_integration_the_user_does_not_run_is_not_matched(
     mcp = _mcp(db_session, created, f"https://{host}/mcp")
     app_host = _host()
     app = _custom_app(db_session, created, app_host)
-    plugin = _run(db_session, [mcp, app])
-    db_session.add(
-        UserPluginPreference(user_id=user.id, plugin_id=plugin.id, enabled=False)
-    )
-    db_session.commit()
+    _run(db_session, [mcp, app])
+    turn_off_integrations(db_session, user.id, [mcp, app])
 
     request = _request(f"https://{host}/mcp", _tool_call("search"))
     assert _evaluate(request, user) is None
@@ -487,7 +483,7 @@ def test_an_unparsable_mcp_body_is_blocked(
 
 
 def _task_run(
-    db_session: Session, user: User, session_id: UUID, links: dict[UUID, Any]
+    db_session: Session, user: User, session_id: UUID, links: dict[int, Any]
 ) -> ScheduledTask:
     task = ScheduledTask(
         user_id=user.id,
@@ -507,12 +503,12 @@ def _task_run(
                 trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
             ),
             *(
-                ScheduledTask__Plugin(
+                ScheduledTask__Integration(
                     scheduled_task_id=task.id,
-                    plugin_id=plugin_id,
+                    integration_id=integration_id,
                     action_settings=settings,
                 )
-                for plugin_id, settings in links.items()
+                for integration_id, settings in links.items()
             ),
         ]
     )
@@ -520,21 +516,21 @@ def _task_run(
     return task
 
 
-def test_a_scheduled_task_calls_only_the_integrations_of_its_plugins(
+def test_a_scheduled_task_calls_only_its_integrations(
     db_session: Session, created: list[int], user: User
 ) -> None:
     task_host = _host()
     in_task = _mcp(db_session, created, f"https://{task_host}/mcp")
     other_host = _host()
     other = _mcp(db_session, created, f"https://{other_host}/mcp")
-    task_plugin = _run(db_session, [in_task])
+    _run(db_session, [in_task])
     _run(db_session, [other])
     ctx = _session_ctx(db_session, user)
     _task_run(
         db_session,
         user,
         ctx.session_id,
-        {task_plugin.id: {"default": "inherit", "actions": {"update": "allow"}}},
+        {in_task.id: {"default": "inherit", "actions": {"update": "allow"}}},
     )
     addon = _addon()
 
@@ -560,7 +556,7 @@ def test_a_scheduled_task_ask_ignores_the_owners_always_allow(
 ) -> None:
     host = _host()
     mcp = _mcp(db_session, created, f"https://{host}/mcp")
-    plugin = _run(db_session, [mcp])
+    _run(db_session, [mcp])
     db_session.add(
         IntegrationActionPolicy(
             integration_id=mcp.id,
@@ -581,7 +577,7 @@ def test_a_scheduled_task_ask_ignores_the_owners_always_allow(
         db_session,
         user,
         run_ctx.session_id,
-        {plugin.id: {"default": "inherit", "actions": {"update": "ask"}}},
+        {mcp.id: {"default": "inherit", "actions": {"update": "ask"}}},
     )
     _, resolved = addon._resolve_request_policies(
         run_ctx, _evaluate(request, user, task.id)
@@ -589,14 +585,14 @@ def test_a_scheduled_task_ask_ignores_the_owners_always_allow(
     assert resolved.governing_action.policy is ActionPolicy.ASK
 
 
-def test_a_scheduled_task_plugin_that_inherits_does_not_block(
+def test_a_scheduled_task_integration_that_inherits_does_not_block(
     db_session: Session, created: list[int], user: User
 ) -> None:
     host = _host()
     mcp = _mcp(db_session, created, f"https://{host}/mcp")
-    plugin = _run(db_session, [mcp])
+    _run(db_session, [mcp])
     ctx = _session_ctx(db_session, user)
-    task = _task_run(db_session, user, ctx.session_id, {plugin.id: {}})
+    task = _task_run(db_session, user, ctx.session_id, {mcp.id: {}})
     addon = _addon()
 
     for action, policy in (
@@ -610,8 +606,7 @@ def test_a_scheduled_task_plugin_that_inherits_does_not_block(
         assert resolved.governing_action.policy is policy
     shown = {
         action.key: action.integration_policy
-        for view in list_task_plugin_views(db_session, user, task.id)
-        for integration in view.integrations
+        for integration in list_task_integration_views(db_session, user, task.id)
         if integration.id == mcp.id
         for action in integration.actions
     }
@@ -683,7 +678,7 @@ def test_a_session_grant_approves_the_same_actions_of_the_integration(
     assert addon._apply_session_grant(ctx, other_resolved) is None
 
 
-def test_the_craft_mcp_config_lists_only_connected_integrations_of_enabled_plugins(
+def test_the_craft_mcp_config_lists_only_connected_integrations_that_are_on(
     db_session: Session, created: list[int], user: User
 ) -> None:
     open_mcp = _mcp(db_session, created, f"https://{_host()}/mcp")
@@ -705,11 +700,8 @@ def test_the_craft_mcp_config_lists_only_connected_integrations_of_enabled_plugi
     )
     turned_off = _mcp(db_session, created, f"https://{_host()}/mcp")
     _run(db_session, [open_mcp, unconnected, connected])
-    off_plugin = _run(db_session, [turned_off])
-    db_session.add(
-        UserPluginPreference(user_id=user.id, plugin_id=off_plugin.id, enabled=False)
-    )
-    db_session.commit()
+    _run(db_session, [turned_off])
+    turn_off_integrations(db_session, user.id, [turned_off])
     add_connection(
         db_session, connected, user.id, ConnectionSecret(fields={"api_key": "k"})
     )
@@ -722,22 +714,19 @@ def test_the_craft_mcp_config_lists_only_connected_integrations_of_enabled_plugi
     assert turned_off.id not in listed
 
 
-def test_a_scheduled_run_matches_a_task_plugin_that_the_owner_turned_off(
+def test_a_scheduled_run_matches_a_task_integration_that_the_owner_turned_off(
     db_session: Session, created: list[int], user: User
 ) -> None:
     host = _host()
     mcp = _mcp(db_session, created, f"https://{host}/mcp")
-    plugin = _run(db_session, [mcp])
-    db_session.add(
-        UserPluginPreference(user_id=user.id, plugin_id=plugin.id, enabled=False)
-    )
-    db_session.commit()
+    _run(db_session, [mcp])
+    turn_off_integrations(db_session, user.id, [mcp])
     ctx = _session_ctx(db_session, user)
     task = _task_run(
         db_session,
         user,
         ctx.session_id,
-        {plugin.id: {"actions": {"update": "allow"}}},
+        {mcp.id: {"actions": {"update": "allow"}}},
     )
     request = _request(f"https://{host}/mcp", _tool_call("update"))
 
@@ -769,20 +758,20 @@ def test_a_scheduled_run_matches_a_task_plugin_that_the_owner_turned_off(
     assert IntegrationResolver().allows_destination(_sandbox(user), "https", host, 443)
 
 
-def test_a_scheduled_run_ignores_a_plugin_that_is_not_on_the_task(
+def test_a_scheduled_run_ignores_an_integration_that_is_not_on_the_task(
     db_session: Session, created: list[int], user: User
 ) -> None:
     host = _host()
     in_task = _mcp(db_session, created, f"https://{host}/mcp")
     # Turned on by the owner, with the same URL, but not on the task.
     _run(db_session, [_mcp(db_session, created, f"https://{host}/mcp")])
-    plugin = _run(db_session, [in_task])
+    _run(db_session, [in_task])
     ctx = _session_ctx(db_session, user)
     task = _task_run(
         db_session,
         user,
         ctx.session_id,
-        {plugin.id: {"actions": {"update": "allow"}}},
+        {in_task.id: {"actions": {"update": "allow"}}},
     )
 
     matched = _evaluate(
@@ -806,8 +795,7 @@ def test_the_task_catalog_locks_a_task_allow_that_the_policy_ignores(
 
     locked = {
         (integration.id, action.key): action.locked
-        for view in list_task_plugin_views(db_session, user, None)
-        for integration in view.integrations
+        for integration in list_task_integration_views(db_session, user, None)
         for action in integration.actions
     }
     assert locked[(open_mcp.id, "update")] is False
@@ -831,8 +819,7 @@ def test_the_task_catalog_shows_that_a_custom_app_always_asks(
 
     (action,) = [
         action
-        for view in list_task_plugin_views(db_session, user, None)
-        for integration in view.integrations
+        for integration in list_task_integration_views(db_session, user, None)
         if integration.id == custom.id
         for action in integration.actions
     ]
@@ -865,8 +852,7 @@ def test_the_task_catalog_leaves_out_openapi_integrations(
 
     listed = {
         integration.id
-        for view in list_task_plugin_views(db_session, user, None)
-        for integration in view.integrations
+        for integration in list_task_integration_views(db_session, user, None)
     }
     assert mcp.id in listed
     assert openapi.id not in listed
@@ -889,30 +875,26 @@ def test_the_task_catalog_ignores_the_owners_always_allow(
 
     policies = {
         (integration.id, action.key): action.integration_policy
-        for view in list_task_plugin_views(db_session, user, None)
-        for integration in view.integrations
+        for integration in list_task_integration_views(db_session, user, None)
         for action in integration.actions
     }
     assert policies[(mcp.id, "update")] is EffectivePolicy.ASK
 
 
-def test_a_scheduled_session_config_lists_the_task_plugins_the_owner_turned_off(
+def test_a_scheduled_session_config_lists_the_task_integrations_the_owner_turned_off(
     db_session: Session, created: list[int], user: User
 ) -> None:
     mcp = _mcp(db_session, created, f"https://{_host()}/mcp")
     other = _mcp(db_session, created, f"https://{_host()}/mcp")
-    plugin = _run(db_session, [mcp])
+    _run(db_session, [mcp])
     _run(db_session, [other])
-    db_session.add(
-        UserPluginPreference(user_id=user.id, plugin_id=plugin.id, enabled=False)
-    )
-    db_session.commit()
+    turn_off_integrations(db_session, user.id, [mcp])
     ctx = _session_ctx(db_session, user)
     task = _task_run(
         db_session,
         user,
         ctx.session_id,
-        {plugin.id: {"actions": {"update": "blocked"}}},
+        {mcp.id: {"actions": {"update": "blocked"}}},
     )
 
     interactive = {
@@ -936,30 +918,29 @@ def test_a_scheduled_session_config_lists_the_task_plugins_the_owner_turned_off(
     assert get_scheduled_task_id_for_session(db_session, ctx.session_id) == task.id
 
 
-def test_the_task_catalog_keeps_a_plugin_with_no_enabled_integration(
+def test_the_task_catalog_keeps_an_integration_that_an_admin_turned_off(
     db_session: Session, created: list[int], user: User
 ) -> None:
     mcp = _mcp(db_session, created, f"https://{_host()}/mcp")
-    plugin = _run(db_session, [mcp])
+    _run(db_session, [mcp])
     ctx = _session_ctx(db_session, user)
     task = _task_run(
         db_session,
         user,
         ctx.session_id,
-        {plugin.id: {"actions": {"update": "allow", "removed": "allow"}}},
+        {mcp.id: {"actions": {"update": "allow", "removed": "allow"}}},
     )
     mcp.enabled = False
     db_session.commit()
 
     views = {
-        view.plugin_id: view
-        for view in list_task_plugin_views(db_session, user, task.id)
+        view.id: view for view in list_task_integration_views(db_session, user, task.id)
     }
 
-    assert views[plugin.id].enabled
-    assert views[plugin.id].integrations == []
-    # A key that no integration has any more is left out, so a save that
+    assert views[mcp.id].enabled
+    assert views[mcp.id].runnable is False
+    # A key that the integration has no more is left out, so a save that
     # sends the settings back passes the action check.
-    settings = views[plugin.id].action_settings
+    settings = views[mcp.id].action_settings
     assert settings is not None
     assert settings.actions == {"update": LinkValue.ALLOW}

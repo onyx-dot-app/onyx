@@ -1,6 +1,6 @@
 """The integration API, called through its route functions against the
 database: create of each kind, the permission rules, sign-in changes, the
-actions, the member choices, the agent plugins and the public tool aliases."""
+actions, the member choices, the agent integrations and the public tool aliases."""
 
 import json
 from collections.abc import Generator
@@ -12,7 +12,7 @@ import pytest
 from httpx import ConnectError, HTTPStatusError, Request, Response
 from mcp.types import Tool as MCPLibTool
 from mcp.types import ToolAnnotations
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -25,8 +25,7 @@ from onyx.db.enums import (
     IntegrationConnectionStatus,
     IntegrationKind,
     IntegrationOAuthProviderMode,
-    MarketplaceKind,
-    PluginPublishingPolicy,
+    PluginInstallationPolicy,
 )
 from onyx.db.integration import (
     get_external_app_for_integration,
@@ -36,24 +35,20 @@ from onyx.db.integration import (
     list_integration_actions,
 )
 from onyx.db.integration_connection import get_connection, get_oauth_client
-from onyx.db.integration_policy import list_persona_plugin_links
+from onyx.db.integration_policy import list_persona_integration_links
 from onyx.db.models import (
     ExternalApp,
     Integration,
+    Integration__User,
     IntegrationOAuthClient,
     Marketplace,
     MCPServer,
     Persona,
     Plugin,
-    Plugin__Integration,
     Tool,
     User,
 )
 from onyx.db.persona import upsert_persona
-from onyx.db.plugin import (
-    lock_plugin,
-    publish_or_request_review__no_commit,
-)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
@@ -68,7 +63,7 @@ from onyx.integrations.connections import (
 )
 from onyx.integrations.models import (
     IntegrationActionSpec,
-    PersonaPluginLink,
+    PersonaIntegrationLink,
 )
 from onyx.integrations.oauth import start_integration_oauth
 from onyx.server.features.integrations import admin_api, api
@@ -86,6 +81,7 @@ from onyx.server.features.integrations.models import (
     OpenApiConfigInput,
     PresetConfigInput,
 )
+from onyx.server.features.persona import api as persona_api
 from onyx.server.features.tool import api as tool_api
 from onyx.server.features.tool.models import (
     CustomToolCreate,
@@ -96,7 +92,7 @@ from onyx.utils.encryption import mask_string
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     make_mcp_integration,
 )
 
@@ -178,26 +174,29 @@ def _openapi_create(
     )
 
 
-def _plugin_of(db_session: Session, integration_id: int) -> Plugin:
-    return db_session.scalars(
-        select(Plugin)
-        .join(Plugin__Integration, Plugin__Integration.plugin_id == Plugin.id)
-        .where(Plugin__Integration.integration_id == integration_id)
-    ).one()
+def _plugin_rows(db_session: Session) -> tuple[int, int]:
+    """The count of plugins and of marketplaces."""
+    return (
+        db_session.scalar(select(func.count()).select_from(Plugin)) or 0,
+        db_session.scalar(select(func.count()).select_from(Marketplace)) or 0,
+    )
 
 
-def _marketplace_kind(db_session: Session, plugin: Plugin) -> MarketplaceKind:
-    return db_session.scalars(
-        select(Marketplace.kind).where(Marketplace.id == plugin.marketplace_id)
-    ).one()
+def _make_available(db_session: Session, integration_id: int) -> None:
+    """Make the integration Available to the organization."""
+    integration = db_session.get(Integration, integration_id)
+    assert integration is not None
+    integration.installation_policy = PluginInstallationPolicy.AVAILABLE
+    db_session.commit()
 
 
 # Create
 
 
-def test_create_openapi_makes_integration_tool_plugin_and_actions(
+def test_create_openapi_makes_integration_tool_and_actions_and_no_plugin(
     db_session: Session, admin: User, created: Created
 ) -> None:
+    plugin_rows = _plugin_rows(db_session)
     detail = admin_api.create_integration(_openapi_create(), admin, db_session)
     created.add(detail.id)
 
@@ -208,10 +207,9 @@ def test_create_openapi_makes_integration_tool_plugin_and_actions(
     assert detail.can_manage is True
     tool = get_openapi_tool_for_integration(detail.id, db_session)
     assert tool is not None and tool.openapi_schema == OPENAPI_SPEC
-    plugin = _plugin_of(db_session, detail.id)
-    assert _marketplace_kind(db_session, plugin) is MarketplaceKind.ORGANIZATION_LIBRARY
-    assert plugin.published_version_id == plugin.current_version_id
-    assert [ref.scope for ref in detail.plugins] == ["organization"]
+    assert _plugin_rows(db_session) == plugin_rows
+    assert detail.installation_policy is PluginInstallationPolicy.AVAILABLE
+    assert detail.access.shared_with_everyone is True
     actions = {
         action.key: action for action in list_integration_actions(detail.id, db_session)
     }
@@ -228,7 +226,8 @@ def test_a_personal_integration_starts_on_for_its_creator(
     created.add(detail.id)
 
     view = api.get_integration_for_member(detail.id, scoped, db_session)
-    assert [(ref.scope, ref.enabled) for ref in view.plugins] == [("personal", True)]
+    assert (view.access.owner_email, view.access.user_enabled) == (scoped.email, True)
+    assert view.access.shared_with_everyone is False
 
 
 def test_a_header_change_keeps_the_stored_credential_fields(
@@ -300,6 +299,7 @@ def test_create_mcp_discovers_tools_of_a_public_server(
             )
         ]
 
+    plugin_rows = _plugin_rows(db_session)
     with patch(
         "onyx.integrations.service.discover_mcp_tools", side_effect=discover
     ) as fetch:
@@ -320,9 +320,12 @@ def test_create_mcp_discovers_tools_of_a_public_server(
     assert [a.key for a in list_integration_actions(detail.id, db_session)] == [
         "search"
     ]
-    plugin = _plugin_of(db_session, detail.id)
-    assert _marketplace_kind(db_session, plugin) is MarketplaceKind.USER_UPLOADS
-    assert plugin.author_user_id == scoped.id
+    # A private integration makes no plugin and no "My uploads".
+    assert _plugin_rows(db_session) == plugin_rows
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None
+    assert integration.owner_user_id == scoped.id
+    assert integration.installation_policy is PluginInstallationPolicy.NOT_AVAILABLE
     # No MCP tool row is written.
     assert server is not None
     assert (
@@ -389,7 +392,7 @@ def test_create_custom_app(db_session: Session, admin: User, created: Created) -
     detail = admin_api.create_integration(_custom_create(), admin, db_session)
     created.add(detail.id)
     assert detail.shape is IntegrationShape.CUSTOM
-    assert [ref.scope for ref in detail.plugins] == ["personal"]
+    assert detail.access.shared_with_everyone is False
     assert detail.config.shape is IntegrationShape.CUSTOM
 
 
@@ -475,7 +478,7 @@ def test_create_rolls_back_when_a_step_fails(db_session: Session, admin: User) -
     name = f"rollback-{uuid4().hex[:8]}"
     with (
         patch(
-            "onyx.integrations.service.create_integration_plugin__no_commit",
+            "onyx.integrations.service.sync_integration_actions__no_commit",
             side_effect=RuntimeError("boom"),
         ),
         pytest.raises(RuntimeError),
@@ -497,7 +500,7 @@ def test_create_rolls_back_when_a_step_fails(db_session: Session, admin: User) -
     ],
 )
 @pytest.mark.usefixtures("craft_available")
-def test_delete_removes_the_kind_row_and_the_emptied_plugin(
+def test_delete_removes_the_kind_row(
     db_session: Session,
     admin: User,
     created: Created,
@@ -521,14 +524,12 @@ def test_delete_removes_the_kind_row_and_the_emptied_plugin(
     if integration.external_app_id is not None:
         kind_row = (ExternalApp, integration.external_app_id)
     assert kind_row[1] is not None
-    plugin_id = _plugin_of(db_session, detail.id).id
 
     admin_api.delete_integration(detail.id, admin, db_session)
 
     db_session.expire_all()
     assert db_session.get(Integration, detail.id) is None
     assert db_session.get(kind_row[0], kind_row[1]) is None
-    assert db_session.get(Plugin, plugin_id) is None
 
 
 # Permissions
@@ -596,11 +597,7 @@ def test_organization_library_integration_needs_global_manager(
         _openapi_create(for_organization=False), scoped, db_session
     )
     created.add(detail.id)
-    plugin = _plugin_of(db_session, detail.id)
-    publish_or_request_review__no_commit(
-        plugin, plugin.current_version_id, None, "rename", db_session
-    )
-    db_session.commit()
+    _make_available(db_session, detail.id)
 
     view = admin_api.get_integration_admin(detail.id, scoped, db_session)
     assert view.can_manage is False
@@ -616,70 +613,17 @@ def test_organization_library_integration_needs_global_manager(
 def test_group_manager_of_a_shared_plugin_cannot_change_it(
     db_session: Session, scoped: User, admin: User, created: Created
 ) -> None:
-    """A plugin in the scope of a group manager (here: shared with it) does
-    not give the right to change its integration."""
+    """A share of an integration with a group manager does not give the right
+    to change it."""
     detail = admin_api.create_integration(
         _openapi_create(for_organization=False), admin, db_session
     )
     created.add(detail.id)
-    plugin = _plugin_of(db_session, detail.id)
-    from onyx.db.models import Plugin__User
-
-    db_session.add(Plugin__User(plugin_id=plugin.id, user_id=scoped.id))
+    db_session.add(Integration__User(integration_id=detail.id, user_id=scoped.id))
     db_session.commit()
     with pytest.raises(OnyxError) as error:
         admin_api.delete_integration(detail.id, scoped, db_session)
     assert error.value.status_code == 403
-
-
-def test_publishing_a_plugin_with_an_integration_needs_global_manager(
-    db_session: Session, scoped: User, admin: User, created: Created
-) -> None:
-    detail = admin_api.create_integration(
-        _openapi_create(for_organization=False), scoped, db_session
-    )
-    created.add(detail.id)
-    plugin = lock_plugin(_plugin_of(db_session, detail.id).id, db_session)
-    assert plugin is not None
-    with (
-        patch(
-            "onyx.db.plugin.load_settings",
-            return_value=type(
-                "S", (), {"plugin_publishing": PluginPublishingPolicy.OPEN}
-            )(),
-        ),
-        pytest.raises(OnyxError) as error,
-    ):
-        publish_or_request_review__no_commit(
-            plugin, plugin.current_version_id, scoped, "raise", db_session
-        )
-    assert error.value.status_code == 403
-    db_session.rollback()
-
-    plugin = lock_plugin(plugin.id, db_session)
-    assert plugin is not None
-    with pytest.raises(OnyxError):
-        publish_or_request_review__no_commit(
-            plugin,
-            plugin.current_version_id,
-            None,
-            "raise",
-            db_session,
-            approver=scoped,
-        )
-    db_session.rollback()
-    plugin = lock_plugin(plugin.id, db_session)
-    assert plugin is not None
-    publish_or_request_review__no_commit(
-        plugin,
-        plugin.current_version_id,
-        None,
-        "raise",
-        db_session,
-        approver=admin,
-    )
-    db_session.commit()
-    assert plugin.published_version_id == plugin.current_version_id
 
 
 # Sign-in changes and connections
@@ -1084,7 +1028,7 @@ def test_refresh_of_an_mcp_server_stores_discovered_tools(
         tools=("old",),
     )
     created.add(integration.id)
-    hold_in_plugin(db_session, [integration])
+    give_access(db_session, [integration])
     spec = IntegrationActionSpec(
         key="new",
         source=IntegrationActionSource.MCP,
@@ -1110,7 +1054,7 @@ def test_refresh_refuses_actions_of_a_server_url_that_changed_meanwhile(
         tools=("old",),
     )
     created.add(integration.id)
-    hold_in_plugin(db_session, [integration])
+    give_access(db_session, [integration])
     server_id = server.id
     spec = IntegrationActionSpec(
         key="new",
@@ -1155,7 +1099,7 @@ def test_refresh_refuses_actions_of_a_header_template_that_changed_meanwhile(
         header_template={"X-Team": "blue"},
     )
     integration_id = created.add(integration.id)
-    hold_in_plugin(db_session, [integration])
+    give_access(db_session, [integration])
     spec = IntegrationActionSpec(
         key="new",
         source=IntegrationActionSource.MCP,
@@ -1437,18 +1381,17 @@ def test_member_cannot_reach_a_private_integration(
     assert error.value.status_code == 404
 
 
-def test_agent_catalog_lists_visible_plugins(
+def test_agent_catalog_lists_the_integrations_the_user_has_access_to(
     db_session: Session, admin: User, member: User, created: Created
 ) -> None:
     detail = admin_api.create_integration(_openapi_create(), admin, db_session)
     created.add(detail.id)
     options = {
-        option.plugin_id: option for option in api.get_agent_catalog(member, db_session)
+        option.id: option for option in api.get_agent_catalog(member, db_session)
     }
-    plugin_id = detail.plugins[0].plugin_id
-    assert [i.id for i in options[plugin_id].integrations] == [detail.id]
-    assert len(options[plugin_id].integrations[0].actions) == 2
-    assert options[plugin_id].integrations[0].users_can_save_always_allow
+    assert options[detail.id].name == detail.name
+    assert len(options[detail.id].actions) == 2
+    assert options[detail.id].users_can_save_always_allow
 
 
 # Agents
@@ -1459,7 +1402,7 @@ def _persona(
     user: User,
     *,
     tool_ids: list[int] | None,
-    plugin_links: list[PersonaPluginLink] | None,
+    integration_links: list[PersonaIntegrationLink] | None,
     persona_id: int | None = None,
 ) -> int:
     persona = upsert_persona(
@@ -1473,13 +1416,20 @@ def _persona(
         is_public=True,
         db_session=db_session,
         tool_ids=tool_ids,
-        plugin_links=plugin_links,
+        integration_links=integration_links,
         persona_id=persona_id,
     )
     return persona.id
 
 
-def test_persona_plugins_and_legacy_tool_ids(
+def _links(db_session: Session, persona_id: int) -> dict[int, dict[str, Any]]:
+    return {
+        link.integration_id: link.action_settings
+        for link in list_persona_integration_links(db_session, persona_id)
+    }
+
+
+def test_persona_integrations_and_legacy_tool_ids(
     db_session: Session, admin: User, created: Created
 ) -> None:
     openapi = admin_api.create_integration(_openapi_create(), admin, db_session)
@@ -1493,36 +1443,31 @@ def test_persona_plugins_and_legacy_tool_ids(
         tools=("hello", "bye"),
     )
     created.add(mcp.id)
-    mcp_plugin = hold_in_plugin(db_session, [mcp])
-    old_mcp_tool = Tool(
-        name="hello",
-        description="",
-        mcp_server_id=server.id,
-        enabled=True,
-        passthrough_auth=False,
-    )
-    db_session.add(old_mcp_tool)
-    db_session.commit()
+    give_access(db_session, [mcp])
+    old_mcp_tool = _old_mcp_tool(db_session, server.id, "hello")
 
     persona_id = _persona(
         db_session,
         admin,
         tool_ids=[openapi_tool.id, old_mcp_tool.id],
-        plugin_links=None,
+        integration_links=None,
     )
-    links = {
-        link.plugin_id: link.action_settings
-        for link in list_persona_plugin_links(db_session, persona_id)
+    assert _links(db_session, persona_id) == {
+        openapi.id: {},
+        mcp.id: {"default": "blocked", "actions": {"hello": "inherit"}},
     }
-    assert links[openapi.plugins[0].plugin_id] == {}
-    assert links[mcp_plugin.id] == {
-        "default": "blocked",
-        "actions": {"hello": "inherit"},
-    }
+    snapshot = persona_api.get_persona(persona_id, admin, db_session)
+    assert [
+        (link.integration_id, link.integration_name) for link in snapshot.integrations
+    ] == sorted(
+        [(openapi.id, openapi.name), (mcp.id, mcp.name)], key=lambda link: link[1]
+    )
 
     # Old tool ids with no MCP tool remove the link of the old MCP tool.
-    _persona(db_session, admin, tool_ids=[], plugin_links=None, persona_id=persona_id)
-    assert list_persona_plugin_links(db_session, persona_id) == []
+    _persona(
+        db_session, admin, tool_ids=[], integration_links=None, persona_id=persona_id
+    )
+    assert _links(db_session, persona_id) == {}
 
 
 def _old_mcp_tool(db_session: Session, server_id: int, name: str) -> Tool:
@@ -1538,38 +1483,11 @@ def _old_mcp_tool(db_session: Session, server_id: int, name: str) -> Tool:
     return tool
 
 
-def test_legacy_tool_ids_of_two_servers_in_one_plugin_allow_both_tools(
+def test_legacy_tool_ids_of_two_servers_give_one_link_for_each_server(
     db_session: Session, admin: User, created: Created
 ) -> None:
-    first, first_server = make_mcp_integration(
-        db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("alpha", "gamma")
-    )
-    second, second_server = make_mcp_integration(
-        db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("beta",)
-    )
-    created.add(first.id)
-    created.add(second.id)
-    plugin = hold_in_plugin(db_session, [first, second])
-    alpha = _old_mcp_tool(db_session, first_server.id, "alpha")
-    beta = _old_mcp_tool(db_session, second_server.id, "beta")
-
-    persona_id = _persona(
-        db_session, admin, tool_ids=[alpha.id, beta.id], plugin_links=None
-    )
-
-    links = {
-        link.plugin_id: link.action_settings
-        for link in list_persona_plugin_links(db_session, persona_id)
-    }
-    assert links[plugin.id] == {
-        "default": "blocked",
-        "actions": {"alpha": "inherit", "beta": "inherit"},
-    }
-
-
-def test_legacy_tool_ids_do_not_allow_a_shared_name_that_another_server_left_out(
-    db_session: Session, admin: User, created: Created
-) -> None:
+    """A tool name that the request did not select on a server stays blocked
+    on that server, also when the request selects it on another server."""
     first, first_server = make_mcp_integration(
         db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("alpha", "beta")
     )
@@ -1578,72 +1496,39 @@ def test_legacy_tool_ids_do_not_allow_a_shared_name_that_another_server_left_out
     )
     created.add(first.id)
     created.add(second.id)
-    plugin = hold_in_plugin(db_session, [first, second])
+    give_access(db_session, [first, second])
     alpha = _old_mcp_tool(db_session, first_server.id, "alpha")
     beta = _old_mcp_tool(db_session, second_server.id, "beta")
 
     persona_id = _persona(
-        db_session, admin, tool_ids=[alpha.id, beta.id], plugin_links=None
+        db_session, admin, tool_ids=[alpha.id, beta.id], integration_links=None
     )
 
-    links = {
-        link.plugin_id: link.action_settings
-        for link in list_persona_plugin_links(db_session, persona_id)
+    assert _links(db_session, persona_id) == {
+        first.id: {"default": "blocked", "actions": {"alpha": "inherit"}},
+        second.id: {"default": "blocked", "actions": {"beta": "inherit"}},
     }
-    assert links[plugin.id] == {"default": "blocked", "actions": {"alpha": "inherit"}}
 
 
-def test_legacy_tool_ids_do_not_bring_back_a_plugin_that_the_request_replaces(
-    db_session: Session, admin: User, created: Created
-) -> None:
-    mcp, server = make_mcp_integration(
-        db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("hello",)
-    )
-    created.add(mcp.id)
-    old, new = (hold_in_plugin(db_session, [mcp]) for _ in range(2))
-    hello = _old_mcp_tool(db_session, server.id, "hello")
-    persona_id = _persona(
-        db_session,
-        admin,
-        tool_ids=None,
-        plugin_links=[PersonaPluginLink(plugin_id=old.id)],
-    )
-
-    _persona(
-        db_session,
-        admin,
-        tool_ids=[hello.id],
-        plugin_links=[PersonaPluginLink(plugin_id=new.id)],
-        persona_id=persona_id,
-    )
-
-    assert [
-        link.plugin_id for link in list_persona_plugin_links(db_session, persona_id)
-    ] == [new.id]
-
-
-def test_legacy_tool_ids_keep_the_plugin_that_the_agent_holds(
+def test_an_agent_link_needs_access_to_the_integration(
     db_session: Session, admin: User, member: User, created: Created
 ) -> None:
+    """An editor adds only an integration that the editor has access to. A
+    link that the agent has stays when an editor with no access saves old
+    tool ids."""
     mcp, server = make_mcp_integration(
         db_session, name=f"mcp-{uuid4().hex[:8]}", tools=("hello",)
     )
     created.add(mcp.id)
-    plugins = sorted(
-        (
-            hold_in_plugin(db_session, [mcp], published=False, author_user_id=admin.id)
-            for _ in range(2)
-        ),
-        key=lambda plugin: plugin.id,
-    )
-    held = plugins[1]
+    give_access(db_session, [mcp], published=False, owner_user_id=admin.id)
     hello = _old_mcp_tool(db_session, server.id, "hello")
-    persona_id = _persona(
-        db_session,
-        admin,
-        tool_ids=None,
-        plugin_links=[PersonaPluginLink(plugin_id=held.id)],
-    )
+    link = PersonaIntegrationLink(integration_id=mcp.id)
+
+    with pytest.raises(ValueError, match="do not have access"):
+        _persona(db_session, member, tool_ids=None, integration_links=[link])
+    db_session.rollback()
+
+    persona_id = _persona(db_session, admin, tool_ids=None, integration_links=[link])
     persona = db_session.get(Persona, persona_id)
     assert persona is not None
     persona.user_id = member.id
@@ -1653,13 +1538,14 @@ def test_legacy_tool_ids_keep_the_plugin_that_the_agent_holds(
         db_session,
         member,
         tool_ids=[hello.id],
-        plugin_links=None,
+        integration_links=None,
         persona_id=persona_id,
     )
 
-    assert [
-        link.plugin_id for link in list_persona_plugin_links(db_session, persona_id)
-    ] == [held.id]
+    assert _links(db_session, persona_id) == {mcp.id: {}}
+    # The agent gives the editor no access to the integration.
+    assert api.get_agent_integration_ids(persona_id, member, db_session) == []
+    assert api.get_agent_integration_ids(persona_id, admin, db_session) == [mcp.id]
 
 
 # Review fixes
@@ -1824,7 +1710,6 @@ def test_saving_a_legacy_oauth_client_keeps_its_credentials(
 def test_turning_default_chat_off_makes_the_plugin_available(
     db_session: Session, admin: User, created: Created
 ) -> None:
-    from onyx.db.enums import PluginInstallationPolicy
 
     snapshot = tool_api.create_custom_tool(
         CustomToolCreate(
@@ -1854,8 +1739,8 @@ def test_turning_default_chat_off_makes_the_plugin_available(
             admin,
         )
         assert updated.default_chat_enabled is enabled
-        db_session.expire_all()
-        assert _plugin_of(db_session, integration.id).installation_policy is policy
+        db_session.refresh(integration)
+        assert integration.installation_policy is policy
 
 
 def _linear_create() -> IntegrationCreate:
@@ -1926,22 +1811,20 @@ def test_cloud_protects_onyx_managed_presets(
         db_session.rollback()
 
 
-def test_member_plugin_refs_carry_the_users_install_setting(
+def test_a_member_row_carries_the_install_setting_for_the_user(
     db_session: Session, admin: User, member: User, created: Created
 ) -> None:
-    from onyx.db.enums import PluginInstallationPolicy
-    from onyx.db.models import Plugin__UserGroup, User__UserGroup, UserGroup
+    from onyx.db.models import Integration__UserGroup, User__UserGroup, UserGroup
 
     detail = admin_api.create_integration(_openapi_create(), admin, db_session)
     created.add(detail.id)
-    plugin_id = detail.plugins[0].plugin_id
     group = UserGroup(name=f"u6-required-{uuid4().hex[:8]}")
     db_session.add(group)
     db_session.flush()
     db_session.add(User__UserGroup(user_id=member.id, user_group_id=group.id))
     db_session.add(
-        Plugin__UserGroup(
-            plugin_id=plugin_id,
+        Integration__UserGroup(
+            integration_id=detail.id,
             user_group_id=group.id,
             permission=None,
             installation_policy=PluginInstallationPolicy.REQUIRED,
@@ -1953,13 +1836,14 @@ def test_member_plugin_refs_carry_the_users_install_setting(
             view.id: view
             for view in api.list_integrations_for_member(member, db_session)
         }
-        assert [ref.installation_policy for ref in listed[detail.id].plugins] == [
+        assert listed[detail.id].access.installation_policy is (
             PluginInstallationPolicy.REQUIRED
-        ]
+        )
+        assert listed[detail.id].access.user_enabled is True
         member_view = api.get_integration_for_member(detail.id, member, db_session)
-        assert [ref.installation_policy for ref in member_view.plugins] == [
+        assert member_view.access.installation_policy is (
             PluginInstallationPolicy.REQUIRED
-        ]
+        )
     finally:
         db_session.delete(group)
         db_session.commit()
@@ -2005,11 +1889,7 @@ def test_literal_header_values_are_masked_and_kept_on_save(
     assert error.value.status_code == 400
 
     # A reader that cannot manage the integration gets no header values.
-    plugin = _plugin_of(db_session, detail.id)
-    publish_or_request_review__no_commit(
-        plugin, plugin.current_version_id, None, "rename", db_session
-    )
-    db_session.commit()
+    _make_available(db_session, detail.id)
     view = admin_api.get_integration_admin(detail.id, scoped, db_session)
     assert view.can_manage is False
     assert view.header_template is None

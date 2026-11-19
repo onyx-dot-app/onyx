@@ -142,7 +142,7 @@ covers new files that match it.
 | `backend/onyx/server/features/action_policies/` | craft-external-apps, plugins |
 | `backend/onyx/db/mcp.py`, `backend/onyx/server/features/mcp/`, `backend/onyx/server/features/tool/`, `backend/onyx/db/tools.py` | mcp-and-custom-tools |
 | `backend/onyx/server/features/tool/tool_visibility.py` | mcp-and-custom-tools, plugins |
-| `backend/onyx/integrations/`, `backend/onyx/db/integration.py`, `backend/onyx/db/integration_connection.py`, `backend/onyx/db/integration_policy.py`, `backend/onyx/server/features/integrations/` | mcp-and-custom-tools, craft-external-apps |
+| `backend/onyx/integrations/`, `backend/onyx/db/integration.py`, `backend/onyx/db/integration_access.py`, `backend/onyx/db/integration_connection.py`, `backend/onyx/db/integration_policy.py`, `backend/onyx/server/features/integrations/` | mcp-and-custom-tools, craft-external-apps |
 | `terraform-provider-onyx/internal/client/custom_tool.go`, `terraform-provider-onyx/internal/client/custom_tool_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_availability_test.go`, `terraform-provider-onyx/docs/resources/custom_tool.md` | mcp-and-custom-tools |
 | `backend/onyx/db/input_prompt.py`, `backend/onyx/db/user_preferences.py`, `backend/onyx/server/features/input_prompt/` | chat-preferences |
 | `backend/onyx/server/settings/api.py`, `backend/onyx/server/settings/models.py`, `backend/onyx/server/settings/store.py`, `backend/onyx/server/settings/build_info.py` | chat-preferences |
@@ -346,7 +346,7 @@ covers new files that match it.
 | `web/src/app/admin/decision-models/`, `web/src/views/admin/DecisionModelsPage.tsx`, `web/src/views/admin/DecisionModelSetting.tsx`, `backend/onyx/llm/decisions/` | llm-providers |
 | `web/src/app/admin/llm-gateway/`, `web/src/views/admin/LLMGatewayPage/` | llm-gateway |
 | `web/src/app/admin/voice/`, `web/src/views/admin/VoicePage/`, `web/src/lib/voice/` | voice |
-| `web/src/app/admin/plugins/`, `web/src/app/admin/integrations/` | plugins |
+| `web/src/app/admin/integrations/` | plugins |
 | `web/src/sections/integrations/`, `web/src/lib/integrations/`, `web/src/sections/oauth/IntegrationOAuthCallback.tsx` | plugins |
 | `web/src/sections/plugins/`, `web/src/lib/plugins/` | plugins |
 | `web/src/sections/actions/`, `web/src/lib/mcp/`, `web/src/app/mcp/oauth/` | plugins, mcp-and-custom-tools |

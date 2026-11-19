@@ -8,9 +8,9 @@ import {
 } from "@tests/e2e/utils/mcpServer";
 import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
 import { AdminIntegrationDetailPage } from "@tests/e2e/pages/AdminIntegrationDetailPage";
-import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
+import { ChatIntegrationsPopover } from "@tests/e2e/pages/ChatIntegrationsPopover";
 import { CustomizePage } from "@tests/e2e/pages/CustomizePage";
-import { MemberPluginDetailPage } from "@tests/e2e/pages/MemberPluginDetailPage";
+import { CustomizeIntegrationPage } from "@tests/e2e/pages/CustomizeIntegrationPage";
 import {
   expectMcpToolInvoked,
   expectMcpToolNotInvoked,
@@ -25,16 +25,15 @@ const MCP_API_KEY_TEST_URL = process.env.MCP_API_KEY_TEST_URL;
 const MCP_ASSERTED_TOOL_NAME = "tool_0";
 
 /**
- * An MCP server with one organization API key, in an Organization library
- * plugin. The default agent uses each plugin of the user, so a member sees it
- * on the Plugins page and in the chat tools popover with no setup.
+ * An MCP server with one organization API key, available to the
+ * organization. A member turns it on once; the default agent then uses it,
+ * and the chat tools popover switches it for each agent.
  */
 test.describe("Default Agent MCP Integration", () => {
   test.describe.configure({ mode: "serial" });
 
   let serverProcess: McpServerProcess | null = null;
   let integrationId: number;
-  let pluginId: string;
   let serverName: string;
   let serverUrl: string;
   let basicUserEmail: string;
@@ -77,9 +76,6 @@ test.describe("Default Agent MCP Integration", () => {
       },
     });
     integrationId = created.id;
-    const plugin = created.plugins[0];
-    if (!plugin) throw new Error("The integration has no plugin");
-    pluginId = plugin.plugin_id;
     const connect = await adminContext.request.put(
       `/api/admin/integrations/${integrationId}/organization-connection`,
       { data: { fields: { api_key: API_KEY } } }
@@ -90,9 +86,9 @@ test.describe("Default Agent MCP Integration", () => {
     await adminClient.setIntegrationActionPolicies(integrationId, {
       [MCP_ASSERTED_TOOL_NAME]: "allow",
     });
-    agentId = await adminClient.createAgentWithPlugins(
+    agentId = await adminClient.createAgentWithIntegrations(
       `PW MCP Agent ${Date.now()}`,
-      [pluginId],
+      [integrationId],
       { isPublic: true }
     );
 
@@ -140,43 +136,43 @@ test.describe("Default Agent MCP Integration", () => {
     await detail.refreshActions();
   });
 
-  test("A member sees the plugin as connected on the Plugins page", async ({
+  test("A member sees the integration as connected on the Integrations tab", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await apiLogin(page, basicUserEmail, basicUserPassword);
-    const plugins = new CustomizePage(page);
-    await plugins.goto("Plugins");
-    await plugins.search(serverName);
-    await plugins.openPlugin(serverName);
+    const customize = new CustomizePage(page);
+    await customize.goto("Integrations");
+    await customize.search(serverName);
+    await customize.expectIntegrationState(serverName, "turn_on");
+    await customize.openIntegration(serverName);
 
-    const detail = new MemberPluginDetailPage(page);
-    await detail.expectTabs(["Overview", "Integrations"]);
-    await detail.openTab("Integrations");
+    const detail = new CustomizeIntegrationPage(page);
+    await detail.openTab("Configuration");
     await detail.expectStatus("Connected");
     await expect(detail.disconnectButton(serverName)).toHaveCount(0);
   });
 
-  // The default agent runs only the plugins that a member turned on.
-  test("A member switches the plugin in the default agent", async ({
+  // The default agent runs only the integrations that a member turned on.
+  test("A member switches the integration in the default agent", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await apiLogin(page, basicUserEmail, basicUserPassword);
-    const detail = new MemberPluginDetailPage(page);
-    await detail.goto(pluginId);
-    await detail.setPluginEnabled(serverName, true);
+    const detail = new CustomizeIntegrationPage(page);
+    await detail.goto(integrationId);
+    await detail.setEnabled(serverName, true);
 
     await page.goto("/app");
     await ensureOnboardingComplete(page);
 
-    const popover = new ChatPluginsPopover(page);
-    await popover.expectPluginEnabled(serverName, true);
-    await popover.setPluginEnabled(serverName, false);
-    await popover.setPluginEnabled(serverName, true);
+    const popover = new ChatIntegrationsPopover(page);
+    await popover.expectIntegrationEnabled(serverName, true);
+    await popover.setIntegrationEnabled(serverName, false);
+    await popover.setIntegrationEnabled(serverName, true);
   });
 
-  test("The agent calls the tool, and not after the member turns the plugin off", async ({
+  test("The agent calls the tool, and not after the member turns the integration off", async ({
     page,
   }) => {
     await page.context().clearCookies();
@@ -191,10 +187,10 @@ test.describe("Default Agent MCP Integration", () => {
     );
     await expectMcpToolInvoked(page, toolName);
 
-    const popover = new ChatPluginsPopover(page);
-    await popover.setPluginEnabled(serverName, false);
+    const popover = new ChatIntegrationsPopover(page);
+    await popover.setIntegrationEnabled(serverName, false);
     await popover.close();
-    await expectMcpToolNotInvoked(page, toolName, pluginId);
+    await expectMcpToolNotInvoked(page, toolName, integrationId);
   });
 
   test("The member's choice for the agent persists in a new chat", async ({
@@ -205,8 +201,8 @@ test.describe("Default Agent MCP Integration", () => {
     await page.goto(`/app?agentId=${agentId}`);
     await ensureOnboardingComplete(page);
 
-    const popover = new ChatPluginsPopover(page);
-    await popover.expectPluginEnabled(serverName, false);
-    await popover.setPluginEnabled(serverName, true);
+    const popover = new ChatIntegrationsPopover(page);
+    await popover.expectIntegrationEnabled(serverName, false);
+    await popover.setIntegrationEnabled(serverName, true);
   });
 });

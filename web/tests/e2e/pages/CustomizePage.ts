@@ -88,6 +88,54 @@ export class CustomizePage {
     return this.page.getByRole("row", { name: `Open ${name}`, exact: true });
   }
 
+  /** The on/off switch of an integration row (states On and Turn on). */
+  integrationSwitch(name: string): Locator {
+    return this.integrationRow(name).getByRole("switch", {
+      name: `Use ${name}`,
+      exact: true,
+    });
+  }
+
+  /** Waits for the state of a member row: a switch for On and Turn on,
+   * Connect for Sign in, and the reason text for No access. */
+  async expectIntegrationState(
+    name: string,
+    state: "on" | "turn_on" | "sign_in" | "no_access"
+  ): Promise<void> {
+    const row = this.integrationRow(name);
+    if (state === "on" || state === "turn_on") {
+      await expect(this.integrationSwitch(name)).toHaveAttribute(
+        "aria-checked",
+        String(state === "on")
+      );
+      return;
+    }
+    if (state === "sign_in") {
+      await expect(
+        row.getByRole("button", { name: `Connect ${name}`, exact: true })
+      ).toBeVisible();
+      return;
+    }
+    await expect(row.getByText(/^No access:/)).toBeVisible();
+    await expect(this.integrationSwitch(name)).toHaveCount(0);
+  }
+
+  /** Turns an integration on or off from its row. */
+  async setIntegrationEnabled(name: string, enabled: boolean): Promise<void> {
+    const toggle = this.integrationSwitch(name);
+    await expect(toggle).toBeEnabled();
+    if ((await toggle.getAttribute("aria-checked")) === String(enabled)) return;
+    const response = this.page.waitForResponse(
+      (candidate) =>
+        /\/api\/integrations\/\d+\/enabled$/.test(
+          new URL(candidate.url()).pathname
+        ) && candidate.request().method() === "PUT"
+    );
+    await toggle.click();
+    expect((await response).ok()).toBeTruthy();
+    await expect(toggle).toHaveAttribute("aria-checked", String(enabled));
+  }
+
   async search(query: string): Promise<void> {
     await this.searchInput.fill(query);
   }
@@ -105,14 +153,14 @@ export class CustomizePage {
   }
 
   /** Adds a personal MCP server from the Add page of the Integrations tab
-   * ("For me" only) and returns the new integration and its plugin. The page
-   * then shows the integration on its Configuration tab. */
+   * ("For me" only) and returns the new integration id. The page then shows
+   * the integration on its Configuration tab. */
   async addMcpServer(details: {
     name: string;
     url: string;
     /** For a server that signs in with OAuth; without a client, Onyx registers one. */
     oauth?: { client: { clientId: string; clientSecret: string } | null };
-  }): Promise<{ integrationId: number; pluginId: string }> {
+  }): Promise<number> {
     await this.openAddMenu();
     await this.page
       .getByRole("menuitem", { name: "Add integration", exact: true })
@@ -147,26 +195,15 @@ export class CustomizePage {
     await form.getByRole("button", { name: "Add", exact: true }).click();
     const created = await response;
     expect(created.ok(), await created.text()).toBeTruthy();
-    const body: { id: number; plugins: { plugin_id: string }[] } =
-      await created.json();
-    const pluginId = body.plugins[0]?.plugin_id;
-    if (!pluginId) throw new Error("The new integration has no plugin");
+    const body: { id: number } = await created.json();
     await expect(this.page).toHaveURL(
       new RegExp(`/app/customize/integrations/${body.id}\\?tab=configuration`)
     );
-    return { integrationId: body.id, pluginId };
+    return body.id;
   }
 
   async openIntegration(name: string): Promise<void> {
     await this.integrationRow(name).click();
     await expect(this.page).toHaveURL(/\/app\/customize\/integrations\/\d+/);
-  }
-
-  /** Opens a plugin from the Plugins tab. */
-  async openPlugin(name: string): Promise<void> {
-    await this.skillRow(name).click();
-    await expect(this.page).toHaveURL(
-      /\/app\/customize\/plugins\/[0-9a-f-]{36}/
-    );
   }
 }

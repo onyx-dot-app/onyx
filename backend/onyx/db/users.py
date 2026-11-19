@@ -979,14 +979,12 @@ def delete_user_from_db__no_commit(
     db_session: Session,
 ) -> None:
     # onyx.db.plugin imports this module through onyx.db.user_group.
-    from onyx.db.plugin import (
-        private_plugins_blocking_user_delete,
-        release_private_integrations__no_commit,
-    )
+    from onyx.db.plugin import private_plugins_blocking_user_delete
 
-    release_private_integrations__no_commit(user_to_delete.id, db_session)
     # A private plugin lives in its owner's "My uploads". Published plugins stay
     # in the Organization library with no author.
+    # An integration stays with no owner (ON DELETE SET NULL), with its
+    # install setting and its shares, so a private one stays private.
     blocking = db_session.scalars(
         private_plugins_blocking_user_delete(user_to_delete.id)
     ).all()

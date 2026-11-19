@@ -6,7 +6,7 @@
 > succeeds or fails.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
-**Edition:** CE. Access to an integration comes from the plugins that hold it.
+**Edition:** CE. An integration holds its own access rule; a plugin gives no access to it.
 
 ---
 
@@ -104,9 +104,9 @@ Its neighbours own:
 
 ```
 Admin config                                Turn time (integrations/chat_tools.py)
-Plugin --plugin__integration--> Integration   resolve_call_credentials(integration, user)
-   |                               |            once per integration; a problem
-persona__plugin (action_settings)  +--integration_action (schemas, defaults)
+Persona --persona__integration--> Integration resolve_call_credentials(integration, user)
+   (action_settings)               |            once per integration; a problem
+                                   +--integration_action (schemas, defaults)
                                    +--integration_connection / oauth_client
                                    +--kind row: mcp_server | OpenAPI tool
 MCP server kind  -> one MCPTool per offered action (mcp__<integration id>__...)
@@ -219,30 +219,76 @@ of `Tool.oauth_config_id` and `MCPServer.admin_connection_config_id`),
 `GatedApp` (the rollback key on approval rows) and `MCPServer__UserGroup` (a
 group delete and the community downgrade remove its rows).
 
+**Access.** `backend/onyx/db/integration_access.py` holds the rule, and its
+module docstring states it. `_user_integration_pairs` is the one query that
+applies it; `load_user_integration_states` and `user_can_use_integration` read
+it.
+- A user has access when the user is the owner (`integration.owner_user_id`),
+  has an `integration__user` row, is in a group that has an
+  `integration__user_group` row with a permission, or has an install setting
+  above NOT_AVAILABLE.
+- The company install setting is `integration.installation_policy`.
+  NOT_AVAILABLE means private. A non-default group can give its own setting;
+  the most open setting of the user's groups wins. The owner and a share get
+  at least AVAILABLE.
+- The user's on/off choice is a `user_integration_preference` row. REQUIRED is
+  always on, DEFAULT is on unless the user turned it off, and AVAILABLE is on
+  only when the user turned it on.
+- `integration.enabled = false` turns the integration off for each user. The
+  access stays.
+- A share gives use only. Each share row is saved as VIEWER
+  (`replace_integration_shares__no_commit`).
+- A plugin gives no access to an integration, and no code names an
+  integration by a plugin id. The API, the agent links
+  (`persona__integration`), the task links (`scheduled_task__integration`),
+  the chat tool options and `disabled_integration_ids` name an integration by
+  its id.
+- An agent or task link gives no access. Each user of the agent needs access
+  to the integration (`db/integration_access.py`).
+- Each integration row of the API carries `access`
+  (`server/features/integrations/models.py:IntegrationAccess`): the install
+  setting for the user, the user's choice, the owner, `can_manage`,
+  `shared_with_everyone` and `state`. `state` is one of `on`, `turn_on`,
+  `sign_in`, `no_access` and `turned_off`
+  (`integrations/service.py:member_state`); a client does not derive it.
+- Migration `730bce2814a0` fills the access tables, `persona__integration`,
+  `scheduled_task__integration` and `disabled_integration_ids` from the
+  released tables. For a private MCP server selected in default Chat, it keeps
+  the server on for its existing owner and recipients. Explicit off choices stay off.
+  No plugin holds an integration: the migration and create
+  make no plugin, and no table links a plugin to an integration.
+- The released mobile app names an integration by `plugin_ids` of the tool
+  list. Four aliases keep it working, each with the integration id as text:
+  `ToolSnapshot.plugin_ids`, `GET /plugins/agents/{id}`,
+  `disabled_plugin_ids` of the agent preferences, and a `plugin` entry of the
+  tool options (`tools/models.py:ToolOptions._read_plugin_entries`).
+
 **Chat on integrations.** `db/tools.py:capture_persona_tool_configuration`
-copies the agent's built-in tools and its `persona__plugin` links (plugin id
-and `action_settings`). `integrations/chat_tools.py:build_integration_chat_tools`
-then picks the integrations:
-- A non-default agent: each link whose plugin the user can see
-  (`db/plugin_access.py:load_user_plugin_states`). The user's on/off choice,
-  `can_run` and the skill limits do not apply.
-- The default agent (id 0): each plugin the user runs (visible and enabled),
-  with the settings of its persona 0 link when one exists (the bot freeze).
-- An anonymous user (a Slack channel): only Organization library plugins, and
-  only integrations with no sign-in or shared sign-in.
+copies the agent's built-in tools and its `persona__integration` links
+(integration id and `action_settings`). `integrations/chat_tools.py:build_integration_chat_tools`
+then picks the integrations
+(`integrations/policy.py:agent_link_settings_by_integration`):
+- A non-default agent: each integration of its links that the user has access
+  to. The user's on/off choice, `can_run` and the skill limits do not apply.
+- The default agent (id 0): each integration that is on for the user, with the
+  settings of its persona 0 link when one exists (the bot freeze).
+- An anonymous user (a Slack channel): only integrations whose company install
+  setting is above NOT_AVAILABLE, and only those with no sign-in or shared
+  sign-in.
+- An integration that is Required for the user stays when the tool options
+  leave its id out.
 - Only integrations with `enabled = true`. An API integration with no OpenAPI
   tool (a preset or custom app) gives no chat tool, so it is skipped before its
-  credential resolves. When several links hold one integration, the strictest
-  link setting of each action wins.
+  credential resolves. An agent has one link for each integration.
 
 For each integration, `integrations/call_credentials.py:resolve_call_credentials`
 calls `resolve_connection` and renders the `header_template`. An OAuth2 or Onyx
 login token goes in `Authorization: Bearer` unless the template fills
 Authorization from a placeholder; a literal Authorization value (the static
 header of a migrated OpenAPI tool) loses to the token. A problem means
-no action of the integration is offered. The migration writes the actions of
-each MCP server, OpenAPI tool, preset and custom app, so chat reads the stored
-actions and never discovers them.
+no action of the integration is offered. The migration copies stored MCP actions.
+For an API integration with no stored actions, chat derives them from its
+OpenAPI spec or app settings in the current session.
 `MCPTool._run` sends the credential that construction resolved and opens no
 database session for it. Only an OAuth2 or Onyx login token that expires within
 `REFRESH_SKEW` resolves again (`integrations/call_credentials.py:resolve_fresh_call_credentials`).
@@ -269,29 +315,28 @@ OAuth start and callback stay in
 `is_craft_available_for_deployment` is false, create refuses those shapes and
 the presets list is empty. A user cannot save Always allow on an action whose
 admin value is not Ask.
-- A plugin that holds only integrations has no skill row, so the skill routes
-  do not reach it. `server/features/integrations/plugins_api.py` serves it
-  (logic in `integrations/plugin_settings.py`): `PUT /plugins/{id}/enabled` is
-  the user's on/off switch (Required cannot go off),
-  `PUT /admin/plugins/{id}/installation-policy` sets the install setting of an
-  Organization library plugin (organization-wide manage-actions),
-  `GET`/`PUT /plugins/{id}/access` reads and replaces the shares of a private
-  plugin (its owner or an organization-wide action manager), and
-  `POST /plugins/{id}/publish` moves a private plugin to the Organization
-  library (organization-wide manage-actions, no review) and returns its new
-  name. A skill name there is refused with CONFLICT, as for a skill publish;
-  the name of another integration plugin gives a free name (`-2`). The MCP
-  server alias publishes with a free name in both cases. The writes go through
-  `db/plugin.py:apply_plugin_access_change__no_commit`,
-  `publish_or_request_review__no_commit` and
-  `set_plugin_preferences__no_commit`. A plugin that holds a skill gets 400.
+- The access routes take the integration id (logic in
+  `integrations/access.py`):
+  `PUT /integrations/{id}/enabled` writes the user's on/off choice (Required
+  cannot go off; no access gives 404),
+  `PUT /admin/integrations/{id}/installation-policy` sets
+  `integration.installation_policy` (organization-wide manage-actions;
+  NOT_AVAILABLE makes the integration private),
+  `GET`/`PUT /integrations/{id}/access` reads and replaces the shares of a
+  private integration (a user for whom `manages_integration` is true; the
+  share rules of plugins apply through `db/plugin.py:check_access_change`),
+  `POST /integrations/{id}/publish` sets a private integration to AVAILABLE
+  (organization-wide manage-actions, no review; the shares stay), and
+  `GET /integrations/agents/{id}` gives the integration ids that a chat of
+  the agent uses for the user. Share and publish refuse an integration that
+  is not private with 400.
 - Create (`create_integration__no_commit`) writes, in one transaction, the
   kind row (`mcp_server`, the OpenAPI `tool` row, or `external_app` with the
   preset or URL patterns), then the `integration` row with exactly one of
-  `mcp_server_id`, `tool_id` or `external_app_id`, the OAuth client, one
-  plugin that holds it (`db/plugin.py:create_integration_plugin__no_commit`:
-  version 1 with no files, Organization library or the creator's "My uploads",
-  where it starts on for the creator) and the actions. A public MCP server (`auth_mode` none) is asked for its
+  `mcp_server_id`, `tool_id` or `external_app_id`, the OAuth client
+  and the actions. It writes no plugin row. The creator is the owner. "For the organization"
+  sets the install setting AVAILABLE; else the integration is private and
+  starts on for its owner. A public MCP server (`auth_mode` none) is asked for its
   tools before the first insert (`_discover_new_server`); a failure gives a
   502 and saves nothing. An MCP server with a sign-in starts with no actions.
 - The admin list, the member list, the agent catalog and `GET /tool` read
@@ -303,8 +348,7 @@ admin value is not Ask.
   constant
   (`backend/tests/external_dependency_unit/integrations/test_list_query_counts.py`).
 - Delete (`db/integration.py:delete_integration__no_commit`) deletes the
-  integration and then its kind row. A plugin left with no skill and no
-  integration goes too. A deleted kind row deletes its integration by cascade.
+  integration and then its kind row. A deleted kind row deletes its integration by cascade.
 - A preset keeps its client id, secret and host settings (Zendesk
   `subdomain`) on `integration_oauth_client`; the host settings are in
   `additional_params`, which
@@ -312,12 +356,11 @@ admin value is not Ask.
   `external_app.organization_credentials` is not written.
 - Who manages: `backend/onyx/integrations/service.py:manages_integration`. Organization-wide
   manage:actions manages each integration. A scoped holder manages one only
-  when each plugin that holds it is in its own "My uploads". Only
+  while it is the owner (`integration.owner_user_id`) and the integration is
+  private (`installation_policy` NOT_AVAILABLE), so a publish ends the right
+  of a scoped owner. Only
   organization-wide manage:actions adds for the organization or sets
-  `onyx_login`. `db/plugin.py:publish_or_request_review__no_commit` refuses to
-  publish a plugin that holds an integration unless the actor (or the approver
-  of a review request) has organization-wide manage:actions. Manage-plugins
-  scope gives no right on an integration.
+  `onyx_login`. Manage-plugins scope gives no right on an integration.
 - PATCH compares `sign_in_settings_for` before and after and calls
   `mark_sign_in_settings_changed`; `client_secret: null` keeps the secret. A
   change away from `api_key` drops the header template unless the request sets
@@ -328,22 +371,29 @@ admin value is not Ask.
   `integration_action` rows. Only the create of a public server and a refresh
   write MCP actions; the create and the update do not sync an MCP integration,
   and no code reads MCP `tool` rows.
-- Agents: `PersonaUpsertRequest.plugins` replaces the `persona__plugin` links
-  (null keeps them). An old custom or MCP id in `tool_ids` adds the plugin of
-  its integration (`db/integration_policy.py:legacy_tool_plugin_links`; MCP
-  links get `default: blocked` and each listed tool `inherit`). Built-in ids
-  stay on `persona__tool`. With `plugins` null, `tool_ids` replaces the links
-  of the plugins that hold a custom tool or an old MCP tool row; an MCP link
-  whose selection did not change keeps its settings. Agent detail returns
-  `plugins`, and its `tools` lists the OpenAPI `tool` row of each linked
-  plugin and the old MCP `tool` rows that the links do not block
+- Agents: `PersonaUpsertRequest.integrations` replaces the
+  `persona__integration` links (null keeps them). An editor adds only an
+  integration that the editor has access to. An old custom or MCP id in
+  `tool_ids` adds its integration
+  (`db/integration_policy.py:legacy_tool_integration_links`; MCP links get
+  `default: blocked` and each listed tool `inherit`). Built-in ids stay on
+  `persona__tool`. With `integrations` null, `tool_ids` replaces the links of
+  the integrations that have a custom tool or an old MCP tool row; an MCP
+  link whose selection did not change keeps its settings. Agent detail
+  returns `integrations`, and its `tools` lists the OpenAPI `tool` row of
+  each linked integration and the old MCP `tool` rows that the links do not
+  block
   (`db/integration_policy.py:list_persona_openapi_tools`,
   `list_persona_mcp_tools`), so the old tool ids round-trip.
 - The eight public `/tool` and `/admin/tool` routes
   (`server/features/tool/api.py`) are aliases on `api` integrations with an
   OpenAPI schema and return the `tool` row id. Plain headers become a shared
   API key connection; `passthrough_auth` is `onyx_login`; `oauth_config_id` is
-  refused; `default_chat_enabled` is the plugin install setting (DEFAULT). A
+  refused; `default_chat_enabled` is true when `integration.installation_policy`
+  is DEFAULT or REQUIRED. A write of true sets DEFAULT unless it is one of
+  these; false sets one of these to AVAILABLE; a private integration stays
+  private on false. `PATCH /tool/{id}/preferences` writes the user's on/off
+  choice on the integration. A
   save of an OAuth integration keeps its sign-in when the headers and
   `passthrough_auth` are the values the read returned, and refuses others.
 - The four admin MCP server routes of the public API, which the Terraform
@@ -353,9 +403,10 @@ admin value is not Ask.
   and return the `mcp_server` row id. `API_TOKEN` maps to `api_key`: `ADMIN` is
   `shared` with the token on the organization connection, `PER_USER` is
   `individual` with the admin values on the admin's own connection. An omitted
-  template keeps the stored one. OAuth types are refused. `is_public` is the
-  Organization library; private is the owner's "My uploads" with `users` and
-  `groups` as shares (the owner may be a share). `available_in_craft` is the
+  template keeps the stored one. OAuth types are refused. `is_public` true is
+  a company install setting above NOT_AVAILABLE; a change to true deletes the
+  shares and sets AVAILABLE. `is_public` false sets NOT_AVAILABLE with `users`
+  and `groups` as the shares. `available_in_craft` is the
   old kind row column, which only the alias reads.
 - Changes call `backend/onyx/integrations/service.py:reload_craft_sessions` after the commit so running
   Craft sandboxes pick them up.
@@ -489,9 +540,9 @@ order to loaded values; `resolve_action_policies` loads the rows for the actions
 that its caller passes. The approval re-check
 (`chat/tool_approvals.py:action_now_blocked`, also in the decision route) uses
 no chat grant. It reads the agent links that construction reads
-(`integrations/policy.py:agent_link_settings_by_integration`), so a plugin the
-user cannot see, or a default agent plugin the user turned off, does not change
-it.
+(`integrations/policy.py:agent_link_settings_by_integration`), so an
+integration that the user has no access to, or that the user turned off on the
+default agent, is Blocked.
 
 ---
 
@@ -533,18 +584,20 @@ it.
    `db/integration.py:replace_integration_actions__no_commit` treats a tool
    that the remote server renames as a new action, and the policy rows and
    agent settings of the old key no longer apply to it.
-7. `mcp-tool-user-id-none` **`Tool.user_id` is not the owner.** The plugins
-   that hold the integration decide who manages it. Check rights with
+7. `mcp-tool-user-id-none` **`Tool.user_id` is not the owner.** The owner is
+   `integration.owner_user_id`. Check rights with
    `integrations/service.py:manages_integration`, never with
    `tool.user_id == user.id`. `integrations/service.py:admin_detail` returns
    `header_template` only to a manager, and masks each value with no
    placeholder, because the migration put static header secrets there.
    `keep_masked_values` keeps the stored value when a client sends a masked
    value back.
-8. `access-grants-default-chat-only` **Plugin visibility gates chat, not server
-   grants.** Chat offers an integration's actions to each user who can use the
-   agent and can see a plugin of the agent that holds the integration
-   (`integrations/chat_tools.py`). Old server grants gate nothing in chat.
+8. `access-grants-default-chat-only` **Integration access gates chat, not
+   server grants or plugins.** Chat offers an integration's actions to each
+   user who can use the agent and has access to the integration, when the
+   agent links it (`integrations/chat_tools.py`). The user's on/off choice
+   applies only on the default agent. The agent link, a plugin, and old
+   server grants give no access in chat.
 9. `destination-change-deletes-credentials` **A changed URL or sign-in
    setting resets connections.** `integrations/connections.py:sign_in_settings_for`
    includes `sign_in_host`: the MCP server URL, or the OpenAPI server URL, the
@@ -859,6 +912,17 @@ it.
 Chat: see [[plugins#openapi-enabled-default-chat-only]].
 
 ---
+21. `api-actions-built-on-read` **Read actions through
+    `integrations/actions.py:integration_actions`.** Migration `730bce2814a0`
+    writes no `integration_action` rows for an API integration, because only app
+    code can parse a spec or read a catalog.
+    `integrations/kinds/api.py:api_integration_actions` builds them from the
+    settings, unsaved, through the caller's session. A read path never writes:
+    a write there needs a second pool connection and the tenant context, which
+    the sandbox proxy does not set. An admin save of the actions, an edit or a
+    refresh writes the rows. A direct call to
+    `db/integration.py:list_integration_actions` sees no actions for that
+    integration, so chat offers no tools and every action falls back to Ask.
 
 ## Decisions
 
@@ -976,8 +1040,10 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   every level.
 - `investigate-missing-mcp-tools` **Investigate "my MCP tools are missing in chat".** In order: the server
   must have an integration (`integration.mcp_server_id`) with `enabled` true;
-  a plugin that holds it must be linked to the agent (`persona__plugin`), or on
-  the default assistant be visible and turned on for the user ([[plugins]]);
+  the agent must link it (`persona__integration`) and
+  the user must have access to the integration, or on the default assistant
+  the integration must be on for the user
+  (`db/integration_access.py:load_user_integration_states`);
   `integration_status` must be connected for the user (a debug log "Skipping
   integration" names the problem); the policy must not be Blocked by the admin
   or the agent; a bot run also drops Ask actions; and a tool that the remote

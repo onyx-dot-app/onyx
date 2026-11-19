@@ -107,15 +107,12 @@ from onyx.server.features.integrations.admin_api import (
 )
 from onyx.server.features.integrations.api import (
     action_policies_router,
+    mobile_plugins_router,
 )
 from onyx.server.features.integrations.api import router as integrations_router
 from onyx.server.features.integrations.connections_api import (
     router as integration_connections_router,
 )
-from onyx.server.features.integrations.plugins_api import (
-    admin_router as admin_plugins_router,
-)
-from onyx.server.features.integrations.plugins_api import router as plugins_router
 from onyx.server.features.mcp.api import admin_router as mcp_admin_router
 from onyx.server.features.mcp.api import router as mcp_router
 from onyx.server.features.microvm.api import router as microvm_router
@@ -678,8 +675,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
         application, integration_connections_router
     )
     include_router_with_global_prefix_prepended(application, action_policies_router)
-    include_router_with_global_prefix_prepended(application, plugins_router)
-    include_router_with_global_prefix_prepended(application, admin_plugins_router)
+    include_router_with_global_prefix_prepended(application, mobile_plugins_router)
     include_router_with_global_prefix_prepended(application, skill_router)
 
     include_router_with_global_prefix_prepended(application, pat_router)

@@ -31,7 +31,7 @@ from onyx.db.enums import (
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
 )
-from onyx.db.integration_policy import list_task_plugin_links
+from onyx.db.integration_policy import list_task_integration_links
 from onyx.db.models import ScheduledTask, ScheduledTaskRun, User
 from onyx.db.scheduled_task import (
     create_scheduled_task,
@@ -46,9 +46,9 @@ from onyx.db.scheduled_task import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.craft import list_task_plugin_views
+from onyx.integrations.craft import list_task_integration_views
 from onyx.integrations.policy import parse_action_settings
-from onyx.server.features.build.models import TaskPluginView
+from onyx.server.features.build.models import TaskIntegrationView
 from onyx.server.features.build.scheduled_tasks.schedule import (
     EDITOR_PAYLOAD_MODELS,
     EditorMode,
@@ -58,7 +58,7 @@ from onyx.server.features.build.scheduled_tasks.schedule import (
     next_n_fires,
 )
 from onyx.server.features.build.timeouts import QUEUE_RESIDENCY_SECONDS
-from onyx.tools.models import PluginLinkConfiguration
+from onyx.tools.models import IntegrationLinkConfiguration
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -130,7 +130,7 @@ class ScheduledTaskCreate(_Forbid):
     editor_payload: EditorPayload
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE
     run_immediately: bool = False
-    plugins: list[PluginLinkConfiguration] | None = None
+    integrations: list[IntegrationLinkConfiguration] | None = None
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -147,7 +147,7 @@ class ScheduledTaskPatch(_Forbid):
     editor_mode: EditorMode | None = None
     editor_payload: EditorPayload | None = None
     status: ScheduledTaskStatus | None = None
-    plugins: list[PluginLinkConfiguration] | None = None
+    integrations: list[IntegrationLinkConfiguration] | None = None
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -223,7 +223,7 @@ class ScheduledTaskDetail(BaseModel):
     next_run_at: datetime | None
     next_runs: list[datetime]
     last_run: RunSummary | None
-    plugins: list[PluginLinkConfiguration]
+    integrations: list[IntegrationLinkConfiguration]
     created_at: datetime
     updated_at: datetime
 
@@ -325,12 +325,12 @@ def _detail(
         next_run_at=task.next_run_at,
         next_runs=next_runs,
         last_run=RunSummary.from_model(last_run) if last_run is not None else None,
-        plugins=[
-            PluginLinkConfiguration(
-                plugin_id=link.plugin_id,
+        integrations=[
+            IntegrationLinkConfiguration(
+                integration_id=link.integration_id,
                 action_settings=parse_action_settings(link.action_settings),
             )
-            for link in list_task_plugin_links(db_session, task.id)
+            for link in list_task_integration_links(db_session, task.id)
         ],
         created_at=task.created_at,
         updated_at=task.updated_at,
@@ -430,7 +430,7 @@ def create_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        plugins=request.plugins,
+        integrations=request.integrations,
     )
 
     if request.run_immediately:
@@ -491,7 +491,7 @@ def patch_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        plugins=request.plugins,
+        integrations=request.integrations,
     )
     db_session.commit()
     db_session.refresh(task)
@@ -626,8 +626,8 @@ def list_task_action_policies(
     task_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> list[TaskPluginView]:
-    """The plugins the task can use, each marked when the task uses it, with
+) -> list[TaskIntegrationView]:
+    """The integrations the task can use, each marked when the task uses it, with
     the setting and the effective policy of each action."""
     get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user.id)
-    return list_task_plugin_views(db_session, user, task_id)
+    return list_task_integration_views(db_session, user, task_id)

@@ -78,7 +78,7 @@ import {
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { effectiveChatPreference } from "@/lib/plugins/chat";
+import { effectiveChatPreference } from "@/lib/tools/chat";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
@@ -1064,7 +1064,7 @@ export default function useChatController({
               requestedToolId: toolConfiguration.preferredToolId,
               requestedAction: toolConfiguration.preferredAction,
               agent: activeAgent,
-              isPluginEnabled: toolConfiguration.isPluginEnabled,
+              isIntegrationEnabled: toolConfiguration.isIntegrationEnabled,
             });
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)

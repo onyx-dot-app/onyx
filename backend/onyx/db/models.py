@@ -5116,8 +5116,8 @@ class Assistant__UserSpecificConfig(Base):
     disabled_tool_ids: Mapped[list[int]] = mapped_column(
         postgresql.ARRAY(Integer), nullable=False
     )
-    disabled_plugin_ids: Mapped[list[UUID]] = mapped_column(
-        postgresql.ARRAY(PGUUID(as_uuid=True)), nullable=False, server_default="{}"
+    disabled_integration_ids: Mapped[list[int]] = mapped_column(
+        postgresql.ARRAY(Integer), nullable=False, server_default="{}"
     )
 
 
@@ -5921,15 +5921,17 @@ class UserPluginPreference(Base):
 
 class Integration(Base):
     """A connection from Onyx to one service: an MCP server or an HTTP API. It
-    stands alone: a plugin holds it through ``plugin__integration``, and that
-    plugin gives the access and the install setting. The settings of each kind
-    stay on the kind's own table (``mcp_server``, ``external_app``, or the
-    OpenAPI ``tool`` row), which this row points at, as ``GatedApp`` does.
+    stands alone and owns its access: the owner, the install setting, the
+    shares (``integration__user``, ``integration__user_group``) and the on/off
+    choice of each user (``user_integration_preference``). A plugin gives no
+    access to it. The settings of each kind stay on the kind's own table
+    (``mcp_server``, ``external_app``, or the OpenAPI ``tool`` row), which this
+    row points at, as ``GatedApp`` does.
 
     Read a kind table only for the settings of its kind: the server URL and
     transport, the preset and URL patterns, the spec. Its name, owner, access,
-    sign-in and approval columns are old copies. The plugin, this table,
-    ``integration_oauth_client``, ``integration_connection`` and
+    sign-in and approval columns are old copies. This table, its access
+    tables, ``integration_oauth_client``, ``integration_connection`` and
     ``integration_action_policy`` own those."""
 
     __tablename__ = "integration"
@@ -5945,15 +5947,22 @@ class Integration(Base):
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # The person who set up the integration, also when an admin set it up for
-    # the organization. A record only: it gives no right to manage. NULL when
-    # not known, as for an external app made before this column. The person
+    # The owner always has access. NULL when not known, as for an external
+    # app made before this column, or when the owner was deleted. The person
     # who signs in is ``IntegrationConnection.user_id``.
-    created_by_user_id: Mapped[UUID | None] = mapped_column(
+    owner_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("user.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+    # The company install setting. NOT_AVAILABLE is private: only the owner
+    # and the shares have access.
+    installation_policy: Mapped[PluginInstallationPolicy] = mapped_column(
+        Enum(PluginInstallationPolicy, native_enum=False),
+        nullable=False,
+        default=PluginInstallationPolicy.NOT_AVAILABLE,
+        server_default=PluginInstallationPolicy.NOT_AVAILABLE.value,
     )
     enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
@@ -6263,10 +6272,85 @@ class IntegrationConnection(Base):
     )
 
 
+class Integration__User(Base):
+    __tablename__ = "integration__user"
+
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    # Only VIEWER is written.
+    permission: Mapped[SkillSharePermission] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=False,
+        default=SkillSharePermission.VIEWER,
+        server_default=SkillSharePermission.VIEWER.value,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (Index("ix_integration__user_user_id", "user_id"),)
+
+
+class Integration__UserGroup(Base):
+    __tablename__ = "integration__user_group"
+
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("user_group.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # NULL: the row holds only a group install setting and grants no access.
+    permission: Mapped[SkillSharePermission | None] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=True,
+    )
+    # NULL: no group override.
+    installation_policy: Mapped[PluginInstallationPolicy | None] = mapped_column(
+        Enum(PluginInstallationPolicy, native_enum=False),
+        nullable=True,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_integration__user_group_user_group_id", "user_group_id"),
+    )
+
+
+class UserIntegrationPreference(Base):
+    __tablename__ = "user_integration_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    # Last time the user turned the integration on. NULL for copied rows.
+    enabled_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_user_integration_preference_integration_id", "integration_id"),
+    )
+
+
 class IntegrationActionPolicy(Base):
-    """The admin value (no user_id) or the saved choice of one user for one
-    action. The row with the empty action is the default for each action with
-    no row of its own."""
+    """The admin value (no user_id and no user_group_id), the value for one
+    group, or the saved choice of one user for one action. The row with the
+    empty action is the default for each action with no row of its own."""
 
     __tablename__ = "integration_action_policy"
 
@@ -6279,6 +6363,10 @@ class IntegrationActionPolicy(Base):
         PGUUID(as_uuid=True),
         ForeignKey("user.id", ondelete="CASCADE"),
         nullable=True,
+    )
+    # No code reads or writes a group row yet.
+    user_group_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("user_group.id", ondelete="CASCADE"), nullable=True
     )
     policy: Mapped[IntegrationActionPolicyValue] = mapped_column(
         Enum(
@@ -6303,13 +6391,27 @@ class IntegrationActionPolicy(Base):
             "policy IN ('allow', 'auto', 'ask', 'blocked')",
             name="ck_integration_action_policy_policy",
         ),
+        # Each unique index covers one scope. A row with a user and a group
+        # would be in two, and a writer of one scope cannot see the other.
+        CheckConstraint(
+            "num_nonnulls(user_id, user_group_id) <= 1",
+            name="ck_integration_action_policy_single_scope",
+        ),
         Index("ix_integration_action_policy_integration_id", "integration_id"),
         Index(
             "uq_integration_action_policy_admin",
             "integration_id",
             "action",
             unique=True,
-            postgresql_where=text("user_id IS NULL"),
+            postgresql_where=text("user_id IS NULL AND user_group_id IS NULL"),
+        ),
+        Index(
+            "uq_integration_action_policy_user_group",
+            "user_group_id",
+            "integration_id",
+            "action",
+            unique=True,
+            postgresql_where=text("user_group_id IS NOT NULL"),
         ),
         Index(
             "uq_integration_action_policy_user",
@@ -6327,62 +6429,47 @@ class IntegrationActionPolicy(Base):
 # missing key is inherit.
 
 
-class Persona__Plugin(Base):
-    __tablename__ = "persona__plugin"
+class Persona__Integration(Base):
+    """An integration on an agent. The link gives no access: each user of
+    the agent needs access to the integration."""
+
+    __tablename__ = "persona__integration"
 
     persona_id: Mapped[int] = mapped_column(
         ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
     )
-    plugin_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("plugin.id", ondelete="CASCADE"),
-        primary_key=True,
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
     )
     action_settings: Mapped[dict[str, Any]] = mapped_column(
         PGJSONB(), nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
 
-    __table_args__ = (Index("ix_persona__plugin_plugin_id", "plugin_id"),)
-
-
-class Plugin__Integration(Base):
-    """An integration that a plugin holds. Several plugins can hold one
-    integration. A person reaches an integration through a plugin that holds
-    it, so the plugin gives the access, the install setting and the on/off
-    choice."""
-
-    __tablename__ = "plugin__integration"
-
-    plugin_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("plugin.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    integration_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
+    __table_args__ = (
+        Index("ix_persona__integration_integration_id", "integration_id"),
     )
 
-    __table_args__ = (Index("ix_plugin__integration_integration_id", "integration_id"),)
 
+class ScheduledTask__Integration(Base):
+    """An integration on a task."""
 
-class ScheduledTask__Plugin(Base):
-    __tablename__ = "scheduled_task__plugin"
+    __tablename__ = "scheduled_task__integration"
 
     scheduled_task_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("scheduled_task.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    plugin_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("plugin.id", ondelete="CASCADE"),
-        primary_key=True,
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
     )
     action_settings: Mapped[dict[str, Any]] = mapped_column(
         PGJSONB(), nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
 
-    __table_args__ = (Index("ix_scheduled_task__plugin_plugin_id", "plugin_id"),)
+    __table_args__ = (
+        Index("ix_scheduled_task__integration_integration_id", "integration_id"),
+    )
 
 
 """
