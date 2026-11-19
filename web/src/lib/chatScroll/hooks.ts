@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import {
   createScrollMemory,
   getScrollMemory,
@@ -195,6 +196,9 @@ export function useChatScroll({
   const onButtonRef = useRef(onScrollButtonVisibilityChange);
   const revealTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowMountersRef = useRef(new Map<Element, () => void>());
+  // Inside a React commit (an effect), a row's state update renders before
+  // paint by itself, and flushSync is not allowed.
+  const committingRef = useRef(false);
   const modeRef = useRef<Mode>({ kind: "opening" });
   const revealedRef = useRef(false);
   const expectedTopRef = useRef(0);
@@ -376,6 +380,37 @@ export function useChatScroll({
     [updateButton, save]
   );
 
+  /**
+   * Mount the placeholders in and around the viewport now, before paint, so
+   * no blank row is painted (an older page that just attached, a restored
+   * position). The near-viewport observer would mount them a frame later.
+   * Returns whether a placeholder in view could not be mounted.
+   */
+  const mountNearRows = useCallback((container: HTMLElement): boolean => {
+    const viewportTop = container.getBoundingClientRect().top;
+    const viewportBottom = viewportTop + container.clientHeight;
+    const margin = container.clientHeight;
+    const mounts: (() => void)[] = [];
+    let waiting = false;
+    for (const placeholder of Array.from(
+      container.querySelectorAll(`[${PLACEHOLDER_ATTRIBUTE}]`)
+    )) {
+      const rect = placeholder.getBoundingClientRect();
+      if (rect.bottom <= viewportTop - margin) continue;
+      if (rect.top >= viewportBottom + margin) continue;
+      const mount = rowMountersRef.current.get(placeholder);
+      if (mount) mounts.push(mount);
+      else if (rect.bottom > viewportTop && rect.top < viewportBottom)
+        waiting = true;
+    }
+    if (mounts.length > 0) {
+      const mountAll = () => mounts.forEach((mount) => mount());
+      if (committingRef.current) mountAll();
+      else flushSync(mountAll);
+    }
+    return waiting;
+  }, []);
+
   /** Place a view that is opening, and reveal it once its rows are in. */
   const placeOpening = useCallback(
     (container: HTMLElement) => {
@@ -392,26 +427,10 @@ export function useChatScroll({
         write(container, maxScrollTop(container));
       }
 
-      // Mount the rows around the position now, in this layout pass, so the
-      // first painted frame has them. Wait only for rows that cannot.
-      const viewportTop = container.getBoundingClientRect().top;
-      const viewportBottom = viewportTop + container.clientHeight;
-      const margin = container.clientHeight;
-      let waiting = false;
-      for (const placeholder of Array.from(
-        container.querySelectorAll(`[${PLACEHOLDER_ATTRIBUTE}]`)
-      )) {
-        const rect = placeholder.getBoundingClientRect();
-        if (rect.bottom <= viewportTop - margin) continue;
-        if (rect.top >= viewportBottom + margin) continue;
-        const mount = rowMountersRef.current.get(placeholder);
-        if (mount) mount();
-        else if (rect.bottom > viewportTop && rect.top < viewportBottom)
-          waiting = true;
-      }
-      if (!waiting) reveal(container);
+      // Wait only for rows in view that cannot mount now.
+      if (!mountNearRows(container)) reveal(container);
     },
-    [hold, write, reveal]
+    [hold, write, reveal, mountNearRows]
   );
 
   /** Keep the position the mode asks for after any layout change. */
@@ -436,10 +455,12 @@ export function useChatScroll({
     } else if (mode.kind === "free" && mode.held) {
       hold(container, mode.held);
     }
+    if (mode.kind !== "opening") mountNearRows(container);
 
     updateButton(container);
     save(container);
   }, [
+    mountNearRows,
     detectUserScroll,
     fitSpace,
     placeOpening,
@@ -448,6 +469,16 @@ export function useChatScroll({
     updateButton,
     save,
   ]);
+
+  /** `reconcile` from an effect: React is committing. */
+  const reconcileInCommit = useCallback(() => {
+    committingRef.current = true;
+    try {
+      reconcile();
+    } finally {
+      committingRef.current = false;
+    }
+  }, [reconcile]);
 
   const tween = useCallback(
     (container: HTMLElement, target: () => number | null) => {
@@ -534,7 +565,7 @@ export function useChatScroll({
     spaceHeightRef.current = -1;
     if (container) {
       expectedTopRef.current = container.scrollTop;
-      reconcile();
+      reconcileInCommit();
     }
     scheduleReveal();
     return () => {
@@ -565,7 +596,7 @@ export function useChatScroll({
         cancelTween();
         settle(container);
       }
-      reconcile();
+      reconcileInCommit();
       return;
     }
     memoryRef.current.spaceTurnKey = turnKey ?? null;
@@ -580,17 +611,17 @@ export function useChatScroll({
         ANCHOR_OFFSET_PX;
       return Math.min(maxScrollTop(container), Math.max(0, target));
     });
-  }, [turnKey, reconcile, fitSpace, tween]);
+  }, [turnKey, reconcileInCommit, fitSpace, tween]);
 
   // Auto-scroll turned back on (the typewriter's drain ended): catch up.
   useEffect(() => {
-    if (autoScroll && modeRef.current.kind === "following") reconcile();
-  }, [autoScroll, reconcile]);
+    if (autoScroll && modeRef.current.kind === "following") reconcileInCommit();
+  }, [autoScroll, reconcileInCommit]);
 
   // The anchor can be re-id'd by a refetch: refit the space to it.
   useEffect(() => {
-    reconcile();
-  }, [anchorId, reconcile]);
+    reconcileInCommit();
+  }, [anchorId, reconcileInCommit]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -638,9 +669,15 @@ export function useChatScroll({
     if (!container) return;
     const moved = Math.abs(container.scrollTop - expectedTopRef.current) > 1;
     // Drift is corrected at once: back to the end, or to the held row.
-    if (moved && !detectUserScroll(container)) reconcile();
-    else updateButton(container);
-  }, [detectUserScroll, reconcile, updateButton]);
+    if (moved && !detectUserScroll(container)) {
+      reconcile();
+      return;
+    }
+    // A fast scroll can reach rows the near-viewport observer has not
+    // mounted yet.
+    if (revealedRef.current) mountNearRows(container);
+    updateButton(container);
+  }, [detectUserScroll, reconcile, mountNearRows, updateButton]);
 
   // Scroll input marks the next position changes as the user's.
   useEffect(() => {
