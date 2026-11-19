@@ -55,7 +55,8 @@ interface SkillContentsTabProps {
   onDirtyChange: (dirty: boolean) => void;
   /** Runs `leave` now, or after the user confirms losing unsaved edits. */
   confirmLeave: (leave: () => void) => void;
-  onSaved: () => Promise<void>;
+  /** Reloads the skill; resolves to whether the newest version loaded. */
+  onSaved: () => Promise<boolean>;
 }
 
 /** What the user started from: each save step is based on `versionId`, so a
@@ -188,9 +189,12 @@ export default function SkillContentsTab({
   }
 
   function reload(): void {
-    // The page's detail is the newest version after `onSaved`. Staged files
-    // are dropped too: they were based on the version that was refused.
-    void onSaved().finally(reset);
+    // Staged files are dropped with the text: they were based on the version
+    // that was refused. A failed load keeps them for another Reload.
+    void onSaved().then((loaded) => {
+      if (loaded) reset();
+      else toast.error(t("reloadFailed"));
+    });
   }
 
   function entriesOf(upload: PreparedSkillFilesUpload): string[] {

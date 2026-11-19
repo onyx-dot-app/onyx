@@ -17388,7 +17388,8 @@
           "skillMd": "Edite o SKILL.md no editor. Adicione aqui apenas arquivos de apoio."
         },
         "loadFailed": "Não foi possível carregar o conteúdo desta habilidade.",
-        "retry": "Tentar novamente"
+        "retry": "Tentar novamente",
+        "reloadFailed": "Não foi possível carregar a versão mais recente. Suas alterações foram mantidas. Tente Recarregar novamente."
       },
       "required": {
         "label": "Obrigatória",
