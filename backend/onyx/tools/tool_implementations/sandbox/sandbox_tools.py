@@ -652,7 +652,7 @@ class PublishFilesTool(_FileTool):
     session, so that everyone who can read the chat can download them
     (`access/access.py:user_can_access_chat_file`). The response's save
     attaches them to its message (`db/chat_response.py:save_chat_turn`), and
-    a chat delete deletes them by their ID prefix, saved or not
+    a hard chat delete deletes them by their ID prefix, saved or not
     (`db/chat.py:delete_messages_and_files_from_chat_session`). A call
     publishes all of its files or none.
     It takes turns with the file tools, so it publishes their changes."""

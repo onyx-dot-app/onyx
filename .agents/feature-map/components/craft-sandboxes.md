@@ -431,8 +431,8 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   no activity in the window.
   A purge mark makes a save in progress drop its archive instead of
   committing. Saves are indexed per sandbox in the tenant cache. A chat's
-  published files are chat files, not sandbox state: the chat delete
-  deletes them ([[chat-persistence]]).
+  published files are chat files, not sandbox state: a hard chat delete
+  deletes them, and a soft delete keeps them ([[chat-persistence]]).
 
 ---
 

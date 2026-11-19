@@ -58,7 +58,7 @@
   files that each patch, edit or write changed, on the same patch card. Every
   model also gets `publish_files`, which gives files from the VM to the user
   as download cards; owners and viewers of a shared chat can download them,
-  and a chat delete deletes them.
+  and a hard chat delete deletes them.
 
 ---
 
