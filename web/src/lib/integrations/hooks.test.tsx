@@ -164,3 +164,33 @@ test("a failed write is read back before the next write is built", async () => {
   ]);
   expect(fetchMock).toHaveBeenCalled();
 });
+
+test("a lost write is read back before the next write is built", async () => {
+  const patches: unknown[] = [];
+  mockFetch({
+    "/api/user/assistant/preferences": {
+      "8": { disabled_tool_ids: [], disabled_integration_ids: [5] },
+    },
+    "PATCH /api/user/assistant/8/preferences": (init?: RequestInit) => {
+      patches.push(JSON.parse(String(init?.body)));
+      if (patches.length === 1) throw new TypeError("Failed to fetch");
+      return new Response(null);
+    },
+  });
+  const { result } = renderHook(() => useAgentIntegrationPreferences(true), {
+    wrapper,
+  });
+  await waitFor(() => expect(result.current.loaded).toBe(true));
+
+  await act(async () => {
+    const first = result.current.setIntegrationsDisabled(8, [1], true);
+    const second = result.current.setIntegrationsDisabled(8, [2], true);
+    await expect(first).rejects.toThrow("Failed to fetch");
+    await second;
+  });
+
+  expect(patches).toEqual([
+    { disabled_integration_ids: [5, 1] },
+    { disabled_integration_ids: [5, 2] },
+  ]);
+});

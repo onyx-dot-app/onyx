@@ -203,17 +203,20 @@ export function useAgentIntegrationPreferences(enabled: boolean) {
         const sent = pending.body;
         if (sent === null)
           throw new Error("The integration preferences have not loaded.");
-        const response = await fetch(
-          `/api/user/assistant/${agentId}/preferences`,
-          {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(sent),
-          }
-        );
-        if (!response.ok) {
+        try {
+          const response = await fetch(
+            `/api/user/assistant/${agentId}/preferences`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(sent),
+            }
+          );
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        } catch (writeError) {
+          // A refused or lost write: read the saved list back.
           await mutate();
-          throw new Error(`HTTP ${response.status}`);
+          throw writeError;
         }
       };
       const write = preferenceWrites.then(run);

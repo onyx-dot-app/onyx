@@ -1032,6 +1032,17 @@ describe("useToolConfiguration: integrations of the agent", () => {
     expect(result.current.optionsLoaded).toBe(true);
   });
 
+  test("an anonymous visitor sends with no integrations", () => {
+    mockUser = { ...SIGNED_IN, is_anonymous_user: true };
+    mockChatId = null;
+    mockActiveAgent = AGENT;
+    // The ids route refuses an anonymous visitor.
+    mockIntegrationIds = null;
+    const { result } = renderHook(() => useToolConfiguration(7));
+    expect(result.current.optionsLoaded).toBe(true);
+    expect(mockReadAgentIds).toContain(undefined);
+  });
+
   test("a new chat holds a send until the saved integration switches load", () => {
     mockChatId = null;
     mockActiveAgent = AGENT;

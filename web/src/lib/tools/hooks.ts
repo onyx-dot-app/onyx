@@ -874,8 +874,12 @@ export function useToolConfiguration(
   const agentTools = activeAgent?.tools;
   // Every integration of the agent, null until it loads. Saved options name
   // integrations in an allow-list, so one unknown here would be left out.
-  const agentIntegrationIds =
-    useAgentIntegrationIds(configAgentId).integrationIds;
+  // An anonymous visitor has no integrations, and the ids route refuses one,
+  // so the list is complete and empty.
+  const loadedIntegrationIds = useAgentIntegrationIds(
+    signedIn ? configAgentId : undefined
+  ).integrationIds;
+  const agentIntegrationIds = signedIn ? loadedIntegrationIds : [];
   const integrationIdsKey =
     agentIntegrationIds === null ? null : agentIntegrationIds.join(",");
   const integrationIds = useMemo(
