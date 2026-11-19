@@ -6,8 +6,6 @@ import pytest
 from ee.onyx.external_permissions.onedrive.permission_mapper import (
     map_onedrive_permissions,
 )
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.onedrive.models import OneDrivePermission
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "tenant_spike.json"
@@ -29,13 +27,13 @@ def test_fixture_user_and_group_permissions_are_conservative(
     permission_shapes: dict[str, list[OneDrivePermission]],
 ) -> None:
     direct = map_onedrive_permissions(
-        permission_shapes["direct"], "<owner-email>", False, False
+        permission_shapes["direct"], "<owner-email>", False
     )
     restricted = map_onedrive_permissions(
-        permission_shapes["restricted"], "<owner-email>", False, False
+        permission_shapes["restricted"], "<owner-email>", False
     )
     group = map_onedrive_permissions(
-        permission_shapes["visible_group"], "<owner-email>", False, False
+        permission_shapes["visible_group"], "<owner-email>", False
     )
 
     assert direct.external_user_emails == {"<owner-email>", "<primary-user-email>"}
@@ -59,7 +57,7 @@ def test_fixture_inheritance_and_permission_mutations_remain_restricted(
 
     for shape, expected_users in cases.items():
         access = map_onedrive_permissions(
-            permission_shapes[shape], "<owner-email>", False, False
+            permission_shapes[shape], "<owner-email>", False
         )
         assert access.external_user_emails == expected_users
         assert not access.is_public
@@ -69,7 +67,7 @@ def test_fixture_hidden_group_stays_restricted_to_its_group(
     permission_shapes: dict[str, list[OneDrivePermission]],
 ) -> None:
     access = map_onedrive_permissions(
-        permission_shapes["hidden_group"], "<owner-email>", False, False
+        permission_shapes["hidden_group"], "<owner-email>", False
     )
 
     assert access.external_user_emails == {"<owner-email>", "<email-id-2>"}
@@ -77,29 +75,17 @@ def test_fixture_hidden_group_stays_restricted_to_its_group(
     assert not access.is_public
 
 
-def test_indexing_prefixes_fixture_group_once(
-    permission_shapes: dict[str, list[OneDrivePermission]],
-) -> None:
-    access = map_onedrive_permissions(
-        permission_shapes["visible_group"], "<owner-email>", False, True
-    )
-
-    assert access.external_user_group_ids == {
-        build_ext_group_name_for_onyx("<visible-group-id>", DocumentSource.ONEDRIVE)
-    }
-
-
 def test_fixture_link_policy_does_not_widen_organization_links(
     permission_shapes: dict[str, list[OneDrivePermission]],
 ) -> None:
     anonymous = map_onedrive_permissions(
-        permission_shapes["anonymous_link"], "<owner-email>", False, False
+        permission_shapes["anonymous_link"], "<owner-email>", False
     )
     organization_private = map_onedrive_permissions(
-        permission_shapes["organization_link"], "<owner-email>", False, False
+        permission_shapes["organization_link"], "<owner-email>", False
     )
     organization_public = map_onedrive_permissions(
-        permission_shapes["organization_link"], "<owner-email>", True, False
+        permission_shapes["organization_link"], "<owner-email>", True
     )
 
     assert anonymous.is_public
@@ -123,7 +109,7 @@ def test_unresolved_grants_are_dropped_without_widening() -> None:
         ),
     ]
 
-    access = map_onedrive_permissions(permissions, "owner@example.com", False, False)
+    access = map_onedrive_permissions(permissions, "owner@example.com", False)
 
     assert access.external_user_emails == {"owner@example.com"}
     assert access.external_user_group_ids == set()
@@ -145,7 +131,7 @@ def test_site_user_email_is_retained_without_user_identity() -> None:
         )
     ]
 
-    access = map_onedrive_permissions(permissions, "owner@example.com", False, False)
+    access = map_onedrive_permissions(permissions, "owner@example.com", False)
 
     assert access.external_user_emails == {
         "owner@example.com",
