@@ -171,7 +171,7 @@ class DocumentQuery:
 
     @staticmethod
     def get_from_document_id_query(
-        document_id: str,
+        document_id: str | None,
         tenant_state: TenantState,
         index_filters: IndexFilters,
         include_hidden: bool,
@@ -190,7 +190,8 @@ class DocumentQuery:
 
         Args:
             document_id: Onyx document ID. Notably not an OpenSearch document
-                ID, which points to what Onyx would refer to as a chunk.
+                ID, which points to what Onyx would refer to as a chunk. If
+                None, index_filters.attached_document_ids selects the documents.
             tenant_state: Tenant state containing the tenant ID.
             index_filters: Filters for the document retrieval query.
             include_hidden: Whether to include hidden documents.

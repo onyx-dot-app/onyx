@@ -71,6 +71,13 @@ class DisabledDocumentIndex(DocumentIndex):
     ) -> list[InferenceChunk]:
         raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
 
+    def leading_chunks_retrieval(
+        self,
+        filters: IndexFilters,  # noqa: ARG002
+        max_chunk_index: int,  # noqa: ARG002
+    ) -> list[InferenceChunk]:
+        raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
+
     def hybrid_retrieval(
         self,
         query: str,  # noqa: ARG002
