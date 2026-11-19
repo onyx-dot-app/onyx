@@ -8,8 +8,10 @@ import type { PersonSuggestions } from "@/lib/suggestedQuestions/types";
 
 /** How often to check again while the server is preparing questions. */
 const POLL_INTERVAL_MS = 30_000;
-/** Stop checking after this long; the server's SQ_PREPARING_S matches it. */
-const POLL_FOR_MS = 120_000;
+/** Stop checking after this long. It is one check longer than the server's
+ * SQ_PREPARING_S (120 s), so the last check sees the server end "preparing"
+ * and the page never keeps a stale "preparing". */
+const POLL_FOR_MS = 150_000;
 
 // Module state lives as long as the page, so every caller shares it: the
 // questions stay put while the page is open and change on reload.
@@ -56,24 +58,6 @@ export function nextPollDelay(
 }
 
 /**
- * The suggestions to show. Once polling has stopped, a "preparing" state that
- * is still cached (for example, a check answered just after the window) is
- * shown as ready, so the page never waits on a check that will not come.
- * Questions already there stay.
- */
-export function settledSuggestions(
-  latest: PersonSuggestions | undefined,
-  openedAtMs: number | undefined,
-  nowMs: number
-): PersonSuggestions | undefined {
-  const pollingOver =
-    openedAtMs !== undefined && nowMs - openedAtMs >= POLL_FOR_MS;
-  return latest?.state === "preparing" && pollingOver
-    ? { ...latest, state: "ready" }
-    : latest;
-}
-
-/**
  * The person's suggested questions, on the Playground only. The first
  * successful fetch for an agent counts as a chat open: the server records
  * the visit and may ask for a run. Every later fetch (the checks while
@@ -88,7 +72,7 @@ export function useSuggestedQuestions(agentId: number | null) {
       ? [SWR_KEYS.suggestedQuestions(agentId, getPageSeed()), agentId]
       : null;
 
-  const { data, isLoading, mutate } = useSWR<PersonSuggestions>(
+  const { data, mutate } = useSWR<PersonSuggestions>(
     key,
     ([url, id]: [string, number]) => fetchSuggestions(url, id),
     {
@@ -102,10 +86,5 @@ export function useSuggestedQuestions(agentId: number | null) {
     }
   );
 
-  const suggestions = settledSuggestions(
-    data,
-    agentId === null ? undefined : openedAt.get(agentId),
-    Date.now()
-  );
-  return { suggestions, isLoading, mutate };
+  return { suggestions: data, mutate };
 }

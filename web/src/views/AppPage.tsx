@@ -212,7 +212,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // On the Playground, every chat open asks for the person's suggested
   // questions, whatever the agent, so the server records the visit. Only the
   // default agent shows them.
-  const { suggestions, isLoading: suggestionsLoading } = useSuggestedQuestions(
+  const { suggestions } = useSuggestedQuestions(
     appPosition.isNewSession() || appPosition.isAgent()
       ? (activeAgent?.id ?? null)
       : null
@@ -630,9 +630,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const isSearch =
     state.phase === "searching" || state.phase === "search-results";
-  // Search mode before a search runs too, as for the model selector.
+  // Search mode before a search runs too, on a new session only (an agent
+  // page always chats), as AppInputBar decides it.
   const isSearchMode =
-    isSearch || (state.phase === "idle" && state.appMode === "search");
+    isSearch ||
+    (isNewSession && state.phase === "idle" && state.appMode === "search");
 
   // 1. Reset the app-mode back to the user's default when navigating back to the "New Sessions" tab.
   // 2. If we're navigating away from the "New Session" tab after performing a search, we reset the app-input-bar.
@@ -802,11 +804,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const hasAgentStarterMessages =
     (activeAgent?.starter_messages?.length ?? 0) > 0;
+  // The input bar's disabled rule; suggestion clicks send like it, so they
+  // share it. Intentionally enabled during name-only onboarding
+  // (showOnboarding=false), since LLM providers are already configured and
+  // the user can chat.
+  const composerDisabled =
+    (!llmManager.isLoadingProviders && llmManager.hasAnyProvider === false) ||
+    // Only while the onboarding steps are on screen.
+    (onboardingVisible &&
+      showOnboarding &&
+      !isLoadingOnboarding &&
+      onboardingState.stepIndex <
+        STEP_CONFIG[OnboardingStep.OptionalSetup].index);
   const hasSuggestedQuestions =
     activeAgent?.id === DEFAULT_AGENT_ID &&
-    (suggestionsLoading ||
-      (suggestions !== undefined &&
-        (suggestions.questions.length > 0 || suggestions.state !== "ready")));
+    (suggestions?.questions.length ?? 0) > 0;
 
   const gridStyle = {
     // The chat column's width, set once here: the messages, the first-open
@@ -1185,18 +1197,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         activeAgent={activeAgent}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}
-                        // Intentionally enabled during name-only onboarding (showOnboarding=false)
-                        // since LLM providers are already configured and the user can chat.
-                        disabled={
-                          (!llmManager.isLoadingProviders &&
-                            llmManager.hasAnyProvider === false) ||
-                          // Only while the onboarding steps are on screen.
-                          (onboardingVisible &&
-                            showOnboarding &&
-                            !isLoadingOnboarding &&
-                            onboardingState.stepIndex <
-                              STEP_CONFIG[OnboardingStep.OptionalSetup].index)
-                        }
+                        disabled={composerDisabled}
                       />
                       <div
                         className={cn(
@@ -1242,6 +1243,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     <Suggestions
                       onChat={onChat}
                       disabled={
+                        composerDisabled ||
                         currentChatState !== "input" ||
                         currentMessageFiles.some((file) =>
                           isFilePending(file.status)

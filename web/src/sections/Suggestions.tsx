@@ -1,6 +1,5 @@
 "use client";
 
-import { useTranslations } from "next-intl";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import { AnalyticsEvent, track } from "@/lib/analytics/utils";
 import type { ComposedMessage } from "@/lib/chat/types";
@@ -8,10 +7,8 @@ import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSuggestedQuestions } from "@/lib/suggestedQuestions/hooks";
 import { markSuggestedQuestionUsed } from "@/lib/suggestedQuestions/svc";
 import type { ShownQuestion } from "@/lib/suggestedQuestions/types";
-import { Text } from "@opal/components";
 import { Interactive } from "@opal/core";
 import { Content } from "@opal/layouts";
-import type { RichStr } from "@opal/types";
 
 export interface SuggestionsProps {
   /** The input bar's send, so a click keeps the chosen models and options. */
@@ -24,15 +21,15 @@ export interface SuggestionsProps {
 /**
  * The buttons under the chat input. An agent's own starter messages always
  * win. On the Playground's default agent, the person gets questions written
- * from their own documents, or one line while those are being prepared.
+ * from their own documents. With no questions yet, nothing shows: we cannot
+ * promise when they will arrive. They appear by themselves once ready.
  */
 export default function Suggestions({
   onChat,
   disabled = false,
 }: SuggestionsProps) {
-  const t = useTranslations("chat.suggestedQuestions");
   const activeAgent = useActiveAgent();
-  const { suggestions, isLoading, mutate } = useSuggestedQuestions(
+  const { suggestions, mutate } = useSuggestedQuestions(
     activeAgent?.id ?? null
   );
 
@@ -77,22 +74,12 @@ export default function Suggestions({
     );
   }
 
-  if (activeAgent?.id !== DEFAULT_AGENT_ID) return null;
-  if (!suggestions) {
-    return isLoading ? <SuggestionsLine text={t("preparing.text")} /> : null;
-  }
-
-  if (suggestions.questions.length === 0) {
-    if (suggestions.state === "ready") return null;
-    return (
-      <SuggestionsLine
-        text={
-          suggestions.state === "preparing"
-            ? t("preparing.text")
-            : t("noDocuments.text")
-        }
-      />
-    );
+  if (
+    activeAgent?.id !== DEFAULT_AGENT_ID ||
+    !suggestions ||
+    suggestions.questions.length === 0
+  ) {
+    return null;
   }
 
   return (
@@ -103,21 +90,6 @@ export default function Suggestions({
         onClick: () => handleQuestionClick(question, position),
       }))}
     />
-  );
-}
-
-interface SuggestionsLineProps {
-  text: string | RichStr;
-}
-
-/** One line in place of the buttons, while there are none to show. */
-function SuggestionsLine({ text }: SuggestionsLineProps) {
-  return (
-    <div className="max-w-(--app-page-main-content-width) w-full p-1">
-      <Text as="p" font="main-ui-muted" color="text-03">
-        {text}
-      </Text>
-    </div>
   );
 }
 

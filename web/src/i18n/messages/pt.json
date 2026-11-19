@@ -13516,14 +13516,6 @@
       "menu": {
         "label": "Exportar como…"
       }
-    },
-    "suggestedQuestions": {
-      "preparing": {
-        "text": "Preparando perguntas a partir dos seus documentos…"
-      },
-      "noDocuments": {
-        "text": "Adicione uma fonte para receber perguntas sobre seus documentos."
-      }
     }
   },
   "common": {
