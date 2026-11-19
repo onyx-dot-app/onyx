@@ -2,10 +2,11 @@ import { type Locator, type Page, expect } from "@playwright/test";
 import { IntegrationCredentialsDialog } from "@tests/e2e/pages/IntegrationCredentialsDialog";
 
 export type IntegrationPageTab = "Overview" | "Configuration" | "Actions";
+// An expired connection shows its reason in the row, not a label: pass the
+// reason text to expectStatus.
 export type IntegrationStatusLabel =
   | "Connected"
   | "Not connected"
-  | "Needs reconnect"
   | "Not set up";
 
 /** One integration of a member at /app/customize/integrations/[id]. */
