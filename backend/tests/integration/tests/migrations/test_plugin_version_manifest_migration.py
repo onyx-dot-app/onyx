@@ -13,7 +13,7 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
-PREVIOUS_REVISION = "65f8d8cd1bf3"
+PREVIOUS_REVISION = "fe5404156f8c"
 REVISION = "2d7510746863"
 
 
