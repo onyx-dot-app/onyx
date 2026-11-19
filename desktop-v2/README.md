@@ -168,19 +168,37 @@ How the app differs from macOS:
 - The main window keeps the native title bar and has its own menu bar: **File** (New Chat
   `Ctrl+N`, Open Launcher, Preferences `Ctrl+,`, Close Window `Ctrl+W`, Quit `Ctrl+Q`), **View**
   (Reload `Ctrl+R`, Back `Alt+Left`, Forward `Alt+Right`, zoom `Ctrl+0`/`Ctrl+=`/`Ctrl+-`, Full
-  Screen `F11`) and **Help** (About). Other windows have no menu bar. **Check for Updates…** is
-  in the tray menu.
+  Screen `F11`) and **Help** (About). Other windows have no menu bar.
+- No auto-update: the update feed has macOS builds only, so the app does not check for updates
+  and has no **Check for Updates…** item. Install a new version by hand.
 - The session cookie goes in through wry's cookie API. WebView2 and WebKitGTK show `alert()`,
   `confirm()` and `prompt()` themselves; other native dialogs use `rfd`.
-- `onyx://` sign-in links are registered by the installer, and again at launch (for AppImage and
-  dev builds).
-- Linux needs a tray host for the tray icon (`libayatana-appindicator3-1`; GNOME needs the
-  AppIndicator extension) and a Secret Service (GNOME Keyring or KWallet) to keep you signed in.
-  The launcher's transparent corners need a compositing window manager.
+- Windows installers install for all users (NSIS `perMachine`, and MSI) into Program Files, so
+  a standard user cannot replace the app's files. They need administrator rights. They contain the
+  WebView2 offline installer, so they also work on a computer with no internet access. The
+  installers register `onyx://` sign-in links for all users. Debug builds register them for
+  the current user at launch.
+- On Linux the app registers `onyx://` at launch (the `.deb` also registers it), so AppImage
+  builds get sign-in links too. This needs `xdg-mime`.
+
+Linux needs some desktop services:
+
+- **Secret Service**, to keep you signed in: GNOME Keyring, KWallet or another provider must
+  run and be unlocked in your session. Minimal window managers, VDI and SSH sessions often have
+  none. Then sign-in fails with a message that names the Secret Service.
+- **Global shortcut**: the launcher shortcut uses X11 key grabs. In a Wayland session (the
+  default on Ubuntu 22.04+, Fedora and RHEL 9) the shortcut works only while an X11 (XWayland)
+  app has focus, and with no XWayland it never works. Preferences shows a notice then. Open the
+  launcher from the tray icon instead. Preferences also shows a notice when another app holds
+  the shortcut.
+- **Tray icon**: it needs a tray host (`libayatana-appindicator3-1`). Stock GNOME shows no
+  tray icon without the AppIndicator extension (`gnome-shell-extension-appindicator`, on by
+  default on Ubuntu).
+- The launcher's transparent corners need a compositing window manager.
 
 ## Auto-update
 
-`src-tauri/src/updater.rs`: the app checks the feed 15 seconds after launch
+macOS only (`updater::SUPPORTED`). `src-tauri/src/updater.rs`: the app checks the feed 15 seconds after launch
 and every 6 hours, downloads a newer version in the background, then changes **Check for
 Updates…** (app menu and tray) to **Restart to Update (vX)**. It does not restart on its own.
 Every download is verified against `plugins.updater.pubkey` in `tauri.conf.json` before it is

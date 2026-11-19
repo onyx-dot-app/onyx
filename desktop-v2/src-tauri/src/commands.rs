@@ -25,6 +25,8 @@ pub struct Prefs {
     server_url: Option<String>,
     hotkey: String,
     signed_in: bool,
+    /// Set when the launcher shortcut may not work.
+    shortcut_notice: Option<String>,
 }
 
 #[tauri::command]
@@ -91,14 +93,16 @@ pub async fn login(
 }
 
 #[tauri::command]
-pub fn get_prefs(state: State<'_, AppState>) -> Prefs {
+pub fn get_prefs(app: AppHandle, state: State<'_, AppState>) -> Prefs {
     let config = state.config.get();
     let signed_in = config
         .server_url
         .as_deref()
         .is_some_and(|server| state.token(server).is_some());
+    let hotkey = config.hotkey();
     Prefs {
-        hotkey: config.hotkey(),
+        shortcut_notice: shortcut::notice(&app, &hotkey),
+        hotkey,
         server_url: config.server_url,
         signed_in,
     }

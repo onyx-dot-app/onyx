@@ -199,7 +199,8 @@ function Preferences() {
     if (accelerator === prefs?.hotkey) return;
     await run(async () => {
       await setHotkey(accelerator);
-      setPrefs((p) => (p ? { ...p, hotkey: accelerator } : p));
+      // Also refreshes the shortcut notice.
+      setPrefs(await getPrefs());
       setSaved(true);
     });
   }
@@ -221,6 +222,11 @@ function Preferences() {
           <Field label="Shows the launcher from any app" inputId="hotkey">
             <ShortcutRecorder value={prefs?.hotkey ?? null} onRecord={(a) => void onRecordHotkey(a)} />
           </Field>
+          {prefs?.shortcutNotice ? (
+            <Text font="secondary-body" color="text-03">
+              {prefs.shortcutNotice}
+            </Text>
+          ) : null}
           {saved ? (
             <Text font="secondary-body" color="text-03">
               Saved

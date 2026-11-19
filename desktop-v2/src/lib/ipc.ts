@@ -10,6 +10,8 @@ export interface Prefs {
   serverUrl: string | null;
   hotkey: string;
   signedIn: boolean;
+  // Why the launcher shortcut may not work, or null.
+  shortcutNotice: string | null;
 }
 
 export interface SearchHit {

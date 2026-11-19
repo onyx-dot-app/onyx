@@ -66,9 +66,10 @@ fn main() {
 
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
-                // Installers register onyx:// on Windows and Linux; AppImage
-                // and dev builds need it at runtime.
-                #[cfg(any(target_os = "windows", target_os = "linux"))]
+                // The NSIS and MSI installers register onyx:// for all users;
+                // a per-user entry would override it. AppImage and dev builds
+                // need it at runtime.
+                #[cfg(any(target_os = "linux", all(target_os = "windows", debug_assertions)))]
                 if let Err(e) = app.deep_link().register_all() {
                     log::warn!("could not register onyx:// links: {e}");
                 }
@@ -81,7 +82,9 @@ fn main() {
             }
 
             main_window::spawn_session_renewal(handle);
-            updater::spawn_background_checks(handle);
+            if updater::SUPPORTED {
+                updater::spawn_background_checks(handle);
+            }
             qa::start(handle);
             Ok(())
         })

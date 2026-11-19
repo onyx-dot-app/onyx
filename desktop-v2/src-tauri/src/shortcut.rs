@@ -22,6 +22,33 @@ pub fn is_registered(app: &AppHandle, accelerator: &str) -> bool {
     app.global_shortcut().is_registered(accelerator)
 }
 
+/// Why the launcher shortcut may not work, for Preferences.
+pub fn notice(app: &AppHandle, accelerator: &str) -> Option<String> {
+    if !is_registered(app, accelerator) {
+        return Some(
+            "The launcher shortcut is not active. Another app may use it. Choose a different one."
+                .into(),
+        );
+    }
+    // global-hotkey grabs keys on X11 only. Under Wayland the registration
+    // reports success, but no key press reaches Onyx while a Wayland app has focus.
+    #[cfg(target_os = "linux")]
+    if is_wayland() {
+        return Some(
+            "This is a Wayland session. The shortcut may not work while another app has focus. \
+             Open the launcher from the tray icon instead."
+                .into(),
+        );
+    }
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn is_wayland() -> bool {
+    std::env::var("XDG_SESSION_TYPE").is_ok_and(|t| t.eq_ignore_ascii_case("wayland"))
+        || std::env::var_os("WAYLAND_DISPLAY").is_some()
+}
+
 /// Swaps the launcher shortcut. Restores the old one if the new one fails.
 pub fn rebind(app: &AppHandle, old: &str, new: &str) -> Result<(), String> {
     if old == new {

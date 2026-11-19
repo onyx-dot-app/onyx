@@ -166,11 +166,15 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             &MenuItem::with_id(app, OPEN, "Open Onyx", true, None::<&str>)?,
             &MenuItem::with_id(app, LAUNCHER, "Open Launcher", true, None::<&str>)?,
             &MenuItem::with_id(app, PREFERENCES, "Preferences…", true, None::<&str>)?,
-            &updates_item(app)?,
-            &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, QUIT, "Quit Onyx", true, None::<&str>)?,
         ],
     )?;
+    if updater::SUPPORTED {
+        menu.append(&updates_item(app)?)?;
+    }
+    menu.append_items(&[
+        &PredefinedMenuItem::separator(app)?,
+        &MenuItem::with_id(app, QUIT, "Quit Onyx", true, None::<&str>)?,
+    ])?;
     TrayIconBuilder::with_id("onyx-tray")
         .icon(Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?)
         .icon_as_template(true)

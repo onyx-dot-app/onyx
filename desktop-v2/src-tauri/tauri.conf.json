@@ -36,6 +36,14 @@
     "macOS": {
       "minimumSystemVersion": "13.0"
     },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller"
+      },
+      "nsis": {
+        "installMode": "perMachine"
+      }
+    },
     "linux": {
       "deb": {
         "depends": [

@@ -14,6 +14,9 @@ use tauri::menu::MenuItem;
 use tauri::{AppHandle, Wry};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
+/// The feed has macOS builds only. Until it has signed Windows and Linux
+/// builds, those platforms do not check for updates and show no update item.
+pub const SUPPORTED: bool = cfg!(target_os = "macos");
 pub const CHECK_ID: &str = "check_updates";
 const FIRST_CHECK_DELAY: Duration = Duration::from_secs(15);
 const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
