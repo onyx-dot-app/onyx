@@ -12620,14 +12620,8 @@
             },
             "title": "Correctif",
             "progress": {
-              "writing": {
-                "named": "Écriture de {path}… {lines, plural, one {# ligne} other {# lignes}}",
-                "unnamed": "Écriture d’un fichier…"
-              },
-              "editing": {
-                "named": "Modification de {path}… {lines, plural, one {# ligne} other {# lignes}}",
-                "unnamed": "Modification d’un fichier…"
-              },
+              "named": "{tool, select, write {Écriture de {path}… {lines, plural, one {# ligne} other {# lignes}}} other {Modification de {path}… {lines, plural, one {# ligne} other {# lignes}}}}",
+              "unnamed": "{tool, select, write {Écriture d’un fichier…} other {Modification d’un fichier…}}",
               "patching": {
                 "status": "{count, plural, =0 {Application du correctif…} one {Application du correctif à # fichier…} other {Application du correctif à # fichiers…}}"
               }

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AttachmentItemButton, Card, useCreateModal } from "@opal/components";
 import { Section } from "@opal/layouts";
+import { stripBidiControls } from "@opal/utils";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import PreviewModal from "@/sections/modals/PreviewModal";
@@ -68,7 +69,9 @@ export function PublishedFileCards({ files }: PublishedFileCardsProps) {
               <Card padding={0} border="solid">
                 <AttachmentItemButton
                   icon={getFileIcon(file.name)}
-                  title={file.title ?? file.name}
+                  // The title is its own flex item, so it cannot reorder
+                  // the text around it.
+                  title={stripBidiControls(file.title ?? file.name)}
                   description={
                     file.version > 1
                       ? t("card.updated.description", { details })

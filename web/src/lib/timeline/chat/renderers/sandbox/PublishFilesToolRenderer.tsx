@@ -3,6 +3,7 @@ import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { Text } from "@opal/components";
 import { SvgFiles } from "@opal/icons";
+import { stripBidiControls } from "@opal/utils";
 import {
   PacketType,
   PublishFilesEnd,
@@ -10,7 +11,6 @@ import {
   PublishFilesToolPacket,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/app/app/message/messageComponents/types";
-import { stripBidiControls } from "@/lib/bidiControls";
 import {
   SandboxCallContent,
   SandboxCallError,

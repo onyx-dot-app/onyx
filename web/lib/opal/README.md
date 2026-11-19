@@ -80,7 +80,7 @@ function MyComponent() {
 | `@onyx-ai/opal/icons`           | SVG icon components                                  |
 | `@onyx-ai/opal/illustrations`   | Larger SVG illustrations                             |
 | `@onyx-ai/opal/types`           | Shared types (`RichStr`, `IconProps`, etc.)          |
-| `@onyx-ai/opal/utils`           | `cn`, `markdown` helpers                             |
+| `@onyx-ai/opal/utils`           | `cn`, `markdown`, `stripBidiControls` helpers        |
 | `@onyx-ai/opal/styles.css`      | Bundled component CSS                                |
 | `@onyx-ai/opal/tailwind-preset` | Tailwind preset with tokens                          |
 

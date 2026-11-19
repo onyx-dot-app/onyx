@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Section } from "@opal/layouts";
 import { ShadowDiv, Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { RenderType } from "@/app/app/message/messageComponents/types";
 
 interface SandboxCallContentProps {
@@ -39,9 +40,10 @@ interface SandboxCallErrorProps {
 export function SandboxCallError({ error }: SandboxCallErrorProps) {
   return (
     <div className="whitespace-pre-wrap wrap-break-word">
-      {/* dir: the sandbox's text cannot reorder the text around it. */}
-      <Text as="p" dir="ltr" font="secondary-body" color="status-error-05">
-        {error}
+      <Text as="p" font="secondary-body" color="status-error-05">
+        {/* dir: the sandbox's text cannot reorder the text around it, and
+            the paragraph keeps the page's direction. */}
+        {richNodes(<span dir="ltr">{error}</span>)}
       </Text>
     </div>
   );

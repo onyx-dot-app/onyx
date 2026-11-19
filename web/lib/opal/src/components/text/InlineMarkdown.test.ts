@@ -1,5 +1,18 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { markdown } from "@opal/utils";
-import { toPlainString } from "@opal/components/text/InlineMarkdown";
+import InlineMarkdown, {
+  toPlainString,
+} from "@opal/components/text/InlineMarkdown";
+
+describe("InlineMarkdown", () => {
+  it("renders a code span as an LTR isolate inside RTL text", () => {
+    const html = renderToStaticMarkup(
+      createElement(InlineMarkdown, { content: "افتح `src/a.py` الآن" })
+    );
+    expect(html).toMatch(/افتح <code dir="ltr"[^>]*>src\/a\.py<\/code> الآن/);
+  });
+});
 
 describe("toPlainString", () => {
   it("returns plain strings unchanged", () => {
