@@ -122,10 +122,9 @@ mod tests {
     use super::{display_host, Unreachable};
     use crate::api::Api;
 
-    fn closed_port() -> u16 {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        listener.local_addr().unwrap().port()
-    }
+    /// A port that refuses connections. Tests bind only ephemeral ports
+    /// (port 0), so no parallel test can take this one, as a freed port could.
+    const CLOSED_PORT: u16 = 1;
 
     /// A one-shot server that answers the first request with `response`.
     fn serve_once(response: &'static [u8]) -> u16 {
@@ -150,7 +149,7 @@ mod tests {
     #[test]
     fn closed_port_is_refused() {
         let error = get(
-            &format!("http://127.0.0.1:{}/", closed_port()),
+            &format!("http://127.0.0.1:{CLOSED_PORT}/"),
             Duration::from_secs(5),
         );
         assert_eq!(
@@ -193,7 +192,7 @@ mod tests {
     #[test]
     fn health_reports_refused_and_server_errors() {
         let api = Api::new();
-        let down = format!("http://127.0.0.1:{}", closed_port());
+        let down = format!("http://127.0.0.1:{CLOSED_PORT}");
         assert_eq!(
             tauri::async_runtime::block_on(api.health(&down)),
             Err(Unreachable::Refused)
