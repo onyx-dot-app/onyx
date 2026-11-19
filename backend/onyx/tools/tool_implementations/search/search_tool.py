@@ -268,11 +268,11 @@ def deduplicate_queries(
     return list(query_map.values())
 
 
+@log_function_time()
 def _trim_sections_by_tokens(
     sections: list[InferenceSection],
     max_tokens: int,
     token_counter: Callable[[str], int],
-    max_chunks_per_section: int,
 ) -> list[InferenceSection]:
     """Keep the ranked prefix within the approximate selection budget."""
     if not sections or max_tokens <= 0:
@@ -282,10 +282,7 @@ def _trim_sections_by_tokens(
     # estimate to avoid joining and encoding passages when the whole pool fits.
     metadata_tokens = 75
     passages = [
-        [
-            chunk.content
-            for chunk in select_chunks_for_relevance(section, max_chunks_per_section)
-        ]
+        [chunk.content for chunk in select_chunks_for_relevance(section)]
         for section in sections
     ]
     upper_estimate = sum(
@@ -294,15 +291,21 @@ def _trim_sections_by_tokens(
         + sum(len(text) * (1 if text.isascii() else 4) for text in chunks)
         for chunks in passages
     )
-    if upper_estimate <= max_tokens:
-        return sections
-
-    remaining = max_tokens
-    for index, chunks in enumerate(passages):
-        remaining -= metadata_tokens + token_counter("\n".join(chunks))
-        if remaining < 0:
-            return sections[:index]
-    return sections
+    retained = sections
+    if upper_estimate > max_tokens:
+        remaining = max_tokens
+        for index, chunks in enumerate(passages):
+            remaining -= metadata_tokens + token_counter("\n".join(chunks))
+            if remaining < 0:
+                retained = sections[:index]
+                break
+    logger.debug(
+        "Retained %s of %s search sections for a %s-token budget",
+        len(retained),
+        len(sections),
+        max_tokens,
+    )
+    return retained
 
 
 class SearchTool(Tool):
@@ -410,7 +413,6 @@ class SearchTool(Tool):
             sections=candidates[:MAX_DECISION_QUESTIONS],
             max_tokens=max_tokens,
             token_counter=token_counter,
-            max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
         )
         speculative = [
             (section, run_in_background(expand, section))
@@ -1487,7 +1489,6 @@ class SearchTool(Tool):
                 sections=top_sections,
                 max_tokens=max_tokens_for_selection,
                 token_counter=token_counter,
-                max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
             )
             # Use LLM to select the most relevant sections for expansion
             selected_sections, best_doc_ids = select_sections_for_expansion(

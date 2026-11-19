@@ -355,21 +355,19 @@ def select_sections_for_expansion(
             options=options,
         )
 
+    num_sections = len(sections_dict)
     if budget:
         fit = budget.fitting_prefix(
-            len(sections_dict), lambda end: build_request(sections_dict[:end])
+            num_sections, lambda end: build_request(sections_dict[:end])
         )
         if fit and fit[0]:
-            end, request = fit
-            sections_dict = sections_dict[:end]
+            num_sections, request = fit
         else:
-            sections_dict = sections_dict[:1]
-            first_section = sections_dict[0]
-            sections_dict[0] = {
-                key: first_section[key]
+            num_sections = 1
+            first_section = {
+                key: sections_dict[0][key]
                 for key in ("section_id", "title", "source_type", "content")
             }
-            first_section = sections_dict[0]
 
             def build_content_request(content: str) -> GenerationRequest:
                 return build_request([{**first_section, "content": content}])
@@ -416,7 +414,6 @@ def select_sections_for_expansion(
         # Skip out-of-range IDs and don't count them toward max_sections
         selected_sections = []
         document_ids_with_exclamation = []  # Collect document_ids for sections with "!"
-        num_sections = len(sections_dict)
 
         for section_id_str in section_ids:
             # Convert to int
