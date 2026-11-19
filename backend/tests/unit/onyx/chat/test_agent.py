@@ -437,6 +437,35 @@ def test_last_step_text_tool_call_follows_the_sent_tool_choice(
     assert result.output.text == "Answer"
 
 
+def test_last_step_xml_without_a_tool_call_is_the_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        ScriptedLLM,
+        "config",
+        property(
+            lambda self: LLMConfig(
+                model_provider="ollama_chat",
+                model_name="llama3.2",
+                max_input_tokens=self.max_input_tokens,
+                temperature=0,
+            )
+        ),
+    )
+    text = '<function_calls><invoke name="unknown"></invoke></function_calls>'
+    llm = ScriptedLLM([Delta(content=text)])
+    result = run_agent(
+        chat_agent(llm, [EchoTool()]),
+        messages=[UserMessage(content="Hello")],
+        max_steps=1,
+    )
+
+    assert llm.requests[0]["tool_choice"] == ToolChoiceOptions.AUTO
+    assert len(llm.requests) == 1
+    assert result.stop_reason == RunStatus.COMPLETE
+    assert result.output.text == text
+
+
 class _PythonTool(EchoTool):
     @property
     def id(self) -> int:

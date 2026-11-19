@@ -727,11 +727,17 @@ class MessageAccumulator:
                     request,
                     sent_tool_choice,
                 )
-            tail = content_filter.flush() if content_filter is not None else ""
+            recovered_calls = recovered.tool_calls if recovered is not None else []
+            # Like the complete path, XML that holds no call stays in the answer.
+            tail = (
+                content_filter.flush(keep_blocks=not self.calls and not recovered_calls)
+                if content_filter is not None
+                else ""
+            )
             if tail:
                 yield from self._add_text(TextContent(text=tail))
-            if not self.calls and recovered is not None and recovered.tool_calls:
-                yield from self._add_recovered_calls(recovered.tool_calls)
+            if not self.calls and recovered_calls:
+                yield from self._add_recovered_calls(recovered_calls)
             self.message.usage = usage
             self.message.stop_reason = stop_reason
         finally:

@@ -94,8 +94,8 @@ python .opencode/skills/pptx/scripts/office/pack.py outputs/unpacked/ outputs/ou
 ```
 
 Validates the unpacked files against `--original`, then condenses the XML and zips the package.
-Validation fails on broken XML, broken relationships, and slide, layout, master, or notes XML that does not match the PresentationML schema. It does not catch every error, so check the result visually too.
-Broken XML and broken relationships fail even when the original deck has them. A schema error fails only when no original slide of the same kind has the same error, so a slide that you add, for example with `add_slide.py`, can keep the errors of the slide that it copies.
+Validation fails on broken XML, on many broken relationships, and on slide, layout, master, or notes XML that does not match the PresentationML schema. It does not catch every error, so check the result visually too. For example, it does not check the `r:id` references of a slide that has no `.rels` file.
+Broken XML and the broken relationships that validation finds fail even when the original deck has them. A schema error fails only when no original slide of the same kind has the same error, so a slide that you add, for example with `add_slide.py`, can keep the errors of the slide that it copies.
 
 ### thumbnail.py
 
