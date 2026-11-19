@@ -129,7 +129,7 @@ def classify_section_relevance(
 
     budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
     options = (
-        budget.options()
+        budget.options
         if budget
         else GenerationOptions(reasoning_effort=ReasoningEffort.OFF)
     )
@@ -155,12 +155,20 @@ def classify_section_relevance(
         )
 
     request = build_request(section_text, section_above_text, section_below_text)
-    if budget and not budget.fits(request):
-        fitted_request = budget.fit_text(section_text, build_request)
-        if fitted_request is None:
+    if (
+        budget
+        and budget.token_counter(request.model_dump_json(exclude_none=True))
+        > budget.input_tokens
+    ):
+        fit = budget.fitting_prefix(
+            len(section_text),
+            lambda end: build_request(section_text[:end]),
+            allow_slack=True,
+        )
+        if fit is None:
             logger.warning("Search classification prompt exceeds its input budget")
             return default_classification
-        request = fitted_request
+        _, request = fit
 
     try:
         response = llm.invoke(
@@ -331,7 +339,7 @@ def select_sections_for_expansion(
     extra_instructions = TRY_TO_FILL_TO_MAX_INSTRUCTIONS if try_to_fill_to_max else ""
     budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
     options = (
-        budget.options()
+        budget.options
         if budget
         else GenerationOptions(reasoning_effort=ReasoningEffort.OFF)
     )
@@ -369,20 +377,22 @@ def select_sections_for_expansion(
                 for key in ("section_id", "title", "source_type", "content")
             }
 
-            def build_content_request(content: str) -> GenerationRequest:
-                return build_request([{**first_section, "content": content}])
-
-            original_content = str(first_section["content"])
-            fitted_request = budget.fit_text(original_content, build_content_request)
-            if fitted_request is None:
-                first_section["title"] = ""
-                fitted_request = budget.fit_text(
-                    original_content, build_content_request
+            content = str(first_section["content"])
+            for title in (first_section["title"], ""):
+                first_section["title"] = title
+                fit = budget.fitting_prefix(
+                    len(content),
+                    lambda end: build_request(
+                        [{**first_section, "content": content[:end]}]
+                    ),
+                    allow_slack=True,
                 )
-            if fitted_request is None:
+                if fit is not None:
+                    _, request = fit
+                    break
+            else:
                 logger.warning("Search selection prompt exceeds its input budget")
                 return sections[:max_sections], None
-            request = fitted_request
     else:
         request = build_request(sections_dict)
 

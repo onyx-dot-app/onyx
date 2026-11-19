@@ -15,27 +15,20 @@ class SearchPromptBudget:
                 available_tokens, budget.context_tokens - budget.safety_tokens
             )
         # Completion limits include reasoning before the visible utility response.
-        self.output_tokens = min(
+        output_tokens = min(
             max_output_tokens,
             budget.max_output_tokens or max_output_tokens,
             max(1, available_tokens // 4),
         )
         self.input_tokens = min(
             max(0, llm.config.max_input_tokens - budget.safety_tokens),
-            available_tokens - self.output_tokens,
+            available_tokens - output_tokens,
         )
         self.token_counter = get_llm_token_counter(llm)
 
-    def options(self) -> GenerationOptions:
-        return GenerationOptions(
-            reasoning_effort=ReasoningEffort.OFF, max_tokens=self.output_tokens
+        self.options = GenerationOptions(
+            reasoning_effort=ReasoningEffort.OFF, max_tokens=output_tokens
         )
-
-    def _size(self, request: GenerationRequest) -> int:
-        return self.token_counter(request.model_dump_json(exclude_none=True))
-
-    def fits(self, request: GenerationRequest) -> bool:
-        return self._size(request) <= self.input_tokens
 
     def fitting_prefix(
         self,
@@ -46,12 +39,16 @@ class SearchPromptBudget:
     ) -> tuple[int, GenerationRequest] | None:
         """Find a verified prefix. Text may leave 2% of the input budget unused."""
 
-        request = build_request(length)
-        full = self._size(request)
+        def measure(end: int) -> tuple[GenerationRequest, int]:
+            request = build_request(end)
+            return request, self.token_counter(
+                request.model_dump_json(exclude_none=True)
+            )
+
+        request, full = measure(length)
         if full <= self.input_tokens:
             return length, request
-        best = build_request(0)
-        empty = self._size(best)
+        best, empty = measure(0)
         if empty > self.input_tokens:
             return None
         lower, upper = 0, length
@@ -59,8 +56,7 @@ class SearchPromptBudget:
         probe = (self.input_tokens - empty) * length // (full - empty)
         while upper - lower > 1:
             probe = max(lower + 1, min(probe, upper - 1))
-            request = build_request(probe)
-            tokens = self._size(request)
+            request, tokens = measure(probe)
             if tokens <= self.input_tokens:
                 lower, best = probe, request
                 if (
@@ -72,11 +68,3 @@ class SearchPromptBudget:
                 upper = probe
             probe = (lower + upper) // 2
         return lower, best
-
-    def fit_text(
-        self, text: str, build_request: Callable[[str], GenerationRequest]
-    ) -> GenerationRequest | None:
-        fit = self.fitting_prefix(
-            len(text), lambda end: build_request(text[:end]), allow_slack=True
-        )
-        return fit[1] if fit is not None else None
