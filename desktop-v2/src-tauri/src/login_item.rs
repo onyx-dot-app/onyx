@@ -196,6 +196,8 @@ fn desktop_exec(exe: &str) -> Result<String, String> {
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn desktop_entry_enabled(body: &str) -> bool {
     let mut in_entry = false;
+    // An empty or cut-off file is not an entry the desktop can start.
+    let mut has_exec = false;
     for line in body.lines().map(str::trim) {
         if line.starts_with('[') {
             in_entry = line == "[Desktop Entry]";
@@ -205,6 +207,9 @@ fn desktop_entry_enabled(body: &str) -> bool {
             continue;
         };
         let (key, value) = (key.trim(), value.trim());
+        if in_entry && key == "Exec" && !value.is_empty() {
+            has_exec = true;
+        }
         if in_entry
             && ((key == "Hidden" && value == "true")
                 || (key == "X-GNOME-Autostart-enabled" && value == "false"))
@@ -212,7 +217,7 @@ fn desktop_entry_enabled(body: &str) -> bool {
             return false;
         }
     }
-    true
+    has_exec
 }
 
 #[cfg(test)]
@@ -223,6 +228,10 @@ mod tests {
     fn reads_whether_an_autostart_entry_is_on() {
         let on = "[Desktop Entry]\nType=Application\nExec=onyx\nX-GNOME-Autostart-enabled=true\n";
         assert!(desktop_entry_enabled(on));
+        assert!(!desktop_entry_enabled(""));
+        assert!(!desktop_entry_enabled(
+            "[Desktop Entry]\nType=Application\n"
+        ));
         assert!(!desktop_entry_enabled(
             "[Desktop Entry]\nExec=onyx\nHidden=true\n"
         ));
@@ -230,7 +239,7 @@ mod tests {
             "[Desktop Entry]\nExec=onyx\nX-GNOME-Autostart-enabled = false\n"
         ));
         assert!(desktop_entry_enabled(
-            "[Desktop Entry]\nHidden=false\n# Hidden=true\n"
+            "[Desktop Entry]\nExec=onyx\nHidden=false\n# Hidden=true\n"
         ));
         // Keys in another group do not apply to the entry.
         assert!(desktop_entry_enabled(

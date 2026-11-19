@@ -368,6 +368,8 @@ pub fn refresh(app: &AppHandle) {
         new.disable_auto_update |= old.disable_auto_update;
         new.disable_launcher |= old.disable_launcher;
         new.disable_notifications |= old.disable_notifications;
+        new.launcher_shortcut = new.launcher_shortcut.or(old.launcher_shortcut.clone());
+        new.launch_at_login = new.launch_at_login.or(old.launch_at_login);
     }
     if new != old {
         state.set_policy(new.clone());
@@ -377,10 +379,10 @@ pub fn refresh(app: &AppHandle) {
         if new.disable_launcher && !old.disable_launcher {
             crate::windows::hide_launcher(app);
         }
-        if new.launch_at_login != old.launch_at_login {
-            apply_launch_at_login(app, &new);
-        }
     }
+    // Every refresh: a managed value that failed to apply is tried again. It
+    // reads the current state first, so it writes only when that differs.
+    apply_launch_at_login(app, &new);
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || sync_hotkey(&handle));
 }
