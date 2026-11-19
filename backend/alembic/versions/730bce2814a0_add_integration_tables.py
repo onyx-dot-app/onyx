@@ -2,18 +2,19 @@
 OpenAPI custom tool into them. Each integration stands alone and owns its
 access: its owner, its install setting, its shares and the on/off choice of
 each user. An agent and a task link to an integration directly. The copy
-makes no plugin.
+makes no plugin. An agent gives no access: a person who used a private
+integration only through an agent gets no share, and loses those tools until
+the owner shares the integration.
 
 The old tables stay the tables of each kind: each integration points at its
 mcp_server, external_app or OpenAPI tool row, as gated_app does. The old tables
 only get new columns, and approval_request.gated_app_id becomes nullable; a
-rollback undoes both. The data copy is SQL only. It moves no secret in
-clear: each credential is copied as its encrypted bytes.
+rollback undoes both. The migration copies each credential as encrypted bytes.
 
 The copy decrypts one value: the admin config of a per-user API key MCP
 server, to read its header template, which holds no secret. The actions of an
-OpenAPI spec or a built-in app catalog are not copied. The app writes them on
-first read (onyx/integrations/actions.py).
+OpenAPI spec or a built-in app catalog are not copied. The app derives them on read until an admin
+saves or refreshes the actions.
 
 Revision ID: 730bce2814a0
 Revises: 2bb0e564ae2d
@@ -673,8 +674,9 @@ _CREATE_SOURCES = f"""
             -- Private: only the owner and the shares have access.
             false AS is_private,
             NULL::uuid AS owner_user_id,
-            -- An app keeps its state: on is available, off is not.
-            CASE WHEN NOT a.enabled THEN 'NOT_AVAILABLE' END
+            -- An app keeps its state: an enabled app was on for each
+            -- user, so it is on by default; off is not available.
+            CASE WHEN a.enabled THEN 'DEFAULT' ELSE 'NOT_AVAILABLE' END
                 AS organization_policy,
             a.created_at,
             a.updated_at
@@ -777,7 +779,9 @@ _CREATE_SOURCES = f"""
             false,
             NULL,
             true,
-            NOT (t.user_id IS NULL OR is_shared.value),
+            -- A tool of a person stays private unless default Chat has it.
+            -- An agent gives no access, so its users get no share.
+            NOT (t.user_id IS NULL OR is_default.value),
             t.user_id,
             CASE WHEN is_default.value THEN 'DEFAULT' END,
             TIMESTAMPTZ '{FALLBACK_CREATED_AT}',
@@ -788,32 +792,6 @@ _CREATE_SOURCES = f"""
             SELECT t.enabled AND t.id IN (SELECT tool_id FROM default_chat_tool)
                 AS value
         ) is_default
-        -- Shared: a default chat tool, or on an agent that other people use.
-        CROSS JOIN LATERAL (
-            SELECT is_default.value OR EXISTS (
-                SELECT 1
-                FROM persona__tool pt
-                JOIN persona p ON p.id = pt.persona_id
-                WHERE pt.tool_id = t.id
-                  AND NOT p.deleted
-                  -- The default agent leaves out a tool the admin turned off.
-                  AND NOT (p.id = 0 AND NOT t.enabled)
-                  AND (
-                      p.user_id IS DISTINCT FROM t.user_id
-                      OR p.is_public
-                      OR p.owner_group_id IS NOT NULL
-                      OR EXISTS (
-                          SELECT 1 FROM persona__user pu
-                          WHERE pu.persona_id = p.id
-                            AND pu.user_id IS DISTINCT FROM t.user_id
-                      )
-                      OR EXISTS (
-                          SELECT 1 FROM persona__user_group pg
-                          WHERE pg.persona_id = p.id
-                      )
-                  )
-            ) AS value
-        ) is_shared
     )
     -- An integration of the organization is Available unless its source
     -- gives another setting. Each other integration is private.
@@ -1108,76 +1086,6 @@ _INSERT_MCP_GROUP_SHARES = """
     WHERE src.installation_policy = 'NOT_AVAILABLE'
 """
 
-# In the last release, each user of a custom agent used a private MCP server
-# through the agent. An integration gives its own access, so this one-time
-# copy gives those users a share. The users of an agent are the users that
-# the agent access rule gives it to: its owner and the members of its owner
-# group, and, while it is listed, its shares and (if public) each user. An
-# agent with only tools that the admin did not select gave no use of the
-# server.
-_PRIVATE_MCP_AGENTS = """
-    SELECT DISTINCT p.id AS persona_id, p.user_id, p.owner_group_id,
-        p.is_public, p.is_listed, i.id AS integration_id, i.created_at
-    FROM persona p
-    JOIN persona__tool pt ON pt.persona_id = p.id
-    JOIN tool t ON t.id = pt.tool_id AND t.enabled
-    JOIN integration i ON i.mcp_server_id = t.mcp_server_id
-    WHERE NOT p.deleted AND p.id <> 0
-      AND i.installation_policy = 'NOT_AVAILABLE'
-"""
-
-# The groups of an agent: its owner group and, while it is listed, its group
-# shares.
-_PRIVATE_MCP_AGENT_GROUPS = f"""
-    SELECT a.integration_id, a.created_at, a.owner_group_id AS user_group_id
-    FROM ({_PRIVATE_MCP_AGENTS}) a
-    WHERE a.owner_group_id IS NOT NULL
-    UNION
-    SELECT a.integration_id, a.created_at, pg.user_group_id
-    FROM ({_PRIVATE_MCP_AGENTS}) a
-    JOIN persona__user_group pg ON pg.persona_id = a.persona_id
-    WHERE a.is_listed
-"""
-
-# A default group becomes its members, as for the shares of the server.
-_INSERT_AGENT_USER_SHARES = f"""
-    INSERT INTO integration__user (integration_id, user_id, permission, created_at)
-    SELECT a.integration_id, a.user_id, 'VIEWER', a.created_at
-    FROM ({_PRIVATE_MCP_AGENTS}) a
-    WHERE a.user_id IS NOT NULL
-    UNION
-    SELECT a.integration_id, pu.user_id, 'VIEWER', a.created_at
-    FROM ({_PRIVATE_MCP_AGENTS}) a
-    JOIN persona__user pu ON pu.persona_id = a.persona_id
-    WHERE a.is_listed AND pu.user_id IS NOT NULL
-    UNION
-    SELECT g.integration_id, uug.user_id, 'VIEWER', g.created_at
-    FROM ({_PRIVATE_MCP_AGENT_GROUPS}) g
-    JOIN user_group ug ON ug.id = g.user_group_id AND ug.is_default
-    JOIN user__user_group uug ON uug.user_group_id = ug.id
-    WHERE uug.user_id IS NOT NULL
-    ON CONFLICT DO NOTHING
-"""
-
-_INSERT_AGENT_GROUP_SHARES = f"""
-    INSERT INTO integration__user_group
-        (integration_id, user_group_id, permission, installation_policy,
-         created_at)
-    SELECT g.integration_id, g.user_group_id, 'VIEWER', NULL, g.created_at
-    FROM ({_PRIVATE_MCP_AGENT_GROUPS}) g
-    JOIN user_group ug ON ug.id = g.user_group_id AND NOT ug.is_default
-    ON CONFLICT DO NOTHING
-"""
-
-# Each user could use a public agent, so its servers become Available. This
-# runs after the share statements: they read the private servers.
-_PUBLISH_PUBLIC_AGENT_INTEGRATIONS = f"""
-    UPDATE integration i
-    SET installation_policy = 'AVAILABLE'
-    FROM ({_PRIVATE_MCP_AGENTS}) a
-    WHERE a.integration_id = i.id AND a.is_public AND a.is_listed
-"""
-
 _POLICY_VALUE = """
     CASE {column}
         WHEN 'ALWAYS' THEN 'allow'
@@ -1250,6 +1158,30 @@ _INSERT_PREFERENCES = """
     SELECT p.user_id, src.id, p.enabled_in_chat, NULL::timestamptz
     FROM tool_user_preference p
     JOIN integration_source src ON src.tool_id = p.tool_id
+"""
+
+# Keep default Chat on for the people who already had the private server.
+# Explicit preferences were copied first and take precedence.
+_INSERT_PRIVATE_DEFAULT_PREFERENCES = """
+    WITH private_default AS (
+        SELECT id, owner_user_id, mcp_server_id
+        FROM integration_source
+        WHERE is_private AND organization_policy = 'DEFAULT'
+    ), recipients AS (
+        SELECT id, owner_user_id AS user_id FROM private_default
+        UNION
+        SELECT src.id, su.user_id
+        FROM private_default src
+        JOIN mcp_server__user su USING (mcp_server_id)
+        UNION
+        SELECT src.id, ug.user_id
+        FROM private_default src
+        JOIN mcp_server__user_group sg USING (mcp_server_id)
+        JOIN user__user_group ug USING (user_group_id)
+    )
+    INSERT INTO user_integration_preference (user_id, integration_id, enabled)
+    SELECT user_id, id, true FROM recipients WHERE user_id IS NOT NULL
+    ON CONFLICT DO NOTHING
 """
 
 # An integration is off for the user on that agent when the user turned off
@@ -1429,14 +1361,12 @@ def _copy_integrations() -> None:
         _CREATE_TOOL_INTEGRATIONS,
         _INSERT_MCP_USER_SHARES,
         _INSERT_MCP_GROUP_SHARES,
-        _INSERT_AGENT_USER_SHARES,
-        _INSERT_AGENT_GROUP_SHARES,
-        _PUBLISH_PUBLIC_AGENT_INTEGRATIONS,
         _INSERT_UNSELECTED_MCP_TOOLS,
         _INSERT_ADMIN_POLICIES,
         _INSERT_OPENAPI_DEFAULT_POLICIES,
         _INSERT_USER_POLICIES,
         _INSERT_PREFERENCES,
+        _INSERT_PRIVATE_DEFAULT_PREFERENCES,
         _INSERT_PERSONA_LINKS,
         _INSERT_TASK_LINKS,
     ):

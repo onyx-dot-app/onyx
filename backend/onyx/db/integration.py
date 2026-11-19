@@ -2,9 +2,7 @@ from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 from uuid import UUID
 
-from psycopg2.errors import LockNotAvailable
 from sqlalchemy import ColumnElement, Select, and_, delete, func, select, update
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.db.enums import (
@@ -327,25 +325,6 @@ def _apply_spec(action: IntegrationAction, spec: IntegrationActionSpec) -> None:
     action.output_schema = spec.output_schema
     action.http_method = spec.http_method
     action.path_template = spec.path_template
-
-
-def try_lock_integration__no_commit(integration_id: int, db_session: Session) -> bool:
-    """Locks the integration row without a wait. False when another
-    transaction holds the lock or the row is gone. The caller rolls back
-    after False."""
-    try:
-        return (
-            db_session.scalar(
-                select(Integration.id)
-                .where(Integration.id == integration_id)
-                .with_for_update(nowait=True)
-            )
-            is not None
-        )
-    except OperationalError as error:
-        if isinstance(error.orig, LockNotAvailable):
-            return False
-        raise
 
 
 def lock_integration__no_commit(integration_id: int, db_session: Session) -> None:

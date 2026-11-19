@@ -112,7 +112,8 @@ a quick click on a new run does not fail.
 `integrations: [{integration_id, action_settings}]`.
 `integrations/craft.py:replace_task_integrations__no_commit` checks that the
 owner has access to each integration and that each action key
-is an action of it, then stores `scheduled_task__integration` rows.
+is an action of it, then stores `scheduled_task__integration` rows. A stored
+link that the owner lost access to is not in the catalog, so a save keeps it.
 A run can use only these integrations, while the owner has
 access to them; the proxy blocks each other integration. Each
 action value is Allow, Ask, Blocked or Inherit (the integration setting).

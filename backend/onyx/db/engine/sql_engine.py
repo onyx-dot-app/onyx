@@ -550,18 +550,6 @@ def get_session_for_schema_on_shard(
 
 
 @contextmanager
-def get_session_beside(db_session: Session) -> Generator[Session, None, None]:
-    """A session with its own transaction on the database and schema of
-    ``db_session``, for a short write that commits apart from the caller.
-    Needs no tenant context: a sandbox proxy session has none."""
-    connection = db_session.connection()
-    schema_map = connection.get_execution_options().get("schema_translate_map") or {}
-    schema_name = schema_map.get(None, POSTGRES_DEFAULT_SCHEMA)
-    with _session_on_schema(connection.engine, schema_name) as session:
-        yield session
-
-
-@contextmanager
 def _session_on_schema(
     engine: Engine, schema_name: str
 ) -> Generator[Session, None, None]:

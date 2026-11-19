@@ -155,3 +155,28 @@ def test_a_task_loses_an_integration_when_its_owner_loses_access(
     task = load_task_integrations(db_session, task_id, owner.id)
     assert task.integrations() == []
     assert task.link_settings(integration.id) is None
+
+
+def test_a_save_keeps_a_link_the_owner_lost_access_to(
+    db_session: Session, created: list[int], owner: User
+) -> None:
+    integration = _mcp(db_session, created, published=True)
+    allow = {"send_report": LinkValue.ALLOW}
+    task_id = _create(db_session, owner, [_link(integration, allow)])
+
+    integration.installation_policy = PluginInstallationPolicy.NOT_AVAILABLE
+    db_session.commit()
+    # The catalog leaves the link out, so the editor saves without it.
+    assert integration.id not in {
+        view.id for view in list_task_integration_views(db_session, owner, task_id)
+    }
+    update_scheduled_task(
+        db_session=db_session, task_id=task_id, user_id=owner.id, integrations=[]
+    )
+    db_session.commit()
+
+    integration.installation_policy = PluginInstallationPolicy.DEFAULT
+    db_session.commit()
+    assert load_task_integrations(db_session, task_id, owner.id).link_settings(
+        integration.id
+    ) == ActionSettings(actions=allow)

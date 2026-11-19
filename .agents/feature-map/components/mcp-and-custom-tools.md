@@ -253,7 +253,9 @@ it.
   (`integrations/service.py:member_state`); a client does not derive it.
 - Migration `730bce2814a0` fills the access tables, `persona__integration`,
   `scheduled_task__integration` and `disabled_integration_ids` from the
-  released tables. No plugin holds an integration: the migration and create
+  released tables. For a private MCP server selected in default Chat, it keeps
+  the server on for its existing owner and recipients. Explicit off choices stay off.
+  No plugin holds an integration: the migration and create
   make no plugin, and no table links a plugin to an integration.
 - The released mobile app names an integration by `plugin_ids` of the tool
   list. Four aliases keep it working, each with the integration id as text:
@@ -284,9 +286,9 @@ calls `resolve_connection` and renders the `header_template`. An OAuth2 or Onyx
 login token goes in `Authorization: Bearer` unless the template fills
 Authorization from a placeholder; a literal Authorization value (the static
 header of a migrated OpenAPI tool) loses to the token. A problem means
-no action of the integration is offered. The migration writes the actions of
-each MCP server, OpenAPI tool, preset and custom app, so chat reads the stored
-actions and never discovers them.
+no action of the integration is offered. The migration copies stored MCP actions.
+For an API integration with no stored actions, chat derives them from its
+OpenAPI spec or app settings in the current session.
 `MCPTool._run` sends the credential that construction resolved and opens no
 database session for it. Only an OAuth2 or Onyx login token that expires within
 `REFRESH_SKEW` resolves again (`integrations/call_credentials.py:resolve_fresh_call_credentials`).
@@ -910,13 +912,15 @@ default agent, is Blocked.
 Chat: see [[plugins#openapi-enabled-default-chat-only]].
 
 ---
-21. `api-actions-written-on-first-read` **Read actions through
+21. `api-actions-built-on-read` **Read actions through
     `integrations/actions.py:integration_actions`.** Migration `730bce2814a0`
     writes no `integration_action` rows for an API integration, because only app
     code can parse a spec or read a catalog.
-    `integrations/kinds/api.py:api_integration_actions` writes them on the first
-    read, in a short session of its own. A reader that holds the integration
-    lock gets the actions unsaved. A direct call to
+    `integrations/kinds/api.py:api_integration_actions` builds them from the
+    settings, unsaved, through the caller's session. A read path never writes:
+    a write there needs a second pool connection and the tenant context, which
+    the sandbox proxy does not set. An admin save of the actions, an edit or a
+    refresh writes the rows. A direct call to
     `db/integration.py:list_integration_actions` sees no actions for that
     integration, so chat offers no tools and every action falls back to Ask.
 

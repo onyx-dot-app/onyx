@@ -534,6 +534,7 @@ def _seed(conn: Connection) -> Seeded:
         (own_persona, tool_unselected),
         (bot_persona, tool_write),
         (bot_persona, custom_oauth),
+        (0, tool_selected),
         (0, custom_default),
         (0, custom_disabled),
         (own_persona, custom_disabled),
@@ -593,6 +594,13 @@ def _seed(conn: Connection) -> Seeded:
             "VALUES (:u, :t, false)"
         ),
         {"u": users["other"], "t": custom_default},
+    )
+    conn.execute(
+        text(
+            "INSERT INTO mcp_server_user_preference (user_id, mcp_server_id, "
+            "enabled_in_chat, enabled_in_craft) VALUES (:u, :s, false, false)"
+        ),
+        {"u": users["other"], "s": mcp_private},
     )
     # The user turned off every tool the agent has of the public server, and
     # one of the two tools on the own agent.
@@ -822,7 +830,7 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
     conn.execute(text("DELETE FROM skill WHERE id = ANY(:ids)"), {"ids": skills})
     conn.execute(
         text("DELETE FROM persona__tool WHERE persona_id = 0 AND tool_id = ANY(:t)"),
-        {"t": [seeded.custom_default, seeded.custom_disabled]},
+        {"t": [seeded.custom_default, seeded.custom_disabled, seeded.tool_selected]},
     )
     conn.execute(
         text("DELETE FROM mcp_server__user_group WHERE mcp_server_id = :s"),
@@ -1396,47 +1404,45 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             **{f"custom_{key}": c.installation_policy for key, c in custom.items()},
         } == {
             "public": "AVAILABLE",
-            "slack": "AVAILABLE",
+            # An enabled app was on for each user.
+            "slack": "DEFAULT",
             "app_custom": "NOT_AVAILABLE",
             "private": "NOT_AVAILABLE",
             "orphan": "NOT_AVAILABLE",
             "custom_private": "NOT_AVAILABLE",
-            "custom_shared": "AVAILABLE",
+            # On an agent of other people: an agent gives no access.
+            "custom_shared": "NOT_AVAILABLE",
             "custom_default": "DEFAULT",
             # Only an agent of its owner has it.
             "custom_oauth": "NOT_AVAILABLE",
             "custom_disabled": "NOT_AVAILABLE",
         }
-        # A private server keeps its people. The agents
-        # that have one of its selected tools add their users: the owner of
-        # each agent, and the shares of an agent that is listed. A default
-        # group becomes its members.
+        # A private server keeps its own people. An agent gives no access, so
+        # the users of its agents get no share. A default group becomes its
+        # members.
         assert _integration_shares(
             conn, "integration__user", "user_id", private.id
-        ) == {
-            seeded.other,
-            seeded.admin,
-            seeded.owner,
-            seeded.agent_user,
-        }
+        ) == {seeded.other, seeded.admin}
         assert _integration_shares(
             conn, "integration__user_group", "user_group_id", private.id
-        ) == {seeded.group, seeded.agent_group, seeded.agent_owner_group}
-        # A server with no owner stays private and gets the users of its agent.
-        agent_orphan = _copied(conn, "i.id = :id", id=seeded.gated["mcp_agent_orphan"])
-        assert agent_orphan.installation_policy == "NOT_AVAILABLE"
-        assert _integration_shares(
-            conn, "integration__user", "user_id", agent_orphan.id
-        ) == {seeded.other, seeded.admin, seeded.agent_user}
-        assert _integration_shares(
-            conn, "integration__user_group", "user_group_id", agent_orphan.id
-        ) == {seeded.agent_group}
-        # Each user could use a public agent, so its server is Available.
-        agent_public = _copied(conn, "i.id = :id", id=seeded.gated["mcp_agent_public"])
-        assert agent_public.installation_policy == "AVAILABLE"
-        assert _integration_shares(
-            conn, "integration__user", "user_id", agent_public.id
-        ) == {seeded.other, seeded.unlisted_user}
+        ) == {seeded.group}
+        # A server with no owner and a server of a public agent stay private
+        # with no share.
+        for key in ("mcp_agent_orphan", "mcp_agent_public"):
+            agent_server = _copied(conn, "i.id = :id", id=seeded.gated[key])
+            assert agent_server.installation_policy == "NOT_AVAILABLE"
+            assert (
+                _integration_shares(
+                    conn, "integration__user", "user_id", agent_server.id
+                )
+                == set()
+            )
+            assert (
+                _integration_shares(
+                    conn, "integration__user_group", "user_group_id", agent_server.id
+                )
+                == set()
+            )
         # No copied group row holds an install setting.
         assert (
             conn.execute(
@@ -1498,7 +1504,21 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
                 ),
                 {"u": seeded.other},
             )
-        } == {public.id: (False, None), custom["default"].id: (False, None)}
+        } == {
+            public.id: (False, None),
+            private.id: (False, None),
+            custom["default"].id: (False, None),
+        }
+        assert {
+            row.user_id: row.enabled
+            for row in conn.execute(
+                text(
+                    "SELECT user_id, enabled FROM user_integration_preference "
+                    "WHERE integration_id = :i"
+                ),
+                {"i": private.id},
+            )
+        } == {seeded.owner: True, seeded.admin: True, seeded.other: False}
         assert {
             row.assistant_id: row.disabled_integration_ids
             for row in conn.execute(

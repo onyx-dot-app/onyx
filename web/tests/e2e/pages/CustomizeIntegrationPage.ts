@@ -11,10 +11,12 @@ export type IntegrationStatusLabel =
 /** One integration of a member at /app/customize/integrations/[id]. */
 export class CustomizeIntegrationPage {
   readonly page: Page;
+  private readonly configuration: Locator;
   readonly credentials: IntegrationCredentialsDialog;
 
   constructor(page: Page) {
     this.page = page;
+    this.configuration = page.getByRole("tabpanel", { name: "Configuration" });
     this.credentials = new IntegrationCredentialsDialog(page);
   }
 
@@ -51,21 +53,21 @@ export class CustomizeIntegrationPage {
   }
 
   connectButton(integration: string): Locator {
-    return this.page.getByRole("button", {
+    return this.configuration.getByRole("button", {
       name: `Connect ${integration}`,
       exact: true,
     });
   }
 
   reconnectButton(integration: string): Locator {
-    return this.page.getByRole("button", {
+    return this.configuration.getByRole("button", {
       name: `Reconnect ${integration}`,
       exact: true,
     });
   }
 
   disconnectButton(integration: string): Locator {
-    return this.page.getByRole("button", {
+    return this.configuration.getByRole("button", {
       name: `Disconnect ${integration}`,
       exact: true,
     });
@@ -78,7 +80,9 @@ export class CustomizeIntegrationPage {
 
   /** Waits for the status text of an integration row. */
   async expectStatus(status: IntegrationStatusLabel | string): Promise<void> {
-    await expect(this.page.getByText(status, { exact: true })).toBeVisible();
+    await expect(
+      this.configuration.getByText(status, { exact: true })
+    ).toBeVisible();
   }
 
   /** Opens the API key form, fills each field by label and connects. */

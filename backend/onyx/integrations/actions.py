@@ -15,8 +15,7 @@ from onyx.integrations.kinds.api import api_integration_actions
 def integration_actions_by_id(
     integration_ids: Collection[int], db_session: Session
 ) -> dict[int, list[IntegrationAction]]:
-    """Read actions through this, not ``list_integration_actions``: an API
-    integration writes its rows on first read."""
+    """Return stored actions. Derive missing API actions from the settings."""
     actions = list_integration_actions_by_id(integration_ids, db_session)
     empty = [integration_id for integration_id, stored in actions.items() if not stored]
     for integration in list_integrations_by_ids(empty, db_session):

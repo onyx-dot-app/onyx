@@ -61,8 +61,11 @@ Group or user restriction needs EE.
   `access.state` (`sections/customize/IntegrationAccessControls.tsx`): On and
   Turn on are the user's switch (`PUT /integrations/{id}/enabled`, locked when
   Required), Sign in adds Connect, No access and Turned off show the reason.
-  `GET /integrations` returns only integrations the user can use, so a No
-  access row shows only on the admin list. A user who manages a private
+  `GET /integrations` returns the integrations the user can use, then each
+  one an admin made available only to groups the user is not in. Those come
+  as No access rows with no configuration, connection or owner
+  (`integrations/service.py:_no_access_views`), and the page lists them last
+  without a link. A private integration stays hidden. A user who manages a private
   integration (`access.can_manage`) gets a "..." menu with Share
   (`sections/plugins/ShareIntegrationModal.tsx`: specific people, groups in
   EE, no permission picker, `PUT /integrations/{id}/access`) and Publish to Org

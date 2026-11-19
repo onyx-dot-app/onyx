@@ -730,6 +730,7 @@
   "PUT /admin/enterprise-settings/logo": "admin",
   "PUT /admin/image-generation/config/{image_provider_id}": "admin",
   "PUT /admin/integrations/{integration_id}/actions": "manage:actions +scope",
+  "PUT /admin/integrations/{integration_id}/group-settings": "manage:actions",
   "PUT /admin/integrations/{integration_id}/installation-policy": "manage:actions",
   "PUT /admin/integrations/{integration_id}/organization-connection": "manage:actions +scope",
   "PUT /admin/kg/config": "admin",

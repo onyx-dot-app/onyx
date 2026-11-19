@@ -120,6 +120,13 @@ A custom agent uses each integration that it links to, if the user has access to
 An agent gives no access: a person who can use an agent but not one of its integrations chats without that integration.
 The agent editor shows a warning when the agent is shared with more people than an integration.
 
+<Note>
+  **Upgrade note.** Before this release, a person who could use an agent could also use each tool of that agent.
+  The upgrade does not give these people access to the integration.
+  A person who used a private MCP server or a custom tool of another person only through an agent loses those tools.
+  To give the access back, share the integration with the person or the group, or set its install setting.
+</Note>
+
 ### Share or publish a private integration
 
 The owner of a private integration, and each user who manages it, can share it. In **Customize → Integrations**,

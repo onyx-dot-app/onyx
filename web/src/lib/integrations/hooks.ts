@@ -80,7 +80,7 @@ export interface AgentChatIntegrations {
   integrations: MemberIntegration[];
   isLoading: boolean;
   error: Error | undefined;
-  /** Reads the integration statuses again. */
+  /** Reads the integration statuses and the agent's integrations again. */
   refresh: () => Promise<void>;
 }
 
@@ -91,17 +91,19 @@ export interface AgentChatIntegrations {
  * out of a send.
  */
 export function useAgentIntegrationIds(agentId: number | undefined) {
-  const { data, error, isLoading } = useSWR<number[], Error>(
+  // Revalidates on focus: turning an integration on in another tab changes
+  // which ids the default agent uses.
+  const { data, error, isLoading, mutate } = useSWR<number[], Error>(
     agentId === undefined ? null : SWR_KEYS.agentIntegrationIds(agentId),
     errorHandlingFetcher,
-    { onErrorRetry: skipRetryOnAuthError, revalidateOnFocus: false }
+    { onErrorRetry: skipRetryOnAuthError }
   );
   const integrationIds = useMemo(
     () =>
       data === undefined ? null : [...new Set(data)].sort((a, b) => a - b),
     [data]
   );
-  return { integrationIds, error, isLoading };
+  return { integrationIds, error, isLoading, mutate };
 }
 
 /** The integrations of an agent that a chat uses for the user. */
@@ -121,9 +123,10 @@ export function useAgentChatIntegrations(
   }, [data, integrationIds]);
 
   const { mutate: refreshIntegrations } = members;
+  const { mutate: refreshIds } = ids;
   const refresh = useCallback(async () => {
-    await refreshIntegrations();
-  }, [refreshIntegrations]);
+    await Promise.all([refreshIntegrations(), refreshIds()]);
+  }, [refreshIntegrations, refreshIds]);
 
   return {
     integrationIds,

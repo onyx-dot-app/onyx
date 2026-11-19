@@ -297,7 +297,9 @@ def replace_task_integrations__no_commit(
 ) -> None:
     """Save the integrations of a task with their action settings. The owner
     must have access to each integration, and each action key must be an
-    action of its integration."""
+    action of its integration. A stored link that the owner lost access to
+    is not in the catalog, so the editor cannot send it: it stays, and the
+    run blocks it until the access comes back."""
     ids = [link.integration_id for link in integrations]
     if len(set(ids)) != len(ids):
         raise OnyxError(
@@ -316,10 +318,24 @@ def replace_task_integrations__no_commit(
         }
         if link.action_settings.actions.keys() - keys:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Unknown integration action")
+    stored = {
+        link.integration_id: link.action_settings
+        for link in list_task_integration_links(db_session, task_id)
+    }
+    still_accessible = {
+        state.integration_id
+        for state in load_user_integration_states([user.id], db_session, stored)
+    }
+    kept = {
+        integration_id: settings
+        for integration_id, settings in stored.items()
+        if integration_id not in still_accessible
+    }
     replace_task_integration_links__no_commit(
         db_session,
         task_id,
-        {
+        kept
+        | {
             link.integration_id: link.action_settings.model_dump(mode="json")
             for link in integrations
         },

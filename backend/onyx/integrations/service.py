@@ -35,6 +35,7 @@ from onyx.db.integration import (
     get_openapi_tool_for_integration,
     insert_integration__no_commit,
     list_external_apps_by_integration,
+    list_integration_actions,
     list_integrations,
     list_integrations_by_ids,
     list_mcp_servers_by_integration,
@@ -1434,6 +1435,11 @@ def set_admin_actions__no_commit(
     integration: Integration, request: IntegrationActionsUpdate, db_session: Session
 ) -> None:
     _check_action_keys(integration, request.actions, db_session)
+    if integration.kind is IntegrationKind.API and not list_integration_actions(
+        integration.id, db_session
+    ):
+        # The migration writes no API actions, and a read never writes them.
+        sync_integration_actions__no_commit(integration, db_session)
     # Only the fields that the request names change, so a save from a stale
     # page does not undo a newer save of another action.
     values: dict[str, IntegrationActionPolicyValue | None] = {}
@@ -1547,10 +1553,52 @@ def list_member_integrations(
     turned off (``access.state`` is ``turned_off``), and each one an admin
     made available only to groups the user is not in (``no_access``)."""
     states = _integration_states(user, db_session)
-    ids = [*states, *group_limited_integration_ids(user.id, db_session)]
     return _member_views(
-        user, list_integrations_by_ids(ids, db_session), states, db_session
+        user, list_integrations_by_ids(list(states), db_session), states, db_session
+    ) + _no_access_views(
+        user,
+        list_integrations_by_ids(
+            group_limited_integration_ids(user.id, db_session), db_session
+        ),
+        db_session,
     )
+
+
+def _no_access_views(
+    user: User, integrations: Collection[Integration], db_session: Session
+) -> list[MemberIntegration]:
+    """Only what a row shows: no configuration, connection or owner."""
+    status = IntegrationStatus(state=ConnectionState.NOT_CONNECTED, reason=None)
+    access = _access_views(
+        user,
+        integrations,
+        {},
+        {integration.id: status for integration in integrations},
+        db_session,
+    )
+    shapes = _shapes(integrations, _external_apps(integrations, db_session))
+    return [
+        MemberIntegration(
+            id=integration.id,
+            kind=integration.kind,
+            shape=shapes[integration.id][0],
+            name=integration.name,
+            description=integration.description,
+            preset_id=shapes[integration.id][1],
+            auth_mode=integration.auth_mode,
+            auth_method=integration.auth_method,
+            credential_fields=[],
+            status=status,
+            access=access[integration.id].model_copy(update={"owner_email": None}),
+            users_can_save_always_allow=integration.users_can_save_always_allow,
+            credential_values={},
+            external_app_id=None,
+            service_urls=[],
+            mcp_server_id=None,
+            server_url=None,
+        )
+        for integration in integrations
+    ]
 
 
 def member_view(

@@ -75,22 +75,25 @@ test("a failed list read leaves the agent's integrations unknown", async () => {
   expect(result.current.integrations).toEqual([]);
 });
 
-test("refresh reads the integrations again and not the agent list", async () => {
-  const fetchMock = mockFetch({
-    "/api/integrations": [linear],
-    "/api/integrations/agents/8": [1],
+test("refresh reads the agent's integrations again", async () => {
+  // The user turns on Reports API in another tab: the default agent now
+  // uses it.
+  let agentIds = [1];
+  mockFetch({
+    "/api/integrations": [linear, reports],
+    "/api/integrations/agents/8": () => agentIds,
   });
   const { result } = renderHook(() => useAgentChatIntegrations(8), {
     wrapper,
   });
   await waitFor(() => expect(result.current.integrations).toHaveLength(1));
-  const reads = (url: string) =>
-    fetchMock.mock.calls.filter(([input]) => String(input) === url).length;
-  const before = reads("/api/integrations/agents/8");
 
+  agentIds = [1, 2];
   await act(() => result.current.refresh());
-  expect(reads("/api/integrations")).toBe(2);
-  expect(reads("/api/integrations/agents/8")).toBe(before);
+  expect(result.current.integrations.map((entry) => entry.name)).toEqual([
+    "Linear",
+    "Reports API",
+  ]);
 });
 
 test("a failed preferences read is not loaded and a switch fails", async () => {

@@ -5,7 +5,6 @@ from urllib.parse import unquote
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
-from onyx.db.engine.sql_engine import get_session_beside
 from onyx.db.enums import (
     ActionPolicy,
     ExternalAppType,
@@ -20,7 +19,6 @@ from onyx.db.integration import (
     list_integration_actions,
     lock_integration__no_commit,
     replace_integration_actions__no_commit,
-    try_lock_integration__no_commit,
 )
 from onyx.db.models import ExternalApp, Integration, IntegrationAction
 from onyx.db.models import Tool as ToolModel
@@ -389,39 +387,21 @@ def sync_integration_actions__no_commit(
         )
 
 
-def _write_actions(
-    integration_id: int, caller_session: Session
-) -> list[IntegrationActionSpec] | None:
-    """Writes the rows in a short session of its own on the caller's tenant,
-    so a read path holds no row lock. None when the rows are saved. When
-    another transaction holds the integration lock, which can be the
-    caller's own, the specs come back unsaved."""
-    with get_session_beside(caller_session) as db_session:
-        if not try_lock_integration__no_commit(integration_id, db_session):
-            db_session.rollback()
-            integration = get_integration_by_id(integration_id, db_session)
-            if integration is None:
-                return []
-            return ApiKindHandler().discover_actions(integration, db_session)
-        integration = get_integration_by_id(integration_id, db_session)
-        if integration is not None and not list_integration_actions(
-            integration_id, db_session
-        ):
-            sync_integration_actions__no_commit(integration, db_session)
-            db_session.commit()
-        return None
-
-
 def api_integration_actions(
     integration_id: int, db_session: Session
 ) -> list[IntegrationAction]:
-    """The migration of the integration tables writes no API actions, so the
-    first read writes them."""
+    """The stored actions. The migration of the integration tables writes no
+    API actions: with no stored rows, the actions come from the settings and
+    stay unsaved, so a read path never writes. An admin save of the actions,
+    an edit or a refresh writes them."""
     stored = list_integration_actions(integration_id, db_session)
     if stored:
         return stored
+    integration = get_integration_by_id(integration_id, db_session)
+    if integration is None:
+        return []
     try:
-        unsaved = _write_actions(integration_id, db_session)
+        specs = ApiKindHandler().discover_actions(integration, db_session)
     except OnyxError as error:
         logger.warning(
             "Integration %s: the API settings give no actions: %s",
@@ -429,6 +409,4 @@ def api_integration_actions(
             error.detail,
         )
         return []
-    if unsaved is None:
-        return list_integration_actions(integration_id, db_session)
-    return [integration_action_from_spec(integration_id, spec) for spec in unsaved]
+    return [integration_action_from_spec(integration_id, spec) for spec in specs]

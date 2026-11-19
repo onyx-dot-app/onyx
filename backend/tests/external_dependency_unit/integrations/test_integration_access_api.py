@@ -638,9 +638,17 @@ def test_a_group_setting_gives_the_group_access_and_others_see_no_access(
         _member_state(member, integration_id, db_session)
         is MemberIntegrationState.TURN_ON
     )
-    assert (
-        _member_state(other, integration_id, db_session)
-        is MemberIntegrationState.NO_ACCESS
+    [row] = [
+        row
+        for row in api.list_integrations_for_member(other, db_session)
+        if row.id == integration_id
+    ]
+    assert row.access.state is MemberIntegrationState.NO_ACCESS
+    # A No access row shows no configuration and no owner.
+    assert (row.access.owner_email, row.credential_fields, row.server_url) == (
+        None,
+        [],
+        None,
     )
 
     _set_group_setting(admin, integration_id, group.id, None, db_session)

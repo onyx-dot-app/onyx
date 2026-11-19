@@ -1,5 +1,5 @@
-"""Migration 730bce2814a0 writes no actions for an API integration. The first
-read of its actions writes them, so the admin and chat see them at once."""
+"""Migration 730bce2814a0 writes no actions for an API integration. A read
+builds them from the settings and writes nothing; an admin save writes them."""
 
 from collections.abc import Generator
 from typing import Any
@@ -13,13 +13,13 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
     get_session_with_tenant,
 )
-from onyx.db.integration import lock_integration__no_commit
 from onyx.db.models import IntegrationAction, Tool, User
 from onyx.integrations.actions import integration_actions
 from onyx.integrations.chat_tools import build_integration_chat_tools
-from onyx.integrations.models import ActionSettings, ApprovalMode
+from onyx.integrations.models import ActionSettings, ApprovalMode, EffectivePolicy
 from onyx.integrations.service import agent_catalog
 from onyx.server.features.integrations import admin_api
+from onyx.server.features.integrations.models import IntegrationActionsUpdate
 from onyx.tools.models import IntegrationChatRequest, IntegrationLinkConfiguration
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -103,7 +103,7 @@ def _stored_keys(db_session: Session, integration_id: int) -> list[str]:
     )
 
 
-def test_the_admin_actions_tab_lists_and_saves_the_actions(
+def test_the_admin_actions_tab_lists_the_actions_and_a_save_writes_them(
     db_session: Session, admin: User, created: list[int]
 ) -> None:
     integration_id = _migrated_openapi(db_session, created, ORDERS_SPEC)
@@ -117,6 +117,16 @@ def test_the_admin_actions_tab_lists_and_saves_the_actions(
         ("listOrders", "allow"),
         ("createOrder", "ask"),
     ]
+    assert _stored_keys(db_session, integration_id) == []
+
+    with get_session_with_current_tenant() as request_session:
+        admin_api.set_integration_actions(
+            integration_id,
+            IntegrationActionsUpdate(actions={"createOrder": EffectivePolicy.BLOCKED}),
+            admin,
+            request_session,
+        )
+
     assert _stored_keys(db_session, integration_id) == ["createOrder", "listOrders"]
 
 
@@ -145,20 +155,6 @@ def test_chat_offers_the_actions(
         f"custom__{integration_id}__createOrder",
         f"custom__{integration_id}__listOrders",
     ]
-
-
-def test_a_reader_that_holds_the_integration_lock_gets_unsaved_actions(
-    db_session: Session, created: list[int]
-) -> None:
-    integration_id = _migrated_openapi(db_session, created, ORDERS_SPEC)
-
-    with get_session_with_current_tenant() as request_session:
-        lock_integration__no_commit(integration_id, request_session)
-        actions = integration_actions(integration_id, request_session)
-        request_session.rollback()
-
-    assert sorted(a.key for a in actions) == ["createOrder", "listOrders"]
-    assert _stored_keys(db_session, integration_id) == []
 
 
 def test_a_spec_with_no_actions_gives_none(
@@ -194,7 +190,7 @@ def test_the_agent_catalog_lists_the_actions(
     ]
 
 
-def test_a_reader_with_no_tenant_context_writes_on_its_session_tenant(
+def test_a_reader_with_no_tenant_context_reads_its_session_tenant(
     db_session: Session, created: list[int]
 ) -> None:
     """The sandbox proxy opens a session for a tenant and sets no tenant
@@ -212,4 +208,4 @@ def test_a_reader_with_no_tenant_context_writes_on_its_session_tenant(
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
     assert sorted(a.key for a in actions) == ["createOrder", "listOrders"]
-    assert _stored_keys(db_session, integration_id) == ["createOrder", "listOrders"]
+    assert _stored_keys(db_session, integration_id) == []
