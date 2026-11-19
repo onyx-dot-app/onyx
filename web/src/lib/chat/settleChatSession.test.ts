@@ -9,7 +9,10 @@ import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { processRawChatHistory, resumeStream } from "@/app/app/services/lib";
 import { type Packet, StopReason } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { INITIAL_RIGHT_PANEL } from "@/lib/chat/rightPanel";
+import {
+  type ChatRightPanelState,
+  INITIAL_RIGHT_PANEL,
+} from "@/lib/chat/rightPanel";
 import {
   claimStreamReader,
   followChatSession,
@@ -1233,7 +1236,10 @@ describe("with stubbed server checks", () => {
   test("history replacement keeps the sources panel on the selected response", async () => {
     const local = { ...message(-2, "assistant", "Answer"), messageId: 42 };
     const saved = { ...local, nodeId: 42 };
-    const rightPanel = { ...INITIAL_RIGHT_PANEL, visible: true };
+    const rightPanel: ChatRightPanelState = {
+      ...INITIAL_RIGHT_PANEL,
+      mode: "medium",
+    };
     useChatSessionStore.getState().updateSessionData("session", {
       messageTree: new Map([[-2, local]]),
       selectedNodeIdForDocDisplay: -2,

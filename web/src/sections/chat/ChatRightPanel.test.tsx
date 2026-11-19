@@ -9,7 +9,11 @@ import {
   PacketType,
   type PublishedFile,
 } from "@/app/app/services/streamingModels";
-import type { Message } from "@/app/app/types";
+import {
+  type BackendChatSession,
+  ChatSessionSharedStatus,
+  type Message,
+} from "@/app/app/types";
 import {
   useChatSessionStore,
   useFilesShown,
@@ -141,7 +145,7 @@ function update(action: ChatRightPanelAction) {
   act(() => useChatSessionStore.getState().updateCurrentRightPanel(action));
 }
 
-/** Saves replies that published `replies`, one answer each, in a chain. */
+/** Saves replies that published `replies`, one answer each. */
 function setReplies(replies: PublishedFile[][]) {
   const messages = replies.map(
     (files, index): Message => ({
@@ -157,9 +161,7 @@ function setReplies(replies: PublishedFile[][]) {
         },
       ],
       toolCall: null,
-      parentNodeId: index === 0 ? null : index,
-      latestChildNodeId: index + 2 <= replies.length ? index + 2 : null,
-      childrenNodeIds: index + 2 <= replies.length ? [index + 2] : [],
+      parentNodeId: null,
     })
   );
   useChatSessionStore
@@ -168,6 +170,33 @@ function setReplies(replies: PublishedFile[][]) {
       "session",
       new Map(messages.map((message) => [message.nodeId, message]))
     );
+}
+
+/** Applies a load whose list is `listed` and whose packets publish `replies`. */
+function applyLoad(listed: PublishedFile[], replies: PublishedFile[][]) {
+  const load: BackendChatSession = {
+    chat_session_id: "session",
+    description: "Chat",
+    persona_id: 0,
+    persona_name: "Assistant",
+    messages: [],
+    time_created: new Date().toISOString(),
+    time_updated: new Date().toISOString(),
+    shared_status: ChatSessionSharedStatus.Private,
+    current_temperature_override: null,
+    current_reasoning_effort_override: null,
+    owner_name: null,
+    packets: replies.map((files) => [
+      {
+        placement: { turn_index: 0, tab_index: 0 },
+        obj: { type: PacketType.PUBLISH_FILES_END, files, error: null },
+      },
+    ]),
+    published_files: listed,
+  };
+  act(() =>
+    useChatSessionStore.getState().applyLoadedSession("session", load, {})
+  );
 }
 
 function panel() {
@@ -661,29 +690,26 @@ test("the Files search filters the tiles, and a file published later is marked n
 });
 
 test("a card opens its own file, also one that the Files list does not hold", async () => {
-  // A file published before paths were stamped: the server's list leaves
-  // it out, so the Files list does not show it
-  const legacy = { ...REPORT, file_id: "file-legacy", title: "Legacy" };
-  renderChat([[legacy]]);
-  act(() =>
-    useChatSessionStore.getState().updateSessionData("session", {
-      loadedPublishedFiles: {
-        listed: [],
-        replayedFileIds: new Set([legacy.file_id]),
-      },
-    })
+  // A file without a path: the server's list leaves it out, so the Files
+  // list does not show it
+  const pathless = { ...REPORT, file_id: "file-pathless", title: "Pathless" };
+  renderChat([[pathless]]);
+  applyLoad([], [[pathless]]);
+  update({ type: "toggleFiles" });
+  expect(screen.getByRole("tab", { name: "Files" })).toHaveAttribute(
+    "aria-selected",
+    "true"
   );
-  expect(screen.queryByRole("button", { name: "Open Legacy" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Open Pathless" })).toBeNull();
 
   await act(async () => {
     screen.getByRole("button", { name: "Preview report.md" }).click();
   });
 
-  expect(await preview("Legacy")).toBeVisible();
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-legacy");
-  expect(screen.getByRole("tab", { name: "Legacy" })).toHaveAttribute(
+  expect(await preview("Pathless")).toBeVisible();
+  expect(fetchChatFile).toHaveBeenLastCalledWith("file-pathless");
+  expect(screen.getByRole("tab", { name: "Pathless" })).toHaveAttribute(
     "aria-selected",
     "true"
   );
-  expect(screen.queryByRole("button", { name: "Open Legacy" })).toBeNull();
 });

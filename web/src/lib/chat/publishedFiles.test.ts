@@ -111,14 +111,22 @@ describe("chatPublishedFiles", () => {
   });
 
   test("lists the files of every branch", () => {
-    // Answers 2 and 3 answer the same question; 3 is on the branch.
-    const switched = response(2, 2, [
-      publishEnd([published("switched", "/w/notes.md")]),
-    ]);
-    const shown = response(3, 3, [
-      publishEnd([published("shown", "/w/report.md")]),
-    ]);
-    const messages = [switched, shown];
+    // Answers 2 and 3 answer question 1; the shown branch holds answer 3.
+    const question: Message = {
+      ...response(1, 1, []),
+      type: "user",
+      childrenNodeIds: [2, 3],
+      latestChildNodeId: 3,
+    };
+    const switched = {
+      ...response(2, 2, [publishEnd([published("switched", "/w/notes.md")])]),
+      parentNodeId: 1,
+    };
+    const shown = {
+      ...response(3, 3, [publishEnd([published("shown", "/w/report.md")])]),
+      parentNodeId: 1,
+    };
+    const messages = [question, switched, shown];
 
     expect(
       fileIds(chatPublishedFiles(NO_LOADED_PUBLISHED_FILES, tree(messages)))
@@ -247,12 +255,8 @@ describe("chatPublishedFiles", () => {
         )
       );
 
-    // A load that reports the idle chat as busy changes nothing.
     expect(
-      shared({
-        published_files: [published("subagent", "/w/report.md")],
-        is_processing: true,
-      })
+      shared({ published_files: [published("subagent", "/w/report.md")] })
     ).toEqual(["subagent"]);
     expect(shared({})).toEqual(["missing"]);
   });

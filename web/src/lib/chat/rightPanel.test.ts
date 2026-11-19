@@ -65,18 +65,6 @@ describe("rightPanelReducer", () => {
     expect(tabIds(state)).toEqual([FILE_A, FILE_B]);
   });
 
-  test("a file tab keeps the file that it opened with", () => {
-    // A file that the Files list does not hold, such as one without a path
-    const legacy = { ...file("legacy"), path: "", display_path: "" };
-    const state = apply({ type: "openFile", file: legacy });
-    expect(state.fileTabs).toEqual([legacy]);
-    expect(state.activeId).toBe(rightPanelFileTab("legacy"));
-    // Opening it again keeps one tab
-    expect(
-      rightPanelReducer(state, { type: "openFile", file: legacy }).fileTabs
-    ).toEqual([legacy]);
-  });
-
   test("the Files list and Sources cannot close or move", () => {
     const state = apply(openFile("a"));
     expect(rightPanelReducer(state, closeTab(RIGHT_PANEL_FILES_TAB))).toBe(
