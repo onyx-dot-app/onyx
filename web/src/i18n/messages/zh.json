@@ -12014,6 +12014,9 @@
         },
         "skillsGroup": {
           "label": "技能"
+        },
+        "manageSkills": {
+          "label": "管理技能"
         }
       },
       "inputChip": {
@@ -14650,15 +14653,12 @@
         "empty": "开始构建吧！会话历史将显示在这里。",
         "title": "会话"
       },
-      "skills": {
-        "label": "技能"
-      },
       "toast": {
         "deleteFailed": "删除会话失败",
         "deleted": "已删除\"{title}\"。"
       },
-      "plugins": {
-        "label": "插件"
+      "customize": {
+        "label": "自定义"
       }
     },
     "skillsStale": {
@@ -16316,8 +16316,8 @@
       "searchChats": {
         "label": "搜索对话"
       },
-      "plugins": {
-        "label": "插件"
+      "customize": {
+        "label": "自定义"
       }
     },
     "chatButton": {
@@ -16918,7 +16918,8 @@
       "toasts": {
         "disableFailed": "停用 {name} 失败",
         "enableFailed": "启用 {name} 失败",
-        "refreshFailed": "{name} 已更新，但技能列表无法刷新。"
+        "refreshFailed": "{name} 已更新，但技能列表无法刷新。",
+        "listRefreshFailed": "技能列表无法刷新。请重新加载页面以查看更改。"
       },
       "builtins": {
         "title": "内置技能（{count, number}）"
@@ -17093,46 +17094,10 @@
   },
   "plugins": {
     "member": {
-      "title": "插件",
-      "description": "可在聊天和智能体中使用的技能和集成。",
-      "filters": {
-        "label": "插件类型",
-        "all": {
-          "label": "全部"
-        },
-        "skills": {
-          "label": "技能"
-        },
-        "integrations": {
-          "label": "集成"
-        }
-      },
       "sections": {
         "organization": "组织库",
         "mine": "我的上传",
         "shared": "与你共享"
-      },
-      "row": {
-        "skillCount": "{count, plural, other {# 个技能}}",
-        "integrationCount": "{count, plural, other {# 个集成}}",
-        "needsConnection": "{count, plural, other {# 个需要登录}}",
-        "open": {
-          "label": "打开 {name}"
-        }
-      },
-      "state": {
-        "loading": "正在加载插件",
-        "loadFailed": "部分插件无法加载。",
-        "emptyTitle": "暂无插件",
-        "emptyDescription": "请让管理员添加插件。",
-        "noResultsTitle": "没有匹配的插件",
-        "noResultsDescription": "请尝试其他名称或筛选条件。",
-        "retry": {
-          "label": "重试"
-        },
-        "clear": {
-          "label": "显示所有插件"
-        }
       },
       "detail": {
         "title": "插件",
@@ -17154,9 +17119,6 @@
         "skills": {
           "off": "已关闭",
           "invalid": "无效"
-        },
-        "back": {
-          "label": "插件"
         },
         "switch": {
           "title": "使用此插件",
@@ -17239,12 +17201,6 @@
       "search": {
         "placeholder": "搜索插件"
       },
-      "addIntegration": {
-        "label": "添加集成"
-      },
-      "manage": {
-        "label": "管理插件"
-      },
       "share": {
         "title": "共享 {name}",
         "description": "授予用户和群组访问此插件的权限。",
@@ -17300,5 +17256,116 @@
   },
   "integrations": {
     "connectionState": "{state, select, connected {已连接} not_connected {未连接} needs_reconnect {需要重新连接} not_set_up {未设置} other {未知}}"
+  },
+  "customize": {
+    "title": "自定义",
+    "tabs": {
+      "label": "自定义分区",
+      "skills": "技能",
+      "integrations": "集成",
+      "plugins": "插件"
+    },
+    "skills": {
+      "loadFailed": "无法加载你的技能。",
+      "filter": {
+        "label": "筛选",
+        "all": "所有技能",
+        "on": "已开启",
+        "off": "已关闭"
+      },
+      "sort": {
+        "label": "排序",
+        "updated": "最近更新",
+        "name": "名称"
+      },
+      "add": {
+        "label": "添加",
+        "upload": "上传技能",
+        "create": "创建技能",
+        "github": "从 GitHub 导入"
+      },
+      "groups": {
+        "mine": "由你创建",
+        "organization": "来自你的组织",
+        "shared": "与你共享",
+        "builtin": "内置"
+      },
+      "source": {
+        "mine": "由你",
+        "organization": "来自你的组织",
+        "sharedBy": "由 {email} 共享",
+        "shared": "与你共享",
+        "builtin": "内置"
+      },
+      "subtitle": "{source} · {description}",
+      "tag": {
+        "off": "已停用",
+        "required": "必需",
+        "pending": "待审核",
+        "invalid": "无效"
+      },
+      "open": "打开 {name}",
+      "menu": {
+        "label": "{name} 的更多操作",
+        "turnOn": "开启",
+        "turnOff": "关闭",
+        "share": "共享",
+        "remove": "移除"
+      },
+      "empty": {
+        "title": "还没有技能",
+        "description": "创建或上传技能，教助手完成一项任务。"
+      },
+      "noMatches": {
+        "title": "没有匹配的技能",
+        "description": "请尝试其他搜索或筛选条件。",
+        "clear": "显示所有技能"
+      }
+    },
+    "integrations": {
+      "title": "集成",
+      "loadFailed": "无法加载你的集成。",
+      "columns": {
+        "name": "集成",
+        "type": "类型",
+        "authorization": "授权",
+        "status": "状态"
+      },
+      "status": {
+        "connected": "已连接"
+      },
+      "add": {
+        "label": "添加",
+        "integration": "添加集成",
+        "manage": "管理集成"
+      },
+      "open": "打开 {name}",
+      "empty": {
+        "title": "还没有集成",
+        "description": "请让管理员添加集成。"
+      },
+      "noMatches": {
+        "title": "没有匹配的集成",
+        "description": "请尝试其他搜索。"
+      }
+    },
+    "plugins": {
+      "contents": "{skills, plural, =0 {} one {1 个技能} other {{skills} 个技能}}{both, select, yes { · } other {}}{integrations, plural, =0 {} one {1 个集成} other {{integrations} 个集成}}",
+      "needsSignIn": "{count, plural, other {# 个需要登录}}",
+      "loadFailed": "无法加载你的插件。",
+      "switchFailed": "无法更改插件。",
+      "filter": {
+        "all": "所有插件"
+      },
+      "empty": {
+        "title": "还没有插件",
+        "description": "创建技能或添加集成。每一个都是一个插件。"
+      },
+      "noMatches": {
+        "title": "没有匹配的插件",
+        "clear": "显示所有插件"
+      }
+    },
+    "search": "搜索"
   }
 }

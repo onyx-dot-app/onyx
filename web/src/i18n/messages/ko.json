@@ -12014,6 +12014,9 @@
         },
         "skillsGroup": {
           "label": "스킬"
+        },
+        "manageSkills": {
+          "label": "스킬 관리"
         }
       },
       "inputChip": {
@@ -14650,15 +14653,12 @@
         "empty": "빌드를 시작하세요! 세션 기록이 여기에 표시됩니다.",
         "title": "세션"
       },
-      "skills": {
-        "label": "스킬"
-      },
       "toast": {
         "deleteFailed": "세션을 삭제하지 못했습니다",
         "deleted": "\"{title}\"이(가) 삭제되었습니다."
       },
-      "plugins": {
-        "label": "플러그인"
+      "customize": {
+        "label": "사용자 지정"
       }
     },
     "skillsStale": {
@@ -16316,8 +16316,8 @@
       "searchChats": {
         "label": "채팅 검색"
       },
-      "plugins": {
-        "label": "플러그인"
+      "customize": {
+        "label": "사용자 지정"
       }
     },
     "chatButton": {
@@ -16918,7 +16918,8 @@
       "toasts": {
         "disableFailed": "{name}을(를) 비활성화하지 못했습니다",
         "enableFailed": "{name}을(를) 활성화하지 못했습니다",
-        "refreshFailed": "{name}이(가) 업데이트되었지만 스킬 목록을 새로고침할 수 없습니다."
+        "refreshFailed": "{name}이(가) 업데이트되었지만 스킬 목록을 새로고침할 수 없습니다.",
+        "listRefreshFailed": "스킬 목록을 새로고침할 수 없습니다. 페이지를 다시 불러와 변경 사항을 확인하세요."
       },
       "builtins": {
         "title": "기본 제공 스킬 ({count, number})"
@@ -17093,46 +17094,10 @@
   },
   "plugins": {
     "member": {
-      "title": "플러그인",
-      "description": "채팅과 에이전트에서 사용할 수 있는 스킬과 통합입니다.",
-      "filters": {
-        "label": "플러그인 유형",
-        "all": {
-          "label": "전체"
-        },
-        "skills": {
-          "label": "스킬"
-        },
-        "integrations": {
-          "label": "통합"
-        }
-      },
       "sections": {
         "organization": "조직 라이브러리",
         "mine": "내 업로드",
         "shared": "나와 공유됨"
-      },
-      "row": {
-        "skillCount": "{count, plural, other {스킬 #개}}",
-        "integrationCount": "{count, plural, other {통합 #개}}",
-        "needsConnection": "{count, plural, other {#개 로그인 필요}}",
-        "open": {
-          "label": "{name} 열기"
-        }
-      },
-      "state": {
-        "loading": "플러그인 불러오는 중",
-        "loadFailed": "일부 플러그인을 불러올 수 없습니다.",
-        "emptyTitle": "아직 플러그인이 없습니다",
-        "emptyDescription": "관리자에게 플러그인 추가를 요청하세요.",
-        "noResultsTitle": "일치하는 플러그인 없음",
-        "noResultsDescription": "다른 이름이나 필터를 사용해 보세요.",
-        "retry": {
-          "label": "다시 시도"
-        },
-        "clear": {
-          "label": "모든 플러그인 보기"
-        }
       },
       "detail": {
         "title": "플러그인",
@@ -17154,9 +17119,6 @@
         "skills": {
           "off": "꺼짐",
           "invalid": "유효하지 않음"
-        },
-        "back": {
-          "label": "플러그인"
         },
         "switch": {
           "title": "이 플러그인 사용",
@@ -17239,12 +17201,6 @@
       "search": {
         "placeholder": "플러그인 검색"
       },
-      "addIntegration": {
-        "label": "통합 추가"
-      },
-      "manage": {
-        "label": "플러그인 관리"
-      },
       "share": {
         "title": "{name} 공유",
         "description": "사람과 그룹에 이 플러그인에 대한 액세스 권한을 부여합니다.",
@@ -17300,5 +17256,116 @@
   },
   "integrations": {
     "connectionState": "{state, select, connected {연결됨} not_connected {연결 안 됨} needs_reconnect {재연결 필요} not_set_up {설정되지 않음} other {알 수 없음}}"
+  },
+  "customize": {
+    "title": "사용자 지정",
+    "tabs": {
+      "label": "사용자 지정 섹션",
+      "skills": "스킬",
+      "integrations": "통합",
+      "plugins": "플러그인"
+    },
+    "skills": {
+      "loadFailed": "스킬을 불러오지 못했습니다.",
+      "filter": {
+        "label": "필터",
+        "all": "모든 스킬",
+        "on": "켜짐",
+        "off": "꺼짐"
+      },
+      "sort": {
+        "label": "정렬",
+        "updated": "최근 업데이트",
+        "name": "이름"
+      },
+      "add": {
+        "label": "추가",
+        "upload": "스킬 업로드",
+        "create": "스킬 만들기",
+        "github": "GitHub에서 가져오기"
+      },
+      "groups": {
+        "mine": "내가 만든 항목",
+        "organization": "조직에서",
+        "shared": "나와 공유됨",
+        "builtin": "기본 제공"
+      },
+      "source": {
+        "mine": "내가 만듦",
+        "organization": "조직에서",
+        "sharedBy": "{email}님이 공유함",
+        "shared": "나와 공유됨",
+        "builtin": "기본 제공"
+      },
+      "subtitle": "{source} · {description}",
+      "tag": {
+        "off": "사용 안 함",
+        "required": "필수",
+        "pending": "검토 대기 중",
+        "invalid": "유효하지 않음"
+      },
+      "open": "{name} 열기",
+      "menu": {
+        "label": "{name} 추가 작업",
+        "turnOn": "켜기",
+        "turnOff": "끄기",
+        "share": "공유",
+        "remove": "제거"
+      },
+      "empty": {
+        "title": "아직 스킬이 없습니다",
+        "description": "스킬을 만들거나 업로드하여 어시스턴트에게 작업을 가르치세요."
+      },
+      "noMatches": {
+        "title": "일치하는 스킬이 없습니다",
+        "description": "다른 검색어나 필터를 사용해 보세요.",
+        "clear": "모든 스킬 보기"
+      }
+    },
+    "integrations": {
+      "title": "통합",
+      "loadFailed": "통합을 불러오지 못했습니다.",
+      "columns": {
+        "name": "통합",
+        "type": "유형",
+        "authorization": "인증",
+        "status": "상태"
+      },
+      "status": {
+        "connected": "연결됨"
+      },
+      "add": {
+        "label": "추가",
+        "integration": "통합 추가",
+        "manage": "통합 관리"
+      },
+      "open": "{name} 열기",
+      "empty": {
+        "title": "아직 통합이 없습니다",
+        "description": "관리자에게 통합 추가를 요청하세요."
+      },
+      "noMatches": {
+        "title": "일치하는 통합이 없습니다",
+        "description": "다른 검색어를 사용해 보세요."
+      }
+    },
+    "plugins": {
+      "contents": "{skills, plural, =0 {} one {스킬 1개} other {스킬 {skills}개}}{both, select, yes { · } other {}}{integrations, plural, =0 {} one {통합 1개} other {통합 {integrations}개}}",
+      "needsSignIn": "{count, plural, other {#개 로그인 필요}}",
+      "loadFailed": "플러그인을 불러오지 못했습니다.",
+      "switchFailed": "플러그인을 변경하지 못했습니다.",
+      "filter": {
+        "all": "모든 플러그인"
+      },
+      "empty": {
+        "title": "아직 플러그인이 없습니다",
+        "description": "스킬을 만들거나 통합을 추가하세요. 각각이 플러그인입니다."
+      },
+      "noMatches": {
+        "title": "일치하는 플러그인이 없습니다",
+        "clear": "모든 플러그인 보기"
+      }
+    },
+    "search": "검색"
   }
 }

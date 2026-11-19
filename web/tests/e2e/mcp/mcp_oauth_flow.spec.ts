@@ -11,7 +11,7 @@ import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
 import { IntegrationConnectPrompt } from "@tests/e2e/pages/IntegrationConnectPrompt";
 import { MemberPluginDetailPage } from "@tests/e2e/pages/MemberPluginDetailPage";
-import { MemberPluginsPage } from "@tests/e2e/pages/MemberPluginsPage";
+import { CustomizePage } from "@tests/e2e/pages/CustomizePage";
 import {
   McpOAuthFlow,
   getMcpOAuthConfig,
@@ -189,10 +189,9 @@ test.describe("MCP OAuth flows", () => {
     await page.context().clearCookies();
     await loginAsWorkerUser(page, testInfo.workerIndex);
 
-    const plugins = new MemberPluginsPage(page);
-    await plugins.goto();
-    await plugins.filter("Integrations");
-    await plugins.openPlugin(serverName);
+    const plugins = new CustomizePage(page);
+    await plugins.goto("Integrations");
+    await plugins.openIntegration(serverName);
     const detail = new MemberPluginDetailPage(page);
     await detail.openTab("Integrations");
     if (await detail.connectButton(serverName).isVisible()) {
@@ -248,8 +247,8 @@ test.describe("MCP OAuth flows", () => {
     await page.goto("/app");
     await ensureOnboardingComplete(page);
 
-    const plugins = new MemberPluginsPage(page);
-    await plugins.goto();
+    const plugins = new CustomizePage(page);
+    await plugins.goto("Integrations");
     const personalName = `PW MCP Personal ${Date.now()}`;
     const created = await plugins.addMcpServer({
       name: personalName,
@@ -258,8 +257,8 @@ test.describe("MCP OAuth flows", () => {
     });
     createdIntegrationIds.push(created.integrationId);
 
-    await plugins.goto();
-    await plugins.expectPluginVisible(personalName);
+    await plugins.goto("Integrations");
+    await plugins.expectIntegrationVisible(personalName);
 
     const otherContext = await browser.newContext();
     const otherPage = await otherContext.newPage();

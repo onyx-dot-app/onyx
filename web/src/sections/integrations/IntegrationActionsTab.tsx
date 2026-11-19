@@ -9,7 +9,7 @@ import { ContentAction, Section, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { SvgRefreshCw } from "@opal/icons";
 import { useNavigation } from "@opal/navigation";
-import { memberPluginHref } from "@/lib/plugins/directory";
+import { customizeTabHref, pluginHref } from "@/lib/customize/paths";
 import PolicyEditor, {
   type PolicyEditorItem,
 } from "@/sections/actions/PolicyEditor";
@@ -335,11 +335,11 @@ export default function IntegrationActionsTab({
                 onClick={() =>
                   navigation.go(
                     integration.plugins[0]
-                      ? memberPluginHref(
+                      ? pluginHref(
                           integration.plugins[0].plugin_id,
                           "integrations"
                         )
-                      : "/app/plugins"
+                      : customizeTabHref("integrations")
                   )
                 }
               >

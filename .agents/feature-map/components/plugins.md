@@ -38,17 +38,28 @@ Group or user restriction needs EE.
   other. A scoped action manager can edit a plugin but cannot change Default
   Chat. When a server needs sign-in, enabling it opens authentication first.
   If sign-in fails or is cancelled, the tools stay off.
-- **A member** opens Plugins (`/app/plugins`) from the sidebar or the
-  composer's Actions menu: one list of custom-skill plugins and plugins that
-  hold integrations, in Organization library, My uploads and Shared with you,
-  with All, Skills and Integrations filters and search. A plugin page
-  (`/app/plugins/[pluginId]`) has Overview, Skills, Integrations and Versions;
-  a tab with nothing to show is hidden. The Integrations tab shows one status
+- **A member** opens Customize (`/app/customize`, sidebar "Customize"; `/app/plugins`,
+  `/app/plugins/[id]` and `/craft/v1/plugins` redirect here with their query in
+  `web/next.config.js`). It has three path tabs: Plugins (`/app/customize/plugins`,
+  first), Skills and Integrations. Plugins lists each plugin of
+  `lib/plugins/directory.ts:memberPluginEntries` in the groups Created by you
+  (the user's own, published or not), From your organization and Shared with you
+  (`lib/customize/plugins.ts:groupPlugins`), with its skill and integration
+  counts, a "needs sign-in" count, Turn on and a row menu (Turn on/off, Share).
+  A plugin holds many items: an upgraded skill that used an app shares its plugin
+  with the app's integration (migration `730bce2814a0`). Integrations
+  (`sections/customize/CustomizeIntegrationsPage.tsx`) is a table: Integration,
+  Type, Authorization and Status (a check, Connect, Reconnect or "Ask your
+  admin" from `sections/plugins/IntegrationConnectButton.tsx`); a row opens its
+  plugin. A plugin page (`/app/customize/plugins/[pluginId]`) has Overview,
+  Skills, Integrations and Versions; a tab with nothing to show is hidden, and a
+  plugin that is one skill and no integration replaces itself with the skill
+  page. The Integrations tab shows one status
   per integration: Connected, Not connected (Connect), Needs reconnect (the
   reason and Reconnect) or Not set up ("Ask your admin"). When the admin lets
   users save it, each action that asks offers "Always allow". A member with
-  manage:actions adds a personal integration ("For me" only); its plugin goes
-  to My uploads. The Overview tab has the user's on/off switch ("Use this
+  manage:actions adds a personal integration ("For me" only) from the Add menu;
+  its plugin shows under Created by you. The Overview tab has the user's on/off switch ("Use this
   plugin"), off with a reason when the plugin is Required. The owner of a
   private plugin that holds only integrations gets Share and Publish; Publish
   is off for a user without global manage:actions.
@@ -93,8 +104,9 @@ through `POST /admin/mcp/probe` to suggest the sign-in, and uses
 `PolicyEditor` and `PolicyToggle`, which take the API values
 `allow|ask|blocked`.
 
-**Member flow.** `web/src/sections/plugins/MemberPluginsPage.tsx` and
-`web/src/sections/plugins/MemberPluginDetailPage.tsx` read only member endpoints: the user's skills
+**Member flow.** `web/src/sections/customize/` (the three tabs, in
+`CustomizeLayout`) and `web/src/sections/plugins/MemberPluginDetailPage.tsx`
+read only member endpoints: the user's skills
 (`GET /skills`, as the Skills page) and `GET /integrations`.
 `lib/plugins/directory.ts:memberPluginEntries` joins them by plugin id (a
 custom skill's id is its plugin id). The API decides which plugins the user
@@ -119,7 +131,7 @@ it loads the provider in the same tab. Each redirect URI
 manual clients, `/mcp/oauth/callback` for MCP) renders
 `sections/oauth/IntegrationOAuthCallback.tsx`. It posts `{code, state}` to
 `POST /integrations/oauth/callback`, reports to the waiting tab, and goes to
-`return_path` (a path of this app) or `/app/plugins`.
+`return_path` (a path of this app) or `/app/customize/integrations`.
 
 **Default Chat at turn time.** Chat reads no tool preference row.
 `integrations/chat_tools.py:build_integration_chat_tools` gives the default
@@ -270,7 +282,7 @@ only the configuration of a chat that does not exist yet.
 - `mcp-auth-type-ui` **The UI for a new MCP auth type.** Add the admin sign-in
   fields in `web/src/sections/integrations/signIn.ts`, the method to
   `connectAction` in `web/src/lib/integrations/connect.ts`, and a branch in
-  `web/src/sections/plugins/IntegrationConnectionRow.tsx:connect`. The Craft
+  `web/src/sections/plugins/IntegrationConnectButton.tsx:connect`. The Craft
   connect card (`web/src/app/craft/components/setup-requests/SetupCard.tsx`)
   signs in with the integration id of the member list (`GET /integrations`).
 - `investigate-missing-default-chat-tool` **Investigate "a plugin is on, but its

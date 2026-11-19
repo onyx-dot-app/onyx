@@ -17,7 +17,7 @@ You can also use your custom skills in [chat](/overview/core_features/chat#skill
   or GitHub, connect an [App](/overview/core_features/craft_apps).
 </Note>
 
-<img className="rounded-image" src="/assets/overview/core_features/craft_skills.webp" alt="The Skills page in Craft"/>
+<img className="rounded-image" src="/assets/overview/core_features/craft_skills.webp" alt="The Skills tab of Customize, with skills in the Created by you, From your organization, and Shared with you groups"/>
 
 ## How Craft uses skills
 
@@ -46,15 +46,19 @@ You can also select one explicitly when you want Craft to follow a particular wo
 
 ## Browse and inspect skills
 
-Open **Skills** from the Craft sidebar to search everything available to you.
-Select a skill card to preview its instructions before using it.
+Open **Customize** from the Chat sidebar or the Craft sidebar, then select the **Skills** tab.
+This page does not need Craft. The tab lists the skills that you can use, in groups:
 
-| Label           | What it means                                                                                |
-| --------------- | -------------------------------------------------------------------------------------------- |
-| **Built-in**    | Maintained by Onyx. Availability can depend on your deployment and configured providers.     |
-| **Custom**      | Created in your organization and shared with you, your group, or everyone.                   |
-| **Personal**    | Created and owned by you. It starts private, but you can share it if your permissions allow. |
-| **Unavailable** | Visible for reference, but Craft cannot use it until its dependency is configured.           |
+| Group                      | Skills                                                                              |
+| -------------------------- | ----------------------------------------------------------------------------------- |
+| **Created by you**         | The skills that you own, also after you publish them to the organization            |
+| **From your organization** | The skills that are published to the organization                                   |
+| **Shared with you**        | The skills that other people shared with you or your group                          |
+| **Built-in**               | The skills that Onyx maintains. This group shows only when Craft is on, because built-in skills run in Craft. |
+
+Search by name or description. The filter shows the skills that are on or off. Sort by **Recently updated** or **Name**.
+A skill that is off shows **Disabled** and **Turn on**. The menu of a row has **Turn on** or **Turn off**, **Share**,
+and **Remove**. Select a skill to open it. Select a built-in skill to preview its instructions.
 
 Built-in skills cover presentations (`pptx`), company search, image generation, website navigation (Browser),
 and Craft documentation. Each built-in [App](/overview/core_features/craft_apps)
@@ -70,12 +74,12 @@ The exact list you see depends on what your organization has enabled.
 ## Create a personal skill
 
 Create a personal Skill when you have instructions, examples, or reference files you want to reuse across sessions.
-Open **Skills**, select **Create skill**, then choose how you want to begin:
+Open **Customize → Skills**, select **Add**, then choose how you want to begin:
 
 | Starting point | Choose | What happens |
 | --- | --- | --- |
-| You want to write the Skill in Onyx | **Start from scratch** | The Skill editor opens so you can write the details and instructions, then add supporting files. |
-| You already have a Skill | **Upload a skill** | Upload `SKILL.md`, a ZIP, or a Skill folder. Onyx reads the instructions and creates the Skill for you. |
+| You want to write the Skill in Onyx | **Create a skill** | The Skill editor opens so you can write the details and instructions, then add supporting files. |
+| You already have a Skill | **Upload skill** | Upload `SKILL.md`, a ZIP, or a Skill folder. Onyx reads the instructions and creates the Skill for you. |
 | The Skill lives in a GitHub repository | **Import from GitHub** | Enter the repository. Onyx lists the importable Skills it finds, and you choose which ones to import. |
 
 Every new Skill is personal and private. After creating it, you can share it from the Skill editor.
@@ -147,7 +151,7 @@ description: Create a concise weekly customer update from meeting notes and acco
   </Step>
 
   <Step title="Upload the Skill">
-    Open **Skills**, select **Create skill** > **Upload a skill**, and select `SKILL.md` or a ZIP. For one Skill,
+    Open **Customize → Skills**, select **Add** > **Upload skill**, and select `SKILL.md` or a ZIP. For one Skill,
     review the editor and configure **Edit sharing** before creating it. To import several Skills together,
     select multiple ZIP files. Each ZIP must contain one Skill. Configure access once for the batch before importing it.
   </Step>
@@ -155,7 +159,7 @@ description: Create a concise weekly customer update from meeting notes and acco
 
 ### Import from GitHub
 
-Select **Create skill** > **Import from GitHub** and enter the repository, such as `owner/repo`.
+Select **Add** > **Import from GitHub** and enter the repository, such as `owner/repo`.
 Onyx scans the repository for folders that contain a `SKILL.md` and lists the importable Skills.
 Select the Skills you want. Select **Configure access** to share them with people, groups, or your organization.
 The access settings apply to all selected Skills. Import the selection and review the results.
@@ -186,8 +190,8 @@ then make your change again. Reload discards your unsaved changes.
 
 ### Version history
 
-Each save of a custom Skill makes a new version. To see earlier versions,
-open the Skill and select the **Versions** tab. The author, editors,
+Each save of a custom Skill makes a new version. To see earlier versions, select **Share** in the menu of the Skill row,
+then select the **Versions** tab. The author, editors,
 and admins with the organization-wide `manage:plugins` permission can see this tab. Each row shows the version number,
 who made it, and when. A row can also show these badges:
 
@@ -207,8 +211,8 @@ who made it, and when. A row can also show these badges:
 ### Publish an update
 
 When you save a published Skill, the new version does not go to the organization at once.
-The Skill card shows **Unpublished changes**. To send the newest version to the organization,
-open the **Versions** tab and select **Publish update**.
+The Skill row shows **Unpublished changes**. To send the newest version to the organization,
+select **Share** in the menu of the row, open the **Versions** tab, and select **Publish update**.
 
 Only the author of the Skill and users with the organization-wide `manage:plugins` permission can publish an update.
 Your admin can require a review before a publish, or turn publishing off.
@@ -217,11 +221,8 @@ select **Publish update** to send the newer version for review in its place.
 
 ### Share a Skill
 
-Custom Skill cards show **Personal**, **Shared**, or **Organization** access.
-**Shared** means specific people or groups have access. **Organization** means everyone in the organization has access.
-
-Open a Skill to view its instructions.
-Owners and editors can switch between **Details** and **Sharing** to manage access.
+Owners and editors select **Share** in the menu of a Skill row to manage access.
+Specific people or groups can have access, or everyone in the organization can have access.
 Only admins can change how a Skill is installed, because this needs the organization-wide `manage:plugins` permission.
 Choose who can use it and give each person or group **Can use** or **Can edit** access.
 The organization can only get **Can use** access.
@@ -244,9 +245,8 @@ A group policy replaces the organization policy for the members of that group.
 
 ### Manage several Skills
 
-Select Skills with the checkboxes on their cards to share, enable, disable, or delete them together.
-**Enable for me** and **Disable for me** affect your library only.
-See [Manage several Skills](/admins/managing_features/craft_skills#manage-several-skills) for the admin steps.
+Admins can select several Skills in **Admin Panel → Skills** to share, enable, disable, or delete them together.
+See [Manage several Skills](/admins/managing_features/craft_skills#manage-several-skills).
 
 <Warning>
   Never put passwords, API keys, tokens, or production credentials in a skill bundle.

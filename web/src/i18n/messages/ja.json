@@ -12014,6 +12014,9 @@
         },
         "skillsGroup": {
           "label": "スキル"
+        },
+        "manageSkills": {
+          "label": "スキルを管理"
         }
       },
       "inputChip": {
@@ -14650,15 +14653,12 @@
         "empty": "さあ、作り始めましょう！セッション履歴がここに表示されます。",
         "title": "セッション"
       },
-      "skills": {
-        "label": "スキル"
-      },
       "toast": {
         "deleteFailed": "セッションを削除できませんでした",
         "deleted": "「{title}」を削除しました。"
       },
-      "plugins": {
-        "label": "プラグイン"
+      "customize": {
+        "label": "カスタマイズ"
       }
     },
     "skillsStale": {
@@ -16316,8 +16316,8 @@
       "searchChats": {
         "label": "チャットを検索"
       },
-      "plugins": {
-        "label": "プラグイン"
+      "customize": {
+        "label": "カスタマイズ"
       }
     },
     "chatButton": {
@@ -16918,7 +16918,8 @@
       "toasts": {
         "disableFailed": "{name}を無効にできませんでした",
         "enableFailed": "{name}を有効にできませんでした",
-        "refreshFailed": "{name}は更新されましたが、スキル一覧を更新できませんでした。"
+        "refreshFailed": "{name}は更新されましたが、スキル一覧を更新できませんでした。",
+        "listRefreshFailed": "スキル一覧を更新できませんでした。ページを再読み込みして変更を確認してください。"
       },
       "builtins": {
         "title": "組み込みスキル（{count, number}）"
@@ -17093,46 +17094,10 @@
   },
   "plugins": {
     "member": {
-      "title": "プラグイン",
-      "description": "チャットとエージェントで使えるスキルと連携です。",
-      "filters": {
-        "label": "プラグインの種類",
-        "all": {
-          "label": "すべて"
-        },
-        "skills": {
-          "label": "スキル"
-        },
-        "integrations": {
-          "label": "連携"
-        }
-      },
       "sections": {
         "organization": "組織ライブラリ",
         "mine": "マイアップロード",
         "shared": "あなたと共有"
-      },
-      "row": {
-        "skillCount": "{count, plural, other {# 件のスキル}}",
-        "integrationCount": "{count, plural, other {# 件の連携}}",
-        "needsConnection": "{count, plural, other {# 件がサインインを必要としています}}",
-        "open": {
-          "label": "{name} を開く"
-        }
-      },
-      "state": {
-        "loading": "プラグインを読み込み中",
-        "loadFailed": "一部のプラグインを読み込めませんでした。",
-        "emptyTitle": "プラグインはまだありません",
-        "emptyDescription": "管理者にプラグインの追加を依頼してください。",
-        "noResultsTitle": "一致するプラグインはありません",
-        "noResultsDescription": "別の名前またはフィルターを試してください。",
-        "retry": {
-          "label": "再試行"
-        },
-        "clear": {
-          "label": "すべてのプラグインを表示"
-        }
       },
       "detail": {
         "title": "プラグイン",
@@ -17154,9 +17119,6 @@
         "skills": {
           "off": "オフ",
           "invalid": "無効"
-        },
-        "back": {
-          "label": "プラグイン"
         },
         "switch": {
           "title": "このプラグインを使用",
@@ -17239,12 +17201,6 @@
       "search": {
         "placeholder": "プラグインを検索"
       },
-      "addIntegration": {
-        "label": "連携を追加"
-      },
-      "manage": {
-        "label": "プラグインを管理"
-      },
       "share": {
         "title": "{name} を共有",
         "description": "ユーザーとグループにこのプラグインへのアクセス権を付与します。",
@@ -17300,5 +17256,116 @@
   },
   "integrations": {
     "connectionState": "{state, select, connected {接続済み} not_connected {未接続} needs_reconnect {要再接続} not_set_up {未設定} other {不明}}"
+  },
+  "customize": {
+    "title": "カスタマイズ",
+    "tabs": {
+      "label": "カスタマイズのセクション",
+      "skills": "スキル",
+      "integrations": "インテグレーション",
+      "plugins": "プラグイン"
+    },
+    "skills": {
+      "loadFailed": "スキルを読み込めませんでした。",
+      "filter": {
+        "label": "フィルター",
+        "all": "すべてのスキル",
+        "on": "オン",
+        "off": "オフ"
+      },
+      "sort": {
+        "label": "並べ替え",
+        "updated": "最近更新",
+        "name": "名前"
+      },
+      "add": {
+        "label": "追加",
+        "upload": "スキルをアップロード",
+        "create": "スキルを作成",
+        "github": "GitHub からインポート"
+      },
+      "groups": {
+        "mine": "自分が作成",
+        "organization": "組織から",
+        "shared": "共有されたもの",
+        "builtin": "組み込み"
+      },
+      "source": {
+        "mine": "自分",
+        "organization": "組織から",
+        "sharedBy": "{email} が共有",
+        "shared": "共有されたもの",
+        "builtin": "組み込み"
+      },
+      "subtitle": "{source} · {description}",
+      "tag": {
+        "off": "無効",
+        "required": "必須",
+        "pending": "レビュー待ち",
+        "invalid": "無効な形式"
+      },
+      "open": "{name} を開く",
+      "menu": {
+        "label": "{name} のその他の操作",
+        "turnOn": "オンにする",
+        "turnOff": "オフにする",
+        "share": "共有",
+        "remove": "削除"
+      },
+      "empty": {
+        "title": "スキルはまだありません",
+        "description": "スキルを作成またはアップロードして、アシスタントにタスクを教えます。"
+      },
+      "noMatches": {
+        "title": "一致するスキルはありません",
+        "description": "別の検索語またはフィルターを試してください。",
+        "clear": "すべてのスキルを表示"
+      }
+    },
+    "integrations": {
+      "title": "インテグレーション",
+      "loadFailed": "インテグレーションを読み込めませんでした。",
+      "columns": {
+        "name": "インテグレーション",
+        "type": "種類",
+        "authorization": "認可",
+        "status": "ステータス"
+      },
+      "status": {
+        "connected": "接続済み"
+      },
+      "add": {
+        "label": "追加",
+        "integration": "インテグレーションを追加",
+        "manage": "インテグレーションを管理"
+      },
+      "open": "{name} を開く",
+      "empty": {
+        "title": "インテグレーションはまだありません",
+        "description": "管理者にインテグレーションの追加を依頼してください。"
+      },
+      "noMatches": {
+        "title": "一致するインテグレーションはありません",
+        "description": "別の検索語を試してください。"
+      }
+    },
+    "plugins": {
+      "contents": "{skills, plural, =0 {} one {スキル 1 件} other {スキル {skills} 件}}{both, select, yes { · } other {}}{integrations, plural, =0 {} one {インテグレーション 1 件} other {インテグレーション {integrations} 件}}",
+      "needsSignIn": "{count, plural, other {# 件のサインインが必要}}",
+      "loadFailed": "プラグインを読み込めませんでした。",
+      "switchFailed": "プラグインを変更できませんでした。",
+      "filter": {
+        "all": "すべてのプラグイン"
+      },
+      "empty": {
+        "title": "プラグインはまだありません",
+        "description": "スキルを作成するか、インテグレーションを追加します。それぞれがプラグインです。"
+      },
+      "noMatches": {
+        "title": "一致するプラグインはありません",
+        "clear": "すべてのプラグインを表示"
+      }
+    },
+    "search": "検索"
   }
 }

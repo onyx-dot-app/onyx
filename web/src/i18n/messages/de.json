@@ -12014,6 +12014,9 @@
         },
         "skillsGroup": {
           "label": "Skills"
+        },
+        "manageSkills": {
+          "label": "Skills verwalten"
         }
       },
       "inputChip": {
@@ -14650,15 +14653,12 @@
         "empty": "Legen Sie los! Der Sitzungsverlauf erscheint hier.",
         "title": "Sitzungen"
       },
-      "skills": {
-        "label": "Skills"
-      },
       "toast": {
         "deleteFailed": "Sitzung konnte nicht gelöscht werden",
         "deleted": "\"{title}\" gelöscht."
       },
-      "plugins": {
-        "label": "Plugins"
+      "customize": {
+        "label": "Anpassen"
       }
     },
     "skillsStale": {
@@ -16316,8 +16316,8 @@
       "searchChats": {
         "label": "Chats durchsuchen"
       },
-      "plugins": {
-        "label": "Plugins"
+      "customize": {
+        "label": "Anpassen"
       }
     },
     "chatButton": {
@@ -16918,7 +16918,8 @@
       "toasts": {
         "disableFailed": "{name} konnte nicht deaktiviert werden",
         "enableFailed": "{name} konnte nicht aktiviert werden",
-        "refreshFailed": "{name} wurde aktualisiert, aber die Skill-Liste konnte nicht aktualisiert werden."
+        "refreshFailed": "{name} wurde aktualisiert, aber die Skill-Liste konnte nicht aktualisiert werden.",
+        "listRefreshFailed": "Die Skill-Liste konnte nicht aktualisiert werden. Laden Sie die Seite neu, um die Änderung zu sehen."
       },
       "builtins": {
         "title": "Integrierte Skills ({count, number})"
@@ -17093,46 +17094,10 @@
   },
   "plugins": {
     "member": {
-      "title": "Plugins",
-      "description": "Skills und Integrationen, die Sie in Chats und Agenten nutzen können.",
-      "filters": {
-        "label": "Plugin-Typ",
-        "all": {
-          "label": "Alle"
-        },
-        "skills": {
-          "label": "Skills"
-        },
-        "integrations": {
-          "label": "Integrationen"
-        }
-      },
       "sections": {
         "organization": "Organisationsbibliothek",
         "mine": "Meine Uploads",
         "shared": "Mit Ihnen geteilt"
-      },
-      "row": {
-        "skillCount": "{count, plural, one {# Skill} other {# Skills}}",
-        "integrationCount": "{count, plural, one {# Integration} other {# Integrationen}}",
-        "needsConnection": "{count, plural, one {# braucht Anmeldung} other {# brauchen Anmeldung}}",
-        "open": {
-          "label": "{name} öffnen"
-        }
-      },
-      "state": {
-        "loading": "Plugins werden geladen",
-        "loadFailed": "Einige Plugins konnten nicht geladen werden.",
-        "emptyTitle": "Noch keine Plugins",
-        "emptyDescription": "Bitten Sie Ihren Admin, ein Plugin hinzuzufügen.",
-        "noResultsTitle": "Keine passenden Plugins",
-        "noResultsDescription": "Versuchen Sie einen anderen Namen oder Filter.",
-        "retry": {
-          "label": "Erneut versuchen"
-        },
-        "clear": {
-          "label": "Alle Plugins anzeigen"
-        }
       },
       "detail": {
         "title": "Plugin",
@@ -17154,9 +17119,6 @@
         "skills": {
           "off": "Aus",
           "invalid": "Ungültig"
-        },
-        "back": {
-          "label": "Plugins"
         },
         "switch": {
           "title": "Dieses Plugin verwenden",
@@ -17239,12 +17201,6 @@
       "search": {
         "placeholder": "Plugins suchen"
       },
-      "addIntegration": {
-        "label": "Integration Hinzufügen"
-      },
-      "manage": {
-        "label": "Plugins verwalten"
-      },
       "share": {
         "title": "{name} teilen",
         "description": "Geben Sie Personen und Gruppen Zugriff auf dieses Plugin.",
@@ -17300,5 +17256,116 @@
   },
   "integrations": {
     "connectionState": "{state, select, connected {Verbunden} not_connected {Nicht verbunden} needs_reconnect {Neu verbinden} not_set_up {Nicht eingerichtet} other {Unbekannt}}"
+  },
+  "customize": {
+    "title": "Anpassen",
+    "tabs": {
+      "label": "Bereiche zum Anpassen",
+      "skills": "Skills",
+      "integrations": "Integrationen",
+      "plugins": "Plugins"
+    },
+    "skills": {
+      "loadFailed": "Ihre Skills konnten nicht geladen werden.",
+      "filter": {
+        "label": "Filtern",
+        "all": "Alle Skills",
+        "on": "Aktiviert",
+        "off": "Deaktiviert"
+      },
+      "sort": {
+        "label": "Sortieren",
+        "updated": "Zuletzt aktualisiert",
+        "name": "Name"
+      },
+      "add": {
+        "label": "Hinzufügen",
+        "upload": "Skill hochladen",
+        "create": "Skill erstellen",
+        "github": "Aus GitHub importieren"
+      },
+      "groups": {
+        "mine": "Von Ihnen erstellt",
+        "organization": "Aus Ihrer Organisation",
+        "shared": "Mit Ihnen geteilt",
+        "builtin": "Integriert"
+      },
+      "source": {
+        "mine": "von Ihnen",
+        "organization": "aus Ihrer Organisation",
+        "sharedBy": "geteilt von {email}",
+        "shared": "mit Ihnen geteilt",
+        "builtin": "integriert"
+      },
+      "subtitle": "{source} · {description}",
+      "tag": {
+        "off": "Deaktiviert",
+        "required": "Erforderlich",
+        "pending": "Prüfung ausstehend",
+        "invalid": "Ungültig"
+      },
+      "open": "{name} öffnen",
+      "menu": {
+        "label": "Mehr zu {name}",
+        "turnOn": "Aktivieren",
+        "turnOff": "Deaktivieren",
+        "share": "Teilen",
+        "remove": "Entfernen"
+      },
+      "empty": {
+        "title": "Noch keine Skills",
+        "description": "Erstellen oder laden Sie einen Skill hoch, um dem Assistenten eine Aufgabe beizubringen."
+      },
+      "noMatches": {
+        "title": "Keine passenden Skills",
+        "description": "Versuchen Sie eine andere Suche oder einen anderen Filter.",
+        "clear": "Alle Skills anzeigen"
+      }
+    },
+    "integrations": {
+      "title": "Integrationen",
+      "loadFailed": "Ihre Integrationen konnten nicht geladen werden.",
+      "columns": {
+        "name": "Integration",
+        "type": "Typ",
+        "authorization": "Autorisierung",
+        "status": "Status"
+      },
+      "status": {
+        "connected": "Verbunden"
+      },
+      "add": {
+        "label": "Hinzufügen",
+        "integration": "Integration hinzufügen",
+        "manage": "Integrationen verwalten"
+      },
+      "open": "{name} öffnen",
+      "empty": {
+        "title": "Noch keine Integrationen",
+        "description": "Bitten Sie Ihren Administrator, eine Integration hinzuzufügen."
+      },
+      "noMatches": {
+        "title": "Keine passenden Integrationen",
+        "description": "Versuchen Sie eine andere Suche."
+      }
+    },
+    "plugins": {
+      "contents": "{skills, plural, =0 {} one {1 Skill} other {{skills} Skills}}{both, select, yes { · } other {}}{integrations, plural, =0 {} one {1 Integration} other {{integrations} Integrationen}}",
+      "needsSignIn": "{count, plural, one {# erfordert Anmeldung} other {# erfordern Anmeldung}}",
+      "loadFailed": "Ihre Plugins konnten nicht geladen werden.",
+      "switchFailed": "Das Plugin konnte nicht geändert werden.",
+      "filter": {
+        "all": "Alle Plugins"
+      },
+      "empty": {
+        "title": "Noch keine Plugins",
+        "description": "Erstellen Sie einen Skill oder fügen Sie eine Integration hinzu. Jedes davon ist ein Plugin."
+      },
+      "noMatches": {
+        "title": "Keine passenden Plugins",
+        "clear": "Alle Plugins anzeigen"
+      }
+    },
+    "search": "Suchen"
   }
 }

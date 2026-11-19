@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Badge, Button, Card, InputSwitch, Tabs } from "@opal/components";
 import {
@@ -18,14 +18,18 @@ import { publishPlugin, setPluginEnabled } from "@/lib/integrations/svc";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import {
   memberPluginEntries,
-  memberPluginHref,
   ownsPrivateIntegrationPlugin,
-  parseMemberPluginTab,
   pendingIntegrations,
   pluginSwitch,
   type MemberPluginEntry,
-  type MemberPluginTab,
 } from "@/lib/plugins/directory";
+import {
+  customizeTabHref,
+  parsePluginPageTab,
+  pluginHref,
+  skillHref,
+  type PluginPageTab,
+} from "@/lib/customize/paths";
 import { setSkillEnabled } from "@/lib/skills/api";
 import { canChangeOrganizationAccess } from "@/lib/skills/sharing";
 import { Permission } from "@/lib/types";
@@ -152,7 +156,7 @@ function SkillsTab({ entry }: PluginTabProps) {
 }
 
 function IntegrationsTab({ entry }: PluginTabProps) {
-  const returnPath = memberPluginHref(entry.id, "integrations");
+  const returnPath = pluginHref(entry.id, "integrations");
   return (
     <Section gap={2} alignItems="stretch" height="auto">
       {entry.integrations.map((integration) => (
@@ -185,6 +189,7 @@ export default function MemberPluginDetailPage({
 }: MemberPluginDetailPageProps) {
   const t = useTranslations("plugins.member.detail");
   const promptCopy = useTranslations("plugins.chat.connectPrompt");
+  const tabCopy = useTranslations("customize.tabs");
   const locale = useLocale();
   const navigation = useNavigation();
   const searchParams = useSearchParams();
@@ -204,11 +209,28 @@ export default function MemberPluginDetailPage({
     locale
   ).find((candidate) => candidate.id === pluginId);
   const loading = skills.isLoading || integrations.isLoading;
+  const onlySkill =
+    skills.data &&
+    integrations.data &&
+    entry !== undefined &&
+    entry.skills.length === 1 &&
+    entry.integrations.length === 0
+      ? entry.skills[0]
+      : undefined;
+  // The editor is the skill page here, and it refuses a viewer.
+  const skillOnlyId =
+    onlySkill?.user_permission === "OWNER" ||
+    onlySkill?.user_permission === "EDITOR"
+      ? onlySkill.id
+      : undefined;
+  useEffect(() => {
+    if (skillOnlyId) navigation.go(skillHref(skillOnlyId), { replace: true });
+  }, [navigation, skillOnlyId]);
   const skill = entry?.skills.length === 1 ? entry.skills[0] : undefined;
   const showVersions =
     skill !== undefined &&
     (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR");
-  const available: MemberPluginTab[] = [
+  const available: PluginPageTab[] = [
     "overview",
     ...(entry && entry.skills.length > 0 ? (["skills"] as const) : []),
     ...(entry && entry.integrations.length > 0
@@ -216,7 +238,7 @@ export default function MemberPluginDetailPage({
       : []),
     ...(showVersions ? (["versions"] as const) : []),
   ];
-  const requested = parseMemberPluginTab(searchParams.get("tab"));
+  const requested = parsePluginPageTab(searchParams.get("tab"));
   const tab = available.includes(requested) ? requested : "overview";
   const pending = entry ? pendingIntegrations(entry.integrations).length : 0;
   const owner = entry
@@ -242,7 +264,7 @@ export default function MemberPluginDetailPage({
   return (
     <SettingsLayouts.Root
       width="lg"
-      loading={loading}
+      loading={loading || skillOnlyId !== undefined}
       error={
         loading
           ? false
@@ -262,9 +284,9 @@ export default function MemberPluginDetailPage({
             key="back"
             prominence="secondary"
             icon={SvgArrowLeft}
-            {...navigation.linkTo("/app/plugins")}
+            {...navigation.linkTo(customizeTabHref("plugins"))}
           >
-            {t("back.label")}
+            {tabCopy("plugins")}
           </Button>,
           ...(owner
             ? [
@@ -305,10 +327,10 @@ export default function MemberPluginDetailPage({
           <Tabs
             value={tab}
             onValueChange={(value) =>
-              navigation.go(
-                memberPluginHref(entry.id, parseMemberPluginTab(value)),
-                { replace: true, scroll: false }
-              )
+              navigation.go(pluginHref(entry.id, parsePluginPageTab(value)), {
+                replace: true,
+                scroll: false,
+              })
             }
             variant="contained"
             gap={6}

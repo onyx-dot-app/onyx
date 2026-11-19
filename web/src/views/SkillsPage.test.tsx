@@ -25,7 +25,7 @@ const mockStageSkillCreationDraft = jest.fn();
 jest.mock("swr", () => ({
   __esModule: true,
   ...jest.requireActual("swr"),
-  useSWRConfig: () => ({ mutate: mockMutate }),
+  useSWRConfig: () => ({ mutate: mockMutate, cache: new Map() }),
 }));
 
 jest.mock("next/navigation", () => ({
@@ -33,7 +33,7 @@ jest.mock("next/navigation", () => ({
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
   useRouter: () => ({ replace: mockRouterReplace }),
-  usePathname: () => "/craft/v1/skills",
+  usePathname: () => "/admin/skills",
 }));
 
 jest.mock("@/hooks/useUserSkills", () => ({
@@ -688,7 +688,7 @@ describe("SkillsPage preference toggles", () => {
 
     expect(mockStageSkillCreationDraft).toHaveBeenCalledWith({ draft: true });
     expect(mockRouterReplace).toHaveBeenCalledWith(
-      "/craft/v1/skills/new?draft=draft-id"
+      "/app/customize/skills/new?draft=draft-id"
     );
     expect(mockRefresh).not.toHaveBeenCalled();
   });

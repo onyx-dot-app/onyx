@@ -12014,6 +12014,9 @@
         },
         "skillsGroup": {
           "label": "المهارات"
+        },
+        "manageSkills": {
+          "label": "إدارة المهارات"
         }
       },
       "inputChip": {
@@ -14650,15 +14653,12 @@
         "empty": "ابدأ البناء! سيظهر سجل الجلسات هنا.",
         "title": "الجلسات"
       },
-      "skills": {
-        "label": "المهارات"
-      },
       "toast": {
         "deleteFailed": "فشل حذف الجلسة",
         "deleted": "تم حذف \"{title}\"."
       },
-      "plugins": {
-        "label": "الإضافات"
+      "customize": {
+        "label": "التخصيص"
       }
     },
     "skillsStale": {
@@ -16316,8 +16316,8 @@
       "searchChats": {
         "label": "البحث في المحادثات"
       },
-      "plugins": {
-        "label": "الإضافات"
+      "customize": {
+        "label": "التخصيص"
       }
     },
     "chatButton": {
@@ -16918,7 +16918,8 @@
       "toasts": {
         "disableFailed": "فشل تعطيل {name}",
         "enableFailed": "فشل تفعيل {name}",
-        "refreshFailed": "تم تحديث {name}، لكن تعذّر تحديث قائمة المهارات."
+        "refreshFailed": "تم تحديث {name}، لكن تعذّر تحديث قائمة المهارات.",
+        "listRefreshFailed": "تعذّر تحديث قائمة المهارات. أعد تحميل الصفحة لرؤية التغيير."
       },
       "builtins": {
         "title": "المهارات المضمنة ({count, number})"
@@ -17093,46 +17094,10 @@
   },
   "plugins": {
     "member": {
-      "title": "الإضافات",
-      "description": "المهارات والتكاملات التي يمكنك استخدامها في المحادثات والوكلاء.",
-      "filters": {
-        "label": "نوع الإضافة",
-        "all": {
-          "label": "الكل"
-        },
-        "skills": {
-          "label": "المهارات"
-        },
-        "integrations": {
-          "label": "التكاملات"
-        }
-      },
       "sections": {
         "organization": "مكتبة المؤسسة",
         "mine": "ملفاتي المرفوعة",
         "shared": "تمت مشاركتها معك"
-      },
-      "row": {
-        "skillCount": "{count, plural, one {مهارة واحدة} other {# مهارات}}",
-        "integrationCount": "{count, plural, one {تكامل واحد} other {# تكاملات}}",
-        "needsConnection": "{count, plural, one {واحد يحتاج إلى تسجيل الدخول} other {# تحتاج إلى تسجيل الدخول}}",
-        "open": {
-          "label": "فتح {name}"
-        }
-      },
-      "state": {
-        "loading": "جارٍ تحميل الإضافات",
-        "loadFailed": "تعذر تحميل بعض الإضافات.",
-        "emptyTitle": "لا توجد إضافات بعد",
-        "emptyDescription": "اطلب من المسؤول إضافة إضافة.",
-        "noResultsTitle": "لا توجد إضافات مطابقة",
-        "noResultsDescription": "جرّب اسمًا أو عامل تصفية آخر.",
-        "retry": {
-          "label": "حاول مرة أخرى"
-        },
-        "clear": {
-          "label": "عرض كل الإضافات"
-        }
       },
       "detail": {
         "title": "إضافة",
@@ -17154,9 +17119,6 @@
         "skills": {
           "off": "متوقفة",
           "invalid": "غير صالحة"
-        },
-        "back": {
-          "label": "الإضافات"
         },
         "switch": {
           "title": "استخدام هذا المكوّن الإضافي",
@@ -17239,12 +17201,6 @@
       "search": {
         "placeholder": "البحث في الإضافات"
       },
-      "addIntegration": {
-        "label": "إضافة تكامل"
-      },
-      "manage": {
-        "label": "إدارة الإضافات"
-      },
       "share": {
         "title": "مشاركة {name}",
         "description": "امنح الأشخاص والمجموعات حق الوصول إلى هذا المكوّن الإضافي.",
@@ -17300,5 +17256,116 @@
   },
   "integrations": {
     "connectionState": "{state, select, connected {متصل} not_connected {غير متصل} needs_reconnect {يحتاج إلى إعادة الاتصال} not_set_up {غير مُعد} other {غير معروف}}"
+  },
+  "customize": {
+    "title": "التخصيص",
+    "tabs": {
+      "label": "أقسام التخصيص",
+      "skills": "المهارات",
+      "integrations": "عمليات التكامل",
+      "plugins": "الإضافات"
+    },
+    "skills": {
+      "loadFailed": "تعذر تحميل مهاراتك.",
+      "filter": {
+        "label": "تصفية",
+        "all": "كل المهارات",
+        "on": "مفعّلة",
+        "off": "معطّلة"
+      },
+      "sort": {
+        "label": "ترتيب",
+        "updated": "المحدّثة مؤخرًا",
+        "name": "الاسم"
+      },
+      "add": {
+        "label": "إضافة",
+        "upload": "رفع مهارة",
+        "create": "إنشاء مهارة",
+        "github": "استيراد من GitHub"
+      },
+      "groups": {
+        "mine": "أنشأتها أنت",
+        "organization": "من مؤسستك",
+        "shared": "تمت مشاركتها معك",
+        "builtin": "مدمجة"
+      },
+      "source": {
+        "mine": "بواسطتك",
+        "organization": "من مؤسستك",
+        "sharedBy": "شاركها {email}",
+        "shared": "تمت مشاركتها معك",
+        "builtin": "مدمجة"
+      },
+      "subtitle": "{source} · {description}",
+      "tag": {
+        "off": "معطّلة",
+        "required": "مطلوبة",
+        "pending": "بانتظار المراجعة",
+        "invalid": "غير صالحة"
+      },
+      "open": "فتح {name}",
+      "menu": {
+        "label": "المزيد لـ {name}",
+        "turnOn": "تفعيل",
+        "turnOff": "تعطيل",
+        "share": "مشاركة",
+        "remove": "إزالة"
+      },
+      "empty": {
+        "title": "لا توجد مهارات بعد",
+        "description": "أنشئ مهارة أو ارفعها لتعليم المساعد مهمة."
+      },
+      "noMatches": {
+        "title": "لا توجد مهارات مطابقة",
+        "description": "جرّب بحثًا أو عامل تصفية آخر.",
+        "clear": "عرض كل المهارات"
+      }
+    },
+    "integrations": {
+      "title": "عمليات التكامل",
+      "loadFailed": "تعذر تحميل عمليات التكامل.",
+      "columns": {
+        "name": "التكامل",
+        "type": "النوع",
+        "authorization": "التفويض",
+        "status": "الحالة"
+      },
+      "status": {
+        "connected": "متصل"
+      },
+      "add": {
+        "label": "إضافة",
+        "integration": "إضافة تكامل",
+        "manage": "إدارة عمليات التكامل"
+      },
+      "open": "فتح {name}",
+      "empty": {
+        "title": "لا توجد عمليات تكامل بعد",
+        "description": "اطلب من المسؤول إضافة تكامل."
+      },
+      "noMatches": {
+        "title": "لا توجد عمليات تكامل مطابقة",
+        "description": "جرّب بحثًا آخر."
+      }
+    },
+    "plugins": {
+      "contents": "{skills, plural, =0 {} one {مهارة واحدة} other {{skills} مهارات}}{both, select, yes { · } other {}}{integrations, plural, =0 {} one {تكامل واحد} other {{integrations} عمليات تكامل}}",
+      "needsSignIn": "{count, plural, one {# يحتاج إلى تسجيل الدخول} other {# تحتاج إلى تسجيل الدخول}}",
+      "loadFailed": "تعذر تحميل الإضافات.",
+      "switchFailed": "تعذر تغيير الإضافة.",
+      "filter": {
+        "all": "كل الإضافات"
+      },
+      "empty": {
+        "title": "لا توجد إضافات بعد",
+        "description": "أنشئ مهارة أو أضف تكاملًا. كل واحد منها إضافة."
+      },
+      "noMatches": {
+        "title": "لا توجد إضافات مطابقة",
+        "clear": "عرض كل الإضافات"
+      }
+    },
+    "search": "بحث"
   }
 }

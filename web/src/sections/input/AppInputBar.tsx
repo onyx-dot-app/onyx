@@ -97,6 +97,7 @@ import {
 import { useAnswerWithMessage, useWaitingQuestionIds } from "@/lib/chat/hooks";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
 import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
+import { customizeTabHref } from "@/lib/customize/paths";
 
 export interface AppInputBarHandle {
   reset: () => void;
@@ -1543,6 +1544,7 @@ const AppInputBar = React.memo(
               onEscape={mentionPicker.onEscape}
               onDismiss={mentionPicker.reset}
               trigger={MENTION_TRIGGER}
+              onManageSkills={() => navigation.go(customizeTabHref("skills"))}
             />
           </div>
         </Disabled>

@@ -13,8 +13,8 @@ A plugin holds skills, integrations, or both. An integration is an MCP server or
 Your admin adds plugins to the Organization library. You connect your account to each integration that needs it.
 
 <Note>
-  In Onyx 5.0, MCP and OpenAPI actions became plugins. Find them in **Plugins** in the sidebar,
-  and in Chat under **Actions → Plugins**. Craft Apps moved from **Craft → Apps** to **Plugins** in the Craft sidebar.
+  In Onyx 5.0, MCP and OpenAPI actions became plugins. Find them in **Customize** in the sidebar,
+  and in Chat under **Actions → Plugins**. Craft Apps moved from **Craft → Apps** to **Customize**.
 </Note>
 
 ## Plugin types
@@ -39,21 +39,26 @@ Plugins and [connectors](/overview/core_features/connectors) give agents differe
 
 ## Find a plugin
 
-Select **Plugins** in the Chat sidebar or the Craft sidebar. The page shows each plugin that you can use,
+Select **Customize** in the Chat sidebar or the Craft sidebar. The **Plugins** tab shows each plugin that you can use,
 in three groups:
 
 | Group | Plugins |
 | --- | --- |
-| **Organization library** | The plugins that your admin published for the organization |
-| **My uploads** | The plugins that you added |
+| **Created by you** | The plugins that you added, also after you publish them |
+| **From your organization** | The plugins that your admin published for the organization |
 | **Shared with you** | The plugins that other people added and shared with you |
 
-Use **All**, **Skills**, or **Integrations** to filter the list, or search by name.
-A plugin that has an integration you must sign in to shows how many need sign-in.
+Each row shows how many skills and integrations the plugin holds.
+A plugin that has an integration you must sign in to shows how many need sign-in. Search by name,
+or use the filter to show only the plugins that are on or off.
+
+The **Skills** tab lists each skill, and the **Integrations** tab lists each integration with its status.
+A skill or an integration also shows in the **Plugins** tab, in the plugin that holds it.
 
 <img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugins_directory.webp" alt="The Plugins page with the Integrations filter on, with three plugins in the Organization library"/>
 
-Click a plugin to open it. The plugin page has these tabs. A tab with nothing to show does not appear.
+Click a plugin to open it. A plugin that holds only one skill opens that skill. The plugin page has these tabs.
+A tab with nothing to show does not appear.
 
 | Tab | What it shows |
 | --- | --- |
@@ -64,8 +69,10 @@ Click a plugin to open it. The plugin page has these tabs. A tab with nothing to
 
 ### Turn a plugin on or off
 
-The **Overview** tab has the **Use this plugin** switch. The default agent uses only the plugins that you turn on.
-A custom agent uses each of its plugins that you can see, with the switch on or off.
+The **Overview** tab of the plugin page has the **Use this plugin** switch. In the **Plugins** tab,
+a plugin that is off shows **Turn on**, and the row menu has **Turn on** or **Turn off**.
+The default agent uses only the plugins that you turn on. A custom agent uses each of its plugins that you can see,
+with the switch on or off.
 
 | Install setting | The switch |
 | --- | --- |
@@ -77,7 +84,8 @@ An admin sets the install setting of each plugin in the Organization library.
 
 ## Connect an integration
 
-Open the plugin and select the **Integrations** tab. Each integration shows one status:
+Select **Customize → Integrations**, or open the plugin and select its **Integrations** tab.
+Each integration shows one status:
 
 | Status | What you see | Who fixes it |
 | --- | --- | --- |
@@ -113,13 +121,14 @@ The plugin stays available to you.
 
 ## Add your own integration
 
-If you have the manage actions permission, click **Add Integration** on the Plugins page. Choose the type,
-then fill in the form. Onyx puts the integration in a new plugin in **My uploads** and turns the plugin on for you.
+If you have the manage actions permission, click **Add → Add integration** in **Customize**. Choose the type,
+then fill in the form.
+Onyx puts the integration in a new plugin under **Created by you** and turns the plugin on for you.
 Only you can use it until you share the plugin.
 
 ### Share or publish your plugin
 
-Open a plugin in **My uploads** that holds only integrations:
+Open a plugin under **Created by you** that holds only integrations:
 
 - Click **Share** to give people and groups access. If an integration uses one account for everybody,
   each person with access uses the account that you connected. The dialog tells you so.

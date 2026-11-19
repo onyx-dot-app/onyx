@@ -1,5 +1,5 @@
 import { redirect } from "@opal/navigation";
-import { CRAFT_PLUGINS_PATH } from "@/app/craft/v1/constants";
+import { customizeTabHref } from "@/lib/customize/paths";
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -12,5 +12,6 @@ export default async function Page({ searchParams }: PageProps) {
     else if (value !== undefined) query.set(key, value);
   }
   const suffix = query.toString();
-  redirect(suffix ? `${CRAFT_PLUGINS_PATH}?${suffix}` : CRAFT_PLUGINS_PATH);
+  const target = customizeTabHref("integrations");
+  redirect(suffix ? `${target}?${suffix}` : target);
 }

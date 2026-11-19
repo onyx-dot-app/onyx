@@ -2,7 +2,7 @@ import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
 import { apiLogin } from "@tests/e2e/utils/auth";
 import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
-import { MemberPluginsPage } from "@tests/e2e/pages/MemberPluginsPage";
+import { CustomizePage } from "@tests/e2e/pages/CustomizePage";
 import type { IntegrationCreate } from "@/lib/integrations/types";
 
 /**
@@ -83,11 +83,11 @@ test.describe("MCP server access through plugins", () => {
     expect(names).toContain(organizationName);
     expect(names).not.toContain(personalName);
 
-    const plugins = new MemberPluginsPage(page);
-    await plugins.goto();
+    const plugins = new CustomizePage(page);
+    await plugins.goto("Integrations");
     await plugins.search(suffix);
-    await plugins.expectPluginVisible(organizationName);
-    await plugins.expectPluginAbsent(personalName);
+    await plugins.expectIntegrationVisible(organizationName);
+    await plugins.expectIntegrationAbsent(personalName);
   });
 
   test("a member without manage:actions cannot add an integration", async ({

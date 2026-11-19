@@ -72,6 +72,7 @@ import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useSkillLimitCopy } from "@/lib/skills/hooks";
+import { customizeTabHref } from "@/lib/customize/paths";
 
 interface SkillEditorPageProps {
   skillId?: string;
@@ -223,7 +224,7 @@ export default function SkillEditorPage({
     !isVersionStale;
 
   function leaveEditor() {
-    navigation.go("/craft/v1/skills");
+    navigation.go(customizeTabHref("skills"));
   }
 
   function handleCancel() {
@@ -258,7 +259,7 @@ export default function SkillEditorPage({
           console.error("Failed to refresh skill data after creation", error);
         });
         toast.success(t("editor.toasts.created", { name: created.name }));
-        navigation.go("/craft/v1/skills", { replace: true });
+        navigation.go(customizeTabHref("skills"), { replace: true });
         return;
       }
 

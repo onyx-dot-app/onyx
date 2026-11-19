@@ -12014,6 +12014,9 @@
         },
         "skillsGroup": {
           "label": "Skills"
+        },
+        "manageSkills": {
+          "label": "Manage skills"
         }
       },
       "inputChip": {
@@ -14650,15 +14653,12 @@
         "empty": "Start building! Session history will appear here.",
         "title": "Sessions"
       },
-      "skills": {
-        "label": "Skills"
-      },
       "toast": {
         "deleteFailed": "Failed to delete session",
         "deleted": "Deleted \"{title}\"."
       },
-      "plugins": {
-        "label": "Plugins"
+      "customize": {
+        "label": "Customize"
       }
     },
     "skillsStale": {
@@ -16316,8 +16316,8 @@
       "searchChats": {
         "label": "Search Chats"
       },
-      "plugins": {
-        "label": "Plugins"
+      "customize": {
+        "label": "Customize"
       }
     },
     "chatButton": {
@@ -16918,7 +16918,8 @@
       "toasts": {
         "disableFailed": "Failed to disable {name}",
         "enableFailed": "Failed to enable {name}",
-        "refreshFailed": "{name} was updated, but the skill list could not be refreshed."
+        "refreshFailed": "{name} was updated, but the skill list could not be refreshed.",
+        "listRefreshFailed": "The skill list could not be refreshed. Reload the page to see the change."
       },
       "builtins": {
         "title": "Built-in skills ({count, number})"
@@ -17093,46 +17094,10 @@
   },
   "plugins": {
     "member": {
-      "title": "Plugins",
-      "description": "Skills and integrations that you can use in chats and agents.",
-      "filters": {
-        "label": "Plugin type",
-        "all": {
-          "label": "All"
-        },
-        "skills": {
-          "label": "Skills"
-        },
-        "integrations": {
-          "label": "Integrations"
-        }
-      },
       "sections": {
         "organization": "Organization library",
         "mine": "My uploads",
         "shared": "Shared with you"
-      },
-      "row": {
-        "skillCount": "{count, plural, one {# skill} other {# skills}}",
-        "integrationCount": "{count, plural, one {# integration} other {# integrations}}",
-        "needsConnection": "{count, plural, one {# needs sign-in} other {# need sign-in}}",
-        "open": {
-          "label": "Open {name}"
-        }
-      },
-      "state": {
-        "loading": "Loading plugins",
-        "loadFailed": "Some plugins could not load.",
-        "emptyTitle": "No plugins yet",
-        "emptyDescription": "Ask your admin to add a plugin.",
-        "noResultsTitle": "No matching plugins",
-        "noResultsDescription": "Try another name or filter.",
-        "retry": {
-          "label": "Try again"
-        },
-        "clear": {
-          "label": "Show all plugins"
-        }
       },
       "detail": {
         "title": "Plugin",
@@ -17154,9 +17119,6 @@
         "skills": {
           "off": "Off",
           "invalid": "Not valid"
-        },
-        "back": {
-          "label": "Plugins"
         },
         "switch": {
           "title": "Use this plugin",
@@ -17239,12 +17201,6 @@
       "search": {
         "placeholder": "Search plugins"
       },
-      "addIntegration": {
-        "label": "Add Integration"
-      },
-      "manage": {
-        "label": "Manage plugins"
-      },
       "share": {
         "title": "Share {name}",
         "description": "Give people and groups access to this plugin.",
@@ -17300,5 +17256,116 @@
   },
   "integrations": {
     "connectionState": "{state, select, connected {Connected} not_connected {Not connected} needs_reconnect {Needs reconnect} not_set_up {Not set up} other {Unknown}}"
+  },
+  "customize": {
+    "title": "Customize",
+    "tabs": {
+      "label": "Customize sections",
+      "skills": "Skills",
+      "integrations": "Integrations",
+      "plugins": "Plugins"
+    },
+    "skills": {
+      "loadFailed": "Could not load your skills.",
+      "filter": {
+        "label": "Filter",
+        "all": "All skills",
+        "on": "Turned on",
+        "off": "Turned off"
+      },
+      "sort": {
+        "label": "Sort",
+        "updated": "Recently updated",
+        "name": "Name"
+      },
+      "add": {
+        "label": "Add",
+        "upload": "Upload skill",
+        "create": "Create a skill",
+        "github": "Import from GitHub"
+      },
+      "groups": {
+        "mine": "Created by you",
+        "organization": "From your organization",
+        "shared": "Shared with you",
+        "builtin": "Built-in"
+      },
+      "source": {
+        "mine": "by you",
+        "organization": "from your organization",
+        "sharedBy": "shared by {email}",
+        "shared": "shared with you",
+        "builtin": "built-in"
+      },
+      "subtitle": "{source} · {description}",
+      "tag": {
+        "off": "Disabled",
+        "required": "Required",
+        "pending": "Pending review",
+        "invalid": "Not valid"
+      },
+      "open": "Open {name}",
+      "menu": {
+        "label": "More for {name}",
+        "turnOn": "Turn on",
+        "turnOff": "Turn off",
+        "share": "Share",
+        "remove": "Remove"
+      },
+      "empty": {
+        "title": "No skills yet",
+        "description": "Create or upload a skill to teach the assistant a task."
+      },
+      "noMatches": {
+        "title": "No matching skills",
+        "description": "Try another search or filter.",
+        "clear": "Show all skills"
+      }
+    },
+    "integrations": {
+      "title": "Integrations",
+      "loadFailed": "Could not load your integrations.",
+      "columns": {
+        "name": "Integration",
+        "type": "Type",
+        "authorization": "Authorization",
+        "status": "Status"
+      },
+      "status": {
+        "connected": "Connected"
+      },
+      "add": {
+        "label": "Add",
+        "integration": "Add integration",
+        "manage": "Manage integrations"
+      },
+      "open": "Open {name}",
+      "empty": {
+        "title": "No integrations yet",
+        "description": "Ask your admin to add an integration."
+      },
+      "noMatches": {
+        "title": "No matching integrations",
+        "description": "Try another search."
+      }
+    },
+    "plugins": {
+      "contents": "{skills, plural, =0 {} one {1 skill} other {{skills} skills}}{both, select, yes { · } other {}}{integrations, plural, =0 {} one {1 integration} other {{integrations} integrations}}",
+      "needsSignIn": "{count, plural, one {# needs sign-in} other {# need sign-in}}",
+      "loadFailed": "Could not load your plugins.",
+      "switchFailed": "Could not change the plugin.",
+      "filter": {
+        "all": "All plugins"
+      },
+      "empty": {
+        "title": "No plugins yet",
+        "description": "Create a skill or add an integration. Each one is a plugin."
+      },
+      "noMatches": {
+        "title": "No matching plugins",
+        "clear": "Show all plugins"
+      }
+    },
+    "search": "Search"
   }
 }

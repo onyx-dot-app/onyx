@@ -9,10 +9,19 @@
 
 ## User experience
 
-- **A Craft user** opens the skills library and sees built-in skills and the
-  custom skills they can see: their own, shared with them, or published to the
-  organization. The Admin Panel lists custom skills only. They preview a
-  skill's instructions, and turn custom skills on or off.
+- **A user** opens Customize → Skills (`/app/customize/skills`,
+  `sections/customize/CustomizeSkillsPage.tsx`; Craft is not needed, and
+  `/craft/v1/skills*` redirect here with their query). The groups are Created by
+  you (owner is the user), From your organization (published), Shared with you,
+  and Built-in, which shows only with Craft on, as `list_chat_skills` leaves
+  built-ins out of chat (`lib/customize/skills.ts:groupSkills`). A row has the
+  tag Disabled, Required, Pending review or Unpublished changes, the date, Turn
+  on, and a menu (Turn on/off, Share, Remove). Add has Upload skill, Create a
+  skill (`/app/customize/skills/new`) and Import from GitHub. A custom skill
+  opens at `/app/customize/skills/[id]`; a built-in opens a preview. A custom
+  skill's icon is a themed glyph picked from its name and description
+  (`sections/customize/skillIcon.tsx`). The Admin Panel lists custom skills
+  only.
 - **Built-in skills** are always on. A built-in that depends on an unavailable
   service, such as image generation with no provider or the browser with
   `ENABLE_BROWSER` off, is hidden. The built-in skill of a preset app, such
@@ -53,8 +62,7 @@
   library default for published skills with no own setting: Available,
   Installed by default or Not available; never Required) and **Sharing** (off:
   only organization-wide managers add user or group shares).
-- **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
-  support selection of custom skills, bulk access and installation changes,
+- **Bulk management.** **Admin Panel → Skills** supports selection of custom skills, bulk access and installation changes,
   personal enable/disable, and confirmed deletion. Admins see all manageable
   custom skills. Bulk sharing adds or updates supplied individual grants;
   omitted visibility and installation settings remain unchanged. Failed items
@@ -99,7 +107,7 @@
   the message is accepted is not applied. Built-in skills
   do not reach chat, because they need the Craft sandbox. Chat cannot open a skill's other files or run its scripts.
   In the chat input, `@` at the start of a word opens a picker of these
-  skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/skills/chat`),
+  skills, with a **Manage skills** row that opens Customize → Skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/skills/chat`),
   filtered by name prefix without case. A row shows the skill's short
   description when it has one, else its description. A skill change in the
   library, the skill editor, a plugin's Skills tab or a Craft app connection

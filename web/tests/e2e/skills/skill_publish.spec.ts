@@ -21,14 +21,6 @@ async function authorPage(
 
 // Both tests change the organization-wide Publishing setting, so they run alone.
 test.describe("skill publishing", () => {
-  test.beforeEach(async ({ page }) => {
-    const settings = await (await page.request.get("/api/settings")).json();
-    test.skip(
-      settings?.onyx_craft_enabled !== true,
-      "Onyx Craft is disabled in this environment"
-    );
-  });
-
   test.afterEach(async ({ page }) => {
     await setPublishing(page.request, "OPEN");
   });
@@ -81,7 +73,8 @@ test.describe("skill publishing", () => {
     browser,
     page: adminPage,
   }, testInfo) => {
-    await setPublishing(adminPage.request, "REQUIRES_REVIEW");
+    // Version 1 is published under Open, so version 2 is an update.
+    await setPublishing(adminPage.request, "OPEN");
     const author = await authorPage(browser, testInfo.workerIndex);
     try {
       const name = uniqueSkillName("publish-review");
@@ -93,6 +86,7 @@ test.describe("skill publishing", () => {
           publish: true,
         }
       );
+      await setPublishing(adminPage.request, "REQUIRES_REVIEW");
       const saved = await editSkillInstructions(
         author.request,
         created.id,

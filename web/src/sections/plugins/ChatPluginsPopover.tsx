@@ -25,6 +25,7 @@ import {
 } from "@/lib/plugins/hooks";
 import { useUser } from "@/providers/UserProvider";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import { customizeTabHref } from "@/lib/customize/paths";
 
 export interface ChatPluginsPopoverProps {
   agentId: number;
@@ -64,7 +65,7 @@ export default function ChatPluginsPopover({
   const matching = plugins.filter((plugin) =>
     plugin.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())
   );
-  const browseLink = navigation.linkTo("/app/plugins");
+  const browseLink = navigation.linkTo(customizeTabHref("integrations"));
 
   function handleBrowse(event: React.MouseEvent<HTMLElement>) {
     if (appPosition.chat() === null) {

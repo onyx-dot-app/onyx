@@ -30,7 +30,7 @@ test("links the sign-in to the plugin that the tool list gives", () => {
   render(<CustomToolAuthCard toolName="Example" toolId={1} />);
   expect(screen.getByRole("link", { name: /connect/i })).toHaveAttribute(
     "href",
-    "/app/plugins/plugin-1?tab=integrations"
+    "/app/customize/plugins/plugin-1?tab=integrations"
   );
 });
 
