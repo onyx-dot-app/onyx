@@ -60,6 +60,7 @@ export default function CraftWorkspace({
     onRestore: useCallback(() => setMode("medium"), [setMode]),
     // The width readies the layout before the panel first opens
     measureWhileClosed: true,
+    sessionId,
   });
   const layoutReady =
     layout.workspaceWidth > 0 &&

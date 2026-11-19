@@ -144,6 +144,7 @@ export default function SharedChatDisplay({
         <RootLayout.RightPanel>
           {/* A shared chat has no Sources view */}
           <ChatRightPanel
+            sessionId={chatSession.chat_session_id}
             open={showsFiles(rightPanel)}
             state={rightPanel}
             dispatch={dispatchRightPanel}

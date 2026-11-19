@@ -278,6 +278,9 @@ interface UseOutputPanelWorkspaceOptions {
   onRestore: () => void;
   // Keeps measuring the workspace while the panel is closed
   measureWhileClosed?: boolean;
+  // The panel's session: a change cancels a drag, whose width belongs to the
+  // session it started in
+  sessionId: string | null;
 }
 
 /**
@@ -296,6 +299,7 @@ export function useOutputPanelWorkspace({
   onResize,
   onRestore,
   measureWhileClosed = false,
+  sessionId,
 }: UseOutputPanelWorkspaceOptions) {
   const [workspaceWidth, setWorkspaceWidth] = useState(0);
   // Measures again on opening: a closed panel keeps its last width, and a
@@ -319,7 +323,7 @@ export function useOutputPanelWorkspace({
     workspaceWidth,
     mediumWidth: saved.mediumWidth,
     onResize,
-    resetKey: JSON.stringify([mode, saved.narrow]),
+    resetKey: JSON.stringify([mode, saved.narrow, sessionId]),
   });
   const shown = outputPanelLayout(
     workspaceWidth,
