@@ -22,6 +22,8 @@ SQ_ACTIVE_DAYS = 7
 # Clicked question ids kept per person. Pool ids rotate, so older ones only
 # take space.
 SQ_USED_IDS_MAX = 200
+# Largest question id a click may store. Ids are 32 hex characters.
+SQ_QUESTION_ID_MAX_BYTES = 64
 
 # Pool runs count against the daily limit inside this window.
 SQ_RUN_WINDOW_HOURS = 24
