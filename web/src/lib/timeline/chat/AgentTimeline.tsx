@@ -1,68 +1,20 @@
 "use client";
 
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo } from "react";
 import { StopReason } from "@/app/app/services/streamingModels";
+import { FullChatState } from "@/app/app/message/messageComponents/types";
 import {
-  FullChatState,
-  RenderType,
-} from "@/app/app/message/messageComponents/types";
-import { TurnGroup } from "./transformers";
-import { cn } from "@opal/utils";
-import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import { TextLoader } from "@opal/loaders";
-import { useTimelineExpansion } from "@/lib/timeline/chat/hooks/useTimelineExpansion";
-import { useTimelineMetrics } from "@/lib/timeline/chat/hooks/useTimelineMetrics";
+  TurnGroup,
+  TransformedStep,
+  toChatTimelineEntry,
+} from "@/lib/timeline/chat/transformers";
 import { useTimelineHeader } from "@/lib/timeline/chat/hooks/useTimelineHeader";
-import {
-  useTimelineUIState,
-  TimelineUIState,
-} from "@/lib/timeline/chat/hooks/useTimelineUIState";
-import {
-  isResearchAgentPackets,
-  isSearchToolPackets,
-  stepSupportsCollapsedStreaming,
-  stepHasCollapsedStreamingContent,
-} from "@/lib/timeline/chat/packetHelpers";
 import { useTimelineStepState } from "@/lib/timeline/chat/hooks/useTimelineStepState";
-import { StreamingHeader } from "@/lib/timeline/chat/headers/StreamingHeader";
-import { CompletedHeader } from "@/lib/timeline/chat/headers/CompletedHeader";
-import { StoppedHeader } from "@/lib/timeline/chat/headers/StoppedHeader";
-import { ParallelStreamingHeader } from "@/lib/timeline/chat/headers/ParallelStreamingHeader";
 import { useStreamingStartTime } from "@/app/app/stores/useChatSessionStore";
-import { ExpandedTimelineContent } from "./ExpandedTimelineContent";
-import { CollapsedStreamingContent } from "./CollapsedStreamingContent";
-import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
-import { TimelineHeaderRow } from "@/lib/timeline/components/primitives/TimelineHeaderRow";
+import { RunCard } from "@/lib/timeline/components/RunCard";
+import { ChatStep } from "@/lib/timeline/chat/ChatStep";
+import type { TimelineEntryStatus } from "@/lib/timeline/types";
 import type { AwaitingUser } from "@/lib/chat/toolApprovals";
-
-// =============================================================================
-// Private Wrapper Components
-// =============================================================================
-
-interface TimelineContainerProps {
-  agent: FullChatState["agent"];
-  headerContent?: React.ReactNode;
-  children?: React.ReactNode;
-}
-
-function TimelineContainer({
-  agent,
-  headerContent,
-  children,
-}: TimelineContainerProps) {
-  return (
-    <TimelineRoot>
-      <TimelineHeaderRow left={<AgentAvatar agent={agent} size={24} />}>
-        {headerContent}
-      </TimelineHeaderRow>
-      {children}
-    </TimelineRoot>
-  );
-}
-
-// =============================================================================
-// Main Component
-// =============================================================================
 
 export interface AgentTimelineProps {
   /** Turn groups from usePacketProcessor */
@@ -77,14 +29,6 @@ export interface AgentTimelineProps {
   finalAnswerComing?: boolean;
   /** Whether there is display content after timeline */
   hasDisplayContent?: boolean;
-  /** Content to render after timeline (final message + toolbar) - slot pattern */
-  children?: React.ReactNode;
-  /** Whether the timeline is collapsible */
-  collapsible?: boolean;
-  /** Title of the button to toggle the timeline */
-  buttonTitle?: string;
-  /** Test ID for e2e testing */
-  "data-testid"?: string;
   /** Processing duration in seconds (for completed messages) */
   processingDurationSeconds?: number;
   /** Number of images generated */
@@ -113,8 +57,6 @@ function areAgentTimelinePropsEqual(
     prev.finalAnswerComing === next.finalAnswerComing &&
     prev.hasDisplayContent === next.hasDisplayContent &&
     prev.processingDurationSeconds === next.processingDurationSeconds &&
-    prev.collapsible === next.collapsible &&
-    prev.buttonTitle === next.buttonTitle &&
     prev.chatState === next.chatState &&
     prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
@@ -123,307 +65,93 @@ function areAgentTimelinePropsEqual(
   );
 }
 
+interface ChatRunStep {
+  id: string;
+  status: TimelineEntryStatus;
+  step: TransformedStep;
+}
+
+/**
+ * A step's status for the run card. A step that never closed counts as done
+ * once the stream ends, or as stopped when the user stopped it.
+ */
+function runStatus(
+  step: TransformedStep,
+  stopPacketSeen: boolean,
+  userStopped: boolean
+): TimelineEntryStatus {
+  const status = toChatTimelineEntry(step).status;
+  if (status !== "streaming" || !stopPacketSeen) return status;
+  return userStopped ? "stopped" : "done";
+}
+
+/** One run of a chat response's steps, on the shared run card. */
 export const AgentTimeline = React.memo(function AgentTimeline({
   turnGroups,
   chatState,
   stopPacketSeen = false,
   stopReason,
-  finalAnswerComing = false,
   hasDisplayContent = false,
-  collapsible = true,
-  buttonTitle,
-  "data-testid": testId,
   processingDurationSeconds,
   generatedImageCount = 0,
   toolProcessingDuration,
   codeModeWorking = false,
   awaitingUser = null,
 }: AgentTimelineProps) {
-  // Header text and state flags
-  const { headerText, hasPackets, userStopped } = useTimelineHeader(
+  const { headerText, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason,
     codeModeWorking,
     awaitingUser
   );
-
-  // Memoized metrics derived from turn groups
-  const {
-    totalSteps,
-    isSingleStep,
-    lastTurnGroup,
-    lastStep,
-    lastStepIsResearchAgent,
-    lastStepIsCodingAgent,
-    lastStepSupportsCollapsedStreaming,
-  } = useTimelineMetrics(turnGroups, userStopped);
-
-  // Extract memory text, operation, and whether this is a memory-only timeline
   const { memoryText, memoryOperation, memoryId, memoryIndex, isMemoryOnly } =
     useTimelineStepState(turnGroups);
-
-  // Check if last step is a search tool for INLINE render type
-  const lastStepIsSearchTool = useMemo(
-    () => lastStep && isSearchToolPackets(lastStep.packets),
-    [lastStep]
-  );
-
-  const { isExpanded, handleToggle, parallelActiveTab, setParallelActiveTab } =
-    useTimelineExpansion(stopPacketSeen, lastTurnGroup, hasDisplayContent);
-
-  // Streaming duration tracking
   const streamingStartTime = useStreamingStartTime();
 
-  // Parallel step analysis for collapsed streaming view
-  const parallelActiveStep = useMemo(() => {
-    if (!lastTurnGroup?.isParallel) return null;
-    return (
-      lastTurnGroup.steps.find((s) => s.key === parallelActiveTab) ??
-      lastTurnGroup.steps[0]
-    );
-  }, [lastTurnGroup, parallelActiveTab]);
-
-  const parallelActiveStepSupportsCollapsedStreaming = useMemo(() => {
-    if (!parallelActiveStep) return false;
-    return stepSupportsCollapsedStreaming(parallelActiveStep.packets);
-  }, [parallelActiveStep]);
-
-  const lastStepHasCollapsedContent = useMemo(() => {
-    if (!lastStep) return false;
-    return stepHasCollapsedStreamingContent(lastStep.packets);
-  }, [lastStep]);
-
-  const parallelActiveStepHasCollapsedContent = useMemo(() => {
-    if (!parallelActiveStep) return false;
-    return stepHasCollapsedStreamingContent(parallelActiveStep.packets);
-  }, [parallelActiveStep]);
-
-  const stoppedStepsCount = useMemo(() => {
-    if (!stopPacketSeen || !userStopped) {
-      return totalSteps;
-    }
-
-    let count = 0;
-    for (const turnGroup of turnGroups) {
-      for (const step of turnGroup.steps) {
-        if (stepHasCollapsedStreamingContent(step.packets)) {
-          count += 1;
-        }
-      }
-    }
-
-    return count;
-  }, [stopPacketSeen, userStopped, totalSteps, turnGroups]);
-
-  // Derive all UI state from inputs
-  const {
-    uiState,
-    showCollapsedCompact,
-    showCollapsedParallel,
-    showParallelTabs,
-    showDoneStep,
-    showStoppedStep,
-    hasDoneIndicator,
-    showTintedBackground,
-    showRoundedBottom,
-  } = useTimelineUIState({
-    stopPacketSeen,
-    hasPackets,
-    hasDisplayContent,
-    userStopped,
-    isExpanded,
-    lastTurnGroup,
-    lastStep,
-    lastStepSupportsCollapsedStreaming,
-    lastStepHasCollapsedContent,
-    lastStepIsResearchAgent,
-    parallelActiveStepSupportsCollapsedStreaming,
-    parallelActiveStepHasCollapsedContent,
-    finalAnswerComing,
-    codeModeWorking,
-    awaitingUser: awaitingUser !== null,
-  });
-
-  const headerIsInteractive = useMemo(() => {
-    if (!collapsible || isMemoryOnly) {
-      return false;
-    }
-
-    if (uiState === TimelineUIState.STOPPED) {
-      return stoppedStepsCount > 0;
-    }
-
-    return totalSteps > 0;
-  }, [collapsible, isMemoryOnly, uiState, stoppedStepsCount, totalSteps]);
-
-  // Determine render type override for collapsed streaming view
-  const collapsedRenderTypeOverride = useMemo(() => {
-    if (lastStepIsResearchAgent) return RenderType.HIGHLIGHT;
-    if (lastStepIsCodingAgent) return RenderType.HIGHLIGHT;
-    if (lastStepIsSearchTool) return RenderType.INLINE;
-    return RenderType.COMPACT;
-  }, [lastStepIsResearchAgent, lastStepIsCodingAgent, lastStepIsSearchTool]);
-
-  // Header selection based on UI state
-  const renderHeader = useCallback(() => {
-    switch (uiState) {
-      case TimelineUIState.STREAMING_PARALLEL:
-        // Only show parallel header when collapsed (showParallelTabs includes !isExpanded check)
-        if (showParallelTabs && lastTurnGroup) {
-          return (
-            <ParallelStreamingHeader
-              steps={lastTurnGroup.steps}
-              activeTab={parallelActiveTab}
-              onTabChange={setParallelActiveTab}
-              collapsible={collapsible}
-              isExpanded={isExpanded}
-              onToggle={handleToggle}
-            />
-          );
-        }
-      // falls through to sequential header when expanded or no lastTurnGroup
-      case TimelineUIState.STREAMING_SEQUENTIAL:
-        return (
-          <StreamingHeader
-            headerText={headerText}
-            collapsible={collapsible}
-            buttonTitle={buttonTitle}
-            isExpanded={isExpanded}
-            onToggle={handleToggle}
-            streamingStartTime={streamingStartTime}
-            toolProcessingDuration={toolProcessingDuration}
-          />
-        );
-
-      case TimelineUIState.STOPPED:
-        return (
-          <StoppedHeader
-            totalSteps={stoppedStepsCount}
-            collapsible={collapsible}
-            isExpanded={isExpanded}
-            onToggle={handleToggle}
-          />
-        );
-
-      case TimelineUIState.COMPLETED_COLLAPSED:
-      case TimelineUIState.COMPLETED_EXPANDED:
-        return (
-          <CompletedHeader
-            totalSteps={totalSteps}
-            collapsible={collapsible}
-            isExpanded={isExpanded}
-            onToggle={handleToggle}
-            processingDurationSeconds={
-              toolProcessingDuration ?? processingDurationSeconds
-            }
-            generatedImageCount={generatedImageCount}
-            isMemoryOnly={isMemoryOnly}
-            memoryText={memoryText}
-            memoryOperation={memoryOperation}
-            memoryId={memoryId}
-            memoryIndex={memoryIndex}
-          />
-        );
-
-      default:
-        return null;
-    }
-  }, [
-    uiState,
-    showParallelTabs,
-    lastTurnGroup,
-    parallelActiveTab,
-    setParallelActiveTab,
-    collapsible,
-    isExpanded,
-    handleToggle,
-    headerText,
-    buttonTitle,
-    streamingStartTime,
-    isMemoryOnly,
-    memoryText,
-    memoryOperation,
-    memoryId,
-    memoryIndex,
-    totalSteps,
-    stoppedStepsCount,
-    processingDurationSeconds,
-    generatedImageCount,
-    toolProcessingDuration,
-  ]);
-
-  // Empty state: no packets, still streaming, and not stopped
-  if (uiState === TimelineUIState.EMPTY) {
-    return (
-      <TimelineContainer
-        agent={chatState.agent}
-        headerContent={
-          <div className="flex w-full h-full items-center ps-(--timeline-header-padding-left) pe-(--timeline-header-padding-right)">
-            <TextLoader>{headerText}</TextLoader>
-          </div>
-        }
-      />
-    );
-  }
-
-  // Display content only (no timeline steps)
-  if (uiState === TimelineUIState.DISPLAY_CONTENT_ONLY) {
-    return <TimelineContainer agent={chatState.agent} />;
-  }
+  const steps = useMemo<ChatRunStep[]>(
+    () =>
+      turnGroups
+        .flatMap((group) => group.steps)
+        .map((step) => ({
+          id: step.key,
+          status: runStatus(step, stopPacketSeen, userStopped),
+          step,
+        })),
+    [turnGroups, stopPacketSeen, userStopped]
+  );
+  // The run works until the stream ends or text follows it; a wait for an
+  // approval or an answer keeps it working after text.
+  const isActive =
+    !stopPacketSeen && (!hasDisplayContent || awaitingUser !== null);
 
   return (
-    <TimelineContainer
-      agent={chatState.agent}
-      headerContent={
-        <div
-          className={cn(
-            "flex flex-1 min-w-0 h-full items-center justify-between p-1 rounded-t-12 transition-colors duration-300",
-            headerIsInteractive && "hover:bg-background-tint-00",
-            showTintedBackground && "bg-background-tint-00",
-            showRoundedBottom && "rounded-b-12"
-          )}
-        >
-          {renderHeader()}
-        </div>
-      }
-    >
-      {/* Collapsed streaming view - single step compact mode */}
-      {showCollapsedCompact && lastStep && (
-        <CollapsedStreamingContent
-          step={lastStep}
+    <RunCard
+      steps={steps}
+      workingText={headerText}
+      isActive={isActive}
+      isStopped={stopPacketSeen && userStopped}
+      autoCollapse={hasDisplayContent}
+      streamingStartTime={streamingStartTime}
+      durationSeconds={toolProcessingDuration ?? processingDurationSeconds}
+      summary={{
+        generatedImageCount,
+        isMemoryOnly,
+        memoryText,
+        memoryOperation,
+        memoryId,
+        memoryIndex,
+      }}
+      renderStep={(runStep, position) => (
+        <ChatStep
+          step={runStep.step}
+          status={runStep.status}
+          position={position}
           chatState={chatState}
+          stopPacketSeen={stopPacketSeen}
           stopReason={stopReason}
-          renderTypeOverride={collapsedRenderTypeOverride}
         />
       )}
-
-      {/* Collapsed streaming view - parallel tools compact mode */}
-      {showCollapsedParallel && parallelActiveStep && (
-        <CollapsedStreamingContent
-          step={parallelActiveStep}
-          chatState={chatState}
-          stopReason={stopReason}
-          renderTypeOverride={RenderType.HIGHLIGHT}
-        />
-      )}
-
-      {/* Expanded timeline view */}
-      {isExpanded && (
-        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-          <ExpandedTimelineContent
-            turnGroups={turnGroups}
-            chatState={chatState}
-            stopPacketSeen={stopPacketSeen}
-            stopReason={stopReason}
-            isSingleStep={isSingleStep}
-            userStopped={userStopped}
-            showDoneStep={showDoneStep}
-            showStoppedStep={showStoppedStep}
-            hasDoneIndicator={hasDoneIndicator}
-          />
-        </div>
-      )}
-    </TimelineContainer>
+    />
   );
 }, areAgentTimelinePropsEqual);
 

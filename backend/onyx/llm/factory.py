@@ -588,11 +588,14 @@ def get_llm_tokenizer_encode_func(llm: LLM) -> Callable[[str], list[int]]:
 
 
 def get_llm_token_counter(llm: LLM) -> Callable[[str], int]:
-    tokenizer_encode_func = get_llm_tokenizer_encode_func(llm)
+    tokenizer_encode_func: Callable[[str], list[int]] | None = None
 
     # Keep prompt content local to this counter, never in a process-wide cache.
     @lru_cache(maxsize=TOKEN_COUNT_CACHE_SIZE)
     def count(text: str) -> int:
+        nonlocal tokenizer_encode_func
+        if tokenizer_encode_func is None:
+            tokenizer_encode_func = get_llm_tokenizer_encode_func(llm)
         return len(tokenizer_encode_func(text))
 
     return count

@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { SvgCircle } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 
 import {
   DeepResearchPlanPacket,
@@ -15,7 +15,7 @@ import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisp
 import {
   mutedTextMarkdownComponents,
   collapsedMarkdownComponents,
-} from "@/lib/timeline/chat/renderers/sharedMarkdownComponents";
+} from "@/lib/timeline/components/bodies/markdownComponents";
 
 /**
  * Renderer for deep research plan packets.
@@ -41,9 +41,8 @@ export const DeepResearchPlanRenderer: MessageRenderer<
     [packets]
   );
 
-  const statusText = isComplete
-    ? t("deepResearchPlan.generated.status")
-    : t("deepResearchPlan.generating.status");
+  const statusText = t("deepResearchPlan.generating.status");
+  const doneStatusText = t("deepResearchPlan.generated.status");
 
   // Markdown renderer callback for ExpandableTextDisplay
   // Uses collapsed components (no spacing) in collapsed view, normal spacing in expanded modal
@@ -70,10 +69,10 @@ export const DeepResearchPlanRenderer: MessageRenderer<
 
   return children([
     {
-      icon: SvgCircle,
+      icon: STEP_ICONS.thinking,
       status: statusText,
+      doneStatus: doneStatusText,
       content: planContent,
-      noPaddingRight: true,
     },
   ]);
 };

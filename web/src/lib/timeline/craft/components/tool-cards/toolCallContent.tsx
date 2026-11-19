@@ -1,10 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Text } from "@opal/components";
-import { cn } from "@opal/utils";
-import { SvgAlertCircle, SvgLoader, SvgSparkle } from "@opal/icons";
-import type { IconFunctionComponent, IconProps } from "@opal/types";
+import { codeSpan, markdown } from "@opal/utils";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import BashBody from "@/lib/timeline/craft/components/tool-cards/BashBody";
 import DiffBody from "@/lib/timeline/craft/components/tool-cards/DiffBody";
 import ReadBody from "@/lib/timeline/craft/components/tool-cards/ReadBody";
@@ -12,84 +11,77 @@ import SearchBody from "@/lib/timeline/craft/components/tool-cards/SearchBody";
 import WebSearchBody from "@/lib/timeline/craft/components/tool-cards/WebSearchBody";
 import WebFetchBody from "@/lib/timeline/craft/components/tool-cards/WebFetchBody";
 import GenericBody from "@/lib/timeline/craft/components/tool-cards/GenericBody";
-import {
-  getToolIcon,
-  isSkillInvocation,
-} from "@/lib/timeline/craft/components/tool-cards/helpers";
+import { isSkillInvocation } from "@/lib/timeline/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 
-/**
- * Plain-text fallback for the step's primary content (skill, task, generic…).
- * The actual detail leads ("List Slack Channels for lookup", "Spawning
- * subagent: …") — not a bare generic verb.
- */
-function primaryText(toolCall: ToolCallState): string {
-  return toolCall.description || toolCall.title;
+/** Text that inline markdown shows as written. */
+function plain(text: string): string {
+  return text.replace(/[\\`*_~[\]<>#|]/g, "\\$&");
 }
 
-/**
- * A plain verb, a code-formatted chip (command, pattern, path, skill name…),
- * and an optional plain suffix ("Using <skill> skill").
- */
-function verbWithCode(verb: string, code: string, suffix?: string): ReactNode {
-  return (
-    <>
-      <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
-        {verb}
-      </Text>
-      {/* 12px mono (vs the 14px sans verb): DM Mono renders visually larger
-          than the sans face, so the smaller step matches their apparent size. */}
-      <span className="rounded-sm bg-background-tint-01 px-1">
-        <Text
-          font="secondary-mono"
-          color="text-04"
-          wordWrap="whitespace-nowrap"
-        >
-          {code}
-        </Text>
-      </span>
-      {suffix && (
-        <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
-          {suffix}
-        </Text>
-      )}
-    </>
-  );
+/** A plain verb, then the command, pattern, skill or path as a code span. */
+function verbWithCode(verb: string, chip: string): RichStr {
+  // A code span cannot cross a line break, so a multi-line command (a heredoc,
+  // say) reads as one line in the title; the body keeps the original.
+  const oneLine = chip.replace(/\s*\n\s*/g, " ").trim();
+  return markdown(`${plain(verb)} ${codeSpan(oneLine)}`);
 }
 
+/** The finished form of each running verb and tool title. */
+const PAST_TENSE: Record<string, string> = {
+  Running: "Ran",
+  "Searching for": "Searched for",
+  "Using skill": "Used skill",
+  Reading: "Read",
+  Writing: "Wrote",
+  Editing: "Edited",
+  "Searching files": "Searched files",
+  "Searching content": "Searched content",
+  "Running command": "Ran command",
+  "Running task": "Ran task",
+  "Updating todos": "Updated todos",
+  "Fetching web content": "Fetched web content",
+  "Searching web": "Searched web",
+  "Checking code": "Checked code",
+  "Applying patch": "Applied patch",
+  "Running skill": "Ran skill",
+  "Listing files": "Listed files",
+  Asking: "Asked",
+  Validating: "Validated",
+  Searching: "Searched",
+  "Running tool": "Ran tool",
+};
+
 /**
- * The step header. Bash/execute, search, and read/edit lead with a verb plus
- * the actual command / pattern / file path in a code-formatted chip;
- * everything else is plain text.
+ * The step's title. Bash/execute, search, skills and read/edit lead with a
+ * verb, then the actual command, pattern, skill or file path in a code span;
+ * everything else is plain text. `done` puts the verb in the past tense.
  */
-export function renderToolCallHeader(toolCall: ToolCallState): ReactNode {
+export function renderToolCallHeader(
+  toolCall: ToolCallState,
+  done = false
+): string | RichStr {
+  const verb = (text: string): string =>
+    done ? (PAST_TENSE[text] ?? text) : text;
   if (toolCall.kind === "execute" && toolCall.command) {
     if (toolCall.skillName && toolCall.description) {
-      return (
-        <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
-          {toolCall.description}
-        </Text>
-      );
+      return toolCall.description;
     }
-    return verbWithCode("Running ", toolCall.command);
+    return verbWithCode(verb("Running"), toolCall.command);
   }
   if (toolCall.kind === "search" && toolCall.description) {
-    return verbWithCode("Searching for ", toolCall.description);
+    return verbWithCode(verb("Searching for"), toolCall.description);
   }
   if (toolCall.toolName === "skill" && toolCall.skillName) {
-    return verbWithCode("Using ", toolCall.skillName, " skill");
+    return verbWithCode(verb("Using skill"), toolCall.skillName);
   }
   if (
     (toolCall.kind === "read" || toolCall.kind === "edit") &&
     toolCall.description
   ) {
-    return verbWithCode(`${toolCall.title} `, toolCall.description);
+    return verbWithCode(verb(toolCall.title), toolCall.description);
   }
-  return (
-    <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
-      {primaryText(toolCall)}
-    </Text>
-  );
+  return toolCall.description || verb(toolCall.title);
 }
 
 export function renderToolCallBody(toolCall: ToolCallState): ReactNode {
@@ -156,24 +148,26 @@ export function hasToolCallBody(toolCall: ToolCallState): boolean {
   }
 }
 
-function SpinningLoader({ className, ...props }: IconProps) {
-  return <SvgLoader {...props} className={cn(className, "animate-spin")} />;
-}
-
-/** The rail icon: a spinner while running, otherwise the tool's own icon. */
-export function getToolCallStepIcon(
+/** The step kind's icon; `RunStep` shows the status while running or failed. */
+export function getToolCallIcon(
   toolCall: ToolCallState
 ): IconFunctionComponent {
-  if (toolCall.status === "pending" || toolCall.status === "in_progress") {
-    return SpinningLoader;
+  if (isSkillInvocation(toolCall)) return STEP_ICONS.skill;
+  if (toolCall.toolName === "websearch") return STEP_ICONS.webSearch;
+  if (toolCall.toolName === "webfetch") return STEP_ICONS.fetch;
+  switch (toolCall.kind) {
+    case "execute":
+      return STEP_ICONS.execute;
+    case "read":
+      return STEP_ICONS.read;
+    case "edit":
+      return STEP_ICONS.edit;
+    case "search":
+      return STEP_ICONS.search;
+    case "task":
+      return STEP_ICONS.agent;
+    case "other":
+    default:
+      return STEP_ICONS.tool;
   }
-  // A stopped call must not look finished.
-  if (toolCall.status === "failed" || toolCall.status === "cancelled") {
-    return SvgAlertCircle;
-  }
-  // A finished skill leads with its sparkle.
-  if (isSkillInvocation(toolCall) && toolCall.status === "completed") {
-    return SvgSparkle;
-  }
-  return getToolIcon(toolCall.kind);
 }

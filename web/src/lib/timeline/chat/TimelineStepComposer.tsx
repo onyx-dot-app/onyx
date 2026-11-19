@@ -1,11 +1,8 @@
-import React, { FunctionComponent } from "react";
-import { useTranslations } from "next-intl";
-import { IconProps } from "@opal/types";
-import { StepContainer } from "@/lib/timeline/components/StepContainer";
-import {
-  TimelineRendererOutput,
-  TimelineRendererResult,
-} from "./TimelineRendererComponent";
+import React from "react";
+import type { IconFunctionComponent } from "@opal/types";
+import { RunStep } from "@/lib/timeline/components/RunStep";
+import type { TimelineEntryStatus } from "@/lib/timeline/types";
+import { TimelineRendererOutput } from "./TimelineRendererComponent";
 
 export interface TimelineStepComposerProps {
   /** Results produced by the active renderer. */
@@ -14,66 +11,45 @@ export interface TimelineStepComposerProps {
   isLastStep: boolean;
   /** Whether the overall step is the first in the timeline (affects connector). */
   isFirstStep: boolean;
-  /** Whether the timeline has a single step (used to hide headers). */
-  isSingleStep?: boolean;
   /** Whether StepContainer should show collapse controls. */
   collapsible?: boolean;
-  /** Optional resolver for custom collapsed icon per result. */
-  getCollapsedIcon?: (
-    result: TimelineRendererResult
-  ) => FunctionComponent<IconProps> | undefined;
+  /** The step's status; it decides the first row's icon and failed tint. */
+  status?: TimelineEntryStatus;
 }
 
 /**
  * TimelineStepComposer renders renderer results into either raw content blocks
- * or StepContainer-wrapped timeline rows based on the layout contract.
+ * or shared run steps (`RunStep`), based on the layout contract.
  */
 export function TimelineStepComposer({
   results,
   isLastStep,
   isFirstStep,
-  isSingleStep = false,
   collapsible = true,
-  getCollapsedIcon,
+  status = "done",
 }: TimelineStepComposerProps) {
-  const t = useTranslations("chat.messages.timeline");
   return (
     <>
       {results.map((result, index) =>
         result.timelineLayout === "content" ? (
           <React.Fragment key={index}>{result.content}</React.Fragment>
         ) : (
-          <StepContainer
+          <RunStep
             key={index}
-            stepIcon={result.icon as FunctionComponent<IconProps> | undefined}
-            header={result.status}
-            isExpanded={result.isExpanded}
-            onToggle={result.onToggle}
-            toggleLabel={t(
-              result.isExpanded
-                ? "collapseButton.ariaLabel"
-                : "expandButton.ariaLabel"
-            )}
-            collapsible={
-              collapsible && (!isSingleStep || !!result.alwaysCollapsible)
-            }
-            supportsCollapsible={result.supportsCollapsible}
-            isLastStep={index === results.length - 1 && isLastStep}
-            isFirstStep={index === 0 && isFirstStep}
-            hideHeader={
-              results.length === 1 &&
-              isSingleStep &&
-              !result.supportsCollapsible
-            }
-            collapsedIcon={
-              getCollapsedIcon ? getCollapsedIcon(result) : undefined
-            }
-            noPaddingRight={result.noPaddingRight ?? false}
+            status={index === 0 ? status : "done"}
+            position={{
+              isFirst: index === 0 && isFirstStep,
+              isLast: index === results.length - 1 && isLastStep,
+            }}
+            icon={result.icon as IconFunctionComponent | undefined}
+            title={result.status ?? undefined}
+            doneTitle={result.doneStatus ?? undefined}
+            defaultExpanded={result.isExpanded}
+            expandable={collapsible}
             isHover={result.isHover}
             surfaceBackground={result.surfaceBackground}
-          >
-            {result.content}
-          </StepContainer>
+            body={result.content}
+          />
         )
       )}
     </>

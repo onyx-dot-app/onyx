@@ -51,8 +51,8 @@ from onyx.configs.chat_configs import (
 )
 from onyx.context.models import UserMemoryContext
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
-from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
+from onyx.llm.model_request import estimate_text_tokens
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -114,7 +114,6 @@ class ChatAgent(Agent, RestorableFeature):
         persona: PersonaPromptConfig | None,
         user_memory_context: UserMemoryContext | None,
         llm: LLM,
-        token_counter: Callable[[str], int],
         preferred_tool: ToolPreference | None = None,
         user_identity: LLMUserIdentity | None = None,
         chat_files: list[ChatFile] | None = None,
@@ -149,7 +148,6 @@ class ChatAgent(Agent, RestorableFeature):
         self.custom_agent_prompt = custom_agent_prompt
         self.additional_context = additional_context
         self.context_files = context_files.model_copy(deep=True)
-        self.token_counter = token_counter
         self.file_metadata = all_injected_file_metadata
         # The tools the chat is configured with; restored and child agents receive
         # them, and code mode applies per agent.
@@ -436,7 +434,7 @@ class ChatAgent(Agent, RestorableFeature):
                     doc.document_id: number
                     for number, doc in self.initial_citations.items()
                 },
-                token_counter=self.token_counter,
+                token_counter=estimate_text_tokens,
                 all_injected_file_metadata=dict(self.file_metadata)
                 if self.file_metadata
                 else None,
@@ -562,7 +560,6 @@ def build_chat_agent(
         base_system_prompt=setup.base_system_prompt,
         user_memory_context=setup.user_memory_context,
         llm=llm,
-        token_counter=get_llm_token_counter(llm),
         preferred_tool=preferred_tool,
         user_identity=setup.user_identity,
         chat_files=setup.chat_files_for_tools,

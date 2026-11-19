@@ -49,7 +49,7 @@ covers new files that match it.
 | `backend/onyx/db/chat.py`, `backend/onyx/db/chat_search.py`, `backend/onyx/db/feedback.py` | chat-persistence |
 | `backend/ee/onyx/background/celery/tasks/ttl_management/` | chat-persistence, background-jobs |
 | `backend/onyx/server/query_and_chat/chat_backend.py`, `backend/onyx/server/query_and_chat/models.py`, `backend/onyx/server/query_and_chat/session_loading.py`, `backend/onyx/server/query_and_chat/chat_utils.py` | core-chat-loop, chat-persistence |
-| `backend/onyx/server/query_and_chat/streaming_models.py`, `backend/onyx/server/query_and_chat/placement.py` | streaming-protocol |
+| `backend/onyx/server/query_and_chat/streaming_models.py`, `backend/onyx/server/query_and_chat/placement.py`, `backend/onyx/server/query_and_chat/acp_stream.py` | streaming-protocol |
 | `backend/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
 | `backend/onyx/secondary_llm_flows/chat_session_naming.py` | chat-persistence |
 | `backend/onyx/secondary_llm_flows/memory_update.py` | chat-preferences |

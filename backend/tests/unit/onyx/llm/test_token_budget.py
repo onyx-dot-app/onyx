@@ -198,4 +198,7 @@ def test_unbounded_router_does_not_add_output_limit(model_name: str) -> None:
         )
     )
     request = GenerationRequest(messages=[UserMessage(content="hello")])
-    assert _limit_output(llm, request, 100).options.max_tokens is None
+    assert (
+        _limit_output(resolve_token_budget(llm), request, 100).options.max_tokens
+        is None
+    )

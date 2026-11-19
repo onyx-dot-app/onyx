@@ -30,9 +30,14 @@ export function toCraftToolCall(toolCall: AcpToolCall): ToolCallState {
   }
   const state: ToolCallState = toolCallStateFromProgress(parsed);
 
-  // ACP has no cancelled status; Onyx carries it in `_meta.onyx`. A call
-  // that completes after a Stop request completed.
-  return toolCall._meta?.onyx?.cancelled && toolCall.status !== "completed"
-    ? { ...state, status: "cancelled" }
-    : state;
+  const onyx = toolCall._meta?.onyx;
+  return {
+    ...state,
+    // ACP has no cancelled status; Onyx carries it in `_meta.onyx`. A call
+    // that completes after a Stop request completed.
+    ...(onyx?.cancelled &&
+      toolCall.status !== "completed" && { status: "cancelled" }),
+    ...(onyx?.search && { onyxSearch: onyx.search }),
+    ...(onyx?.exitCode !== undefined && { exitCode: onyx.exitCode }),
+  };
 }

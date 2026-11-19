@@ -49,7 +49,6 @@ function createTurnGroup(steps: TransformedStep[]): TurnGroup {
   return {
     turnIndex: steps[0]!.turnIndex,
     steps,
-    isParallel: steps.length > 1,
   };
 }
 

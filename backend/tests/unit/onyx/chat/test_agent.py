@@ -43,7 +43,7 @@ from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
 from onyx.integrations.models import CallCredentials
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -113,7 +113,6 @@ def chat_agent(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=lambda text: len(text) // 4,
         is_subagent=is_subagent,
         create_subagent=lambda: chat_agent(
             llm, tools, code_mode=code_mode, is_subagent=True
@@ -206,7 +205,6 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
         preferred_tool=CapabilityEntry(tool_id=1),
     )
     project = partial(
@@ -379,6 +377,93 @@ def test_after_step_runs_on_the_denied_step(monkeypatch: pytest.MonkeyPatch) -> 
     assert observed == [(0, [NO_TOOL_CAN_RUN_RESULT]), (1, [])]
 
 
+_XML_CALL = (
+    '<function_calls><invoke name="echo"><parameter name="value">hi</parameter>'
+    "</invoke></function_calls>"
+)
+
+
+@pytest.mark.parametrize(
+    ("provider", "model_name", "sent_choice"),
+    [
+        ("openai", "qwen3.7-plus", ToolChoiceOptions.AUTO),
+        ("openai", "z-ai/glm-5.3", ToolChoiceOptions.AUTO),
+        ("ollama_chat", "llama3.2", ToolChoiceOptions.AUTO),
+        ("bedrock", "us.amazon.nova-pro-v1:0", ToolChoiceOptions.AUTO),
+        ("openai", "gpt-5", ToolChoiceOptions.NONE),
+    ],
+)
+def test_last_step_text_tool_call_follows_the_sent_tool_choice(
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+    model_name: str,
+    sent_choice: ToolChoiceOptions,
+) -> None:
+    """Under AUTO a text tool call is denied and the extra step answers; under
+    NONE the provider forbade calls, so the text is the answer."""
+    monkeypatch.setattr(
+        ScriptedLLM,
+        "config",
+        property(
+            lambda self: LLMConfig(
+                model_provider=provider,
+                model_name=model_name,
+                max_input_tokens=self.max_input_tokens,
+                temperature=0,
+            )
+        ),
+    )
+
+    def never_run(*_args: object, **_kwargs: object) -> ToolResult:
+        raise AssertionError("A call on the last step ran")
+
+    monkeypatch.setattr(EchoTool, "_run", never_run)
+    llm = ScriptedLLM([Delta(content=_XML_CALL), Delta(content="Answer")])
+    agent = chat_agent(llm, [EchoTool()])
+    result = run_agent(agent, messages=[UserMessage(content="Hello")], max_steps=1)
+
+    assert llm.requests[0]["tool_choice"] == sent_choice
+    if sent_choice == ToolChoiceOptions.NONE:
+        assert len(llm.requests) == 1
+        assert result.output.text == _XML_CALL
+        return
+    assert len(llm.requests) == 2
+    denied = agent.state.messages[2]
+    assert isinstance(denied, ToolResultMessage)
+    assert denied.is_error and denied.text == NO_TOOL_CAN_RUN_RESULT
+    assert result.stop_reason == RunStatus.COMPLETE
+    assert result.output.text == "Answer"
+
+
+def test_last_step_xml_without_a_tool_call_is_the_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        ScriptedLLM,
+        "config",
+        property(
+            lambda self: LLMConfig(
+                model_provider="ollama_chat",
+                model_name="llama3.2",
+                max_input_tokens=self.max_input_tokens,
+                temperature=0,
+            )
+        ),
+    )
+    text = '<function_calls><invoke name="unknown"></invoke></function_calls>'
+    llm = ScriptedLLM([Delta(content=text)])
+    result = run_agent(
+        chat_agent(llm, [EchoTool()]),
+        messages=[UserMessage(content="Hello")],
+        max_steps=1,
+    )
+
+    assert llm.requests[0]["tool_choice"] == ToolChoiceOptions.AUTO
+    assert len(llm.requests) == 1
+    assert result.stop_reason == RunStatus.COMPLETE
+    assert result.output.text == text
+
+
 class _PythonTool(EchoTool):
     @property
     def id(self) -> int:
@@ -463,7 +548,6 @@ def test_search_stages_files_only_when_python_needs_them(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
         chat_files=[staged] if already_available else [],
     )
     run_agent(agent, messages=[UserMessage(content="Find evidence twice")], max_steps=3)
@@ -526,7 +610,6 @@ def test_chat_preserves_search_filters_in_accepted_result_and_projection(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
     )
     runs: list[Run] = []
     run_agent(
@@ -607,7 +690,6 @@ def test_cancelled_source_file_staging_drains_before_completion(
         None,
         None,
         llm,
-        len,
     )
     project = partial(
         project_response,
@@ -709,7 +791,6 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
     )
     for _ in range(2):
         output: queue.Queue[Packet] = queue.Queue()
@@ -813,7 +894,6 @@ def test_context_file_citations_keep_history_numbers_across_turns(
             persona=None,
             user_memory_context=None,
             llm=FakeModelClient(reply),
-            token_counter=len,
         )
         # Resume decodes feature state separately from the retained conversation.
         feature.restore_state(
@@ -890,7 +970,6 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
         ),
         user_memory_context=None,
         llm=ScriptedLLM([]),
-        token_counter=len,
         reminders_enabled=False,
     )
     prepared = agent._prepare_step(
@@ -970,7 +1049,6 @@ def test_user_information_is_split_out_of_the_shared_system_prompt(
                 memories=[f"{name} works on billing."],
             ),
             llm=ScriptedLLM([]),
-            token_counter=len,
             inject_memories_in_prompt=inject_memories,
             reminders_enabled=False,
         )
@@ -1049,7 +1127,6 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
         persona=None,
         user_memory_context=None,
         llm=FakeModelClient(reply),
-        token_counter=len,
         reminders_enabled=False,
     )
     original = make_agent(messages=[], preferred_tool=CapabilityEntry(tool_id=1))
@@ -1276,7 +1353,6 @@ def test_child_notification_remaps_citations() -> None:
         persona=None,
         user_memory_context=None,
         llm=FakeModelClient(reply),
-        token_counter=len,
     )
     coordinator = AgentCoordinator(
         ownership=FakeRunOwnership(

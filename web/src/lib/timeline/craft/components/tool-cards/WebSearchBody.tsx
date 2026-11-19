@@ -1,12 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { cn } from "@opal/utils";
-import { Text } from "@opal/components";
-import { SvgGlobe } from "@opal/icons";
-import ToolCardSurface, {
-  ToolCardSection,
-} from "@/lib/timeline/craft/components/tool-cards/ToolCardSurface";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { RetrievalBody } from "@/lib/timeline/components/bodies/RetrievalBody";
+import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
 import type { ToolCardBodyProps } from "@/lib/timeline/craft/components/tool-cards/interfaces";
 
 interface SearchResult {
@@ -45,6 +42,8 @@ function parseResults(rawOutput: string): SearchResult[] {
     const urls = block.match(URL_RE_G);
     if (!urls || urls.length === 0) continue;
     const url = urls[0]!;
+    // Overlapping queries can return the same page; it shows once.
+    if (results.some((result) => result.url === url)) continue;
 
     // Heuristics: first non-URL line is the title; subsequent non-URL lines are snippet
     const nonUrlLines = lines.filter((l) => !URL_RE.test(l));
@@ -65,71 +64,68 @@ function domainFromUrl(url: string): string {
 }
 
 /**
- * WebSearchBody - Result cards for the websearch tool.
- *
- * Falls back to a single block of raw output when no structured results can
- * be parsed.
+ * WebSearchBody - The websearch tool's queries and the results it read, in the
+ * shared retrieval layout: from `_meta.onyx.search` when the backend sends
+ * them, otherwise parsed from the text output. Output that parses into no results shows as a
+ * `CommandBody`: the query, then the raw output.
  */
 export default function WebSearchBody({ toolCall }: ToolCardBodyProps) {
   const results = useMemo(
     () => parseResults(toolCall.rawOutput),
     [toolCall.rawOutput]
   );
+  const isComplete =
+    toolCall.status !== "pending" && toolCall.status !== "in_progress";
 
-  if (results.length === 0) {
+  // Onyx's web_search sends its queries and results in `_meta.onyx`: no text
+  // to parse. Older rows and opencode's own websearch fall through to parsing.
+  const search = toolCall.onyxSearch;
+  if (search) {
     return (
-      <ToolCardSurface>
-        <ToolCardSection className="whitespace-pre-wrap wrap-break-word">
-          <Text as="p" font="secondary-mono" color="text-03">
-            {toolCall.rawOutput || "No results"}
-          </Text>
-        </ToolCardSection>
-      </ToolCardSurface>
+      <RetrievalBody
+        queries={search.queries}
+        // `/search-lite` does not dedupe across queries; a page shows once.
+        results={search.results
+          .filter(
+            (result, index, all) =>
+              all.findIndex((other) => other.url === result.url) === index
+          )
+          .map((result) => ({
+            id: result.url,
+            title: result.title,
+            sourceType: ValidSources.Web,
+            sourceUrl: result.url,
+            description: result.snippet || undefined,
+          }))}
+        isComplete={isComplete}
+      />
+    );
+  }
+
+  // Output that parses into results reads like chat's web search; output
+  // that does not (plain text) shows under the query, like glob and grep.
+  if (results.length === 0 && toolCall.rawOutput) {
+    return (
+      <CommandBody
+        command={toolCall.description}
+        title={toolCall.toolName ?? toolCall.title}
+        output={toolCall.rawOutput}
+        emptyLabel=""
+      />
     );
   }
 
   return (
-    <ToolCardSurface>
-      <div className="divide-y divide-border-01">
-        {results.map((result, idx) => (
-          <div
-            key={idx}
-            className={cn(
-              "py-2 px-3 flex flex-col gap-1",
-              "hover:bg-background-tint-01 transition-colors"
-            )}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <SvgGlobe className="size-3.5 stroke-text-03 shrink-0" />
-              <span className="truncate min-w-0">
-                <Text
-                  font="main-ui-action"
-                  color="text-04"
-                  wordWrap="whitespace-nowrap"
-                >
-                  {result.title ?? domainFromUrl(result.url)}
-                </Text>
-              </span>
-            </div>
-            <div className="ps-5 truncate">
-              <Text
-                font="secondary-mono"
-                color="text-02"
-                wordWrap="whitespace-nowrap"
-              >
-                {result.url}
-              </Text>
-            </div>
-            {result.snippet && (
-              <div className="ps-5">
-                <Text font="secondary-body" color="text-03">
-                  {result.snippet}
-                </Text>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </ToolCardSurface>
+    <RetrievalBody
+      queries={toolCall.description ? [toolCall.description] : []}
+      results={results.map((result) => ({
+        id: result.url,
+        title: result.title ?? domainFromUrl(result.url),
+        sourceType: ValidSources.Web,
+        sourceUrl: result.url,
+        description: result.snippet,
+      }))}
+      isComplete={isComplete}
+    />
   );
 }

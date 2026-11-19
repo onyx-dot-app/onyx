@@ -1,6 +1,8 @@
 import React from "react";
+import { RetrievalBody } from "@/lib/timeline/components/bodies/RetrievalBody";
 import { useTranslations } from "next-intl";
-import { SvgSearch, SvgGlobe } from "@opal/icons";
+import { SvgSearch } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
@@ -8,7 +10,10 @@ import {
 } from "@/app/app/message/messageComponents/types";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { SearchChipList, SourceInfo } from "./SearchChipList";
+import {
+  SearchChipList,
+  SourceInfo,
+} from "@/lib/timeline/components/bodies/SearchChipList";
 import {
   constructCurrentSearchState,
   INITIAL_QUERIES_TO_SHOW,
@@ -50,12 +55,14 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
   const isInline = renderType === RenderType.INLINE;
 
   const queriesHeader = t("webSearch.searching.status");
+  const queriesDoneHeader = t("webSearch.searched.status");
 
   if (queries.length === 0) {
     return children([
       {
-        icon: SvgGlobe,
+        icon: STEP_ICONS.webSearch,
         status: queriesHeader,
+        doneStatus: queriesDoneHeader,
         content: <div />,
         supportsCollapsible: false,
         timelineLayout: "timeline",
@@ -118,21 +125,17 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
     ]);
   }
 
-  // FULL mode: return queries timeline step
+  // FULL mode: return queries timeline step; the fetch step reads results
   return children([
     {
-      icon: SvgGlobe,
+      icon: STEP_ICONS.webSearch,
       status: queriesHeader,
+      doneStatus: queriesDoneHeader,
       content: (
-        <SearchChipList
-          items={queries}
-          initialCount={INITIAL_QUERIES_TO_SHOW}
-          expansionCount={QUERIES_PER_EXPANSION}
-          getKey={(_, index) => index}
-          toSourceInfo={queryToSourceInfo}
-          emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
-          showDetailsCard={false}
-          isQuery={true}
+        <RetrievalBody
+          queries={queries}
+          results={null}
+          isComplete={stopPacketSeen}
         />
       ),
       supportsCollapsible: false,

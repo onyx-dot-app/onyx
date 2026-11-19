@@ -458,7 +458,7 @@ describe("usePacketProcessor", () => {
   });
 
   describe("toolTurnGroups transformation", () => {
-    test("groups tools by turn index", () => {
+    test("gives parallel tools on one turn their own groups", () => {
       const packets = [
         createSearchToolStartPacket({ turn_index: 0, tab_index: 0 }),
         createSearchToolStartPacket({ turn_index: 0, tab_index: 1 }),
@@ -468,9 +468,11 @@ describe("usePacketProcessor", () => {
 
       const { result } = renderHook(() => usePacketProcessor(packets, 1));
 
-      expect(result.current.toolTurnGroups.length).toBe(1);
-      expect(result.current.toolTurnGroups[0]?.isParallel).toBe(true);
-      expect(result.current.toolTurnGroups[0]?.steps.length).toBe(2);
+      expect(
+        result.current.toolTurnGroups.map((group) =>
+          group.steps.map((step) => step.key)
+        )
+      ).toEqual([["0-0"], ["0-1"]]);
     });
   });
 
@@ -583,8 +585,9 @@ test("a stop shows the text that a later tool call retracted", () => {
     ],
   });
   expect(result.current.finalAnswerComing).toBe(true);
-  expect(result.current.displayGroups).toHaveLength(1);
-  expect(result.current.isComplete).toBe(false);
-  act(() => result.current.onRenderComplete());
+  // The text renders in place, between the steps.
+  expect(result.current.interimDisplayGroups).toHaveLength(1);
+  expect(result.current.displayGroups).toHaveLength(0);
+  // No final answer waits to render, so the stop completes the message.
   expect(result.current.isComplete).toBe(true);
 });

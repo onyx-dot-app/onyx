@@ -1,12 +1,6 @@
 import { JSX, Key, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import {
-  SvgCheckCircle,
-  SvgCircle,
-  SvgSparkle,
-  SvgTerminal,
-  SvgXCircle,
-} from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import {
   CodingAgentFinal,
   CodingAgentPacket,
@@ -129,7 +123,7 @@ function ThinkingStep({ step, isLastStep, isHover }: ThinkingStepProps) {
 
   return (
     <StepContainer
-      stepIcon={SvgSparkle}
+      stepIcon={STEP_ICONS.agent}
       header={t("codingAgent.thinking.header")}
       isLastStep={isLastStep}
       isHover={isHover}
@@ -152,11 +146,12 @@ function bashStepHeader(call: BashStepView, t: TimelineTranslate): string {
   return t("codingAgent.bashExit.header", { exitCode: call.exit_code ?? 0 });
 }
 
-function bashStepIcon(call: BashStepView) {
-  if (!call.isComplete) return SvgTerminal;
+/** A command that never finished before the stream stopped shows as stopped. */
+function bashStepIcon(call: BashStepView, stopped: boolean) {
+  if (!call.isComplete) return stopped ? STEP_ICONS.failed : STEP_ICONS.running;
   const failed =
     call.error !== null || (call.exit_code !== null && call.exit_code !== 0);
-  return failed || call.timed_out ? SvgXCircle : SvgCheckCircle;
+  return failed || call.timed_out ? STEP_ICONS.failed : STEP_ICONS.execute;
 }
 
 function BashStepBody({ call }: { call: BashStepView }) {
@@ -217,20 +212,25 @@ interface BashCallStepProps {
   call: BashStepView;
   isLastStep: boolean;
   isHover: boolean;
+  stopped: boolean;
 }
 
-function BashCallStep({ call, isLastStep, isHover }: BashCallStepProps) {
+function BashCallStep({
+  call,
+  isLastStep,
+  isHover,
+  stopped,
+}: BashCallStepProps) {
   const t = useTranslations("chat.messages.timeline");
 
   return (
     <StepContainer
-      stepIcon={bashStepIcon(call)}
+      stepIcon={bashStepIcon(call, stopped)}
       header={bashStepHeader(call, t)}
       isLastStep={isLastStep}
       isHover={isHover}
       collapsible={true}
       supportsCollapsible={true}
-      noPaddingRight={true}
     >
       <BashStepBody call={call} />
     </StepContainer>
@@ -241,7 +241,8 @@ function renderAgentStep(
   step: AgentStep,
   key: Key,
   isLastStep: boolean,
-  isHover: boolean
+  isHover: boolean,
+  stopped: boolean
 ): JSX.Element {
   return step.kind === "thinking" ? (
     <ThinkingStep
@@ -256,6 +257,7 @@ function renderAgentStep(
       call={step}
       isLastStep={isLastStep}
       isHover={isHover}
+      stopped={stopped}
     />
   );
 }
@@ -275,7 +277,7 @@ function CodingTaskStep({
 
   return (
     <StepContainer
-      stepIcon={SvgCircle}
+      stepIcon={STEP_ICONS.thinking}
       header={t("codingAgent.task.header")}
       collapsible={true}
       isLastStep={isLastStep}
@@ -302,7 +304,7 @@ function ResponseStep({ answer, isLastStep, isHover }: ResponseStepProps) {
 
   return (
     <StepContainer
-      stepIcon={SvgCheckCircle}
+      stepIcon={STEP_ICONS.done}
       header={t("codingAgent.response.header")}
       isLastStep={isLastStep}
       isHover={isHover}
@@ -422,7 +424,13 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
     }
     if (latestStep) {
       return wrap(
-        renderAgentStep(latestStep, "latest", lastStepIsActive, isHover)
+        renderAgentStep(
+          latestStep,
+          "latest",
+          lastStepIsActive,
+          isHover,
+          stopPacketSeen
+        )
       );
     }
     if (startPacket) {
@@ -451,7 +459,8 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
           step,
           idx,
           lastStepIsActive && idx === steps.length - 1 && !finalPacket,
-          isHover
+          isHover,
+          stopPacketSeen
         )
       )}
       {finalPacket && (

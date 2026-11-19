@@ -21,6 +21,7 @@ from onyx.llm.model_response import (
     StreamingChoice,
     from_litellm_model_response,
     from_litellm_model_response_stream,
+    recover_tool_calls,
     to_assistant_message,
 )
 from onyx.llm.model_response import ChatCompletionMessageToolCall as WireToolCall
@@ -31,6 +32,7 @@ from onyx.llm.models import (
     GenerationOptions,
     GenerationRequest,
     RedactedThinkingBlock,
+    TextContent,
     TextDeltaEvent,
     ThinkingBlock,
     ThinkingDeltaEvent,
@@ -701,6 +703,62 @@ def test_disabled_recovery_preserves_literal_xml(mode: str) -> None:
     )
     assert message.text == complete.text == text
     assert message.tool_calls == []
+
+
+@pytest.mark.parametrize(
+    ("request_choice", "sent_choice"),
+    [(ToolChoiceOptions.AUTO, None), (ToolChoiceOptions.NONE, ToolChoiceOptions.AUTO)],
+)
+def test_xml_without_a_recovered_call_stays_in_the_answer(
+    request_choice: ToolChoiceOptions, sent_choice: ToolChoiceOptions | None
+) -> None:
+    text = (
+        'Before <function_calls><invoke name="unknown"></invoke></function_calls>'
+        ' {"name": ["search"]} after'
+    )
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})],
+        options=GenerationOptions(tool_choice=request_choice),
+    )
+    accumulator = MessageAccumulator(request.tools)
+    events = list(
+        accumulator.consume(
+            iter(
+                [
+                    _stream_chunk(Delta(content=text[i : i + 9]))
+                    for i in range(0, len(text), 9)
+                ]
+            ),
+            request,
+            sent_choice,
+        )
+    )
+    events.extend(accumulator.end())
+    message = collect_generation(events)
+    complete = to_assistant_message(
+        ModelResponse(
+            id="test", created="1", choice=Choice(message=ResponseMessage(content=text))
+        ),
+        request,
+        sent_choice,
+    )
+    assert message.text == complete.text == text
+    assert message.tool_calls == complete.tool_calls == []
+
+
+def test_non_string_json_names_do_not_block_xml_recovery() -> None:
+    text = (
+        '{"name": ["search"]} {"function": {"name": {"x": 1}}}'
+        '<function_calls><invoke name="search"></invoke></function_calls>'
+    )
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})],
+        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+    )
+    message = recover_tool_calls(
+        AssistantMessage(content=[TextContent(text=text)]), request
+    )
+    assert [call.name for call in message.tool_calls] == ["search"]
 
 
 def test_thinking_fragments_form_signed_blocks_for_replay() -> None:
