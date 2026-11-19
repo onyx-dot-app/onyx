@@ -366,12 +366,22 @@ pub fn watch_load(app: &AppHandle, url: &Url) {
             if finished && !matches!(reason, Unreachable::ServerError { .. }) {
                 return;
             }
+            // wry reports iframe navigations here too, so recovery reopens
+            // the window's own document, not the URL this check started for.
+            let path = top_level_path(&app, &server).unwrap_or(path);
             if let Err(e) = show(&app, &path, reason, epoch) {
                 log::warn!("the main window keeps the failed page: {e}");
             }
             return;
         }
     });
+}
+
+/// The path of the main window's document, if it is on `server`.
+fn top_level_path(app: &AppHandle, server: &str) -> Option<String> {
+    let url = app.get_webview_window(main_window::LABEL)?.url().ok()?;
+    let server = Url::parse(server).ok()?;
+    (url.origin() == server.origin()).then(|| path_of(&url))
 }
 
 /// The main window committed a new document (`PageLoadEvent::Started`).
