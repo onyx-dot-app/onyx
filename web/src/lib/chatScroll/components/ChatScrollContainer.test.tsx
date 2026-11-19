@@ -1,21 +1,8 @@
-import { createRef, useLayoutEffect } from "react";
+import { createRef } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/lib/chatScroll/components/ChatScrollContainer";
-import { useScrollContainer } from "@/lib/chatScroll/components/ScrollContainerContext";
-
-interface SpacerProps {
-  height: number;
-}
-
-function Spacer({ height }: SpacerProps) {
-  const { spacerHeightRef } = useScrollContainer();
-  useLayoutEffect(() => {
-    spacerHeightRef.current = height;
-  }, [height, spacerHeightRef]);
-  return null;
-}
 
 const originalScrollTo = Object.getOwnPropertyDescriptor(
   HTMLElement.prototype,
@@ -42,7 +29,7 @@ test("mounting with auto-scroll enabled does not start an unrelated scroll", () 
   view.unmount();
 });
 
-describe.each([0, 200])("with spacer height %i", (spacerHeight) => {
+describe("following", () => {
   describe.each(["drain", "smooth", "both"])("%s pause", (pause) => {
     test.each([
       {
@@ -85,7 +72,7 @@ describe.each([0, 200])("with spacer height %i", (spacerHeight) => {
           });
         const message = (enabled: boolean, paused = false) => (
           <ChatScrollContainer autoScroll={enabled} pauseFollowing={paused}>
-            <Spacer height={spacerHeight} />
+            <div />
           </ChatScrollContainer>
         );
         // The typewriter's drain pauses following without turning it off.

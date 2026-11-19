@@ -63,6 +63,7 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import { messageRowId } from "@/lib/chat/rowIds";
+import { useScrollToNewTurn } from "@/lib/chatScroll/hooks";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/lib/chatScroll/components/ChatScrollContainer";
@@ -377,6 +378,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const anchorSelector = anchorMessage
     ? `#${messageRowId(anchorMessage)}`
     : undefined;
+  // A send glides to the new turn: its message at the top.
+  useScrollToNewTurn(
+    scrollContainerRef,
+    anchorSelector,
+    currentChatState === "loading"
+  );
 
   // Auto-scroll preference from user settings. Pause while the
   // typewriter is running its post-finish adaptive drain — the user is

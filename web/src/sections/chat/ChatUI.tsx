@@ -21,7 +21,6 @@ import { MultiModelResponse } from "@/app/app/message/types";
 import { getMultiModelResponses } from "@/app/app/message/multiModel";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
-import DynamicBottomSpacer from "@/lib/chatScroll/components/DynamicBottomSpacer";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
@@ -85,10 +84,8 @@ export interface ChatUIProps {
 
   onResubmit: () => void;
 
-  /**
-   * Node ID of the message to use as scroll anchor.
-   * Used by DynamicBottomSpacer to position the push-up effect.
-   */
+  /** Node ID of the latest user message, the scroll anchor. Its row stays
+   *  mounted. */
   anchorNodeId?: number;
 
   /** Currently selected models for multi-model comparison. */
@@ -290,11 +287,176 @@ const ChatUI = React.memo(
         savedRowMountEnd += 1;
       }
     }
-    const anchorMessage =
-      anchorNodeId === undefined
-        ? undefined
-        : messages.find((message) => message.nodeId === anchorNodeId);
-    const anchorRowId = anchorMessage ? messageRowId(anchorMessage) : undefined;
+
+    const renderRow = (message: Message, i: number) => {
+      const messageReactComponentKey = messageRowId(message);
+      const rowsFromEnd = messages.length - i;
+      const pinned =
+        rowsFromEnd <= PINNED_ROWS ||
+        message.is_generating ||
+        message.nodeId === anchorNodeId;
+      const initiallyMounted =
+        rowsFromEnd <= INITIALLY_MOUNTED_ROWS ||
+        (savedRowIndex >= 0 &&
+          i >= savedRowIndex - SAVED_ROW_NEIGHBORS &&
+          i <= savedRowMountEnd);
+      const parentMessage = message.parentNodeId
+        ? messageTree?.get(message.parentNodeId)
+        : null;
+      if (message.type === "user") {
+        const nextMessage = messages.length > i + 1 ? messages[i + 1] : null;
+        const multiModelResponses = getMultiModelResponsesForMessage(message);
+
+        return (
+          <WindowedRow
+            id={messageReactComponentKey}
+            key={messageReactComponentKey}
+            className="flex flex-col gap-12 w-full"
+            pinned={pinned}
+            initiallyMounted={initiallyMounted}
+            heightCache={rowHeightCache}
+          >
+            <div className={cn("w-full self-center", msgWidth)}>
+              <HumanMessage
+                disableSwitchingForStreaming={
+                  (nextMessage && nextMessage.is_generating) || false
+                }
+                stopGenerating={stopGenerating}
+                content={message.message}
+                files={message.files}
+                mentions={message.mentions}
+                messageId={message.messageId}
+                nodeId={message.nodeId}
+                onEdit={handleEditWithMessageId}
+                otherMessagesCanSwitchTo={
+                  parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                }
+                onMessageSelection={onMessageSelection}
+              />
+            </div>
+
+            {/* Multi-model responses use full width */}
+            {multiModelResponses && (
+              <MultiModelResponseView
+                responses={multiModelResponses}
+                chatState={{
+                  agent: activeAgent,
+                  docs: emptyDocs,
+                  citations: undefined,
+                  setPresentingDocument,
+                  overriddenModel: llmManager.currentLlm?.modelName,
+                }}
+                llmManager={llmManager}
+                onRegenerate={createRegenerator}
+                parentMessage={message}
+                otherMessagesCanSwitchTo={
+                  parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                }
+                onMessageSelection={onMessageSelection}
+                selectionDisabled={chatState !== "input"}
+              />
+            )}
+          </WindowedRow>
+        );
+      } else if (message.type === "agent_results") {
+        return (
+          <WindowedRow
+            id={messageReactComponentKey}
+            key={messageReactComponentKey}
+            className={cn("w-full self-center", msgWidth)}
+            pinned={pinned}
+            initiallyMounted={initiallyMounted}
+            heightCache={rowHeightCache}
+          >
+            <AgentResultsDivider />
+          </WindowedRow>
+        );
+      } else if (message.type === "assistant" || message.type === "error") {
+        const previousMessage = i !== 0 ? messages[i - 1] : null;
+
+        // Skip assistant messages already rendered in MultiModelResponseView
+        if (
+          previousMessage?.type === "user" &&
+          getMultiModelResponsesForMessage(previousMessage)
+        ) {
+          return null;
+        }
+
+        const chatStateData = {
+          agent: activeAgent,
+          docs: message.documents ?? emptyDocs,
+          citations: message.citations,
+          setPresentingDocument,
+          overriddenModel: llmManager.currentLlm?.modelName,
+          researchType: message.researchType,
+        };
+
+        return (
+          <WindowedRow
+            id={messageReactComponentKey}
+            key={messageReactComponentKey}
+            className={cn("w-full self-center", msgWidth)}
+            pinned={pinned}
+            initiallyMounted={initiallyMounted}
+            heightCache={rowHeightCache}
+          >
+            {(message.type !== "error" || message.packets.length > 0) && (
+              <AgentMessage
+                rawPackets={message.packets}
+                packetCount={message.packetCount}
+                restoredPacketCount={message.restoredPacketCount}
+                chatState={chatStateData}
+                nodeId={message.nodeId}
+                messageId={message.messageId}
+                currentFeedback={message.currentFeedback}
+                llmManager={llmManager}
+                otherMessagesCanSwitchTo={
+                  parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                }
+                onMessageSelection={onMessageSelection}
+                onRegenerate={createRegenerator}
+                parentMessage={previousMessage}
+                processingDurationSeconds={message.processingDurationSeconds}
+                hideFooter={message.type === "error"}
+                disableTTS={message.type === "error"}
+              />
+            )}
+            {message.type === "error" && (
+              <ErrorBanner
+                resubmit={
+                  chatState === "input" &&
+                  previousMessage?.type === "user" &&
+                  i === messages.length - 1
+                    ? onResubmit
+                    : undefined
+                }
+                error={message.errorMessage ?? ""}
+                errorCode={message.errorCode ?? undefined}
+                isRetryable={message.isRetryable ?? true}
+                details={message.errorDetails ?? undefined}
+                stackTrace={message.stackTrace}
+              />
+            )}
+          </WindowedRow>
+        );
+      }
+      return null;
+    };
+
+    // Each turn (a user message and its replies) is one group, so a row never
+    // changes parent when a turn arrives. The latest turn fills the viewport
+    // less the 1rem anchor offset and the list's 2rem bottom padding: at the
+    // end of the chat, its user message sits 1rem below the top. Pure layout,
+    // so it is the same in every browser and tab.
+    const turns: { key: string; start: number; end: number }[] = [];
+    messages.forEach((message, i) => {
+      const last = turns[turns.length - 1];
+      if (!last || message.type === "user") {
+        turns.push({ key: messageRowId(message), start: i, end: i + 1 });
+      } else {
+        last.end = i + 1;
+      }
+    });
 
     return (
       <>
@@ -308,167 +470,24 @@ const ChatUI = React.memo(
         >
           {hasOlderMessages && <OlderMessagesLoader className={msgWidth} />}
 
-          {messages.map((message, i) => {
-            const messageReactComponentKey = messageRowId(message);
-            const rowsFromEnd = messages.length - i;
-            const pinned =
-              rowsFromEnd <= PINNED_ROWS ||
-              message.is_generating ||
-              message.nodeId === anchorNodeId;
-            const initiallyMounted =
-              rowsFromEnd <= INITIALLY_MOUNTED_ROWS ||
-              (savedRowIndex >= 0 &&
-                i >= savedRowIndex - SAVED_ROW_NEIGHBORS &&
-                i <= savedRowMountEnd);
-            const parentMessage = message.parentNodeId
-              ? messageTree?.get(message.parentNodeId)
-              : null;
-            if (message.type === "user") {
-              const nextMessage =
-                messages.length > i + 1 ? messages[i + 1] : null;
-              const multiModelResponses =
-                getMultiModelResponsesForMessage(message);
-
-              return (
-                <WindowedRow
-                  id={messageReactComponentKey}
-                  key={messageReactComponentKey}
-                  className="flex flex-col gap-12 w-full"
-                  pinned={pinned}
-                  initiallyMounted={initiallyMounted}
-                  heightCache={rowHeightCache}
-                >
-                  <div className={cn("w-full self-center", msgWidth)}>
-                    <HumanMessage
-                      disableSwitchingForStreaming={
-                        (nextMessage && nextMessage.is_generating) || false
-                      }
-                      stopGenerating={stopGenerating}
-                      content={message.message}
-                      files={message.files}
-                      mentions={message.mentions}
-                      messageId={message.messageId}
-                      nodeId={message.nodeId}
-                      onEdit={handleEditWithMessageId}
-                      otherMessagesCanSwitchTo={
-                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                      }
-                      onMessageSelection={onMessageSelection}
-                    />
-                  </div>
-
-                  {/* Multi-model responses use full width */}
-                  {multiModelResponses && (
-                    <MultiModelResponseView
-                      responses={multiModelResponses}
-                      chatState={{
-                        agent: activeAgent,
-                        docs: emptyDocs,
-                        citations: undefined,
-                        setPresentingDocument,
-                        overriddenModel: llmManager.currentLlm?.modelName,
-                      }}
-                      llmManager={llmManager}
-                      onRegenerate={createRegenerator}
-                      parentMessage={message}
-                      otherMessagesCanSwitchTo={
-                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                      }
-                      onMessageSelection={onMessageSelection}
-                      selectionDisabled={chatState !== "input"}
-                    />
-                  )}
-                </WindowedRow>
-              );
-            } else if (message.type === "agent_results") {
-              return (
-                <WindowedRow
-                  id={messageReactComponentKey}
-                  key={messageReactComponentKey}
-                  className={cn("w-full self-center", msgWidth)}
-                  pinned={pinned}
-                  initiallyMounted={initiallyMounted}
-                  heightCache={rowHeightCache}
-                >
-                  <AgentResultsDivider />
-                </WindowedRow>
-              );
-            } else if (
-              message.type === "assistant" ||
-              message.type === "error"
-            ) {
-              const previousMessage = i !== 0 ? messages[i - 1] : null;
-
-              // Skip assistant messages already rendered in MultiModelResponseView
-              if (
-                previousMessage?.type === "user" &&
-                getMultiModelResponsesForMessage(previousMessage)
-              ) {
-                return null;
+          {turns.map((turn, turnIndex) => (
+            <div
+              key={turn.key}
+              data-chat-turn
+              className="flex flex-col w-full gap-12"
+              style={
+                turnIndex === turns.length - 1
+                  ? { minHeight: "calc(100cqh - 3rem)" }
+                  : undefined
               }
-
-              const chatStateData = {
-                agent: activeAgent,
-                docs: message.documents ?? emptyDocs,
-                citations: message.citations,
-                setPresentingDocument,
-                overriddenModel: llmManager.currentLlm?.modelName,
-                researchType: message.researchType,
-              };
-
-              return (
-                <WindowedRow
-                  id={messageReactComponentKey}
-                  key={messageReactComponentKey}
-                  className={cn("w-full self-center", msgWidth)}
-                  pinned={pinned}
-                  initiallyMounted={initiallyMounted}
-                  heightCache={rowHeightCache}
-                >
-                  {(message.type !== "error" || message.packets.length > 0) && (
-                    <AgentMessage
-                      rawPackets={message.packets}
-                      packetCount={message.packetCount}
-                      restoredPacketCount={message.restoredPacketCount}
-                      chatState={chatStateData}
-                      nodeId={message.nodeId}
-                      messageId={message.messageId}
-                      currentFeedback={message.currentFeedback}
-                      llmManager={llmManager}
-                      otherMessagesCanSwitchTo={
-                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                      }
-                      onMessageSelection={onMessageSelection}
-                      onRegenerate={createRegenerator}
-                      parentMessage={previousMessage}
-                      processingDurationSeconds={
-                        message.processingDurationSeconds
-                      }
-                      hideFooter={message.type === "error"}
-                      disableTTS={message.type === "error"}
-                    />
-                  )}
-                  {message.type === "error" && (
-                    <ErrorBanner
-                      resubmit={
-                        chatState === "input" &&
-                        previousMessage?.type === "user" &&
-                        i === messages.length - 1
-                          ? onResubmit
-                          : undefined
-                      }
-                      error={message.errorMessage ?? ""}
-                      errorCode={message.errorCode ?? undefined}
-                      isRetryable={message.isRetryable ?? true}
-                      details={message.errorDetails ?? undefined}
-                      stackTrace={message.stackTrace}
-                    />
-                  )}
-                </WindowedRow>
-              );
-            }
-            return null;
-          })}
+            >
+              {messages
+                .slice(turn.start, turn.end)
+                .map((message, offset) =>
+                  renderRow(message, turn.start + offset)
+                )}
+            </div>
+          ))}
 
           {/* Approval and question cards that wait for the user follow the
               last message. */}
@@ -503,8 +522,6 @@ const ChatUI = React.memo(
             </div>
           )}
         </div>
-        {/* Dynamic spacer for "fresh chat" effect - pushes content up when new message is sent */}
-        <DynamicBottomSpacer anchorRowId={anchorRowId} />
       </>
     );
   }

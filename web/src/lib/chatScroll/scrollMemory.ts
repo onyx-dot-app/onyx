@@ -10,8 +10,6 @@ export type SavedChatPosition =
 
 export interface ChatScrollMemory {
   position: SavedChatPosition | null;
-  /** Row id of the anchor whose turn has space below it. */
-  spaceAnchorRowId: string | null;
   /** Last measured height of each row, by row id, so a chat opened again
    *  lays out its windowed rows at their real heights. */
   rowHeights: Map<string, number>;
@@ -24,7 +22,6 @@ export function getChatScrollMemory(sessionId: string): ChatScrollMemory {
   if (existing) return existing;
   const memory: ChatScrollMemory = {
     position: null,
-    spaceAnchorRowId: null,
     rowHeights: new Map(),
   };
   memories.set(sessionId, memory);

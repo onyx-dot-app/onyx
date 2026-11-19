@@ -99,8 +99,8 @@ const SCROLL_KEYS = new Set([
   " ",
 ]);
 
-// Following new content scrolls to the real end, spacer included. So only
-// that end counts as "at bottom" for following.
+// Following new content scrolls to the real end, the latest turn's unfilled
+// space included. So only that end counts as "at bottom" for following.
 function isAtScrollEnd(container: HTMLElement, thresholdPx: number): boolean {
   return (
     container.scrollHeight - container.clientHeight - container.scrollTop <=
@@ -158,8 +158,6 @@ const ChatScrollContainer = React.memo(
       const buttonThresholdPx = DEFAULT_BUTTON_THRESHOLD_PX;
       const scrollContainerRef = useRef<HTMLDivElement>(null);
       const contentWrapperRef = useRef<HTMLDivElement>(null);
-      const spacerHeightRef = useRef(0);
-      const spaceRestoreRef = useRef<(() => void) | null>(null);
       const endDivRef = useRef<HTMLDivElement>(null);
       const scrolledForSessionRef = useRef<string | null>(null);
       const prevAnchorSelectorRef = useRef<string | null>(null);
@@ -227,7 +225,7 @@ const ChatScrollContainer = React.memo(
             (isAtBottomRef.current && autoScrollRef.current) ||
             // 2px: a fractional scrollTop (Firefox) can sit just short of
             // the rounded end.
-            (isAtScrollEnd(container, 2) && spacerHeightRef.current === 0);
+            isAtScrollEnd(container, 2);
           if (atEnd) {
             memory.position = { kind: "end" };
             return;
@@ -248,10 +246,22 @@ const ChatScrollContainer = React.memo(
           };
         }
 
-        // Exclude the dynamic spacer — it's cosmetic (push-up effect) and
-        // shouldn't make the system think there's real content below the viewport.
-        const contentEnd =
-          endDivRef.current.offsetTop - spacerHeightRef.current;
+        // Exclude the latest turn's unfilled space (its min-height): it is
+        // layout, not content below the viewport.
+        let unfilled = 0;
+        const turns =
+          container.querySelectorAll<HTMLElement>("[data-chat-turn]");
+        const lastTurn = turns.item(turns.length - 1);
+        const lastRow = lastTurn?.lastElementChild;
+        if (lastTurn && lastRow instanceof HTMLElement) {
+          unfilled = Math.max(
+            0,
+            lastTurn.offsetTop +
+              lastTurn.offsetHeight -
+              (lastRow.offsetTop + lastRow.offsetHeight)
+          );
+        }
+        const contentEnd = endDivRef.current.offsetTop - unfilled;
         // A footer inside the scroll element (a sticky composer) covers the
         // bottom of the viewport.
         let footerHeight = 0;
@@ -377,12 +387,7 @@ const ChatScrollContainer = React.memo(
       useEffect(() => {
         const resumed = followingNow && !previousFollowingRef.current;
         previousFollowingRef.current = followingNow;
-        if (
-          resumed &&
-          isAtBottomRef.current &&
-          !isAutoScrollingRef.current &&
-          scrollContainerRef.current?.dataset.smoothScrollActive !== "true"
-        ) {
+        if (resumed && isAtBottomRef.current && !isAutoScrollingRef.current) {
           scrollToBottom("instant");
         }
       }, [followingNow, scrollToBottom]);
@@ -423,7 +428,7 @@ const ChatScrollContainer = React.memo(
         }
 
         // Only upward movement can stop following new content. Measure from
-        // the real end: the spacer below a new message hides no content, but
+        // the real end: the latest turn's unfilled space hides no content, but
         // following would still pull the user back down through it.
         const atScrollEnd = isAtScrollEnd(container, buttonThresholdPx);
         // An upward move counts as the user's only right after their scroll
@@ -433,9 +438,7 @@ const ChatScrollContainer = React.memo(
           pointerHeldRef.current ||
           performance.now() - userInputAtRef.current < USER_INPUT_WINDOW_MS;
         // This view's own smooth scrolls move without user input too.
-        const ownGlide =
-          performance.now() < anchorGlideUntilRef.current ||
-          container.dataset.smoothScrollActive === "true";
+        const ownGlide = performance.now() < anchorGlideUntilRef.current;
         if (scrolledUp && !byUser && ownGlide) {
           // Neither the user nor layout: leave the glide alone.
         } else if (scrolledUp && !byUser) {
@@ -535,20 +538,13 @@ const ChatScrollContainer = React.memo(
             // Capture whether we were at bottom BEFORE content changed
             const wasAtBottom = isAtBottomRef.current;
 
-            // Auto-scroll: follow content if we were at bottom.
-            // Skip instant auto-scroll during DynamicBottomSpacer's smooth
-            // scroll to avoid competing scroll commands.
-            // Skip it during a smooth scroll to the bottom too: an instant
-            // scroll would cut it short.
+            // Auto-scroll: follow content if we were at bottom. Skip it during
+            // a smooth scroll to the bottom: an instant scroll would cut it
+            // short.
             const following =
               (autoScrollRef.current && !pauseFollowingRef.current) ||
               performance.now() < followOpeningUntilRef.current;
-            if (
-              following &&
-              wasAtBottom &&
-              !isAutoScrollingRef.current &&
-              container.dataset.smoothScrollActive !== "true"
-            ) {
+            if (following && wasAtBottom && !isAutoScrollingRef.current) {
               // scrollToBottom handles isAutoScrollingRef and ref updates
               scrollToBottom("instant");
             } else if (
@@ -556,8 +552,7 @@ const ChatScrollContainer = React.memo(
               // the bottom must catch up when the pause ends.
               !autoScrollRef.current &&
               !following &&
-              !isAutoScrollingRef.current &&
-              container.dataset.smoothScrollActive !== "true"
+              !isAutoScrollingRef.current
             ) {
               // Not following, so growth leaves the end behind: the view is
               // no longer at the bottom, and a later resume must not jump.
@@ -663,7 +658,7 @@ const ChatScrollContainer = React.memo(
         // A new anchor while the user reads elsewhere, with auto-scroll off,
         // or during a pause (a refresh brought in a turn from another tab;
         // the typewriter's drain): keep their
-        // position. A send anchors through DynamicBottomSpacer, and a
+        // position. A send scrolls through useScrollToNewTurn, and a
         // following view still moves.
         if (
           !isLoadingExistingContent &&
@@ -677,17 +672,6 @@ const ChatScrollContainer = React.memo(
         const behavior: ScrollBehavior = isLoadingExistingContent
           ? "instant"
           : "smooth";
-
-        // Refit the reopened chat's remembered space first: the saved
-        // position may sit inside it. The spacer cannot measure in its own
-        // layout effect, which runs before this element's ref attaches.
-        if (isLoadingExistingContent) {
-          spaceRestoreRef.current?.();
-          spaceRestoreRef.current = null;
-        }
-
-        // Reopening a chat: return to its saved row when that row is loaded.
-        // Only rows already loaded count, so opening never waits.
         const saved =
           isLoadingExistingContent && sessionId
             ? getChatScrollMemory(sessionId).position
@@ -784,7 +768,8 @@ const ChatScrollContainer = React.memo(
             className={
               scrollClassName ??
               cn(
-                "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden",
+                // A size container: the latest turn's min-height is in cqh.
+                "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden [container-type:size]",
                 hideScrollbar ? "no-scrollbar" : "default-scrollbar",
                 // Full-width (always the case below md) drops the reserved
                 // gutters so content sits flush with the chat edge; centered
@@ -820,9 +805,7 @@ const ChatScrollContainer = React.memo(
               <ScrollContainerProvider
                 scrollContainerRef={scrollContainerRef}
                 contentWrapperRef={contentWrapperRef}
-                spacerHeightRef={spacerHeightRef}
                 sessionId={sessionId}
-                spaceRestoreRef={spaceRestoreRef}
               >
                 {children}
               </ScrollContainerProvider>

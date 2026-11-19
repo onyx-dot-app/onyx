@@ -124,7 +124,7 @@ test.describe("Chat Scroll Behavior", () => {
     await sendMessage(page, "Another message to test scrolling behavior");
 
     // The scroll container should settle at the bottom. Poll because the
-    // DynamicBottomSpacer's ~600ms smooth scroll and streaming-driven spacer
+    // send's smooth scroll to the new turn and streaming-driven layout
     // resizes are still in flight when sendMessage resolves.
     const scrollContainer = getScrollContainer(page);
     await expect
@@ -140,13 +140,13 @@ test.describe("Chat Scroll Behavior", () => {
 });
 
 /**
- * Tests for the Dynamic Bottom Spacer feature.
+ * Tests for turn anchoring.
  *
- * The DynamicBottomSpacer creates a "fresh chat" effect where new messages
+ * The latest turn's min-height creates a "fresh chat" effect where new messages
  * appear at the top of the viewport (below the header), giving each exchange
  * a clean slate appearance while preserving scroll-up access to history.
  */
-test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
+test.describe("Turn anchoring - Fresh Chat Effect", () => {
   test.describe.configure({ mode: "serial" });
 
   test.beforeEach(async ({ page }) => {
@@ -217,19 +217,29 @@ test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
       .toBeLessThan(150);
   });
 
-  test("Dynamic spacer element exists and has correct attributes", async ({
+  test("A reloaded chat keeps the space below its latest turn", async ({
     page,
   }) => {
-    // Send a message to start a conversation
+    // The space is layout (the latest turn's min-height), not a side effect
+    // of sending, so a chat opened without a send has it too.
     await sendMessage(page, "Test message to initialize chat");
-
-    // Send a follow-up to trigger the spacer
     await sendMessage(page, "Follow-up message");
+    await page.reload();
+    await page.locator('[data-scroll-ready="true"]').waitFor();
 
-    // Verify the dynamic spacer element exists with correct attributes
-    const spacer = page.locator('[data-dynamic-spacer="true"]');
-    await expect(spacer).toBeVisible({ timeout: 10000 });
-    await expect(spacer).toHaveAttribute("aria-hidden", "true");
+    const lastUserMessage = page.locator("#onyx-human-message").last();
+    await expect
+      .poll(
+        async () => {
+          const position = await getElementPositionInContainer(
+            page,
+            lastUserMessage
+          );
+          return position?.topOffset ?? Number.POSITIVE_INFINITY;
+        },
+        { timeout: 5000 }
+      )
+      .toBeLessThan(150);
   });
 
   test("User can scroll up to see previous messages after fresh chat effect", async ({

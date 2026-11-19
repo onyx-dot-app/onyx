@@ -6,10 +6,6 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import type { BackendMessage, Message } from "@/app/app/types";
 import type { Packet } from "@/app/app/services/streamingModels";
 
-jest.mock("@/lib/chatScroll/components/DynamicBottomSpacer", () => ({
-  __esModule: true,
-  default: () => null,
-}));
 jest.mock("@/providers/VoiceModeProvider", () => ({
   useVoiceMode: () => ({
     resetTTS: jest.fn(),
