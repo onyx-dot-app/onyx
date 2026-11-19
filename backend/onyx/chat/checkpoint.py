@@ -24,6 +24,7 @@ from onyx.chat.models import (
     CheckpointBinding,
     CheckpointPayload,
     CheckpointToolAnswer,
+    LegacyToolRendering,
     MessagePayload,
     MessageRendering,
     PromptMetadata,
@@ -85,7 +86,9 @@ class CheckpointSerializer:
     def encode_payload(self, value: BaseModel | None) -> JsonValue:
         if value is None:
             return None
-        tag = self._tags.get(type(value))
+        tag = self._tags.get(
+            MessageRendering if isinstance(value, LegacyToolRendering) else type(value)
+        )
         if tag is None:
             raise ValueError("Checkpoint contains an unregistered payload type")
         if isinstance(value, PromptMetadata):

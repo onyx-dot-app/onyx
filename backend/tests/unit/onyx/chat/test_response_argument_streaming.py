@@ -9,7 +9,10 @@ from onyx.agents.models import ExecutionStatus, RunStatus, StepRecord
 from onyx.chat.models import MessageRendering, PresentationMode, ResponseRecord
 from onyx.chat.presentation import replay_response
 from onyx.chat.renderer import MessageRenderer, ResponseLayout
-from onyx.chat.response import tool_arguments_for_display
+from onyx.chat.response import (
+    historical_message_for_display,
+    tool_arguments_for_display,
+)
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -203,14 +206,16 @@ def test_invalid_python_arguments_stop_display_but_retain_raw_input() -> None:
 
 def test_replay_reads_interrupted_reasoning_from_legacy_tool_arguments() -> None:
     accumulator = MessageAccumulator()
-    settings = MessageRendering(think_tool="think")
+    settings = MessageRendering.model_validate(
+        {"mode": "answer", "text_as_thinking": True, "think_tool": "think_tool"}
+    )
     accepted = AssistantMessage()
     for fragment in ['{"reasoning":"check ', "the sources"]:
-        for event in accumulator.add(chunk(fragment, name="think")):
+        for event in accumulator.add(chunk(fragment, name="think_tool")):
             apply_generation_event(accepted, event)
     saved = AssistantMessage.model_validate_json(accepted.model_dump_json())
     replay = MessageRenderer(settings, {}, ResponseLayout())
-    replay.complete(saved)
+    replay.complete(historical_message_for_display(saved, settings))
     assert replay.reasoning == "check the sources"
     assert tool_arguments_for_display(saved.tool_calls[0]) == {
         "reasoning": "check the sources"

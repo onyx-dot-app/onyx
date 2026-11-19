@@ -35,6 +35,7 @@ from onyx.chat.models import (
     ChatMessageMetadata,
     ChatResponseSnapshot,
     CitationMode,
+    LegacyToolRendering,
     MessageRendering,
     PresentationMode,
     ResponseRecord,
@@ -47,7 +48,6 @@ from onyx.chat.models import (
 )
 from onyx.chat.renderer import (
     HIDDEN_TOOLS,
-    LEGACY_THINK_TOOL_NAME,
     MessageRenderer,
     ResponseLayout,
     ToolRenderer,
@@ -55,7 +55,11 @@ from onyx.chat.renderer import (
     question_resolved,
     tool_renderer,
 )
-from onyx.chat.response import response_record, tool_arguments_for_display
+from onyx.chat.response import (
+    historical_message_for_display,
+    response_record,
+    tool_arguments_for_display,
+)
 from onyx.chat.tool_approvals import ended_answer
 from onyx.chat.tool_questions import question_answer
 from onyx.chat.tool_results import (
@@ -229,6 +233,13 @@ def _tool_record(
     )
 
 
+def _default_rendering(mode: PresentationMode) -> MessageRendering:
+    # Current coding steps always supply their own rendering metadata.
+    if mode == PresentationMode.CODING_THINKING:
+        return LegacyToolRendering(mode=mode)
+    return MessageRendering(mode=mode)
+
+
 def message_presentation(
     metadata: BaseModel | None,
     *,
@@ -237,8 +248,8 @@ def message_presentation(
     """Resolve feature metadata into display settings retained for history replay."""
     if isinstance(metadata, MessageRendering):
         return metadata.model_copy(deep=True)
-    presentation = MessageRendering(
-        mode=PresentationMode.CODING_THINKING
+    presentation = _default_rendering(
+        PresentationMode.CODING_THINKING
         if parent_tool_name == CODING_AGENT_TOOL_NAME
         else PresentationMode.ANSWER,
     )
@@ -259,9 +270,12 @@ def message_presentation(
         if metadata.phase == ResearchPhase.PLANNING:
             presentation.mode = PresentationMode.PLAN
         elif metadata.phase == ResearchPhase.RESEARCH:
-            presentation.text_as_thinking = True
+            presentation.mode = PresentationMode.RESEARCH
             if metadata.is_reasoning_model is False:
-                presentation.think_tool = LEGACY_THINK_TOOL_NAME
+                return LegacyToolRendering(
+                    mode=PresentationMode.RESEARCH,
+                    pre_answer_seconds=metadata.elapsed_seconds,
+                )
         elif metadata.phase == ResearchPhase.REPORT:
             presentation.mode = (
                 PresentationMode.REPORT
@@ -365,7 +379,10 @@ def _project_response_display(
                 parent_tool_name=parent_tool_name,
             )
             presentation[message_id] = setting
-            if node is not snapshot or setting.mode != PresentationMode.ANSWER:
+            if node is not snapshot or setting.mode not in (
+                PresentationMode.ANSWER,
+                PresentationMode.RESEARCH,
+            ):
                 continue
             renderer = MessageRenderer(
                 setting,
@@ -373,7 +390,7 @@ def _project_response_display(
                 ResponseLayout(),
             )
             is_answer = step_index == node.answer_step_index
-            renderer.complete(message)
+            renderer.complete(historical_message_for_display(message, setting))
             if not is_answer and snapshot.status == RunStatus.COMPLETE:
                 continue
             response = response.model_copy(
@@ -501,8 +518,7 @@ class ResponsePresenter:
             calls = [
                 call
                 for call in event.message.tool_calls
-                if call.name != renderer.settings.think_tool
-                and call.name not in HIDDEN_TOOLS
+                if call.name not in HIDDEN_TOOLS
             ]
             for call in calls:
                 tool_placement = renderer.tool_placement(call.id)
@@ -611,14 +627,11 @@ def replay_response(
         packets.extend(user_message_packets(step.input_messages, layout, parent))
         message = step.message
         message_id = _message_identity(message)
-        setting = settings.get(message_id, MessageRendering(mode=default_mode))
+        setting = settings.get(message_id) or _default_rendering(default_mode)
         renderer = MessageRenderer(setting, documents, layout, parent)
+        message = historical_message_for_display(message, setting)
         packets.extend(renderer.complete(message))
-        calls = [
-            call
-            for call in message.tool_calls
-            if call.name not in HIDDEN_TOOLS and call.name != setting.think_tool
-        ]
+        calls = [call for call in message.tool_calls if call.name not in HIDDEN_TOOLS]
         if not calls:
             continue
         for call in calls:

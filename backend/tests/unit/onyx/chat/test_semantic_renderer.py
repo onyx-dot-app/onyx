@@ -36,7 +36,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
 from onyx.chat.renderer import MessageRenderer, ResponseLayout, ToolRenderer
-from onyx.chat.response import response_record, tool_arguments_for_display
+from onyx.chat.response import response_record
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.configs.constants import DocumentSource
@@ -698,7 +698,7 @@ def test_invalid_tool_arguments_replay_the_error_and_later_answer(
 
 
 @pytest.mark.parametrize("reasoning", ["Reasoning", []])
-def test_replay_hides_configured_thinking_tool(reasoning: str | list[str]) -> None:
+def test_replay_reads_historical_research_reasoning(reasoning: str | list[str]) -> None:
     response = ResponseRecord(
         run_id="r",
         status=RunStatus.COMPLETE,
@@ -709,7 +709,7 @@ def test_replay_hides_configured_thinking_tool(reasoning: str | list[str]) -> No
                     content=[
                         ToolCall(
                             id="think",
-                            name="think",
+                            name="think_tool",
                             arguments={"reasoning": reasoning},
                         )
                     ],
@@ -719,10 +719,52 @@ def test_replay_hides_configured_thinking_tool(reasoning: str | list[str]) -> No
         ],
     )
     packets = replay_response(
-        response, {}, {"m": MessageRendering(think_tool="think")}, {}
+        response,
+        {},
+        {
+            "m": MessageRendering.model_validate(
+                {"mode": "answer", "text_as_thinking": True, "think_tool": "think_tool"}
+            )
+        },
+        {},
     )
     assert not any(isinstance(p.obj, CustomToolStart) for p in packets)
     assert any(p.obj.type == "reasoning_delta" for p in packets) == bool(reasoning)
+
+
+def test_research_replay_keeps_a_rejected_call_out_of_reasoning() -> None:
+    call = ToolCall(
+        id="rejected", name="think_tool", arguments={"reasoning": "discarded"}
+    )
+    response = ResponseRecord(
+        run_id="r",
+        status=RunStatus.COMPLETE,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(id="m", content=[call]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    call.id: ToolExecutionRecord(
+                        status=ExecutionStatus.ERROR,
+                        result=ToolResultMessage(
+                            tool_call_id=call.id,
+                            tool_name=call.name,
+                            content="Unknown tool",
+                            is_error=True,
+                        ),
+                    )
+                },
+            )
+        ],
+    )
+    saved = MessageRendering(mode=PresentationMode.RESEARCH).model_dump(mode="json")
+    assert saved["mode"] == "answer" and saved["text_as_thinking"] is True
+    assert "think_tool" not in saved
+    settings = MessageRendering.model_validate(saved)
+    assert settings.mode == PresentationMode.RESEARCH
+    packets = replay_response(response, {}, {"m": settings}, {})
+    assert any(isinstance(p.obj, CustomToolStart) for p in packets)
+    assert not any(isinstance(p.obj, ReasoningDelta) for p in packets)
 
 
 @pytest.mark.parametrize("status", [RunStatus.ERROR, RunStatus.CANCELLED])
@@ -769,19 +811,51 @@ def test_interrupted_answer_citations_belong_to_the_selected_text(
     assert response.citation_info == []
 
 
-@pytest.mark.parametrize("live", [False, True])
-@pytest.mark.parametrize("tool_thinking", [False, True])
+def test_coding_child_replay_without_saved_settings_preserves_reasoning() -> None:
+    message = AssistantMessage(
+        id="old",
+        content=[
+            ToolCall(id="t", name="think_tool", arguments={"reasoning": "Inspect"})
+        ],
+    )
+    response = ResponseRecord(
+        run_id="child",
+        parent_run_id="root",
+        status=RunStatus.COMPLETE,
+        steps=[StepRecord(message=message, generation_status=ExecutionStatus.COMPLETE)],
+    )
+    packets = replay_response(
+        response,
+        {},
+        {},
+        {},
+        parent=Placement(turn_index=0),
+        default_mode=PresentationMode.CODING_THINKING,
+    )
+    assert [
+        p.obj.content for p in packets if isinstance(p.obj, CodingAgentThinkingDelta)
+    ] == ["Inspect"]
+    assert not any(isinstance(p.obj, CustomToolStart) for p in packets)
+
+
+@pytest.mark.parametrize(
+    ("live", "tool_thinking"), [(True, False), (False, False), (False, True)]
+)
 @pytest.mark.parametrize(
     "mode", [PresentationMode.CODING_THINKING, PresentationMode.CODING_ANSWER]
 )
 def test_coding_thinking_uses_coding_packets(
     live: bool, tool_thinking: bool, mode: PresentationMode
 ) -> None:
-    settings = MessageRendering(mode=mode, think_tool="think")
+    settings = MessageRendering.model_validate(
+        {"mode": mode, "think_tool": "think_tool"} if tool_thinking else {"mode": mode}
+    )
     message = AssistantMessage(
         id="m",
         content=[
-            ToolCall(id="t", name="think", arguments={"reasoning": "Inspect the code"})
+            ToolCall(
+                id="t", name="think_tool", arguments={"reasoning": "Inspect the code"}
+            )
             if tool_thinking
             else ThinkingContent(text="Inspect the code")
         ],
@@ -789,20 +863,9 @@ def test_coding_thinking_uses_coding_packets(
     parent = Placement(turn_index=3, tab_index=1)
     if live:
         renderer = MessageRenderer(settings, {}, ResponseLayout(), parent)
-        if tool_thinking:
-            call = message.tool_calls[0]
-            output = renderer.consume(
-                ToolCallStartEvent(
-                    content_index=0, tool_call_id=call.id, tool_name=call.name
-                )
-            )
-            output.extend(
-                renderer.consume(ToolCallEndEvent(content_index=0, tool_call=call))
-            )
-        else:
-            output = renderer.consume(
-                ThinkingDeltaEvent(content_index=0, text="Inspect the code")
-            )
+        output = renderer.consume(
+            ThinkingDeltaEvent(content_index=0, text="Inspect the code")
+        )
         output.extend(renderer.complete(message))
     else:
         output = replay_response(
@@ -1066,36 +1129,17 @@ def test_tool_errors_only_display_explicit_public_details(
 
 
 @pytest.mark.parametrize("live", [False, True])
-def test_completion_batches_content_and_decodes_thinking_once(
-    live: bool, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    decoded_calls: list[str] = []
-
-    def decode(call: ToolCall) -> dict[str, JsonValue]:
-        decoded_calls.append(call.id)
-        return tool_arguments_for_display(call)
-
-    monkeypatch.setattr("onyx.chat.response.tool_arguments_for_display", decode)
-    think = ToolCall(
-        id="think",
-        name="think",
-        arguments={},
-        raw_arguments='{"reasoning":"' + "r" * 128,
-        arguments_complete=False,
-    )
+def test_completion_batches_content(live: bool) -> None:
     tool = ToolCall(id="lookup", name="lookup", arguments={})
     message = AssistantMessage(
         content=[
-            *[ThinkingContent(text="r") for _ in range(128)],
-            think,
+            *[ThinkingContent(text="r") for _ in range(256)],
             *[TextContent(text="a") for _ in range(128)],
             tool,
             *[TextContent(text="b") for _ in range(128)],
         ]
     )
-    renderer = MessageRenderer(
-        MessageRendering(think_tool="think"), {}, ResponseLayout()
-    )
+    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
     output: list[Packet] = []
     if live:
         output.extend(
@@ -1103,7 +1147,6 @@ def test_completion_batches_content_and_decodes_thinking_once(
         )
     output.extend(renderer.complete(message))
     assert renderer.complete(message) == []
-    assert decoded_calls == ["think"]
     assert renderer.reasoning == "r" * 256
     assert renderer.answer == "a" * 128 + "b" * 128
     assert [
@@ -1122,8 +1165,6 @@ def test_completion_batches_content_and_decodes_thinking_once(
     assert (
         renderer.tool_placement(tool.id).turn_index > answer_start.placement.turn_index
     )
-    assert think.arguments == {}
-    assert len(message.content) == 386
 
 
 @pytest.mark.parametrize("public_error", [False, True])

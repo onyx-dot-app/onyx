@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 
-from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
+from pydantic import BaseModel, JsonValue
 
 from onyx.agents.compaction import is_input_context
 from onyx.agents.models import (
@@ -12,14 +12,18 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.chat.models import ChatMessageMetadata, MessageRendering, ResponseRecord
+from onyx.chat.models import (
+    ChatMessageMetadata,
+    LegacyToolRendering,
+    MessageRendering,
+    ResponseRecord,
+)
 from onyx.chat.tool_results import restored_result_details, saved_result_details
 from onyx.context.search.models import SearchDoc
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import (
     AssistantMessage,
     Message,
-    TextContent,
     ThinkingContent,
     ToolCall,
     ToolResultMessage,
@@ -28,7 +32,6 @@ from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.utils.logger import setup_logger
 from onyx.utils.streaming_json import parse_partial_object
 
-_STRING = TypeAdapter(str)
 logger = setup_logger()
 
 
@@ -43,32 +46,22 @@ def tool_arguments_for_display(call: ToolCall) -> dict[str, JsonValue]:
         return call.arguments
 
 
-def thinking_tool_text(call: ToolCall) -> str:
-    try:
-        return _STRING.validate_python(
-            tool_arguments_for_display(call).get("reasoning", "")
-        )
-    except ValidationError:
-        logger.debug("Thinking tool arguments are not text", exc_info=True)
-        return ""
+def historical_message_for_display(
+    message: AssistantMessage, settings: MessageRendering
+) -> AssistantMessage:
+    """Read the former research and coding control call as display-only reasoning."""
+    if not isinstance(settings, LegacyToolRendering):
+        return message
 
-
-def message_thinking(
-    message: AssistantMessage,
-    think_tool: str | None = None,
-    *,
-    text_as_thinking: bool = False,
-) -> str:
-    """Collect model and configured-tool thinking in accepted content order."""
-    return "".join(
-        block.text
-        if isinstance(block, (ThinkingContent, TextContent))
-        else thinking_tool_text(block)
-        for block in message.content
-        if isinstance(block, ThinkingContent)
-        or (text_as_thinking and isinstance(block, TextContent))
-        or (isinstance(block, ToolCall) and block.name == think_tool)
-    )
+    content = []
+    for block in message.content:
+        if isinstance(block, ToolCall) and block.name == settings.think_tool:
+            reasoning = tool_arguments_for_display(block).get("reasoning")
+            block = ThinkingContent(
+                text=reasoning if isinstance(reasoning, str) else ""
+            )
+        content.append(block)
+    return message.model_copy(update={"content": content})
 
 
 def response_record(
