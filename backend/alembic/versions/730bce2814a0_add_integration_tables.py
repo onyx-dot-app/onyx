@@ -10,11 +10,10 @@ only get new columns, and approval_request.gated_app_id becomes nullable; a
 rollback undoes both. The data copy is SQL only. It moves no secret in
 clear: each credential is copied as its encrypted bytes.
 
-Some data needs app code to read: the actions of an OpenAPI spec and of a
-built-in app catalog, and the header template of a per-user API key MCP
-server, which is in its encrypted admin config. The copy leaves synced_at
-NULL, and the app fills that data on the first database session of the
-schema (onyx/integrations/sync.py).
+The copy decrypts one value: the admin config of a per-user API key MCP
+server, to read its header template, which holds no secret. The actions of an
+OpenAPI spec or a built-in app catalog are not copied. The app writes them on
+first read (onyx/integrations/actions.py).
 
 Revision ID: 730bce2814a0
 Revises: 2bb0e564ae2d
@@ -22,12 +21,21 @@ Create Date: 2026-11-13 14:42:45.411165
 
 """
 
+import base64
+import json
 import logging
+import os
+import re
 import time
 from collections.abc import Callable
+from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
+from cryptography.hazmat.primitives import hashes, padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import DBAPIError
 
@@ -54,6 +62,18 @@ LOCK_TIMEOUT = "60s"
 # Created-at of a row whose source has no timestamp (tool rows have none).
 FALLBACK_CREATED_AT = "2026-11-13 00:00:00+00"
 _INSTALLATION_POLICIES = ("REQUIRED", "DEFAULT", "AVAILABLE", "NOT_AVAILABLE")
+# A frozen copy of the ciphertext formats of onyx/utils/encryption.py and
+# ee/onyx/utils/encryption.py. Data at this revision was written in these
+# formats, so the copy must not follow later changes to that code.
+_ENVELOPE_MAGIC = b"\xffONYX"
+_ENVELOPE_VERSION = 1
+_LEGACY_KEY_ID = "legacy"
+_LEGACY_ENVELOPE_KEY_INFO = b"onyx-envelope-v1-legacy"
+_NONCE_BYTES = 12
+_CBC_IV_BYTES = 16
+_LEGACY_KEY_SIZES = (32, 24, 16)
+_DENYLISTED_HEADERS = frozenset({"host"})
+_TEMPLATE_TOKEN = re.compile(r"\{\{|\}\}|\{([^{}]+)\}")
 _SHARE_PERMISSIONS = ("EDITOR", "VIEWER")
 
 
@@ -206,7 +226,6 @@ def _create_tables() -> None:
             nullable=False,
         ),
         # NULL until the app fills the data that only app code can read.
-        sa.Column("synced_at", sa.DateTime(timezone=True), nullable=True),
         # The row of its kind that holds the settings: exactly one is set, and
         # it matches kind. Deleting that row deletes the integration.
         sa.Column(
@@ -1424,6 +1443,141 @@ def _copy_integrations() -> None:
         op.execute(statement)
 
 
+def _legacy_key() -> bytes | None:
+    # The key only decrypts existing rows. No seeded value depends on it.
+    secret = os.environ.get("ENCRYPTION_KEY_SECRET")  # migration-determinism: allow
+    encoded = (secret or "").encode()
+    for size in _LEGACY_KEY_SIZES:
+        if len(encoded) >= size:
+            return encoded[:size]
+    return None
+
+
+def _envelope_keys(legacy_key: bytes | None) -> dict[str, bytes]:
+    keys_json = os.environ.get("ENCRYPTION_KEYS", "")  # migration-determinism: allow
+    keys_json = keys_json.strip()
+    keys = {
+        key_id: base64.b64decode(encoded, validate=True)
+        for key_id, encoded in (json.loads(keys_json) if keys_json else {}).items()
+    }
+    if legacy_key is not None:
+        keys[_LEGACY_KEY_ID] = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=_LEGACY_ENVELOPE_KEY_INFO,
+        ).derive(legacy_key)
+    return keys
+
+
+def _decrypt(data: bytes, keys: dict[str, bytes], legacy_key: bytes | None) -> str:
+    if data.startswith(_ENVELOPE_MAGIC):
+        fixed_length = len(_ENVELOPE_MAGIC) + 2
+        if data[len(_ENVELOPE_MAGIC)] != _ENVELOPE_VERSION:
+            raise ValueError("unknown envelope version")
+        header_length = fixed_length + data[len(_ENVELOPE_MAGIC) + 1]
+        key = keys[data[fixed_length:header_length].decode("ascii")]
+        nonce_end = header_length + _NONCE_BYTES
+        return (
+            AESGCM(key)
+            .decrypt(
+                data[header_length:nonce_end], data[nonce_end:], data[:header_length]
+            )
+            .decode()
+        )
+    if legacy_key is not None:
+        decryptor = Cipher(
+            algorithms.AES(legacy_key), modes.CBC(data[:_CBC_IV_BYTES])
+        ).decryptor()
+        unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
+        try:
+            padded = decryptor.update(data[_CBC_IV_BYTES:]) + decryptor.finalize()
+            return (unpadder.update(padded) + unpadder.finalize()).decode()
+        except (ValueError, UnicodeDecodeError):
+            # Values stored before the deployment had a key are plain text.
+            pass
+    return data.decode()
+
+
+def _mcp_header_template(config: Any) -> dict[str, str] | None:
+    """Old configs kept the template in ``headers``."""
+    if not isinstance(config, dict):
+        return None
+    template = config.get("header_template") or config.get("headers")
+    if not isinstance(template, dict):
+        return None
+    return {
+        name: value
+        for name, value in template.items()
+        if isinstance(name, str)
+        and isinstance(value, str)
+        and name.lower() not in _DENYLISTED_HEADERS
+    } or None
+
+
+def _template_fields(template: dict[str, str]) -> list[dict[str, Any]] | None:
+    """A secret field for each placeholder a person fills. Onyx fills
+    ``user_email``."""
+    keys: list[str] = []
+    for value in template.values():
+        for match in _TEMPLATE_TOKEN.finditer(value):
+            key = match.group(1)
+            if key is not None and key != "user_email" and key not in keys:
+                keys.append(key)
+    return [
+        {"key": key, "label": key.replace("_", " "), "secret": True} for key in keys
+    ] or None
+
+
+def _copy_mcp_header_templates() -> None:
+    """A config that does not read leaves no template, and the admin list
+    shows the integration as not set up."""
+    bind = op.get_bind()
+    legacy_key = _legacy_key()
+    keys = _envelope_keys(legacy_key)
+    updates: list[dict[str, Any]] = []
+    for row in bind.execute(
+        sa.text(
+            "SELECT i.id, c.config FROM integration i "
+            "JOIN mcp_server m ON m.id = i.mcp_server_id "
+            "JOIN mcp_connection_config c ON c.id = m.admin_connection_config_id "
+            "WHERE i.auth_mode = 'individual' AND i.auth_method = 'api_key' "
+            "AND i.header_template IS NULL "
+            "ORDER BY i.id"
+        )
+    ):
+        try:
+            config = json.loads(_decrypt(bytes(row.config), keys, legacy_key))
+        except Exception as error:
+            logger.warning(
+                "Integration %s: the MCP admin config does not read (%s)",
+                row.id,
+                type(error).__name__,
+            )
+            continue
+        template = _mcp_header_template(config)
+        if template is None:
+            continue
+        fields = _template_fields(template)
+        updates.append(
+            {
+                "id": row.id,
+                "header_template": json.dumps(template),
+                "credential_fields": json.dumps(fields) if fields else None,
+            }
+        )
+    if updates:
+        bind.execute(
+            sa.text(
+                "UPDATE integration SET "
+                "header_template = CAST(:header_template AS jsonb), "
+                "credential_fields = CAST(:credential_fields AS jsonb) "
+                "WHERE id = :id"
+            ),
+            updates,
+        )
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     schema: str = bind.execute(sa.text("SELECT current_schema()")).scalar_one()
@@ -1434,6 +1588,7 @@ def upgrade() -> None:
         # tool against writes while the tables are made.
         _with_bounded_lock_wait(_create_tables)
         _copy_integrations()
+        _copy_mcp_header_templates()
         # The chat tables stay locked from here to the commit, so they are
         # altered last, with only the statement that needs a new column of
         # theirs after them.

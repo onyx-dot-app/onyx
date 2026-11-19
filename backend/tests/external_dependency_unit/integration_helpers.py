@@ -35,9 +35,9 @@ from onyx.db.models import (
     Tool,
     UserIntegrationPreference,
 )
+from onyx.integrations.kinds.api import sync_integration_actions__no_commit
 from onyx.integrations.kinds.mcp_server import mcp_action_default_policy
 from onyx.integrations.models import IntegrationActionSpec
-from onyx.integrations.sync import sync_integration_actions__no_commit
 
 DEFAULT_INPUT_SCHEMA: dict[str, JsonValue] = {
     "type": "object",

@@ -910,6 +910,15 @@ default agent, is Blocked.
 Chat: see [[plugins#openapi-enabled-default-chat-only]].
 
 ---
+21. `api-actions-written-on-first-read` **Read actions through
+    `integrations/actions.py:integration_actions`.** Migration `730bce2814a0`
+    writes no `integration_action` rows for an API integration, because only app
+    code can parse a spec or read a catalog.
+    `integrations/kinds/api.py:api_integration_actions` writes them on the first
+    read, in a short session of its own. A reader that holds the integration
+    lock gets the actions unsaved. A direct call to
+    `db/integration.py:list_integration_actions` sees no actions for that
+    integration, so chat offers no tools and every action falls back to Ask.
 
 ## Decisions
 

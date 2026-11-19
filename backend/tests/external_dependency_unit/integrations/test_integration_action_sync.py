@@ -35,9 +35,11 @@ from onyx.db.models import (
     Tool,
 )
 from onyx.external_apps.providers.registry import get_endpoint_catalog
-from onyx.integrations.kinds.api import ApiKindHandler
+from onyx.integrations.kinds.api import (
+    ApiKindHandler,
+    sync_integration_actions__no_commit,
+)
 from onyx.integrations.models import IntegrationActionSpec
-from onyx.integrations.sync import sync_integration_actions__no_commit
 from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_method_specs,
 )

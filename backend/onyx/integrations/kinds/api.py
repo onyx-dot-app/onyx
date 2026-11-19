@@ -5,6 +5,7 @@ from urllib.parse import unquote
 from mitmproxy import http
 from sqlalchemy.orm import Session
 
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     ActionPolicy,
     ExternalAppType,
@@ -13,8 +14,13 @@ from onyx.db.enums import (
 )
 from onyx.db.integration import (
     get_external_app_for_integration,
+    get_integration_by_id,
     get_openapi_tool_for_integration,
+    integration_action_from_spec,
     list_integration_actions,
+    lock_integration__no_commit,
+    replace_integration_actions__no_commit,
+    try_lock_integration__no_commit,
 )
 from onyx.db.models import ExternalApp, Integration, IntegrationAction
 from onyx.db.models import Tool as ToolModel
@@ -54,6 +60,9 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_url,
 )
 from onyx.utils.headers import header_dict_to_header_list
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 CATALOG_POLICY_VALUES: dict[ActionPolicy, IntegrationActionPolicyValue] = {
     ActionPolicy.ALWAYS: IntegrationActionPolicyValue.ALLOW,
@@ -327,7 +336,7 @@ class ApiKindHandler(IntegrationKindHandler):
         method = method.upper()
         path_matches = [
             (action, action.path_template)
-            for action in list_integration_actions(integration_id, db_session)
+            for action in api_integration_actions(integration_id, db_session)
             if action.path_template is not None
             and _openapi_path_matches(action.path_template, relative_path)
         ]
@@ -358,3 +367,66 @@ class ApiKindHandler(IntegrationKindHandler):
             or [_whole_domain_action(integration_id, f"{method} {path}")],
             path_prefix_length=len(target.path_prefix),
         )
+
+
+def sync_integration_actions__no_commit(
+    integration: Integration, db_session: Session
+) -> None:
+    """A stored source that the kind no longer finds loses its rows. The kind
+    settings are read under the integration lock, so a sync that started
+    earlier cannot write an older action list over a newer one."""
+    lock_integration__no_commit(integration.id, db_session)
+    specs = ApiKindHandler().discover_actions(integration, db_session)
+    stored_sources = {
+        action.source for action in list_integration_actions(integration.id, db_session)
+    }
+    for source in sorted(stored_sources | {spec.source for spec in specs}):
+        replace_integration_actions__no_commit(
+            integration.id,
+            source,
+            [spec for spec in specs if spec.source == source],
+            db_session,
+        )
+
+
+def _write_actions(integration_id: int) -> list[IntegrationActionSpec] | None:
+    """Writes the rows in a short session of its own, so a read path holds no
+    row lock. None when the rows are saved. When another transaction holds
+    the integration lock, which can be the caller's own, the specs come back
+    unsaved."""
+    with get_session_with_current_tenant() as db_session:
+        if not try_lock_integration__no_commit(integration_id, db_session):
+            db_session.rollback()
+            integration = get_integration_by_id(integration_id, db_session)
+            if integration is None:
+                return []
+            return ApiKindHandler().discover_actions(integration, db_session)
+        integration = get_integration_by_id(integration_id, db_session)
+        if integration is not None and not list_integration_actions(
+            integration_id, db_session
+        ):
+            sync_integration_actions__no_commit(integration, db_session)
+            db_session.commit()
+        return None
+
+
+def api_integration_actions(
+    integration_id: int, db_session: Session
+) -> list[IntegrationAction]:
+    """The migration of the integration tables writes no API actions, so the
+    first read writes them."""
+    stored = list_integration_actions(integration_id, db_session)
+    if stored:
+        return stored
+    try:
+        unsaved = _write_actions(integration_id)
+    except OnyxError as error:
+        logger.warning(
+            "Integration %s: the API settings give no actions: %s",
+            integration_id,
+            error.detail,
+        )
+        return []
+    if unsaved is None:
+        return list_integration_actions(integration_id, db_session)
+    return [integration_action_from_spec(integration_id, spec) for spec in unsaved]

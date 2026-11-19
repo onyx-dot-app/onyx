@@ -13,7 +13,6 @@ from onyx.db.enums import ExternalAppType, IntegrationKind
 from onyx.db.integration import (
     get_external_app_for_integration,
     list_enabled_integrations_by_id,
-    list_integration_actions,
     list_integrations_by_ids,
 )
 from onyx.db.integration_access import load_user_integration_states
@@ -25,6 +24,7 @@ from onyx.db.models import ExternalApp, Integration, IntegrationAction, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
+from onyx.integrations.actions import integration_actions
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import integration_status
 from onyx.integrations.models import (
@@ -274,7 +274,7 @@ def list_task_integration_views(
         _integration_view(
             db_session,
             integration,
-            list_integration_actions(integration.id, db_session),
+            integration_actions(integration.id, db_session),
             user,
             links.get(integration.id),
         )
@@ -312,7 +312,7 @@ def replace_task_integrations__no_commit(
     for link in integrations:
         keys = {
             action.key
-            for action in list_integration_actions(link.integration_id, db_session)
+            for action in integration_actions(link.integration_id, db_session)
         }
         if link.action_settings.actions.keys() - keys:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Unknown integration action")

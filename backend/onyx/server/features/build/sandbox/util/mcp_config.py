@@ -13,9 +13,9 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import IntegrationKind
 from onyx.db.integration import (
     get_mcp_server_for_integration,
-    list_integration_actions,
 )
 from onyx.db.models import Integration, User
+from onyx.integrations.actions import integration_actions
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import integration_status
 from onyx.integrations.craft import (
@@ -46,7 +46,7 @@ def _blocked_actions(
     user: User,
     task: TaskIntegrations | None,
 ) -> tuple[str, ...]:
-    actions = list_integration_actions(integration.id, db_session)
+    actions = integration_actions(integration.id, db_session)
     policies = resolve_craft_action_policies(
         db_session,
         integration=integration,

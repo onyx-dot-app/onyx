@@ -18,13 +18,13 @@ from onyx.db.enums import (
     PluginInstallationPolicy,
 )
 from onyx.db.integration import (
-    list_integration_actions_by_id,
     list_mcp_servers_by_integration,
     list_openapi_tools_by_integration,
 )
 from onyx.db.integration_connection import list_connections
 from onyx.db.integration_policy import list_policy_rows, list_session_granted_actions
 from onyx.db.models import Integration, IntegrationAction, IntegrationConnection, User
+from onyx.integrations.actions import integration_actions_by_id
 from onyx.integrations.call_credentials import resolve_call_credentials
 from onyx.integrations.connections import ConnectionProblem
 from onyx.integrations.kinds.api import ApiKindHandler
@@ -187,7 +187,7 @@ def build_integration_chat_tools(
         )
     }
     user_id = None if user.is_anonymous else user.id
-    actions = list_integration_actions_by_id(list(selected), db_session)
+    actions = integration_actions_by_id(list(selected), db_session)
     connections = list_connections(db_session, list(selected), user_id)
     policies = list_policy_rows(db_session, list(selected), user_id)
     grants = list_session_granted_actions(

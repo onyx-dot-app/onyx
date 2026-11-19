@@ -2,7 +2,9 @@ from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, and_, delete, func, select, text, update
+from psycopg2.errors import LockNotAvailable
+from sqlalchemy import ColumnElement, Select, and_, delete, func, select, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import InstrumentedAttribute, Session, load_only
 
 from onyx.db.enums import (
@@ -24,7 +26,6 @@ from onyx.db.models import (
     IntegrationActionPolicy,
     IntegrationConnection,
     IntegrationOAuthClient,
-    MCPConnectionConfig,
     MCPServer,
     Tool,
 )
@@ -33,7 +34,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_oauth_client
 from onyx.integrations.models import IntegrationActionSpec
-from onyx.utils.sensitive import SensitiveValue
 
 
 def get_integration_by_id(
@@ -223,52 +223,6 @@ def get_mcp_tool_with_integration(
     return (row[0], row[1], row[2]) if row is not None else None
 
 
-def list_unsynced_integration_ids(db_session: Session) -> list[int]:
-    return list(
-        db_session.scalars(
-            select(Integration.id)
-            .where(Integration.synced_at.is_(None))
-            .order_by(Integration.id)
-        ).all()
-    )
-
-
-def lock_unsynced_integration__no_commit(
-    integration_id: int, db_session: Session
-) -> Integration | None:
-    """Locks the row and returns it while its synced_at is NULL. A lock that
-    waits longer than 10 seconds raises, so a session that holds the lock
-    in the same thread cannot block this one forever."""
-    db_session.execute(text("SET LOCAL lock_timeout = '10s'"))
-    integration = db_session.scalar(
-        select(Integration)
-        .where(Integration.id == integration_id, Integration.synced_at.is_(None))
-        .with_for_update()
-    )
-    db_session.execute(text("SET LOCAL lock_timeout = DEFAULT"))
-    return integration
-
-
-def mark_integration_synced__no_commit(
-    integration: Integration, db_session: Session
-) -> None:
-    integration.synced_at = func.now()
-    db_session.flush()
-
-
-def get_mcp_admin_config(
-    integration_id: int, db_session: Session
-) -> SensitiveValue[dict[str, Any]] | None:
-    """The encrypted admin config of the MCP server of an integration. Only
-    the first sync reads it: the integration tables replace it."""
-    return db_session.scalar(
-        select(MCPConnectionConfig.config)
-        .join(MCPServer, MCPServer.admin_connection_config_id == MCPConnectionConfig.id)
-        .join(Integration, Integration.mcp_server_id == MCPServer.id)
-        .where(Integration.id == integration_id)
-    )
-
-
 def list_integration_actions(
     integration_id: int, db_session: Session
 ) -> list[IntegrationAction]:
@@ -404,6 +358,25 @@ def _apply_spec(action: IntegrationAction, spec: IntegrationActionSpec) -> None:
     action.path_template = spec.path_template
 
 
+def try_lock_integration__no_commit(integration_id: int, db_session: Session) -> bool:
+    """Locks the integration row without a wait. False when another
+    transaction holds the lock or the row is gone. The caller rolls back
+    after False."""
+    try:
+        return (
+            db_session.scalar(
+                select(Integration.id)
+                .where(Integration.id == integration_id)
+                .with_for_update(nowait=True)
+            )
+            is not None
+        )
+    except OperationalError as error:
+        if isinstance(error.orig, LockNotAvailable):
+            return False
+        raise
+
+
 def lock_integration__no_commit(integration_id: int, db_session: Session) -> None:
     """Locks the integration row, then expires the session, so the reads that
     follow see what other transactions committed before the lock. Raises
@@ -415,6 +388,25 @@ def lock_integration__no_commit(integration_id: int, db_session: Session) -> Non
     db_session.expire_all()
     if locked is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration not found.")
+
+
+def integration_action_from_spec(
+    integration_id: int, spec: IntegrationActionSpec
+) -> IntegrationAction:
+    """A new row, not added to any session."""
+    return IntegrationAction(
+        integration_id=integration_id,
+        key=spec.key,
+        source=spec.source,
+        display_name=spec.display_name,
+        description=spec.description,
+        read_only=spec.read_only,
+        default_policy=spec.default_policy,
+        input_schema=spec.input_schema,
+        output_schema=spec.output_schema,
+        http_method=spec.http_method,
+        path_template=spec.path_template,
+    )
 
 
 def replace_integration_actions__no_commit(
@@ -442,21 +434,7 @@ def replace_integration_actions__no_commit(
         if existing is not None:
             _apply_spec(existing, spec)
             continue
-        db_session.add(
-            IntegrationAction(
-                integration_id=integration_id,
-                key=spec.key,
-                source=spec.source,
-                display_name=spec.display_name,
-                description=spec.description,
-                read_only=spec.read_only,
-                default_policy=spec.default_policy,
-                input_schema=spec.input_schema,
-                output_schema=spec.output_schema,
-                http_method=spec.http_method,
-                path_template=spec.path_template,
-            )
-        )
+        db_session.add(integration_action_from_spec(integration_id, spec))
 
     stale_ids = [
         action.id

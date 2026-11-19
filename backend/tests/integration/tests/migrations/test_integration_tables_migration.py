@@ -4,20 +4,23 @@ task links. It makes no plugin. The rows are seeded at the revision before it,
 then the chain upgrades."""
 
 import ast
+import base64
 import hashlib
+import importlib.util
 import json
 import sys
 from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import Connection, Engine, create_engine, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 
+from ee.onyx.utils.encryption import build_keyring, encrypt_with_keyring
 from onyx.configs.app_configs import (
     POSTGRES_DB,
     POSTGRES_HOST,
@@ -26,9 +29,6 @@ from onyx.configs.app_configs import (
     POSTGRES_USER,
 )
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
-from onyx.db.enums import ActionPolicy, ExternalAppType
-from onyx.external_apps.providers.registry import get_endpoint_catalog
-from onyx.integrations.sync import sync_new_integration__no_commit
 from onyx.tools.models import ToolOptions
 from onyx.utils.encryption import encrypt_string_to_bytes
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
@@ -1215,8 +1215,7 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             "registration": b"\x00",
             "legacy_format": "external_app_org",
         }
-        # App code reads a catalog, a spec and an encrypted config, so the
-        # copy leaves those to the first sync of the app.
+        # The actions of a catalog or a spec are written on first read.
         assert _actions(conn, slack.id) == []
         assert slack.header_template == {"Authorization": "Bearer {token}"}
         assert not slack.users_can_save_always_allow
@@ -1268,20 +1267,22 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             None: (b"private-admin", "mcp_config", None),
         }
 
-        # A per-user API key server: its template is in the encrypted admin
-        # config, so the first sync of the app copies it.
+        # A per-user API key server: the template of its encrypted admin
+        # config, with no denylisted header, and a field for each placeholder
+        # that a user fills.
         assert (per_user_mcp.auth_mode, per_user_mcp.auth_method) == (
             "individual",
             "api_key",
         )
-        assert per_user_mcp.header_template is None
-        assert per_user_mcp.credential_fields is None
-        assert (
-            conn.execute(
-                text("SELECT count(*) FROM integration WHERE synced_at IS NOT NULL")
-            ).scalar_one()
-            == 0
-        )
+        assert per_user_mcp.header_template == {
+            "X-Api-Key": "{api_key}",
+            "X-Team": "{team_id}",
+            "X-User": "{user_email}",
+        }
+        assert per_user_mcp.credential_fields == [
+            {"key": "api_key", "label": "api key", "secret": True},
+            {"key": "team_id", "label": "team id", "secret": True},
+        ]
         assert (
             conn.execute(
                 text(
@@ -1816,100 +1817,49 @@ def test_action_policy_row_has_one_scope(engine: Engine, seeded: Seeded) -> None
             )
 
 
-def test_first_sync_fills_what_the_migration_cannot_read(
-    engine: Engine, seeded: Seeded
-) -> None:
-    """The first sync of the app writes the actions of each API integration
-    and the header template of a per-user API key MCP server. The test rolls
-    back, so the other tests see the rows as the migration left them."""
-    _migrate("upgrade", "head")
-    with engine.connect() as conn:
-        slack_id = seeded.gated["app_slack"]
-        app_custom_id = seeded.gated["app_custom"]
-        per_user_mcp_id = seeded.gated["mcp_user_key"]
-        openapi_id = _copied(conn, TOOL_INTEGRATION, t=seeded.custom_private).id
-        with Session(bind=conn) as db_session:
-            for integration_id in (
-                slack_id,
-                app_custom_id,
-                per_user_mcp_id,
-                openapi_id,
-            ):
-                sync_new_integration__no_commit(integration_id, db_session)
-            db_session.flush()
+def _migration_module() -> ModuleType:
+    path = (
+        Path(__file__).resolve().parents[4]
+        / "alembic"
+        / "versions"
+        / f"{REVISION}_add_integration_tables.py"
+    )
+    spec = importlib.util.spec_from_file_location("integration_migration", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-            # A built-in app gets its catalog, each action at its catalog policy.
-            assert {
-                (a["key"], a["source"], a["default_policy"], a["read_only"])
-                for a in _actions(conn, slack_id)
-            } == {
-                (
-                    endpoint.id.value,
-                    "external_app",
-                    "allow"
-                    if endpoint.default_policy is ActionPolicy.ALWAYS
-                    else "ask",
-                    endpoint.default_policy is ActionPolicy.ALWAYS,
-                )
-                for endpoint in get_endpoint_catalog(ExternalAppType.SLACK)
-            }
-            # A custom app has one action for any request. The old gated app
-            # actions used the same key, so the copied policies still apply.
-            app_custom_name = _copied(conn, "i.id = :id", id=app_custom_id).name
-            assert [
-                (a["key"], a["source"], a["display_name"], a["default_policy"])
-                for a in _actions(conn, app_custom_id)
-            ] == [("unspecified", "external_app", app_custom_name, "ask")]
-            # Each operation of the spec: GET is Allow and each other method Ask.
-            openapi_action = {
-                "source": "openapi",
-                "output_schema": None,
-                "input_schema": {"type": "object", "properties": {}},
-                "path_template": "/issues",
-            }
-            assert _actions(conn, openapi_id) == [
-                {
-                    **openapi_action,
-                    "key": "createIssue",
-                    "display_name": "Create",
-                    "description": "Create",
-                    "read_only": False,
-                    "default_policy": "ask",
-                    "http_method": "POST",
-                },
-                {
-                    **openapi_action,
-                    "key": "listIssues",
-                    "display_name": "List",
-                    "description": "List",
-                    "read_only": True,
-                    "default_policy": "allow",
-                    "http_method": "GET",
-                },
-            ]
-            # The template of the admin config, with no denylisted header, and
-            # a field for each placeholder that a user fills.
-            per_user_mcp = _copied(conn, "i.id = :id", id=per_user_mcp_id)
-            assert per_user_mcp.header_template == {
-                "X-Api-Key": "{api_key}",
-                "X-Team": "{team_id}",
-                "X-User": "{user_email}",
-            }
-            assert per_user_mcp.credential_fields == [
-                {"key": "api_key", "label": "api key", "secret": True},
-                {"key": "team_id", "label": "team id", "secret": True},
-            ]
-            assert (
-                conn.execute(
-                    text(
-                        "SELECT count(*) FROM integration "
-                        "WHERE id = ANY(:ids) AND synced_at IS NULL"
-                    ),
-                    {"ids": [slack_id, app_custom_id, per_user_mcp_id, openapi_id]},
-                ).scalar_one()
-                == 0
-            )
-        conn.rollback()
+
+@pytest.mark.parametrize(
+    ("legacy_secret", "write_key_id"),
+    [
+        ("", ""),
+        ("a-legacy-secret-of-32-bytes-long!", ""),
+        ("", "k1"),
+        ("a-legacy-secret-of-32-bytes-long!", "legacy"),
+    ],
+    ids=["plain", "legacy-cbc", "envelope", "envelope-under-legacy-key"],
+)
+def test_migration_reads_each_ciphertext_format(
+    monkeypatch: pytest.MonkeyPatch, legacy_secret: str, write_key_id: str
+) -> None:
+    """The frozen decrypt of the migration reads what the app encryption
+    wrote before this revision, under the same settings."""
+    keys_json = json.dumps({"k1": base64.b64encode(b"k" * 32).decode()})
+    monkeypatch.setenv("ENCRYPTION_KEY_SECRET", legacy_secret)
+    monkeypatch.setenv("ENCRYPTION_KEYS", keys_json)
+    keyring = build_keyring(legacy_secret, keys_json, write_key_id)
+    data = encrypt_with_keyring(keyring, '{"header_template": {"X": "{k}"}}')
+
+    migration = _migration_module()
+    legacy_key = migration._legacy_key()
+
+    assert (
+        migration._decrypt(data, migration._envelope_keys(legacy_key), legacy_key)
+        == '{"header_template": {"X": "{k}"}}'
+    )
 
 
 def test_migration_imports_no_app_code() -> None:
@@ -1929,5 +1879,5 @@ def test_migration_imports_no_app_code() -> None:
                 modules.add("." * node.level + (node.module or ""))
             else:
                 modules.add(node.module)
-    allowed_roots = sys.stdlib_module_names | {"alembic", "sqlalchemy"}
+    allowed_roots = sys.stdlib_module_names | {"alembic", "cryptography", "sqlalchemy"}
     assert sorted(m for m in modules if m.split(".")[0] not in allowed_roots) == []

@@ -24,7 +24,6 @@ from onyx.db.enums import (
 )
 from onyx.db.external_app import associate_built_in_skill__no_commit
 from onyx.db.integration import (
-    count_integration_actions,
     create_external_app_row__no_commit,
     create_mcp_server_row__no_commit,
     create_openapi_tool_row__no_commit,
@@ -37,7 +36,6 @@ from onyx.db.integration import (
     insert_integration__no_commit,
     list_action_summaries,
     list_external_apps_by_integration,
-    list_integration_actions,
     list_integrations,
     list_integrations_by_ids,
     list_mcp_servers_by_integration,
@@ -75,6 +73,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.base import OAuthExternalAppProvider
 from onyx.external_apps.providers.registry import get_onyx_managed_provider
 from onyx.external_apps.url_glob import UrlGlob
+from onyx.integrations.actions import count_actions, integration_actions
 from onyx.integrations.connection_models import (
     SIGN_IN_SETTINGS_CHANGED_REASON,
     ConnectionState,
@@ -98,6 +97,7 @@ from onyx.integrations.connections import (
     sign_in_settings_for,
 )
 from onyx.integrations.craft import always_asks, craft_service_urls
+from onyx.integrations.kinds.api import sync_integration_actions__no_commit
 from onyx.integrations.kinds.mcp_server import (
     check_mcp_credential_fields,
     fetch_mcp_actions,
@@ -114,7 +114,6 @@ from onyx.integrations.policy import (
     admin_policy,
 )
 from onyx.integrations.presets import PRESETS, Preset, get_preset
-from onyx.integrations.sync import sync_integration_actions__no_commit
 from onyx.server.features.build.utils import is_craft_available_for_deployment
 from onyx.server.features.integrations.models import (
     ActionGrantsResponse,
@@ -1109,7 +1108,7 @@ def action_views(
 ) -> list[IntegrationActionView]:
     rows = get_policy_rows(db_session, integration.id, None)
     return _action_views(
-        integration, list_integration_actions(integration.id, db_session), rows.admin
+        integration, integration_actions(integration.id, db_session), rows.admin
     )
 
 
@@ -1213,7 +1212,7 @@ def _admin_views(
         db_session,
     )
     shapes = _shapes(integrations, _external_apps(integrations, db_session))
-    action_counts = count_integration_actions(
+    action_counts = count_actions(
         [integration.id for integration in integrations], db_session
     )
     views: list[AdminIntegration] = []
@@ -1375,7 +1374,7 @@ def admin_actions(
         ),
         actions=_action_views(
             integration,
-            list_integration_actions(integration.id, db_session),
+            integration_actions(integration.id, db_session),
             rows.admin,
         ),
     )
@@ -1390,9 +1389,7 @@ def _stored_value(
 def _check_action_keys(
     integration: Integration, keys: Collection[str], db_session: Session
 ) -> None:
-    known = {
-        action.key for action in list_integration_actions(integration.id, db_session)
-    }
+    known = {action.key for action in integration_actions(integration.id, db_session)}
     unknown = sorted(set(keys) - known)
     if unknown:
         raise OnyxError(
@@ -1572,7 +1569,7 @@ def member_actions(
         )
         for view in _action_views(
             integration,
-            list_integration_actions(integration.id, db_session),
+            integration_actions(integration.id, db_session),
             rows.admin,
         )
     ]

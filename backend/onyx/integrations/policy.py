@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.enums import IntegrationActionPolicyValue, PluginInstallationPolicy
-from onyx.db.integration import list_integration_actions, list_integrations_by_ids
+from onyx.db.integration import list_integrations_by_ids
 from onyx.db.integration_access import load_user_integration_states
 from onyx.db.integration_policy import (
     get_chat_session_persona_id,
@@ -32,6 +32,7 @@ from onyx.db.integration_policy import (
     list_persona_integration_links,
 )
 from onyx.db.models import Integration, IntegrationAction
+from onyx.integrations.actions import integration_actions
 from onyx.integrations.models import (
     ActionSettings,
     ApprovalMode,
@@ -105,7 +106,7 @@ def admin_blocked_actions(db_session: Session, integration_id: int) -> set[str]:
     rows = get_policy_rows(db_session, integration_id, None).admin
     return {
         action.key
-        for action in list_integration_actions(integration_id, db_session)
+        for action in integration_actions(integration_id, db_session)
         if admin_policy(rows, action.key, action) is EffectivePolicy.BLOCKED
     }
 
@@ -302,7 +303,7 @@ def resolve_chat_action_policy(
     return resolve_action_policies(
         db_session,
         integration=integration,
-        actions=list_integration_actions(integration.id, db_session),
+        actions=integration_actions(integration.id, db_session),
         action_keys=[action_key],
         user_id=user_id,
         link_settings=held.settings if held is not None else None,
