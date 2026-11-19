@@ -536,7 +536,10 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     direct calls do (`ToolInvocation.nested_calls`, a `NestedCallGate`;
     `tools/tool_implementations/code_mode/cells.py:CodeCell._call`): a
     `ToolResult` decision becomes the call's result, so a denial raises in the
-    program as a tool error does. A request decision shows the request at once,
+    program as a tool error does. The cell keeps one gate (`CodeCell._gate`):
+    each of its requests belongs to the call that started it, or that rebuilt
+    it in this process, also while `wait_code` observes it, so the run offers
+    their answers together. A request decision shows the request at once,
     also for a cell that runs in the background, and the call waits without a
     thread (the handler returns
     `tools/tool_implementations/code_mode/sandbox.py:AWAITS_INPUT`). Once the program
@@ -718,7 +721,10 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     (`CodeCells.saved`); its requests stay open. For a
     restored run, `tools/tool_implementations/code_mode/cells.py:_interrupted_amendments` closes such observations
     with `reason="interrupted"` and status `cancelled`, since what the cell did
-    after them is not known. The run applies the amendments before it saves
+    after them is not known; a cell that stays saved gets none. A cell that a
+    restored run rebuilds takes its last running observation from the
+    recorded results, so it gets its closing record as a live cell does, also
+    when it ends in the background with no `wait_code`. The run applies the amendments before it saves
     and publishes `ToolResultAmendedEvent` for each, before `AgentEndEvent`.
     Their calls, also the unfinished ones, may have had effects. The final
     `code_mode_delta` has `status="cancelled"` live and on replay. A tool whose

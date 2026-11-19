@@ -99,12 +99,15 @@ class ExecutionWork:
 
     `tracker` counts every job: the run drains after all of them end. `held`
     counts the jobs that the tool phase also waits for before it suspends:
-    all but those of `track_detached`.
+    all but those of `track_detached`. `on_held_finished` runs after each held
+    job ends, such as a program driver that parked, so the tool phase checks
+    its calls and open requests again.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, on_held_finished: Callable[[], None] | None = None) -> None:
         self.tracker = WorkTracker()
         self.held = WorkTracker()
+        self._on_held_finished = on_held_finished
 
     def start[T](self, operation: Callable[[], T]) -> Future[T]:
         self.tracker.started()
@@ -132,6 +135,8 @@ class ExecutionWork:
     def _finished(self, *, held: bool) -> None:
         if held:
             self.held.finished()
+            if self._on_held_finished is not None:
+                self._on_held_finished()
         self.tracker.finished()
 
 

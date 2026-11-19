@@ -251,7 +251,9 @@ The continuation returns a result, or another `NestedInputWait`.
 A tool that stops waiting, for example because its program ended, ends the request with `NestedCallGate.withdraw`.
 A request that no `NestedInputWait` holds stays open: the run saves it in `RunProgress.open_inputs`, also while it suspends.
 Its answer goes to `AgentTool.continue_open_input` of the tool that made the call, such as for a program that waits in the background.
-The tool returns the requests that it took; the run ends those, and offers the others again later.
+The tool returns the requests that it took; the run ends those, and offers the others again at its next wake.
+The run offers one call's answered requests together, so a tool keeps all requests that one task waits for under one call.
+For example, a code cell opens all of its requests under the call that started it, also while a `wait_code` call observes it.
 Open requests end with the run.
 A hook that raises fails the run, as for a direct call: `decide` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
 A code mode program stops at the failure; the observation that reports its end raises it.
@@ -292,7 +294,8 @@ The `ToolInvocation` argument provides everything the tool needs:
 - `agents` — the subagent coordinator (next section).
 - `run_work` — the run's work. A tool that starts work which outlives the call, such as a code mode
   program's driver, adds it with `run_work.track_operation(future)`, which holds the tool phase and
-  the drain. `run_work.track_detached(future)` holds only the drain, for work such as a tool call that
+  the drain. Its end wakes the tool phase, which then offers open answers again, for example to a
+  program that parked. `run_work.track_detached(future)` holds only the drain, for work such as a tool call that
   a program left running when it ended.
 
 Tool calls run in parallel by default. `SEQUENTIAL` orders calls to the same registered tool name
@@ -532,7 +535,7 @@ It can suspend during the tool phase with unanswered calls, or before the next s
 Snapshots taken during provider I/O or arbitrary callbacks support inspection only.
 
 The tool phase suspends only when no call of the step runs and no `run_work.track_operation` work runs (see `run_work` in [Tools](#tools)).
-An answer or Stop wakes the wait.
+An answer, Stop, or the end of a call or held work wakes the wait.
 A code cell's lifetime bounds its program; a tool call that the program left running does not hold the phase.
 `OPERATION_TIMEOUT_SECONDS` bounds the wait as a backstop. The runtime does not stop work to suspend.
 An answer that arrives first is applied in the same execution, without a suspension.

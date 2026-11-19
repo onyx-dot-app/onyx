@@ -24,6 +24,7 @@ from onyx.agents.tool_execution import DENIED_CALL_MESSAGE, UNAVAILABLE_CALL_MES
 from onyx.agents.tools import (
     BeforeToolCallFailed,
     InputDecision,
+    NestedCallGate,
     NestedInputAnswer,
     NestedInputRequest,
     NestedInputWait,
@@ -719,6 +720,11 @@ class CodeCell:
         # Context and messages of the latest observation, for nested calls.
         self._source = invocation
         self._context = context
+        # Decides the program's calls. It stays the gate of the call that
+        # started the cell, or that rebuilt it in this process, so every
+        # request of the cell belongs to that call and the run offers their
+        # answers together.
+        self._gate: NestedCallGate | None = invocation.nested_calls
         # Files of documents that nested calls found, for later Python calls of
         # the program, as the chat stages them for direct calls.
         self._stages_files = any(
@@ -747,7 +753,8 @@ class CodeCell:
         # The final result was returned, or the response ended; events are dropped.
         self._closed = False
         # The last saved observation, with its call id, while it reports the cell
-        # running.
+        # running; `_closing` amends it. A rebuilt cell takes it from the
+        # recorded results.
         self._last: tuple[str, ToolResult, CodeModeExecutionResult] | None = None
         # Observations taken but not yet formatted; `close` waits for them.
         self._formatting = 0
@@ -804,6 +811,15 @@ class CodeCell:
         ):
             self._program_store.store(key, value)
         self._parked = saved.program
+        observations = [
+            observation
+            for observation in code_mode_results(self._source.recorded_results)
+            if observation[1].cell_id == self.id
+        ]
+        if observations:
+            message, details = observations[-1]
+            if details.status == "running" and details.closing is None:
+                self._last = (message.tool_call_id, message, details)
 
     def saved(self) -> SavedCodeCell | None:
         """The cell's saved form while its program is parked for input."""
@@ -1001,6 +1017,13 @@ class CodeCell:
                     status="cancelled", duration_seconds=parked.state.elapsed_seconds
                 )
             )
+
+    @property
+    def parked(self) -> bool:
+        """Whether the program is parked: it waits only for calls that wait
+        for input."""
+        with self._lock:
+            return self._parked is not None
 
     @property
     def waiting_call_id(self) -> str | None:
@@ -1495,10 +1518,9 @@ class CodeCell:
                     is_error=True,
                 )
             self._requests.clear()
-            gate = self._source.nested_calls
-        if gate is not None:
+        if self._gate is not None:
             for request in requests:
-                gate.withdraw(request)
+                self._gate.withdraw(request)
         return False
 
     def _release_slot(self) -> None:
@@ -1560,10 +1582,9 @@ class CodeCell:
         finally:
             with self._lock:
                 self._release_slot()
-                gate = self._source.nested_calls
-            if gate is not None:
+            if self._gate is not None:
                 for request in requests:
-                    gate.withdraw(request)
+                    self._gate.withdraw(request)
 
     def _print(self, text: str) -> None:
         with self._lock:
@@ -1639,7 +1660,7 @@ class CodeCell:
             )
             source = self._source
         call = ToolCall(id=started.id, name=function.tool.name, arguments=arguments)
-        gate = source.nested_calls
+        gate = self._gate
         try:
             # An answered call runs, or gets its answer's result; others ask
             # the run's hook, then the user's approval, as a direct call does.
@@ -2081,13 +2102,12 @@ class CodeCells:
     ) -> list[ToolResultAmendment]:
         with self._lock:
             cells = list(self._cells.values())
+            saved_ids = set(self._saved)
             # Saved cells that did not resume stay saved while the run pauses.
             unresumed = [] if reason == "suspended" else list(self._saved.values())
             if unresumed:
                 self._saved.clear()
-        closing = [
-            cell for cell in cells if reason != "suspended" or cell._parked is None
-        ]
+        closing = [cell for cell in cells if reason != "suspended" or not cell.parked]
         for cell in closing:
             cell.stop("terminated")
         for cell in closing:
@@ -2114,11 +2134,7 @@ class CodeCells:
                 if (amendment := _unresumed_amendment(saved, results)) is not None
             ),
             *_interrupted_amendments(
-                results,
-                {
-                    *(cell.id for cell in cells),
-                    *(saved.cell_id for saved in unresumed),
-                },
+                results, {*(cell.id for cell in cells), *saved_ids}
             ),
         ]
         # A hook failure that no observation raised fails the run, as for a

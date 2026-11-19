@@ -127,10 +127,12 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   The tool phase suspends only when the run is idle; the rule is in
   "Suspend and accept input" in `agents/README.md`, and
   `agents/tool_execution.py:ToolBatch.execute` waits on
-  `ExecutionWork.held`.
+  `ExecutionWork.held`; each held job that ends wakes it
+  (`Run.notify_tool_activity`).
   Open requests of calls that tools made for the model stay open while the
   run suspends (`RunProgress.open_inputs`); `ToolBatch._continue_open_inputs`
-  gives their answers to `AgentTool.continue_open_input`.
+  gives their answers to `AgentTool.continue_open_input`, one call's
+  requests together.
   `Agent.on_suspend` runs before each suspension; `Run._suspend` applies its
   amendments before it captures state. A suspend hook that fails sets no
   results and the run still suspends. A suspend hook that stops for

@@ -18,6 +18,7 @@ from onyx.agents.events import (
     AgentSuspendedEvent,
     InputEndedEvent,
     InputRequiredEvent,
+    ToolUpdateEvent,
 )
 from onyx.agents.models import (
     AgentState,
@@ -97,6 +98,18 @@ BACKGROUND_SEND_TWICE = (
     'r = await tools.send(value="bg2")\nprint("sent", r)'
 )
 SECOND_BACKGROUND_REQUEST_ID = "send-bg2"
+# A background cell whose second request opens once the "first" gate opens,
+# and which parks once the "last" gate opens.
+SPLIT_REQUESTS = (
+    "async def later():\n"
+    '    await tools.wait(value="first")\n'
+    '    return await tools.send(value="bg2")\n'
+    "yield_control()\n"
+    "a, b, c = await asyncio.gather(\n"
+    '    tools.send(value="bg"), later(), tools.wait(value="last")\n'
+    ")\n"
+    'print("sent", a, b)'
+)
 
 Reply = Callable[[GenerationRequest, CancellationSignal], AssistantMessage]
 
@@ -169,6 +182,8 @@ class Agents:
         # Builds agents without the `send` tool, as after its server is removed.
         self.send_removed = False
         self.gate: threading.Event | None = None
+        # Gates of `wait` calls by value; other values use `gate`.
+        self.gates: dict[JsonValue, threading.Event] = {}
         self.limits = PARKING_LIMITS
         # Set once a request shows; later model steps wait for it.
         self.shown = threading.Event()
@@ -181,7 +196,7 @@ class Agents:
     def wait(self, invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
         """Returns once the gate opens; it stops when its cell stops, as a tool
         that checks its cancellation does."""
-        gate = self.gate
+        gate = self.gates.get(invocation.arguments["value"], self.gate)
         assert gate is not None
         deadline = time.monotonic() + 10
         while not gate.wait(0.05):
@@ -641,6 +656,195 @@ def test_an_answer_before_a_background_program_parks_still_runs_its_call(
         agents.gate.set()
         run.cancel()
         assert run.wait_for_idle(10)
+
+
+def _moved(run: Run) -> ExecutionCheckpoint:
+    """The suspended run as chat restores it in another process: its saved
+    results keep their typed details, which chat saves with the response."""
+    return run.capture()
+
+
+def _result(run: Run, step_index: int, call_id: str) -> ToolResultMessage | None:
+    steps = run.snapshot().steps
+    execution = (
+        steps[step_index].tools.get(call_id) if len(steps) > step_index else None
+    )
+    return execution.result if execution is not None else None
+
+
+@pytest.mark.parametrize("restored", [False, True], ids=["live", "restored"])
+def test_a_background_cell_takes_the_answers_of_requests_from_each_observation(
+    restored: bool,
+) -> None:
+    """The first request opens after the cell's first observation ends, the
+    second while a wait_code call observes it, and the program parks after that
+    observation ends. Both requests belong to the call that started the cell,
+    so their answers continue the program together."""
+    agents = Agents(
+        reply=_one_call_per_step(
+            _execute("background", SPLIT_REQUESTS),
+            ToolCall(
+                id="read",
+                name=WaitCodeTool.NAME,
+                arguments={"cell_id": 1, "yield_time_ms": 1_000},
+            ),
+            _execute("program", PROGRAM),
+        )
+    )
+    first, last = threading.Event(), threading.Event()
+    agents.gates = {"first": first, "last": last}
+
+    def on_event(event: AgentEvent) -> None:
+        # The wait_code call attached: it gets the cell's running calls.
+        if isinstance(event, ToolUpdateEvent) and event.tool_call.id == "read":
+            first.set()
+
+    run = agents.agent().start(
+        max_steps=5, messages=[UserMessage(content="Send")], on_event=on_event
+    )
+    try:
+        until(
+            lambda: (
+                SECOND_BACKGROUND_REQUEST_ID
+                in {request.request_id for request in run.pending_inputs}
+            )
+        )
+        until(lambda: _result(run, 1, "read") is not None)
+        last.set()
+        _suspended(run)
+        answers = [
+            _answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID),
+            _answer(InputDecision.APPROVE, SECOND_BACKGROUND_REQUEST_ID),
+        ]
+        if restored:
+            checkpoint = _transferred(run)
+            run = agents.agent(checkpoint.agent_state).resume(
+                checkpoint.run_state, answers=answers
+            )
+        else:
+            for answer in answers:
+                run.submit(answer)
+        until(lambda: sorted(map(str, agents.sent)) == ["bg", "bg2"])
+        _suspended(run)
+        run.submit(_answer(InputDecision.APPROVE))
+        run.result(timeout=20)
+        assert run.wait_for_idle(10)
+        assert sorted(map(str, agents.sent)) == ["bg", "bg2", "x"]
+    finally:
+        first.set()
+        last.set()
+        run.cancel()
+        assert run.wait_for_idle(10)
+
+
+def test_a_program_that_parks_while_a_call_runs_takes_its_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The user approves while another call of the background program runs.
+    Once the program parks, it takes the answer at once, while a direct call
+    of the same step still runs."""
+    offers: list[int] = []
+    continue_open = CodeCells.continue_open
+
+    def counted(self: CodeCells, *args: Any, **kwargs: Any) -> list[str]:
+        taken = continue_open(self, *args, **kwargs)
+        offers.append(len(taken))
+        return taken
+
+    monkeypatch.setattr(CodeCells, "continue_open", counted)
+    agents = Agents(
+        reply=_one_call_per_step(
+            _execute(
+                "background",
+                "yield_control()\n"
+                'a, b = await asyncio.gather(tools.wait(value="a"), tools.send(value="bg"))\n'
+                'print("sent", a, b)',
+            ),
+            _execute("busy", 'print(await tools.wait(value="direct"))'),
+        )
+    )
+    background, direct = threading.Event(), threading.Event()
+    agents.gates = {"a": background, "direct": direct}
+    run = agents.agent().start(max_steps=5, messages=[UserMessage(content="Send")])
+    try:
+        until(
+            lambda: (
+                BACKGROUND_REQUEST_ID
+                in {request.request_id for request in run.pending_inputs}
+            )
+        )
+        until(lambda: "busy" in run.snapshot().steps[-1].tools)
+        run.submit(_answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID))
+        # Offered before the park, so the program took nothing.
+        until(lambda: offers == [0])
+        background.set()
+
+        until(lambda: agents.sent == ["bg"])
+        assert not direct.is_set()
+        assert _result(run, 1, "busy") is None
+    finally:
+        background.set()
+        direct.set()
+        run.cancel()
+        assert run.wait_for_idle(10)
+
+
+def test_a_restored_background_cell_that_ends_unobserved_keeps_its_output() -> None:
+    """The background cell continues in another process and ends there with no
+    wait_code call: its closing record saves its output and store commit."""
+    agents = Agents(
+        reply=_one_call_per_step(
+            _execute(
+                "background",
+                'yield_control()\nr = await tools.send(value="bg")\n'
+                'store("k", "v")\nprint("sent", r)',
+            ),
+            _execute("program", PROGRAM),
+        )
+    )
+    run = agents.agent().start(max_steps=5, messages=[UserMessage(content="Send")])
+    _suspended(run)
+    checkpoint = _moved(run)
+    resumed = agents.agent(checkpoint.agent_state).resume(
+        checkpoint.run_state,
+        answers=[_answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID)],
+    )
+    try:
+        until(lambda: agents.sent == ["bg"])
+        state = _suspended(resumed)
+    finally:
+        resumed.cancel()
+        assert resumed.wait_for_idle(10)
+
+    closing = _closing(state, "background")
+    assert closing is not None and closing.status == "completed"
+    assert closing.commit is not None
+    assert "sent {'sent': 'bg'}" in _closing_text(state, "background")
+
+
+def test_a_saved_background_cell_stays_open_across_another_suspend() -> None:
+    """A restored run suspends again before the background cell's answer: the
+    cell stays saved, without an interrupted record, and continues later."""
+    agents = _background_send_agents()
+    run = agents.agent().start(max_steps=5, messages=[UserMessage(content="Send")])
+    _suspended(run)
+    checkpoint = _moved(run)
+
+    resumed = agents.agent(checkpoint.agent_state).resume(checkpoint.run_state)
+    state = _suspended(resumed)
+    assert _closing(state, "background") is None
+
+    checkpoint = _moved(resumed)
+    last = agents.agent(checkpoint.agent_state).resume(
+        checkpoint.run_state,
+        answers=[
+            _answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID),
+            _answer(InputDecision.APPROVE),
+        ],
+    )
+    last.result(timeout=20)
+    assert last.wait_for_idle(10)
+    assert sorted(map(str, agents.sent)) == ["bg", "x"]
 
 
 def test_a_program_too_large_to_park_continues_without_the_call(

@@ -193,10 +193,10 @@ class ToolBatch:
                 self.run.record_tool_results(outcome, calls)
             return outcome
 
+        # The run's work wakes the tool phase when the operation ends.
         future = self.run.work.start(operation)
         for member in calls:
             self.futures[member.id] = future
-        future.add_done_callback(lambda _future: self.run.notify_tool_activity())
 
     def _collect_results(self) -> None:
         for call_id, future in tuple(self.futures.items()):
@@ -274,21 +274,11 @@ class ToolBatch:
                         if len(self._completed_call_ids()) > len(completed_call_ids):
                             continue
                         # See ToolInvocation.run_work.
-                        unsubscribe = self.run.work.held.on_idle(
-                            self.run.notify_tool_activity
-                        )
-                        try:
-                            if self.run.work.held.idle:
-                                return False
-                            self.run.wait_for_tool_activity(
-                                lambda: self.run.work.held.idle
-                            )
-                        finally:
-                            unsubscribe()
-                        continue
-                    self.run.wait_for_tool_activity(
-                        lambda: any(future.done() for future in self.futures.values())
-                    )
+                        if self.run.work.held.idle:
+                            return False
+                    # Each held job that ends, such as a call or a program
+                    # that parks, starts another cycle.
+                    self.run.wait_for_tool_activity()
         except BaseException:
             self.run.cancellation_signal.cancel()
             self.run.notify_tool_activity()

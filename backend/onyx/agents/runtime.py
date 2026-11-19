@@ -564,6 +564,8 @@ class Run:
         # Reserve execution through cleanup, even after output becomes terminal.
         self._execution_active = True
         self._execution_request = ExecutionRequest.NONE
+        # Set by `notify_tool_activity` until the tool phase's next cycle.
+        self._tool_activity = False
         self._watched_children: dict[str, Future[RunState]] = {}
         self._llm: LLM | None = None
         self._defaults = PreparedStep()
@@ -586,7 +588,7 @@ class Run:
         self._on_drained: Callable[[], None] | None = None
         self._restoration: RestorableFeature | None = None
         self._step_tools: list[AgentTool] | None = None
-        self.work = ExecutionWork()
+        self.work = ExecutionWork(self.notify_tool_activity)
         self.coordination: RunCoordination | None = None
         self._thread_context = copy_context()
         self._cancellation_link = ExitStack()
@@ -757,7 +759,10 @@ class Run:
         self.work.track_operation(child.idle)
 
     def notify_tool_activity(self) -> None:
+        """Wake the tool phase for another cycle: a call or held work ended,
+        or the run was cancelled."""
         with self._execution_condition:
+            self._tool_activity = True
             self._execution_condition.notify_all()
 
     @property
@@ -1184,7 +1189,7 @@ class Run:
             if resuming:
                 self._idle = Future()
                 self._settled = Future()
-                self.work = ExecutionWork()
+                self.work = ExecutionWork(self.notify_tool_activity)
             self._execution_active = True
             self._state.status = RunStatus.RUNNING
             if self.event_delivery is not None:
@@ -1227,18 +1232,20 @@ class Run:
         """Acknowledge pending wakeups and return whether new work may start."""
         with self.execution_lock:
             self.cancellation_signal.check()
+            self._tool_activity = False
             if self._execution_request == ExecutionRequest.SUSPEND:
                 return False
             self._execution_request = ExecutionRequest.NONE
             return True
 
-    def wait_for_tool_activity(self, completed: Callable[[], bool]) -> None:
+    def wait_for_tool_activity(self) -> None:
+        """Wait for `notify_tool_activity`, an accepted input, or cancellation."""
         with self._execution_condition:
             ready = self._execution_condition.wait_for(
                 lambda: (
                     self.cancellation_signal.cancelled
                     or self._execution_request == ExecutionRequest.WAKE
-                    or completed()
+                    or self._tool_activity
                 ),
                 OPERATION_TIMEOUT_SECONDS,
             )
