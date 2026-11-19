@@ -2071,9 +2071,9 @@ class CodeCells:
         self, results: Sequence[ToolResultMessage]
     ) -> list[ToolResultAmendment]:
         """Close the cells when the run pauses, and return final records as
-        `finish` does; see ToolInvocation.run_work for when the run pauses. A
-        cell whose program waits for input stays, to save with the run. Later
-        calls can start new cells."""
+        `finish` does; "Suspend and accept input" in agents/README.md says when
+        the run pauses. A cell whose program waits for input stays, to save with
+        the run. Later calls can start new cells."""
         return self._close_all(results, "suspended")
 
     def _close_all(

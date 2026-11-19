@@ -382,6 +382,7 @@ def test_a_continuing_program_takes_the_next_slot_before_new_cells() -> None:
     continued = start_thread_future(
         lambda: running.acquire("tenant", wait=cancellation), name="continued"
     )
+    until(lambda: running._waiting == 1)
     assert not running.acquire("tenant")
 
     running.release("tenant", 0.0)

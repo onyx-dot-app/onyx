@@ -124,8 +124,8 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   next request builds its context from the amended result, and compacts only
   when that context is over budget. A hook that fails or stops for
   cancellation sets no results; the run still ends.
-  The tool phase suspends only when the run is idle; the rule is at
-  `ToolInvocation.run_work` (`agents/tools.py`), and
+  The tool phase suspends only when the run is idle; the rule is in
+  "Suspend and accept input" in `agents/README.md`, and
   `agents/tool_execution.py:ToolBatch.execute` waits on
   `ExecutionWork.held`.
   Open requests of calls that tools made for the model stay open while the
@@ -156,9 +156,9 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   display adds nothing. `ToolRenderer.complete` renders that part after the
   section end too. Live, the closing record follows the answer; replay places
   it before the answer's `message_start`. Both orders give the same groups.
-  An input request or its end for a call without a card in this stream, such
-  as a request of a background program after a restore, gets a card that
-  starts as ended. A continued program's requests keep the message and step
+  A replayed card, ended or open and in child runs too, takes the later
+  events of its call. A call that no part of this stream drew gets an open
+  card, which closes when its run ends. A continued program's requests keep the message and step
   of the call that started it (`agents/tool_execution.py:_NestedCallGate`).
 - `backend/onyx/agents/runtime.py:_compact_context` fits each request before the
   model call: it applies the saved checkpoint and summarizes through
