@@ -108,6 +108,13 @@ or on the **Overview** tab of the integration.
 
 Only users with the organization-wide **Manage Actions** permission can change the install setting.
 
+When an integration is **Required** and each user signs in with their own account,
+each user must connect it before they can use Onyx. Onyx shows a **Connect your work tools** page on the next page load,
+with a **Connect** button for each Required integration. **Continue** stays off until the user connects each one.
+Admins see the same page, but they can click **Continue** to use Onyx without a connection.
+The page shows again on the next page load. A Required integration that only an admin can connect,
+such as one with an organization account, does not block users.
+
 On the Enterprise plan, a group can have its own install setting. Set it in **Group Access** on the **Overview** tab.
 A group setting replaces the company setting for the members of the group, also when it is stricter.
 A group with no setting uses the company setting.
