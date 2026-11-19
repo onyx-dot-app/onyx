@@ -9,10 +9,6 @@ import type {
 } from "@/app/craft/types/streamingTypes";
 import type { TimelineEvent } from "@/lib/timeline/events";
 
-jest.mock("@/lib/app/components", () => ({
-  FoldableLogo: () => <div data-testid="onyx-logo" />,
-}));
-
 jest.mock("@/components/chat/MinimalMarkdown", () => ({
   __esModule: true,
   default: ({ content }: { content: string }) => <div>{content}</div>,
@@ -130,12 +126,15 @@ test("shows a cursor after refresh with only completed tools until the turn sett
   expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
 });
 
-test("uses the text cursor without adding a second progress cursor", () => {
+test("uses the text cursor without adding a second progress cursor", async () => {
   renderList({
     isStreaming: true,
     timelineEvents: [text("Writing")],
   });
-  expect(screen.getAllByTestId("blinking-bar")).toHaveLength(1);
+  // The text cursor is the inline `[*]()` marker in the (mocked) markdown.
+  // Live text types out.
+  expect(await screen.findByText(/Writing \[\*\]\(\)/)).toBeInTheDocument();
+  expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
 });
 
 test("shows a cursor when a live turn has only saved history", () => {
@@ -273,7 +272,8 @@ describe("BuildMessageList thinking visibility", () => {
   it("shows restored thought packets as collapsed thinking rows", () => {
     renderList({ messages: [savedAssistantMessage] });
 
-    fireEvent.click(screen.getByRole("button", { name: /Thinking/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand timeline" }));
+    fireEvent.click(screen.getByRole("button", { name: "Thinking" }));
 
     expect(screen.getByText("Thinking")).toBeInTheDocument();
     expect(screen.getByText("Checking the app structure.")).toBeInTheDocument();
@@ -283,6 +283,8 @@ describe("BuildMessageList thinking visibility", () => {
   it("does not open restored thought packets by default", () => {
     renderList({ messages: [savedAssistantMessage] });
 
+    // The saved run is folded; opening it shows the thought step closed.
+    fireEvent.click(screen.getByRole("button", { name: "Expand timeline" }));
     expect(screen.getByText("Thinking")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
@@ -299,12 +301,17 @@ describe("BuildMessageList thinking visibility", () => {
       ],
     });
 
+    // Live text types out with its cursor, and the run folds once text
+    // follows it.
+    expect(await screen.findByText(/^Final answer/)).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Expand timeline" })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Expand timeline" }));
     expect(screen.getByText("Thinking")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
     ).not.toBeInTheDocument();
-    // Live text types out.
-    expect(await screen.findByText("Final answer")).toBeInTheDocument();
   });
 
   it("shows live thought packets as collapsed progress by default", () => {
@@ -374,7 +381,6 @@ test("keeps one assistant cursor during finalization and removes it when finaliz
     </TooltipProvider>
   );
   expect(screen.getAllByText("Final answer")).toHaveLength(1);
-  expect(screen.getAllByTestId("onyx-logo")).toHaveLength(1);
   expect(screen.getAllByTestId("blinking-bar")).toHaveLength(1);
   rerender(
     <TooltipProvider>

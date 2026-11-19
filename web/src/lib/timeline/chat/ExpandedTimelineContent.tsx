@@ -73,13 +73,12 @@ const TimelineStep = React.memo(function TimelineStep({
         results={results}
         isLastStep={isLastStep}
         isFirstStep={isFirstStep}
-        isSingleStep={isSingleStep}
         collapsible={true}
         getCollapsedIcon={getCollapsedIcon}
         statusIcon={statusIcon}
       />
     ),
-    [isFirstStep, isLastStep, isSingleStep, getCollapsedIcon, statusIcon]
+    [isFirstStep, isLastStep, getCollapsedIcon, statusIcon]
   );
 
   return (

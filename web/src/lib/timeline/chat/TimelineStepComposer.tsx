@@ -14,8 +14,6 @@ export interface TimelineStepComposerProps {
   isLastStep: boolean;
   /** Whether the overall step is the first in the timeline (affects connector). */
   isFirstStep: boolean;
-  /** Whether the timeline has a single step (used to hide headers). */
-  isSingleStep?: boolean;
   /** Whether StepContainer should show collapse controls. */
   collapsible?: boolean;
   /** Optional resolver for custom collapsed icon per result. */
@@ -34,7 +32,6 @@ export function TimelineStepComposer({
   results,
   isLastStep,
   isFirstStep,
-  isSingleStep = false,
   collapsible = true,
   getCollapsedIcon,
   statusIcon,
@@ -52,7 +49,7 @@ export function TimelineStepComposer({
               (index === 0 ? statusIcon : undefined) ??
               (result.icon as FunctionComponent<IconProps> | undefined)
             }
-            header={result.status}
+            header={result.status ?? undefined}
             isExpanded={result.isExpanded}
             onToggle={result.onToggle}
             toggleLabel={t(
@@ -60,17 +57,10 @@ export function TimelineStepComposer({
                 ? "collapseButton.ariaLabel"
                 : "expandButton.ariaLabel"
             )}
-            collapsible={
-              collapsible && (!isSingleStep || !!result.alwaysCollapsible)
-            }
+            collapsible={collapsible}
             supportsCollapsible={result.supportsCollapsible}
             isLastStep={index === results.length - 1 && isLastStep}
             isFirstStep={index === 0 && isFirstStep}
-            hideHeader={
-              results.length === 1 &&
-              isSingleStep &&
-              !result.supportsCollapsible
-            }
             collapsedIcon={
               getCollapsedIcon ? getCollapsedIcon(result) : undefined
             }

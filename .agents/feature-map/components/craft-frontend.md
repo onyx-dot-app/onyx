@@ -150,11 +150,12 @@ into rail blocks (consecutive tool calls and thinking) and inline items
 part id, so a late update changes it in place.
 `web/src/lib/timeline/craft/components/CraftTimeline.tsx` draws a block on the rail that
 chat uses (`web/src/lib/timeline/`, [[chat-frontend]]), with chat's layout:
-every block has the shared run header (`RunHeaderRow`), the first block's
-header carries the logo, and text sits outside the rail. A response that does
-not start with a block gets a logo-only header row. A block with more than one
-entry folds once a text reply follows; one entry always stays on the rail.
-Chat's `AgentTimeline` follows the same open and fold rules.
+each block is a card, with the shared run header (`RunHeaderRow`) across its
+top. Each step's header is a `Content` (icon and title); the rail is a line
+that `StepContainer` places absolutely from one step's icon to the next. Answer
+text (`AnswerText`) lines up with the run header's text. Every block folds,
+even with one entry, once a text reply follows. Chat's `AgentTimeline`
+follows the same open and fold rules.
 
 ---
 

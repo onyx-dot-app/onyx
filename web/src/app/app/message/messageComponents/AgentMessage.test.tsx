@@ -1355,14 +1355,17 @@ test("a tool step after an accepted user message follows that message", async ()
     const bubble = await screen.findByText("Use the latest report");
     // Each search gets its own timeline, on its side of the user message.
     expect(screen.queryByText("2 steps")).not.toBeInTheDocument();
-    // A single-step run is open, so its query shows.
-    const first = screen.getByText("first query");
-    const second = screen.getByText("second query");
+    const timelines = screen.getAllByRole("button", {
+      name: "Toggle timeline",
+    });
+    expect(timelines).toHaveLength(2);
     expect(
-      first.compareDocumentPosition(bubble) & Node.DOCUMENT_POSITION_FOLLOWING
+      timelines[0]!.compareDocumentPosition(bubble) &
+        Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
-      bubble.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING
+      bubble.compareDocumentPosition(timelines[1]!) &
+        Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
   } finally {
     view.unmount();

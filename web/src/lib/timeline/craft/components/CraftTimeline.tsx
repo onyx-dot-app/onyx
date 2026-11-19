@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Collapsible } from "@opal/components";
 import { STEP_ICONS } from "@/lib/timeline/icons";
-import { FoldableLogo } from "@/lib/app/components";
 import { StepContainer } from "@/lib/timeline/components/StepContainer";
 import { TimelineSteps } from "@/lib/timeline/components/TimelineSteps";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
@@ -109,9 +108,7 @@ function CraftTimelineStep({
   return (
     <StepContainer
       stepIcon={getToolCallStepIcon(toolCall)}
-      header={
-        <span className="block truncate">{renderToolCallHeader(toolCall)}</span>
-      }
+      header={renderToolCallHeader(toolCall)}
       headerAccessory={
         toolCall.skillName && toolCall.toolName !== "skill" ? (
           <SkillBadge name={toolCall.skillName} />
@@ -136,8 +133,6 @@ interface CraftTimelineProps {
   entries: CraftTimelineEntry[];
   /** Fold the run closed once an assistant message follows it. */
   autoCollapse?: boolean;
-  /** Only a response's first run shows the agent's logo, as in chat. */
-  showAgentAvatar?: boolean;
 }
 
 /**
@@ -148,7 +143,6 @@ interface CraftTimelineProps {
 export default function CraftTimeline({
   entries,
   autoCollapse = false,
-  showAgentAvatar = false,
 }: CraftTimelineProps) {
   const t = useTranslations("craft.toolCards.group");
   const tTimeline = useTranslations("chat.messages.timeline");
@@ -156,20 +150,34 @@ export default function CraftTimeline({
   const isRunning = entries.some((entry) => entry.status === "streaming");
   const isStopped =
     !isRunning && entries.some((entry) => entry.status === "stopped");
-  const foldable = entries.length > 1;
-  // Open while the run is active so streaming steps stay visible; settled
-  // runs start folded.
-  const [isOpen, setIsOpen] = useState(!foldable || isRunning);
-  const toggle = () => setIsOpen((prev) => !prev);
+  // Every run folds, even with one step. Open while the run is active so
+  // streaming steps stay visible; settled runs start folded.
+  const [isOpen, setIsOpen] = useState(isRunning);
+  // A run the user folded or opened keeps their choice.
+  const userToggled = useRef(false);
+  const toggle = () => {
+    userToggled.current = true;
+    setIsOpen((prev) => !prev);
+  };
+
+  // Open when the run becomes active after mounting settled (its first call
+  // arrived complete); only on that change, so a later fold sticks.
+  const wasRunning = useRef(isRunning);
+  useEffect(() => {
+    if (isRunning && !wasRunning.current && !userToggled.current) {
+      setIsOpen(true);
+    }
+    wasRunning.current = isRunning;
+  }, [isRunning]);
 
   // Fold closed once a message follows; fire once so a manual re-open sticks.
   const didAutoCollapse = useRef(false);
   useEffect(() => {
-    if (foldable && autoCollapse && !didAutoCollapse.current) {
+    if (autoCollapse && !didAutoCollapse.current) {
       didAutoCollapse.current = true;
       setIsOpen(false);
     }
-  }, [foldable, autoCollapse]);
+  }, [autoCollapse]);
 
   // A run that streams here is timed; a saved run has no duration.
   const [startedAt] = useState<number | undefined>(() =>
@@ -185,22 +193,19 @@ export default function CraftTimeline({
   }, [isRunning, startedAt]);
 
   // The end row folds with the steps, so it does not depend on `isOpen`.
-  const showEndRow = foldable && !isRunning;
+  const showEndRow = !isRunning;
 
   return (
     <TimelineRoot>
       <RunHeaderRow
-        left={
-          showAgentAvatar ? <FoldableLogo onyxBranded folded size={24} /> : null
-        }
-        interactive={foldable}
+        interactive
         tinted={isRunning || isOpen}
         roundedBottom={!isOpen}
       >
         {isRunning ? (
           <StreamingHeader
             headerText={t("working.label")}
-            collapsible={foldable}
+            collapsible
             isExpanded={isOpen}
             onToggle={toggle}
             streamingStartTime={startedAt}
@@ -208,14 +213,14 @@ export default function CraftTimeline({
         ) : isStopped ? (
           <StoppedHeader
             totalSteps={entries.length}
-            collapsible={foldable}
+            collapsible
             isExpanded={isOpen}
             onToggle={toggle}
           />
         ) : (
           <CompletedHeader
             totalSteps={entries.length}
-            collapsible={foldable}
+            collapsible
             isExpanded={isOpen}
             onToggle={toggle}
             processingDurationSeconds={durationSeconds}
@@ -233,7 +238,9 @@ export default function CraftTimeline({
                   ...position,
                   isLast: position.isLast && !showEndRow,
                 }}
-                defaultExpanded={!foldable && entry.status === "error"}
+                defaultExpanded={
+                  entries.length === 1 && entry.status === "error"
+                }
               />
             )}
           />
