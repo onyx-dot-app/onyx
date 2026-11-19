@@ -221,9 +221,19 @@ def _session_cookie_clear_header() -> str | None:
         or _REASON_TO_ERROR_CODE[rejection.reason] != OnyxErrorCode.SESSION_UNRECOGNIZED
     ):
         return None
-    # The synchronous body of the transport's async get_logout_response, so
-    # sync endpoints can use it.
-    logout_response = cookie_transport._set_logout_cookie(Response())
+    # The same cookie as the transport's async get_logout_response, built
+    # synchronously so sync endpoints can send it.
+    logout_response = Response()
+    logout_response.set_cookie(
+        cookie_transport.cookie_name,
+        "",
+        max_age=0,
+        path=cookie_transport.cookie_path,
+        domain=cookie_transport.cookie_domain,
+        secure=cookie_transport.cookie_secure,
+        httponly=cookie_transport.cookie_httponly,
+        samesite=cookie_transport.cookie_samesite,
+    )
     return logout_response.headers["set-cookie"]
 
 

@@ -16,10 +16,10 @@ import httpx
 import pytest
 from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.orm import Session
 
 import onyx.auth.users as auth_users
 import onyx.server.manage.users as manage_users
+from onyx.auth.session_tokens import cookie_transport
 from onyx.auth.users import TenantAwareRedisStrategy, current_chat_accessible_user
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
@@ -27,7 +27,7 @@ from onyx.db.models import User
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.manage.users import router as user_router
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import MakeTestUser
 
 
 @pytest.fixture
@@ -59,9 +59,12 @@ def _session_set_cookies(response: httpx.Response) -> list[str]:
     ]
 
 
-def _assert_clears_session_cookie(response: httpx.Response) -> None:
+async def _assert_clears_session_cookie(response: httpx.Response) -> None:
     session_cookies = _session_set_cookies(response)
     assert len(session_cookies) == 1
+    # Identical to the cookie /auth/logout sends.
+    logout_response = await cookie_transport.get_logout_response()
+    assert session_cookies[0] == logout_response.headers["set-cookie"]
     attributes = [part.strip() for part in session_cookies[0].split(";")]
     assert attributes[0] == f'{FASTAPI_USERS_AUTH_COOKIE_NAME}=""'
     assert "Max-Age=0" in attributes
@@ -71,8 +74,7 @@ def _assert_clears_session_cookie(response: httpx.Response) -> None:
 
 
 @asynccontextmanager
-async def _expired_session_token(db_session: Session) -> AsyncIterator[str]:
-    user = create_test_user(db_session, "session_contract_expired")
+async def _expired_session_token(user: User) -> AsyncIterator[str]:
     token = await TenantAwareRedisStrategy().write_token(user)
     redis = get_raw_redis_client()
     redis_key = REDIS_AUTH_KEY_PREFIX + token
@@ -98,9 +100,10 @@ def _enable_anonymous_access(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("tenant_context")
 async def test_expired_session_yields_403_with_expired_code(
-    app: FastAPI, db_session: Session
+    app: FastAPI, make_test_user: MakeTestUser
 ) -> None:
-    async with _expired_session_token(db_session) as token:
+    user = make_test_user("session_contract_expired")
+    async with _expired_session_token(user) as token:
         async with _client(app, token) as client:
             response = await client.get("/me")
 
@@ -131,7 +134,7 @@ async def test_unrecognized_session_yields_403_and_clears_cookie(
 
     assert response.status_code == 403
     assert response.json()["error_code"] == "SESSION_UNRECOGNIZED"
-    _assert_clears_session_cookie(response)
+    await _assert_clears_session_cookie(response)
 
 
 @pytest.mark.asyncio
@@ -146,18 +149,22 @@ async def test_anonymous_fallback_clears_unrecognized_cookie(
         response = await client.get(path)
 
     assert response.status_code == 200
-    _assert_clears_session_cookie(response)
+    await _assert_clears_session_cookie(response)
 
 
 @pytest.mark.asyncio
 @pytest.mark.usefixtures("tenant_context")
 @pytest.mark.parametrize("path", ["/me", "/chat-accessible"])
 async def test_anonymous_fallback_keeps_expired_cookie(
-    app: FastAPI, db_session: Session, monkeypatch: pytest.MonkeyPatch, path: str
+    app: FastAPI,
+    make_test_user: MakeTestUser,
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
 ) -> None:
     _enable_anonymous_access(monkeypatch)
+    user = make_test_user("session_contract_expired")
 
-    async with _expired_session_token(db_session) as token:
+    async with _expired_session_token(user) as token:
         async with _client(app, token) as client:
             response = await client.get(path)
 
