@@ -41,6 +41,6 @@ def test_pruning_drops_questions_only_when_documents_were_pruned(
         )
 
     if expect_drop:
-        drop.assert_called_once_with("tenant_x")
+        drop.assert_called_once_with()
     else:
         drop.assert_not_called()

@@ -987,7 +987,7 @@ def monitor_ccpair_pruning_taskset(
     # so the per-batch commits of the drain are safe here.
     if initial > 0:
         # A failed prune may still have removed some documents.
-        drop_orphaned_questions(tenant_id)
+        drop_orphaned_questions()
         sweep_orphan_tags(r, db_session)
 
 

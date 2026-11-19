@@ -1,4 +1,6 @@
 from collections import Counter, defaultdict
+from collections.abc import Mapping
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -42,60 +44,72 @@ class NothingSearchableYet(Exception):
 def choose_documents(
     db_session: Session,
     people: list[User],
-    exclude_ids: set[str],
-    prefer_private: bool = False,
+    shared_exclude_ids: set[str],
+    private_exclude_ids: Mapping[UUID, set[str]],
+    include_shared: bool = True,
 ) -> list[CandidateDocument]:
     """Pick the documents a run writes questions about: the newest ones everyone
     can see, and for each person the newest ones only they (or a few people)
     can see, topped up with their uploads when those fall short. Each person
     has their own query, so a large shared connector cannot crowd out their
-    documents. Access uses the same rules as search."""
-    shared = [
-        CandidateDocument(document_id=document_id, kind=QuestionKind.DOCUMENT)
-        for document_id in get_newest_public_document_ids(
-            db_session, SQ_SHARED_DOCS, exclude_ids
-        )
-    ]
+    documents. Access uses the same rules as search.
 
-    private: list[CandidateDocument] = []
+    Each private candidate records the people whose bucket chose it, so its
+    question goes on their private shelves. A document already on a shelf is
+    skipped for that shelf only. A top-up passes include_shared=False: the
+    shared shelf is filled by pool runs."""
+    shared = (
+        [
+            CandidateDocument(document_id=document_id, kind=QuestionKind.DOCUMENT)
+            for document_id in get_newest_public_document_ids(
+                db_session, SQ_SHARED_DOCS, shared_exclude_ids
+            )
+        ]
+        if include_shared
+        else []
+    )
+
+    # The private query leaves out documents everyone can see, so a document is
+    # never both shared and private. A group document can be in several
+    # people's buckets: one candidate, several owners.
+    owners: dict[str, list[UUID]] = defaultdict(list)
+    kinds: dict[str, QuestionKind] = {}
     # A Playground company has at most 5 people, so these are a few small
     # queries per run. One query per person keeps them easy to read and debug;
     # combining them into one statement or running them in parallel would not
     # be worth the extra code.
     for person in people:
-        granted = [
-            CandidateDocument(document_id=document_id, kind=QuestionKind.DOCUMENT)
-            for document_id in get_newest_private_document_ids(
-                db_session,
-                user_email=person.email,
-                external_group_ids=get_user_external_group_ids(db_session, person),
-                user_id=person.id,
-                prior_emails=person.prior_emails,
-                limit=SQ_PRIVATE_DOCS_PER_USER,
-                exclude_ids=exclude_ids,
-            )
-        ]
+        exclude_ids = private_exclude_ids.get(person.id, set())
+        granted = get_newest_private_document_ids(
+            db_session,
+            user_email=person.email,
+            external_group_ids=get_user_external_group_ids(db_session, person),
+            user_id=person.id,
+            prior_emails=person.prior_emails,
+            limit=SQ_PRIVATE_DOCS_PER_USER,
+            exclude_ids=exclude_ids,
+        )
         # Uploads only fill the bucket when connector documents fall short.
         missing = SQ_PRIVATE_DOCS_PER_USER - len(granted)
         uploads = (
-            [
-                CandidateDocument(document_id=user_file_id, kind=QuestionKind.USER_FILE)
-                for user_file_id in get_recent_user_file_ids(
-                    db_session, person.id, missing, exclude_ids
-                )
-            ]
+            get_recent_user_file_ids(db_session, person.id, missing, exclude_ids)
             if missing > 0
             else []
         )
-        private.extend([*granted, *uploads])
+        for document_id in granted:
+            kinds.setdefault(document_id, QuestionKind.DOCUMENT)
+            owners[document_id].append(person.id)
+        for user_file_id in uploads:
+            kinds[user_file_id] = QuestionKind.USER_FILE
+            owners[user_file_id].append(person.id)
 
-    ordered = [*private, *shared] if prefer_private else [*shared, *private]
-    seen: set[str] = set()
-    candidates = []
-    for candidate in ordered:
-        if candidate.document_id not in seen:
-            seen.add(candidate.document_id)
-            candidates.append(candidate)
+    private = [
+        CandidateDocument(
+            document_id=document_id, kind=kinds[document_id], owner_ids=owner_ids
+        )
+        for document_id, owner_ids in owners.items()
+    ]
+    candidates = [*shared, *private]
     logger.info(
         "Suggested questions: chose %d documents (%d shared, %d private) for %d people",
         len(candidates),

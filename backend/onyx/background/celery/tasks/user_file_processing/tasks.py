@@ -943,7 +943,7 @@ def delete_user_file_impl(
             if user_file is not None:
                 delete_user_file__no_commit(db_session, user_file)
                 db_session.commit()
-        drop_orphaned_questions(tenant_id)
+        drop_orphaned_questions()
         task_logger.info(f"delete_user_file_impl - Completed id={user_file_id}")
     except Exception as e:
         task_logger.exception(

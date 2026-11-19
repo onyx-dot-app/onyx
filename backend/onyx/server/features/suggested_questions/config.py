@@ -2,8 +2,13 @@ import os
 
 from onyx.llm.decisions.models import OPENAI_DECISIONS_MODEL_NAME
 
-# Questions kept in a company's pool after each merge.
-SQ_POOL_MAX = 40
+# The shared shelf: questions about company-wide documents, one per company.
+SQ_SHARED_SHELF = 20
+# The private shelf: questions about one person's own documents.
+SQ_PRIVATE_SHELF = 8
+# A top-up runs only while the person has this many usable private questions
+# or fewer. The ones over the 4 shown cover a refill that fails.
+SQ_PRIVATE_REFILL_AT = 6
 
 # A person counts as active if they opened the chat within this many days.
 SQ_ACTIVE_DAYS = 7
@@ -85,17 +90,10 @@ SQ_SEARCH_LIMIT = 10
 SQ_SEARCH_WORKERS = 4
 SQ_TRIAGE_WORKERS = 4
 
-# When a pool run is worth it. Running low: fewer usable questions than this.
-SQ_POOL_SHORT = 12
-# New material: at least this many new documents since the last run, while the
-# pool has room (fewer than SQ_POOL_MAX questions).
-SQ_MIN_NEW_DOCS = 20
-# No run with fewer documents than this that are not yet in the pool.
+# No pool run with fewer documents than this that have no question yet.
 SQ_MIN_CANDIDATE_DOCS = 5
-# Minimum minutes since the last run: when running low, and for new material,
-# so a connector that indexes for hours does not use every run at once.
-SQ_SHORT_GAP_MIN = 10
-SQ_GROWTH_GAP_MIN = 60
+# Minimum minutes between pool runs.
+SQ_POOL_RUN_GAP_MIN = 10
 # A safety limit on pool runs per SQ_RUN_WINDOW_HOURS.
 SQ_MAX_POOL_RUNS_PER_DAY = 5
 # A question is not shown, and does not count as usable, after this age.
@@ -106,10 +104,7 @@ SQ_QUESTION_MAX_AGE_DAYS = 7
 SQ_TOPUPS_PER_USER_PER_DAY = 5
 SQ_TOPUP_GAP_MIN = 10
 
-# Delay before a new-material run, so a large connector does not request a run
-# per batch. Other runs start at once.
-SQ_GROWTH_DELAY_S = 600
-# A queued task expires this long after it was due, and the queued flag lives
+# A queued task expires this long after it was sent, and the queued flag lives
 # as long as the task can wait, so a stale flag cannot block runs.
 SQ_TASK_EXPIRES_S = 1800
 # Lease of the pool lock. It expires only on Redis; on Postgres the lock is

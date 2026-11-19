@@ -46,36 +46,22 @@ def _pool(questions: int = 0, runs_ago_min: list[int] | None = None) -> Question
 
 
 @pytest.mark.parametrize(
-    "pool, new_docs, candidates, usable, run, reason",
+    "pool, candidates, run, reason",
     [
-        (None, 0, 4, 0, False, "too few documents without a question"),
-        (None, 0, 5, 0, True, "first run"),
-        (_pool(0, []), 0, 5, 0, True, "first run"),
-        (
-            _pool(5, [300, 240, 180, 120, 60]),
-            0,
-            50,
-            5,
-            False,
-            "daily run limit reached",
-        ),
-        (_pool(5, [5]), 0, 50, 5, False, "running low, but too soon"),
-        (_pool(5, [15]), 0, 50, 5, True, "running low"),
-        (_pool(20, [30]), 25, 50, 20, False, "new material, but too soon"),
-        (_pool(20, [90]), 25, 50, 20, True, "new material"),
-        (_pool(40, [90]), 25, 50, 40, False, "enough questions and no new material"),
-        (_pool(20, [90]), 19, 50, 20, False, "enough questions and no new material"),
+        (None, 4, False, "too few documents without a question"),
+        (None, 5, True, "first run"),
+        (_pool(0, []), 5, True, "first run"),
+        (_pool(5, [300, 240, 180, 120, 60]), 50, False, "daily run limit reached"),
+        (_pool(5, [5]), 50, False, "too soon after the last run"),
+        (_pool(5, [15]), 50, True, "requested"),
+        # A full shelf still runs when asked: the requester decided it is needed.
+        (_pool(20, [15]), 50, True, "requested"),
     ],
 )
 def test_worth_running(
-    pool: QuestionPool | None,
-    new_docs: int,
-    candidates: int,
-    usable: int,
-    run: bool,
-    reason: str,
+    pool: QuestionPool | None, candidates: int, run: bool, reason: str
 ) -> None:
-    decision = scheduling.worth_running(pool, NOW, new_docs, candidates, usable)
+    decision = scheduling.worth_running(pool, NOW, candidates)
 
     assert (decision.run, decision.reason) == (run, reason)
 
@@ -97,15 +83,13 @@ def test_topup_allowed(topups_ago_min: list[int], allowed: bool) -> None:
 
 
 def test_count_usable_questions_skips_deleted_and_old() -> None:
-    pool = QuestionPool(
-        questions=[
-            _question("live"),
-            _question("deleted"),
-            _question("old", age=timedelta(days=8)),
-        ]
-    )
+    questions = [
+        _question("live"),
+        _question("deleted"),
+        _question("old", age=timedelta(days=8)),
+    ]
 
-    assert scheduling.count_usable_questions(pool, {"live", "old"}, NOW) == 1
+    assert scheduling.count_usable_questions(questions, {"live", "old"}, NOW) == 1
 
 
 def _as_bytes(value: Any) -> bytes:
@@ -158,6 +142,10 @@ def cache(monkeypatch: pytest.MonkeyPatch) -> _FakeCache:
     fake = _FakeCache()
     monkeypatch.setattr(scheduling, "is_enabled", lambda: True)
     monkeypatch.setattr(scheduling, "get_cache_backend", lambda **_kw: fake)
+    # No pool yet and enough documents, so the run rules allow a first run.
+    monkeypatch.setattr(scheduling, "load_pool", lambda: None)
+    monkeypatch.setattr(scheduling, "get_session_with_current_tenant", MagicMock())
+    monkeypatch.setattr(scheduling, "count_candidate_documents", lambda _s, _ids: 30)
     return fake
 
 
@@ -165,12 +153,12 @@ def cache(monkeypatch: pytest.MonkeyPatch) -> _FakeCache:
 def sent(
     cache: _FakeCache,  # noqa: ARG001 - turns scheduling on with a fake cache
     monkeypatch: pytest.MonkeyPatch,
-) -> list[tuple[str, dict[str, Any], int, int]]:
+) -> list[tuple[str, dict[str, Any], int]]:
     """Tasks sent, with the scheduling turned on and an in-memory cache."""
-    calls: list[tuple[str, dict[str, Any], int, int]] = []
+    calls: list[tuple[str, dict[str, Any], int]] = []
     client = MagicMock()
-    client.send_task.side_effect = lambda name, kwargs, priority, countdown, **_kw: (
-        calls.append((name, kwargs, priority, countdown))
+    client.send_task.side_effect = lambda name, kwargs, priority, **_kw: calls.append(
+        (name, kwargs, priority)
     )
     monkeypatch.setitem(
         sys.modules,
@@ -180,20 +168,42 @@ def sent(
     return calls
 
 
-def test_pool_refresh_queues_once_unless_more_urgent(sent: list[Any]) -> None:
-    scheduling.request_pool_refresh("tenant", RefreshReason.GROWTH)
-    scheduling.request_pool_refresh("tenant", RefreshReason.GROWTH)
-    scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
-    scheduling.request_pool_refresh("tenant", RefreshReason.POOL_SHORT)
+def test_pool_refresh_queues_once_at_high_priority(sent: list[Any]) -> None:
+    for _ in range(3):
+        scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
 
-    assert [
-        (kwargs["reason"], priority, countdown)
-        for _, kwargs, priority, countdown in sent
-    ] == [
-        ("growth", OnyxCeleryPriority.LOW, 600),
-        ("first_run", OnyxCeleryPriority.HIGH, 0),
+    assert [(kwargs["reason"], priority) for _, kwargs, priority in sent] == [
+        ("first_run", OnyxCeleryPriority.HIGH)
     ]
     assert sent[0][1]["tenant_id"] == "tenant"
+
+
+@pytest.mark.parametrize(
+    "pool, candidates",
+    [
+        (_pool(5, [5]), 30),  # too soon after the last run
+        (None, 4),  # too few documents without a question
+    ],
+)
+def test_a_request_the_run_rules_refuse_is_never_sent(
+    sent: list[Any],
+    cache: _FakeCache,
+    monkeypatch: pytest.MonkeyPatch,
+    pool: QuestionPool | None,
+    candidates: int,
+) -> None:
+    # The pool is read through the real clock, so the last run is "now".
+    if pool is not None:
+        pool = pool.model_copy(update={"runs": [datetime.now(timezone.utc)]})
+    monkeypatch.setattr(scheduling, "load_pool", lambda: pool)
+    monkeypatch.setattr(
+        scheduling, "count_candidate_documents", lambda _s, _ids: candidates
+    )
+
+    scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
+
+    assert sent == []
+    assert cache.values == {}
 
 
 def test_pool_refresh_does_nothing_when_disabled(
@@ -221,7 +231,7 @@ def test_topup_queues_once_and_respects_limits(sent: list[Any]) -> None:
         "tenant", bob, UserRecord(topups=[NOW - timedelta(minutes=2)]), NOW
     )
 
-    assert [(kwargs["user_id"], priority) for _, kwargs, priority, _ in sent] == [
+    assert [(kwargs["user_id"], priority) for _, kwargs, priority in sent] == [
         (str(alice), OnyxCeleryPriority.HIGH)
     ]
 
@@ -254,7 +264,8 @@ def pool_store(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     state: dict[str, Any] = {
         "pool": QuestionPool(questions=[_question("kept"), _question("deleted")]),
         "saved": None,
-        "refreshes": [],
+        "shelves": {},
+        "private_saves": [],
     }
     monkeypatch.setattr(scheduling, "is_enabled", lambda: True)
     monkeypatch.setattr(scheduling, "pool_lock", lambda _wait: nullcontext())
@@ -262,21 +273,27 @@ def pool_store(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(scheduling, "save_pool", lambda pool: state.update(saved=pool))
     monkeypatch.setattr(scheduling, "get_session_with_current_tenant", MagicMock())
     monkeypatch.setattr(scheduling, "get_live_document_ids", lambda _s, _ids: {"kept"})
+    monkeypatch.setattr(scheduling, "load_private_shelves", lambda _s: state["shelves"])
     monkeypatch.setattr(
         scheduling,
-        "request_pool_refresh",
-        lambda _tenant_id, reason: state["refreshes"].append(reason),
+        "save_private_questions",
+        lambda user_id, added, live, _now: state["private_saves"].append(
+            (user_id, added, live)
+        ),
     )
+    state["requests"] = MagicMock()
+    monkeypatch.setattr(scheduling, "request_pool_refresh", state["requests"])
     return state
 
 
-def test_drop_orphaned_questions_saves_and_asks_for_a_refill(
+def test_drop_orphaned_questions_saves_and_asks_for_no_run(
     pool_store: dict[str, Any],
 ) -> None:
-    scheduling.drop_orphaned_questions("tenant")
+    scheduling.drop_orphaned_questions()
 
     assert [q.document_id for q in pool_store["saved"].questions] == ["kept"]
-    assert pool_store["refreshes"] == [RefreshReason.POOL_SHORT]
+    # The next chat open of a person who is now short asks for a run.
+    pool_store["requests"].assert_not_called()
 
 
 def test_drop_orphaned_questions_changes_nothing_when_all_live(
@@ -286,10 +303,32 @@ def test_drop_orphaned_questions_changes_nothing_when_all_live(
         scheduling, "get_live_document_ids", lambda _s, _ids: {"kept", "deleted"}
     )
 
-    scheduling.drop_orphaned_questions("tenant")
+    scheduling.drop_orphaned_questions()
 
     assert pool_store["saved"] is None
-    assert pool_store["refreshes"] == []
+    pool_store["requests"].assert_not_called()
+
+
+def test_drop_orphaned_questions_cleans_private_shelves_too(
+    pool_store: dict[str, Any],
+) -> None:
+    alice, bob = uuid4(), uuid4()
+    pool_store["pool"] = QuestionPool(questions=[_question("kept")])
+    pool_store["shelves"] = {
+        alice: [_question("kept"), _question("deleted")],
+        bob: [_question("kept")],
+    }
+
+    scheduling.drop_orphaned_questions()
+
+    # Only Alice's shelf had a deleted document; the shared shelf is unchanged,
+    # so no pool run is asked for: Alice refills on her next chat open.
+    assert [(user, added) for user, added, _ in pool_store["private_saves"]] == [
+        (alice, [])
+    ]
+    assert pool_store["private_saves"][0][2] == {"kept"}
+    assert pool_store["saved"] is None
+    pool_store["requests"].assert_not_called()
 
 
 def test_drop_orphaned_questions_leaves_a_busy_pool(
@@ -300,7 +339,7 @@ def test_drop_orphaned_questions_leaves_a_busy_pool(
 
     monkeypatch.setattr(scheduling, "pool_lock", busy)
 
-    scheduling.drop_orphaned_questions("tenant")
+    scheduling.drop_orphaned_questions()
 
     assert pool_store["saved"] is None
 
@@ -336,22 +375,6 @@ def _client(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 _KEY = "suggested_questions_pool_queued"
 
 
-def test_a_failed_upgrade_restores_the_earlier_flag(
-    cache: _FakeCache, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    client = _client(monkeypatch)
-    scheduling.request_pool_refresh("tenant", RefreshReason.GROWTH)
-    growth_flag = cache.values[_KEY]
-    client.send_task.side_effect = ConnectionError("broker down")
-
-    scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
-
-    # The upgrade was attempted, failed, and the growth run keeps its slot.
-    assert client.send_task.call_count == 2
-    assert client.send_task.call_args.kwargs["kwargs"]["reason"] == "first_run"
-    assert cache.values[_KEY] == growth_flag
-
-
 def test_a_failed_send_leaves_another_requests_flag(
     cache: _FakeCache, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -363,24 +386,9 @@ def test_a_failed_send_leaves_another_requests_flag(
 
     client.send_task.side_effect = another_request_wins
 
-    scheduling.request_pool_refresh("tenant", RefreshReason.GROWTH)
+    scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
 
     assert cache.values[_KEY] == b"1:another-request"
-
-
-def test_two_upgrades_at_once_send_one_task(
-    cache: _FakeCache, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    client = _client(monkeypatch)
-    scheduling.request_pool_refresh("tenant", RefreshReason.GROWTH)
-    growth_flag = cache.values[_KEY]
-    scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
-    # The second request read the flag before the first one replaced it.
-    monkeypatch.setattr(cache, "get", lambda _key: growth_flag)
-
-    scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
-
-    assert client.send_task.call_count == 2  # growth, then one upgrade
 
 
 def test_a_failed_client_import_removes_the_flag(
@@ -417,26 +425,29 @@ def test_a_failed_settings_read_sends_nothing(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.parametrize(
-    "pool, reason",
+    "pool, requested",
     [
-        (None, RefreshReason.FIRST_RUN),
-        (QuestionPool(), RefreshReason.FIRST_RUN),
-        (_pool(3, [30]), RefreshReason.GROWTH),
+        (None, [RefreshReason.FIRST_RUN]),
+        (QuestionPool(), [RefreshReason.FIRST_RUN]),
+        # After the first run, chat opens ask for runs, not indexing.
+        (_pool(3, [30]), []),
     ],
 )
-def test_new_documents_ask_for_a_first_run_or_new_material(
-    monkeypatch: pytest.MonkeyPatch, pool: QuestionPool | None, reason: RefreshReason
+def test_new_documents_ask_only_for_a_first_run(
+    monkeypatch: pytest.MonkeyPatch,
+    pool: QuestionPool | None,
+    requested: list[RefreshReason],
 ) -> None:
-    requested: list[RefreshReason] = []
+    asked: list[RefreshReason] = []
     monkeypatch.setattr(scheduling, "is_enabled", lambda: True)
     monkeypatch.setattr(scheduling, "load_pool", lambda: pool)
     monkeypatch.setattr(
-        scheduling, "request_pool_refresh", lambda _t, r: requested.append(r)
+        scheduling, "request_pool_refresh", lambda _t, r: asked.append(r)
     )
 
     scheduling.request_refresh_for_new_documents("tenant")
 
-    assert requested == [reason]
+    assert asked == requested
 
 
 def test_new_documents_never_raise(monkeypatch: pytest.MonkeyPatch) -> None:
