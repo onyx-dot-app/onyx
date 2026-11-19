@@ -48,6 +48,11 @@ export interface ChatScrollContainerProps {
   /** Enable auto-scroll behavior (follow new content) */
   autoScroll?: boolean;
 
+  /** Pause following for a moment (the typewriter's post-finish drain)
+   *  without turning it off: a view at the bottom stays there, and
+   *  catches up when the pause ends. */
+  pauseFollowing?: boolean;
+
   /** Whether content is currently streaming (affects scroll button visibility) */
   isStreaming?: boolean;
 
@@ -105,6 +110,7 @@ const ChatScrollContainer = React.memo(
         children,
         anchorSelector,
         autoScroll = true,
+        pauseFollowing = false,
         onScrollButtonVisibilityChange,
         sessionId,
         hideScrollbar = false,
@@ -145,7 +151,8 @@ const ChatScrollContainer = React.memo(
         onScrollButtonVisibilityChange
       );
       const autoScrollRef = useRef(autoScroll);
-      const previousAutoScrollRef = useRef(autoScroll);
+      const pauseFollowingRef = useRef(pauseFollowing);
+      const previousFollowingRef = useRef(autoScroll && !pauseFollowing);
 
       // Layout effect: queued rAF/observer callbacks fire after commit, so a
       // passive sync could let them scroll with a stale autoScroll flag.
@@ -153,6 +160,7 @@ const ChatScrollContainer = React.memo(
         onScrollButtonVisibilityChangeRef.current =
           onScrollButtonVisibilityChange;
         autoScrollRef.current = autoScroll;
+        pauseFollowingRef.current = pauseFollowing;
         sessionIdRef.current = sessionId;
       }, [onScrollButtonVisibilityChange, autoScroll, sessionId]);
 
@@ -308,9 +316,10 @@ const ChatScrollContainer = React.memo(
       );
 
       // Catch up on content that arrived while the typewriter paused following.
+      const followingNow = autoScroll && !pauseFollowing;
       useEffect(() => {
-        const resumed = autoScroll && !previousAutoScrollRef.current;
-        previousAutoScrollRef.current = autoScroll;
+        const resumed = followingNow && !previousFollowingRef.current;
+        previousFollowingRef.current = followingNow;
         if (
           resumed &&
           isAtBottomRef.current &&
@@ -319,7 +328,7 @@ const ChatScrollContainer = React.memo(
         ) {
           scrollToBottom("instant");
         }
-      }, [autoScroll, scrollToBottom]);
+      }, [followingNow, scrollToBottom]);
 
       // Expose scrollToBottom via ref
       useImperativeHandle(ref, () => ({ scrollToBottom }), [scrollToBottom]);
@@ -401,7 +410,7 @@ const ChatScrollContainer = React.memo(
             // Skip it during a smooth scroll to the bottom too: an instant
             // scroll would cut it short.
             const following =
-              autoScrollRef.current ||
+              (autoScrollRef.current && !pauseFollowingRef.current) ||
               performance.now() < followOpeningUntilRef.current;
             if (
               following &&
@@ -412,6 +421,9 @@ const ChatScrollContainer = React.memo(
               // scrollToBottom handles isAutoScrollingRef and ref updates
               scrollToBottom("instant");
             } else if (
+              // Only following that is off, not a pause: a paused view at
+              // the bottom must catch up when the pause ends.
+              !autoScrollRef.current &&
               !following &&
               !isAutoScrollingRef.current &&
               container.dataset.smoothScrollActive !== "true"

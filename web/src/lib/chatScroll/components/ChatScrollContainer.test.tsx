@@ -83,12 +83,13 @@ describe.each([0, 200])("with spacer height %i", (spacerHeight) => {
             frames.push(callback);
             return frames.length;
           });
-        const message = (enabled: boolean) => (
-          <ChatScrollContainer autoScroll={enabled}>
+        const message = (enabled: boolean, paused = false) => (
+          <ChatScrollContainer autoScroll={enabled} pauseFollowing={paused}>
             <Spacer height={spacerHeight} />
           </ChatScrollContainer>
         );
-        const view = render(message(pause === "smooth" ? autoScroll : false));
+        // The typewriter's drain pauses following without turning it off.
+        const view = render(message(autoScroll, pause !== "smooth"));
         const container = screen.getByTestId("chat-scroll-container");
         const end = container.firstElementChild?.lastElementChild;
         if (!(end instanceof HTMLElement))

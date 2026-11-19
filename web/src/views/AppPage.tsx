@@ -388,7 +388,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // running, growth is layout settling (an action row, a card growing in),
   // so a view at the end keeps to it, and a reopened chat lands at the end.
   const autoScrollEnabled =
-    !isStreamDraining && (autoScrollPreference || currentChatState === "input");
+    autoScrollPreference || currentChatState === "input";
   const isStreaming = currentChatState === "streaming";
 
   const multiModel = useMultiModelChat(llmManager);
@@ -889,6 +889,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         sessionId={storeSessionId ?? undefined}
                         anchorSelector={anchorSelector}
                         autoScroll={autoScrollEnabled}
+                        pauseFollowing={isStreamDraining}
                         isStreaming={isStreaming}
                         onScrollButtonVisibilityChange={setShowScrollButton}
                         fullWidth={fullWidthActive}
