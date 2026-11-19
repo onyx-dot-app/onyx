@@ -10,13 +10,10 @@ import type { Skill } from "@/lib/skills/types";
 import PluginNeedList from "@/sections/plugins/PluginNeedList";
 
 interface PluginTurnOnModalProps {
-  /** The plugin the user just turned on, as the switch call returned it. */
   plugin: Skill;
   onClose: () => void;
 }
 
-/** After a plugin is turned on: each integration it needs with the user's
- * state and action. The plugin works without the ones that are not on. */
 export default function PluginTurnOnModal({
   plugin,
   onClose,

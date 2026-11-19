@@ -1,8 +1,6 @@
 import { type Locator, type Page, expect } from "@playwright/test";
 import type { UploadFile } from "@tests/e2e/utils/plugins";
 
-/** The Upload plugin dialog of the Plugins tab and the member plugin page
- * (/app/customize/plugins/<id>). */
 export class CustomizePluginPage {
   readonly page: Page;
   readonly uploadDialog: Locator;
@@ -21,7 +19,6 @@ export class CustomizePluginPage {
     await expect(this.uploadDialog).toBeVisible();
   }
 
-  /** Picks a zip; the dialog reads it at once. */
   async chooseZip(file: UploadFile): Promise<void> {
     await this.uploadDialog
       .getByTestId("skill-bundle-dropzone")
@@ -29,7 +26,6 @@ export class CustomizePluginPage {
       .setInputFiles(file);
   }
 
-  /** The save line: "Updates <name> to v<n>" or "New plugin: <name>". */
   async expectSaveLine(text: string): Promise<void> {
     await expect(
       this.uploadDialog.getByText(text, { exact: true })
@@ -57,7 +53,6 @@ export class CustomizePluginPage {
     expect((await response).ok()).toBeTruthy();
   }
 
-  /** Saves the upload and returns the plugin id. */
   async saveUpload(): Promise<string> {
     const response = this.page.waitForResponse(
       (candidate) =>
@@ -99,7 +94,6 @@ export class CustomizePluginPage {
     return this.page.getByLabel(name, { exact: true });
   }
 
-  /** A need row shows its state badge and, for some states, a note. */
   async expectNeed(name: string, state: string, note?: string): Promise<void> {
     const row = this.needRow(name);
     await expect(row.getByText(state, { exact: true })).toBeVisible();

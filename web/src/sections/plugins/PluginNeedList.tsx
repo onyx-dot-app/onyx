@@ -115,14 +115,10 @@ function NeedActionControl({
 
 interface PluginNeedListProps {
   needs: readonly PluginNeed[];
-  /** False in the upload preview: the rows show states and no actions. */
   interactive: boolean;
-  /** Called after an action changes an integration. */
   onChanged?: () => void;
 }
 
-/** The integrations a plugin needs, each with the user's state of it and
- * the one action the user can take. */
 export default function PluginNeedList({
   needs,
   interactive,

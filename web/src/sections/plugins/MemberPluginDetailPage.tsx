@@ -44,7 +44,6 @@ interface PluginTabProps {
 
 interface PluginSwitchProps extends PluginTabProps {
   onChanged: () => Promise<void>;
-  /** Called with the plugin after a turn on that left a need not on. */
   onNeedsAttention: (plugin: Skill) => void;
 }
 
@@ -194,7 +193,6 @@ interface MemberPluginDetailPageProps {
   pluginId: string;
 }
 
-/** Tabs with nothing to show are hidden. */
 export default function MemberPluginDetailPage({
   pluginId,
 }: MemberPluginDetailPageProps) {

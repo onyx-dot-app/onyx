@@ -1,6 +1,3 @@
-"""Read a Claude Code or Codex plugin zip: its plugin.json, its skills and the
-MCP servers it needs. Pure: it reads bytes and stores nothing."""
-
 import json
 import zipfile
 from collections.abc import Mapping
@@ -36,7 +33,6 @@ SKILLS_DIR: Final = "skills"
 MCP_JSON_PATH: Final = ".mcp.json"
 _JSON_MAX_BYTES: Final = 1024 * 1024
 
-# A top-level folder or file, or a plugin.json key, that marks a part.
 _UNUSED_PART_PATHS: Final[Mapping[PluginUnusedPart, tuple[str, ...]]] = {
     PluginUnusedPart.COMMANDS: ("commands/",),
     PluginUnusedPart.AGENTS: ("agents/",),
@@ -66,16 +62,11 @@ class PluginBundleSkill(BaseModel):
 
 
 class PluginBundle(BaseModel):
-    """A plugin zip as Onyx stores it: the normalized bytes, with no wrapper
-    folder, and what Onyx reads from them."""
-
     model_config = ConfigDict(frozen=True)
 
     content: bytes
     manifest: PluginManifest
-    # By path.
     skills: list[PluginBundleSkill]
-    # By name.
     needs: list[PluginNeed]
     warnings: list[str]
 
@@ -99,7 +90,6 @@ def _optional_string(manifest: Mapping[str, JsonValue], key: str) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     if isinstance(value, dict):
-        # "repository" can be {"type": "git", "url": "..."}.
         url = value.get("url")
         if isinstance(url, str) and url.strip():
             return url.strip()
@@ -186,8 +176,6 @@ def _skill(bundle_zip: zipfile.ZipFile, folder: str, path: str) -> PluginBundleS
 
 
 def mcp_need(name: str, entry: JsonValue) -> PluginNeed:
-    """The need of one entry of ``mcpServers``. Only a URL entry with an HTTP
-    or SSE ``type`` and no ``${...}`` variable can match an integration."""
     if not isinstance(entry, dict):
         return PluginNeed(name=name, url=None, transport=None, supported=False)
     transport = entry.get("type")
@@ -211,9 +199,6 @@ def _servers(
     *,
     from_manifest: bool,
 ) -> dict[str, JsonValue]:
-    """The server entries of ``mcpServers``: a mapping, or a JSON file that
-    holds one with or without an ``mcpServers`` key. Only plugin.json can name
-    such a file by its path."""
     if isinstance(value, str) and from_manifest:
         path = value.removeprefix("./")
         if path not in paths:
@@ -230,12 +215,6 @@ def _servers(
 
 
 def read_plugin_bundle(zip_bytes: bytes) -> PluginBundle:
-    """Validate a plugin zip with the skill upload limits and read it.
-
-    A plugin has .claude-plugin/plugin.json, .codex-plugin/plugin.json or
-    plugin.json, at the zip root or inside one top-level folder. Skills are
-    in skills/<name>/SKILL.md and MCP servers in .mcp.json or in
-    ``mcpServers`` of plugin.json. A plugin with neither is refused."""
     normalized = normalize_custom_bundle(zip_bytes, layout=PLUGIN_BUNDLE_LAYOUT)
     warnings: list[str] = []
     with open_bundle_zip(normalized.content) as bundle_zip:

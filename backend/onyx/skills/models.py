@@ -125,8 +125,6 @@ class PluginSkillContent(BaseModel):
 
 
 class PluginUnusedPart(str, Enum):
-    """A part of a Claude Code or Codex plugin that Onyx does not use."""
-
     COMMANDS = "commands"
     AGENTS = "agents"
     HOOKS = "hooks"
@@ -146,9 +144,6 @@ class PluginAuthor(BaseModel):
 
 
 class PluginManifest(BaseModel):
-    """The plugin.json fields Onyx shows, as plugin_version.manifest stores
-    them, and the parts of the bundle Onyx does not use."""
-
     model_config = ConfigDict(frozen=True)
 
     name: str
@@ -162,26 +157,18 @@ class PluginManifest(BaseModel):
     unused_parts: list[PluginUnusedPart] = Field(default_factory=list)
 
 
-# The MCP transports a URL can match an integration with.
 MCP_URL_TRANSPORTS: Final = frozenset({"http", "streamable-http", "sse"})
 
 
 class PluginNeed(BaseModel):
-    """One MCP server a plugin names, as plugin_version.needs stores it. It
-    names a server by URL and never refers to an integration row."""
+    """A need names a server by URL and never refers to an integration row."""
 
     model_config = ConfigDict(frozen=True)
 
     kind: Literal["mcp"] = "mcp"
-    # The server key in .mcp.json.
     name: str
-    # ``onyx.utils.url.normalize_mcp_server_url`` of the URL; None for a
-    # local server or a URL that cannot be normalized.
     url: str | None
-    # The ``type`` of the entry, "stdio" for a local command, or None.
     transport: str | None
-    # False for a local command, an entry with a URL and no type, or a URL
-    # with a ``${...}`` variable. Only a supported need can match.
     supported: bool
 
 
@@ -202,7 +189,6 @@ class PluginVersionContent(BaseModel):
     unpacked_size_bytes: int | None
     file_count: int | None
     skills: list[PluginSkillContent]
-    # Set only for an uploaded plugin.
     manifest: PluginManifest | None = None
     needs: list[PluginNeed] | None = None
 
@@ -245,8 +231,6 @@ class ChatSkill(BaseModel):
     # prefers. None when it is missing or blank.
     short_description: str | None = None
     version_id: UUID
-    # The skill's folder in the version's bundle; empty for a skill at the
-    # bundle root.
     path: str = ""
 
     @field_validator("description")

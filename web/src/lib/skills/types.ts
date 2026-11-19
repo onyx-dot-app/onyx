@@ -96,13 +96,9 @@ export interface Skill {
   published_version_number: number | null;
   /** The version that waits for an admin's review. */
   pending_version_number: number | null;
-  /** "plugin" when the version the user runs is not one skill at the bundle
-   * root. */
   kind: "skill" | "plugin";
-  /** Supported needs that are on for the user, and all supported needs. */
   available_count: number;
   needed_count: number;
-  /** Only on the routes that read one plugin. */
   plugin: PluginDetail | null;
 }
 

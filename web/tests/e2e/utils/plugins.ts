@@ -1,13 +1,11 @@
 import { TextReader, Uint8ArrayWriter, ZipWriter } from "@zip.js/zip.js";
 
-/** A file for `setInputFiles`. */
 export interface UploadFile {
   name: string;
   mimeType: string;
   buffer: Buffer;
 }
 
-/** A zip with the given files, built at run time. */
 export async function zipFile(
   name: string,
   files: Record<string, string>
@@ -32,14 +30,10 @@ export interface PluginZipOptions {
   name: string;
   version?: string;
   skills: string[];
-  /** Server key to its .mcp.json entry. */
   mcpServers?: Record<string, Record<string, string>>;
-  /** Extra files, such as a commands/ folder Onyx does not use. */
   extra?: Record<string, string>;
 }
 
-/** A Claude Code plugin zip: .claude-plugin/plugin.json, skills and an
- * optional .mcp.json. */
 export async function pluginZip(
   options: PluginZipOptions
 ): Promise<UploadFile> {

@@ -14,11 +14,6 @@ import type {
   IntegrationCreate,
 } from "@/lib/integrations/types";
 
-/**
- * A member uploads a Claude Code plugin zip. The dialog shows what Onyx uses
- * and where the save goes. The plugin page lists each MCP server the plugin
- * needs with the user's own state of the matching integration.
- */
 test.describe("Plugin upload", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -67,7 +62,6 @@ test.describe("Plugin upload", () => {
   function servers(): Record<string, Record<string, string>> {
     return {
       "pw-on": { type: "http", url: `${base}/on` },
-      // A trailing slash and an upper-case host still match.
       "pw-off": {
         type: "http",
         url: `${base.replace("example", "EXAMPLE")}/off/`,
@@ -137,8 +131,6 @@ test.describe("Plugin upload", () => {
     await plugins.expectPreviewText("Commands");
     const firstId = await plugins.saveUpload();
     pluginIds.push(firstId);
-    // Turning the new plugin on leaves needs that are not on, so the page
-    // opens on its Integrations tab.
     await expect(page).toHaveURL(/\?tab=integrations$/);
 
     await plugins.openUploadDialog();
@@ -214,7 +206,6 @@ test.describe("Plugin upload", () => {
     );
     await plugins.expectNeed("pw-missing", "Not added");
 
-    // Turning the plugin on turned on the integration the admin can use.
     await plugins.expectNeed("pw-off", "On");
     await new OnyxApiClient(page.request).setIntegrationEnabled(
       integrationIds["pw-off"]!,

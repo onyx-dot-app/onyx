@@ -248,8 +248,6 @@ def _load_custom_bundle(
 
 
 def _sandbox_path(path: str, folders: Iterable[RuntimeSkillFolder]) -> str | None:
-    """Where a bundle file goes in the sandbox: under the folder of the skill
-    that holds it. None for a file outside each skill folder."""
     for folder in folders:
         if not folder.path:
             return f"{folder.name}/{path}"

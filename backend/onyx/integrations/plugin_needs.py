@@ -1,6 +1,4 @@
-"""What the MCP servers a plugin needs are for one user. A need matches an
-integration by URL at read time. A plugin never gives access to an
-integration: each match shows the user's own state of that integration."""
+"""A plugin never gives access to an integration: each match shows the user's own state of that integration."""
 
 from collections.abc import Iterable, Sequence
 from enum import Enum
@@ -21,19 +19,13 @@ from onyx.utils.url import normalize_mcp_server_url
 
 
 class PluginNeedState(str, Enum):
-    """What one need is for one user. The first five are the values of
-    ``MemberIntegrationState``: the state of the one integration it
-    matches."""
-
     ON = "on"
     TURN_ON = "turn_on"
     SIGN_IN = "sign_in"
     NO_ACCESS = "no_access"
     TURNED_OFF = "turned_off"
-    # No integration that the user's integration list shows matches.
     NOT_ADDED = "not_added"
     MORE_THAN_ONE = "more_than_one"
-    # A local server, or a URL Onyx cannot match.
     NOT_SUPPORTED = "not_supported"
 
 
@@ -41,14 +33,10 @@ class PluginNeedView(PluginNeed):
     model_config = ConfigDict(frozen=True)
 
     state: PluginNeedState
-    # The integration it matches; None unless exactly one matches.
     integration_id: int | None
 
 
 class NeedCounts(BaseModel):
-    """ "3 of 4 integrations available": supported needs that are on, and
-    supported needs."""
-
     model_config = ConfigDict(frozen=True)
 
     available_count: int
@@ -58,9 +46,6 @@ class NeedCounts(BaseModel):
 def need_views(
     needs: Iterable[PluginNeed], integrations: Sequence[MemberIntegration]
 ) -> list[PluginNeedView]:
-    """The state of each need, matched against the integrations the user's
-    integration list shows (``list_member_integrations``). Each MCP
-    integration matches by ``normalize_mcp_server_url`` of its server URL."""
     by_url: dict[str, list[MemberIntegration]] = {}
     for integration in integrations:
         if integration.kind is not IntegrationKind.MCP or not integration.server_url:
@@ -103,8 +88,6 @@ def need_counts(views: Iterable[PluginNeedView]) -> NeedCounts:
 def needs_of_versions(
     user: User, version_ids: Iterable[UUID], db_session: Session
 ) -> dict[UUID, list[PluginNeedView]]:
-    """The need views of each version that has needs, for the user. Reads
-    the user's integrations only when a version has a need."""
     needs = {
         version_id: version_needs
         for version_id, version_needs in get_versions_needs(
@@ -124,9 +107,6 @@ def needs_of_versions(
 def turn_on_needed_integrations__no_commit(
     user: User, needs: Sequence[PluginNeed], db_session: Session
 ) -> bool:
-    """Turn on each needed integration that is off for the user and works
-    when on: the user has access and a working connection, or the
-    integration needs no sign-in. Returns whether one was turned on."""
     if not needs:
         return False
     integrations = list_member_integrations(user, db_session)
@@ -148,8 +128,6 @@ def turn_on_needed_integrations__no_commit(
 def unavailable_need_names(
     user: User, version_ids: Iterable[UUID], db_session: Session
 ) -> list[str]:
-    """The names of the needs, of the given versions, that are not on for the
-    user, sorted."""
     return sorted(
         {
             view.name

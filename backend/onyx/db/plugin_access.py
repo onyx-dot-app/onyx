@@ -371,8 +371,6 @@ class UserPluginState(BaseModel):
     can_run: bool
     created_at: datetime
     plugin_name: str
-    # Names and folders of the plugin_skill rows of the version the user
-    # runs, by path.
     skill_names: tuple[str, ...]
     skill_paths: tuple[str, ...]
     # Recorded size of the version the user runs; a NULL size or file count
@@ -854,14 +852,10 @@ class PluginAccess(BaseModel):
     # The version waiting for review, if any.
     pending_version_number: int | None
     version_user_runs: UUID
-    # From the frontmatter of the version the user runs. None for a version
-    # that is not a skill.
     name: str | None
     description: str
     # Lazy validity of the version the user runs.
     is_valid: bool | None
-    # The version the user runs is a skill (``holds_one_root_skill``), not a
-    # plugin.
     is_skill: bool
     user_shares: tuple[PluginUserShare, ...]
     group_rows: tuple[PluginGroupRowAccess, ...]

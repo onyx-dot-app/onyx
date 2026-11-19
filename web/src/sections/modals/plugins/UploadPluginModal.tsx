@@ -26,7 +26,6 @@ import type { SkillCreationDraft } from "@/lib/skills/creationDraft";
 import PluginNeedList from "@/sections/plugins/PluginNeedList";
 import SkillBundlePicker from "@/sections/skills/SkillBundlePicker";
 
-/** Pick, then a skill that keeps the skill flow, or a plugin preview. */
 type UploadStep =
   | { step: "pick"; bundle: PreparedSkillBundle | null }
   | { step: "skill"; bundle: PreparedSkillBundle }
@@ -40,7 +39,6 @@ type UploadStep =
 interface UploadPluginModalProps {
   open: boolean;
   onClose: () => void;
-  /** A zip with a skill and no plugin.json continues as a skill upload. */
   onContinueSkill: (draft: SkillCreationDraft) => void;
   onSaved: (result: PluginUploadResult, needsAttention: boolean) => void;
 }
@@ -76,9 +74,6 @@ function PluginPreview({
 }: PluginPreviewProps) {
   const t = useTranslations("plugins.upload");
   const { target } = preview;
-  // The choice shows while it can change the target: an upload that would
-  // update a plugin, or one the user asked to save as new. It stays while a
-  // change of the choice reads the zip again.
   const showSaveAsNew = target.kind === "new_version" || saveAsNew || busy;
   return (
     <Section gap={4} alignItems="stretch" height="auto">
@@ -370,8 +365,6 @@ function UploadPluginModalContent({
   );
 }
 
-/** Upload a Claude Code or Codex plugin zip: preview what Onyx uses from it
- * and where the save goes, then save. */
 export default function UploadPluginModal({
   open,
   onClose,

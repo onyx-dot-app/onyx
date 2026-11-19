@@ -142,7 +142,6 @@ function pluginUploadForm(bundle: File, saveAsNew: boolean): FormData {
   return form;
 }
 
-/** Read a plugin zip and say what a save does with it. Stores nothing. */
 export async function inspectPluginUpload(
   bundle: File,
   saveAsNew: boolean
@@ -158,12 +157,9 @@ export async function inspectPluginUpload(
 export interface PluginUploadResult {
   target: PluginUploadTarget;
   plugin: CustomSkill;
-  /** A new plugin was turned on for the uploader. */
   enabled: boolean;
 }
 
-/** Save a plugin zip as a new version of a plugin with the same name, or as
- * a new plugin. */
 export async function savePluginUpload(
   bundle: File,
   saveAsNew: boolean

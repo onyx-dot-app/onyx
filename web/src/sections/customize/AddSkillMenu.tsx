@@ -15,8 +15,6 @@ import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFr
 import UploadPluginModal from "@/sections/modals/plugins/UploadPluginModal";
 
 interface AddSkillMenuProps {
-  /** The Plugins tab uploads a plugin zip; a zip with only a skill still
-   * goes to the skill flow. */
   upload?: "skill" | "plugin";
 }
 

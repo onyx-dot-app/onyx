@@ -1,6 +1,3 @@
-"""Plugin zip upload through the skills routes, against the database and the
-file store: the save target, multi-skill run time, needs and turn on."""
-
 import io
 import json
 import zipfile
@@ -264,16 +261,11 @@ def test_same_name_adds_a_version_and_a_non_editor_gets_a_new_plugin(
         (editor.id, SkillSharePermission.EDITOR),
         (viewer.id, SkillSharePermission.VIEWER),
     }
-    # A new version keeps the author's choice.
     assert second.plugin.enabled is True
 
-    # save_as_new makes a second plugin with the next free name.
     copy = _save(author, _plugin_zip("same-kit", ["one"]), db_session, save_as_new=True)
     assert (copy.target.kind, copy.plugin.name) == ("new_plugin", "same-kit-2")
 
-    # Published, the plugin is in the Organization library. An editor's
-    # upload adds a version there, and the organization keeps the published
-    # version.
     apply_plugin_access_change__no_commit(
         [plugin_id], PluginAccessChange(publish=True), None, db_session
     ).raise_first_failure()
@@ -290,8 +282,6 @@ def test_same_name_adds_a_version_and_a_non_editor_gets_a_new_plugin(
         published_version_id
     )
 
-    # The viewer cannot edit the plugin, so the same name makes a plugin in
-    # the viewer's own "My uploads".
     viewer_save = _save(viewer, _plugin_zip("same-kit", ["one"]), db_session)
     assert (viewer_save.target.kind, viewer_save.target.plugin_name) == (
         "new_plugin",
@@ -369,7 +359,6 @@ def test_need_states_match_integrations_by_url_and_give_no_access(
         db_session,
     )
     plugin_id = saved.plugin.id
-    # The save turned on each needed integration that works when on.
     assert _need_states(author, plugin_id, db_session) == [
         ("gone", PluginNeedState.ON, gone_id),
         ("local", PluginNeedState.NOT_SUPPORTED, None),
@@ -377,9 +366,7 @@ def test_need_states_match_integrations_by_url_and_give_no_access(
         ("private", PluginNeedState.NOT_ADDED, None),
         ("twins", PluginNeedState.MORE_THAN_ONE, None),
     ]
-    # Four supported needs, two of them on.
     assert (saved.plugin.available_count, saved.plugin.needed_count) == (2, 4)
-    # The upload gave no access to the private integration.
     assert not db_session.scalars(
         select(Integration__User).where(Integration__User.user_id == author.id)
     ).all()
@@ -413,7 +400,6 @@ def test_turning_a_plugin_on_turns_on_its_integrations(
     api.set_skill_enabled_for_current_user(
         plugin_id, SkillEnableRequest(enabled=False), author, db_session
     )
-    # The integration is off again: the user made no choice.
     db_session.execute(
         delete(UserIntegrationPreference).where(
             UserIntegrationPreference.user_id == author.id

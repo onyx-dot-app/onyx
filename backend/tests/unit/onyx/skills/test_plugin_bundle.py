@@ -112,7 +112,6 @@ def test_reads_a_wrapped_claude_plugin() -> None:
         ),
     ]
     assert bundle.warnings == []
-    # The stored zip has no wrapper folder and no junk.
     assert _paths(bundle.content) == [
         ".claude-plugin/plugin.json",
         ".mcp.json",

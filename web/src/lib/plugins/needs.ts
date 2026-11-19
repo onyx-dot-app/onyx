@@ -1,14 +1,12 @@
 import type { MemberIntegration } from "@/lib/integrations/types";
 import type { PluginNeed, PluginNeedState } from "@/lib/plugins/types";
 
-/** Why a need has no action, shown as a muted note. */
 export type PluginNeedNote =
   | "askAdmin"
   | "turnedOff"
   | "moreThanOne"
   | "notSupported";
 
-/** The one thing a user can do for a need. */
 export type PluginNeedAction =
   | { kind: "none" }
   | { kind: "turnOn"; integration: MemberIntegration }
@@ -16,9 +14,6 @@ export type PluginNeedAction =
   | { kind: "add" }
   | { kind: "note"; note: PluginNeedNote };
 
-/** The need's state, read from the integration list when the need matches
- * one integration there. The first five need states are that integration's
- * own state, so the row follows a sign-in or a switch at once. */
 export function liveNeedState(
   need: PluginNeed,
   integration: MemberIntegration | undefined
@@ -57,12 +52,10 @@ export function needAction(
   }
 }
 
-/** A supported need that is not on: the turn-on dialog lists the needs. */
 export function needsAttention(needs: readonly PluginNeed[]): boolean {
   return needs.some((need) => need.supported && need.state !== "on");
 }
 
-/** The transport of the Add integration form for an MCP need. */
 export function needTransport(need: PluginNeed): "STREAMABLE_HTTP" | "SSE" {
   return need.transport === "sse" ? "SSE" : "STREAMABLE_HTTP";
 }

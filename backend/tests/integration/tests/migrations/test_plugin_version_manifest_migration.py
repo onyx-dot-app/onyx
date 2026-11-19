@@ -1,6 +1,3 @@
-"""Tests for migration 2d7510746863, which adds plugin_version.manifest and
-plugin_version.needs."""
-
 from collections.abc import Generator
 
 import pytest

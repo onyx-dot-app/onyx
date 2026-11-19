@@ -76,7 +76,6 @@ ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
 _PLUGIN_NAME_INDEX = "uq_plugin_marketplace_name"
 
 NameClashAction = Literal["raise", "rename"]
-# A skill of a plugin version: the version id and the skill's folder.
 SkillKey = tuple[UUID, str]
 _RENAME_ATTEMPTS = 3
 
@@ -124,7 +123,6 @@ def get_or_create_user_uploads__no_commit(user_id: UUID, db_session: Session) ->
 
 
 def get_user_uploads_id(user_id: UUID, db_session: Session) -> UUID | None:
-    """The user's "My uploads" id; None before the user's first upload."""
     return db_session.scalar(
         select(Marketplace.id).where(
             Marketplace.kind == MarketplaceKind.USER_UPLOADS,
@@ -376,8 +374,6 @@ def add_plugin_version__no_commit(
 
 
 def version_description(content: PluginVersionContent) -> str | None:
-    """The plugin description a version gives: its skill's for a skill, the
-    plugin.json description for an uploaded plugin, else None."""
     if is_skill_version(skill.path for skill in content.skills):
         return content.skills[0].description
     if content.manifest is not None:
@@ -483,9 +479,6 @@ class StoredSkillMd(BaseModel):
 def get_visible_versions_skill_md(
     skills: Collection[SkillKey], user_id: UUID, db_session: Session
 ) -> dict[SkillKey, StoredSkillMd]:
-    """The SKILL.md of each skill, by version id and folder, whose plugin the
-    user can see now, in one query. A skill that is gone or hidden from the
-    user is left out."""
     rows = db_session.execute(
         select(
             PluginVersion.id,
@@ -510,7 +503,6 @@ def get_visible_versions_skill_md(
 def get_versions_needs(
     version_ids: Iterable[UUID], db_session: Session
 ) -> dict[UUID, list[PluginNeed]]:
-    """The needs of each version that stores some."""
     ids = sorted(set(version_ids))
     if not ids:
         return {}
@@ -542,7 +534,6 @@ class VersionSkill(BaseModel):
 
 
 def list_version_skills(version_id: UUID, db_session: Session) -> list[VersionSkill]:
-    """The skills of one version, by path."""
     return [
         VersionSkill(path=path, name=name, description=description)
         for path, name, description in db_session.execute(
@@ -583,10 +574,6 @@ def create_plugin__no_commit(
     author: User,
     db_session: Session,
 ) -> Plugin:
-    """Add a plugin with ``content`` as version 1 and its plugin_skill rows,
-    private in the author's "My uploads". A used name takes the next free
-    name. A plugin that takes the same name at the same time gets
-    SKILL_NAME_CONFLICT."""
     marketplace_id = get_or_create_user_uploads__no_commit(author.id, db_session)
     version_id = uuid4()
     try:
@@ -620,10 +607,6 @@ def create_plugin__no_commit(
 
 
 def find_upload_target(name: str, user_id: UUID, db_session: Session) -> Plugin | None:
-    """The plugin that an upload named ``name`` adds a version to: a plugin
-    with that name in the user's "My uploads" or the Organization library,
-    that the user owns or edits, and whose current version is not a skill.
-    "My uploads" comes first. The caller locks it."""
     return db_session.scalars(
         select(Plugin)
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)

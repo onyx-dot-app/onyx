@@ -1,15 +1,11 @@
 import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
 
-/** The plugin.json paths Onyx reads, as `PLUGIN_MANIFEST_PATHS` in
- * `backend/onyx/skills/bundle.py`. */
 const PLUGIN_MANIFEST_PATHS: readonly string[] = [
   ".claude-plugin/plugin.json",
   ".codex-plugin/plugin.json",
   "plugin.json",
 ];
 
-/** Whether a zip has a plugin.json at its root or directly inside one
- * top-level folder, as the server looks for it. */
 export async function zipHasPluginManifest(file: File): Promise<boolean> {
   const { BlobReader, ZipReader } = await import("@zip.js/zip.js");
   const reader = new ZipReader(new BlobReader(file));
@@ -26,7 +22,6 @@ export async function zipHasPluginManifest(file: File): Promise<boolean> {
   }
 }
 
-/** A plugin, or a skill that keeps the skill upload flow. */
 export type PluginUploadKind = "plugin" | "skill";
 
 export async function pluginUploadKind(

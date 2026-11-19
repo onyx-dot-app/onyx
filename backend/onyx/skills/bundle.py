@@ -70,9 +70,6 @@ _IGNORED_BUNDLE_FILE_NAMES: Final[frozenset[str]] = frozenset(
 
 
 class BundleLayout(BaseModel):
-    """The root files that mark a bundle, and the errors when they are not at
-    the root or inside one top-level directory."""
-
     model_config = ConfigDict(frozen=True)
 
     markers: tuple[str, ...]
@@ -86,7 +83,6 @@ SKILL_BUNDLE_LAYOUT: Final = BundleLayout(
     "top-level directory",
     outside_detail="bundle contains files outside the directory containing SKILL.md",
 )
-# In the order a plugin reader prefers them.
 PLUGIN_MANIFEST_PATHS: Final = (
     ".claude-plugin/plugin.json",
     ".codex-plugin/plugin.json",
@@ -450,8 +446,6 @@ def _is_ignored_bundle_path(path: str) -> bool:
 
 
 def _bundle_wrapper_prefix(file_paths: list[str], layout: BundleLayout) -> str | None:
-    """Identify an optional single directory wrapped around a bundle: the one
-    directory that holds a marker of ``layout``."""
     meaningful_paths = [
         path for path in file_paths if not _is_ignored_bundle_path(path)
     ]

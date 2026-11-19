@@ -624,12 +624,7 @@ _DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
 def normalize_mcp_server_url(url: str) -> str | None:
-    """The key that matches two MCP server URLs, as Claude Code matches them:
-    the scheme and host in lowercase, with no default port and no trailing
-    slash. Path, query and other ports stay. None for a URL that is not http
-    or https, has no host, holds a ``${...}`` variable, or holds user info:
-    the key is shown to each viewer of the plugin, so it must not carry a
-    credential."""
+    """None for user info: the key is shown to each viewer of the plugin, so it must not carry a credential."""
     if "${" in url:
         return None
     try:

@@ -93,10 +93,6 @@ def read_versions_skill_md(
     user_id: UUID,
     db_session: Session,
 ) -> dict[SkillKey, str]:
-    """The whole SKILL.md, frontmatter included, of each skill (version id and
-    folder) the user can see now, from one query. A version that stores no
-    SKILL.md text opens its bundle. A skill that is gone, hidden from the user
-    or unreadable is left out."""
     if not skills:
         return {}
     skill_md: dict[SkillKey, str] = {}

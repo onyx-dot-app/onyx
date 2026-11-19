@@ -424,9 +424,6 @@ def set_skill_enabled_for_current_user(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    """Turn a skill or plugin on or off. Turning a plugin on also turns on
-    each integration it needs that works for the user. The response has the
-    plugin detail, with each need's state."""
     skill = set_skill_enabled_for_user(
         skill_id=skill_id,
         enabled=request.enabled,
@@ -518,8 +515,6 @@ def fetch_skill_for_current_user(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
-    """A skill, or a plugin with its detail: the skills, needs and plugin.json
-    fields of the version the user runs."""
     skill = fetch_skill(skill_id, user=user, db_session=db_session)
     if skill is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
@@ -620,8 +615,6 @@ def _read_plugin_upload(upload: UploadFile) -> PluginBundle:
 def _upload_target(
     bundle: PluginBundle, save_as_new: bool, user: User, db_session: Session
 ) -> PluginUploadTarget:
-    """``find_upload_target`` unless ``save_as_new``, else a new plugin with
-    the next free name."""
     name = bundle.manifest.name
     target = None if save_as_new else find_upload_target(name, user.id, db_session)
     if target is not None:
@@ -651,7 +644,6 @@ def inspect_plugin_upload(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PluginUploadPreview:
-    """Read a plugin zip and say what a save does with it. Stores nothing."""
     plugin_bundle = _read_plugin_upload(bundle)
     manifest = plugin_bundle.manifest
     return PluginUploadPreview(
@@ -685,10 +677,6 @@ def save_plugin_upload(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PluginUploadResponse:
-    """Save a plugin zip. A plugin with the same name that the user owns or
-    edits gets a new version, unless ``save_as_new``. Otherwise a new plugin
-    in "My uploads", turned on for the user with ``auto_enable``, with the
-    integrations it needs that work for the user."""
     plugin_bundle = _read_plugin_upload(bundle)
     target = _upload_target(plugin_bundle, save_as_new, user, db_session)
     enabled = False
@@ -945,8 +933,6 @@ def _editable_skill(
     lock_for_update: bool,
     any_plugin: bool = False,
 ) -> Plugin:
-    """The plugin of a skill the user may edit. 404 otherwise.
-    ``any_plugin`` as in ``fetch_editable_skill``."""
     skill = fetch_editable_skill(
         skill_id,
         user=user,

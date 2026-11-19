@@ -135,9 +135,6 @@ class RuntimeSkillVersion(BaseModel):
 
 
 class RuntimeSkillFolder(BaseModel):
-    """One skill of a plugin version: its folder in the bundle and the name
-    of its sandbox folder."""
-
     model_config = ConfigDict(strict=True, frozen=True)
 
     path: str
@@ -149,11 +146,7 @@ class RuntimeSkill(BaseModel):
 
     id: UUID
     built_in_skill_id: str | None = None
-    # The skill name in the version the user runs, the plugin name for a
-    # plugin version, or the row name for a built-in.
     name: str
-    # Each skill of a plugin version. Empty for a built-in, and for a skill
-    # version, whose bundle root is the skill.
     plugin_skills: tuple[RuntimeSkillFolder, ...] = ()
     # None for a built-in skill.
     version: RuntimeSkillVersion | None = None
@@ -295,9 +288,6 @@ def _built_in_skill_select(
 
 
 def _visible_custom_skill_select(user: User) -> Select[tuple[Plugin]]:
-    """Every plugin for an organization-wide skill manager, else the plugins
-    the user can see. A skill sorts by its skill name, a plugin by its
-    name."""
     runs = version_user_runs(Plugin, user.id)
     stmt = select(Plugin)
     if not has_global_permission(user, Permission.MANAGE_PLUGINS):
@@ -404,11 +394,6 @@ def list_runtime_skills_for_user(
 
 
 def list_chat_skills(db_session: Session, user: User) -> list[ChatSkill]:
-    """The custom skills the user's sandbox loads, by name: one for each skill
-    of each plugin version the user runs, with its name, description,
-    `metadata.short-description`, version id and folder. Built-in skills need
-    the Craft sandbox, so chat leaves them out; their names stay reserved.
-    Anonymous users have none."""
     if user.is_anonymous:
         return []
     version_ids = [
@@ -550,9 +535,6 @@ def create_uploaded_plugin__no_commit(
     user: User,
     db_session: Session,
 ) -> tuple[Plugin, bool]:
-    """Create a plugin from an uploaded plugin zip, private in the uploader's
-    "My uploads", under the next free name. Returns the plugin and whether it
-    was turned on for the uploader: a skill name it holds can be taken."""
     if content.manifest is None:
         raise RuntimeError("Bug: an uploaded plugin has a manifest.")
     plugin_id = uuid4()
@@ -572,9 +554,6 @@ def add_uploaded_plugin_version__no_commit(
     user: User,
     db_session: Session,
 ) -> tuple[Plugin, PluginVersion]:
-    """Add an uploaded plugin zip as the next version of a plugin the user
-    edits (``find_upload_target``). Shares, publishing, user choices and
-    history stay; the organization keeps its published version."""
     lock_user_skill_preferences(user.id, db_session)
     plugin = fetch_editable_skill(
         plugin_id,

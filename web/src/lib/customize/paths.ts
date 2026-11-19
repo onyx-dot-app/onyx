@@ -62,7 +62,6 @@ export function integrationHref(
 
 export const NEW_INTEGRATION_PATH = "/app/customize/integrations/new";
 
-/** The fields an Add integration link fills in for an MCP server. */
 export interface NewIntegrationPrefill {
   name: string;
   serverUrl: string;

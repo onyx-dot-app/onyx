@@ -52,16 +52,12 @@ class SkillGroupSummary(BaseModel):
 
 
 class PluginSkillSummary(BaseModel):
-    # The skill's folder in the bundle, such as "skills/review".
     path: str
     name: str
     description: str
 
 
 class PluginDetail(BaseModel):
-    """The version of a plugin that the user runs: its plugin.json fields,
-    its skills and its needs, with each need's state for the user."""
-
     manifest: PluginManifest | None
     skills: list[PluginSkillSummary]
     needs: list[PluginNeedView]
@@ -72,14 +68,9 @@ class SkillResponse(BaseModel):
     id: UUID
     name: str
     description: str
-    # "plugin" when the version the user runs is not one skill at the bundle
-    # root.
     kind: Literal["skill", "plugin"] = "skill"
-    # Supported needs of the version the user runs that are on for the
-    # user, and all supported needs: "3 of 4 integrations available".
     available_count: int = 0
     needed_count: int = 0
-    # Only on the routes that read one plugin.
     plugin: PluginDetail | None = None
 
     is_available: bool | None = None
@@ -319,26 +310,18 @@ class PluginUploadSkill(BaseModel):
 
 
 class PluginUploadTarget(BaseModel):
-    """Where a save puts the upload: a new version of a plugin the uploader
-    owns or edits ("updates <plugin> to v<n>"), or a new plugin in the
-    uploader's "My uploads"."""
-
     kind: Literal["new_version", "new_plugin"]
-    # The plugin a new version goes to; None for a new plugin.
     plugin_id: UUID | None
-    # The plugin's name; for a new plugin, the next free name.
     plugin_name: str
     version_number: int
 
 
 class PluginUploadPreview(BaseModel):
     name: str
-    # The version in plugin.json, as written.
     version: str | None
     description: str | None
     manifest: PluginManifest
     skills: list[PluginUploadSkill]
-    # Each need with its state for the uploader.
     needs: list[PluginNeedView]
     unused_parts: list[PluginUnusedPart]
     warnings: list[str]
@@ -347,10 +330,7 @@ class PluginUploadPreview(BaseModel):
 
 class PluginUploadResponse(BaseModel):
     target: PluginUploadTarget
-    # The plugin as the uploader sees it after the save, with its detail.
     plugin: SkillResponse
-    # A new plugin was turned on for the uploader. False for a new version,
-    # and when a skill name of the plugin is taken.
     enabled: bool
 
 

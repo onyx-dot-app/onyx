@@ -135,8 +135,6 @@ def store_version_content(
     manifest: PluginManifest | None = None,
     needs: list[PluginNeed] | None = None,
 ) -> PluginVersionContent:
-    """Store a normalized bundle and return what a new version made from it
-    stores. The blob is deleted when the content cannot be built."""
     bundle_file_id = save_skill_bundle_bytes(
         normalized_bundle, display_name=display_name, file_store=file_store
     )
@@ -162,8 +160,6 @@ def store_version_content(
 def stored_plugin_bundle(
     bundle: PluginBundle, file_store: FileStore
 ) -> Iterator[PluginVersionContent]:
-    """Store a read plugin zip. The blob is deleted when the caller's block
-    fails."""
     content = store_version_content(
         bundle.content,
         display_name=f"{bundle.manifest.name}.zip",
