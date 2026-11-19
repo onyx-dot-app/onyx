@@ -626,27 +626,27 @@ _DEFAULT_PORTS = {"http": 80, "https": 443}
 def normalize_mcp_server_url(url: str) -> str | None:
     """The key that matches two MCP server URLs, as Claude Code matches them:
     the scheme and host in lowercase, with no default port and no trailing
-    slash. Path, query, user info and other ports stay. None for a URL that
-    is not http or https, has no host, or holds a ``${...}`` variable."""
+    slash. Path, query and other ports stay. None for a URL that is not http
+    or https, has no host, holds a ``${...}`` variable, or holds user info:
+    the key is shown to each viewer of the plugin, so it must not carry a
+    credential."""
     if "${" in url:
         return None
-    parts = urlsplit(url.strip())
-    scheme = parts.scheme.lower()
-    if scheme not in _DEFAULT_PORTS or not parts.hostname:
-        return None
     try:
+        parts = urlsplit(url.strip())
         port = parts.port
     except ValueError:
+        return None
+    scheme = parts.scheme.lower()
+    if scheme not in _DEFAULT_PORTS or not parts.hostname or "@" in parts.netloc:
         return None
     host = parts.hostname
     if ":" in host:
         host = f"[{host}]"
     if port is not None and port != _DEFAULT_PORTS[scheme]:
         host = f"{host}:{port}"
-    userinfo, at, _ = parts.netloc.rpartition("@")
-    netloc = f"{userinfo}{at}{host}"
     return urlunsplit(
-        (scheme, netloc, parts.path.removesuffix("/"), parts.query, parts.fragment)
+        (scheme, host, parts.path.removesuffix("/"), parts.query, parts.fragment)
     )
 
 

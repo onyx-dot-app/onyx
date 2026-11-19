@@ -15,7 +15,6 @@ from onyx.utils.url import normalize_mcp_server_url
         ("https://mcp.example.com:8443/mcp", "https://mcp.example.com:8443/mcp"),
         ("http://mcp.example.com:443/mcp", "http://mcp.example.com:443/mcp"),
         ("https://mcp.example.com/MCP", "https://mcp.example.com/MCP"),
-        ("https://User:Pw@MCP.example.com/mcp", "https://User:Pw@mcp.example.com/mcp"),
         ("https://[::1]:443/mcp", "https://[::1]/mcp"),
     ],
 )
@@ -31,6 +30,8 @@ def test_normalizes_like_claude_code(url: str, expected: str) -> None:
         "mcp.example.com/mcp",
         "https:///mcp",
         "https://mcp.example.com:99999/mcp",
+        "https://user:secret@mcp.example.com/mcp",
+        "https://[::1/mcp",
     ],
 )
 def test_refuses_what_cannot_match(url: str) -> None:
