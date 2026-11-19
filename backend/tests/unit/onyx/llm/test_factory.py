@@ -523,7 +523,7 @@ class TestPolicyFnForwarding:
             patch("onyx.llm.factory.get_session_with_current_tenant"),
             patch(
                 "onyx.llm.factory._resolve_provider_and_model",
-                return_value=(MagicMock(), "some-model"),
+                return_value=(MagicMock(), "some-model", MagicMock()),
             ),
             patch("onyx.llm.factory.fetch_user_group_ids", return_value=[]),
             patch("onyx.llm.factory.can_user_access_llm_provider", return_value=False),
@@ -543,7 +543,7 @@ class TestPolicyFnForwarding:
             patch("onyx.llm.factory.get_session_with_current_tenant"),
             patch(
                 "onyx.llm.factory._resolve_provider_and_model",
-                return_value=(MagicMock(), "some-model"),
+                return_value=(MagicMock(), "some-model", MagicMock()),
             ),
             patch("onyx.llm.factory.fetch_user_group_ids", return_value=[]),
             patch("onyx.llm.factory.can_user_access_llm_provider", return_value=True),
@@ -577,14 +577,6 @@ class TestUnconfiguredOverrideModel:
     but only after the provider access check passes."""
 
     @staticmethod
-    def _provider() -> MagicMock:
-        configured = MagicMock()
-        configured.name = "gateway/gpt-model"
-        provider = MagicMock()
-        provider.model_configurations = [configured]
-        return provider
-
-    @staticmethod
     def _override(model_version: str) -> LLMOverride:
         return LLMOverride(model_provider="Gateway", model_version=model_version)
 
@@ -593,7 +585,7 @@ class TestUnconfiguredOverrideModel:
             patch("onyx.llm.factory.get_session_with_current_tenant"),
             patch(
                 "onyx.llm.factory._resolve_provider_and_model",
-                return_value=(self._provider(), "gateway/unlisted-model"),
+                return_value=(MagicMock(), "gateway/unlisted-model", None),
             ),
             patch("onyx.llm.factory.fetch_user_group_ids", return_value=[]),
             patch("onyx.llm.factory.can_user_access_llm_provider", return_value=True),
@@ -613,7 +605,7 @@ class TestUnconfiguredOverrideModel:
             patch("onyx.llm.factory.get_session_with_current_tenant"),
             patch(
                 "onyx.llm.factory._resolve_provider_and_model",
-                return_value=(self._provider(), "gateway/gpt-model"),
+                return_value=(MagicMock(), "gateway/gpt-model", MagicMock()),
             ),
             patch("onyx.llm.factory.fetch_user_group_ids", return_value=[]),
             patch("onyx.llm.factory.can_user_access_llm_provider", return_value=True),
@@ -632,7 +624,7 @@ class TestUnconfiguredOverrideModel:
             patch("onyx.llm.factory.get_session_with_current_tenant"),
             patch(
                 "onyx.llm.factory._resolve_provider_and_model",
-                return_value=(self._provider(), "gateway/unlisted-model"),
+                return_value=(MagicMock(), "gateway/unlisted-model", None),
             ),
             patch("onyx.llm.factory.fetch_user_group_ids", return_value=[]),
             patch("onyx.llm.factory.can_user_access_llm_provider", return_value=False),

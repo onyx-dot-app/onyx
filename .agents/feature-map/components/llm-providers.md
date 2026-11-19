@@ -81,7 +81,12 @@ provider. MANAGE_LLMS bypasses the group check, never the agent check.
 | groups only | every user | group members and MANAGE_LLMS holders |
 | groups and agents | every user, only with a listed agent | group check and agent check |
 
-**Building the client.** `llm/factory.py:llm_from_provider` resolves
+**Building the client.** The factories and the public search API build the
+`LLMProviderView` from the chosen model's saved configuration only. That
+configuration applies even to a dated variant that provider listings hide.
+`ModelConfiguration.llm_model_flows` loads with `lazy="selectin"`, so every
+view reads flows in one query per batch of models, not one per model.
+`llm/factory.py:llm_from_provider` resolves
 `max_input_tokens` (configured value, else the model catalog) and temperature
 (session, then model default, then user default, then `GEN_AI_TEMPERATURE`). It
 rejects a model without CHAT capability. It calls `policy_fn` with the
