@@ -64,6 +64,28 @@ LIMITER_CUTS = Counter(
     ["source", "api", "scope"],
 )
 
+LIMITER_LATE_REFUSALS = Counter(
+    "onyx_source_api_limiter_late_refusals_total",
+    "Refusals of requests that took their slot before the last cut of their "
+    "budget. They do not count toward the next cut.",
+    ["source", "api", "scope"],
+)
+
+LIMITER_CEILING = Gauge(
+    "onyx_source_api_limiter_ceiling",
+    "The project budget at its ceiling: the share that the source accepted at "
+    "the last cut, which moves up when the budget grows past it with no cut. "
+    "The budget grows slowly from 80 % of it.",
+    ["source", "api"],
+)
+
+LIMITER_OVERDRAFTS = Counter(
+    "onyx_source_api_limiter_overdrafts_total",
+    "Calls that waited the longest wait for the shared limiter and then took "
+    "their units over the budget",
+    ["source", "api"],
+)
+
 LIMITER_WAIT_SECONDS = Counter(
     "onyx_source_api_limiter_wait_seconds_total",
     "Time that callers waited for the shared limiter",
@@ -87,6 +109,20 @@ def record_source_api_request(
 
 def record_limiter_cut(source: str, api: str, scope: LimiterScope) -> None:
     LIMITER_CUTS.labels(source=source, api=api, scope=scope.value).inc()
+
+
+def record_late_refusals(
+    source: str, api: str, scope: LimiterScope, count: int
+) -> None:
+    LIMITER_LATE_REFUSALS.labels(source=source, api=api, scope=scope.value).inc(count)
+
+
+def record_limiter_overdraft(source: str, api: str) -> None:
+    LIMITER_OVERDRAFTS.labels(source=source, api=api).inc()
+
+
+def set_project_ceiling(source: str, api: str, allowed: int) -> None:
+    LIMITER_CEILING.labels(source=source, api=api).set(allowed)
 
 
 def record_limiter_wait(source: str, api: str, seconds: float) -> None:
