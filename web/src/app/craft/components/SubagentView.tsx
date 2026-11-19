@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import { useSubagent } from "@/app/craft/hooks/useBuildSessionStore";
@@ -26,6 +26,8 @@ interface SubagentViewProps {
 export default function SubagentView({ subagentSessionId }: SubagentViewProps) {
   const t = useTranslations("craft.subagentView");
   const subagent = useSubagent(subagentSessionId);
+  // Static transcript (autoScroll off) — ref only satisfies the prop contract.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const { messages, activeEvents } = useMemo<{
     messages: BuildMessage[];
@@ -75,6 +77,8 @@ export default function SubagentView({ subagentSessionId }: SubagentViewProps) {
       messages={messages}
       timelineEvents={activeEvents}
       isStreaming={subagent.status === "running"}
+      autoScrollEnabled={subagent.status === "running"}
+      scrollContainerRef={scrollRef}
     />
   );
 }

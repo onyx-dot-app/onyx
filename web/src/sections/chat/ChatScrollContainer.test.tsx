@@ -1,128 +1,285 @@
+import { createRef, useLayoutEffect } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
+import ChatScrollContainer, {
+  ChatScrollContainerHandle,
+} from "@/sections/chat/ChatScrollContainer";
+import { useScrollContainer } from "@/sections/chat/ScrollContainerContext";
 
-const VIEWPORT_HEIGHT = 400;
+interface SpacerProps {
+  height: number;
+}
 
-const resizeCallbacks = new Map<Element, (() => void)[]>();
-const originalResizeObserver = global.ResizeObserver;
+function Spacer({ height }: SpacerProps) {
+  const { spacerHeightRef } = useScrollContainer();
+  useLayoutEffect(() => {
+    spacerHeightRef.current = height;
+  }, [height, spacerHeightRef]);
+  return null;
+}
 
+const originalScrollTo = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "scrollTo"
+);
 beforeEach(() => {
-  jest.useFakeTimers();
-  resizeCallbacks.clear();
-  global.ResizeObserver = class {
-    constructor(private readonly callback: ResizeObserverCallback) {}
-    observe(target: Element) {
-      const callbacks = resizeCallbacks.get(target) ?? [];
-      callbacks.push(() =>
-        this.callback([], this as unknown as ResizeObserver)
-      );
-      resizeCallbacks.set(target, callbacks);
-    }
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-});
-
-afterEach(() => {
-  jest.useRealTimers();
-  global.ResizeObserver = originalResizeObserver;
-});
-
-/** A chat in a 400px viewport. */
-function renderChat(autoScroll: boolean) {
-  let contentHeight = 0;
-  const chat = (enabled: boolean) => (
-    <ChatScrollContainer sessionId="session" autoScroll={enabled}>
-      <div />
-    </ChatScrollContainer>
-  );
-  const view = render(chat(autoScroll));
-  const container = screen.getByTestId("chat-scroll-container");
-  Object.defineProperties(container, {
-    clientHeight: { get: () => VIEWPORT_HEIGHT },
-    scrollHeight: { get: () => contentHeight },
+  Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+    configurable: true,
+    writable: true,
+    value: jest.fn(),
   });
-  /** Content changes size: the controller reacts before paint. */
-  const layout = (height: number) => {
-    contentHeight = height;
-    act(() => resizeCallbacks.get(container)?.forEach((run) => run()));
-  };
-  /** Content shrinks before any resize callback runs. */
-  const shrink = (height: number) => {
-    contentHeight = height;
-  };
-  const userScroll = (top: number) => {
-    fireEvent.wheel(container);
-    container.scrollTop = top;
+});
+afterEach(() => {
+  if (originalScrollTo) {
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", originalScrollTo);
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
+  }
+});
+
+test("mounting with auto-scroll enabled does not start an unrelated scroll", () => {
+  const view = render(<ChatScrollContainer>{null}</ChatScrollContainer>);
+  expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
+  view.unmount();
+});
+
+describe.each([0, 200])("with spacer height %i", (spacerHeight) => {
+  describe.each(["drain", "smooth", "both"])("%s pause", (pause) => {
+    test.each([
+      {
+        scenario: "follows new content",
+        autoScroll: true,
+        scrollUp: false,
+        follows: true,
+        returnToBottom: false,
+      },
+      {
+        scenario: "respects disabled auto-scroll",
+        autoScroll: false,
+        scrollUp: false,
+        follows: false,
+        returnToBottom: false,
+      },
+      {
+        scenario: "respects a user scrolling up",
+        autoScroll: true,
+        scrollUp: true,
+        follows: false,
+        returnToBottom: false,
+      },
+      {
+        scenario: "follows after the user returns to bottom",
+        autoScroll: true,
+        scrollUp: true,
+        follows: true,
+        returnToBottom: true,
+      },
+    ])(
+      "$scenario after a following pause",
+      async ({ autoScroll, scrollUp, follows, returnToBottom }) => {
+        const frames: FrameRequestCallback[] = [];
+        const requestFrame = jest
+          .spyOn(window, "requestAnimationFrame")
+          .mockImplementation((callback) => {
+            frames.push(callback);
+            return frames.length;
+          });
+        const message = (enabled: boolean) => (
+          <ChatScrollContainer autoScroll={enabled}>
+            <Spacer height={spacerHeight} />
+          </ChatScrollContainer>
+        );
+        const view = render(message(pause === "smooth" ? autoScroll : false));
+        const container = screen.getByTestId("chat-scroll-container");
+        const end = container.firstElementChild?.lastElementChild;
+        if (!(end instanceof HTMLElement))
+          throw new Error("Missing content end marker");
+        let contentHeight = 1000;
+        Object.defineProperties(container, {
+          clientHeight: { get: () => 400 },
+          scrollHeight: { get: () => contentHeight },
+        });
+        Object.defineProperty(end, "offsetTop", { get: () => contentHeight });
+        const scrollTo = jest.fn(
+          (options?: ScrollToOptions | number, y?: number) => {
+            const top = typeof options === "number" ? y : options?.top;
+            if (top !== undefined) container.scrollTop = top;
+          }
+        );
+        container.scrollTo = scrollTo;
+
+        async function flushChanges(change: () => void) {
+          await act(async () => {
+            change();
+            // Let the real MutationObserver deliver its records before the next frame.
+            await Promise.resolve();
+          });
+          act(() => frames.splice(0).forEach((callback) => callback(0)));
+        }
+
+        try {
+          container.scrollTop = 600;
+          fireEvent.scroll(container);
+          if (scrollUp) {
+            container.scrollTop = 100;
+            fireEvent.scroll(container);
+          }
+
+          if (returnToBottom) {
+            container.scrollTop = 600;
+            fireEvent.scroll(container);
+          }
+
+          if (pause !== "drain") {
+            await flushChanges(() => {
+              container.dataset.smoothScrollActive = "true";
+            });
+          }
+          scrollTo.mockClear();
+          await flushChanges(() => {
+            // The answer footer appears while instant following is suppressed.
+            contentHeight += 48;
+            end.before(document.createElement("div"));
+          });
+          expect(scrollTo).not.toHaveBeenCalled();
+
+          await flushChanges(() => {
+            view.rerender(message(autoScroll));
+          });
+          if (pause !== "drain") {
+            expect(scrollTo).not.toHaveBeenCalled();
+            await flushChanges(() => {
+              container.dataset.smoothScrollActive = "false";
+            });
+          }
+          if (follows) {
+            expect(scrollTo).toHaveBeenCalledWith({
+              top: 648,
+              behavior: "instant",
+            });
+            expect(container.scrollTop).toBe(648);
+          } else {
+            expect(scrollTo).not.toHaveBeenCalled();
+            expect(container.scrollTop).toBe(scrollUp ? 100 : 600);
+          }
+        } finally {
+          view.unmount();
+          requestFrame.mockRestore();
+        }
+      }
+    );
+  });
+});
+
+test("an interrupted smooth scroll does not resume following later content", async () => {
+  jest.useFakeTimers();
+  const ref = createRef<ChatScrollContainerHandle>();
+  const view = render(
+    <ChatScrollContainer ref={ref}>{null}</ChatScrollContainer>
+  );
+  const container = screen.getByTestId("chat-scroll-container");
+  const end = container.firstElementChild?.lastElementChild;
+  if (!(end instanceof HTMLElement))
+    throw new Error("Missing content end marker");
+  let height = 1000;
+  Object.defineProperties(container, {
+    clientHeight: { get: () => 400 },
+    scrollHeight: { get: () => height },
+  });
+  Object.defineProperty(end, "offsetTop", { get: () => height });
+  const scrollTo = jest.fn();
+  container.scrollTo = scrollTo;
+  try {
+    act(() => ref.current?.scrollToBottom("smooth"));
+    container.scrollTop = 100;
     fireEvent.scroll(container);
-  };
-  /** The position moves without user input (rounding, a clamp). */
-  const drift = (top: number) => {
-    container.scrollTop = top;
-    fireEvent.scroll(container);
-  };
-  const setAutoScroll = (enabled: boolean) => view.rerender(chat(enabled));
-  return { container, layout, shrink, userScroll, drift, setAutoScroll };
-}
-
-/** Past the opening, when the view keeps to the end whatever the setting. */
-function settleOpening() {
-  act(() => jest.advanceTimersByTime(1500));
-}
-
-test("with auto-scroll on, the view follows new content at the end", () => {
-  const { container, layout } = renderChat(true);
-  layout(1000);
-  settleOpening();
-  layout(1048);
-  expect(container.scrollTop).toBe(648);
+    act(() => jest.advanceTimersByTime(600));
+    scrollTo.mockClear();
+    await act(async () => {
+      height += 48;
+      end.before(document.createElement("div"));
+      await Promise.resolve();
+    });
+    act(() => jest.advanceTimersByTime(20));
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(container.scrollTop).toBe(100);
+  } finally {
+    view.unmount();
+    jest.useRealTimers();
+  }
 });
 
-test("with auto-scroll off, new content does not move the view", () => {
-  const { container, layout } = renderChat(false);
-  layout(1000);
-  expect(container.scrollTop).toBe(600);
-  settleOpening();
-  layout(1048);
-  expect(container.scrollTop).toBe(600);
-});
+test.each([
+  // The browser clamps the scroll position to the shorter content.
+  { case: "layout moves", scrollTopAfterShrink: 500, follows: true },
+  // The user scrolls up farther than the content shrank.
+  { case: "the user scrolls", scrollTopAfterShrink: 300, follows: false },
+])(
+  "when shrinking rows move the scroll position up and $case, following is $follows",
+  async ({ scrollTopAfterShrink, follows }) => {
+    // A reloaded chat opens at the bottom and follows during the opening
+    // window. Windowed rows settle to smaller heights before the first scroll
+    // event, the scroll position moves up, then the resumed run streams more.
+    const frames: FrameRequestCallback[] = [];
+    const requestFrame = jest
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        frames.push(callback);
+        return frames.length;
+      });
+    const chat = (anchorSelector?: string) => (
+      <ChatScrollContainer
+        sessionId="session"
+        anchorSelector={anchorSelector}
+        autoScroll={false}
+      >
+        <div id="anchor" />
+      </ChatScrollContainer>
+    );
+    const view = render(chat());
+    const container = screen.getByTestId("chat-scroll-container");
+    const end = container.firstElementChild?.lastElementChild;
+    if (!(end instanceof HTMLElement))
+      throw new Error("Missing content end marker");
+    let contentHeight = 1000;
+    Object.defineProperties(container, {
+      clientHeight: { get: () => 400 },
+      scrollHeight: { get: () => contentHeight },
+    });
+    Object.defineProperty(end, "offsetTop", { get: () => contentHeight });
+    const scrollTo = jest.fn((options?: ScrollToOptions | number) => {
+      if (typeof options === "object" && options.top !== undefined)
+        container.scrollTop = options.top;
+    });
+    container.scrollTo = scrollTo;
+    try {
+      view.rerender(chat("#anchor"));
+      expect(container.scrollTop).toBe(600);
 
-test("a user scroll up stops following, and a return to the end resumes it", () => {
-  const { container, layout, userScroll } = renderChat(true);
-  layout(1000);
-  settleOpening();
+      contentHeight = 900;
+      container.scrollTop = scrollTopAfterShrink;
+      fireEvent.scroll(container);
 
-  userScroll(100);
-  layout(1048);
-  expect(container.scrollTop).toBe(100);
+      scrollTo.mockClear();
+      await act(async () => {
+        contentHeight += 150;
+        end.before(document.createElement("div"));
+        await Promise.resolve();
+      });
+      act(() => frames.splice(0).forEach((callback) => callback(0)));
 
-  userScroll(648);
-  layout(1096);
-  expect(container.scrollTop).toBe(696);
-});
-
-test("a pause in auto-scroll holds the view, and the resume catches up", () => {
-  // The typewriter's drain turns auto-scroll off while it runs.
-  const { container, layout, setAutoScroll } = renderChat(true);
-  layout(1000);
-  settleOpening();
-
-  setAutoScroll(false);
-  layout(1048);
-  expect(container.scrollTop).toBe(600);
-
-  setAutoScroll(true);
-  expect(container.scrollTop).toBe(648);
-});
-
-test("a position change without user input does not stop following", () => {
-  // The browser clamps to shorter content, or re-rounds a fractional position.
-  const { container, layout, shrink, drift } = renderChat(true);
-  layout(1000);
-  settleOpening();
-
-  shrink(900);
-  drift(300);
-  expect(container.scrollTop).toBe(500);
-  layout(1000);
-  expect(container.scrollTop).toBe(600);
-});
+      if (follows) {
+        expect(scrollTo).toHaveBeenCalledWith({
+          top: 650,
+          behavior: "instant",
+        });
+        expect(container.scrollTop).toBe(650);
+      } else {
+        expect(scrollTo).not.toHaveBeenCalled();
+        expect(container.scrollTop).toBe(scrollTopAfterShrink);
+      }
+    } finally {
+      view.unmount();
+      requestFrame.mockRestore();
+    }
+  }
+);

@@ -182,52 +182,9 @@ export class ChatPage {
 
   async scrollTo(position: "top" | "bottom"): Promise<void> {
     await this.scrollContainer.evaluate(async (el, pos) => {
-      // The chat treats a scroll as the user's only after scroll input.
-      el.dispatchEvent(new WheelEvent("wheel"));
       el.scrollTo({ top: pos === "top" ? 0 : el.scrollHeight });
       await new Promise<void>((r) => requestAnimationFrame(() => r()));
     }, position);
-  }
-
-  /** Scrolls to `top`, as a user scroll would. `top` must differ from the
-   * current position, or no scroll event arrives. */
-  async scrollToTop(top: number): Promise<void> {
-    await this.scrollContainer.evaluate(
-      (el, value) =>
-        new Promise<void>((resolve) => {
-          el.addEventListener("scroll", () => resolve(), { once: true });
-          el.dispatchEvent(new WheelEvent("wheel"));
-          el.scrollTop = value;
-        }),
-      top
-    );
-  }
-
-  async scrollMetrics(): Promise<{ scrollTop: number; maxScrollTop: number }> {
-    return this.scrollContainer.evaluate((el) => ({
-      scrollTop: el.scrollTop,
-      maxScrollTop: el.scrollHeight - el.clientHeight,
-    }));
-  }
-
-  /** The latest user message's top, relative to the viewport's top. */
-  async latestHumanMessageOffset(): Promise<number> {
-    const container = await this.scrollContainer.boundingBox();
-    const message = await this.humanMessages.last().boundingBox();
-    if (!container || !message) throw new Error("Chat is not rendered");
-    return message.y - container.y;
-  }
-
-  /** Opens a chat from the sidebar, in the page: no reload. */
-  async openFromSidebar(sessionId: string): Promise<void> {
-    await this.page
-      .locator(`a[href="/app?chatId=${sessionId}"]`)
-      .first()
-      .click();
-    await this.page.waitForURL(
-      (url) => url.searchParams.get("chatId") === sessionId
-    );
-    await expect(this.page.locator('[data-scroll-ready="true"]')).toBeVisible();
   }
 
   async screenshotContainer(name: string): Promise<void> {
