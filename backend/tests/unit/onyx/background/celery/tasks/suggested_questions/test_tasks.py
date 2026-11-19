@@ -123,6 +123,45 @@ def test_pool_run_saves_the_merged_pool_and_records_the_run(
     assert run["released"] == [("pool", "tenant")]
 
 
+def _pool_task_for(requester_id: str) -> None:
+    pool_task: Any = tasks.generate_suggested_questions_pool
+    pool_task.run(tenant_id="tenant", reason="person_short", requester_id=requester_id)
+
+
+def test_a_run_for_a_person_who_is_no_longer_short_is_skipped(
+    run: dict[str, Any],
+) -> None:
+    alice = uuid4()
+    run["pool"] = QuestionPool(
+        questions=[_question(f"s-{n}") for n in range(tasks.SQ_SHARED_REFRESH_AT + 1)]
+    )
+
+    _pool_task_for(str(alice))
+
+    run["triage"].assert_not_called()
+    assert run["saved"] is None
+
+
+def test_a_run_for_a_short_person_drops_their_used_questions_first(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    alice = uuid4()
+    run["pool"] = QuestionPool(questions=[_question("old")])
+    run["records"][alice] = UserRecord(used=["old"])
+    evicted: list[Any] = []
+    merge = tasks.merge_questions
+    monkeypatch.setattr(
+        tasks,
+        "merge_questions",
+        lambda *a, **kw: evicted.append(kw.get("evict_first")) or merge(*a, **kw),
+    )
+
+    _pool_task_for(str(alice))
+
+    assert evicted == [{"old"}]
+    assert run["saved"] is not None
+
+
 def test_pool_run_skipped_makes_no_model_call(run: dict[str, Any]) -> None:
     run["decision"] = RunDecision(run=False, reason="running low, but too soon")
 

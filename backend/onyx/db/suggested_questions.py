@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import KV_SUGGESTED_QUESTIONS_USER_KEY
 from onyx.db.document_access import apply_document_access_filter
 from onyx.db.enums import UserFileStatus
-from onyx.db.models import Document, KVStore, UserFile
+from onyx.db.models import Document, KVStore, User, UserFile
 from onyx.utils.special_types import JSON_ro
 
 
@@ -124,6 +124,61 @@ def count_candidate_documents(db_session: Session, exclude_ids: set[str]) -> int
         )
     )
     return (documents or 0) + (uploads or 0)
+
+
+def get_visible_document_ids(
+    db_session: Session,
+    user: User,
+    external_group_ids: list[str],
+    document_ids: list[str],
+) -> set[str]:
+    """The ids, out of these, this person may open right now: indexed connector
+    documents they can see (the same rules as search, which also skip pairs
+    being deleted) and their own finished uploads."""
+    if not document_ids:
+        return set()
+    connector_stmt = apply_document_access_filter(
+        db_session,
+        _indexed_documents(set()).where(Document.id.in_(document_ids)),
+        user_email=user.email,
+        external_group_ids=external_group_ids,
+        user_id=user.id,
+        prior_emails=user.prior_emails,
+    )
+    visible = {document_id for document_id, _ in db_session.execute(connector_stmt)}
+    uploads = select(UserFile.id).where(
+        cast(UserFile.id, String).in_(document_ids),
+        UserFile.user_id == user.id,
+        UserFile.status == UserFileStatus.COMPLETED,
+        UserFile.incognito.is_(False),
+    )
+    return visible | {str(user_file_id) for user_file_id in db_session.scalars(uploads)}
+
+
+def has_visible_documents(
+    db_session: Session, user: User, external_group_ids: list[str]
+) -> bool:
+    """Whether this person can open any indexed document or finished upload."""
+    connector_stmt = apply_document_access_filter(
+        db_session,
+        _indexed_documents(set()),
+        user_email=user.email,
+        external_group_ids=external_group_ids,
+        user_id=user.id,
+        prior_emails=user.prior_emails,
+    ).limit(1)
+    if db_session.execute(connector_stmt).first() is not None:
+        return True
+    uploads = (
+        select(UserFile.id)
+        .where(
+            UserFile.user_id == user.id,
+            UserFile.status == UserFileStatus.COMPLETED,
+            UserFile.incognito.is_(False),
+        )
+        .limit(1)
+    )
+    return db_session.execute(uploads).first() is not None
 
 
 def load_user_record_values(

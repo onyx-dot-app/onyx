@@ -106,6 +106,33 @@ def test_merge_keeps_newest_up_to_cap() -> None:
     assert [question.document_id for question in merged] == ["doc0", "doc1", "doc2"]
 
 
+def test_a_full_shelf_drops_the_requesters_used_questions_first() -> None:
+    used = _question("used-but-newest", age_minutes=1)
+    oldest = _question("oldest", age_minutes=90)
+    newer = _question("newer", age_minutes=30)
+
+    merged = store.merge_questions(
+        [used, oldest, newer],
+        [_question("new")],
+        {"used-but-newest", "oldest", "newer", "new"},
+        max_size=3,
+        evict_first={used.id},
+    )
+
+    assert [q.document_id for q in merged] == ["new", "newer", "oldest"]
+
+
+@pytest.mark.usefixtures("kv")
+def test_record_requested_keeps_the_rest_of_the_record() -> None:
+    user_id = uuid4()
+    store.mark_used(user_id, "q1")
+
+    store.record_requested(user_id, NOW)
+
+    record = store.load_user_record(user_id)
+    assert (record.requested_at, record.used) == (NOW, ["q1"])
+
+
 @pytest.mark.usefixtures("kv")
 def test_pool_round_trips_through_the_kv_store() -> None:
     assert store.load_pool() is None
