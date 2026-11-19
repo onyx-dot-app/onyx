@@ -299,7 +299,6 @@ pub async fn ask(
         Ok(_) => crate::notify::Outcome::Answered,
         Err(_) => crate::notify::Outcome::Failed,
     };
-    crate::notify::answer_finished(&app, crate::notify::Answer { id: answer, epoch }, outcome);
     let event = match &result {
         Ok(_) => AskEvent::Done,
         Err(message) => AskEvent::Error {
@@ -307,6 +306,16 @@ pub async fn ask(
         },
     };
     let _ = on_event.send(event);
+    // After the answer ends in the launcher: the first notification can wait
+    // for the permission prompt.
+    let notify_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::notify::answer_finished(
+            &notify_app,
+            crate::notify::Answer { id: answer, epoch },
+            outcome,
+        );
+    });
     Ok(())
 }
 
