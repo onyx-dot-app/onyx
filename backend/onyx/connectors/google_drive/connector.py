@@ -129,6 +129,7 @@ from onyx.connectors.models import (
     DocumentFailure,
     EntityFailure,
     HierarchyNode,
+    ListingCounts,
     ResolveTarget,
     SlimDocument,
 )
@@ -448,6 +449,7 @@ def _drop_listing_state(checkpoint: GoogleDriveCheckpoint) -> None:
     checkpoint.incomplete_drive_ids = set()
     checkpoint.failed_impersonation_emails = set()
     checkpoint.unreachable_target_ids = set()
+    checkpoint.denied_listing_emails = set()
 
 
 def _listing_done(checkpoint: GoogleDriveCheckpoint) -> bool:
@@ -2709,6 +2711,10 @@ class GoogleDriveConnector(
                 ListingPartitionKind.SHARED_DRIVE,
                 ListingPartitionKind.FOLDER_SUBTREE,
             )
+            if not keyed_by_parent:
+                # The lister marks a denied drive or folder. A denied user
+                # partition is marked here, so the counts are partial.
+                checkpoint.denied_listing_emails.add(email)
             return [
                 RetrievedDriveFile(
                     drive_file={},
@@ -2898,6 +2904,33 @@ class GoogleDriveConnector(
             raise ConnectorValidationError(
                 f"Unexpected error during Google Workspace directory API probe: {e}"
             )
+
+    @override
+    def listing_counts(self, checkpoint: GoogleDriveCheckpoint) -> ListingCounts | None:
+        state = checkpoint.listing
+        if state is None:
+            return None
+        # A shared drive that was listed only in part, a requested drive or
+        # folder that no user could reach, a user whose My Drive could not
+        # be listed as them, or a user listing that Drive denied leaves files
+        # out of the count.
+        failed_users = {
+            email.lower() for email in checkpoint.failed_impersonation_emails
+        }
+        unlisted_my_drives = any(
+            email.lower() in failed_users
+            for email in self._my_drive_partition_emails(checkpoint)
+        )
+        return ListingCounts(
+            docs_by_type=state.docs_by_type,
+            bytes_by_type=state.bytes_by_type,
+            partial=bool(
+                checkpoint.incomplete_drive_ids
+                or checkpoint.unreachable_target_ids
+                or unlisted_my_drives
+                or checkpoint.denied_listing_emails
+            ),
+        )
 
     @override
     def build_dummy_checkpoint(self) -> GoogleDriveCheckpoint:
