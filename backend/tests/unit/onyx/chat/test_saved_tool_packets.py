@@ -30,6 +30,7 @@ from onyx.server.query_and_chat.session_loading import (
 )
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
+    CustomToolDelta,
     MemoryToolNoAccess,
     OverallStop,
     PacketException,
@@ -53,7 +54,7 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
 @pytest.mark.parametrize(
-    "kind", ["search", "custom", "error", "display_error", "no_details"]
+    "kind", ["search", "custom", "error", "public_error", "display_error", "no_details"]
 )
 def test_live_and_saved_tool_cards_share_public_content_without_tool_definition(
     kind: str,
@@ -76,6 +77,10 @@ def test_live_and_saved_tool_cards_share_public_content_without_tool_definition(
     elif kind == "custom":
         details = CustomToolCallSummary(
             tool_name="lookup", response_type="json", tool_result={"value": "found"}
+        )
+    elif kind == "public_error":
+        details = CustomToolCallSummary(
+            tool_name=call.name, response_type="text", tool_result="command exited 1"
         )
     elif kind == "display_error":
         details = ToolExecutionError(message="lookup failed")
@@ -133,6 +138,10 @@ def test_live_and_saved_tool_cards_share_public_content_without_tool_definition(
     assert "stale" not in public_json
     if kind == "error":
         assert "lookup failed" not in public_json
+    if kind == "public_error":
+        assert [p.obj.data for p in restored if isinstance(p.obj, CustomToolDelta)] == [
+            "command exited 1"
+        ]
     if kind == "display_error":
         errors = [
             packet.obj for packet in restored if isinstance(packet.obj, PacketException)

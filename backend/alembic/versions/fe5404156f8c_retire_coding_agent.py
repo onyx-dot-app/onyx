@@ -23,9 +23,15 @@ def upgrade() -> None:
           AND c.parent_chat_message_id = m.id AND m.response_status IS NULL
           AND (c.result IS NULL OR c.result = 'null'::jsonb) AND c.tool_call_response <> ''
     """)
-    # Keep the command output and the final answer in the standard result content.
+    # Failed commands need a public result to replay stdout and stderr.
     op.execute("""
-        UPDATE tool_call SET result = result - 'details'
+        UPDATE tool_call SET result = CASE
+            WHEN result @> '{"is_error": true, "details": {"type": "bash_execution"}}'
+            THEN jsonb_set(result, '{details}', jsonb_build_object(
+                'type', 'custom_tool_result', 'tool_name', result->>'tool_name',
+                'response_type', 'text', 'tool_result', result->>'content'))
+            ELSE result - 'details'
+        END
         WHERE result #>> '{details,type}' IN ('coding_result','bash_execution')
     """)
     op.execute("""
