@@ -12264,9 +12264,6 @@
         "emptyState": {
           "text": "No images generated"
         },
-        "failedStatus": {
-          "text": "Image generation failed"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {Generated # image} other {Generated # images}}"
         },
@@ -12418,12 +12415,12 @@
         "fetch": {
           "reading": {
             "status": "Reading"
+          },
+          "read": {
+            "status": "Read"
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "chars {start, number}–{end, number} of {total, number}"
-          },
           "read": {
             "status": "Read {fileName} (chars {start, number}–{end, number} of {total, number})"
           },
@@ -12500,9 +12497,14 @@
           "reading": {
             "status": "Reading"
           },
+          "read": {
+            "label": "Read"
+          },
           "header": {
             "default": "Searching internal documents",
+            "doneDefault": "Searched internal documents",
             "sources": "Searching {sources}",
+            "doneSources": "Searched {sources}",
             "sourcesOverflow": "{sources} +{count} more",
             "withTimeWindow": "{header} ({timeWindow})"
           },
@@ -12524,6 +12526,9 @@
           },
           "updating": {
             "status": "Updating memory"
+          },
+          "updated": {
+            "status": "Updated memory"
           },
           "viewMemoriesButton": {
             "tooltip": "View Memories"
@@ -12589,20 +12594,8 @@
           }
         },
         "python": {
-          "completed": {
-            "status": "Python execution completed"
-          },
-          "default": {
-            "status": "Python execution"
-          },
           "error": {
             "label": "Error:"
-          },
-          "executing": {
-            "status": "Executing Python code..."
-          },
-          "failed": {
-            "status": "Python execution failed"
           },
           "generatedFiles": {
             "label": "{count, plural, one {Generated # file} other {Generated # files}}"
@@ -12613,6 +12606,12 @@
           "output": {
             "label": "Output:"
           },
+          "running": {
+            "status": "Running Python"
+          },
+          "ran": {
+            "status": "Ran Python"
+          },
           "runningCode": {
             "label": "Running code..."
           },
@@ -12621,11 +12620,11 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "Full text"
-          },
           "thinking": {
             "status": "Thinking"
+          },
+          "thought": {
+            "status": "Thought"
           }
         },
         "researchAgent": {
@@ -12679,6 +12678,9 @@
         "webSearch": {
           "searching": {
             "status": "Searching the web"
+          },
+          "searched": {
+            "status": "Searched the web"
           }
         },
         "sandbox": {

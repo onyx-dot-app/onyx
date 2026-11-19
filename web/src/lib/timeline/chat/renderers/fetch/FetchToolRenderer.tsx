@@ -71,6 +71,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
       {
         icon: STEP_ICONS.fetch,
         status: t("fetch.reading.status"),
+        doneStatus: t("fetch.read.status"),
         content: <div />,
         supportsCollapsible: false,
         timelineLayout: "timeline",
@@ -131,6 +132,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
     {
       icon: STEP_ICONS.fetch,
       status: t("fetch.reading.status"),
+      doneStatus: t("fetch.read.status"),
       supportsCollapsible: false,
       timelineLayout: "timeline",
       content: (

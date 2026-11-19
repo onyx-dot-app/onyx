@@ -382,8 +382,8 @@ export class ChatPage {
   }
 
   /** Opens the run card and checks one completed step of the tool that
-   * shows `output`. A JSON response renders as a `code` block; a text
-   * response renders as an inline code span. */
+   * shows `output`. The step's body is a code panel with the request and
+   * the response, so the output is matched as text. */
   async expectCustomToolResult(name: string, output: string): Promise<void> {
     // A run card folds by a button named for its step count.
     const fold = this.scrollContainer
@@ -397,12 +397,7 @@ export class ChatPage {
     });
     await expect(status).toBeVisible();
     await status.click();
-    await expect(
-      this.scrollContainer
-        .getByRole("code")
-        .or(this.scrollContainer.getByTestId("code-block"))
-        .filter({ hasText: output })
-    ).toBeVisible();
+    await expect(this.scrollContainer.getByText(output).first()).toBeVisible();
   }
 
   async startIncognito(): Promise<void> {

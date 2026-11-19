@@ -43,6 +43,7 @@ export function TimelineStepComposer({
             }}
             icon={result.icon as IconFunctionComponent | undefined}
             title={result.status ?? undefined}
+            doneTitle={result.doneStatus ?? undefined}
             defaultExpanded={result.isExpanded}
             expandable={collapsible}
             isHover={result.isHover}

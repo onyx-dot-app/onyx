@@ -12,6 +12,12 @@ export {
   type ButtonProps,
 } from "@opal/components/buttons/button/components";
 
+/* FoldButton */
+export {
+  FoldButton,
+  type FoldButtonProps,
+} from "@opal/components/buttons/fold-button/components";
+
 /* SelectButton */
 export {
   SelectButton,
@@ -169,14 +175,19 @@ export {
   type IconTooltipStatus,
 } from "@opal/components/icon-tooltip/components";
 
-/* Log */
+/* Line */
+export { Line, type LineProps } from "@opal/components/lines/line/components";
 export {
-  Log,
-  type LogProps,
-  type LogStatus,
-  type LogVariant,
-  type LogWeight,
-} from "@opal/components/log/components";
+  type LineStatus,
+  type LineVariant,
+  type LineWeight,
+} from "@opal/components/lines/line-base/components";
+
+/* LogLine */
+export {
+  LogLine,
+  type LogLineProps,
+} from "@opal/components/lines/log-line/components";
 
 /* Divider */
 export {
@@ -416,6 +427,20 @@ export {
 
 /* Code */
 export { Code } from "@opal/components/code/components";
+
+/* CodePanel */
+export {
+  CodePanel,
+  type CodePanelProps,
+  type CodePanelHeaderProps,
+  type CodePanelLinesProps,
+  type CodePanelColumnsProps,
+  type CodePanelOutputProps,
+  type CodePanelContentProps,
+  type CodePanelFooterProps,
+  type CodePanelLine,
+  type CodePanelLineKind,
+} from "@opal/components/code-panel/components";
 
 /* Tabs */
 export {

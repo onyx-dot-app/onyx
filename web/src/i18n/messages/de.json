@@ -12264,9 +12264,6 @@
         "emptyState": {
           "text": "Keine Bilder generiert"
         },
-        "failedStatus": {
-          "text": "Bildgenerierung fehlgeschlagen"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {# Bild generiert} other {# Bilder generiert}}"
         },
@@ -12418,12 +12415,12 @@
         "fetch": {
           "reading": {
             "status": "Liest"
+          },
+          "read": {
+            "status": "Gelesen"
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "Zeichen {start, number}–{end, number} von {total, number}"
-          },
           "read": {
             "status": "{fileName} gelesen (Zeichen {start, number}–{end, number} von {total, number})"
           },
@@ -12500,9 +12497,14 @@
           "reading": {
             "status": "Liest"
           },
+          "read": {
+            "label": "Gelesen"
+          },
           "header": {
             "default": "Interne Dokumente werden durchsucht",
+            "doneDefault": "Interne Dokumente durchsucht",
             "sources": "Suche in {sources}",
+            "doneSources": "{sources} durchsucht",
             "sourcesOverflow": "{sources} +{count} weitere",
             "withTimeWindow": "{header} ({timeWindow})"
           },
@@ -12524,6 +12526,9 @@
           },
           "updating": {
             "status": "Aktualisiert Erinnerung"
+          },
+          "updated": {
+            "status": "Erinnerung aktualisiert"
           },
           "viewMemoriesButton": {
             "tooltip": "Erinnerungen ansehen"
@@ -12589,20 +12594,8 @@
           }
         },
         "python": {
-          "completed": {
-            "status": "Python-Ausführung abgeschlossen"
-          },
-          "default": {
-            "status": "Python-Ausführung"
-          },
           "error": {
             "label": "Fehler:"
-          },
-          "executing": {
-            "status": "Führt Python-Code aus..."
-          },
-          "failed": {
-            "status": "Python-Ausführung fehlgeschlagen"
           },
           "generatedFiles": {
             "label": "{count, plural, one {# Datei generiert} other {# Dateien generiert}}"
@@ -12613,6 +12606,12 @@
           "output": {
             "label": "Ausgabe:"
           },
+          "running": {
+            "status": "Python wird ausgeführt"
+          },
+          "ran": {
+            "status": "Python ausgeführt"
+          },
           "runningCode": {
             "label": "Führt Code aus..."
           },
@@ -12621,11 +12620,11 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "Vollständiger Text"
-          },
           "thinking": {
             "status": "Denkt nach"
+          },
+          "thought": {
+            "status": "Nachgedacht"
           }
         },
         "researchAgent": {
@@ -12679,6 +12678,9 @@
         "webSearch": {
           "searching": {
             "status": "Durchsucht das Web"
+          },
+          "searched": {
+            "status": "Im Web gesucht"
           }
         },
         "sandbox": {

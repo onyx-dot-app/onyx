@@ -288,7 +288,7 @@ describe("BuildMessageList thinking visibility", () => {
     openRun();
     openSteps();
 
-    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.getByText("Thought")).toBeInTheDocument();
     expect(screen.getByText("Checking the app structure.")).toBeInTheDocument();
     expect(screen.getByText("Final answer")).toBeInTheDocument();
   });
@@ -298,7 +298,7 @@ describe("BuildMessageList thinking visibility", () => {
 
     // The saved run is folded; opening it shows the thought step closed.
     openRun();
-    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.getByText("Thought")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
     ).not.toBeInTheDocument();
@@ -321,7 +321,7 @@ describe("BuildMessageList thinking visibility", () => {
       await screen.findByRole("button", { name: "1 step", expanded: false })
     ).toBeInTheDocument();
     openRun();
-    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.getByText("Thought")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
     ).not.toBeInTheDocument();
@@ -333,7 +333,7 @@ describe("BuildMessageList thinking visibility", () => {
       timelineEvents: [thought("Checking the app structure.")],
     });
 
-    expect(screen.getByText("Thinking...")).toBeInTheDocument();
+    expect(screen.getByText("Thinking")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
     ).not.toBeInTheDocument();

@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Text } from "@opal/components";
-import type { IconFunctionComponent } from "@opal/types";
+import { codeSpan, markdown } from "@opal/utils";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import BashBody from "@/lib/timeline/craft/components/tool-cards/BashBody";
 import DiffBody from "@/lib/timeline/craft/components/tool-cards/DiffBody";
@@ -14,58 +14,74 @@ import GenericBody from "@/lib/timeline/craft/components/tool-cards/GenericBody"
 import { isSkillInvocation } from "@/lib/timeline/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 
+/** Text that inline markdown shows as written. */
+function plain(text: string): string {
+  return text.replace(/[\\`*_~[\]<>#|]/g, "\\$&");
+}
+
+/** A plain verb, then the command, pattern, skill or path as a code span. */
+function verbWithCode(verb: string, chip: string): RichStr {
+  // A code span cannot cross a line break, so a multi-line command (a heredoc,
+  // say) reads as one line in the title; the body keeps the original.
+  const oneLine = chip.replace(/\s*\n\s*/g, " ").trim();
+  return markdown(`${plain(verb)} ${codeSpan(oneLine)}`);
+}
+
+/** The finished form of each running verb and tool title. */
+const PAST_TENSE: Record<string, string> = {
+  Running: "Ran",
+  "Searching for": "Searched for",
+  "Using skill": "Used skill",
+  Reading: "Read",
+  Writing: "Wrote",
+  Editing: "Edited",
+  "Searching files": "Searched files",
+  "Searching content": "Searched content",
+  "Running command": "Ran command",
+  "Running task": "Ran task",
+  "Updating todos": "Updated todos",
+  "Fetching web content": "Fetched web content",
+  "Searching web": "Searched web",
+  "Checking code": "Checked code",
+  "Applying patch": "Applied patch",
+  "Running skill": "Ran skill",
+  "Listing files": "Listed files",
+  Asking: "Asked",
+  Validating: "Validated",
+  Searching: "Searched",
+  "Running tool": "Ran tool",
+};
+
 /**
- * Plain-text fallback for the step's primary content (skill, task, generic…).
- * The actual detail leads ("List Slack Channels for lookup", "Spawning
- * subagent: …") — not a bare generic verb.
+ * The step's title. Bash/execute, search, skills and read/edit lead with a
+ * verb, then the actual command, pattern, skill or file path in a code span;
+ * everything else is plain text. `done` puts the verb in the past tense.
  */
-function primaryText(toolCall: ToolCallState): string {
-  return toolCall.description || toolCall.title;
-}
-
-export interface ToolCallHeader {
-  /** The short title, in the log line's title column. */
-  title: string;
-  /** What the call acted on (a command, a pattern, a path), as a code chip. */
-  detail?: ReactNode;
-}
-
-/** A code-formatted chip for the detail column. */
-function codeChip(text: string): ReactNode {
-  return (
-    <span className="min-w-0 rounded-sm bg-background-tint-01 px-1">
-      <Text font="secondary-mono" color="text-03" maxLines={1}>
-        {text}
-      </Text>
-    </span>
-  );
-}
-
-/**
- * The step's title and detail. Bash/execute, search, skills and read/edit get
- * a verb as the title and the actual command, pattern, skill or file path as a
- * code chip; everything else is plain text.
- */
-export function renderToolCallHeader(toolCall: ToolCallState): ToolCallHeader {
+export function renderToolCallHeader(
+  toolCall: ToolCallState,
+  done = false
+): string | RichStr {
+  const verb = (text: string): string =>
+    done ? (PAST_TENSE[text] ?? text) : text;
   if (toolCall.kind === "execute" && toolCall.command) {
     if (toolCall.skillName && toolCall.description) {
-      return { title: toolCall.description };
+      return toolCall.description;
     }
-    return { title: "Running", detail: codeChip(toolCall.command) };
+    return verbWithCode(verb("Running"), toolCall.command);
   }
   if (toolCall.kind === "search" && toolCall.description) {
-    return { title: "Searching for", detail: codeChip(toolCall.description) };
+    return verbWithCode(verb("Searching for"), toolCall.description);
   }
   if (toolCall.toolName === "skill" && toolCall.skillName) {
-    return { title: "Using skill", detail: codeChip(toolCall.skillName) };
+    return verbWithCode(verb("Using skill"), toolCall.skillName);
   }
   if (
     (toolCall.kind === "read" || toolCall.kind === "edit") &&
     toolCall.description
   ) {
-    return { title: toolCall.title, detail: codeChip(toolCall.description) };
+    return verbWithCode(verb(toolCall.title), toolCall.description);
   }
-  return { title: primaryText(toolCall) };
+  return toolCall.description || verb(toolCall.title);
 }
 
 export function renderToolCallBody(toolCall: ToolCallState): ReactNode {

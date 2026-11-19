@@ -1,8 +1,6 @@
 import React, { FunctionComponent } from "react";
 import type { IconFunctionComponent, IconProps, RichStr } from "@opal/types";
-import { Button, Log } from "@opal/components";
-import { SvgChevronRight } from "@opal/icons";
-import { cn } from "@opal/utils";
+import { Line, type LineVariant } from "@opal/components";
 import type { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 
@@ -11,10 +9,8 @@ export interface StepContainerProps {
   children?: React.ReactNode;
   /** Step icon component */
   stepIcon?: FunctionComponent<IconProps>;
-  /** The step's title, in the log line's title column */
+  /** The step's title; it fills the line */
   header?: string | RichStr;
-  /** What the step acted on (a command, a path), after the title */
-  detail?: React.ReactNode;
   /** Rendered at the inline end of the line, before the fold button */
   headerAccessory?: React.ReactNode;
   /** Controlled expanded state */
@@ -35,18 +31,19 @@ export interface StepContainerProps {
   isHover?: boolean;
   /** `error` shows the step as a failed log line */
   surfaceBackground?: TimelineSurfaceBackground;
+  /** The line's variant; it wins over `surfaceBackground`. */
+  variant?: LineVariant;
 }
 
 /**
- * One step of a run, as an Opal `Log` line: the icon, the title and its
- * detail, and the body folding open below it. A failed step is an
- * `error-heavy` line, tinted with its body.
+ * One step of a run, as an Opal `Line`: the icon, the title, trailing
+ * content and the chevron, and the body folding open below it. A failed step
+ * is an `error-heavy` line, tinted with its body.
  */
 export function StepContainer({
   children,
   stepIcon,
   header,
-  detail,
   headerAccessory,
   isExpanded = true,
   onToggle,
@@ -54,56 +51,42 @@ export function StepContainer({
   supportsCollapsible = false,
   hideHeader = false,
   surfaceBackground,
+  variant: variantProp,
 }: StepContainerProps) {
   if (hideHeader) return <>{children}</>;
 
-  const variant = surfaceBackground === "error" ? "error-heavy" : "default";
+  const variant: LineVariant =
+    variantProp ?? (surfaceBackground === "error" ? "error-heavy" : "default");
   const icon = (stepIcon ?? STEP_ICONS.thinking) as IconFunctionComponent;
   const title = header ?? "";
   const foldable = collapsible && supportsCollapsible && !!onToggle;
 
+  // A step that cannot fold keeps its body open, so every step's body has the
+  // same place under its header.
   if (!foldable) {
-    return (
-      <>
-        <Log
-          padding={0}
-          variant={variant}
-          icon={icon}
-          title={title}
-          centerChildren={detail}
-          rightChildren={headerAccessory}
-        />
-        {children}
-      </>
+    const line = {
+      padding: 0,
+      variant,
+      icon,
+      title,
+      rightChildren: headerAccessory,
+    } as const;
+    return children == null || children === false ? (
+      <Line {...line} />
+    ) : (
+      <Line {...line} expandable expanded expandedContent={children} />
     );
   }
 
   return (
-    <Log
+    <Line
       padding={0}
       variant={variant}
       icon={icon}
       title={title}
-      centerChildren={detail}
-      rightChildren={headerAccessory}
       onClick={onToggle}
-      endButton={
-        // As in the connector check card: points right closed and turns down
-        // open. Its click reaches the line's, which toggles the step.
-        <div
-          className={cn(
-            "transition-transform duration-200 ease-in-out",
-            isExpanded && "rotate-90"
-          )}
-        >
-          <Button
-            icon={SvgChevronRight}
-            prominence="tertiary"
-            size="md"
-            aria-expanded={isExpanded}
-          />
-        </div>
-      }
+      // The line draws the chevron; the accessory sits before it.
+      rightChildren={headerAccessory}
       expandable
       expanded={isExpanded}
       expandedContent={children}

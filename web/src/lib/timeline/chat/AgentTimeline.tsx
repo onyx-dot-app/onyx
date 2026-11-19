@@ -12,7 +12,7 @@ import { useTimelineHeader } from "@/lib/timeline/chat/hooks/useTimelineHeader";
 import { useTimelineStepState } from "@/lib/timeline/chat/hooks/useTimelineStepState";
 import { useStreamingStartTime } from "@/app/app/stores/useChatSessionStore";
 import { RunCard } from "@/lib/timeline/components/RunCard";
-import { ChatStep, chatStepStartsOpen } from "@/lib/timeline/chat/ChatStep";
+import { ChatStep } from "@/lib/timeline/chat/ChatStep";
 import type { TimelineEntryStatus } from "@/lib/timeline/types";
 import type { AwaitingUser } from "@/lib/chat/toolApprovals";
 
@@ -149,11 +149,6 @@ export const AgentTimeline = React.memo(function AgentTimeline({
           chatState={chatState}
           stopPacketSeen={stopPacketSeen}
           stopReason={stopReason}
-          defaultExpanded={chatStepStartsOpen(
-            runStep.step,
-            steps.length,
-            isActive
-          )}
         />
       )}
     />

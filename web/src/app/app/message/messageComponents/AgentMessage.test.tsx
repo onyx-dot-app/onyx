@@ -114,13 +114,16 @@ function seedSessionAwaitingAnswer() {
   store.setCurrentSession(SESSION_ID);
 }
 
-// Opens the run card when it is folded. Its fold button is named by the
-// step count.
+// Opens the run card when it is folded, then its steps, which start closed.
+// The card's fold button is named by the step count.
 async function openRun() {
   await act(async () => {});
   const fold = screen.queryByRole("button", { name: /^\d+ steps?$/ });
   if (fold?.getAttribute("aria-expanded") === "false") {
     await act(async () => fold.click());
+  }
+  for (const step of screen.queryAllByRole("button", { expanded: false })) {
+    await act(async () => step.click());
   }
 }
 
@@ -216,7 +219,10 @@ test.each([undefined, 0])(
       />
     );
     try {
-      // The run works, so it is open.
+      // The run works, so it is open; its steps start closed.
+      for (const step of screen.getAllByRole("button", { expanded: false })) {
+        act(() => step.click());
+      }
       expect(
         screen.getByText("Searching internal documents")
       ).toBeInTheDocument();
@@ -960,6 +966,11 @@ test("an expanded step keeps its state when a call is inserted before it", async
       ])
     );
 
+    // The new step starts closed.
+    await screen.findByRole("button", {
+      name: "Expand lookup_refunds completed",
+    });
+    await openRun();
     expect(await screen.findByText("1 refund")).toBeInTheDocument();
     // The same node: React kept the step and its state, such as expanded.
     expect(screen.getByText("sunny")).toBe(weather);

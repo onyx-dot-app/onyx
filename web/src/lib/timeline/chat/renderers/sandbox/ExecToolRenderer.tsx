@@ -1,7 +1,7 @@
 import { type ComponentProps, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
-import { Text } from "@opal/components";
+import { CodePanel, Text } from "@opal/components";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import {
   ExecCommandStart,
@@ -11,9 +11,8 @@ import {
   WriteStdinStart,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/app/app/message/messageComponents/types";
-import { CodeBlock } from "@/app/app/message/CodeBlock";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
-import { HighlightedBashCode } from "@/lib/timeline/chat/renderers/code/HighlightedBashCode";
+import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
 import {
   SandboxCallContent,
   SandboxCallError,
@@ -97,16 +96,13 @@ export function ExecToolRenderer({
     <SandboxCallContent renderType={renderType}>
       {start.type === PacketType.EXEC_COMMAND_START ? (
         <Section gap={1} alignItems="stretch" height="fit">
-          <div className="prose max-w-full">
-            <CodeBlock
-              className="font-secondary-mono"
-              codeText={start.cmd}
-              noPadding
-            >
-              <span className="select-none text-text-03">{"$ "}</span>
-              <HighlightedBashCode code={start.cmd} />
-            </CodeBlock>
-          </div>
+          <CommandBody
+            command={start.cmd}
+            language="bash"
+            prompt="$ "
+            output=""
+            emptyLabel=""
+          />
           {start.workdir && (
             <Text font="secondary-body" color="text-03">
               {t("sandbox.exec.workdir.label", { workdir: start.workdir })}
@@ -115,22 +111,23 @@ export function ExecToolRenderer({
         </Section>
       ) : (
         start.chars && (
-          <div className="prose max-w-full">
-            <CodeBlock
-              className="font-secondary-mono"
-              codeText={start.chars}
-              noPadding
-            >
-              {Array.from(
-                start.chars,
-                (char) =>
-                  ESCAPED_CONTROL_CHARS.get(char) ??
-                  (char.charCodeAt(0) < 0x20
-                    ? `^${String.fromCharCode(char.charCodeAt(0) + 0x40)}`
-                    : char)
-              ).join("")}
-            </CodeBlock>
-          </div>
+          <CodePanel>
+            <CodePanel.Lines
+              copyText={start.chars}
+              lines={[
+                {
+                  content: Array.from(
+                    start.chars,
+                    (char) =>
+                      ESCAPED_CONTROL_CHARS.get(char) ??
+                      (char.charCodeAt(0) < 0x20
+                        ? `^${String.fromCharCode(char.charCodeAt(0) + 0x40)}`
+                        : char)
+                  ).join(""),
+                },
+              ]}
+            />
+          </CodePanel>
         )
       )}
 

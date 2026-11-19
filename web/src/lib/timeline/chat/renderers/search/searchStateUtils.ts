@@ -92,11 +92,17 @@ export const formatSearchHeader = (
   sourceFilters: string[],
   timeFilter: TimeFilter | null,
   t: TimelineTranslate,
-  locale: string
+  locale: string,
+  /** The finished form: "Searched …" instead of "Searching …". */
+  done = false
 ): string => {
   let header: string;
   if (sourceFilters.length === 0) {
-    header = t("internalSearch.header.default");
+    header = t(
+      done
+        ? "internalSearch.header.doneDefault"
+        : "internalSearch.header.default"
+    );
   } else {
     const names = sourceFilters.map((source) =>
       isValidSource(source)
@@ -112,7 +118,12 @@ export const formatSearchHeader = (
             count: overflow,
           })
         : shown;
-    header = t("internalSearch.header.sources", { sources });
+    header = t(
+      done
+        ? "internalSearch.header.doneSources"
+        : "internalSearch.header.sources",
+      { sources }
+    );
   }
   const timeWindow = formatTimeWindow(timeFilter, t, locale);
   return timeWindow

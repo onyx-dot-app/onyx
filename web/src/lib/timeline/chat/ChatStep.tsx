@@ -12,7 +12,6 @@ import {
   TimelineRendererOutput,
 } from "@/lib/timeline/chat/TimelineRendererComponent";
 import { TimelineStepComposer } from "@/lib/timeline/chat/TimelineStepComposer";
-import { isPythonToolPackets } from "@/lib/timeline/chat/packetHelpers";
 import type {
   TimelineEntryStatus,
   TimelineStepPosition,
@@ -25,8 +24,6 @@ export interface ChatStepProps {
   chatState: FullChatState;
   stopPacketSeen: boolean;
   stopReason?: StopReason;
-  /** Start open: the run is live, or it is a single non-Python step. */
-  defaultExpanded: boolean;
 }
 
 /**
@@ -40,7 +37,6 @@ export const ChatStep = React.memo(function ChatStep({
   chatState,
   stopPacketSeen,
   stopReason,
-  defaultExpanded,
 }: ChatStepProps) {
   const renderStep = useCallback(
     (results: TimelineRendererOutput) => (
@@ -64,7 +60,9 @@ export const ChatStep = React.memo(function ChatStep({
       animate={!stopPacketSeen}
       stopPacketSeen={stopPacketSeen}
       stopReason={stopReason}
-      defaultExpanded={defaultExpanded}
+      // Every step starts closed. The card drops its steps when it closes,
+      // so reopening it closes them all again.
+      defaultExpanded={false}
       // Every step folds its body away, as in Craft: the renderer always
       // draws its full view, never a compact or masked one.
       renderTypeOverride={RenderType.FULL}
@@ -74,14 +72,5 @@ export const ChatStep = React.memo(function ChatStep({
     </TimelineRendererComponent>
   );
 });
-
-/** Whether a step starts open in a run of `count` steps. */
-export function chatStepStartsOpen(
-  step: TransformedStep,
-  count: number,
-  isLive: boolean
-): boolean {
-  return isLive || (count === 1 && !isPythonToolPackets(step.packets));
-}
 
 export default ChatStep;

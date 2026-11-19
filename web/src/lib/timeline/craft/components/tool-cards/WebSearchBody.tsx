@@ -1,12 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { Text } from "@opal/components";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { RetrievalBody } from "@/lib/timeline/components/bodies/RetrievalBody";
-import ToolCardSurface, {
-  ToolCardSection,
-} from "@/lib/timeline/components/bodies/ToolCardSurface";
+import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
 import type { ToolCardBodyProps } from "@/lib/timeline/craft/components/tool-cards/interfaces";
 
 interface SearchResult {
@@ -68,7 +65,8 @@ function domainFromUrl(url: string): string {
 
 /**
  * WebSearchBody - The websearch tool's query and the results it read, in the
- * shared retrieval layout. Raw output shows when no result can be parsed.
+ * shared retrieval layout. Output that parses into no results shows as a
+ * `CommandBody`: the query, then the raw output.
  */
 export default function WebSearchBody({ toolCall }: ToolCardBodyProps) {
   const results = useMemo(
@@ -78,28 +76,30 @@ export default function WebSearchBody({ toolCall }: ToolCardBodyProps) {
   const isComplete =
     toolCall.status !== "pending" && toolCall.status !== "in_progress";
 
-  return (
-    <>
-      <RetrievalBody
-        queries={toolCall.description ? [toolCall.description] : []}
-        results={results.map((result) => ({
-          id: result.url,
-          title: result.title ?? domainFromUrl(result.url),
-          sourceType: ValidSources.Web,
-          sourceUrl: result.url,
-          description: result.snippet,
-        }))}
-        isComplete={isComplete}
+  // Output that parses into results reads like chat's web search; output
+  // that does not (plain text) shows under the query, like glob and grep.
+  if (results.length === 0 && toolCall.rawOutput) {
+    return (
+      <CommandBody
+        command={toolCall.description}
+        title={toolCall.toolName ?? toolCall.title}
+        output={toolCall.rawOutput}
+        emptyLabel=""
       />
-      {results.length === 0 && toolCall.rawOutput && (
-        <ToolCardSurface>
-          <ToolCardSection className="whitespace-pre-wrap wrap-break-word">
-            <Text as="p" font="secondary-mono" color="text-03">
-              {toolCall.rawOutput}
-            </Text>
-          </ToolCardSection>
-        </ToolCardSurface>
-      )}
-    </>
+    );
+  }
+
+  return (
+    <RetrievalBody
+      queries={toolCall.description ? [toolCall.description] : []}
+      results={results.map((result) => ({
+        id: result.url,
+        title: result.title ?? domainFromUrl(result.url),
+        sourceType: ValidSources.Web,
+        sourceUrl: result.url,
+        description: result.snippet,
+      }))}
+      isComplete={isComplete}
+    />
   );
 }

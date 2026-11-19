@@ -41,9 +41,8 @@ export const DeepResearchPlanRenderer: MessageRenderer<
     [packets]
   );
 
-  const statusText = isComplete
-    ? t("deepResearchPlan.generated.status")
-    : t("deepResearchPlan.generating.status");
+  const statusText = t("deepResearchPlan.generating.status");
+  const doneStatusText = t("deepResearchPlan.generated.status");
 
   // Markdown renderer callback for ExpandableTextDisplay
   // Uses collapsed components (no spacing) in collapsed view, normal spacing in expanded modal
@@ -72,6 +71,7 @@ export const DeepResearchPlanRenderer: MessageRenderer<
     {
       icon: STEP_ICONS.thinking,
       status: statusText,
+      doneStatus: doneStatusText,
       content: planContent,
     },
   ]);

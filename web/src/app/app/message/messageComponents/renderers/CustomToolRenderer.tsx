@@ -14,45 +14,13 @@ import {
   RenderType,
 } from "@/app/app/message/messageComponents/types";
 import { buildImgUrl } from "../../../components/files/images/utils";
-import { ShadowDiv, Text } from "@opal/components";
+import { Button, CodePanel, ShadowDiv, Text } from "@opal/components";
+import { Section } from "@opal/layouts";
+import { downloadFile } from "@/lib/download";
+import { openExternalLink } from "@/lib/search/utils";
 import { SvgDownload, SvgExternalLink } from "@opal/icons";
 import { STEP_ICONS } from "@/lib/timeline/icons";
-import { CodeBlock } from "@/app/app/message/CodeBlock";
-import hljs from "highlight.js/lib/core";
-import json from "highlight.js/lib/languages/json";
-import { IoBlockLabel } from "@/app/app/message/messageComponents/IoBlockLabel";
-
-// Lazy registration for hljs JSON language
-function ensureHljsRegistered() {
-  if (!hljs.listLanguages().includes("json")) {
-    hljs.registerLanguage("json", json);
-  }
-}
-
-// Component to render syntax-highlighted JSON
-interface HighlightedJsonCodeProps {
-  code: string;
-}
-function HighlightedJsonCode({ code }: HighlightedJsonCodeProps) {
-  const highlightedHtml = useMemo(() => {
-    ensureHljsRegistered();
-    try {
-      return hljs.highlight(code, { language: "json" }).value;
-    } catch {
-      return code
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    }
-  }, [code]);
-
-  return (
-    <span
-      dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-      className="hljs"
-    />
-  );
-}
+import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
 
 function constructCustomToolState(
   packets: CustomToolPacket[],
@@ -119,7 +87,10 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     }
   }, [isComplete, onComplete]);
 
-  const status = useMemo(() => {
+  // A failed or stopped step keeps the running title; a done one says how it
+  // ended, the tool's own errors included.
+  const status = t("customTool.runningStatus.text", { toolName });
+  const doneStatus = useMemo(() => {
     if (isComplete) {
       if (error) {
         if (error.is_unreachable)
@@ -142,9 +113,8 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         return t("customTool.fileStatus.text", { toolName });
       return t("customTool.completedStatus.text", { toolName });
     }
-    if (isRunning) return t("customTool.runningStatus.text", { toolName });
     return null;
-  }, [toolName, responseType, error, isComplete, isRunning, t]);
+  }, [toolName, responseType, error, isComplete, t]);
 
   const icon = STEP_ICONS.tool;
 
@@ -159,120 +129,134 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         : null,
     [data]
   );
+  const hasData = data !== undefined && data !== null;
+  const hasFiles = !error && !!fileIds && fileIds.length > 0;
+  // The response shows once it arrives, and as "waiting" while the tool runs.
+  const showResponse = !!error || hasFiles || hasData || isRunning;
+  const argsLines = useCodeLines(toolArgsJson ?? "", "json");
+  const dataLines = useCodeLines(dataJson ?? "", "json");
 
   const content = useMemo(
-    () => (
-      <div className="flex flex-col gap-3">
-        {/* Loading indicator */}
-        {isRunning &&
-          !error &&
-          !fileIds &&
-          (data === undefined || data === null) && (
-            <div className="flex items-center gap-2 text-sm text-text-03">
-              <div className="flex gap-0.5">
-                <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
-                <div
-                  className="w-1 h-1 bg-current rounded-full animate-pulse"
-                  style={{ animationDelay: "0.1s" }}
-                ></div>
-                <div
-                  className="w-1 h-1 bg-current rounded-full animate-pulse"
-                  style={{ animationDelay: "0.2s" }}
-                ></div>
-              </div>
-              <Text font="secondary-body" color="text-03">
-                {t("customTool.waitingIndicator.text")}
-              </Text>
-            </div>
+    () =>
+      // One panel: the request, then the response (waiting, files, JSON,
+      // text or the tool's error), each under its own title row.
+      toolArgsJson || showResponse ? (
+        <CodePanel>
+          {toolArgsJson && (
+            <>
+              <CodePanel.Header
+                title={t("customTool.requestBlock.label")}
+                copyText={toolArgsJson}
+              />
+              <CodePanel.Lines lineNumbers lines={argsLines} />
+            </>
           )}
-
-        {/* Tool arguments */}
-        {toolArgsJson && (
-          <div>
-            <IoBlockLabel label={t("customTool.requestBlock.label")} />
-            <div className="prose max-w-full">
-              <CodeBlock
-                className="font-secondary-mono"
-                codeText={toolArgsJson}
-                noPadding
-              >
-                <HighlightedJsonCode code={toolArgsJson} />
-              </CodeBlock>
-            </div>
-          </div>
-        )}
-
-        {/* Error display */}
-        {error && (
-          <div className="ps-(--timeline-common-text-padding)">
-            <Text font="main-ui-muted" color="text-03">
-              {error.message}
-            </Text>
-          </div>
-        )}
-
-        {/* File responses */}
-        {!error && fileIds && fileIds.length > 0 && (
-          <div className="text-sm text-text-03 flex flex-col gap-2">
-            {fileIds.map((fid, idx) => (
-              <div key={fid} className="flex items-center gap-2 flex-wrap">
-                <Text
-                  font="secondary-body"
-                  color="text-03"
-                  wordWrap="whitespace-nowrap"
-                >
-                  {t("customTool.fileItem.label", { index: idx + 1 })}
-                </Text>
-                <a
-                  href={buildImgUrl(fid)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-action-selection-01 hover:underline whitespace-nowrap"
-                >
-                  <SvgExternalLink className="w-3 h-3" />{" "}
-                  {t("customTool.openFileLink.label")}
-                </a>
-                <a
-                  href={buildImgUrl(fid)}
-                  download
-                  className="inline-flex items-center gap-1 text-xs text-action-selection-01 hover:underline whitespace-nowrap"
-                >
-                  <SvgDownload className="w-3 h-3" />{" "}
-                  {t("customTool.downloadFileLink.label")}
-                </a>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* JSON/Text responses */}
-        {!error && data !== undefined && data !== null && (
-          <div>
-            <IoBlockLabel label={t("customTool.responseBlock.label")} />
-            <div className="prose max-w-full">
-              {dataJson ? (
-                <CodeBlock
-                  className="font-secondary-mono"
-                  codeText={dataJson}
-                  noPadding
-                >
-                  <HighlightedJsonCode code={dataJson} />
-                </CodeBlock>
+          {showResponse && (
+            <>
+              <CodePanel.Header
+                title={t("customTool.responseBlock.label")}
+                copyText={
+                  error || hasFiles || !hasData
+                    ? undefined
+                    : (dataJson ?? String(data))
+                }
+              />
+              {error ? (
+                <CodePanel.Output error>{error.message}</CodePanel.Output>
+              ) : hasFiles ? (
+                <CodePanel.Content>
+                  <Section alignItems="stretch" gap={0.5} height="fit">
+                    {(fileIds ?? []).map((fid, idx) => (
+                      <Section
+                        key={fid}
+                        flexDirection="row"
+                        justifyContent="start"
+                        gap={2}
+                        height="fit"
+                      >
+                        <Text
+                          font="secondary-body"
+                          color="text-03"
+                          wordWrap="whitespace-nowrap"
+                        >
+                          {t("customTool.fileItem.label", { index: idx + 1 })}
+                        </Text>
+                        {/* Open and Download, 2px apart and 0.5rem from the label. */}
+                        <Section
+                          flexDirection="row"
+                          width="fit"
+                          height="fit"
+                          gap={0.5}
+                        >
+                          <Button
+                            prominence="secondary"
+                            size="xs"
+                            icon={SvgExternalLink}
+                            onClick={() => openExternalLink(buildImgUrl(fid))}
+                          >
+                            {t("customTool.openFileLink.label")}
+                          </Button>
+                          <Button
+                            prominence="secondary"
+                            size="xs"
+                            icon={SvgDownload}
+                            onClick={() =>
+                              downloadFile("", { url: buildImgUrl(fid) })
+                            }
+                          >
+                            {t("customTool.downloadFileLink.label")}
+                          </Button>
+                        </Section>
+                      </Section>
+                    ))}
+                  </Section>
+                </CodePanel.Content>
+              ) : hasData ? (
+                dataJson ? (
+                  <CodePanel.Lines lineNumbers lines={dataLines} />
+                ) : (
+                  <CodePanel.Output>{String(data)}</CodePanel.Output>
+                )
               ) : (
-                <CodeBlock
-                  className="font-secondary-mono"
-                  codeText={String(data)}
-                  noPadding
-                >
-                  {String(data)}
-                </CodeBlock>
+                <CodePanel.Content>
+                  <div className="flex items-center gap-2 text-sm text-text-03">
+                    <div className="flex gap-0.5">
+                      <div className="w-1 h-1 bg-current rounded-full animate-pulse"></div>
+                      <div
+                        className="w-1 h-1 bg-current rounded-full animate-pulse"
+                        style={{ animationDelay: "0.1s" }}
+                      ></div>
+                      <div
+                        className="w-1 h-1 bg-current rounded-full animate-pulse"
+                        style={{ animationDelay: "0.2s" }}
+                      ></div>
+                    </div>
+                    <Text font="secondary-body" color="text-03">
+                      {t("customTool.waitingIndicator.text")}
+                    </Text>
+                  </div>
+                </CodePanel.Content>
               )}
-            </div>
-          </div>
-        )}
-      </div>
-    ),
-    [toolArgsJson, dataJson, data, fileIds, error, isRunning, t]
+            </>
+          )}
+        </CodePanel>
+      ) : (
+        <></>
+      ),
+    [
+      toolArgsJson,
+      dataJson,
+      argsLines,
+      dataLines,
+      showResponse,
+      hasFiles,
+      hasData,
+      data,
+      fileIds,
+      error,
+      isRunning,
+      t,
+    ]
   );
 
   // Blocked, unreachable, or auth error: always render FULL with error surface
@@ -281,6 +265,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       {
         icon,
         status,
+        doneStatus,
         supportsCollapsible: false,
         surfaceBackground: "error" as const,
         content,
@@ -294,6 +279,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       {
         icon,
         status,
+        doneStatus,
         supportsCollapsible: true,
         content,
       },
@@ -305,6 +291,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     {
       icon,
       status,
+      doneStatus,
       supportsCollapsible: true,
       content: (
         <ShadowDiv

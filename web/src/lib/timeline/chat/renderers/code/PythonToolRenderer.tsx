@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
 import { useTranslations } from "next-intl";
 import {
@@ -87,7 +87,6 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
     isStreaming,
     isExecuting,
     isComplete,
-    hasError,
   } = constructCurrentPythonState(packets);
 
   useEffect(() => {
@@ -96,25 +95,12 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
     }
   }, [isComplete, onComplete]);
 
-  const status = useMemo(() => {
-    if (isStreaming) {
-      return t("python.writingCode.status");
-    }
-    if (isExecuting) {
-      return t("python.executing.status");
-    }
-    if (hasError) {
-      return t("python.failed.status");
-    }
-    if (isComplete) {
-      return t("python.completed.status");
-    }
-    return t("python.default.status");
-  }, [isStreaming, isComplete, isExecuting, hasError, t]);
+  const status = t("python.running.status");
+  const doneStatus = t("python.ran.status");
 
   // Shared content for all states - used by both FULL and compact modes
   const content = (
-    <div className="flex flex-col mb-1 space-y-2">
+    <div className="flex flex-col space-y-2">
       {/* Loading indicator when streaming or executing */}
       {(isStreaming || isExecuting) && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -164,6 +150,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
       {
         icon: STEP_ICONS.execute,
         status,
+        doneStatus,
         content,
         supportsCollapsible: true,
         alwaysCollapsible: true,
@@ -176,6 +163,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
     {
       icon: STEP_ICONS.execute,
       status,
+      doneStatus,
       supportsCollapsible: true,
       alwaysCollapsible: true,
       content: (

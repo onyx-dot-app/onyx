@@ -79,12 +79,20 @@ export const InternalSearchToolRenderer: MessageRenderer<
     t,
     locale
   );
+  const queriesDoneHeader = formatSearchHeader(
+    sourceFilters,
+    timeFilter,
+    t,
+    locale,
+    true
+  );
 
   if (queries.length === 0) {
     return children([
       {
         icon: STEP_ICONS.search,
         status: queriesHeader,
+        doneStatus: queriesDoneHeader,
         content: <></>,
         supportsCollapsible: true,
         timelineLayout: "timeline",
@@ -203,6 +211,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
     {
       icon: STEP_ICONS.search,
       status: queriesHeader,
+      doneStatus: queriesDoneHeader,
       supportsCollapsible: true,
       timelineLayout: "timeline",
       content: (
