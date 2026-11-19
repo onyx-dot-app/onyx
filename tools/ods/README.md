@@ -453,7 +453,8 @@ state.
 | `stopped` | Nothing runs (with `--all`) |
 | `stale-lease` | Port leases that no stack uses (with `--all`) |
 
-By default `ls` shows stacks with a running process or container. `--all` adds
+By default `ls` shows stacks with a running process or container, and orphans
+that left only Docker volumes. `--all` adds
 stopped stacks, and `--orphaned` shows only orphaned stacks. `--json` prints an
 array with the project, root, branch, mode, profile, phase, application and
 container counts, web URL, age, status, leases, errors, and `next`, the command
@@ -468,7 +469,27 @@ releases the stack's port leases, and removes the owner record of an orphan. The
 refuse a stack that still runs in an existing worktree unless you add `--force`.
 `ods stack prune` runs `down --project` for every orphaned stack after a
 confirmation (`--yes` skips it). `--volumes` also deletes their Docker volumes,
-after a separate confirmation.
+after a separate confirmation. A removed worktree whose stack was already down
+leaves only its volumes. `ls` shows it as orphaned, plain `prune` leaves it,
+and `prune --volumes` deletes the volumes. Plain `prune` keeps the owner record
+of a project with volumes, because that record is the only link from the
+removed worktree to them. When Docker cannot list the volumes, `prune` keeps
+every owner record. Docker keeps a volume that a container still uses, so
+`prune --volumes` lists the volumes again and keeps the owner record if any is left.
+
+`ods stack prune --idle 6h` also stops each isolated stack whose worktree had no
+activity for 6 hours. Activity is the stack start, a Git operation in the
+worktree (commit, checkout, add, rebase), a change to a modified or untracked
+file, a deleted tracked file or directory, or a running coding agent (`claude`, `codex`, `opencode`, `cursor-agent`)
+whose working directory is in the worktree. Ignored files, such as service
+logs, do not count. ods finds agents through `/proc` on Linux and `lsof` on
+macOS. If ods cannot find the agents, `prune --idle` fails and stops nothing.
+If Git cannot read a worktree, prune warns and does not stop its stack.
+After the confirmation and the stack lock, prune checks the activity again and
+skips a stack that had activity since the listing. Shared stacks serve several
+worktrees, so prune never stops them as idle. Idle stacks keep their volumes, also with `--volumes`, so `ods stack up`
+in the worktree starts the stack again with its data. To prune on a schedule,
+run `ods stack prune --idle 6h --yes` from cron or a systemd timer.
 
 **Examples:**
 
@@ -495,6 +516,9 @@ ods stack plan --profile full
 ods stack ls --all
 ods stack down --project fast-mode-93732ec3
 ods stack prune
+
+# Also stop isolated stacks with no work in their worktree for 6 hours
+ods stack prune --idle 6h --yes
 ```
 
 ### `object-store migrate` - Move a Dev MinIO's Files to the Object Store
