@@ -104,6 +104,17 @@ export function RunCard<S extends RunCardStep>({
     }
   }, [autoCollapse]);
 
+  // Open when the run becomes active again: a run that mounted settled, or a
+  // waiting card that folded under text and is reused by the first call.
+  // Only on that change, so a later fold sticks.
+  const wasRunning = useRef(isRunning);
+  useEffect(() => {
+    if (isRunning && !wasRunning.current && !userToggled.current) {
+      setIsOpen(true);
+    }
+    wasRunning.current = isRunning;
+  }, [isRunning]);
+
   // A run that works here is timed; a saved run has no duration.
   const [startedAt] = useState<number | undefined>(() =>
     isRunning ? (streamingStartTime ?? Date.now()) : undefined
