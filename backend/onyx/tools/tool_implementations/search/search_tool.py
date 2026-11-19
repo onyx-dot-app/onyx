@@ -268,79 +268,41 @@ def deduplicate_queries(
     return list(query_map.values())
 
 
-def _estimate_section_tokens(
-    section: InferenceSection,
-    token_counter: Callable[[str], int],
-    max_chunks_per_section: int | None = None,
-) -> int:
-    """Estimate token count for a section using the LLM tokenizer.
-
-    Args:
-        section: InferenceSection to estimate tokens for
-        token_counter: Function that counts tokens in text
-        max_chunks_per_section: Maximum chunks to consider per section (None for all)
-
-    Returns:
-        Token count for the section
-    """
-    # Estimate for metadata (title, source_type, etc.)
-    METADATA_TOKEN_ESTIMATE = 75
-
-    # If max_chunks_per_section is specified, only count tokens for selected chunks
-    if max_chunks_per_section is not None:
-        selected_chunks = select_chunks_for_relevance(section, max_chunks_per_section)
-        # Combine content from selected chunks
-        combined_content = "\n".join(chunk.content for chunk in selected_chunks)
-        content_tokens = token_counter(combined_content)
-    else:
-        content_tokens = token_counter(section.combined_content)
-
-    return content_tokens + METADATA_TOKEN_ESTIMATE
-
-
-@log_function_time()
 def _trim_sections_by_tokens(
     sections: list[InferenceSection],
     max_tokens: int,
     token_counter: Callable[[str], int],
-    max_chunks_per_section: int | None = None,
+    max_chunks_per_section: int,
 ) -> list[InferenceSection]:
-    """Trim sections to fit within a token budget using the LLM tokenizer.
-
-    Args:
-        sections: List of InferenceSection objects to trim
-        max_tokens: Maximum token budget
-        token_counter: Function that counts tokens in text
-        max_chunks_per_section: Maximum chunks to consider per section (None for all)
-
-    Returns:
-        Trimmed list of sections that fit within the token budget
-    """
+    """Keep the ranked prefix within the approximate selection budget."""
     if not sections or max_tokens <= 0:
         return sections
 
-    trimmed_sections = []
-    total_tokens = 0
-
-    for section in sections:
-        section_tokens = _estimate_section_tokens(
-            section, token_counter, max_chunks_per_section
-        )
-        if total_tokens + section_tokens <= max_tokens:
-            trimmed_sections.append(section)
-            total_tokens += section_tokens
-        else:
-            break
-
-    logger.debug(
-        "Trimmed sections from %s to %s (%s tokens, budget: %s)",
-        len(sections),
-        len(trimmed_sections),
-        total_tokens,
-        max_tokens,
+    # Each section has a fixed metadata allowance. Use a conservative text
+    # estimate to avoid joining and encoding passages when the whole pool fits.
+    metadata_tokens = 75
+    passages = [
+        [
+            chunk.content
+            for chunk in select_chunks_for_relevance(section, max_chunks_per_section)
+        ]
+        for section in sections
+    ]
+    upper_estimate = sum(
+        metadata_tokens
+        + max(0, len(chunks) - 1)
+        + sum(len(text) * (1 if text.isascii() else 4) for text in chunks)
+        for chunks in passages
     )
+    if upper_estimate <= max_tokens:
+        return sections
 
-    return trimmed_sections
+    remaining = max_tokens
+    for index, chunks in enumerate(passages):
+        remaining -= metadata_tokens + token_counter("\n".join(chunks))
+        if remaining < 0:
+            return sections[:index]
+    return sections
 
 
 class SearchTool(Tool):
@@ -445,11 +407,11 @@ class SearchTool(Tool):
         Returns the selected sections and the expansions already done, keyed by
         section id, or None when the ranking call fails."""
         pool = _trim_sections_by_tokens(
-            sections=candidates,
+            sections=candidates[:MAX_DECISION_QUESTIONS],
             max_tokens=max_tokens,
             token_counter=token_counter,
             max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
-        )[:MAX_DECISION_QUESTIONS]
+        )
         speculative = [
             (section, run_in_background(expand, section))
             for section in pool[:RERANK_SPECULATIVE_EXPANSIONS]
@@ -1429,26 +1391,12 @@ class SearchTool(Tool):
 
         token_counter = get_llm_token_counter(self.llm)
 
-        # Trim sections to fit within token budget before LLM selection
-        # This is to account for very short chunks flooding the search context
-        # Only consider MAX_CHUNKS_FOR_RELEVANCE chunks per section to avoid flooding from
-        # documents with many matching sections
         max_tokens_for_selection = (
             MAX_CHUNKS_FED_TO_CHAT
             * DOC_EMBEDDING_CONTEXT_SIZE
             * SELECTION_TOKEN_BUDGET_MULTIPLIER
         )
 
-        # This is approximate since it doesn't build the exact string of the call below
-        # Some things are estimated and may be under (like the metadata tokens)
-        sections_for_selection = _trim_sections_by_tokens(
-            sections=top_sections,
-            max_tokens=max_tokens_for_selection,
-            token_counter=token_counter,
-            max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
-        )
-
-        # Create wrapper function to handle errors gracefully
         def expand_section_safe(
             section: InferenceSection,
             user_query: str,
@@ -1535,6 +1483,12 @@ class SearchTool(Tool):
             if not llm_allowed:
                 # Raises the primary model's budget error.
                 check_primary_llm_cost()
+            sections_for_selection = _trim_sections_by_tokens(
+                sections=top_sections,
+                max_tokens=max_tokens_for_selection,
+                token_counter=token_counter,
+                max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
+            )
             # Use LLM to select the most relevant sections for expansion
             selected_sections, best_doc_ids = select_sections_for_expansion(
                 sections=sections_for_selection,

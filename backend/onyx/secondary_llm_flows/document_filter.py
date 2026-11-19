@@ -156,11 +156,11 @@ def classify_section_relevance(
 
     request = build_request(section_text, section_above_text, section_below_text)
     if budget and not budget.fits(request):
-        fitted_text = budget.fit_text(section_text, build_request)
-        if fitted_text is None:
+        fitted_request = budget.fit_text(section_text, build_request)
+        if fitted_request is None:
             logger.warning("Search classification prompt exceeds its input budget")
             return default_classification
-        request = build_request(fitted_text)
+        request = fitted_request
 
     try:
         response = llm.invoke(
@@ -355,12 +355,15 @@ def select_sections_for_expansion(
             options=options,
         )
 
-    request = build_request(sections_dict)
     if budget:
-        while len(sections_dict) > 1 and not budget.fits(request):
-            sections_dict.pop()
-            request = build_request(sections_dict)
-        if not budget.fits(request):
+        fit = budget.fitting_prefix(
+            len(sections_dict), lambda end: build_request(sections_dict[:end])
+        )
+        if fit and fit[0]:
+            end, request = fit
+            sections_dict = sections_dict[:end]
+        else:
+            sections_dict = sections_dict[:1]
             first_section = sections_dict[0]
             sections_dict[0] = {
                 key: first_section[key]
@@ -372,16 +375,18 @@ def select_sections_for_expansion(
                 return build_request([{**first_section, "content": content}])
 
             original_content = str(first_section["content"])
-            fitted_content = budget.fit_text(original_content, build_content_request)
-            if fitted_content is None:
+            fitted_request = budget.fit_text(original_content, build_content_request)
+            if fitted_request is None:
                 first_section["title"] = ""
-                fitted_content = budget.fit_text(
+                fitted_request = budget.fit_text(
                     original_content, build_content_request
                 )
-            if fitted_content is None:
+            if fitted_request is None:
                 logger.warning("Search selection prompt exceeds its input budget")
                 return sections[:max_sections], None
-            request = build_content_request(fitted_content)
+            request = fitted_request
+    else:
+        request = build_request(sections_dict)
 
     try:
         response = llm.invoke(
