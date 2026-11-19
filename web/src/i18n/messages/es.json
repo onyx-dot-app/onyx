@@ -12727,8 +12727,12 @@
             },
             "title": "Parche",
             "progress": {
-              "named": "{tool, select, write {Escribiendo {path}… {lines, plural, one {# línea} other {# líneas}}} other {Editando {path}… {lines, plural, one {# línea} other {# líneas}}}}",
-              "unnamed": "{tool, select, write {Escribiendo un archivo…} other {Editando un archivo…}}",
+              "named": {
+                "status": "{tool, select, write {Escribiendo {path}… {lines, plural, one {# línea} other {# líneas}}} other {Editando {path}… {lines, plural, one {# línea} other {# líneas}}}}"
+              },
+              "unnamed": {
+                "status": "{tool, select, write {Escribiendo un archivo…} other {Editando un archivo…}}"
+              },
               "patching": {
                 "status": "{count, plural, =0 {Aplicando parche a archivos…} one {Aplicando parche a # archivo…} other {Aplicando parche a # archivos…}}"
               }

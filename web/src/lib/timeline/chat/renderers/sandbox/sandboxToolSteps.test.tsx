@@ -571,15 +571,15 @@ test("a patch stopped while it streams shows only that it stopped, as on replay"
   );
 });
 
-test("a write whose call fails after its progress shows the error", async () => {
+test("a patch whose call fails after its progress shows only the error", async () => {
   const call = at({ turn_index: 0, tab_index: 0 });
   const view = render(
     renderMessage([
-      call(fileProgress("write", ["a.md"], 2)),
+      call(fileProgress("apply_patch", ["new.py", "old.py"], 7)),
       call({
         type: PacketType.APPLY_PATCH_START,
-        patch: "*** Begin Patch\n*** Add File: a.md\n+x\n*** End Patch",
-        tool_name: "write",
+        patch: PATCH,
+        tool_name: "apply_patch",
       }),
       call({
         type: PacketType.APPLY_PATCH_END,
@@ -594,13 +594,18 @@ test("a write whose call fails after its progress shows the error", async () => 
     await expandTimeline();
     expect(screen.getByText("Edit failed")).toBeInTheDocument();
     expect(screen.getByText("Permission denied")).toBeInTheDocument();
-    expect(view.container).not.toHaveTextContent("Writing");
+    // The progress file list and status are gone.
+    expect(screen.queryByText("new.py")).not.toBeInTheDocument();
+    expect(screen.queryByText("old.py")).not.toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent("Patching");
   } finally {
     view.unmount();
   }
 });
 
-test("an edit with wrong-typed arguments shows only that it failed and why", async () => {
+// Renderer contract: the backend renderer starts an edit whose arguments are
+// wrong-typed with an empty patch, and ends it with the validation error.
+test("renderer contract: an edit with wrong-typed arguments shows only that it failed and why", async () => {
   const call = at({ turn_index: 0, tab_index: 0 });
   const view = render(
     renderMessage([

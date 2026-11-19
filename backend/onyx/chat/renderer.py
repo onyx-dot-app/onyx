@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from time import monotonic
-from typing import Literal, TypeGuard
+from typing import Literal, NamedTuple, TypeGuard
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 from typing_extensions import override
@@ -127,15 +127,22 @@ SPILLED_OUTPUT_NOTE = "Large output: the full result was saved to the sandbox."
 CODE_ARGUMENT_TOOLS = frozenset({PythonTool.NAME, CODE_MODE_TOOL_NAME})
 # Tools whose calls observe a code mode cell; each call renders as one code mode card.
 CODE_MODE_TOOL_NAMES = frozenset({CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME})
-# The file tools (FileToolName) and the argument that holds the text of each;
-# edit and write also name their file in FILE_PATH_ARGUMENT. Their calls render
-# as a patch card and end with apply_patch_end.
-FILE_TOOL_TEXT_ARGUMENTS: dict[FileToolName, str] = {
-    ApplyPatchTool.NAME: "input",
-    EditTool.NAME: "new_string",
-    WriteTool.NAME: "content",
+
+
+class FileToolArguments(NamedTuple):
+    # The argument that holds the tool's text.
+    text: str
+    # The argument that names the file; None when the text names the files.
+    path: str | None
+
+
+# The file tools (FileToolName) and their arguments. Their calls render as a
+# patch card and end with apply_patch_end.
+FILE_TOOL_ARGUMENTS: dict[FileToolName, FileToolArguments] = {
+    ApplyPatchTool.NAME: FileToolArguments(text="input", path=None),
+    EditTool.NAME: FileToolArguments(text="new_string", path="file_path"),
+    WriteTool.NAME: FileToolArguments(text="content", path="file_path"),
 }
-FILE_PATH_ARGUMENT = "file_path"
 # Tools whose calls end with their own end packet, and its type; a failed call
 # ends with that packet's error. Each call of these tools sends its own start
 # packet too, so the end never lands on a generic card.
@@ -145,7 +152,7 @@ OWN_END_PACKETS: dict[
 ] = {
     ExecCommandTool.NAME: packets.ExecEnd,
     WriteStdinTool.NAME: packets.ExecEnd,
-    **dict.fromkeys(FILE_TOOL_TEXT_ARGUMENTS, packets.ApplyPatchEnd),
+    **dict.fromkeys(FILE_TOOL_ARGUMENTS, packets.ApplyPatchEnd),
     PublishFilesTool.NAME: packets.PublishFilesEnd,
 }
 # The shortest time between two reports of a call's streamed arguments.
@@ -173,7 +180,7 @@ def _string_argument(arguments: Mapping[str, JsonValue], key: str) -> str:
 
 
 def is_file_tool(name: str) -> TypeGuard[FileToolName]:
-    return name in FILE_TOOL_TEXT_ARGUMENTS
+    return name in FILE_TOOL_ARGUMENTS
 
 
 def file_tool_progress(
@@ -182,10 +189,11 @@ def file_tool_progress(
     """What a file tool call's arguments hold, parsed so far or `complete`.
 
     A partial parse can cut off its last string, so a patch header counts once
-    its line ends, and `file_path` once a later key follows it.
+    its line ends, and the path argument once a later key follows it.
     """
-    text = _string_argument(arguments, FILE_TOOL_TEXT_ARGUMENTS[tool_name])
-    if tool_name == ApplyPatchTool.NAME:
+    text_key, path_key = FILE_TOOL_ARGUMENTS[tool_name]
+    text = _string_argument(arguments, text_key)
+    if path_key is None:
         lines = text.split("\n")
         headers = (line.strip() for line in (lines if complete else lines[:-1]))
         # Two hunks of one file name it once.
@@ -198,8 +206,8 @@ def file_tool_progress(
             )
         )
     else:
-        path = _string_argument(arguments, FILE_PATH_ARGUMENT)
-        whole = complete or next(reversed(arguments), None) != FILE_PATH_ARGUMENT
+        path = _string_argument(arguments, path_key)
+        whole = complete or next(reversed(arguments), None) != path_key
         paths = [path] if path and whole else []
     return packets.FileToolProgress(
         tool_name=tool_name,
@@ -828,13 +836,12 @@ class ToolRenderer:
                 packets.WriteStdinStart(session_id=write.session_id, chars=write.chars)
             ]
         elif is_file_tool(name):
-            patch = _STRING.validate_python(
-                args.get(FILE_TOOL_TEXT_ARGUMENTS[name], "")
-            )
+            text_key, path_key = FILE_TOOL_ARGUMENTS[name]
+            patch = _STRING.validate_python(args.get(text_key, ""))
             path = (
                 ""
-                if name == ApplyPatchTool.NAME
-                else _STRING.validate_python(args.get(FILE_PATH_ARGUMENT, ""))
+                if path_key is None
+                else _STRING.validate_python(args.get(path_key, ""))
             )
             # A call without a file path, such as one with wrong-typed
             # arguments, has no file header.

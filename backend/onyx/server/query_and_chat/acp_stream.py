@@ -51,12 +51,12 @@ _TOOL_STARTS: dict[str, tuple[str, str]] = {
 
 # A pre-start packet (.agents/feature-map/components/streaming-protocol.md)
 # opens its call before the call's start packet: its ACP kind and title until
-# the start renames the call. Streamed Python code has its own.
+# the start renames the call. Streamed code has its own.
 _PRE_STARTS: dict[str, tuple[str, str]] = {
     "tool_call_argument_delta": ("other", "Running tool"),
     "file_tool_progress": ("edit", "Editing files"),
 }
-_PYTHON_ARGUMENTS = ("execute", "Writing code")
+_CODE_ARGUMENTS = ("execute", "Writing code")
 
 _MESSAGE_TYPES = {"message_start", "message_delta"}
 _REASONING_TYPES = {"reasoning_start", "reasoning_delta", "reasoning_done"}
@@ -140,7 +140,7 @@ class ChatAcpTranslator:
         opening = _TOOL_STARTS.get(packet_type) or _PRE_STARTS.get(packet_type)
         if call_id not in self._open and opening is not None:
             kind, title = (
-                _PYTHON_ARGUMENTS
+                _CODE_ARGUMENTS
                 if packet_type == "tool_call_argument_delta"
                 and packet.get("tool_type") in CODE_ARGUMENT_TOOLS
                 else opening

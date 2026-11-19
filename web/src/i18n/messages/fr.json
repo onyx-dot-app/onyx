@@ -12727,8 +12727,12 @@
             },
             "title": "Correctif",
             "progress": {
-              "named": "{tool, select, write {Écriture de {path}… {lines, plural, one {# ligne} other {# lignes}}} other {Modification de {path}… {lines, plural, one {# ligne} other {# lignes}}}}",
-              "unnamed": "{tool, select, write {Écriture d’un fichier…} other {Modification d’un fichier…}}",
+              "named": {
+                "status": "{tool, select, write {Écriture de {path}… {lines, plural, one {# ligne} other {# lignes}}} other {Modification de {path}… {lines, plural, one {# ligne} other {# lignes}}}}"
+              },
+              "unnamed": {
+                "status": "{tool, select, write {Écriture d’un fichier…} other {Modification d’un fichier…}}"
+              },
               "patching": {
                 "status": "{count, plural, =0 {Application du correctif…} one {Application du correctif à # fichier…} other {Application du correctif à # fichiers…}}"
               }

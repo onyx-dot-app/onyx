@@ -225,8 +225,9 @@ end reports the held fragments when its message completes or its agent ends
 (`MessageRenderer.complete`, `MessageRenderer.finish`). The file tools (`write`, `edit`, `apply_patch`)
 report `file_tool_progress` instead of their arguments: `tool_name`, the whole
 `paths` so far without repeats, and the `lines` of the file text or patch
-(`chat/renderer.py:file_tool_progress`). A report that changes nothing sends
-no packet. Replay sends no progress.
+(`chat/renderer.py:file_tool_progress`). The card shows `lines` for `write` and
+`edit`; an `apply_patch` card shows only the count of files. A report that
+changes nothing sends no packet. Replay sends no progress.
 
 Pre-start packets: `tool_call_argument_delta` and `file_tool_progress` open a
 call before its start packet, and clients do not count them as its start

@@ -42,8 +42,6 @@ function renderPatchLines(text: string) {
     coloredLines.reduce((length, line) => length + line.length + 1, 0)
   );
   return (
-    // dir="ltr": a patch is code, and the attribute isolates it, so the
-    // sandbox's text cannot reorder the text around it.
     <div dir="ltr" className="whitespace-pre-wrap wrap-break-word">
       {coloredLines.map((line, index) => (
         <Text
@@ -99,8 +97,6 @@ function FileList({ files }: { files: FileRow[] }) {
               {CHANGE_MARKERS[file.change].marker}
             </Text>
           )}
-          {/* Each path in its own LTR isolate: the sandbox's text cannot
-              reorder the text around it. */}
           <Text font="secondary-mono" color="text-04" wordWrap="break-all">
             {richNodes(
               <>
@@ -173,7 +169,6 @@ export function ApplyPatchToolRenderer({
   // ends without a start shows only how it ended.
   const liveProgress = start !== null || isComplete ? null : progress;
   const [progressPath] = liveProgress?.paths ?? [];
-  // The path reads as code, isolated from the words around it.
   const pathCode =
     progressPath === undefined
       ? null
@@ -192,11 +187,11 @@ export function ApplyPatchToolRenderer({
                 count: liveProgress.paths.length,
               })
             : pathCode === null
-              ? t("sandbox.patch.progress.unnamed", {
+              ? t("sandbox.patch.progress.unnamed.status", {
                   tool: liveProgress.tool_name,
                 })
               : markdown(
-                  t("sandbox.patch.progress.named", {
+                  t("sandbox.patch.progress.named.status", {
                     tool: liveProgress.tool_name,
                     path: pathCode,
                     lines: liveProgress.lines,
