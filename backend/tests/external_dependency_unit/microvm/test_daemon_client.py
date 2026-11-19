@@ -287,6 +287,66 @@ def test_write_then_read_a_file_in_chunks(guest: Guest) -> None:
     assert b"".join(tail) == data[10:15]
 
 
+class _RecordedReads(io.BytesIO):
+    def __init__(self, data: bytes) -> None:
+        super().__init__(data)
+        self.sizes: list[int | None] = []
+
+    def read(self, size: int | None = -1, /) -> bytes:
+        self.sizes.append(size)
+        return super().read(size)
+
+
+def test_write_streams_a_whole_file_in_chunks(guest: Guest) -> None:
+    data = bytes(range(256)) * 1024 * 10  # 2.5 MiB
+    source = _RecordedReads(data)
+    # A retry with a partly read file still sends the whole file.
+    source.read(4)
+    source.sizes.clear()
+
+    written = guest.daemon.write_file(session_id=SESSION, path="a.bin", data=source)
+
+    assert written.info.size == len(data)
+    _, chunks = guest.daemon.read_file(session_id=SESSION, path="a.bin")
+    assert b"".join(chunks) == data
+    # Never one read of the whole file.
+    assert set(source.sizes) == {1 << 20}
+    assert guest.agent.write_chunk_sizes[-1] == [
+        1 << 20,
+        1 << 20,
+        len(data) - (2 << 20),
+    ]
+
+
+def test_write_refuses_a_file_that_cannot_seek(guest: Guest) -> None:
+    class Unseekable(io.BytesIO):
+        def seekable(self) -> bool:
+            return False
+
+    with pytest.raises(ValueError, match="seekable"):
+        guest.daemon.write_file(session_id=SESSION, path="a.bin", data=Unseekable(b"x"))
+
+
+def test_write_read_and_delete_an_absolute_path_with_no_session(guest: Guest) -> None:
+    path = "/tmp/onyx/tool-results/c1.txt"
+    written = guest.daemon.write_file(session_id="", path=path, data=b"spill")
+    assert written.info.path == path
+
+    _, chunks = guest.daemon.read_file(session_id="", path=path)
+    assert b"".join(chunks) == b"spill"
+    with pytest.raises(SandboxDaemonError) as missing:
+        guest.daemon.read_file(session_id=SESSION, path="tmp/onyx/tool-results/c1.txt")
+    assert missing.value.reason is SandboxDaemonErrorReason.FILE_NOT_FOUND
+    assert guest.daemon.delete_file(session_id="", path=path)
+    # Cleaned as the daemon does.
+    guest.daemon.write_file(session_id="", path="/tmp/onyx/a/../b.txt", data=b"b")
+    assert guest.agent.files[(SANDBOX_ID, "", "/tmp/onyx/b.txt")] == b"b"
+    for bad in ("tmp/onyx/x.txt", "/proc/1/environ", "/run/craft-fc/key", "/a/../"):
+        with pytest.raises(SandboxDaemonError) as exc:
+            guest.daemon.write_file(session_id="", path=bad, data=b"x")
+        assert exc.value.reason is SandboxDaemonErrorReason.INVALID_ARGUMENT
+
+
 def test_write_without_overwrite_raises_file_exists(guest: Guest) -> None:
     guest.daemon.write_file(session_id=SESSION, path="a.txt", data=b"1")
     with pytest.raises(SandboxDaemonError) as exc:

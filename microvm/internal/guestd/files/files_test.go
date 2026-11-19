@@ -149,6 +149,129 @@ func TestPathEscapes(t *testing.T) {
 	}
 }
 
+// A command can plant links in the onyx root: a call with no session never
+// follows one out of it.
+func TestOnyxRootConfinesCallsWithoutSession(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	onyx := filepath.Join(dir, "onyx")
+	s, err := New(Config{SessionsRoot: filepath.Join(dir, "sessions"), OnyxRoot: onyx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	write := func(p, data string) error {
+		spec := WriteSpec{Path: p, Size: int64(len(data)), Overwrite: true, MakeParents: true}
+		_, _, err := s.Write(ctx, "", spec, strings.NewReader(data))
+		return err
+	}
+	outside := filepath.Join(dir, "passwd")
+	if err := os.WriteFile(outside, []byte("root"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The daemon makes a missing onyx root.
+	if err := write(onyx+"/./tool-results/../c1.txt", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(onyx, "c1.txt")); err != nil || string(b) != "ok" {
+		t.Fatalf("c1.txt %q %v", b, err)
+	}
+
+	// A link in the last part is replaced, not followed.
+	if err := os.Symlink(outside, filepath.Join(onyx, "out.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := write(onyx+"/out.txt", "new"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(outside); string(b) != "root" {
+		t.Fatalf("the write followed the link: %q", b)
+	}
+	if fi, err := os.Lstat(filepath.Join(onyx, "out.txt")); err != nil || !fi.Mode().IsRegular() {
+		t.Fatalf("out.txt is not the written file: %v", err)
+	}
+
+	// A directory link out of the root fails every call.
+	if err := os.Symlink(dir, filepath.Join(onyx, "up")); err != nil {
+		t.Fatal(err)
+	}
+	if err := write(onyx+"/up/passwd", "new"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("write through a directory link: %v", err)
+	}
+	if err := write(onyx+"/up/new/x.txt", "new"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("write of new directories through a link: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "new")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("made a directory outside the root: %v", err)
+	}
+	err = s.Read(ctx, "", onyx+"/up/passwd", 0, 0, func(Info) error { return nil }, func([]byte) error { return nil })
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("read through a directory link: %v", err)
+	}
+	if _, err := s.Delete("", onyx+"/up/passwd", false); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("delete through a directory link: %v", err)
+	}
+	// A delete of the link removes the link only.
+	if ok, err := s.Delete("", onyx+"/up", true); !ok || err != nil {
+		t.Fatalf("delete link: %v %v", ok, err)
+	}
+	if b, _ := os.ReadFile(outside); string(b) != "root" {
+		t.Fatalf("the delete followed the link: %q", b)
+	}
+
+	// An onyx root that a command replaced with a link is refused.
+	if err := os.RemoveAll(onyx); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(dir, onyx); err != nil {
+		t.Fatal(err)
+	}
+	if err := write(onyx+"/passwd", "new"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("write through a linked onyx root: %v", err)
+	}
+	if b, _ := os.ReadFile(outside); string(b) != "root" {
+		t.Fatalf("the write followed the onyx root link: %q", b)
+	}
+}
+
+// The sandbox user owns the sessions root's parent and can replace the
+// sessions root with a link: session calls refuse it.
+func TestALinkedSessionsRootIsRefused(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	elsewhere := filepath.Join(dir, "etc")
+	if err := os.Mkdir(elsewhere, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sessions := filepath.Join(dir, "sessions")
+	if err := os.Symlink(elsewhere, sessions); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(Config{SessionsRoot: sessions})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := WriteSpec{Path: "a.txt", Size: 1, MakeParents: true}
+	if _, _, err := s.Write(context.Background(), sid, spec, strings.NewReader("x")); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("write in a linked sessions root: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(elsewhere, sid)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("made the session through the link: %v", err)
+	}
+}
+
+func TestAnOnyxRootUnderADeniedPathIsRefused(t *testing.T) {
+	for _, onyx := range []string{"/run/craft-fc/onyx", "/proc", "/dev/shm/onyx"} {
+		if _, err := New(Config{OnyxRoot: onyx}); !errors.Is(err, ErrInvalid) {
+			t.Errorf("onyx root %s: %v", onyx, err)
+		}
+	}
+}
+
 func TestReadLinkRoots(t *testing.T) {
 	dir := t.TempDir()
 	dir, _ = filepath.EvalSymlinks(dir)

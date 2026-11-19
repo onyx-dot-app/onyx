@@ -85,8 +85,11 @@ log "boot $(cut -d' ' -f1 /proc/uptime)s"
 # Kernel hardening. The guest image loads no modules (it has no
 # /lib/modules) and uses no io_uring (libuv falls back to threads).
 # modules_disabled and kexec_load_disabled cannot be set back before reboot.
-for setting in io_uring_disabled=2 kptr_restrict=2 dmesg_restrict=1 sysrq=0 kexec_load_disabled=1 modules_disabled=1; do
-  echo "${setting#*=}" >"/proc/sys/kernel/${setting%%=*}" 2>/dev/null || log "sysctl kernel.${setting} failed"
+# The fs settings stop links that the sandbox user plants in /tmp from
+# redirecting root.
+for setting in kernel/io_uring_disabled=2 kernel/kptr_restrict=2 kernel/dmesg_restrict=1 kernel/sysrq=0 \
+  kernel/kexec_load_disabled=1 kernel/modules_disabled=1 fs/protected_hardlinks=1 fs/protected_symlinks=1; do
+  echo "${setting#*=}" >"/proc/sys/${setting%%=*}" 2>/dev/null || log "sysctl ${setting} failed"
 done
 
 # Refuse to read or run anything from a writable /craft-fc. The probe write

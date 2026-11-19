@@ -32,6 +32,7 @@ Exec contract (Codex `exec_command` / `write_stdin`):
 import abc
 import posixpath
 from collections.abc import Generator, Iterator, Sequence
+from typing import IO
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.models import (
@@ -43,6 +44,11 @@ from onyx.server.features.build.sandbox.models import (
 
 # Parent of each chat session's working directory in the sandbox.
 SESSION_WORKSPACE_ROOT = "/home/onyx/workspaces"
+
+# Parent of the files that Onyx writes outside every session directory (for
+# example large tool results). No session save keeps them; they go when the
+# sandbox stops.
+ONYX_VM_FILES_ROOT = "/tmp/onyx"  # noqa: S108 - a path in the sandbox VM.
 
 # Most exec session records per sandbox; the least recently used goes
 # first. The guest daemon caps the running commands.
@@ -174,7 +180,10 @@ class HarnessSandbox(abc.ABC):
     # Files: only what exec_command cannot do well. view_image needs exact
     # bytes (exec output is text), and apply_patch needs exact writes of any
     # content (no shell quoting) and typed path facts. Paths are relative to
-    # the session directory, or absolute inside it.
+    # the session directory, or absolute inside it; only write_onyx_file
+    # takes an absolute path under ONYX_VM_FILES_ROOT instead. Write data is
+    # bytes, or a seekable binary file (for example a file store temp file)
+    # that is streamed whole, from its start, in chunks.
 
     @abc.abstractmethod
     def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
@@ -184,10 +193,23 @@ class HarnessSandbox(abc.ABC):
 
     @abc.abstractmethod
     def write_file(
-        self, ref: HarnessSandboxRef, path: str, data: bytes, *, mode: int = 0o644
+        self,
+        ref: HarnessSandboxRef,
+        path: str,
+        data: bytes | IO[bytes],
+        *,
+        mode: int = 0o644,
     ) -> None:
         """Atomic replace (a link is replaced, not followed); creates parent
         directories. `mode`: permission bits."""
+
+    @abc.abstractmethod
+    def write_onyx_file(
+        self, ref: HarnessSandboxRef, path: str, data: bytes | IO[bytes]
+    ) -> None:
+        """Atomic replace of an absolute path under ONYX_VM_FILES_ROOT, mode
+        0644; creates parent directories. Starts the sandbox if needed but
+        sets up no session. Raises SandboxPathError for another path."""
 
     @abc.abstractmethod
     def stat_files(

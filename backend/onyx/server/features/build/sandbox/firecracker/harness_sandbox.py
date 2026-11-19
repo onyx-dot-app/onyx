@@ -16,6 +16,7 @@ import secrets
 import time
 from collections.abc import Generator, Sequence
 from io import BytesIO
+from typing import IO
 from uuid import UUID
 
 import grpc
@@ -133,6 +134,7 @@ from onyx.server.features.build.sandbox.firecracker.session_saves import (
 from onyx.server.features.build.sandbox.harness_base import (
     EXEC_DEFAULT_ENV,
     INTERRUPT_CHAR,
+    ONYX_VM_FILES_ROOT,
     ExecCapReachedError,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
@@ -836,7 +838,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             )
         return True
 
-    # Files (paths relative to the session directory)
+    # Files (paths relative to the session directory, except write_onyx_file)
 
     def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
         rel = session_relative_path(ref, path)
@@ -858,7 +860,12 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         return data
 
     def write_file(
-        self, ref: HarnessSandboxRef, path: str, data: bytes, *, mode: int = 0o644
+        self,
+        ref: HarnessSandboxRef,
+        path: str,
+        data: bytes | IO[bytes],
+        *,
+        mode: int = 0o644,
     ) -> None:
         rel = session_relative_path(ref, path)
         if not rel:
@@ -871,6 +878,18 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             )
         self._session_vm(ref)[1].write_file(
             session_id=str(ref.session_id), path=rel, data=data, mode=mode
+        )
+
+    def write_onyx_file(
+        self, ref: HarnessSandboxRef, path: str, data: bytes | IO[bytes]
+    ) -> None:
+        normalized = posixpath.normpath(path)
+        if not normalized.startswith(ONYX_VM_FILES_ROOT + "/"):
+            raise SandboxPathError(f"{path!r} is not under {ONYX_VM_FILES_ROOT}/")
+        # With no session ID the daemon takes the absolute path, and no
+        # session is restored.
+        sandbox_daemon(self._client_factory, self._place(ref)).write_file(
+            session_id="", path=normalized, data=data
         )
 
     def stat_files(

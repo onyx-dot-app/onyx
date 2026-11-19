@@ -67,6 +67,8 @@ _DAEMON_REASON_CODES: dict[SandboxDaemonErrorReason, grpc.StatusCode] = {
 # The guest daemon's files.TopFilesRoot.
 TOP_FILES_ROOT = ".onyx-top-level"
 WORKSPACES = "/home/onyx/workspaces"
+# Absolute paths that the daemon refuses with no session ID.
+_DENIED_VM_PATHS = ("/proc", "/sys", "/dev", "/run/craft-fc")
 
 
 def _abort(
@@ -148,7 +150,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.daemon_inits: dict[str, int] = {}
         # Guest daemon executions and session files, by sandbox.
         self.executions: dict[str, dict[str, FakeExecution]] = {}
-        # (sandbox_id, session_id, path) -> bytes of a regular file.
+        # (sandbox_id, session_id, path) -> bytes of a regular file. A call
+        # with no session ID keeps its absolute path, with session_id "".
         self.files: dict[tuple[str, str, str], bytes] = {}
         # Permission bits of a file in `files`; 0o644 when absent.
         self.file_modes: dict[tuple[str, str, str], int] = {}
@@ -158,6 +161,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         # them (the Go tests own those rules). Other paths get the facts of
         # their own entry, and a link names nothing.
         self.path_stats: dict[tuple[str, str, str], sandboxd_pb2.PathStat] = {}
+        # The data message sizes of each WriteFile, in order.
+        self.write_chunk_sizes: list[list[int]] = []
         # ZipFiles fails with LIMIT_EXCEEDED over this many input bytes.
         self.zip_max_input_bytes: int | None = None
         # Spooled captures by ID, and "object storage" by presigned URL.
@@ -1123,6 +1128,29 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             abort_daemon(context, SandboxDaemonErrorReason.INVALID_ARGUMENT, "bad path")
         return path.strip("/")
 
+    def _file_key(
+        self, context: grpc.ServicerContext, sandbox_id: str, session_id: str, path: str
+    ) -> tuple[str, str, str]:
+        """The `files` key of a call's path: session-relative with a session
+        ID, else absolute and cleaned as the daemon's vmPath does (in the
+        fake, a separate file even when it names a session directory)."""
+        if session_id:
+            return sandbox_id, session_id, self._check_path(context, path)
+        # normpath keeps a leading "//"; path.Clean does not.
+        normalized = "/" + posixpath.normpath(path).lstrip("/")
+        if (
+            not posixpath.isabs(path)
+            or normalized == "/"
+            or any(
+                normalized == denied or normalized.startswith(denied + "/")
+                for denied in _DENIED_VM_PATHS
+            )
+        ):
+            abort_daemon(
+                context, SandboxDaemonErrorReason.INVALID_ARGUMENT, "bad VM path"
+            )
+        return sandbox_id, "", normalized
+
     def _session_files(self, sandbox_id: str, session_id: str) -> dict[str, bytes]:
         return {
             path: data
@@ -1169,8 +1197,9 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     ) -> Iterator[sandboxd_pb2.ReadFileResponse]:
         with self.agent.lock:
             sandbox_id = self._ready(context)
-            path = self._check_path(context, request.path)
-            key = self._followed(context, (sandbox_id, request.session_id, path))
+            key = self._file_key(context, sandbox_id, request.session_id, request.path)
+            path = key[2]
+            key = self._followed(context, key)
             data = self.agent.files.get(key)
             if data is None:
                 abort_daemon(context, SandboxDaemonErrorReason.FILE_NOT_FOUND, path)
@@ -1216,11 +1245,17 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 context, SandboxDaemonErrorReason.INVALID_ARGUMENT, "header first"
             )
         header = first.header
-        data = b"".join(r.data for r in request_iterator)
+        sizes: list[int] = []
+        parts: list[bytes] = []
+        for request in request_iterator:
+            sizes.append(len(request.data))
+            parts.append(request.data)
+        data = b"".join(parts)
         with self.agent.lock:
+            self.agent.write_chunk_sizes.append(sizes)
             sandbox_id = self._ready(context)
-            path = self._check_path(context, header.path)
-            key = (sandbox_id, header.session_id, path)
+            key = self._file_key(context, sandbox_id, header.session_id, header.path)
+            path = key[2]
             if key in self.agent.files and not header.overwrite:
                 abort_daemon(context, SandboxDaemonErrorReason.FILE_EXISTS, path)
             digest = self._store(
@@ -1309,8 +1344,8 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 for k in gone:
                     del self.agent.files[k]
                 return sandboxd_pb2.DeleteFileResponse(deleted=bool(gone))
-            path = self._check_path(context, request.path)
-            key = (sandbox_id, request.session_id, path)
+            key = self._file_key(context, sandbox_id, request.session_id, request.path)
+            path = key[2]
             self.agent.file_modes.pop(key, None)
             if (
                 self.agent.files.pop(key, None) is not None
