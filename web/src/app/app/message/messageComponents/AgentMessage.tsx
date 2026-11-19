@@ -87,6 +87,8 @@ interface ResponseSection {
   userMessage: UserMessage | null;
   turnIndex: number;
   toolGroups: TurnGroup[];
+  /** Text that a later step of this section follows. */
+  interimGroups: GroupedPacket[];
   displayGroups: GroupedPacket[];
   images: GeneratedImage[];
   publishedFiles: PlacedPublishedFile[];
@@ -172,6 +174,7 @@ const AgentMessage = React.memo(function AgentMessage({
     toolTurnGroups,
     codeModeWorking,
     displayGroups,
+    interimDisplayGroups,
     stopPacketSeen,
     stopReason,
     generatedImages,
@@ -242,6 +245,7 @@ const AgentMessage = React.memo(function AgentMessage({
         userMessage: null,
         turnIndex: -1,
         toolGroups: [],
+        interimGroups: [],
         displayGroups: [],
         images: [],
         publishedFiles: [],
@@ -257,6 +261,7 @@ const AgentMessage = React.memo(function AgentMessage({
           userMessage: input,
           turnIndex: group.turn_index,
           toolGroups: [],
+          interimGroups: [],
           displayGroups: [],
           images: [],
           publishedFiles: [],
@@ -293,6 +298,7 @@ const AgentMessage = React.memo(function AgentMessage({
         },
         turnIndex: record.turnIndex,
         toolGroups: [],
+        interimGroups: [],
         displayGroups: before.displayGroups.filter(
           (group) => group.turn_index > record.turnIndex
         ),
@@ -316,6 +322,11 @@ const AgentMessage = React.memo(function AgentMessage({
         index++;
       }
       sections[index]!.toolGroups.push(group);
+    }
+    for (const group of interimDisplayGroups) {
+      sections
+        .findLast((section) => section.turnIndex < group.turn_index)!
+        .interimGroups.push(group);
     }
     for (const image of generatedImages) {
       sections
@@ -341,6 +352,7 @@ const AgentMessage = React.memo(function AgentMessage({
   }, [
     pacedDisplayGroups,
     pacedTurnGroups,
+    interimDisplayGroups,
     generatedImages,
     publishedFiles,
     authErrors,
@@ -522,19 +534,76 @@ const AgentMessage = React.memo(function AgentMessage({
               </Section>
             )}
 
-            <AgentTimeline
-              turnGroups={section.toolGroups}
-              chatState={effectiveChatState}
-              stopPacketSeen={stopPacketSeen || !isLastSection}
-              stopReason={isLastSection ? stopReason : undefined}
-              hasDisplayContent={section.displayGroups.length > 0}
-              processingDurationSeconds={processingDurationSeconds}
-              generatedImageCount={section.images.length}
-              finalAnswerComing={!isLastSection || pacedFinalAnswerComing}
-              toolProcessingDuration={toolProcessingDuration}
-              codeModeWorking={isLastSection && codeModeWorking}
-              awaitingUser={isLastSection ? toolRequests.awaiting : null}
-            />
+            {buildRunSegments(
+              section.toolGroups,
+              toolTurnGroups,
+              section.interimGroups,
+              section.turnIndex
+            ).map((segment, index, segments) => {
+              if (segment.kind === "text") {
+                return (
+                  <div
+                    key={`text-${segment.key}`}
+                    className={cn(!fullWidthChat && "px-3")}
+                  >
+                    <RendererComponent
+                      packets={segment.group.packets}
+                      nestedCalls={segment.group.nestedCalls}
+                      streamPackets={segment.group.streamPackets}
+                      chatState={effectiveChatState}
+                      messageNodeId={nodeId}
+                      hasTimelineThinking
+                      onComplete={() => {}}
+                      restoredTextLength={visibleGroups.get(segment.key)}
+                      animate={!stopPacketSeen && isLastSection}
+                      stopPacketSeen={stopPacketSeen}
+                      stopReason={stopReason}
+                    >
+                      {(results) => (
+                        <>
+                          {results.map((r, i) => (
+                            <div key={i}>{r.content}</div>
+                          ))}
+                        </>
+                      )}
+                    </RendererComponent>
+                  </div>
+                );
+              }
+              const showAgentAvatar =
+                segments.findIndex((s) => s.kind === "run") === index;
+              // A run that text follows has settled.
+              if (index < segments.length - 1) {
+                return (
+                  <AgentTimeline
+                    key={`run-${segment.key}`}
+                    turnGroups={segment.turnGroups}
+                    chatState={effectiveChatState}
+                    stopPacketSeen
+                    hasDisplayContent
+                    finalAnswerComing
+                    showAgentAvatar={showAgentAvatar}
+                  />
+                );
+              }
+              return (
+                <AgentTimeline
+                  key={`run-${segment.key}`}
+                  turnGroups={segment.turnGroups}
+                  chatState={effectiveChatState}
+                  stopPacketSeen={stopPacketSeen || !isLastSection}
+                  stopReason={isLastSection ? stopReason : undefined}
+                  hasDisplayContent={section.displayGroups.length > 0}
+                  processingDurationSeconds={processingDurationSeconds}
+                  generatedImageCount={section.images.length}
+                  finalAnswerComing={!isLastSection || pacedFinalAnswerComing}
+                  toolProcessingDuration={toolProcessingDuration}
+                  codeModeWorking={isLastSection && codeModeWorking}
+                  awaitingUser={isLastSection ? toolRequests.awaiting : null}
+                  showAgentAvatar={showAgentAvatar}
+                />
+              );
+            })}
 
             {/* Row 2: Display content + MessageToolbar */}
             <div
@@ -680,3 +749,71 @@ const AgentMessage = React.memo(function AgentMessage({
 }, arePropsEqual);
 
 export default AgentMessage;
+
+type RunSegment =
+  | { kind: "run"; key: string; turnGroups: TurnGroup[] }
+  | { kind: "text"; key: string; group: GroupedPacket };
+
+/** The packet turn of a timeline turn; code mode renumbers timeline turns. */
+function packetTurn(group: TurnGroup): number {
+  const step = group.steps[0];
+  return step ? parseToolKey(step.groupKey).turn_index : group.turnIndex;
+}
+
+/**
+ * Orders the revealed steps and the interim text by turn. Consecutive steps
+ * form one run. Interim text shows once every earlier step is revealed, so
+ * text never appears ahead of the steps before it. Only the section's own
+ * steps count: an earlier section's steps never gate its text. The list always
+ * ends with a run, which holds the live header while later steps arrive.
+ */
+function buildRunSegments(
+  pacedTurnGroups: TurnGroup[],
+  allTurnGroups: TurnGroup[],
+  interimGroups: GroupedPacket[],
+  sectionTurnIndex: number
+): RunSegment[] {
+  const revealed = new Set(
+    pacedTurnGroups.flatMap((group) => group.steps.map((step) => step.key))
+  );
+  const visibleText = interimGroups.filter((text) =>
+    allTurnGroups.every(
+      (group) =>
+        packetTurn(group) < sectionTurnIndex ||
+        packetTurn(group) >= text.turn_index ||
+        group.steps.every((step) => revealed.has(step.key))
+    )
+  );
+
+  type Item =
+    | { turn: number; group: TurnGroup }
+    | { turn: number; text: GroupedPacket };
+  const items: Item[] = [
+    ...pacedTurnGroups.map((group) => ({ turn: packetTurn(group), group })),
+    ...visibleText.map((text) => ({ turn: text.turn_index, text })),
+  ].sort((a, b) => a.turn - b.turn);
+
+  const segments: RunSegment[] = [];
+  for (const item of items) {
+    if ("text" in item) {
+      segments.push({
+        kind: "text",
+        key: getToolKey(item.text.turn_index, item.text.tab_index),
+        group: item.text,
+      });
+      continue;
+    }
+    const last = segments[segments.length - 1];
+    if (last?.kind === "run") last.turnGroups.push(item.group);
+    else
+      segments.push({
+        kind: "run",
+        key: item.group.steps[0]?.key ?? String(item.turn),
+        turnGroups: [item.group],
+      });
+  }
+  if (segments[segments.length - 1]?.kind !== "run") {
+    segments.push({ kind: "run", key: "live", turnGroups: [] });
+  }
+  return segments;
+}

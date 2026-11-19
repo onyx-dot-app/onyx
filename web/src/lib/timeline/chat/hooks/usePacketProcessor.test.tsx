@@ -585,8 +585,9 @@ test("a stop shows the text that a later tool call retracted", () => {
     ],
   });
   expect(result.current.finalAnswerComing).toBe(true);
-  expect(result.current.displayGroups).toHaveLength(1);
-  expect(result.current.isComplete).toBe(false);
-  act(() => result.current.onRenderComplete());
+  // The text renders in place, between the steps.
+  expect(result.current.interimDisplayGroups).toHaveLength(1);
+  expect(result.current.displayGroups).toHaveLength(0);
+  // No final answer waits to render, so the stop completes the message.
   expect(result.current.isComplete).toBe(true);
 });

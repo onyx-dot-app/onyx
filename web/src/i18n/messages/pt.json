@@ -14886,9 +14886,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# chamada} other {# chamadas}}"
-        },
         "working": {
           "label": "Trabalhando"
         }
