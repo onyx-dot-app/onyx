@@ -68,9 +68,6 @@ export interface ChatScrollOptions {
   /** DOM id of the current turn's anchor (the latest user message). */
   anchorId?: string;
   onScrollButtonVisibilityChange?: (visible: boolean) => void;
-  /** Loads a saved row that is not in the view (a page of older messages the
-   *  store no longer holds). The view stays hidden until it settles. */
-  restoreRow?: (rowId: string) => Promise<void>;
 }
 
 export interface ChatScrollController {
@@ -177,7 +174,6 @@ export function useChatScroll({
   turnKey,
   anchorId,
   onScrollButtonVisibilityChange,
-  restoreRow,
 }: ChatScrollOptions): ChatScrollController {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -197,10 +193,6 @@ export function useChatScroll({
   const autoScrollRef = useRef(autoScroll);
   const anchorIdRef = useRef(anchorId);
   const onButtonRef = useRef(onScrollButtonVisibilityChange);
-  const restoreRowRef = useRef(restoreRow);
-  // The current opening, so a restore that settles late can tell it is stale.
-  const openingRef = useRef(0);
-  const restoreRef = useRef<"idle" | "pending" | "done">("idle");
   const revealTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowMountersRef = useRef(new Map<Element, () => void>());
   const modeRef = useRef<Mode>({ kind: "opening" });
@@ -222,14 +214,7 @@ export function useChatScroll({
     autoScrollRef.current = autoScroll;
     anchorIdRef.current = anchorId;
     onButtonRef.current = onScrollButtonVisibilityChange;
-    restoreRowRef.current = restoreRow;
-  }, [
-    memory,
-    autoScroll,
-    anchorId,
-    onScrollButtonVisibilityChange,
-    restoreRow,
-  ]);
+  }, [memory, autoScroll, anchorId, onScrollButtonVisibilityChange]);
 
   const write = useCallback((container: HTMLElement, top: number) => {
     container.scrollTop = top;
@@ -372,7 +357,7 @@ export function useChatScroll({
         position?.kind === "row"
           ? {
               kind: "free",
-              held: findHeldRow(container, position)
+              held: findById(container, position.rowId)
                 ? {
                     rowId: position.rowId,
                     rowIndexFromEnd: position.rowIndexFromEnd,
@@ -395,30 +380,13 @@ export function useChatScroll({
   const placeOpening = useCallback(
     (container: HTMLElement) => {
       const position = memoryRef.current.position;
-      // Look the saved row up by its id first: the by-rank fallback can name
-      // another row once newer messages arrived.
-      const loaded =
-        position?.kind === "row" && findById(container, position.rowId);
-      if (
-        position?.kind === "row" &&
-        !loaded &&
-        restoreRowRef.current &&
-        restoreRef.current !== "done"
-      ) {
-        // The saved row is not loaded: load it before the view shows.
-        if (restoreRef.current === "idle") {
-          restoreRef.current = "pending";
-          const opening = openingRef.current;
-          void restoreRowRef.current(position.rowId).finally(() => {
-            if (opening !== openingRef.current) return;
-            restoreRef.current = "done";
-            reconcile();
-            scheduleReveal();
-          });
-        }
-        return;
-      }
-      if (position?.kind === "row" && findHeldRow(container, position)) {
+      // Only the saved row itself, by id: the by-rank fallback can name
+      // another row once newer messages arrived. A row that is not loaded
+      // (its page left the store) opens at the end; opening never waits on
+      // the network.
+      const savedRow =
+        position?.kind === "row" ? findById(container, position.rowId) : null;
+      if (position?.kind === "row" && savedRow) {
         hold(container, position);
       } else {
         write(container, maxScrollTop(container));
@@ -443,7 +411,6 @@ export function useChatScroll({
       }
       if (!waiting) reveal(container);
     },
-    // reconcile and scheduleReveal are declared below and never change.
     [hold, write, reveal]
   );
 
@@ -540,15 +507,14 @@ export function useChatScroll({
     pendingTurnRef.current = revealedRef.current ? performance.now() : null;
   }, []);
 
-  /** Reveal after a short wait, even if rows near the position never mount.
-   *  A pending restore holds the view hidden until it settles. */
+  /** Reveal after a short wait, even if rows near the position never mount. */
   const scheduleReveal = useCallback(() => {
     if (revealTimeoutRef.current !== null)
       clearTimeout(revealTimeoutRef.current);
     revealTimeoutRef.current = setTimeout(() => {
       revealTimeoutRef.current = null;
       const container = containerRef.current;
-      if (container && restoreRef.current !== "pending") reveal(container);
+      if (container) reveal(container);
     }, REVEAL_TIMEOUT_MS);
   }, [reveal]);
 
@@ -556,8 +522,6 @@ export function useChatScroll({
   useLayoutEffect(() => {
     const container = containerRef.current;
     cancelTween();
-    openingRef.current += 1;
-    restoreRef.current = "idle";
     modeRef.current = { kind: "opening" };
     revealedRef.current = false;
     setRevealed(false);

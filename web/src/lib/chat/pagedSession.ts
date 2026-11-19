@@ -154,32 +154,6 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
   }
 }
 
-/** Most pages loaded to bring back a saved position. */
-const MAX_RESTORE_PAGES = 10;
-
-/**
- * Loads older pages of the current branch until `messageId` is in the chat,
- * so a saved position in an older page can be restored. Stops when the branch
- * has no older messages or after `MAX_RESTORE_PAGES` pages.
- */
-export async function loadChatMessagesUntil(
-  sessionId: string,
-  messageId: number
-): Promise<void> {
-  for (let page = 0; page < MAX_RESTORE_PAGES; page++) {
-    const session = useChatSessionStore.getState().sessions.get(sessionId);
-    if (!session?.hasOlderMessages) return;
-    const chain = getLatestMessageChain(session.messageTree);
-    if (chain.some((message) => message.messageId === messageId)) return;
-    await loadOlderChatMessages(sessionId);
-    // No older page attached (an empty page reloads the branch instead):
-    // asking again would repeat the same request.
-    const after = useChatSessionStore.getState().sessions.get(sessionId);
-    const oldest = after && getLatestMessageChain(after.messageTree)[0];
-    if (oldest?.messageId === chain[0]?.messageId) return;
-  }
-}
-
 /**
  * Replaces the chat's message tree with the last page of its current branch,
  * for example after a switch to a branch whose messages are not loaded. Does

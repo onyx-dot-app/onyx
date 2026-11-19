@@ -750,9 +750,9 @@ up its own branding.
       for the page's lifetime. A view that opens again stays hidden until it
       is placed: the saved row at its offset, or the end. Older pages load
       only after the user's scroll input (`scrolledByUser`), so a restore
-      fetches nothing. A saved row on a page the store no longer holds is
-      loaded first (`restoreRow` → `lib/chat/pagedSession.ts:loadChatMessagesUntil`),
-      while the view stays hidden.
+      fetches nothing. Opening never waits on the network: a saved row
+      whose page left the store opens at the end, so a chat switch is
+      instant even on a slow network.
     - Rows: `lib/chat/rowIds.ts:messageRowId` keeps the id a row was first
       shown with, so a refetch that turns temporary node ids into database ids
       neither remounts rows nor reads as a new turn. Rows are windowed by

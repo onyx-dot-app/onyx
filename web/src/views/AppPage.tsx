@@ -62,8 +62,7 @@ import {
   useCurrentIsStreamDraining,
 } from "@/app/app/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
-import { messageIdFromRowId, messageRowId } from "@/lib/chat/rowIds";
-import { loadChatMessagesUntil } from "@/lib/chat/pagedSession";
+import { messageRowId } from "@/lib/chat/rowIds";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/sections/chat/ChatScrollContainer";
@@ -378,16 +377,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // The last row changes when a turn starts.
   const lastMessage = messageHistory.at(-1);
   const turnKey = lastMessage ? messageRowId(lastMessage) : undefined;
-  // A saved position in an older page the store no longer holds: load the
-  // pages back to it before the chat shows.
-  const restoreRow = useCallback(
-    async (rowId: string) => {
-      const messageId = messageIdFromRowId(rowId);
-      if (storeSessionId && messageId !== null)
-        await loadChatMessagesUntil(storeSessionId, messageId);
-    },
-    [storeSessionId]
-  );
 
   // The auto-scroll setting decides whether a streaming reply is followed.
   // With nothing running, growth is only layout settling (an action row,
@@ -907,7 +896,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         sessionId={storeSessionId ?? undefined}
                         anchorId={anchorId}
                         turnKey={turnKey}
-                        restoreRow={restoreRow}
                         autoScroll={autoScrollEnabled}
                         onScrollButtonVisibilityChange={setShowScrollButton}
                         fullWidth={fullWidthActive}

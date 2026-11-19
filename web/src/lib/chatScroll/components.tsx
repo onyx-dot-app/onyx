@@ -138,8 +138,6 @@ export interface ChatScrollViewProps {
    *  composer). The space below a new turn leaves room for it. */
   footer?: React.ReactNode;
   onScrollButtonVisibilityChange?: (visible: boolean) => void;
-  /** Loads a saved row that is not in the view, while the view stays hidden. */
-  restoreRow?: (rowId: string) => Promise<void>;
   /** Classes of the scroll element. */
   className?: string;
   style?: React.CSSProperties;
@@ -167,7 +165,6 @@ export const ChatScrollView = React.forwardRef(function ChatScrollView(
     anchorId,
     footer,
     onScrollButtonVisibilityChange,
-    restoreRow,
     className,
     style,
     contentClassName,
@@ -182,7 +179,6 @@ export const ChatScrollView = React.forwardRef(function ChatScrollView(
     turnKey,
     anchorId,
     onScrollButtonVisibilityChange,
-    restoreRow,
   });
   const { scrollToBottom, startTurn } = scroll;
   useImperativeHandle(ref, () => ({ scrollToBottom, startTurn }), [
