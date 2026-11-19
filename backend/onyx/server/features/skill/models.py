@@ -193,6 +193,8 @@ class SkillPreviewResponse(BaseModel):
     description: str
     author_email: str | None = None
     instructions_markdown: str
+    # The supporting files of the version the user runs; empty for a built-in.
+    files: list[SkillBundleFile] = []
 
     @classmethod
     def from_builtin(
@@ -217,6 +219,7 @@ class SkillPreviewResponse(BaseModel):
         access: PluginAccess,
         *,
         instructions_markdown: str,
+        files: list[SkillBundleFile],
     ) -> "SkillPreviewResponse":
         return cls(
             source="custom",
@@ -225,6 +228,7 @@ class SkillPreviewResponse(BaseModel):
             description=access.description,
             author_email=access.author_email,
             instructions_markdown=instructions_markdown,
+            files=files,
         )
 
 

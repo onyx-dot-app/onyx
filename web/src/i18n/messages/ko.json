@@ -16438,12 +16438,7 @@
         "importSubmit": {
           "label": "스킬 가져오기"
         },
-        "importTitle": "이 스킬을 가져올까요?",
-        "replaceBody": "이 업로드는 동일한 스킬 이름을 사용해야 합니다. 계속하면 설명, 지침, 파일이 업로드된 번들로 교체됩니다.",
-        "replaceSubmit": {
-          "label": "콘텐츠 교체"
-        },
-        "replaceTitle": "스킬 콘텐츠를 교체할까요?"
+        "importTitle": "이 스킬을 가져올까요?"
       },
       "delete": {
         "button": {
@@ -16458,7 +16453,7 @@
         "pendingLabel": "삭제 중..."
       },
       "details": {
-        "description": "Craft가 이 스킬을 언제 어떻게 사용해야 하는지 정의하세요.",
+        "description": "에이전트가 이 스킬을 언제, 어떻게 사용할지 정의하세요.",
         "descriptionField": {
           "description": "이 스킬을 언제 사용해야 하는지 설명하세요.",
           "placeholder": "이 스킬은 어떤 도움을 주나요?",
@@ -16466,7 +16461,6 @@
         },
         "name": {
           "createDescription": "소문자, 숫자, 단일 하이픈을 사용하세요.",
-          "lockedDescription": "스킬 이름은 생성 후 변경할 수 없습니다.",
           "placeholder": "스킬 이름 지정",
           "title": "이름"
         },
@@ -16484,14 +16478,11 @@
         "title": "지원 파일"
       },
       "filesTooltip": {
-        "noPermission": "이 스킬의 파일을 업데이트할 권한이 없습니다.",
-        "saveFirst": "스킬 파일을 업데이트하기 전에 세부 정보 변경 사항을 저장하세요.",
         "updating": "스킬 파일 업데이트 중..."
       },
       "header": {
         "createDescription": "개인 스킬 만들기",
         "createTitle": "스킬 만들기",
-        "editDescription": "스킬 세부 정보 및 파일 업데이트",
         "editTitle": "스킬 편집",
         "save": {
           "label": "저장",
@@ -16511,14 +16502,13 @@
         "title": "기존 스킬이 있나요?"
       },
       "instructions": {
-        "description": "이 스킬이 Craft에 추가하는 동작과 워크플로를 작성하세요.",
+        "description": "이 스킬이 에이전트에 추가하는 동작과 워크플로를 작성하세요.",
         "emptyFallback": "아직 지침이 없습니다.",
         "placeholder": "스킬 지침을 작성하세요.",
         "title": "지침"
       },
       "loadError": {
-        "description": "이 스킬이 존재하지 않거나, 기본 제공 스킬이거나, 내 계정으로 편집할 수 없는 스킬일 수 있습니다.",
-        "title": "스킬 사용 불가"
+        "description": "이 스킬이 존재하지 않거나, 기본 제공 스킬이거나, 내 계정으로 편집할 수 없는 스킬일 수 있습니다."
       },
       "management": {
         "sharing": {
@@ -16532,25 +16522,19 @@
         "missingInstructions": "저장하기 전에 지침을 추가하세요.",
         "missingName": "저장하기 전에 이름을 추가하세요.",
         "noChanges": "변경된 사항이 없습니다.",
-        "noPermission": "이 스킬의 세부 정보를 편집할 권한이 없습니다.",
-        "savingChanges": "변경 사항 저장 중...",
         "savingSkill": "스킬 저장 중..."
       },
       "staleVersion": {
-        "description": "다른 사용자가 새 버전을 저장했습니다. 새로고침하여 가져오세요. 저장하지 않은 변경 사항은 사라집니다.",
         "reload": {
           "label": "새로고침"
         },
-        "title": "이 스킬은 연 이후에 변경되었습니다"
+        "title": "이 스킬은 연 이후에 변경되었습니다",
+        "description": "다른 사용자가 새 버전을 저장했습니다. 새로고침하여 가져오세요. 저장하지 않은 변경 사항은 사라집니다."
       },
       "toasts": {
         "created": "\"{name}\"을(를) 생성했습니다",
         "deleteFailed": "스킬을 삭제하지 못했습니다",
         "deleted": "\"{name}\"을(를) 삭제했습니다",
-        "fileRemoveFailed": "스킬 파일을 제거하지 못했습니다",
-        "fileRemoved": "\"{path}\"을(를) 제거했습니다",
-        "filesUpdateFailed": "스킬 파일을 업데이트하지 못했습니다",
-        "filesUpdated": "\"{name}\"의 파일을 업데이트했습니다",
         "importMissingSkillMd": "SKILL.md, ZIP 또는 SKILL.md가 포함된 폴더를 가져오세요.",
         "inspectFailed": "스킬 번들을 검사하지 못했습니다",
         "saveFailed": "스킬을 저장하지 못했습니다",
@@ -16828,11 +16812,7 @@
           "ariaLabel": "버전 {number} 복원",
           "successToast": "버전 {number}을(를) 버전 {newNumber}(으)로 복원했습니다.",
           "unchangedToast": "버전 {number}의 파일이 현재 버전과 같습니다.",
-          "failedToast": "이 버전을 복원할 수 없습니다.",
-          "unsavedChanges": {
-            "title": "먼저 변경 사항을 저장하세요",
-            "description": "버전을 복원하기 전에 편집기의 변경 사항을 저장하거나 삭제하세요."
-          }
+          "failedToast": "이 버전을 복원할 수 없습니다."
         },
         "loadError": {
           "title": "버전을 불러올 수 없습니다",
@@ -17364,6 +17344,62 @@
       "noMatches": {
         "title": "일치하는 플러그인이 없습니다",
         "clear": "모든 플러그인 보기"
+      }
+    },
+    "skillPage": {
+      "title": "스킬",
+      "back": "스킬",
+      "meta": "{owner} · v{version}{published, select, none {} other { · v{published}이(가) 조직에 게시됨}} · {updated} 업데이트",
+      "ownerYou": "내가 만듦",
+      "ownerEmail": "{email}님이 만듦",
+      "ownerYouTitle": "나",
+      "fromOrganization": "조직 라이브러리에서",
+      "copyLink": "링크 복사",
+      "share": "공유",
+      "menu": "더 보기",
+      "edit": "편집",
+      "remove": "제거",
+      "add": "추가",
+      "switch": "{name} 사용",
+      "loadFailed": "이 스킬을 사용할 수 없습니다.",
+      "tabs": {
+        "overview": "개요",
+        "contents": "콘텐츠",
+        "versions": "버전",
+        "contentsCount": "콘텐츠 · {count}"
+      },
+      "overview": {
+        "description": "설명",
+        "noDescription": "설명이 없습니다.",
+        "createdBy": "만든 사람",
+        "access": "액세스",
+        "accessValue": "{access, select, personal {나만} private {소유자만} shared {사용자 또는 그룹과 공유됨} other {조직 라이브러리}}",
+        "tools": "통합 및 작업",
+        "instructionsOnly": "에이전트에 지침만 추가합니다"
+      },
+      "contents": {
+        "version": "{name} v{version} · 현재",
+        "edit": "편집",
+        "cancel": "취소",
+        "saveVersion": "버전 저장",
+        "saving": "저장 중…",
+        "addFile": "파일 추가",
+        "removeFile": "{name} 제거",
+        "editorLabel": "SKILL.md",
+        "noPreview": "Onyx는 SKILL.md의 텍스트만 표시합니다. 이 파일은 스킬의 일부입니다.",
+        "addedFile": "버전 저장을 누르면 이 파일이 스킬에 추가됩니다.",
+        "errors": {
+          "frontmatter": "SKILL.md는 이름과 설명이 있는 --- 블록으로 시작해야 합니다.",
+          "description": "SKILL.md의 --- 블록에 설명을 추가하세요.",
+          "name": "이름은 \"{name}\"(으)로 유지해야 합니다.",
+          "skillMd": "SKILL.md는 편집기에서 수정하세요. 여기에는 보조 파일만 추가합니다."
+        },
+        "loadFailed": "이 스킬의 내용을 불러올 수 없습니다.",
+        "retry": "다시 시도"
+      },
+      "required": {
+        "label": "필수",
+        "tooltip": "관리자가 이 스킬을 필수로 지정해서 끌 수 없습니다."
       }
     },
     "search": "검색"

@@ -16438,12 +16438,7 @@
         "importSubmit": {
           "label": "Skill importieren"
         },
-        "importTitle": "Diesen Skill importieren?",
-        "replaceBody": "Dieser Upload muss denselben Skill-Namen verwenden. Wenn Sie fortfahren, werden die Beschreibung, die Anweisungen und die Dateien durch das hochgeladene Paket ersetzt.",
-        "replaceSubmit": {
-          "label": "Inhalt ersetzen"
-        },
-        "replaceTitle": "Skill-Inhalt ersetzen?"
+        "importTitle": "Diesen Skill importieren?"
       },
       "delete": {
         "button": {
@@ -16458,7 +16453,7 @@
         "pendingLabel": "Wird gelöscht..."
       },
       "details": {
-        "description": "Legen Sie fest, wann und wie Craft diesen Skill verwenden soll.",
+        "description": "Legen Sie fest, wann und wie der Agent diesen Skill verwendet.",
         "descriptionField": {
           "description": "Beschreiben Sie, wann dieser Skill verwendet werden soll.",
           "placeholder": "Wobei hilft dieser Skill?",
@@ -16466,7 +16461,6 @@
         },
         "name": {
           "createDescription": "Verwenden Sie Kleinbuchstaben, Zahlen und einzelne Bindestriche.",
-          "lockedDescription": "Skill-Namen können nach der Erstellung nicht geändert werden.",
           "placeholder": "Benennen Sie Ihren Skill",
           "title": "Name"
         },
@@ -16484,14 +16478,11 @@
         "title": "Unterstützende Dateien"
       },
       "filesTooltip": {
-        "noPermission": "Sie haben keine Berechtigung, die Dateien dieses Skills zu aktualisieren.",
-        "saveFirst": "Speichern Sie die Detailänderungen, bevor Sie die Skill-Dateien aktualisieren.",
         "updating": "Skill-Dateien werden aktualisiert..."
       },
       "header": {
         "createDescription": "Erstellen Sie einen persönlichen Skill",
         "createTitle": "Skill erstellen",
-        "editDescription": "Aktualisieren Sie Skill-Details und -Dateien",
         "editTitle": "Skill bearbeiten",
         "save": {
           "label": "Speichern",
@@ -16511,14 +16502,13 @@
         "title": "Haben Sie bereits einen Skill?"
       },
       "instructions": {
-        "description": "Beschreiben Sie das Verhalten und den Workflow, den dieser Skill zu Craft hinzufügt.",
+        "description": "Beschreiben Sie das Verhalten und den Ablauf, die dieser Skill dem Agenten hinzufügt.",
         "emptyFallback": "Noch keine Anweisungen.",
         "placeholder": "Schreiben Sie die Skill-Anweisungen.",
         "title": "Anweisungen"
       },
       "loadError": {
-        "description": "Dieser Skill existiert möglicherweise nicht, ist integriert oder kann mit Ihrem Konto nicht bearbeitet werden.",
-        "title": "Skill nicht verfügbar"
+        "description": "Dieser Skill existiert möglicherweise nicht, ist integriert oder kann mit Ihrem Konto nicht bearbeitet werden."
       },
       "management": {
         "sharing": {
@@ -16532,25 +16522,19 @@
         "missingInstructions": "Fügen Sie vor dem Speichern Anweisungen hinzu.",
         "missingName": "Fügen Sie vor dem Speichern einen Namen hinzu.",
         "noChanges": "Es wurden keine Änderungen vorgenommen.",
-        "noPermission": "Sie haben keine Berechtigung, die Details dieses Skills zu bearbeiten.",
-        "savingChanges": "Änderungen werden gespeichert...",
         "savingSkill": "Skill wird gespeichert..."
       },
       "staleVersion": {
-        "description": "Jemand hat eine neuere Version gespeichert. Laden Sie neu, um sie zu erhalten. Ihre nicht gespeicherten Änderungen gehen verloren.",
         "reload": {
           "label": "Neu laden"
         },
-        "title": "Dieser Skill wurde geändert, seit Sie ihn geöffnet haben"
+        "title": "Dieser Skill wurde geändert, seit Sie ihn geöffnet haben",
+        "description": "Jemand hat eine neuere Version gespeichert. Laden Sie neu, um sie zu erhalten. Ihre nicht gespeicherten Änderungen gehen verloren."
       },
       "toasts": {
         "created": "„{name}“ erstellt",
         "deleteFailed": "Skill konnte nicht gelöscht werden",
         "deleted": "„{name}“ gelöscht",
-        "fileRemoveFailed": "Skill-Datei konnte nicht entfernt werden",
-        "fileRemoved": "„{path}“ entfernt",
-        "filesUpdateFailed": "Skill-Dateien konnten nicht aktualisiert werden",
-        "filesUpdated": "Dateien für „{name}“ aktualisiert",
         "importMissingSkillMd": "Importieren Sie eine SKILL.md, eine ZIP-Datei oder einen Ordner mit SKILL.md.",
         "inspectFailed": "Skill-Paket konnte nicht geprüft werden",
         "saveFailed": "Skill konnte nicht gespeichert werden",
@@ -16828,11 +16812,7 @@
           "ariaLabel": "Version {number} wiederherstellen",
           "successToast": "Version {number} als Version {newNumber} wiederhergestellt.",
           "unchangedToast": "Version {number} hat dieselben Dateien wie die aktuelle Version.",
-          "failedToast": "Diese Version konnte nicht wiederhergestellt werden.",
-          "unsavedChanges": {
-            "title": "Speichern Sie zuerst Ihre Änderungen",
-            "description": "Speichern oder verwerfen Sie die Änderungen im Editor, bevor Sie eine Version wiederherstellen."
-          }
+          "failedToast": "Diese Version konnte nicht wiederhergestellt werden."
         },
         "loadError": {
           "title": "Versionen konnten nicht geladen werden",
@@ -17364,6 +17344,62 @@
       "noMatches": {
         "title": "Keine passenden Plugins",
         "clear": "Alle Plugins anzeigen"
+      }
+    },
+    "skillPage": {
+      "title": "Skill",
+      "back": "Skills",
+      "meta": "{owner} · v{version}{published, select, none {} other { · v{published} ist für Ihre Organisation live}} · aktualisiert am {updated}",
+      "ownerYou": "von Ihnen",
+      "ownerEmail": "von {email}",
+      "ownerYouTitle": "Sie",
+      "fromOrganization": "Aus der Organisationsbibliothek",
+      "copyLink": "Link kopieren",
+      "share": "Teilen",
+      "menu": "Mehr",
+      "edit": "Bearbeiten",
+      "remove": "Entfernen",
+      "add": "Hinzufügen",
+      "switch": "{name} verwenden",
+      "loadFailed": "Dieser Skill ist für Sie nicht verfügbar.",
+      "tabs": {
+        "overview": "Übersicht",
+        "contents": "Inhalt",
+        "versions": "Versionen",
+        "contentsCount": "Inhalt · {count}"
+      },
+      "overview": {
+        "description": "Beschreibung",
+        "noDescription": "Keine Beschreibung.",
+        "createdBy": "Erstellt von",
+        "access": "Zugriff",
+        "accessValue": "{access, select, personal {Nur Sie} private {Nur der Besitzer} shared {Mit Personen oder Gruppen geteilt} other {Organisationsbibliothek}}",
+        "tools": "Integrationen und Aktionen",
+        "instructionsOnly": "Fügt dem Agenten nur Anweisungen hinzu"
+      },
+      "contents": {
+        "version": "{name} v{version} · aktuell",
+        "edit": "Bearbeiten",
+        "cancel": "Abbrechen",
+        "saveVersion": "Version speichern",
+        "saving": "Wird gespeichert…",
+        "addFile": "Datei hinzufügen",
+        "removeFile": "{name} entfernen",
+        "editorLabel": "SKILL.md",
+        "noPreview": "Onyx zeigt nur den Text von SKILL.md. Diese Datei gehört zum Skill.",
+        "addedFile": "„Version speichern“ fügt diese Datei dem Skill hinzu.",
+        "errors": {
+          "frontmatter": "SKILL.md muss mit einem ---‑Block beginnen, der den Namen und die Beschreibung enthält.",
+          "description": "Fügen Sie dem ---‑Block von SKILL.md eine Beschreibung hinzu.",
+          "name": "Der Name muss „{name}“ bleiben.",
+          "skillMd": "Bearbeiten Sie SKILL.md im Editor. Fügen Sie hier nur zusätzliche Dateien hinzu."
+        },
+        "loadFailed": "Der Inhalt dieses Skills konnte nicht geladen werden.",
+        "retry": "Erneut versuchen"
+      },
+      "required": {
+        "label": "Erforderlich",
+        "tooltip": "Ihr Administrator schreibt diesen Skill vor, daher können Sie ihn nicht deaktivieren."
       }
     },
     "search": "Suchen"

@@ -16438,12 +16438,7 @@
         "importSubmit": {
           "label": "导入技能"
         },
-        "importTitle": "导入此技能？",
-        "replaceBody": "此上传必须使用相同的技能名称。继续操作会用上传的包替换描述、说明和文件。",
-        "replaceSubmit": {
-          "label": "替换内容"
-        },
-        "replaceTitle": "替换技能内容？"
+        "importTitle": "导入此技能？"
       },
       "delete": {
         "button": {
@@ -16458,7 +16453,7 @@
         "pendingLabel": "正在删除..."
       },
       "details": {
-        "description": "定义 Craft 应在何时以及如何使用此技能。",
+        "description": "定义代理何时以及如何使用此技能。",
         "descriptionField": {
           "description": "描述何时应使用此技能。",
           "placeholder": "此技能有什么用途？",
@@ -16466,7 +16461,6 @@
         },
         "name": {
           "createDescription": "使用小写字母、数字和单个连字符。",
-          "lockedDescription": "技能名称创建后无法更改。",
           "placeholder": "为您的技能命名",
           "title": "名称"
         },
@@ -16484,14 +16478,11 @@
         "title": "支持文件"
       },
       "filesTooltip": {
-        "noPermission": "您没有更新此技能文件的权限。",
-        "saveFirst": "更新技能文件前请先保存详情更改。",
         "updating": "正在更新技能文件..."
       },
       "header": {
         "createDescription": "构建个人技能",
         "createTitle": "创建技能",
-        "editDescription": "更新技能详情和文件",
         "editTitle": "编辑技能",
         "save": {
           "label": "保存",
@@ -16511,14 +16502,13 @@
         "title": "已有技能？"
       },
       "instructions": {
-        "description": "编写此技能为 Craft 添加的行为和工作流程。",
+        "description": "编写此技能为代理添加的行为和工作流程。",
         "emptyFallback": "暂无说明。",
         "placeholder": "编写技能说明。",
         "title": "说明"
       },
       "loadError": {
-        "description": "此技能可能不存在、是内置技能，或您的账户无法编辑。",
-        "title": "技能不可用"
+        "description": "此技能可能不存在、是内置技能，或您的账户无法编辑。"
       },
       "management": {
         "sharing": {
@@ -16532,25 +16522,19 @@
         "missingInstructions": "保存前请添加说明。",
         "missingName": "保存前请添加名称。",
         "noChanges": "尚未进行任何更改。",
-        "noPermission": "您没有编辑此技能详情的权限。",
-        "savingChanges": "正在保存更改...",
         "savingSkill": "正在保存技能..."
       },
       "staleVersion": {
-        "description": "有人保存了更新的版本。请重新加载以获取。未保存的更改将丢失。",
         "reload": {
           "label": "重新加载"
         },
-        "title": "此技能在您打开后已被更改"
+        "title": "此技能在您打开后已被更改",
+        "description": "有人保存了更新的版本。请重新加载以获取。未保存的更改将丢失。"
       },
       "toasts": {
         "created": "已创建“{name}”",
         "deleteFailed": "删除技能失败",
         "deleted": "已删除“{name}”",
-        "fileRemoveFailed": "移除技能文件失败",
-        "fileRemoved": "已移除“{path}”",
-        "filesUpdateFailed": "更新技能文件失败",
-        "filesUpdated": "已更新“{name}”的文件",
         "importMissingSkillMd": "请导入 SKILL.md、ZIP 或包含 SKILL.md 的文件夹。",
         "inspectFailed": "检查技能包失败",
         "saveFailed": "保存技能失败",
@@ -16828,11 +16812,7 @@
           "ariaLabel": "恢复版本 {number}",
           "successToast": "已将版本 {number} 恢复为版本 {newNumber}。",
           "unchangedToast": "版本 {number} 的文件与当前版本相同。",
-          "failedToast": "无法恢复此版本。",
-          "unsavedChanges": {
-            "title": "请先保存更改",
-            "description": "在恢复版本之前，请保存或放弃编辑器中的更改。"
-          }
+          "failedToast": "无法恢复此版本。"
         },
         "loadError": {
           "title": "无法加载版本",
@@ -17364,6 +17344,62 @@
       "noMatches": {
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
+      }
+    },
+    "skillPage": {
+      "title": "技能",
+      "back": "技能",
+      "meta": "{owner} · v{version}{published, select, none {} other { · v{published} 已对你的组织上线}} · 更新于 {updated}",
+      "ownerYou": "由你",
+      "ownerEmail": "由 {email}",
+      "ownerYouTitle": "你",
+      "fromOrganization": "来自组织库",
+      "copyLink": "复制链接",
+      "share": "共享",
+      "menu": "更多",
+      "edit": "编辑",
+      "remove": "移除",
+      "add": "添加",
+      "switch": "使用 {name}",
+      "loadFailed": "你无法使用此技能。",
+      "tabs": {
+        "overview": "概览",
+        "contents": "内容",
+        "versions": "版本",
+        "contentsCount": "内容 · {count}"
+      },
+      "overview": {
+        "description": "描述",
+        "noDescription": "没有描述。",
+        "createdBy": "创建者",
+        "access": "访问权限",
+        "accessValue": "{access, select, personal {仅你} private {仅所有者} shared {与用户或群组共享} other {组织库}}",
+        "tools": "集成和操作",
+        "instructionsOnly": "仅为代理添加说明"
+      },
+      "contents": {
+        "version": "{name} v{version} · 当前",
+        "edit": "编辑",
+        "cancel": "取消",
+        "saveVersion": "保存版本",
+        "saving": "正在保存…",
+        "addFile": "添加文件",
+        "removeFile": "移除 {name}",
+        "editorLabel": "SKILL.md",
+        "noPreview": "Onyx 仅显示 SKILL.md 的文本。此文件是技能的一部分。",
+        "addedFile": "“保存版本”会将此文件添加到技能中。",
+        "errors": {
+          "frontmatter": "SKILL.md 必须以包含名称和描述的 --- 块开头。",
+          "description": "请在 SKILL.md 的 --- 块中添加描述。",
+          "name": "名称必须保持为“{name}”。",
+          "skillMd": "请在编辑器中编辑 SKILL.md。此处仅添加支持文件。"
+        },
+        "loadFailed": "无法加载此技能的内容。",
+        "retry": "重试"
+      },
+      "required": {
+        "label": "必需",
+        "tooltip": "你的管理员要求使用此技能，因此你无法将其关闭。"
       }
     },
     "search": "搜索"

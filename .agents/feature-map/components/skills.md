@@ -85,11 +85,26 @@
   only. It waits while the session is stale. The admin Skills page shows
   `SkillLimitUsersBanner` (`web/src/sections/skills/`) when
   `GET /skills/users-over-limit` lists users: the first 10, then a count.
-- **Skill dialog.** Owners and editors open custom cards in a single
-  Details/Sharing dialog. Share actions open its Sharing tab directly. Draft
-  sharing edits survive tab switches. Other recipients and built-in skills
-  keep a preview-only dialog. The sharing endpoint requires EDIT; do not
-  require that endpoint for a VIEW-only preview.
+- **Skill page.** A custom skill opens at `/app/customize/skills/[id]`
+  (`sections/customize/CustomizeSkillPage.tsx`): a header with the owner, the
+  current and published versions, Copy link, Share, a menu (Edit, Remove) and
+  the switch, or Add for a published skill the user has not turned on; tabs
+  Overview, Contents and Versions (owners and editors only). Contents
+  (`web/src/sections/customize/SkillContentsTab.tsx`) shows the files beside a viewer; Edit, or `?edit=1`,
+  edits SKILL.md as text (frontmatter `name` and `description`, then the
+  instructions) and stages added and removed files. Save Version sends a PATCH,
+  then each upload, then each removal, each with the version the step before
+  made as `base_version_id`, so one save can make several versions. The first
+  base is the version the edit started from, so a newer save by someone else
+  is refused (stale notice with Reload). A finished step leaves the staged
+  list, so Save retries only the rest. There is no file
+  content endpoint, so only SKILL.md shows text. `SkillEditorPage` only
+  creates a skill (`/app/customize/skills/new`).
+  The skill comes from `GET /skills`; only owners and editors read
+  `/skills/custom/{id}/edit` (it is 404 for a viewer), and a viewer reads the
+  instructions and the supporting file list from `/skills/{id}/preview`. `ShareSkillModal` holds only the
+  share settings. The admin Skills page opens the same skill page; built-in
+  skills keep a preview-only dialog.
 - **Access at import.** GitHub import and multiple-ZIP upload accept one set
   of sharing settings for the selection. The single-skill editor accepts
   sharing before creation. These use the same sharing checks as later edits.
@@ -706,7 +721,10 @@ the app from the same rule
     the edit gets 409 `PLUGIN_VERSION_STALE`. Skill responses return the plugin's
     `current_version_id`, read with the name and description; the editor
     returns the id of the version whose content it read, so the editor's base
-    always matches its fields. Routes no longer delete the
+    always matches its fields. An editor write (the PATCH, a file upload or
+    removal) returns the version it made, or its base when nothing changed,
+    not a later read: a save by someone else in between would otherwise
+    become the base of the next chained write and skip its stale check. Routes no longer delete the
     previous bundle, because older versions still point at it
     ([[#bundle-retention]]). Each new version stores `plugin_skill.skill_md`
     ([[#bundle-size-limits]]). `skills/metadata.py:frontmatter_for_jsonb`

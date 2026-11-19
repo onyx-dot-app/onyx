@@ -16438,12 +16438,7 @@
         "importSubmit": {
           "label": "Importar habilidade"
         },
-        "importTitle": "Importar esta habilidade?",
-        "replaceBody": "Este envio deve usar o mesmo nome de habilidade. Continuar substituirá a descrição, as instruções e os arquivos pelo pacote enviado.",
-        "replaceSubmit": {
-          "label": "Substituir conteúdo"
-        },
-        "replaceTitle": "Substituir o conteúdo da habilidade?"
+        "importTitle": "Importar esta habilidade?"
       },
       "delete": {
         "button": {
@@ -16458,7 +16453,7 @@
         "pendingLabel": "Excluindo..."
       },
       "details": {
-        "description": "Defina quando e como o Craft deve usar esta habilidade.",
+        "description": "Defina quando e como o agente deve usar esta habilidade.",
         "descriptionField": {
           "description": "Descreva quando esta habilidade deve ser usada.",
           "placeholder": "Com o que esta habilidade ajuda?",
@@ -16466,7 +16461,6 @@
         },
         "name": {
           "createDescription": "Use letras minúsculas, números e hifens simples.",
-          "lockedDescription": "Os nomes das habilidades não podem ser alterados após a criação.",
           "placeholder": "Dê um nome à sua habilidade",
           "title": "Nome"
         },
@@ -16484,14 +16478,11 @@
         "title": "Arquivos de apoio"
       },
       "filesTooltip": {
-        "noPermission": "Você não tem permissão para atualizar os arquivos desta habilidade.",
-        "saveFirst": "Salve as alterações dos detalhes antes de atualizar os arquivos da habilidade.",
         "updating": "Atualizando os arquivos da habilidade..."
       },
       "header": {
         "createDescription": "Crie uma habilidade pessoal",
         "createTitle": "Criar habilidade",
-        "editDescription": "Atualize os detalhes e arquivos da habilidade",
         "editTitle": "Editar habilidade",
         "save": {
           "label": "Salvar",
@@ -16511,14 +16502,13 @@
         "title": "Já tem uma habilidade?"
       },
       "instructions": {
-        "description": "Escreva o comportamento e o fluxo de trabalho que esta habilidade adiciona ao Craft.",
+        "description": "Escreva o comportamento e o fluxo de trabalho que esta habilidade adiciona ao agente.",
         "emptyFallback": "Ainda não há instruções.",
         "placeholder": "Escreva as instruções da habilidade.",
         "title": "Instruções"
       },
       "loadError": {
-        "description": "Esta habilidade pode não existir, ser integrada ou não ser editável pela sua conta.",
-        "title": "Habilidade indisponível"
+        "description": "Esta habilidade pode não existir, ser integrada ou não ser editável pela sua conta."
       },
       "management": {
         "sharing": {
@@ -16532,25 +16522,19 @@
         "missingInstructions": "Adicione instruções antes de salvar.",
         "missingName": "Adicione um nome antes de salvar.",
         "noChanges": "Nenhuma alteração foi feita.",
-        "noPermission": "Você não tem permissão para editar os detalhes desta habilidade.",
-        "savingChanges": "Salvando as alterações...",
         "savingSkill": "Salvando a habilidade..."
       },
       "staleVersion": {
-        "description": "Alguém salvou uma versão mais recente. Recarregue para obtê-la. Suas alterações não salvas serão perdidas.",
         "reload": {
           "label": "Recarregar"
         },
-        "title": "Esta habilidade mudou desde que você a abriu"
+        "title": "Esta habilidade mudou desde que você a abriu",
+        "description": "Alguém salvou uma versão mais recente. Recarregue para obtê-la. Suas alterações não salvas serão perdidas."
       },
       "toasts": {
         "created": "\"{name}\" criada",
         "deleteFailed": "Falha ao excluir a habilidade",
         "deleted": "\"{name}\" excluída",
-        "fileRemoveFailed": "Falha ao remover o arquivo da habilidade",
-        "fileRemoved": "\"{path}\" removido",
-        "filesUpdateFailed": "Falha ao atualizar os arquivos da habilidade",
-        "filesUpdated": "Arquivos de \"{name}\" atualizados",
         "importMissingSkillMd": "Importe um SKILL.md, um ZIP ou uma pasta contendo SKILL.md.",
         "inspectFailed": "Falha ao inspecionar o pacote da habilidade",
         "saveFailed": "Falha ao salvar a habilidade",
@@ -16828,11 +16812,7 @@
           "ariaLabel": "Restaurar a versão {number}",
           "successToast": "Versão {number} restaurada como versão {newNumber}.",
           "unchangedToast": "A versão {number} tem os mesmos arquivos que a versão atual.",
-          "failedToast": "Não foi possível restaurar esta versão.",
-          "unsavedChanges": {
-            "title": "Salve suas alterações primeiro",
-            "description": "Salve ou descarte as alterações no editor antes de restaurar uma versão."
-          }
+          "failedToast": "Não foi possível restaurar esta versão."
         },
         "loadError": {
           "title": "Não foi possível carregar as versões",
@@ -17364,6 +17344,62 @@
       "noMatches": {
         "title": "Nenhum plugin correspondente",
         "clear": "Mostrar todos os plugins"
+      }
+    },
+    "skillPage": {
+      "title": "Habilidade",
+      "back": "Habilidades",
+      "meta": "{owner} · v{version}{published, select, none {} other { · v{published} está ativa na sua organização}} · atualizada em {updated}",
+      "ownerYou": "por você",
+      "ownerEmail": "por {email}",
+      "ownerYouTitle": "Você",
+      "fromOrganization": "Da biblioteca da organização",
+      "copyLink": "Copiar link",
+      "share": "Compartilhar",
+      "menu": "Mais",
+      "edit": "Editar",
+      "remove": "Remover",
+      "add": "Adicionar",
+      "switch": "Usar {name}",
+      "loadFailed": "Esta habilidade não está disponível para você.",
+      "tabs": {
+        "overview": "Visão geral",
+        "contents": "Conteúdo",
+        "versions": "Versões",
+        "contentsCount": "Conteúdo · {count}"
+      },
+      "overview": {
+        "description": "Descrição",
+        "noDescription": "Sem descrição.",
+        "createdBy": "Criada por",
+        "access": "Acesso",
+        "accessValue": "{access, select, personal {Somente você} private {Somente o proprietário} shared {Compartilhada com pessoas ou grupos} other {Biblioteca da organização}}",
+        "tools": "Integrações e ações",
+        "instructionsOnly": "Só adiciona instruções para o agente"
+      },
+      "contents": {
+        "version": "{name} v{version} · atual",
+        "edit": "Editar",
+        "cancel": "Cancelar",
+        "saveVersion": "Salvar versão",
+        "saving": "Salvando…",
+        "addFile": "Adicionar arquivo",
+        "removeFile": "Remover {name}",
+        "editorLabel": "SKILL.md",
+        "noPreview": "O Onyx mostra apenas o texto do SKILL.md. Este arquivo faz parte da habilidade.",
+        "addedFile": "Salvar versão adiciona este arquivo à habilidade.",
+        "errors": {
+          "frontmatter": "O SKILL.md deve começar com um bloco --- que contenha o nome e a descrição.",
+          "description": "Adicione uma descrição ao bloco --- do SKILL.md.",
+          "name": "O nome deve continuar \"{name}\".",
+          "skillMd": "Edite o SKILL.md no editor. Adicione aqui apenas arquivos de apoio."
+        },
+        "loadFailed": "Não foi possível carregar o conteúdo desta habilidade.",
+        "retry": "Tentar novamente"
+      },
+      "required": {
+        "label": "Obrigatória",
+        "tooltip": "Seu administrador exige esta habilidade, então você não pode desativá-la."
       }
     },
     "search": "Pesquisar"

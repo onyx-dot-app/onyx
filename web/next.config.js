@@ -206,7 +206,7 @@ const nextConfig = {
       },
       {
         source: "/craft/v1/skills/edit/:id",
-        destination: "/app/customize/skills/:id",
+        destination: "/app/customize/skills/:id?edit=1",
         permanent: false,
       },
       {

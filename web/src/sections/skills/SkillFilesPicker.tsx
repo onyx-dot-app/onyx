@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
 import { useDropzone } from "react-dropzone";
 import {
@@ -22,6 +23,9 @@ interface SkillFilesPickerProps {
   onChange: (upload: PreparedSkillFilesUpload) => void;
   onError: (message: string) => void;
   onPreparingChange?: (preparing: boolean) => void;
+  /** Only the button, with no drop area or prompt. */
+  compact?: boolean;
+  buttonIcon?: IconFunctionComponent;
 }
 
 export default function SkillFilesPicker({
@@ -34,6 +38,8 @@ export default function SkillFilesPicker({
   onChange,
   onError,
   onPreparingChange,
+  compact = false,
+  buttonIcon = SvgUploadCloud,
 }: SkillFilesPickerProps) {
   const t = useTranslations("skills.sections");
   const [preparing, setPreparing] = useState(false);
@@ -66,6 +72,35 @@ export default function SkillFilesPicker({
     onDropAccepted: handleDrop,
   });
 
+  const button = (
+    <Button
+      type="button"
+      icon={buttonIcon}
+      prominence={compact ? "tertiary" : "secondary"}
+      disabled={disabled || preparing}
+      onClick={open}
+    >
+      {preparing
+        ? t("filesPicker.preparing.label")
+        : (busyLabel ?? buttonLabel ?? t("filesPicker.addFiles.label"))}
+    </Button>
+  );
+  const input = (
+    <input
+      {...getInputProps({
+        "aria-label": inputLabel ?? t("filesPicker.input.ariaLabel"),
+      })}
+    />
+  );
+
+  if (compact)
+    return (
+      <div {...getRootProps()}>
+        {input}
+        {button}
+      </div>
+    );
+
   return (
     <div
       {...getRootProps()}
@@ -76,22 +111,8 @@ export default function SkillFilesPicker({
           : "border-border-01"
       )}
     >
-      <input
-        {...getInputProps({
-          "aria-label": inputLabel ?? t("filesPicker.input.ariaLabel"),
-        })}
-      />
-      <Button
-        type="button"
-        icon={SvgUploadCloud}
-        prominence="secondary"
-        disabled={disabled || preparing}
-        onClick={open}
-      >
-        {preparing
-          ? t("filesPicker.preparing.label")
-          : (busyLabel ?? buttonLabel ?? t("filesPicker.addFiles.label"))}
-      </Button>
+      {input}
+      {button}
       <Text font="secondary-body" color="text-03">
         {value?.displayName ?? prompt ?? t("filesPicker.prompt.description")}
       </Text>

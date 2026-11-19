@@ -245,8 +245,7 @@ export default function CustomizeSkillsPage() {
     : 0;
 
   function open(skill: Skill): void {
-    // The editor refuses a viewer, so a viewer reads the preview.
-    if (skill.source === "builtin" || !canEdit(skill)) setPreview(skill);
+    if (skill.source === "builtin") setPreview(skill);
     else navigation.go(skillHref(skill.id));
   }
 
@@ -370,7 +369,6 @@ export default function CustomizeSkillsPage() {
         <ShareSkillModal
           mode="edit"
           skillId={shareTarget.id}
-          initialTab="sharing"
           fallbackTitle={shareTarget.name}
           open
           onClose={() => setShareTarget(null)}

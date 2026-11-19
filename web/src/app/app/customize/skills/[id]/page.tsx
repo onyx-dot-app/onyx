@@ -1,10 +1,10 @@
-import SkillEditorPage from "@/views/SkillEditorPage";
+import CustomizeSkillPage from "@/sections/customize/CustomizeSkillPage";
 
-export interface PageProps {
+interface PageProps {
   params: Promise<{ id: string }>;
 }
 
 export default async function Page({ params }: PageProps) {
   const { id } = await params;
-  return <SkillEditorPage skillId={id} />;
+  return <CustomizeSkillPage key={id} skillId={id} />;
 }

@@ -263,10 +263,10 @@ def skill_preview_response(
         )
 
     access = _access_of(skill, load_plugin_access([skill.id], user.id, db_session))
+    contents = read_version_contents(access.version_user_runs, db_session)
     return SkillPreviewResponse.from_custom(
         skill,
         access,
-        instructions_markdown=read_version_contents(
-            access.version_user_runs, db_session
-        ).instructions_markdown,
+        instructions_markdown=contents.instructions_markdown,
+        files=contents.files,
     )

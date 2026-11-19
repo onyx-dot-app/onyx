@@ -139,15 +139,6 @@ describe("SkillVersionsTab", () => {
     expect(mockToast.error).not.toHaveBeenCalled();
   });
 
-  it("turns Restore off while the open editor has unsaved changes", async () => {
-    renderTab({ restoreBlocked: true });
-
-    expect(
-      await screen.findByRole("button", { name: "Restore version 2" })
-    ).toBeDisabled();
-    expect(screen.getByText("Save your changes first")).toBeVisible();
-  });
-
   it("opens a preview of a version from its row", async () => {
     const user = setupUser();
     renderTab();
