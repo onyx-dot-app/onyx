@@ -1,6 +1,6 @@
 /**
  * Page Object Model for the Skills tab of Customize (/app/customize/skills)
- * and the skill dialog that its row menu opens.
+ * and the page of one skill.
  */
 
 import { type Locator, type Page, expect } from "@playwright/test";
@@ -25,29 +25,42 @@ export class SkillsLibraryPage {
     return this.page.getByRole("button", { name: `Open ${name}`, exact: true });
   }
 
-  get dialog(): Locator {
-    return this.page.getByRole("dialog");
+  async openSkill(name: string): Promise<void> {
+    await this.card(name).click();
+    await expect(this.page).toHaveURL(
+      /\/app\/customize\/skills\/[0-9a-f-]{36}/
+    );
   }
 
-  async openSkill(name: string): Promise<void> {
+  /** Opens the Contents tab of a skill in edit mode. */
+  async openContentsEditor(skillId: string): Promise<void> {
+    await this.page.goto(`${SKILLS_PATH}/${skillId}?edit=1`);
+    await expect(this.skillMdEditor).toBeVisible();
+  }
+
+  get skillMdEditor(): Locator {
+    return this.page.getByRole("textbox", { name: "SKILL.md", exact: true });
+  }
+
+  /** Replaces the text of SKILL.md and saves a version. */
+  async saveSkillMd(text: string): Promise<void> {
+    await this.skillMdEditor.fill(text);
     await this.page
-      .getByRole("button", { name: `More for ${name}`, exact: true })
+      .getByRole("button", { name: "Save Version", exact: true })
       .click();
-    await this.page
-      .getByRole("menuitem", { name: "Share", exact: true })
-      .click();
-    await expect(this.dialog).toBeVisible();
+    await expect(this.page).toHaveURL(/\?tab=contents$/);
+    await expect(this.skillMdEditor).toHaveCount(0);
   }
 
   async openVersionsTab(): Promise<void> {
-    await this.dialog.getByRole("tab", { name: "Versions" }).click();
+    await this.page.getByRole("tab", { name: "Versions" }).click();
     await expect(
-      this.dialog.getByRole("table", { name: "Skill versions" })
+      this.page.getByRole("table", { name: "Skill versions" })
     ).toBeVisible();
   }
 
   versionRow(versionNumber: number): Locator {
-    return this.dialog.getByRole("row", {
+    return this.page.getByRole("row", {
       name: `Preview version ${versionNumber}`,
     });
   }
@@ -64,7 +77,7 @@ export class SkillsLibraryPage {
   }
 
   get publishUpdateButton(): Locator {
-    return this.dialog.getByRole("button", { name: "Publish update" });
+    return this.page.getByRole("button", { name: "Publish update" });
   }
 
   async publishUpdate(): Promise<void> {
@@ -84,8 +97,8 @@ export class SkillsLibraryPage {
     await expect(this.page.getByText(text, { exact: true })).toBeVisible();
   }
 
-  async closeDialog(): Promise<void> {
-    await this.page.keyboard.press("Escape");
-    await expect(this.dialog).toBeHidden();
+  async backToList(): Promise<void> {
+    await this.page.getByRole("link", { name: "Skills", exact: true }).click();
+    await expect(this.page).toHaveURL(/\/app\/customize\/skills$/);
   }
 }

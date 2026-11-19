@@ -70,7 +70,7 @@ import {
 import { useSettings } from "@/lib/settings/hooks";
 import { useSkillEnablement } from "@/lib/skills/hooks";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
-import { newSkillHref, skillHref } from "@/lib/customize/paths";
+import { newSkillHref, skillEditHref, skillHref } from "@/lib/customize/paths";
 
 interface SkillsPageProps {
   admin?: boolean;
@@ -154,7 +154,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   }
 
   function handleEdit(item: CustomSkillCardItem) {
-    navigation.go(skillHref(item.id));
+    navigation.go(skillEditHref(item.id));
   }
 
   const loadedItems = useMemo<SkillCardItem[]>(() => {
@@ -633,7 +633,12 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                               deleteModal.toggle(true);
                             }}
                             onClick={(skill) =>
-                              setSkillDialog({ item: skill, tab: "details" })
+                              skill.source === "custom"
+                                ? navigation.go(skillHref(skill.id))
+                                : setSkillDialog({
+                                    item: skill,
+                                    tab: "details",
+                                  })
                             }
                             onEnabledChange={(skill, enabled) =>
                               void enablement.setEnabled(skill, enabled)
@@ -749,7 +754,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         <ShareSkillModal
           mode="edit"
           skillId={editablePreview.id}
-          initialTab={skillDialog?.tab ?? "details"}
           fallbackTitle={editablePreview.name}
           open
           onClose={() => setSkillDialog(null)}

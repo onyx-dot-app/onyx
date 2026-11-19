@@ -236,7 +236,7 @@ describe("SkillsPage preference toggles", () => {
     mockStageSkillCreationDraft.mockReturnValue("draft-id");
   });
 
-  it("keeps shared skill previews available without sharing-management permission", async () => {
+  it("opens a custom skill on its skill page", async () => {
     skillsData.customs = [
       {
         ...customSkill("shared-id", "shared-skill"),
@@ -248,7 +248,9 @@ describe("SkillsPage preference toggles", () => {
     await user.click(
       screen.getByRole("button", { name: "Preview shared-skill" })
     );
-    expect(screen.getByRole("dialog")).toHaveTextContent("Skill instructions");
+    await waitFor(() =>
+      expect(window.location.pathname).toBe("/app/customize/skills/shared-id")
+    );
   });
 
   it("keeps built-in skills collapsed until expanded", async () => {

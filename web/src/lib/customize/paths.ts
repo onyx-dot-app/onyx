@@ -14,6 +14,12 @@ export function skillHref(skillId: string): `/app/customize/skills/${string}` {
   return `/app/customize/skills/${skillId}`;
 }
 
+export function skillEditHref(
+  skillId: string
+): `/app/customize/skills/${string}` {
+  return `/app/customize/skills/${skillId}?edit=1`;
+}
+
 export function newSkillHref(
   draftId?: string
 ): `/app/customize/skills/new${string}` {

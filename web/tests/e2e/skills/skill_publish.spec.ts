@@ -62,7 +62,7 @@ test.describe("skill publishing", () => {
         saved.current_version_number,
         "Published"
       );
-      await skills.closeDialog();
+      await skills.backToList();
       await skills.expectCardUnpublishedChanges(name, false);
     } finally {
       await author.context().close();

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { InputBar } from "@tests/e2e/chat/InputBar";
 import { CustomizePage } from "@tests/e2e/pages/CustomizePage";
+import { SkillsLibraryPage } from "@tests/e2e/pages/SkillsLibraryPage";
 import {
   createSkill,
   deleteSkill,
@@ -23,7 +24,7 @@ test.describe("Customize page", () => {
       ["/craft/v1/skills/new?draft=abc", "/app/customize/skills/new?draft=abc"],
       [
         `/craft/v1/skills/edit/${PLUGIN_ID}`,
-        `/app/customize/skills/${PLUGIN_ID}`,
+        `/app/customize/skills/${PLUGIN_ID}?edit=1`,
       ],
       ["/craft/v1/plugins?connect=7", "/app/customize/integrations?connect=7"],
     ];
@@ -54,6 +55,27 @@ test.describe("Customize page", () => {
 
       await customize.openTab("Integrations");
       await customize.openTab("Plugins");
+    } finally {
+      await deleteSkill(page.request, created.id);
+    }
+  });
+
+  test("a skill is edited in place on its Contents tab", async ({ page }) => {
+    const name = uniqueSkillName("inline");
+    const created = await createSkill(page.request, name, "Do the task.");
+    try {
+      const skills = new SkillsLibraryPage(page);
+      await skills.openContentsEditor(created.id);
+      const text = await skills.skillMdEditor.inputValue();
+      await skills.saveSkillMd(
+        text.replace("Do the task.", "Do the task in three steps.")
+      );
+      const saved = await page.request.get(
+        `/api/skills/custom/${created.id}/edit`
+      );
+      expect((await saved.json()).instructions_markdown).toBe(
+        "Do the task in three steps."
+      );
     } finally {
       await deleteSkill(page.request, created.id);
     }

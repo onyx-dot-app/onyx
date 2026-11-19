@@ -126,6 +126,8 @@ export interface SkillPreview {
   description: string;
   author_email: string | null;
   instructions_markdown: string;
+  /** The supporting files of the version the user runs; empty for a built-in. */
+  files: SkillBundleFile[];
 }
 
 export type SkillEditableDetail = CustomSkill & {

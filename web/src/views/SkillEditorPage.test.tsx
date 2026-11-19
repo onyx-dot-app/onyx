@@ -10,19 +10,16 @@ import {
 } from "@tests/setup/test-utils";
 import SkillEditorPage from "@/views/SkillEditorPage";
 import type { SkillEditableDetail } from "@/lib/skills/types";
-import { SWR_KEYS } from "@/lib/swr-keys";
+import { toast } from "@opal/layouts";
+import messages from "@/i18n/messages/en.json";
 
 const mockCreateCustomSkillFromEditor = jest.fn();
-const mockDeleteUserSkill = jest.fn();
-const mockPatchUserSkill = jest.fn();
-const mockRemoveUserSkillFile = jest.fn();
 const mockRouterReplace = jest.fn();
 const mockGetSkillCreationDraft = jest.fn();
 const mockDiscardSkillCreationDraft = jest.fn();
 const mockMutate = jest.fn();
 const mockRefreshSkill = jest.fn();
 const mockUseSWR = jest.fn();
-let mockRestoredSkill: SkillEditableDetail;
 
 async function fillRequiredFields(user: ReturnType<typeof setupUser>) {
   await user.type(
@@ -37,45 +34,6 @@ async function fillRequiredFields(user: ReturnType<typeof setupUser>) {
     screen.getByPlaceholderText("Write the skill instructions."),
     "Write the requested report."
   );
-}
-
-function existingSkill(
-  overrides: Partial<SkillEditableDetail> = {}
-): SkillEditableDetail {
-  return {
-    source: "custom",
-    id: "existing-id",
-    name: "report-writer",
-    description: "Writes reports",
-    instructions_markdown: "Write the requested report.",
-    files: [],
-    is_available: true,
-    unavailable_reason: null,
-    is_valid: true,
-    is_personal: true,
-    enabled: true,
-    can_toggle: true,
-    installation_policy: "AVAILABLE",
-    default_installation_policy: "AVAILABLE",
-    can_delete: true,
-    group_summaries: [],
-    required_for_user: false,
-    author_user_id: "author-id",
-    author_email: "author@example.com",
-    owner: { id: "author-id", email: "author@example.com" },
-    ownership_vacant: false,
-    created_at: null,
-    updated_at: null,
-    user_shares: [],
-    group_shares: [],
-    public_permission: null,
-    user_permission: "OWNER",
-    current_version_id: "version-1",
-    current_version_number: 1,
-    published_version_number: null,
-    pending_version_number: null,
-    ...overrides,
-  };
 }
 
 jest.mock("next/navigation", () => ({
@@ -93,7 +51,7 @@ jest.mock("swr", () => ({
   __esModule: true,
   ...jest.requireActual("swr"),
   default: (...args: unknown[]) => mockUseSWR(...args),
-  useSWRConfig: () => ({ mutate: mockMutate }),
+  useSWRConfig: () => ({ mutate: mockMutate, cache: new Map() }),
 }));
 
 jest.mock("@/lib/skills/creationDraft", () => ({
@@ -107,17 +65,7 @@ jest.mock("@/sections/modals/skills/ShareSkillModal", () => ({
   __esModule: true,
   default: (props: ComponentProps<typeof ShareSkillModal>) => {
     if (!props.open) return null;
-    if (props.mode === "edit") {
-      return (
-        <button
-          type="button"
-          disabled={props.restoreBlocked}
-          onClick={() => props.onVersionRestored?.(mockRestoredSkill)}
-        >
-          Restore version 1
-        </button>
-      );
-    }
+    if (props.mode === "edit") return null;
     return (
       <button
         type="button"
@@ -136,9 +84,6 @@ jest.mock("@/lib/skills/api", () => ({
   ...jest.requireActual("@/lib/skills/api"),
   createCustomSkillFromEditor: (...args: unknown[]) =>
     mockCreateCustomSkillFromEditor(...args),
-  deleteUserSkill: (...args: unknown[]) => mockDeleteUserSkill(...args),
-  patchUserSkill: (...args: unknown[]) => mockPatchUserSkill(...args),
-  removeUserSkillFile: (...args: unknown[]) => mockRemoveUserSkillFile(...args),
 }));
 
 jest.mock("@/sections/skills/SkillFilesPicker", () => ({
@@ -149,10 +94,6 @@ jest.mock("@/sections/skills/SkillFilesPicker", () => ({
 describe("SkillEditorPage", () => {
   beforeEach(() => {
     mockCreateCustomSkillFromEditor.mockReset();
-    mockDeleteUserSkill.mockReset();
-    mockDeleteUserSkill.mockResolvedValue(undefined);
-    mockPatchUserSkill.mockReset();
-    mockRemoveUserSkillFile.mockReset();
     mockRouterReplace.mockReset();
     window.history.replaceState(null, "", "/");
     mockGetSkillCreationDraft.mockReset();
@@ -196,9 +137,9 @@ describe("SkillEditorPage", () => {
     );
   });
 
-  it("navigates after creation even when the skill-list refresh fails", async () => {
+  it("reports a failed skill-list refresh and still opens the new skill", async () => {
     const user = setupUser();
-    const consoleError = jest.spyOn(console, "error").mockImplementation();
+    const toastError = jest.spyOn(toast, "error");
     mockCreateCustomSkillFromEditor.mockResolvedValue({
       id: "created-id",
       name: "report-writer",
@@ -211,16 +152,15 @@ describe("SkillEditorPage", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
-      expect(mockRouterReplace).toHaveBeenCalledWith("/app/customize/skills")
-    );
-    await waitFor(() =>
-      expect(consoleError).toHaveBeenCalledWith(
-        "Failed to refresh skill data after creation",
-        expect.any(Error)
+      expect(mockRouterReplace).toHaveBeenCalledWith(
+        "/app/customize/skills/created-id"
       )
     );
+    expect(toastError).toHaveBeenCalledWith(
+      messages.skills.page.toasts.listRefreshFailed
+    );
     expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledTimes(1);
-    consoleError.mockRestore();
+    toastError.mockRestore();
   });
 
   it("prefills an uploaded draft without creating it until Save", async () => {
@@ -273,7 +213,9 @@ describe("SkillEditorPage", () => {
       )
     );
     expect(mockDiscardSkillCreationDraft).toHaveBeenCalledWith("draft-id");
-    expect(mockRouterReplace).toHaveBeenCalledWith("/app/customize/skills");
+    expect(mockRouterReplace).toHaveBeenCalledWith(
+      "/app/customize/skills/created-id"
+    );
   });
 
   it("confirms before canceling a create page with unsaved changes", async () => {
@@ -296,367 +238,6 @@ describe("SkillEditorPage", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(mockRouterReplace).toHaveBeenCalledWith("/app/customize/skills");
-  });
-
-  it("sends the base version and offers a reload when it is stale", async () => {
-    const user = setupUser();
-    const skill = existingSkill();
-    mockUseSWR.mockReturnValue({
-      data: skill,
-      error: undefined,
-      isLoading: false,
-      mutate: mockRefreshSkill,
-    });
-    const stale = Object.assign(new Error("This skill changed."), {
-      errorCode: "PLUGIN_VERSION_STALE",
-    });
-    mockPatchUserSkill.mockRejectedValue(stale);
-    mockRefreshSkill.mockResolvedValue({
-      ...skill,
-      description: "Saved by someone else",
-      current_version_id: "version-2",
-    });
-
-    render(<SkillEditorPage skillId={skill.id} />);
-    const description = screen.getByPlaceholderText(
-      "What does this skill help with?"
-    );
-    await user.clear(description);
-    await user.type(description, "My edit");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(mockPatchUserSkill).toHaveBeenCalledWith(skill.id, {
-      description: "My edit",
-      instructions_markdown: skill.instructions_markdown,
-      base_version_id: "version-1",
-    });
-    expect(
-      await screen.findByText("This skill changed since you opened it")
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Reload" }));
-    await waitFor(() =>
-      expect(
-        screen.queryByText("This skill changed since you opened it")
-      ).not.toBeInTheDocument()
-    );
-    expect(
-      screen.getByPlaceholderText("What does this skill help with?")
-    ).toHaveValue("Saved by someone else");
-  });
-
-  it("keeps the base version of the form after a background refresh", async () => {
-    const user = setupUser();
-    const skill = existingSkill();
-    mockUseSWR.mockReturnValue({
-      data: skill,
-      error: undefined,
-      isLoading: false,
-      mutate: mockRefreshSkill,
-    });
-    mockPatchUserSkill.mockResolvedValue(skill);
-
-    const { rerender } = render(<SkillEditorPage skillId={skill.id} />);
-    // A focus refresh loads a version saved by someone else. The form still
-    // shows version 1.
-    mockUseSWR.mockReturnValue({
-      data: {
-        ...skill,
-        description: "Saved by someone else",
-        current_version_id: "version-2",
-      },
-      error: undefined,
-      isLoading: false,
-      mutate: mockRefreshSkill,
-    });
-    rerender(<SkillEditorPage skillId={skill.id} />);
-
-    const description = screen.getByPlaceholderText(
-      "What does this skill help with?"
-    );
-    await user.clear(description);
-    await user.type(description, "My edit");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(mockPatchUserSkill).toHaveBeenCalledWith(skill.id, {
-      description: "My edit",
-      instructions_markdown: skill.instructions_markdown,
-      base_version_id: "version-1",
-    });
-  });
-
-  it("takes the fields and version that a save reloads", async () => {
-    const user = setupUser();
-    const skill = existingSkill();
-    mockUseSWR.mockReturnValue({
-      data: skill,
-      error: undefined,
-      isLoading: false,
-      mutate: mockRefreshSkill,
-    });
-    mockPatchUserSkill.mockResolvedValue({
-      ...skill,
-      description: "Saved by someone else",
-      current_version_id: "version-3",
-    });
-    // Another save committed after this one, before the response.
-    const newer = existingSkill({
-      description: "Saved by someone else",
-      instructions_markdown: "Their instructions.",
-      current_version_id: "version-3",
-    });
-    mockRefreshSkill.mockResolvedValue(newer);
-
-    render(<SkillEditorPage skillId={skill.id} />);
-    const description = screen.getByPlaceholderText(
-      "What does this skill help with?"
-    );
-    await user.clear(description);
-    await user.type(description, "My edit");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() =>
-      expect(description).toHaveValue("Saved by someone else")
-    );
-    expect(
-      screen.getByPlaceholderText("Write the skill instructions.")
-    ).toHaveValue("Their instructions.");
-  });
-
-  it("takes the fields of the version a file removal returns", async () => {
-    const user = setupUser();
-    const skill = existingSkill({
-      files: [{ path: "notes.txt", size: 5 }],
-    });
-    mockUseSWR.mockReturnValue({
-      data: skill,
-      error: undefined,
-      isLoading: false,
-      mutate: mockRefreshSkill,
-    });
-    mockRemoveUserSkillFile.mockResolvedValue(
-      existingSkill({
-        description: "Saved by someone else",
-        current_version_id: "version-3",
-      })
-    );
-    mockPatchUserSkill.mockResolvedValue(skill);
-
-    render(<SkillEditorPage skillId={skill.id} />);
-    await user.click(screen.getByRole("button", { name: "Remove notes.txt" }));
-    expect(mockRemoveUserSkillFile).toHaveBeenCalledWith(
-      skill.id,
-      "notes.txt",
-      "version-1"
-    );
-    const description = screen.getByPlaceholderText(
-      "What does this skill help with?"
-    );
-    await waitFor(() =>
-      expect(description).toHaveValue("Saved by someone else")
-    );
-  });
-
-  it("takes the fields and base version of a restored version", async () => {
-    const user = setupUser();
-    const skill = existingSkill({ current_version_id: "version-2" });
-    mockRestoredSkill = existingSkill({
-      instructions_markdown: "Restored instructions.",
-      current_version_id: "version-3",
-    });
-    mockUseSWR.mockReturnValue({
-      data: skill,
-      error: undefined,
-      isLoading: false,
-      mutate: mockRefreshSkill,
-    });
-    mockPatchUserSkill.mockResolvedValue(mockRestoredSkill);
-
-    render(<SkillEditorPage skillId={skill.id} />);
-    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
-    await user.click(screen.getByRole("button", { name: "Restore version 1" }));
-
-    const instructions = screen.getByPlaceholderText(
-      "Write the skill instructions."
-    );
-    await waitFor(() =>
-      expect(instructions).toHaveValue("Restored instructions.")
-    );
-    expect(mockRefreshSkill).toHaveBeenCalledWith(mockRestoredSkill, {
-      revalidate: false,
-    });
-    await user.type(instructions, " More.");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(mockPatchUserSkill).toHaveBeenCalledWith(
-        skill.id,
-        expect.objectContaining({ base_version_id: "version-3" })
-      )
-    );
-  });
-
-  it("blocks a restore while the editor has unsaved changes", async () => {
-    const user = setupUser();
-    const skill = existingSkill();
-    mockUseSWR.mockReturnValue({
-      data: skill,
-      error: undefined,
-      isLoading: false,
-      mutate: mockRefreshSkill,
-    });
-
-    render(<SkillEditorPage skillId={skill.id} />);
-    await user.type(
-      screen.getByPlaceholderText("Write the skill instructions."),
-      " More."
-    );
-    await user.click(screen.getByRole("button", { name: "Edit sharing" }));
-
-    expect(
-      screen.getByRole("button", { name: "Restore version 1" })
-    ).toBeDisabled();
-  });
-
-  it("keeps the old base version when the reload after a save fails", async () => {
-    const user = setupUser();
-    const skill = existingSkill();
-    mockUseSWR.mockReturnValue({
-      data: skill,
-      error: undefined,
-      isLoading: false,
-      mutate: mockRefreshSkill,
-    });
-    // The response can name a newer save than these fields.
-    mockPatchUserSkill.mockResolvedValue({
-      ...skill,
-      description: "My edit",
-      current_version_id: "version-3",
-    });
-    mockRefreshSkill.mockImplementation((data?: SkillEditableDetail) =>
-      data === undefined
-        ? Promise.reject(new Error("Network error"))
-        : Promise.resolve(data)
-    );
-    jest.spyOn(console, "error").mockImplementation(() => {});
-
-    render(<SkillEditorPage skillId={skill.id} />);
-    const description = screen.getByPlaceholderText(
-      "What does this skill help with?"
-    );
-    await user.clear(description);
-    await user.type(description, "My edit");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(mockPatchUserSkill).toHaveBeenCalledTimes(1));
-
-    await user.type(description, " again");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() => expect(mockPatchUserSkill).toHaveBeenCalledTimes(2));
-    expect(mockPatchUserSkill).toHaveBeenLastCalledWith(skill.id, {
-      description: "My edit again",
-      instructions_markdown: skill.instructions_markdown,
-      base_version_id: "version-1",
-    });
-  });
-
-  it("locks the fields while a file removal is pending", async () => {
-    const user = setupUser();
-    const skill = existingSkill({
-      files: [{ path: "notes.txt", size: 5 }],
-    });
-    mockUseSWR.mockReturnValue({
-      data: skill,
-      error: undefined,
-      isLoading: false,
-      mutate: mockRefreshSkill,
-    });
-    let finishRemoval: (value: SkillEditableDetail) => void = () => {};
-    mockRemoveUserSkillFile.mockReturnValue(
-      new Promise<SkillEditableDetail>((resolve) => {
-        finishRemoval = resolve;
-      })
-    );
-
-    render(<SkillEditorPage skillId={skill.id} />);
-    await user.click(screen.getByRole("button", { name: "Remove notes.txt" }));
-
-    expect(
-      screen.getByPlaceholderText("What does this skill help with?")
-    ).toBeDisabled();
-    finishRemoval(existingSkill({ current_version_id: "version-2" }));
-    await waitFor(() =>
-      expect(
-        screen.getByPlaceholderText("What does this skill help with?")
-      ).toBeEnabled()
-    );
-  });
-
-  it("confirms before leaving an existing skill with unsaved changes", async () => {
-    const user = setupUser();
-    const skill = existingSkill();
-    mockUseSWR.mockReturnValue({
-      data: skill,
-      error: undefined,
-      isLoading: false,
-      mutate: mockRefreshSkill,
-    });
-
-    render(<SkillEditorPage skillId={skill.id} />);
-    const description = screen.getByPlaceholderText(
-      "What does this skill help with?"
-    );
-    await user.clear(description);
-    await user.type(description, "Writes detailed reports");
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-
-    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
-    expect(mockRouterReplace).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(mockRouterReplace).toHaveBeenCalledWith("/app/customize/skills");
-    expect(mockDiscardSkillCreationDraft).not.toHaveBeenCalled();
-  });
-
-  it("refreshes skill lists and returns after skill deletion", async () => {
-    const user = setupUser();
-    const skill = existingSkill();
-    mockUseSWR.mockReturnValue({
-      data: skill,
-      error: undefined,
-      isLoading: false,
-      mutate: mockRefreshSkill,
-    });
-
-    render(<SkillEditorPage skillId={skill.id} />);
-    await user.click(screen.getByRole("button", { name: "Delete skill" }));
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-
-    await waitFor(() =>
-      expect(mockRouterReplace).toHaveBeenCalledWith("/app/customize/skills")
-    );
-    expect(mockDeleteUserSkill).toHaveBeenCalledWith(skill.id);
-    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.userSkills);
-    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
-  });
-
-  it("keeps sharing in the header without a management section", () => {
-    const skill = existingSkill({
-      is_personal: false,
-      public_permission: "VIEWER",
-    });
-    mockUseSWR.mockReturnValue({
-      data: skill,
-      error: undefined,
-      isLoading: false,
-      mutate: mockRefreshSkill,
-    });
-
-    render(<SkillEditorPage skillId={skill.id} />);
-
-    expect(screen.queryByText("Management")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Edit sharing" })
-    ).toBeInTheDocument();
   });
 
   it("requires confirmation before retrying a same-name creation disabled", async () => {
@@ -701,7 +282,9 @@ describe("SkillEditorPage", () => {
         }),
         undefined
       );
-      expect(mockRouterReplace).toHaveBeenCalledWith("/app/customize/skills");
+      expect(mockRouterReplace).toHaveBeenCalledWith(
+        "/app/customize/skills/created-id"
+      );
     });
     expect(
       screen.queryByText("Create another “report-writer” skill?")

@@ -16431,12 +16431,7 @@
         "importSubmit": {
           "label": "استيراد المهارة"
         },
-        "importTitle": "استيراد هذه المهارة؟",
-        "replaceBody": "يجب أن يستخدم هذا الرفع اسم المهارة نفسه. ستؤدي المتابعة إلى استبدال الوصف والتعليمات والملفات بالحزمة المرفوعة.",
-        "replaceSubmit": {
-          "label": "استبدال المحتوى"
-        },
-        "replaceTitle": "استبدال محتوى المهارة؟"
+        "importTitle": "استيراد هذه المهارة؟"
       },
       "delete": {
         "button": {
@@ -16451,7 +16446,7 @@
         "pendingLabel": "جارٍ الحذف..."
       },
       "details": {
-        "description": "حدد متى وكيف ينبغي لـ Craft استخدام هذه المهارة.",
+        "description": "حدّد متى وكيف يستخدم الوكيل هذه المهارة.",
         "descriptionField": {
           "description": "صف متى ينبغي استخدام هذه المهارة.",
           "placeholder": "بمَ تساعد هذه المهارة؟",
@@ -16459,7 +16454,6 @@
         },
         "name": {
           "createDescription": "استخدم أحرفًا صغيرة وأرقامًا وشرطات مفردة.",
-          "lockedDescription": "لا يمكن تغيير أسماء المهارات بعد إنشائها.",
           "placeholder": "سمِّ مهارتك",
           "title": "الاسم"
         },
@@ -16477,14 +16471,11 @@
         "title": "الملفات الداعمة"
       },
       "filesTooltip": {
-        "noPermission": "ليست لديك صلاحية تحديث ملفات هذه المهارة.",
-        "saveFirst": "احفظ تغييرات التفاصيل قبل تحديث ملفات المهارة.",
         "updating": "جارٍ تحديث ملفات المهارة..."
       },
       "header": {
         "createDescription": "أنشئ مهارة شخصية",
         "createTitle": "إنشاء مهارة",
-        "editDescription": "حدّث تفاصيل المهارة وملفاتها",
         "editTitle": "تعديل المهارة",
         "save": {
           "label": "حفظ",
@@ -16504,14 +16495,13 @@
         "title": "لديك مهارة موجودة بالفعل؟"
       },
       "instructions": {
-        "description": "اكتب السلوك وسير العمل الذي تضيفه هذه المهارة إلى Craft.",
+        "description": "اكتب السلوك وسير العمل اللذين تضيفهما هذه المهارة إلى الوكيل.",
         "emptyFallback": "لا توجد تعليمات بعد.",
         "placeholder": "اكتب تعليمات المهارة.",
         "title": "التعليمات"
       },
       "loadError": {
-        "description": "قد لا تكون هذه المهارة موجودة، أو قد تكون مدمجة، أو قد لا يكون حسابك قادرًا على تعديلها.",
-        "title": "المهارة غير متاحة"
+        "description": "قد لا تكون هذه المهارة موجودة، أو قد تكون مدمجة، أو قد لا يكون حسابك قادرًا على تعديلها."
       },
       "management": {
         "sharing": {
@@ -16525,25 +16515,19 @@
         "missingInstructions": "أضف تعليمات قبل الحفظ.",
         "missingName": "أضف اسمًا قبل الحفظ.",
         "noChanges": "لم يتم إجراء أي تغييرات.",
-        "noPermission": "ليست لديك صلاحية تعديل تفاصيل هذه المهارة.",
-        "savingChanges": "جارٍ حفظ التغييرات...",
         "savingSkill": "جارٍ حفظ المهارة..."
       },
       "staleVersion": {
-        "description": "حفظ شخص ما إصدارًا أحدث. أعد التحميل للحصول عليه. ستفقد التغييرات غير المحفوظة.",
         "reload": {
           "label": "إعادة التحميل"
         },
-        "title": "تغيّرت هذه المهارة منذ فتحها"
+        "title": "تغيّرت هذه المهارة منذ فتحها",
+        "description": "حفظ شخص ما إصدارًا أحدث. أعد التحميل للحصول عليه. ستفقد التغييرات غير المحفوظة."
       },
       "toasts": {
         "created": "تم إنشاء \"{name}\"",
         "deleteFailed": "فشل حذف المهارة",
         "deleted": "تم حذف \"{name}\"",
-        "fileRemoveFailed": "فشلت إزالة ملف المهارة",
-        "fileRemoved": "تمت إزالة \"{path}\"",
-        "filesUpdateFailed": "فشل تحديث ملفات المهارة",
-        "filesUpdated": "تم تحديث ملفات \"{name}\"",
         "importMissingSkillMd": "استورد ملف SKILL.md أو ملف ZIP أو مجلدًا يحتوي على SKILL.md.",
         "inspectFailed": "فشل فحص حزمة المهارة",
         "saveFailed": "فشل حفظ المهارة",
@@ -16821,11 +16805,7 @@
           "ariaLabel": "استعادة الإصدار {number}",
           "successToast": "تمت استعادة الإصدار {number} بصفته الإصدار {newNumber}.",
           "unchangedToast": "الإصدار {number} له نفس ملفات الإصدار الحالي.",
-          "failedToast": "تعذّرت استعادة هذا الإصدار.",
-          "unsavedChanges": {
-            "title": "احفظ تغييراتك أولاً",
-            "description": "احفظ التغييرات في المحرر أو تجاهلها قبل استعادة إصدار."
-          }
+          "failedToast": "تعذّرت استعادة هذا الإصدار."
         },
         "loadError": {
           "title": "تعذّر تحميل الإصدارات",
@@ -17357,6 +17337,63 @@
       "noMatches": {
         "title": "لا توجد إضافات مطابقة",
         "clear": "عرض كل الإضافات"
+      }
+    },
+    "skillPage": {
+      "title": "مهارة",
+      "back": "المهارات",
+      "meta": "{owner} · v{version}{published, select, none {} other { · الإصدار v{published} متاح لمؤسستك}} · حُدّثت {updated}",
+      "ownerYou": "بواسطتك",
+      "ownerEmail": "بواسطة {email}",
+      "ownerYouTitle": "أنت",
+      "fromOrganization": "من مكتبة المؤسسة",
+      "copyLink": "نسخ الرابط",
+      "share": "مشاركة",
+      "menu": "المزيد",
+      "edit": "تعديل",
+      "remove": "إزالة",
+      "add": "إضافة",
+      "switch": "استخدام {name}",
+      "loadFailed": "هذه المهارة غير متاحة لك.",
+      "tabs": {
+        "overview": "نظرة عامة",
+        "contents": "المحتويات",
+        "versions": "الإصدارات",
+        "contentsCount": "المحتويات · {count}"
+      },
+      "overview": {
+        "description": "الوصف",
+        "noDescription": "لا يوجد وصف.",
+        "createdBy": "أنشأها",
+        "access": "الوصول",
+        "accessValue": "{access, select, personal {أنت فقط} private {المالك فقط} shared {مشاركة مع أشخاص أو مجموعات} other {مكتبة المؤسسة}}",
+        "tools": "عمليات التكامل والإجراءات",
+        "instructionsOnly": "تضيف تعليمات للوكيل فقط"
+      },
+      "contents": {
+        "version": "{name} الإصدار {version} · الحالي",
+        "edit": "تعديل",
+        "cancel": "إلغاء",
+        "saveVersion": "حفظ الإصدار",
+        "saving": "جارٍ الحفظ…",
+        "addFile": "إضافة ملف",
+        "removeFile": "إزالة {name}",
+        "editorLabel": "SKILL.md",
+        "noPreview": "يعرض Onyx نص SKILL.md فقط. هذا الملف جزء من المهارة.",
+        "addedFile": "يضيف «حفظ الإصدار» هذا الملف إلى المهارة.",
+        "errors": {
+          "frontmatter": "يجب أن يبدأ SKILL.md بكتلة --- تحتوي على الاسم والوصف.",
+          "description": "أضف وصفًا إلى كتلة --- في SKILL.md.",
+          "name": "يجب أن يبقى الاسم \"{name}\".",
+          "skillMd": "عدّل SKILL.md في المحرر. أضف الملفات الداعمة فقط هنا."
+        },
+        "loadFailed": "تعذّر تحميل محتويات هذه المهارة.",
+        "retry": "إعادة المحاولة",
+        "reloadFailed": "تعذّر تحميل أحدث إصدار. تم الاحتفاظ بتغييراتك. جرّب إعادة التحميل مرة أخرى."
+      },
+      "required": {
+        "label": "مطلوبة",
+        "tooltip": "يتطلب المسؤول هذه المهارة، لذا لا يمكنك إيقافها."
       }
     },
     "search": "بحث"

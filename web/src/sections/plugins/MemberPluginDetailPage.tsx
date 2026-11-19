@@ -209,19 +209,13 @@ export default function MemberPluginDetailPage({
     locale
   ).find((candidate) => candidate.id === pluginId);
   const loading = skills.isLoading || integrations.isLoading;
-  const onlySkill =
+  const skillOnlyId =
     skills.data &&
     integrations.data &&
     entry !== undefined &&
     entry.skills.length === 1 &&
     entry.integrations.length === 0
-      ? entry.skills[0]
-      : undefined;
-  // The editor is the skill page here, and it refuses a viewer.
-  const skillOnlyId =
-    onlySkill?.user_permission === "OWNER" ||
-    onlySkill?.user_permission === "EDITOR"
-      ? onlySkill.id
+      ? entry.skills[0]?.id
       : undefined;
   useEffect(() => {
     if (skillOnlyId) navigation.go(skillHref(skillOnlyId), { replace: true });

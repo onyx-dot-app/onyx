@@ -327,7 +327,6 @@ export default function CustomizePluginsPage() {
         <ShareSkillModal
           mode="edit"
           skillId={sharing.skills[0].id}
-          initialTab="sharing"
           fallbackTitle={sharing.name}
           open
           onClose={() => setSharing(null)}

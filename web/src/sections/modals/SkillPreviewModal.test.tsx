@@ -22,6 +22,7 @@ function preview(overrides: Partial<SkillPreview> = {}): SkillPreview {
     description: "Looks up CRM records",
     author_email: "owner@example.com",
     instructions_markdown: "Look up the requested record.",
+    files: [],
     ...overrides,
   };
 }

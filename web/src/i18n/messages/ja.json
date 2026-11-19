@@ -16431,12 +16431,7 @@
         "importSubmit": {
           "label": "スキルをインポート"
         },
-        "importTitle": "このスキルをインポートしますか？",
-        "replaceBody": "このアップロードは同じスキル名を使用する必要があります。続行すると、説明、指示、ファイルがアップロードされたバンドルに置き換えられます。",
-        "replaceSubmit": {
-          "label": "内容を置き換え"
-        },
-        "replaceTitle": "スキルの内容を置き換えますか？"
+        "importTitle": "このスキルをインポートしますか？"
       },
       "delete": {
         "button": {
@@ -16451,7 +16446,7 @@
         "pendingLabel": "削除中..."
       },
       "details": {
-        "description": "Craftがこのスキルをいつどのように使用するかを定義します。",
+        "description": "エージェントがこのスキルをいつ、どのように使うかを定義します。",
         "descriptionField": {
           "description": "このスキルをいつ使用すべきかを説明します。",
           "placeholder": "このスキルは何に役立ちますか？",
@@ -16459,7 +16454,6 @@
         },
         "name": {
           "createDescription": "小文字、数字、単一のハイフンを使用してください。",
-          "lockedDescription": "スキル名は作成後に変更できません。",
           "placeholder": "スキルに名前を付ける",
           "title": "名前"
         },
@@ -16477,14 +16471,11 @@
         "title": "サポートファイル"
       },
       "filesTooltip": {
-        "noPermission": "このスキルのファイルを更新する権限がありません。",
-        "saveFirst": "スキルファイルを更新する前に詳細の変更を保存してください。",
         "updating": "スキルファイルを更新中..."
       },
       "header": {
         "createDescription": "個人スキルを作成",
         "createTitle": "スキルを作成",
-        "editDescription": "スキルの詳細とファイルを更新",
         "editTitle": "スキルを編集",
         "save": {
           "label": "保存",
@@ -16504,14 +16495,13 @@
         "title": "既存のスキルがありますか？"
       },
       "instructions": {
-        "description": "このスキルがCraftに追加する動作とワークフローを記述します。",
+        "description": "このスキルがエージェントに追加する動作とワークフローを記述します。",
         "emptyFallback": "まだ指示がありません。",
         "placeholder": "スキルの指示を書いてください。",
         "title": "指示"
       },
       "loadError": {
-        "description": "このスキルは存在しないか、組み込みであるか、またはお使いのアカウントでは編集できない可能性があります。",
-        "title": "スキルを利用できません"
+        "description": "このスキルは存在しないか、組み込みであるか、またはお使いのアカウントでは編集できない可能性があります。"
       },
       "management": {
         "sharing": {
@@ -16525,25 +16515,19 @@
         "missingInstructions": "保存する前に指示を追加してください。",
         "missingName": "保存する前に名前を追加してください。",
         "noChanges": "変更はありません。",
-        "noPermission": "このスキルの詳細を編集する権限がありません。",
-        "savingChanges": "変更を保存中...",
         "savingSkill": "スキルを保存中..."
       },
       "staleVersion": {
-        "description": "他のユーザーが新しいバージョンを保存しました。再読み込みして取得してください。保存されていない変更は失われます。",
         "reload": {
           "label": "再読み込み"
         },
-        "title": "このスキルは開いた後に変更されました"
+        "title": "このスキルは開いた後に変更されました",
+        "description": "他のユーザーが新しいバージョンを保存しました。再読み込みして取得してください。保存されていない変更は失われます。"
       },
       "toasts": {
         "created": "「{name}」を作成しました",
         "deleteFailed": "スキルの削除に失敗しました",
         "deleted": "「{name}」を削除しました",
-        "fileRemoveFailed": "スキルファイルの削除に失敗しました",
-        "fileRemoved": "「{path}」を削除しました",
-        "filesUpdateFailed": "スキルファイルの更新に失敗しました",
-        "filesUpdated": "「{name}」のファイルを更新しました",
         "importMissingSkillMd": "SKILL.md、ZIP、またはSKILL.mdを含むフォルダをインポートしてください。",
         "inspectFailed": "スキルバンドルの検査に失敗しました",
         "saveFailed": "スキルの保存に失敗しました",
@@ -16821,11 +16805,7 @@
           "ariaLabel": "バージョン {number} を復元",
           "successToast": "バージョン {number} をバージョン {newNumber} として復元しました。",
           "unchangedToast": "バージョン {number} のファイルは現在のバージョンと同じです。",
-          "failedToast": "このバージョンを復元できませんでした。",
-          "unsavedChanges": {
-            "title": "先に変更を保存してください",
-            "description": "バージョンを復元する前に、エディターの変更を保存するか破棄してください。"
-          }
+          "failedToast": "このバージョンを復元できませんでした。"
         },
         "loadError": {
           "title": "バージョンを読み込めませんでした",
@@ -17357,6 +17337,63 @@
       "noMatches": {
         "title": "一致するプラグインはありません",
         "clear": "すべてのプラグインを表示"
+      }
+    },
+    "skillPage": {
+      "title": "スキル",
+      "back": "スキル",
+      "meta": "{owner} · v{version}{published, select, none {} other { · v{published} が組織で公開中}} · {updated} に更新",
+      "ownerYou": "自分",
+      "ownerEmail": "{email} が作成",
+      "ownerYouTitle": "自分",
+      "fromOrganization": "組織ライブラリから",
+      "copyLink": "リンクをコピー",
+      "share": "共有",
+      "menu": "その他",
+      "edit": "編集",
+      "remove": "削除",
+      "add": "追加",
+      "switch": "{name} を使用",
+      "loadFailed": "このスキルは利用できません。",
+      "tabs": {
+        "overview": "概要",
+        "contents": "コンテンツ",
+        "versions": "バージョン",
+        "contentsCount": "コンテンツ · {count}"
+      },
+      "overview": {
+        "description": "説明",
+        "noDescription": "説明はありません。",
+        "createdBy": "作成者",
+        "access": "アクセス",
+        "accessValue": "{access, select, personal {自分のみ} private {所有者のみ} shared {ユーザーまたはグループと共有} other {組織ライブラリ}}",
+        "tools": "インテグレーションとアクション",
+        "instructionsOnly": "エージェントへの指示のみを追加します"
+      },
+      "contents": {
+        "version": "{name} v{version} · 現在",
+        "edit": "編集",
+        "cancel": "キャンセル",
+        "saveVersion": "バージョンを保存",
+        "saving": "保存中…",
+        "addFile": "ファイルを追加",
+        "removeFile": "{name} を削除",
+        "editorLabel": "SKILL.md",
+        "noPreview": "Onyx は SKILL.md のテキストのみを表示します。このファイルはスキルの一部です。",
+        "addedFile": "「バージョンを保存」でこのファイルがスキルに追加されます。",
+        "errors": {
+          "frontmatter": "SKILL.md は名前と説明を含む --- ブロックで始める必要があります。",
+          "description": "SKILL.md の --- ブロックに説明を追加してください。",
+          "name": "名前は「{name}」のままにしてください。",
+          "skillMd": "SKILL.md はエディターで編集してください。ここでは補助ファイルのみを追加します。"
+        },
+        "loadFailed": "このスキルの内容を読み込めませんでした。",
+        "retry": "再試行",
+        "reloadFailed": "最新バージョンを読み込めませんでした。変更は保持されています。もう一度再読み込みしてください。"
+      },
+      "required": {
+        "label": "必須",
+        "tooltip": "管理者がこのスキルを必須にしているため、オフにできません。"
       }
     },
     "search": "検索"

@@ -16431,12 +16431,7 @@
         "importSubmit": {
           "label": "Importer la compétence"
         },
-        "importTitle": "Importer cette compétence ?",
-        "replaceBody": "Ce téléversement doit utiliser le même nom de compétence. Continuer remplacera la description, les instructions et les fichiers par le paquet téléversé.",
-        "replaceSubmit": {
-          "label": "Remplacer le contenu"
-        },
-        "replaceTitle": "Remplacer le contenu de la compétence ?"
+        "importTitle": "Importer cette compétence ?"
       },
       "delete": {
         "button": {
@@ -16451,7 +16446,7 @@
         "pendingLabel": "Suppression..."
       },
       "details": {
-        "description": "Définissez quand et comment Craft doit utiliser cette compétence.",
+        "description": "Définissez quand et comment l’agent doit utiliser cette compétence.",
         "descriptionField": {
           "description": "Décrivez quand cette compétence doit être utilisée.",
           "placeholder": "À quoi sert cette compétence ?",
@@ -16459,7 +16454,6 @@
         },
         "name": {
           "createDescription": "Utilisez des lettres minuscules, des chiffres et des traits d'union simples.",
-          "lockedDescription": "Les noms de compétences ne peuvent pas être modifiés après la création.",
           "placeholder": "Nommez votre compétence",
           "title": "Nom"
         },
@@ -16477,14 +16471,11 @@
         "title": "Fichiers annexes"
       },
       "filesTooltip": {
-        "noPermission": "Vous n'avez pas l'autorisation de mettre à jour les fichiers de cette compétence.",
-        "saveFirst": "Enregistrez les modifications des détails avant de mettre à jour les fichiers de la compétence.",
         "updating": "Mise à jour des fichiers de la compétence..."
       },
       "header": {
         "createDescription": "Créez une compétence personnelle",
         "createTitle": "Créer une compétence",
-        "editDescription": "Mettez à jour les détails et fichiers de la compétence",
         "editTitle": "Modifier la compétence",
         "save": {
           "label": "Enregistrer",
@@ -16504,14 +16495,13 @@
         "title": "Vous avez déjà une compétence ?"
       },
       "instructions": {
-        "description": "Décrivez le comportement et le flux de travail que cette compétence ajoute à Craft.",
+        "description": "Décrivez le comportement et le flux de travail que cette compétence ajoute à l’agent.",
         "emptyFallback": "Pas encore d'instructions.",
         "placeholder": "Rédigez les instructions de la compétence.",
         "title": "Instructions"
       },
       "loadError": {
-        "description": "Cette compétence n'existe peut-être pas, est peut-être intégrée ou n'est peut-être pas modifiable avec votre compte.",
-        "title": "Compétence indisponible"
+        "description": "Cette compétence n'existe peut-être pas, est peut-être intégrée ou n'est peut-être pas modifiable avec votre compte."
       },
       "management": {
         "sharing": {
@@ -16525,25 +16515,19 @@
         "missingInstructions": "Ajoutez des instructions avant d'enregistrer.",
         "missingName": "Ajoutez un nom avant d'enregistrer.",
         "noChanges": "Aucune modification n'a été apportée.",
-        "noPermission": "Vous n'avez pas l'autorisation de modifier les détails de cette compétence.",
-        "savingChanges": "Enregistrement des modifications...",
         "savingSkill": "Enregistrement de la compétence..."
       },
       "staleVersion": {
-        "description": "Quelqu’un a enregistré une version plus récente. Rechargez pour l’obtenir. Vos modifications non enregistrées seront perdues.",
         "reload": {
           "label": "Recharger"
         },
-        "title": "Cette compétence a changé depuis son ouverture"
+        "title": "Cette compétence a changé depuis son ouverture",
+        "description": "Quelqu’un a enregistré une version plus récente. Rechargez pour l’obtenir. Vos modifications non enregistrées seront perdues."
       },
       "toasts": {
         "created": "« {name} » créée",
         "deleteFailed": "Échec de la suppression de la compétence",
         "deleted": "« {name} » supprimée",
-        "fileRemoveFailed": "Échec de la suppression du fichier de la compétence",
-        "fileRemoved": "« {path} » supprimé",
-        "filesUpdateFailed": "Échec de la mise à jour des fichiers de la compétence",
-        "filesUpdated": "Fichiers de « {name} » mis à jour",
         "importMissingSkillMd": "Importez un SKILL.md, un ZIP ou un dossier contenant SKILL.md.",
         "inspectFailed": "Échec de l'inspection du paquet de compétence",
         "saveFailed": "Échec de l'enregistrement de la compétence",
@@ -16821,11 +16805,7 @@
           "ariaLabel": "Restaurer la version {number}",
           "successToast": "Version {number} restaurée en tant que version {newNumber}.",
           "unchangedToast": "La version {number} a les mêmes fichiers que la version actuelle.",
-          "failedToast": "Impossible de restaurer cette version.",
-          "unsavedChanges": {
-            "title": "Enregistrez d'abord vos modifications",
-            "description": "Enregistrez ou annulez les modifications de l'éditeur avant de restaurer une version."
-          }
+          "failedToast": "Impossible de restaurer cette version."
         },
         "loadError": {
           "title": "Impossible de charger les versions",
@@ -17357,6 +17337,63 @@
       "noMatches": {
         "title": "Aucun plugin correspondant",
         "clear": "Afficher tous les plugins"
+      }
+    },
+    "skillPage": {
+      "title": "Compétence",
+      "back": "Compétences",
+      "meta": "{owner} · v{version}{published, select, none {} other { · v{published} est en ligne pour votre organisation}} · mise à jour le {updated}",
+      "ownerYou": "par vous",
+      "ownerEmail": "par {email}",
+      "ownerYouTitle": "Vous",
+      "fromOrganization": "De la bibliothèque de l’organisation",
+      "copyLink": "Copier le lien",
+      "share": "Partager",
+      "menu": "Plus",
+      "edit": "Modifier",
+      "remove": "Supprimer",
+      "add": "Ajouter",
+      "switch": "Utiliser {name}",
+      "loadFailed": "Cette compétence ne vous est pas disponible.",
+      "tabs": {
+        "overview": "Aperçu",
+        "contents": "Contenu",
+        "versions": "Versions",
+        "contentsCount": "Contenu · {count}"
+      },
+      "overview": {
+        "description": "Description",
+        "noDescription": "Aucune description.",
+        "createdBy": "Créée par",
+        "access": "Accès",
+        "accessValue": "{access, select, personal {Vous seul} private {Le propriétaire seulement} shared {Partagée avec des personnes ou des groupes} other {Bibliothèque de l’organisation}}",
+        "tools": "Intégrations et actions",
+        "instructionsOnly": "Ajoute seulement des instructions pour l’agent"
+      },
+      "contents": {
+        "version": "{name} v{version} · actuelle",
+        "edit": "Modifier",
+        "cancel": "Annuler",
+        "saveVersion": "Enregistrer la version",
+        "saving": "Enregistrement…",
+        "addFile": "Ajouter un fichier",
+        "removeFile": "Supprimer {name}",
+        "editorLabel": "SKILL.md",
+        "noPreview": "Onyx affiche uniquement le texte de SKILL.md. Ce fichier fait partie de la compétence.",
+        "addedFile": "Enregistrer la version ajoute ce fichier à la compétence.",
+        "errors": {
+          "frontmatter": "SKILL.md doit commencer par un bloc --- qui contient le nom et la description.",
+          "description": "Ajoutez une description au bloc --- de SKILL.md.",
+          "name": "Le nom doit rester « {name} ».",
+          "skillMd": "Modifiez SKILL.md dans l’éditeur. Ajoutez ici uniquement des fichiers complémentaires."
+        },
+        "loadFailed": "Impossible de charger le contenu de cette compétence.",
+        "retry": "Réessayer",
+        "reloadFailed": "Impossible de charger la version la plus récente. Vos modifications sont conservées. Réessayez Recharger."
+      },
+      "required": {
+        "label": "Obligatoire",
+        "tooltip": "Votre administrateur exige cette compétence, vous ne pouvez donc pas la désactiver."
       }
     },
     "search": "Rechercher"

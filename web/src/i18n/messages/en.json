@@ -16431,12 +16431,7 @@
         "importSubmit": {
           "label": "Import skill"
         },
-        "importTitle": "Import this skill?",
-        "replaceBody": "This upload must use the same skill name. Continuing will replace the description, instructions, and files with the uploaded bundle.",
-        "replaceSubmit": {
-          "label": "Replace content"
-        },
-        "replaceTitle": "Replace skill content?"
+        "importTitle": "Import this skill?"
       },
       "delete": {
         "button": {
@@ -16451,7 +16446,7 @@
         "pendingLabel": "Deleting..."
       },
       "details": {
-        "description": "Define when and how Craft should use this skill.",
+        "description": "Define when and how the agent should use this skill.",
         "descriptionField": {
           "description": "Describe when this skill should be used.",
           "placeholder": "What does this skill help with?",
@@ -16459,7 +16454,6 @@
         },
         "name": {
           "createDescription": "Use lowercase letters, numbers, and single hyphens.",
-          "lockedDescription": "Skill names cannot be changed after creation.",
           "placeholder": "Name your skill",
           "title": "Name"
         },
@@ -16477,14 +16471,11 @@
         "title": "Supporting files"
       },
       "filesTooltip": {
-        "noPermission": "You don't have permission to update this skill's files.",
-        "saveFirst": "Save detail changes before updating skill files.",
         "updating": "Updating skill files..."
       },
       "header": {
         "createDescription": "Build a personal skill",
         "createTitle": "Create skill",
-        "editDescription": "Update skill details and files",
         "editTitle": "Edit skill",
         "save": {
           "label": "Save",
@@ -16504,14 +16495,13 @@
         "title": "Have an existing skill?"
       },
       "instructions": {
-        "description": "Write the behavior and workflow this skill adds to Craft.",
+        "description": "Write the behavior and workflow this skill adds to the agent.",
         "emptyFallback": "No instructions yet.",
         "placeholder": "Write the skill instructions.",
         "title": "Instructions"
       },
       "loadError": {
-        "description": "This skill may not exist, may be built-in, or may not be editable by your account.",
-        "title": "Skill unavailable"
+        "description": "This skill may not exist, may be built-in, or may not be editable by your account."
       },
       "management": {
         "sharing": {
@@ -16525,25 +16515,19 @@
         "missingInstructions": "Add instructions before saving.",
         "missingName": "Add a name before saving.",
         "noChanges": "No changes have been made.",
-        "noPermission": "You don't have permission to edit this skill's details.",
-        "savingChanges": "Saving changes...",
         "savingSkill": "Saving skill..."
       },
       "staleVersion": {
-        "description": "Someone saved a newer version. Reload to get it. Your unsaved changes will be lost.",
         "reload": {
           "label": "Reload"
         },
-        "title": "This skill changed since you opened it"
+        "title": "This skill changed since you opened it",
+        "description": "Someone saved a newer version. Reload to get it. Your unsaved changes will be lost."
       },
       "toasts": {
         "created": "Created \"{name}\"",
         "deleteFailed": "Failed to delete skill",
         "deleted": "Deleted \"{name}\"",
-        "fileRemoveFailed": "Failed to remove skill file",
-        "fileRemoved": "Removed \"{path}\"",
-        "filesUpdateFailed": "Failed to update skill files",
-        "filesUpdated": "Updated files for \"{name}\"",
         "importMissingSkillMd": "Import a SKILL.md, ZIP, or folder containing SKILL.md.",
         "inspectFailed": "Failed to inspect skill bundle",
         "saveFailed": "Failed to save skill",
@@ -16821,11 +16805,7 @@
           "ariaLabel": "Restore version {number}",
           "successToast": "Restored version {number} as version {newNumber}.",
           "unchangedToast": "Version {number} has the same files as the current version.",
-          "failedToast": "Couldn't restore this version.",
-          "unsavedChanges": {
-            "title": "Save your changes first",
-            "description": "Save or discard the changes in the editor before you restore a version."
-          }
+          "failedToast": "Couldn't restore this version."
         },
         "loadError": {
           "title": "Couldn't load versions",
@@ -17357,6 +17337,63 @@
       "noMatches": {
         "title": "No matching plugins",
         "clear": "Show all plugins"
+      }
+    },
+    "skillPage": {
+      "title": "Skill",
+      "back": "Skills",
+      "meta": "{owner} · v{version}{published, select, none {} other { · v{published} is live for your organization}} · updated {updated}",
+      "ownerYou": "by you",
+      "ownerEmail": "by {email}",
+      "ownerYouTitle": "You",
+      "fromOrganization": "From Organization library",
+      "copyLink": "Copy link",
+      "share": "Share",
+      "menu": "More",
+      "edit": "Edit",
+      "remove": "Remove",
+      "add": "Add",
+      "switch": "Use {name}",
+      "loadFailed": "This skill is not available to you.",
+      "tabs": {
+        "overview": "Overview",
+        "contents": "Contents",
+        "versions": "Versions",
+        "contentsCount": "Contents · {count}"
+      },
+      "overview": {
+        "description": "Description",
+        "noDescription": "No description.",
+        "createdBy": "Created by",
+        "access": "Access",
+        "accessValue": "{access, select, personal {Only you} private {Only the owner} shared {Shared with people or groups} other {Organization library}}",
+        "tools": "Integrations & actions",
+        "instructionsOnly": "Only adds instructions for the agent"
+      },
+      "contents": {
+        "version": "{name} v{version} · current",
+        "edit": "Edit",
+        "cancel": "Cancel",
+        "saveVersion": "Save Version",
+        "saving": "Saving…",
+        "addFile": "Add File",
+        "removeFile": "Remove {name}",
+        "editorLabel": "SKILL.md",
+        "noPreview": "Onyx shows the text of SKILL.md only. This file is part of the skill.",
+        "addedFile": "Save Version adds this file to the skill.",
+        "errors": {
+          "frontmatter": "SKILL.md must start with a --- block that holds the name and the description.",
+          "description": "Add a description to the --- block of SKILL.md.",
+          "name": "The name must stay \"{name}\".",
+          "skillMd": "Edit SKILL.md in the editor. Add only supporting files here."
+        },
+        "loadFailed": "Could not load the contents of this skill.",
+        "retry": "Retry",
+        "reloadFailed": "Could not load the newest version. Your changes are kept. Try Reload again."
+      },
+      "required": {
+        "label": "Required",
+        "tooltip": "Your admin requires this skill, so you cannot turn it off."
       }
     },
     "search": "Search"
