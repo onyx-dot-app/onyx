@@ -3,11 +3,14 @@ from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from onyx.configs.constants import ANONYMOUS_USER_UUID, DEFAULT_PERSONA_ID
 from onyx.db.models import User
 from onyx.server.features.suggested_questions import api
+from onyx.server.features.suggested_questions.config import SQ_QUESTION_ID_MAX_BYTES
 from onyx.server.features.suggested_questions.models import (
+    MarkUsedRequest,
     PersonSuggestions,
     ShownQuestion,
     SuggestionsState,
@@ -88,7 +91,7 @@ def test_the_anonymous_user_gets_nothing(calls: dict[str, Any]) -> None:
 def test_a_click_marks_the_question_used(calls: dict[str, Any]) -> None:
     alice = _user()
 
-    api.mark_suggested_question_used(api.MarkUsedRequest(question_id="q1"), alice)
+    api.mark_suggested_question_used(MarkUsedRequest(question_id="q1"), alice)
 
     assert calls["used"] == [(alice.id, "q1")]
 
@@ -98,6 +101,15 @@ def test_a_click_off_the_playground_stores_nothing(
 ) -> None:
     monkeypatch.setattr(api, "is_enabled", lambda: False)
 
-    api.mark_suggested_question_used(api.MarkUsedRequest(question_id="q1"), _user())
+    api.mark_suggested_question_used(MarkUsedRequest(question_id="q1"), _user())
 
     assert calls["used"] == []
+
+
+def test_a_click_id_is_limited_in_bytes_not_characters() -> None:
+    # "€" takes 3 bytes, so this is over the limit in fewer characters.
+    over = "€" * (SQ_QUESTION_ID_MAX_BYTES // 3 + 1)
+
+    with pytest.raises(ValidationError):
+        MarkUsedRequest(question_id=over)
+    assert MarkUsedRequest(question_id="a" * SQ_QUESTION_ID_MAX_BYTES).question_id

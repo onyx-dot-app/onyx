@@ -7,13 +7,12 @@ Salesforce connector holds a record only Alice may read, and Alice uploaded a
 file. The pool also keeps a question about a document that is gone."""
 
 from collections.abc import Generator
-from contextlib import suppress
+from contextlib import ExitStack, suppress
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import (
@@ -39,7 +38,7 @@ from onyx.server.features.suggested_questions.store import (
     save_private_questions,
 )
 from shared_configs.contextvars import get_current_tenant_id
-from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
+from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -70,6 +69,7 @@ def _clear_kv(*keys: str) -> None:
 def company(
     tenant_context: None,  # noqa: ARG001
     db_session: Session,
+    make_test_user: MakeTestUser,
 ) -> Generator[dict[str, Any], None, None]:
     now = datetime.now(UTC)
     suffix = uuid4().hex[:8]
@@ -77,14 +77,25 @@ def company(
         name: f"sq-pick-{name}-{suffix}"
         for name in ("handbook", "hidden", "alice-record", "gone")
     }
-    alice = create_test_user(db_session, "sq_alice")
-    bob = create_test_user(db_session, "sq_bob")
-    public = make_cc_pair(db_session)
-    synced = make_cc_pair(db_session, DocumentSource.SALESFORCE)
+    # make_test_user deletes the people and the uploads they own afterwards.
+    alice = make_test_user("sq_alice")
+    bob = make_test_user("sq_bob")
     upload_id = uuid4()
-    user_keys = [KV_SUGGESTED_QUESTIONS_USER_KEY.format(u.id) for u in (alice, bob)]
-    # Clean up whatever setup created, even if setup fails part way.
-    try:
+    # Each cleanup is registered as soon as its resource exists, so a setup
+    # that fails part way still cleans up. They run in reverse order.
+    with ExitStack() as cleanup:
+        cleanup.callback(
+            _clear_kv,
+            KV_SUGGESTED_QUESTIONS_POOL_KEY,
+            *(KV_SUGGESTED_QUESTIONS_USER_KEY.format(u.id) for u in (alice, bob)),
+        )
+        public = make_cc_pair(db_session)
+        cleanup.callback(cleanup_cc_pair, db_session, public)
+        synced = make_cc_pair(db_session, DocumentSource.SALESFORCE)
+        cleanup.callback(cleanup_cc_pair, db_session, synced)
+        # Runs first: a failed setup step leaves the session to roll back.
+        cleanup.callback(db_session.rollback)
+
         synced.access_type = AccessType.SYNC
         db_session.add_all(
             [
@@ -145,15 +156,6 @@ def company(
             "bob": bob,
             "now": now,
         }
-    finally:
-        _clear_kv(KV_SUGGESTED_QUESTIONS_POOL_KEY, *user_keys)
-        db_session.rollback()
-        db_session.execute(delete(UserFile).where(UserFile.id == upload_id))
-        db_session.commit()
-        cleanup_cc_pair(db_session, public)
-        cleanup_cc_pair(db_session, synced)
-        delete_test_user(db_session, alice, bob)
-        db_session.commit()
 
 
 @pytest.fixture

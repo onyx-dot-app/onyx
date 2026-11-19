@@ -4,7 +4,6 @@ marks one used, so it is not shown to that person again."""
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_chat_accessible_user
@@ -12,6 +11,7 @@ from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.server.features.suggested_questions.models import (
+    MarkUsedRequest,
     PersonSuggestions,
     SuggestionsState,
 )
@@ -26,10 +26,6 @@ logger = setup_logger()
 router = APIRouter(prefix="/chat/suggested-questions")
 
 _NONE = PersonSuggestions(questions=[], state=SuggestionsState.READY)
-
-
-class MarkUsedRequest(BaseModel):
-    question_id: str
 
 
 @router.get("")

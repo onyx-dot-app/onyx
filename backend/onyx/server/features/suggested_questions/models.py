@@ -6,7 +6,10 @@ from pydantic import BaseModel, Field, field_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
-from onyx.server.features.suggested_questions.config import SQ_QUESTION_MAX_AGE_DAYS
+from onyx.server.features.suggested_questions.config import (
+    SQ_QUESTION_ID_MAX_BYTES,
+    SQ_QUESTION_MAX_AGE_DAYS,
+)
 
 
 class QuestionKind(StrEnum):
@@ -197,3 +200,17 @@ class ShownQuestion(BaseModel):
 class PersonSuggestions(BaseModel):
     questions: list[ShownQuestion]
     state: SuggestionsState
+
+
+class MarkUsedRequest(BaseModel):
+    """A click on a suggested question. The id comes from the browser, so its
+    size is checked before it is stored in the person's record."""
+
+    question_id: str
+
+    @field_validator("question_id")
+    @classmethod
+    def fits_in_the_record(cls, value: str) -> str:
+        if len(value.encode()) > SQ_QUESTION_ID_MAX_BYTES:
+            raise ValueError(f"question_id is over {SQ_QUESTION_ID_MAX_BYTES} bytes")
+        return value
