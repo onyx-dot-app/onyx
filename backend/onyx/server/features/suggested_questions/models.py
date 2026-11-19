@@ -29,6 +29,8 @@ class RefreshReason(StrEnum):
 
     # The company never had a pool run and its first documents arrived.
     FIRST_RUN = "first_run"
+    # A person who opened the chat is short of shared questions.
+    PERSON_SHORT = "person_short"
 
 
 class RunDecision(BaseModel):
@@ -166,9 +168,32 @@ class UserRecord(BaseModel):
     topups: list[datetime] = Field(default_factory=list)
     # The private shelf: questions about documents granted to this person.
     questions: list[PoolQuestion] = Field(default_factory=list)
+    # When a chat open last asked for a run for this person.
+    requested_at: datetime | None = None
 
     def record_topup(self, started_at: datetime, window: timedelta) -> "UserRecord":
         """Return a copy with the top-up recorded and top-ups older than the
         rate-limit window dropped. The caller saves it."""
         topups = [topup for topup in self.topups if topup >= started_at - window]
         return self.model_copy(update={"topups": [*topups, started_at]})
+
+
+class SuggestionsState(StrEnum):
+    READY = "ready"
+    # A run for this person was asked for moments ago: check again soon.
+    PREPARING = "preparing"
+    # The person cannot open any indexed document yet.
+    NO_DOCUMENTS = "no_documents"
+
+
+class ShownQuestion(BaseModel):
+    id: str
+    # Named like StarterMessage.message, so the chat page renders it the same.
+    message: str
+    # From the person's private shelf, for analytics; it looks the same.
+    private: bool
+
+
+class PersonSuggestions(BaseModel):
+    questions: list[ShownQuestion]
+    state: SuggestionsState

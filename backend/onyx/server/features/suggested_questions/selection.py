@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.access.access import get_censoring_enabled_sources
 from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.context.search.models import IndexFilters, InferenceChunk
 from onyx.db.models import User
@@ -58,11 +59,12 @@ def choose_documents(
     question goes on their private shelves. A document already on a shelf is
     skipped for that shelf only. A top-up passes include_shared=False: the
     shared shelf is filled by pool runs."""
+    censored_sources = get_censoring_enabled_sources()
     shared = (
         [
             CandidateDocument(document_id=document_id, kind=QuestionKind.DOCUMENT)
             for document_id in get_newest_public_document_ids(
-                db_session, SQ_SHARED_DOCS, shared_exclude_ids
+                db_session, SQ_SHARED_DOCS, shared_exclude_ids, censored_sources
             )
         ]
         if include_shared
@@ -88,6 +90,7 @@ def choose_documents(
             prior_emails=person.prior_emails,
             limit=SQ_PRIVATE_DOCS_PER_USER,
             exclude_ids=exclude_ids,
+            censored_sources=censored_sources,
         )
         # Uploads only fill the bucket when connector documents fall short.
         missing = SQ_PRIVATE_DOCS_PER_USER - len(granted)
