@@ -8,6 +8,10 @@
 
 import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
 import type {
+  PluginUploadPreview,
+  PluginUploadTarget,
+} from "@/lib/plugins/types";
+import type {
   CustomSkill,
   GitHubSkillsImportResult,
   OrganizationLibraryDefaultAccess,
@@ -129,6 +133,47 @@ export async function bulkUpdateSkills(
     }
   }
   return result;
+}
+
+function pluginUploadForm(bundle: File, saveAsNew: boolean): FormData {
+  const form = new FormData();
+  form.append("bundle", bundle);
+  form.append("save_as_new", String(saveAsNew));
+  return form;
+}
+
+/** Read a plugin zip and say what a save does with it. Stores nothing. */
+export async function inspectPluginUpload(
+  bundle: File,
+  saveAsNew: boolean
+): Promise<PluginUploadPreview> {
+  return handle<PluginUploadPreview>(
+    await fetch("/api/skills/plugins/inspect", {
+      method: "POST",
+      body: pluginUploadForm(bundle, saveAsNew),
+    })
+  );
+}
+
+export interface PluginUploadResult {
+  target: PluginUploadTarget;
+  plugin: CustomSkill;
+  /** A new plugin was turned on for the uploader. */
+  enabled: boolean;
+}
+
+/** Save a plugin zip as a new version of a plugin with the same name, or as
+ * a new plugin. */
+export async function savePluginUpload(
+  bundle: File,
+  saveAsNew: boolean
+): Promise<PluginUploadResult> {
+  return handle<PluginUploadResult>(
+    await fetch("/api/skills/plugins", {
+      method: "POST",
+      body: pluginUploadForm(bundle, saveAsNew),
+    })
+  );
 }
 
 export interface CreateCustomSkillInput {

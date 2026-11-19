@@ -17000,7 +17000,12 @@
           "location": "Ubicación",
           "owner": "Propietario",
           "skills": "Habilidades",
-          "description": "Descripción"
+          "description": "Descripción",
+          "version": "Versión",
+          "author": "Autor",
+          "homepage": "Página web",
+          "license": "Licencia",
+          "notUsed": "No se usa en Onyx"
         },
         "skills": {
           "off": "Desactivada",
@@ -17109,6 +17114,93 @@
           "label": "Listo"
         }
       }
+    },
+    "needs": {
+      "intro": "Un plugin nunca da acceso a una integración. Cada fila muestra tu propio estado de la integración. El plugin funciona sin las integraciones que no están activadas.",
+      "state": {
+        "on": "Activado",
+        "turn_on": "Desactivado",
+        "sign_in": "Sin iniciar sesión",
+        "no_access": "Sin acceso",
+        "turned_off": "Desactivado por admin",
+        "not_added": "No añadido",
+        "more_than_one": "Más de una coincidencia",
+        "not_supported": "No compatible"
+      },
+      "note": {
+        "askAdmin": "Pregunta a un admin",
+        "turnedOff": "Desactivado por tu admin",
+        "moreThanOne": "Coincide más de una integración",
+        "notSupported": "No compatible con Onyx"
+      },
+      "localServer": "Servidor local",
+      "noUrl": "Sin URL de servidor",
+      "turnOn": {
+        "label": "Activar",
+        "ariaLabel": "Activar {name}",
+        "failed": "No se pudo activar {name}."
+      },
+      "add": {
+        "label": "Añadir para tu equipo",
+        "ariaLabel": "Añadir {name} para tu equipo"
+      }
+    },
+    "upload": {
+      "title": "Subir Plugin",
+      "description": "Sube un plugin de Claude Code o Codex como archivo .zip o carpeta.",
+      "reading": "Leyendo…",
+      "requirements": {
+        "title": "Onyx usa estas partes de un plugin:",
+        "skills": "Skills en skills/<name>/SKILL.md",
+        "mcp": "Servidores MCP en .mcp.json o plugin.json",
+        "other": "Onyx no usa comandos, agentes, hooks ni las demás partes."
+      },
+      "skillOnly": {
+        "title": "Esta subida es un skill",
+        "description": "No tiene plugin.json. Continúa para añadirlo como skill.",
+        "continue": "Continuar"
+      },
+      "version": "v{version}",
+      "target": {
+        "newVersion": "Actualiza {name} a v{version}",
+        "newPlugin": "Nuevo plugin: {name}"
+      },
+      "saveAsNew": {
+        "label": "Guardar como Plugin Nuevo",
+        "description": "Mantén sin cambios el plugin que tiene este nombre."
+      },
+      "sections": {
+        "skills": "Skills · {count}",
+        "integrations": "Integraciones · {count}",
+        "unused": "No se usa en Onyx",
+        "warnings": "Advertencias"
+      },
+      "integrationsNote": "Al guardar se activan las integraciones que ya puedes usar. Un plugin nunca da acceso a una integración.",
+      "unusedParts": {
+        "commands": "Comandos",
+        "agents": "Agentes",
+        "hooks": "Hooks",
+        "lsp_servers": "Servidores LSP",
+        "output_styles": "Estilos de salida",
+        "bin": "Ejecutables (bin)",
+        "themes": "Temas",
+        "monitors": "Monitores"
+      },
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "saving": "Guardando…",
+      "readFailed": "No se pudo leer el plugin.",
+      "saveFailed": "No se pudo guardar el plugin.",
+      "saved": {
+        "newPlugin": "Se añadió {name}.",
+        "newVersion": "Se actualizó {name} a v{version}."
+      }
+    },
+    "turnOn": {
+      "title": "{name} está activado",
+      "description": "Algunas integraciones que necesita este plugin no están disponibles para ti.",
+      "note": "El plugin funciona sin ellas. Un plugin nunca da acceso a una integración.",
+      "done": "Listo"
     }
   },
   "integrations": {
@@ -17195,7 +17287,8 @@
         "label": "Añadir",
         "upload": "Subir habilidad",
         "create": "Crear una habilidad",
-        "github": "Importar desde GitHub"
+        "github": "Importar desde GitHub",
+        "uploadPlugin": "Subir plugin"
       },
       "groups": {
         "mine": "Creadas por ti",
@@ -17270,13 +17363,14 @@
       },
       "empty": {
         "title": "Aún no hay plugins",
-        "description": "Crea una habilidad. Cada habilidad es un plugin."
+        "description": "Sube un plugin o crea un skill. Cada skill es un plugin."
       },
       "noMatches": {
         "title": "No hay plugins que coincidan",
         "clear": "Mostrar todos los plugins"
       },
-      "intro": "Un plugin agrupa habilidades que activas juntas. Cada habilidad que agregas viene en su propio plugin. Las integraciones están en la pestaña Integraciones."
+      "intro": "Un plugin agrupa skills y las integraciones que necesitan. Sube un plugin de Claude Code o Codex, o añade un skill. Cada skill que añades va en su propio plugin.",
+      "integrations": "{available} de {needed} integraciones disponibles"
     },
     "skillPage": {
       "title": "Habilidad",
@@ -17366,7 +17460,8 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "Habilidades · {count}"
+        "skills": "Habilidades · {count}",
+        "integrations": "Integraciones · {count}"
       }
     },
     "search": "Buscar"

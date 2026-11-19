@@ -33,6 +33,10 @@ export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
     current_version_number: null,
     published_version_number: null,
     pending_version_number: null,
+    kind: "skill",
+    available_count: 0,
+    needed_count: 0,
+    plugin: null,
     ...over,
   };
 }
@@ -68,6 +72,10 @@ export function customFixture(over: Partial<CustomSkill> = {}): CustomSkill {
     current_version_number: null,
     published_version_number: null,
     pending_version_number: null,
+    kind: "skill",
+    available_count: 0,
+    needed_count: 0,
+    plugin: null,
     ...over,
   };
 }

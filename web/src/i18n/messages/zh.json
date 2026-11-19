@@ -17000,7 +17000,12 @@
           "location": "位置",
           "owner": "所有者",
           "skills": "技能",
-          "description": "描述"
+          "description": "描述",
+          "version": "版本",
+          "author": "作者",
+          "homepage": "主页",
+          "license": "许可证",
+          "notUsed": "Onyx 不使用的部分"
         },
         "skills": {
           "off": "已关闭",
@@ -17109,6 +17114,93 @@
           "label": "完成"
         }
       }
+    },
+    "needs": {
+      "intro": "插件从不授予集成的访问权限。每一行显示您自己对该集成的状态。即使缺少未开启的集成，插件也能工作。",
+      "state": {
+        "on": "已开启",
+        "turn_on": "已关闭",
+        "sign_in": "未登录",
+        "no_access": "无访问权限",
+        "turned_off": "管理员已关闭",
+        "not_added": "未添加",
+        "more_than_one": "多个匹配",
+        "not_supported": "不支持"
+      },
+      "note": {
+        "askAdmin": "请询问管理员",
+        "turnedOff": "已被您的管理员关闭",
+        "moreThanOne": "有多个集成匹配",
+        "notSupported": "Onyx 不支持"
+      },
+      "localServer": "本地服务器",
+      "noUrl": "无服务器 URL",
+      "turnOn": {
+        "label": "开启",
+        "ariaLabel": "开启 {name}",
+        "failed": "无法开启 {name}。"
+      },
+      "add": {
+        "label": "为您的团队添加",
+        "ariaLabel": "为您的团队添加 {name}"
+      }
+    },
+    "upload": {
+      "title": "上传插件",
+      "description": "以 .zip 文件或文件夹形式上传 Claude Code 或 Codex 插件。",
+      "reading": "正在读取…",
+      "requirements": {
+        "title": "Onyx 使用插件的以下部分：",
+        "skills": "skills/<name>/SKILL.md 中的技能",
+        "mcp": ".mcp.json 或 plugin.json 中的 MCP 服务器",
+        "other": "Onyx 不使用命令、代理、钩子或其他部分。"
+      },
+      "skillOnly": {
+        "title": "此上传是一个技能",
+        "description": "它没有 plugin.json。继续以将其添加为技能。",
+        "continue": "继续"
+      },
+      "version": "v{version}",
+      "target": {
+        "newVersion": "将 {name} 更新到 v{version}",
+        "newPlugin": "新插件：{name}"
+      },
+      "saveAsNew": {
+        "label": "另存为新插件",
+        "description": "保持同名插件不变。"
+      },
+      "sections": {
+        "skills": "技能 · {count}",
+        "integrations": "集成 · {count}",
+        "unused": "Onyx 不使用的部分",
+        "warnings": "警告"
+      },
+      "integrationsNote": "保存会开启您已经可以使用的集成。插件从不授予集成的访问权限。",
+      "unusedParts": {
+        "commands": "命令",
+        "agents": "代理",
+        "hooks": "钩子",
+        "lsp_servers": "LSP 服务器",
+        "output_styles": "输出样式",
+        "bin": "可执行文件 (bin)",
+        "themes": "主题",
+        "monitors": "监视器"
+      },
+      "cancel": "取消",
+      "save": "保存",
+      "saving": "正在保存…",
+      "readFailed": "无法读取插件。",
+      "saveFailed": "无法保存插件。",
+      "saved": {
+        "newPlugin": "已添加 {name}。",
+        "newVersion": "已将 {name} 更新到 v{version}。"
+      }
+    },
+    "turnOn": {
+      "title": "{name} 已开启",
+      "description": "此插件所需的部分集成对您不可用。",
+      "note": "没有它们插件也能工作。插件从不授予集成的访问权限。",
+      "done": "完成"
     }
   },
   "integrations": {
@@ -17195,7 +17287,8 @@
         "label": "添加",
         "upload": "上传技能",
         "create": "创建技能",
-        "github": "从 GitHub 导入"
+        "github": "从 GitHub 导入",
+        "uploadPlugin": "上传插件"
       },
       "groups": {
         "mine": "由你创建",
@@ -17270,13 +17363,14 @@
       },
       "empty": {
         "title": "还没有插件",
-        "description": "创建技能。每个技能都是一个插件。"
+        "description": "上传插件或创建技能。每个技能都是一个插件。"
       },
       "noMatches": {
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
       },
-      "intro": "插件将你一起开启的技能打包在一起。你添加的每个技能都有自己的插件。集成位于“集成”标签页。"
+      "intro": "插件将技能及其所需的集成打包在一起。上传 Claude Code 或 Codex 插件，或添加技能。您添加的每个技能都位于各自的插件中。",
+      "integrations": "{needed} 个集成中有 {available} 个可用"
     },
     "skillPage": {
       "title": "技能",
@@ -17366,7 +17460,8 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "技能 · {count}"
+        "skills": "技能 · {count}",
+        "integrations": "集成 · {count}"
       }
     },
     "search": "搜索"

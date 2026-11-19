@@ -32,10 +32,21 @@ export function newSkillHref(
     : "/app/customize/skills/new";
 }
 
+export type PluginPageTab = "overview" | "skills" | "integrations" | "versions";
+
 export function pluginHref(
-  pluginId: string
+  pluginId: string,
+  tab?: PluginPageTab
 ): `/app/customize/plugins/${string}` {
-  return `/app/customize/plugins/${pluginId}`;
+  return tab && tab !== "overview"
+    ? `/app/customize/plugins/${pluginId}?tab=${tab}`
+    : `/app/customize/plugins/${pluginId}`;
+}
+
+export function parsePluginPageTab(value: string | null): PluginPageTab {
+  return value === "skills" || value === "integrations" || value === "versions"
+    ? value
+    : "overview";
 }
 
 export type IntegrationPageTab = "overview" | "configuration" | "actions";
@@ -50,3 +61,34 @@ export function integrationHref(
 }
 
 export const NEW_INTEGRATION_PATH = "/app/customize/integrations/new";
+
+/** The fields an Add integration link fills in for an MCP server. */
+export interface NewIntegrationPrefill {
+  name: string;
+  serverUrl: string;
+  transport: "STREAMABLE_HTTP" | "SSE";
+}
+
+export function newIntegrationHref(
+  prefill: NewIntegrationPrefill
+): `/app/customize/integrations/new?${string}` {
+  const params = new URLSearchParams({
+    name: prefill.name,
+    server_url: prefill.serverUrl,
+    transport: prefill.transport,
+  });
+  return `${NEW_INTEGRATION_PATH}?${params.toString()}`;
+}
+
+export function parseNewIntegrationPrefill(
+  params: Pick<URLSearchParams, "get">
+): NewIntegrationPrefill | null {
+  const name = params.get("name");
+  const serverUrl = params.get("server_url");
+  if (!name || !serverUrl) return null;
+  return {
+    name,
+    serverUrl,
+    transport: params.get("transport") === "SSE" ? "SSE" : "STREAMABLE_HTTP",
+  };
+}

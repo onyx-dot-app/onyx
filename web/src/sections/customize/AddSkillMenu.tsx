@@ -6,17 +6,27 @@ import { Button, Dropdown, useCreateModal } from "@opal/components";
 import { SvgEdit, SvgPlus, SvgUploadCloud } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
 import { useNavigation } from "@opal/navigation";
-import { newSkillHref } from "@/lib/customize/paths";
+import { toast } from "@opal/layouts";
+import { newSkillHref, pluginHref } from "@/lib/customize/paths";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { useRefreshSkillLists } from "@/lib/skills/hooks";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
+import UploadPluginModal from "@/sections/modals/plugins/UploadPluginModal";
 
-export default function AddSkillMenu() {
+interface AddSkillMenuProps {
+  /** The Plugins tab uploads a plugin zip; a zip with only a skill still
+   * goes to the skill flow. */
+  upload?: "skill" | "plugin";
+}
+
+export default function AddSkillMenu({ upload = "skill" }: AddSkillMenuProps) {
   const t = useTranslations("customize.skills.add");
+  const uploadCopy = useTranslations("plugins.upload");
   const navigation = useNavigation();
   const revalidate = useRefreshSkillLists();
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [pluginUploadOpen, setPluginUploadOpen] = useState(false);
   const githubModal = useCreateModal();
 
   return (
@@ -32,8 +42,11 @@ export default function AddSkillMenu() {
               kind: "action",
               id: "upload",
               icon: SvgUploadCloud,
-              title: t("upload"),
-              onSelect: () => setUploadOpen(true),
+              title: upload === "plugin" ? t("uploadPlugin") : t("upload"),
+              onSelect: () =>
+                upload === "plugin"
+                  ? setPluginUploadOpen(true)
+                  : setUploadOpen(true),
             },
             {
               kind: "action",
@@ -59,6 +72,29 @@ export default function AddSkillMenu() {
         onContinue={(draft) => {
           setUploadOpen(false);
           navigation.go(newSkillHref(stageSkillCreationDraft(draft)));
+        }}
+      />
+      <UploadPluginModal
+        open={pluginUploadOpen}
+        onClose={() => setPluginUploadOpen(false)}
+        onContinueSkill={(draft) => {
+          setPluginUploadOpen(false);
+          navigation.go(newSkillHref(stageSkillCreationDraft(draft)));
+        }}
+        onSaved={({ target, plugin }, needsAttention) => {
+          setPluginUploadOpen(false);
+          revalidate();
+          toast.success(
+            target.kind === "new_version"
+              ? uploadCopy("saved.newVersion", {
+                  name: target.plugin_name,
+                  version: target.version_number,
+                })
+              : uploadCopy("saved.newPlugin", { name: target.plugin_name })
+          );
+          navigation.go(
+            pluginHref(plugin.id, needsAttention ? "integrations" : undefined)
+          );
         }}
       />
       <githubModal.Provider>

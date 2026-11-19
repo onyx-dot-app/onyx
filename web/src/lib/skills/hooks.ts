@@ -442,10 +442,12 @@ export interface SkillEnablement {
 }
 
 /** Turns skills on and off. Only one enabled skill holds a name, so turning
- * on a skill whose name is taken asks first, then replaces the other one. */
+ * on a skill whose name is taken asks first, then replaces the other one.
+ * `onEnabled` gets the skill as the server returns it after a turn on. */
 export function useSkillEnablement(
   items: readonly SkillToggleTarget[],
-  refresh: KeyedMutator<SkillsList>
+  refresh: KeyedMutator<SkillsList>,
+  onEnabled?: (skill: Skill) => void
 ): SkillEnablement {
   const t = useTranslations("skills");
   const { describeError } = useSkillLimitCopy();
@@ -504,6 +506,7 @@ export function useSkillEnablement(
     try {
       const updated = await setSkillEnabled(item.id, enabled, replaceConflict);
       if (replaceConflict) switchModal.toggle(false);
+      if (enabled) onEnabled?.(updated);
       await refresh(
         (current) => {
           if (!current) return current;

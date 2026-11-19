@@ -17000,7 +17000,12 @@
           "location": "الموقع",
           "owner": "المالك",
           "skills": "المهارات",
-          "description": "الوصف"
+          "description": "الوصف",
+          "version": "الإصدار",
+          "author": "المؤلف",
+          "homepage": "الصفحة الرئيسية",
+          "license": "الترخيص",
+          "notUsed": "غير مستخدم في Onyx"
         },
         "skills": {
           "off": "متوقفة",
@@ -17109,6 +17114,93 @@
           "label": "تم"
         }
       }
+    },
+    "needs": {
+      "intro": "لا تمنح الإضافة أبدًا وصولًا إلى أي تكامل. يعرض كل صف حالتك أنت للتكامل. تعمل الإضافة دون التكاملات غير المفعّلة.",
+      "state": {
+        "on": "مفعّل",
+        "turn_on": "متوقف",
+        "sign_in": "لم يتم تسجيل الدخول",
+        "no_access": "لا يوجد وصول",
+        "turned_off": "أوقفه المسؤول",
+        "not_added": "غير مضاف",
+        "more_than_one": "أكثر من تطابق",
+        "not_supported": "غير مدعوم"
+      },
+      "note": {
+        "askAdmin": "اسأل مسؤولًا",
+        "turnedOff": "أوقفه المسؤول لديك",
+        "moreThanOne": "يتطابق أكثر من تكامل واحد",
+        "notSupported": "غير مدعوم في Onyx"
+      },
+      "localServer": "خادم محلي",
+      "noUrl": "لا يوجد عنوان URL للخادم",
+      "turnOn": {
+        "label": "تفعيل",
+        "ariaLabel": "تفعيل {name}",
+        "failed": "تعذّر تفعيل {name}."
+      },
+      "add": {
+        "label": "إضافة لفريقك",
+        "ariaLabel": "إضافة {name} لفريقك"
+      }
+    },
+    "upload": {
+      "title": "رفع إضافة",
+      "description": "ارفع إضافة Claude Code أو Codex كملف ‎.zip أو مجلد.",
+      "reading": "جارٍ القراءة…",
+      "requirements": {
+        "title": "يستخدم Onyx هذه الأجزاء من الإضافة:",
+        "skills": "المهارات في skills/<name>/SKILL.md",
+        "mcp": "خوادم MCP في ‎.mcp.json أو plugin.json",
+        "other": "لا يستخدم Onyx الأوامر أو الوكلاء أو الخطافات أو الأجزاء الأخرى."
+      },
+      "skillOnly": {
+        "title": "هذا الملف المرفوع مهارة",
+        "description": "لا يحتوي على plugin.json. تابع لإضافته كمهارة.",
+        "continue": "متابعة"
+      },
+      "version": "v{version}",
+      "target": {
+        "newVersion": "يحدّث {name} إلى v{version}",
+        "newPlugin": "إضافة جديدة: {name}"
+      },
+      "saveAsNew": {
+        "label": "حفظ كإضافة جديدة",
+        "description": "أبقِ الإضافة التي تحمل هذا الاسم كما هي."
+      },
+      "sections": {
+        "skills": "المهارات · {count}",
+        "integrations": "التكاملات · {count}",
+        "unused": "غير مستخدم في Onyx",
+        "warnings": "تحذيرات"
+      },
+      "integrationsNote": "يؤدي الحفظ إلى تفعيل التكاملات التي يمكنك استخدامها بالفعل. لا تمنح الإضافة أبدًا وصولًا إلى أي تكامل.",
+      "unusedParts": {
+        "commands": "الأوامر",
+        "agents": "الوكلاء",
+        "hooks": "الخطافات",
+        "lsp_servers": "خوادم LSP",
+        "output_styles": "أنماط الإخراج",
+        "bin": "الملفات التنفيذية (bin)",
+        "themes": "السمات",
+        "monitors": "أدوات المراقبة"
+      },
+      "cancel": "إلغاء",
+      "save": "حفظ",
+      "saving": "جارٍ الحفظ…",
+      "readFailed": "تعذّرت قراءة الإضافة.",
+      "saveFailed": "تعذّر حفظ الإضافة.",
+      "saved": {
+        "newPlugin": "تمت إضافة {name}.",
+        "newVersion": "تم تحديث {name} إلى v{version}."
+      }
+    },
+    "turnOn": {
+      "title": "{name} مفعّلة",
+      "description": "بعض التكاملات التي تحتاجها هذه الإضافة غير متاحة لك.",
+      "note": "تعمل الإضافة بدونها. لا تمنح الإضافة أبدًا وصولًا إلى أي تكامل.",
+      "done": "تم"
     }
   },
   "integrations": {
@@ -17195,7 +17287,8 @@
         "label": "إضافة",
         "upload": "رفع مهارة",
         "create": "إنشاء مهارة",
-        "github": "استيراد من GitHub"
+        "github": "استيراد من GitHub",
+        "uploadPlugin": "رفع إضافة"
       },
       "groups": {
         "mine": "أنشأتها أنت",
@@ -17270,13 +17363,14 @@
       },
       "empty": {
         "title": "لا توجد إضافات بعد",
-        "description": "أنشئ مهارة. كل مهارة هي إضافة."
+        "description": "ارفع إضافة أو أنشئ مهارة. كل مهارة هي إضافة."
       },
       "noMatches": {
         "title": "لا توجد إضافات مطابقة",
         "clear": "عرض كل الإضافات"
       },
-      "intro": "تجمع الإضافة المهارات التي تفعّلها معًا. تأتي كل مهارة تضيفها في إضافة خاصة بها. توجد التكاملات في علامة تبويب التكاملات."
+      "intro": "تجمع الإضافة المهارات والتكاملات التي تحتاجها. ارفع إضافة Claude Code أو Codex، أو أضف مهارة. كل مهارة تضيفها تأتي في إضافة خاصة بها.",
+      "integrations": "{available} من {needed} من التكاملات متاحة"
     },
     "skillPage": {
       "title": "مهارة",
@@ -17366,7 +17460,8 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "المهارات · {count}"
+        "skills": "المهارات · {count}",
+        "integrations": "التكاملات · {count}"
       }
     },
     "search": "بحث"

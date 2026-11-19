@@ -17000,7 +17000,12 @@
           "location": "場所",
           "owner": "所有者",
           "skills": "スキル",
-          "description": "説明"
+          "description": "説明",
+          "version": "バージョン",
+          "author": "作成者",
+          "homepage": "ホームページ",
+          "license": "ライセンス",
+          "notUsed": "Onyx では使用しない部分"
         },
         "skills": {
           "off": "オフ",
@@ -17109,6 +17114,93 @@
           "label": "完了"
         }
       }
+    },
+    "needs": {
+      "intro": "プラグインが連携へのアクセス権を与えることはありません。各行には、その連携に対するあなた自身の状態が表示されます。オンでない連携がなくても、プラグインは動作します。",
+      "state": {
+        "on": "オン",
+        "turn_on": "オフ",
+        "sign_in": "未サインイン",
+        "no_access": "アクセス権なし",
+        "turned_off": "管理者がオフに設定",
+        "not_added": "未追加",
+        "more_than_one": "複数が一致",
+        "not_supported": "非対応"
+      },
+      "note": {
+        "askAdmin": "管理者に依頼してください",
+        "turnedOff": "管理者がオフにしています",
+        "moreThanOne": "複数の連携が一致します",
+        "notSupported": "Onyx では非対応"
+      },
+      "localServer": "ローカルサーバー",
+      "noUrl": "サーバー URL なし",
+      "turnOn": {
+        "label": "オンにする",
+        "ariaLabel": "{name} をオンにする",
+        "failed": "{name} をオンにできませんでした。"
+      },
+      "add": {
+        "label": "チーム用に追加",
+        "ariaLabel": "{name} をチーム用に追加"
+      }
+    },
+    "upload": {
+      "title": "プラグインをアップロード",
+      "description": "Claude Code または Codex のプラグインを .zip ファイルまたはフォルダーとしてアップロードします。",
+      "reading": "読み込み中…",
+      "requirements": {
+        "title": "Onyx はプラグインの次の部分を使用します:",
+        "skills": "skills/<name>/SKILL.md 内のスキル",
+        "mcp": ".mcp.json または plugin.json 内の MCP サーバー",
+        "other": "Onyx はコマンド、エージェント、フック、その他の部分を使用しません。"
+      },
+      "skillOnly": {
+        "title": "このアップロードはスキルです",
+        "description": "plugin.json がありません。続行してスキルとして追加します。",
+        "continue": "続行"
+      },
+      "version": "v{version}",
+      "target": {
+        "newVersion": "{name} を v{version} に更新します",
+        "newPlugin": "新しいプラグイン: {name}"
+      },
+      "saveAsNew": {
+        "label": "新しいプラグインとして保存",
+        "description": "この名前のプラグインは変更しません。"
+      },
+      "sections": {
+        "skills": "スキル · {count}",
+        "integrations": "連携 · {count}",
+        "unused": "Onyx では使用しない部分",
+        "warnings": "警告"
+      },
+      "integrationsNote": "保存すると、すでに利用できる連携がオンになります。プラグインが連携へのアクセス権を与えることはありません。",
+      "unusedParts": {
+        "commands": "コマンド",
+        "agents": "エージェント",
+        "hooks": "フック",
+        "lsp_servers": "LSP サーバー",
+        "output_styles": "出力スタイル",
+        "bin": "実行ファイル (bin)",
+        "themes": "テーマ",
+        "monitors": "モニター"
+      },
+      "cancel": "キャンセル",
+      "save": "保存",
+      "saving": "保存中…",
+      "readFailed": "プラグインを読み込めませんでした。",
+      "saveFailed": "プラグインを保存できませんでした。",
+      "saved": {
+        "newPlugin": "{name} を追加しました。",
+        "newVersion": "{name} を v{version} に更新しました。"
+      }
+    },
+    "turnOn": {
+      "title": "{name} はオンです",
+      "description": "このプラグインが必要とする連携の一部は、あなたには利用できません。",
+      "note": "それらがなくてもプラグインは動作します。プラグインが連携へのアクセス権を与えることはありません。",
+      "done": "完了"
     }
   },
   "integrations": {
@@ -17195,7 +17287,8 @@
         "label": "追加",
         "upload": "スキルをアップロード",
         "create": "スキルを作成",
-        "github": "GitHub からインポート"
+        "github": "GitHub からインポート",
+        "uploadPlugin": "プラグインをアップロード"
       },
       "groups": {
         "mine": "自分が作成",
@@ -17270,13 +17363,14 @@
       },
       "empty": {
         "title": "プラグインはまだありません",
-        "description": "スキルを作成します。各スキルが1つのプラグインです。"
+        "description": "プラグインをアップロードするか、スキルを作成します。各スキルは 1 つのプラグインです。"
       },
       "noMatches": {
         "title": "一致するプラグインはありません",
         "clear": "すべてのプラグインを表示"
       },
-      "intro": "プラグインは、まとめてオンにするスキルをパッケージ化したものです。追加した各スキルは個別のプラグインになります。統合は[統合]タブにあります。"
+      "intro": "プラグインは、スキルとそれらが必要とする連携をまとめたものです。Claude Code または Codex のプラグインをアップロードするか、スキルを追加します。追加した各スキルは個別のプラグインに入ります。",
+      "integrations": "{needed} 件中 {available} 件の連携が利用可能"
     },
     "skillPage": {
       "title": "スキル",
@@ -17366,7 +17460,8 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "スキル · {count}"
+        "skills": "スキル · {count}",
+        "integrations": "連携 · {count}"
       }
     },
     "search": "検索"

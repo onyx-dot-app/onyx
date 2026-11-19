@@ -29,6 +29,8 @@ import {
   type SkillEnablement,
   useRefreshSkillLists,
 } from "@/lib/skills/hooks";
+import { needsAttention } from "@/lib/plugins/needs";
+import type { Skill } from "@/lib/skills/types";
 import { useUser } from "@/providers/UserProvider";
 import CustomizeLayout from "@/sections/customize/CustomizeLayout";
 import AddSkillMenu from "@/sections/customize/AddSkillMenu";
@@ -41,6 +43,7 @@ import {
 import { skillIcon } from "@/sections/customize/skillIcon";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
+import PluginTurnOnModal from "@/sections/modals/plugins/PluginTurnOnModal";
 
 interface PluginRowProps {
   entry: MemberPluginEntry;
@@ -75,7 +78,15 @@ function PluginRow({
         : entry.ownerEmail
           ? t("skills.source.sharedBy", { email: entry.ownerEmail })
           : t("skills.source.shared");
-  const contents = t("plugins.contents", { skills: entry.skills.length });
+  const contents =
+    skill?.kind !== "plugin"
+      ? t("plugins.contents", { skills: entry.skills.length })
+      : skill.needed_count > 0
+        ? t("plugins.integrations", {
+            available: skill.available_count,
+            needed: skill.needed_count,
+          })
+        : (entry.description ?? "");
   const menu: DropdownMenuItem[] = [
     ...(canToggle
       ? [
@@ -106,7 +117,11 @@ function PluginRow({
       icon={skill ? skillIcon(skill) : undefined}
       title={entry.name}
       titleMaxLines={1}
-      description={t("skills.subtitle", { source, description: contents })}
+      description={
+        contents
+          ? t("skills.subtitle", { source, description: contents })
+          : source
+      }
       descriptionMaxLines={1}
       badge={
         !enabled
@@ -145,6 +160,7 @@ export default function CustomizePluginsPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<SkillStatusFilter>("all");
   const [sharing, setSharing] = useState<MemberPluginEntry | null>(null);
+  const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
 
   const userEmail = user?.email ?? null;
   const entries = memberPluginEntries(
@@ -154,7 +170,10 @@ export default function CustomizePluginsPage() {
   );
   const enablement = useSkillEnablement(
     skills.data?.customs ?? [],
-    skills.refresh
+    skills.refresh,
+    (skill) => {
+      if (needsAttention(skill.plugin?.needs ?? [])) setTurnedOn(skill);
+    }
   );
   const groups = groupPlugins(entries, { userEmail, query, status, locale });
   const shownCount = PLUGIN_GROUPS.reduce(
@@ -169,7 +188,7 @@ export default function CustomizePluginsPage() {
         onChange={setStatus}
         allLabel={t("plugins.filter.all")}
       />
-      <AddSkillMenu />
+      <AddSkillMenu upload="plugin" />
     </>
   );
 
@@ -233,6 +252,12 @@ export default function CustomizePluginsPage() {
       )}
 
       <SkillSwitchModal enablement={enablement} />
+      {turnedOn && (
+        <PluginTurnOnModal
+          plugin={turnedOn}
+          onClose={() => setTurnedOn(null)}
+        />
+      )}
       {sharing && sharing.skills[0] && (
         <ShareSkillModal
           mode="edit"

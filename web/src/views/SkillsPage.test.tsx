@@ -140,6 +140,10 @@ function customSkill(id: string, name: string): CustomSkill {
     current_version_number: null,
     published_version_number: null,
     pending_version_number: null,
+    kind: "skill",
+    available_count: 0,
+    needed_count: 0,
+    plugin: null,
   };
 }
 

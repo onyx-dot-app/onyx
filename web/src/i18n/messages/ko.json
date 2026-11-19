@@ -17000,7 +17000,12 @@
           "location": "위치",
           "owner": "소유자",
           "skills": "스킬",
-          "description": "설명"
+          "description": "설명",
+          "version": "버전",
+          "author": "작성자",
+          "homepage": "홈페이지",
+          "license": "라이선스",
+          "notUsed": "Onyx에서 사용하지 않음"
         },
         "skills": {
           "off": "꺼짐",
@@ -17109,6 +17114,93 @@
           "label": "완료"
         }
       }
+    },
+    "needs": {
+      "intro": "플러그인은 통합에 대한 액세스 권한을 주지 않습니다. 각 행은 통합에 대한 내 상태를 보여 줍니다. 켜져 있지 않은 통합이 없어도 플러그인은 작동합니다.",
+      "state": {
+        "on": "켜짐",
+        "turn_on": "꺼짐",
+        "sign_in": "로그인 안 됨",
+        "no_access": "액세스 권한 없음",
+        "turned_off": "관리자가 끔",
+        "not_added": "추가되지 않음",
+        "more_than_one": "여러 개 일치",
+        "not_supported": "지원되지 않음"
+      },
+      "note": {
+        "askAdmin": "관리자에게 문의하세요",
+        "turnedOff": "관리자가 껐습니다",
+        "moreThanOne": "두 개 이상의 통합이 일치합니다",
+        "notSupported": "Onyx에서 지원되지 않음"
+      },
+      "localServer": "로컬 서버",
+      "noUrl": "서버 URL 없음",
+      "turnOn": {
+        "label": "켜기",
+        "ariaLabel": "{name} 켜기",
+        "failed": "{name}을(를) 켤 수 없습니다."
+      },
+      "add": {
+        "label": "팀용으로 추가",
+        "ariaLabel": "팀용으로 {name} 추가"
+      }
+    },
+    "upload": {
+      "title": "플러그인 업로드",
+      "description": "Claude Code 또는 Codex 플러그인을 .zip 파일이나 폴더로 업로드하세요.",
+      "reading": "읽는 중…",
+      "requirements": {
+        "title": "Onyx는 플러그인의 다음 부분을 사용합니다:",
+        "skills": "skills/<name>/SKILL.md의 스킬",
+        "mcp": ".mcp.json 또는 plugin.json의 MCP 서버",
+        "other": "Onyx는 명령, 에이전트, 훅 및 기타 부분을 사용하지 않습니다."
+      },
+      "skillOnly": {
+        "title": "이 업로드는 스킬입니다",
+        "description": "plugin.json이 없습니다. 계속하여 스킬로 추가하세요.",
+        "continue": "계속"
+      },
+      "version": "v{version}",
+      "target": {
+        "newVersion": "{name}을(를) v{version}(으)로 업데이트합니다",
+        "newPlugin": "새 플러그인: {name}"
+      },
+      "saveAsNew": {
+        "label": "새 플러그인으로 저장",
+        "description": "이 이름의 플러그인은 그대로 둡니다."
+      },
+      "sections": {
+        "skills": "스킬 · {count}",
+        "integrations": "통합 · {count}",
+        "unused": "Onyx에서 사용하지 않음",
+        "warnings": "경고"
+      },
+      "integrationsNote": "저장하면 이미 사용할 수 있는 통합이 켜집니다. 플러그인은 통합에 대한 액세스 권한을 주지 않습니다.",
+      "unusedParts": {
+        "commands": "명령",
+        "agents": "에이전트",
+        "hooks": "훅",
+        "lsp_servers": "LSP 서버",
+        "output_styles": "출력 스타일",
+        "bin": "실행 파일 (bin)",
+        "themes": "테마",
+        "monitors": "모니터"
+      },
+      "cancel": "취소",
+      "save": "저장",
+      "saving": "저장 중…",
+      "readFailed": "플러그인을 읽을 수 없습니다.",
+      "saveFailed": "플러그인을 저장할 수 없습니다.",
+      "saved": {
+        "newPlugin": "{name}을(를) 추가했습니다.",
+        "newVersion": "{name}을(를) v{version}(으)로 업데이트했습니다."
+      }
+    },
+    "turnOn": {
+      "title": "{name}이(가) 켜졌습니다",
+      "description": "이 플러그인에 필요한 일부 통합을 사용할 수 없습니다.",
+      "note": "플러그인은 이 통합 없이도 작동합니다. 플러그인은 통합에 대한 액세스 권한을 주지 않습니다.",
+      "done": "완료"
     }
   },
   "integrations": {
@@ -17195,7 +17287,8 @@
         "label": "추가",
         "upload": "스킬 업로드",
         "create": "스킬 만들기",
-        "github": "GitHub에서 가져오기"
+        "github": "GitHub에서 가져오기",
+        "uploadPlugin": "플러그인 업로드"
       },
       "groups": {
         "mine": "내가 만든 항목",
@@ -17270,13 +17363,14 @@
       },
       "empty": {
         "title": "아직 플러그인이 없습니다",
-        "description": "스킬을 만드세요. 각 스킬이 하나의 플러그인입니다."
+        "description": "플러그인을 업로드하거나 스킬을 만드세요. 각 스킬은 하나의 플러그인입니다."
       },
       "noMatches": {
         "title": "일치하는 플러그인이 없습니다",
         "clear": "모든 플러그인 보기"
       },
-      "intro": "플러그인은 함께 켜는 스킬을 묶은 것입니다. 추가한 각 스킬은 자체 플러그인으로 제공됩니다. 통합은 통합 탭에 있습니다."
+      "intro": "플러그인은 스킬과 스킬에 필요한 통합을 묶습니다. Claude Code 또는 Codex 플러그인을 업로드하거나 스킬을 추가하세요. 추가한 각 스킬은 자체 플러그인에 들어갑니다.",
+      "integrations": "{needed}개 중 {available}개 통합 사용 가능"
     },
     "skillPage": {
       "title": "스킬",
@@ -17366,7 +17460,8 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "스킬 · {count}"
+        "skills": "스킬 · {count}",
+        "integrations": "통합 · {count}"
       }
     },
     "search": "검색"
