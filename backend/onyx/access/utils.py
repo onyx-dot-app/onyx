@@ -40,6 +40,7 @@ SOURCES_YIELDING_BARE_GROUP_IDS: frozenset[DocumentSource] = frozenset(
     {
         DocumentSource.BOX,
         DocumentSource.CANVAS,
+        DocumentSource.GOOGLE_DRIVE,
         DocumentSource.LINEAR,
     }
 )

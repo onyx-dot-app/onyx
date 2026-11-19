@@ -60,9 +60,7 @@ def _nodes(
 ) -> list[HierarchyNode]:
     listing = checkpoint.listing
     assert listing is not None
-    return connector._listed_folder_nodes(
-        listing, checkpoint, folders, [], None, add_prefix=False
-    )
+    return connector._listed_folder_nodes(listing, checkpoint, folders, [], None)
 
 
 def _readers(listing: DriveListingState) -> dict[str, list[str]]:
@@ -114,9 +112,7 @@ def test_a_read_after_the_listing_gives_a_parentless_folder_its_parent(
     monkeypatch.setattr(GoogleDriveConnector, "_is_my_drive_root", lambda *_args: False)
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     nodes = [
@@ -172,7 +168,6 @@ def test_an_unlisted_parent_is_read_as_a_later_user_who_can_read_it(
         [],
         [_file_under("parent", "first@x.com"), _file_under("parent", "second@x.com")],
         None,
-        add_prefix=False,
     )
     assert _readers(listing) == {"parent": ["first@x.com", "second@x.com"]}
     read_as: list[str] = []
@@ -193,9 +188,7 @@ def test_an_unlisted_parent_is_read_as_a_later_user_who_can_read_it(
     monkeypatch.setattr(GoogleDriveConnector, "_is_my_drive_root", lambda *_args: True)
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     assert [node.raw_node_id for batch in batches for node in batch] == ["parent"]
@@ -215,9 +208,7 @@ def test_a_read_round_with_no_node_still_yields_a_batch(
     )
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     assert batches == [[]]
@@ -304,13 +295,11 @@ def test_an_unlisted_parent_is_read_first_as_its_organizer_or_owner(
     checkpoint.organizer_email_by_drive_id = {"drive": "organizer@x.com"}
     listing = checkpoint.listing
     assert listing is not None
-    connector._listed_folder_nodes(listing, checkpoint, [], [child], None, False)
+    connector._listed_folder_nodes(listing, checkpoint, [], [child], None)
     reads = _read_as(monkeypatch, {"parent": {first_reader, "viewer@x.com"}})
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     assert [node.raw_node_id for batch in batches for node in batch] == ["parent"]
@@ -328,7 +317,6 @@ def test_an_owner_outside_the_domain_is_not_read_as() -> None:
         [],
         [_file_in("parent", "viewer@x.com", owner="someone@gmail.com")],
         None,
-        False,
     )
 
     (parent,) = listing.unresolved_parents.values()
@@ -350,14 +338,11 @@ def test_every_user_who_saw_a_child_can_read_an_unlisted_parent(
         [],
         [_file_in("parent", user) for user in users],
         None,
-        add_prefix=False,
     )
     reads = _read_as(monkeypatch, {"parent": {users[-1]}})
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     assert [node.raw_node_id for batch in batches for node in batch] == ["parent"]
@@ -397,9 +382,7 @@ def test_a_folder_that_one_reader_cannot_read_is_read_again_as_a_later_one(
     monkeypatch.setattr(GoogleDriveConnector, "_is_my_drive_root", lambda *_args: False)
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     nodes = sorted(node.raw_node_id for batch in batches for node in batch)
@@ -435,9 +418,7 @@ def test_a_folder_read_with_no_parent_is_read_again_as_the_next_reader(
     monkeypatch.setattr(GoogleDriveConnector, "_is_my_drive_root", lambda *_args: False)
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     nodes = [
@@ -481,9 +462,7 @@ def test_a_folder_read_with_no_parent_is_read_again_for_a_later_child(
     monkeypatch.setattr(GoogleDriveConnector, "_is_my_drive_root", lambda *_args: False)
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     nodes = [
