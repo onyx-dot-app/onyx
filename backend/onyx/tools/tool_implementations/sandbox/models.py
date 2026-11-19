@@ -5,7 +5,6 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
-from onyx.file_store.constants import chat_artifact_session_id
 from onyx.server.features.build.sandbox.exec_output import (
     EXEC_DEFAULT_YIELD_MS,
     EXEC_MAX_YIELD_MS,
@@ -16,8 +15,8 @@ from onyx.server.features.build.sandbox.exec_output import (
     WRITE_STDIN_MAX_YIELD_MS,
 )
 from onyx.server.features.build.sandbox.models import (
+    SESSION_WORKSPACE_ROOT,
     ExecCompletionName,
-    session_workspace,
 )
 from onyx.tools.constants import DEFAULT_MAX_OUTPUT_CHARS, MAX_OUTPUT_CHARS_DESCRIPTION
 from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
@@ -204,15 +203,14 @@ class PublishedFileView(PublishedFile):
     @property
     def display_path(self) -> str:
         """The path to show: relative to the working directory of the chat
-        that published the file, or the whole path outside it. The file ID
-        names that chat."""
-        session_id = chat_artifact_session_id(self.file_id)
-        if session_id is None:
+        that published the file, or the whole path outside it. publish_files
+        accepts only that chat's working directory under
+        SESSION_WORKSPACE_ROOT."""
+        workspaces = f"{SESSION_WORKSPACE_ROOT}/"
+        if not self.path.startswith(workspaces):
             return self.path
-        workspace = f"{session_workspace(session_id)}/"
-        if not self.path.startswith(workspace):
-            return self.path
-        return self.path.removeprefix(workspace) or self.path
+        _, _, relative = self.path.removeprefix(workspaces).partition("/")
+        return relative or self.path
 
 
 class PublishedFiles(BaseModel):

@@ -20,11 +20,11 @@ def test_a_title_is_stored_trimmed_without_nul_and_within_its_limit(
 ) -> None:
     saved_titles: list[str | None] = []
 
-    def save(_content: bytes, *, published_title: str | None, **_: object) -> str:
-        saved_titles.append(published_title)
+    def save(_content: bytes, *, title: str | None, **_: object) -> str:
+        saved_titles.append(title)
         return f"file-{len(saved_titles)}"
 
-    monkeypatch.setattr(sandbox_tools, "save_chat_output_file", save)
+    monkeypatch.setattr(sandbox_tools, "save_chat_artifact", save)
     turn = MagicMock(spec=SandboxTurn)
     turn.start_call.return_value = HarnessSandboxRef(
         tenant_id="tenant", sandbox_id=uuid4(), session_id=uuid4()

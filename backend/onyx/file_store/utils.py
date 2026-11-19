@@ -8,18 +8,11 @@ import requests
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS, WEB_DOMAIN
-from onyx.configs.constants import (
-    CHAT_OUTPUT_FILE_ORIGINS,
-    CHAT_SESSION_ID_FILE_METADATA_KEY,
-    PUBLISHED_FILE_PATH_METADATA_KEY,
-    PUBLISHED_FILE_TITLE_METADATA_KEY,
-    FileOrigin,
-)
+from onyx.configs.constants import CHAT_SESSION_ID_FILE_METADATA_KEY, FileOrigin
 from onyx.db.models import UserFile
 from onyx.db.projects import get_project_user_files_by_file_ids
 from onyx.db.user_file import get_user_file_by_id
 from onyx.file_processing.file_types import guess_mime_type
-from onyx.file_store.constants import chat_artifact_file_id
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import (
     ChatFileType,
@@ -246,39 +239,19 @@ def save_chat_output_file(
     *,
     display_name: str,
     file_type: str,
-    file_origin: FileOrigin,
     chat_session_id: UUID,
-    published_path: str | None = None,
-    published_title: str | None = None,
 ) -> str:
-    """Save a file that a chat produced for its readers, stamped with the
-    chat session: `access.py:user_can_access_chat_file` gives a stamped file
-    of a `CHAT_OUTPUT_FILE_ORIGINS` origin to the users who may read that
-    session. Only `CHAT_IMAGE_GEN` rows written before stamping existed lack
-    the stamp. A `CHAT_ARTIFACT` file gets an ID under
-    `CHAT_ARTIFACT_FILE_PREFIX` and the chat session, by which the chat delete
-    deletes it. A `CHAT_ARTIFACT` file also records its VM path and title,
-    which the chat's file list reads. Returns the file ID."""
-    if file_origin not in CHAT_OUTPUT_FILE_ORIGINS:
-        raise ValueError(f"{file_origin} is not a chat output origin")
-    if (file_origin == FileOrigin.CHAT_ARTIFACT) != (published_path is not None):
-        raise ValueError("A published path is given for published files only")
-    if published_title is not None and published_path is None:
-        raise ValueError("A published title needs a published path")
-    file_metadata = {CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat_session_id)}
-    if published_path is not None:
-        file_metadata[PUBLISHED_FILE_PATH_METADATA_KEY] = published_path
-    if published_title is not None:
-        file_metadata[PUBLISHED_FILE_TITLE_METADATA_KEY] = published_title
+    """Save a generated image or code interpreter output, stamped with the
+    chat session: `access.py:user_can_access_chat_file` gives the file to the
+    users who may read that session. A file without the stamp is open to
+    every signed-in user (see `user_can_access_chat_file`). Returns the file
+    ID."""
     return get_default_file_store().save_file(
         content=BytesIO(content),
         display_name=display_name,
-        file_origin=file_origin,
+        file_origin=FileOrigin.CHAT_IMAGE_GEN,
         file_type=file_type,
-        file_metadata=file_metadata,
-        file_id=chat_artifact_file_id(chat_session_id)
-        if file_origin == FileOrigin.CHAT_ARTIFACT
-        else None,
+        file_metadata={CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat_session_id)},
     )
 
 
@@ -289,7 +262,6 @@ def save_file_from_url(url: str, chat_session_id: UUID) -> str:
         response.content,
         display_name="GeneratedImage",
         file_type="image/png;base64",
-        file_origin=FileOrigin.CHAT_IMAGE_GEN,
         chat_session_id=chat_session_id,
     )
 
@@ -299,7 +271,6 @@ def save_file_from_base64(base64_string: str, chat_session_id: UUID) -> str:
         base64.b64decode(base64_string),
         display_name="GeneratedImage",
         file_type=get_image_type(base64_string),
-        file_origin=FileOrigin.CHAT_IMAGE_GEN,
         chat_session_id=chat_session_id,
     )
 

@@ -20,9 +20,9 @@ from onyx.agents.tools import (
     ToolInvocation,
     ToolProgress,
 )
-from onyx.configs.constants import FileOrigin
+from onyx.db.chat import save_chat_artifact
 from onyx.file_store.staging import delete_files_best_effort
-from onyx.file_store.utils import chat_output_file_type, save_chat_output_file
+from onyx.file_store.utils import chat_output_file_type
 from onyx.llm.model_capabilities import is_claude_model
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.prompts.sandbox_tools import (
@@ -701,11 +701,12 @@ class WriteTool(_FileTool):
 
 
 class PublishFilesTool(_FileTool):
-    """Copies files from the VM to the file store, stamped with the chat
-    session, so that everyone who can read the chat can download them
-    (`access/access.py:user_can_access_chat_file`). The response's save
-    attaches them to its message (`db/chat_response.py:save_chat_turn`), and
-    a hard chat delete deletes them by their ID prefix, saved or not
+    """Copies files from the VM to the file store, each with a chat_artifact
+    row that links it to the root chat, so that everyone who can read the chat
+    can download them (`access/access.py:user_can_access_chat_file`). The
+    response's save attaches them to its message
+    (`db/chat_response.py:save_chat_turn`), and a hard chat delete deletes
+    them through their rows, saved or not
     (`db/chat.py:delete_messages_and_files_from_chat_session`). A call
     publishes all of its files or none.
     It takes turns with the file tools, so it publishes their changes."""
@@ -748,8 +749,8 @@ class PublishFilesTool(_FileTool):
                     )
                     name = posixpath.basename(path)
                     mime_type = chat_output_file_type(name)
-                    # The file record's JSON metadata cannot hold NUL, and a
-                    # blank title is no title
+                    # Postgres text cannot hold NUL, and a blank title is no
+                    # title
                     title = (
                         sanitize_string(requested.title or "")
                         .strip()[:PUBLISH_FILES_MAX_TITLE_CHARS]
@@ -758,14 +759,13 @@ class PublishFilesTool(_FileTool):
                     )
                     published.append(
                         PublishedFile(
-                            file_id=save_chat_output_file(
+                            file_id=save_chat_artifact(
                                 data,
                                 display_name=name,
                                 file_type=mime_type,
-                                file_origin=FileOrigin.CHAT_ARTIFACT,
                                 chat_session_id=ref.session_id,
-                                published_path=path,
-                                published_title=title,
+                                path=path,
+                                title=title,
                             ),
                             name=name,
                             title=title,

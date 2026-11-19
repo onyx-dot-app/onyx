@@ -42,10 +42,7 @@ from onyx.chat.process_message import (
 from onyx.chat.renderer import SPILLED_OUTPUT_NOTE
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.configs.constants import (
-    CHAT_SESSION_ID_FILE_METADATA_KEY,
     DEFAULT_PERSONA_ID,
-    PUBLISHED_FILE_PATH_METADATA_KEY,
-    PUBLISHED_FILE_TITLE_METADATA_KEY,
     DocumentSource,
     FileOrigin,
     MessageType,
@@ -72,6 +69,7 @@ from onyx.db.enums import (
 )
 from onyx.db.models import (
     ApprovalRequest,
+    ChatArtifact,
     ChatMessage,
     ChatSession,
     FileRecord,
@@ -89,7 +87,6 @@ from onyx.db.tools import get_builtin_tool
 from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.constants import CHAT_ARTIFACT_FILE_PREFIX
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.utils import plaintext_file_name_for_id
 from onyx.integrations.models import ApprovalMode
@@ -2238,15 +2235,23 @@ def test_a_bulk_delete_keeps_a_chat_created_while_it_runs(
 
 
 def _published_records(db_session: Session, chat_session_id: UUID) -> list[FileRecord]:
-    """The published files stamped with the chat session."""
+    """The published files of the chat session."""
     db_session.expire_all()
     return list(
         db_session.scalars(
-            select(FileRecord).where(
-                FileRecord.file_origin == FileOrigin.CHAT_ARTIFACT,
-                FileRecord.file_metadata[CHAT_SESSION_ID_FILE_METADATA_KEY].astext
-                == str(chat_session_id),
-            )
+            select(FileRecord)
+            .join(ChatArtifact, ChatArtifact.file_id == FileRecord.file_id)
+            .where(ChatArtifact.chat_session_id == chat_session_id)
+        )
+    )
+
+
+def _remaining_file_ids(db_session: Session, file_ids: list[str]) -> list[str]:
+    """The file IDs among `file_ids` that still have a file record."""
+    db_session.expire_all()
+    return list(
+        db_session.scalars(
+            select(FileRecord.file_id).where(FileRecord.file_id.in_(file_ids))
         )
     )
 
@@ -2335,16 +2340,14 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
         record = store.read_file_record(file.file_id)
         assert record.file_origin == FileOrigin.CHAT_ARTIFACT
         assert record.display_name == file.name
-        # The chat's file list reads the path and title from the record.
-        assert record.file_metadata == {
-            CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat.chat_session_id),
-            PUBLISHED_FILE_PATH_METADATA_KEY: file.path,
-            **(
-                {PUBLISHED_FILE_TITLE_METADATA_KEY: file.title}
-                if file.title is not None
-                else {}
-            ),
-        }
+        assert record.file_metadata is None
+        # The chat's file list and access read the chat_artifact row.
+        artifact = db_session.get_one(ChatArtifact, file.file_id)
+        assert (artifact.chat_session_id, artifact.path, artifact.title) == (
+            chat.chat_session_id,
+            file.path,
+            file.title,
+        )
         assert store.read_file(file.file_id).read() == data
     # Packets carry the path to show; the saved details do not store it.
     assert [file.display_path for file in published] == [
@@ -2366,7 +2369,7 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
     delete_chat_session_by_id(
         chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
     )
-    assert _published_records(db_session, chat.chat_session_id) == []
+    assert _remaining_file_ids(db_session, [file.file_id for file in published]) == []
 
 
 @pytest.mark.usefixtures("node", "initialize_file_store")
@@ -2385,8 +2388,6 @@ def test_everyone_who_can_read_the_chat_can_download_a_published_file(
     result, _ = _run(tools.publish_files, {"files": [{"path": "report.md"}]})
     assert isinstance(result.details, PublishedFiles)
     [file] = result.details.files
-    # Not a UUID: the download's user file lookup passes it through.
-    assert file.file_id.startswith(f"{CHAT_ARTIFACT_FILE_PREFIX}{chat_session.id}-")
     other = make_test_user("published_viewer")
 
     def download(reader: User) -> int:
@@ -2399,7 +2400,8 @@ def test_everyone_who_can_read_the_chat_can_download_a_published_file(
         ).status_code
 
     try:
-        # No response saved the file yet: the chat stamp alone gives access.
+        # No response saved the file yet: the chat_artifact row alone gives
+        # access.
         assert download(user) == 200
         with pytest.raises(OnyxError):
             download(other)
@@ -2434,9 +2436,14 @@ def test_a_publish_that_fails_on_one_file_publishes_none(
     make_tools: MakeTools,
     path: str,
     error: str,
+    user: User,
 ) -> None:
     monkeypatch.setattr(sandbox_tools, "PUBLISH_FILES_MAX_BYTES", 16)
-    tools = make_tools()
+    tools = make_tools(
+        create_chat_session(
+            db_session, "published", user.id, persona_id=DEFAULT_PERSONA_ID
+        ).id
+    )
     sandbox.write_file(tools.ref, "report.md", b"# Report\n")
     sandbox.write_file(tools.ref, "out/a.txt", b"a")
     sandbox.write_file(tools.ref, "big.bin", b"x" * 17)
@@ -2718,18 +2725,23 @@ def test_a_stop_during_the_last_copy_publishes_nothing(
     db_session: Session,
     sandbox: FirecrackerHarnessSandbox,
     make_tools: MakeTools,
+    user: User,
 ) -> None:
-    tools = make_tools()
+    tools = make_tools(
+        create_chat_session(
+            db_session, "published", user.id, persona_id=DEFAULT_PERSONA_ID
+        ).id
+    )
     sandbox.write_file(tools.ref, "report.md", b"# Report\n")
     cancellation = CancellationSignal()
-    save_chat_output_file = sandbox_tools.save_chat_output_file
+    save_chat_artifact = sandbox_tools.save_chat_artifact
 
     def save_then_stop(*args: Any, **kwargs: Any) -> str:
-        file_id = save_chat_output_file(*args, **kwargs)
+        file_id = save_chat_artifact(*args, **kwargs)
         cancellation.cancel()
         return file_id
 
-    monkeypatch.setattr(sandbox_tools, "save_chat_output_file", save_then_stop)
+    monkeypatch.setattr(sandbox_tools, "save_chat_artifact", save_then_stop)
 
     with pytest.raises(AgentCancelled):
         tools.publish_files.run(
@@ -2783,9 +2795,12 @@ def test_a_parked_response_lists_its_published_file_once_and_a_chat_delete_delet
         )
     ).one()
     response_id = approval.chat_message_id
-    [record] = _published_records(db_session, chat.chat_session_id)
+    [file_id] = [
+        record.file_id
+        for record in _published_records(db_session, chat.chat_session_id)
+    ]
     if not resume:
-        # No save lists the file: the chat delete finds it by its ID.
+        # No save lists the file: the chat delete finds it by its row.
         assert _answer_file_ids(db_session, chat.chat_session_id) == []
         delete_chat_session_by_id(
             chat.chat_session_id,
@@ -2793,7 +2808,7 @@ def test_a_parked_response_lists_its_published_file_once_and_a_chat_delete_delet
             user=chat.user,
             db_session=db_session,
         )
-        assert _published_records(db_session, chat.chat_session_id) == []
+        assert _remaining_file_ids(db_session, [file_id]) == []
         return
 
     with get_session_with_current_tenant() as session:
@@ -2812,18 +2827,25 @@ def test_a_parked_response_lists_its_published_file_once_and_a_chat_delete_delet
 
     _wait_until(completed)
     assert chat_turn_work.wait_idle(timeout=30)
-    assert _answer_file_ids(db_session, chat.chat_session_id) == [record.file_id]
+    assert _answer_file_ids(db_session, chat.chat_session_id) == [file_id]
     delete_chat_session_by_id(
         chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
     )
-    assert _published_records(db_session, chat.chat_session_id) == []
+    assert _remaining_file_ids(db_session, [file_id]) == []
 
 
 @pytest.mark.usefixtures("node", "initialize_file_store")
 def test_a_publish_of_too_many_files_publishes_none(
-    db_session: Session, sandbox: FirecrackerHarnessSandbox, make_tools: MakeTools
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    make_tools: MakeTools,
+    user: User,
 ) -> None:
-    tools = make_tools()
+    tools = make_tools(
+        create_chat_session(
+            db_session, "published", user.id, persona_id=DEFAULT_PERSONA_ID
+        ).id
+    )
     sandbox.write_file(tools.ref, "report.md", b"# Report\n")
 
     result, _ = _run(
