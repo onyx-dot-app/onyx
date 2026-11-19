@@ -238,27 +238,58 @@ fn read_macos(domain: &str, forced_only: bool) -> Policy {
     })
 }
 
+/// One store's read of a key: `Ok(None)` when the key or value is absent.
+type StoreRead = Result<Option<RawValue>, String>;
+
+/// The value from the first store that has it. A read error stops the search:
+/// a lower store must not stand in for a value that may exist, so the error
+/// becomes a value that is not valid, and `parse` fails closed on it.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn first_value(reads: impl IntoIterator<Item = StoreRead>) -> Option<RawValue> {
+    for read in reads {
+        match read {
+            Ok(None) => continue,
+            Ok(Some(value)) => return Some(value),
+            Err(e) => return Some(RawValue::Other(format!("could not read: {e}"))),
+        }
+    }
+    None
+}
+
 #[cfg(windows)]
 fn read_windows() -> Policy {
+    use std::io::ErrorKind;
     use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::types::FromRegValue;
     use winreg::RegKey;
     const KEY: &str = r"SOFTWARE\Policies\Onyx\Desktop";
     // Machine policy wins over user policy.
-    let keys: Vec<RegKey> = [HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER]
+    let keys: Vec<Result<Option<RegKey>, String>> = [HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER]
         .into_iter()
-        .filter_map(|hive| RegKey::predef(hive).open_subkey(KEY).ok())
+        .map(|hive| match RegKey::predef(hive).open_subkey(KEY) {
+            Ok(key) => Ok(Some(key)),
+            Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e.to_string()),
+        })
         .collect();
     parse(|name| {
-        keys.iter().find_map(|key| {
-            let raw = key.get_raw_value(name).ok()?;
-            Some(if let Ok(v) = key.get_value::<u32, _>(name) {
+        first_value(keys.iter().map(|key| -> StoreRead {
+            let Some(key) = key.as_ref().map_err(Clone::clone)?.as_ref() else {
+                return Ok(None);
+            };
+            let raw = match key.get_raw_value(name) {
+                Ok(raw) => raw,
+                Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+                Err(e) => return Err(e.to_string()),
+            };
+            Ok(Some(if let Ok(v) = u32::from_reg_value(&raw) {
                 RawValue::Int(i64::from(v))
-            } else if let Ok(v) = key.get_value::<String, _>(name) {
+            } else if let Ok(v) = String::from_reg_value(&raw) {
                 RawValue::Str(v)
             } else {
                 RawValue::Other(format!("{:?}", raw.vtype))
-            })
-        })
+            }))
+        }))
     })
 }
 
@@ -331,6 +362,9 @@ pub fn refresh(app: &AppHandle) {
         state.set_policy(new.clone());
         if new.disable_auto_update {
             crate::updater::discard_ready();
+        }
+        if new.disable_launcher && !old.disable_launcher {
+            crate::windows::hide_launcher(app);
         }
         if new.launch_at_login != old.launch_at_login {
             apply_launch_at_login(app, &new);
@@ -531,6 +565,27 @@ mod tests {
         let float = parse_json(r#"{"DisableAutoUpdate": 1.0}"#);
         assert!(float.disable_auto_update);
         assert!(float.invalid);
+    }
+
+    #[test]
+    fn a_read_error_does_not_fall_through_to_a_lower_store() {
+        let user = || Ok(Some(RawValue::Bool(false)));
+        let denied = || Err("access denied".to_string());
+        assert_eq!(first_value([Ok(None), user()]), Some(RawValue::Bool(false)));
+        assert_eq!(first_value([Ok(None), Ok(None)]), None);
+        assert!(matches!(
+            first_value([denied(), user()]),
+            Some(RawValue::Other(_))
+        ));
+        // A key that cannot be read takes its restrictive value.
+        let p = parse(|key| match key {
+            LOCK_SERVER_URL | DISABLE_LAUNCHER | LAUNCH_AT_LOGIN => first_value([denied(), user()]),
+            _ => None,
+        });
+        assert!(p.lock_server_url);
+        assert!(p.disable_launcher);
+        assert_eq!(p.launch_at_login, None);
+        assert!(p.invalid);
     }
 
     /// Reads real preferences through CFPreferences, from a scratch domain

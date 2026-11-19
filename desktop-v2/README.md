@@ -81,7 +81,7 @@ organization". Sample files for each platform are in [`deploy/`](deploy/).
 | `LockServerURL` | bool | Always use `ServerURL`, and hide **Change server**. Without a valid `ServerURL`, the user's saved server stays and cannot change. |
 | `DisableAutoUpdate` | bool | The updater does not check for updates, and an update that already downloaded is not installed. **Check for Updates…** says that updates are managed. |
 | `LauncherShortcut` | string | The launcher shortcut, in the Preferences format, for example `CommandOrControl+Shift+Space`. If another app holds the shortcut, the app tries again at each policy read. |
-| `DisableLauncher` | bool | No launcher shortcut, and the launcher does not open. |
+| `DisableLauncher` | bool | No launcher shortcut, and the launcher does not open. An open launcher closes at the next policy read. |
 | `LaunchAtLogin` | bool | Turns **Launch at login** on or off, and the Preferences switch is locked. See [Launch at login](#launch-at-login). |
 | `DisableNotifications` | bool | Turns off desktop notifications. |
 
@@ -194,7 +194,8 @@ To see what the app gets on a device, run `defaults read "/Library/Managed Prefe
 ### Windows
 
 The app reads `HKLM\SOFTWARE\Policies\Onyx\Desktop`, then the same key under `HKCU`. A machine
-value wins over a user value. Use `REG_SZ` for strings and `REG_DWORD` (`0` or `1`) for booleans.
+value wins over a user value. If the app cannot read a machine key or value (for example, access
+is denied), it does not use the user value. The value is not valid. Use `REG_SZ` for strings and `REG_DWORD` (`0` or `1`) for booleans.
 For Group Policy or Intune (imported ADMX), use the templates in
 [`deploy/windows/`](deploy/windows/): copy `Onyx.admx` to `PolicyDefinitions` and `en-US/Onyx.adml`
 to `PolicyDefinitions/en-US`. You can also deploy the values with Group Policy Preferences

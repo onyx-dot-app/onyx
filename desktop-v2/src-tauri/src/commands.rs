@@ -59,6 +59,15 @@ fn server_locked(state: &AppState) -> Result<(), String> {
     .into())
 }
 
+/// Launcher commands refuse while managed policy turns the launcher off.
+fn launcher_enabled(app: &AppHandle, state: &AppState) -> Result<(), String> {
+    if !state.policy().disable_launcher {
+        return Ok(());
+    }
+    windows::hide_launcher(app);
+    Err("Your organization turned off the launcher.".into())
+}
+
 #[tauri::command]
 pub async fn check_server(url: String, state: State<'_, AppState>) -> Result<ServerInfo, String> {
     let server = normalize_server_url(&url)?;
@@ -243,6 +252,7 @@ pub async fn ask(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    launcher_enabled(&app, &state)?;
     let epoch = state.epoch();
     let (server, token) = state.session()?;
     let current = || state.epoch() == epoch;
@@ -269,7 +279,12 @@ pub async fn ask(
 }
 
 #[tauri::command]
-pub async fn search(query: String, state: State<'_, AppState>) -> Result<Vec<SearchHit>, String> {
+pub async fn search(
+    query: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Vec<SearchHit>, String> {
+    launcher_enabled(&app, &state)?;
     let epoch = state.epoch();
     let (server, token) = state.session()?;
     let hits = state.api.search(&server, &token, &query).await?;
@@ -286,6 +301,7 @@ pub async fn open_chat_in_main(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    launcher_enabled(&app, &state)?;
     let (server, token) = state.session()?;
     let path = match chat_session_id {
         Some(id) => format!("/app?chatId={id}"),
@@ -301,6 +317,7 @@ pub async fn open_external(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    launcher_enabled(&app, &state)?;
     // Relative links (search results, citations) belong to the server.
     let server = state.server().ok();
     let base = server.as_deref().and_then(|s| url::Url::parse(s).ok());
@@ -333,8 +350,10 @@ pub fn hide_launcher(app: AppHandle) {
 
 /// The launcher logo's easter egg: brings Aonyx onto the screen or sends it away.
 #[tauri::command]
-pub fn toggle_aonyx(app: AppHandle) {
-    crate::aonyx::toggle(&app);
+pub fn toggle_aonyx(app: AppHandle, state: State<'_, AppState>) {
+    if launcher_enabled(&app, &state).is_ok() {
+        crate::aonyx::toggle(&app);
+    }
 }
 
 /// A click on the pet opens (or closes) the launcher.
