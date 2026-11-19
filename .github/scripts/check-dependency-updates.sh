@@ -30,7 +30,8 @@ while IFS= read -r base; do
     stable=false
     continue
   fi
-  # A non-zero exit with JSON is a pending update. With no output the check itself broke.
+  # Success covers the first 24 hours after a release. A non-zero exit with JSON is a pending update.
+  # With no output the check itself broke.
   if status="$("$ods_audit" updates --monitor --state "$policy" --package chrome --version "$installed")"; then
     continue
   fi
@@ -50,7 +51,7 @@ while IFS= read -r base; do
 done <<< "main"$'\n'"${releases}"
 
 if [ "${#lines[@]}" -eq 0 ]; then
-  echo "All dependency updates are current."
+  echo "No dependency update has been pending for 24 hours."
   exit 0
 fi
 
