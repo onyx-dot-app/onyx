@@ -9,7 +9,7 @@ from fastapi_users_db_sqlalchemy import (
 )
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import TIMESTAMPAware
-from pydantic import BaseModel, Field, JsonValue, ValidationError
+from pydantic import BaseModel, BeforeValidator, Field, JsonValue, ValidationError
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -4059,6 +4059,31 @@ class StoredToolResult(ToolResultMessage):
     details: SavedToolResultDetails | None = None
 
 
+_SAVED_TOOL_DETAIL_TAGS = frozenset(
+    kind.model_fields["type"].default for kind in SAVED_TOOL_RESULT_TYPES
+)
+
+
+class UnavailableStoredToolResult(StoredToolResult):
+    """A completed result whose display schema is unavailable."""
+
+
+def _read_stored_tool_result(value: object) -> object:
+    if isinstance(value, dict):
+        details = value.get("details")
+        if (
+            isinstance(details, dict)
+            and isinstance(tag := details.get("type"), str)
+            and tag not in _SAVED_TOOL_DETAIL_TAGS
+        ):
+            result = UnavailableStoredToolResult.model_validate(
+                {**value, "details": None}
+            )
+            result.content = ""
+            return result
+    return value
+
+
 class ToolCall(Base):
     """Invocation arguments and their recorded output, with related search documents."""
 
@@ -4075,7 +4100,11 @@ class ToolCall(Base):
         nullable=True,
     )
     result: Mapped[StoredToolResult | None] = mapped_column(
-        PydanticType(StoredToolResult, sanitize_strings=True), nullable=True
+        PydanticType(
+            Annotated[StoredToolResult, BeforeValidator(_read_stored_tool_result)],
+            sanitize_strings=True,
+        ),
+        nullable=True,
     )
     chat_session_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("chat_session.id", ondelete="CASCADE")

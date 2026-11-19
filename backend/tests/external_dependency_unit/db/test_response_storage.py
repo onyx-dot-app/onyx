@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel
-from sqlalchemy import delete, event, func, inspect, select, update
+from sqlalchemy import delete, event, func, inspect, select, text, update
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.unitofwork import UOWTransaction
 
@@ -1825,6 +1825,64 @@ def test_content_free_response_does_not_write_items(
         )
         == 0
     )
+
+
+def test_unavailable_tool_result_keeps_the_outer_answer(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    _child_record(db_session, record, uuid4(), "Private child output")
+    record.steps = _steps(
+        record.run_id,
+        [
+            AssistantMessage(
+                content=[
+                    TextContent(text="Private intermediate text"),
+                    ToolCall(
+                        id="delegate",
+                        name="delegate",
+                        arguments={"query": "Private input"},
+                    ),
+                ]
+            ),
+            ToolResultMessage(
+                tool_call_id="delegate", tool_name="delegate", content="Private output"
+            ),
+            AssistantMessage(content=[TextContent(text="Saved answer")]),
+        ],
+    )
+    record.answer_step_index = 1
+    _save(db_session, response, record)
+    db_session.execute(
+        text("""
+            UPDATE tool_call SET result = jsonb_set(result, '{details}', '{"type":"unavailable"}')
+            WHERE parent_chat_message_id = :id
+        """),
+        {"id": response.id},
+    )
+    db_session.execute(
+        update(ChatResponseItem)
+        .where(
+            ChatResponseItem.chat_message_id == response.id,
+            ChatResponseItem.step_index == 0,
+        )
+        .values(rendering={"mode": "unavailable"})
+    )
+    db_session.expire_all()
+
+    packets = translate_assistant_message_to_packets(response, {}, db_session)
+    assert [
+        p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
+    ] == ["Saved answer"]
+    assert "Private" not in "".join(p.model_dump_json() for p in packets)
+    history = messages_from_steps(read_response_steps(response))
+    assert not any(
+        isinstance(m, ToolResultMessage)
+        or (isinstance(m, AssistantMessage) and m.tool_calls)
+        for m in history
+    )
+    assert history[-1].text == "Saved answer"
 
 
 def test_old_rows_keep_the_legacy_reader(

@@ -410,9 +410,8 @@ are plain `AgentTool` objects with no `Tool` row, and
    ([[#renderer-dispatches-by-name]]). Older messages with no saved response
    replay through
    `server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`,
-   which dispatches on `Tool.in_code_tool_id`, the class name. If the tool row
-   is gone, legacy replay shows the name and text from `ToolCall.result`.
-   Calls with only `tool_call_response` need a backfill before tool deletion.
+   which dispatches on `Tool.in_code_tool_id`, the class name. Legacy replay
+   skips calls whose tool row is missing ([[chat-persistence#tool-id-not-foreign-key]]).
 12. `calls-are-merged` **Merged calls share one execution and one result.**
     `agents/tool_execution.py:ToolBatch._start_compatible_calls` merges later
     calls to the same tool when the tool sets `merge_list_argument` and all

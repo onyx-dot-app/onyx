@@ -258,6 +258,14 @@ class MessageRendering(BaseModel):
     pre_answer_seconds: float | None = None
 
 
+def read_message_rendering(value: dict[str, JsonValue]) -> MessageRendering:
+    """Hide text with an unknown display mode when replaying stored chat steps."""
+    mode = value.get("mode")
+    if isinstance(mode, str) and mode not in PresentationMode:
+        value = {**value, "mode": PresentationMode.SILENT}
+    return MessageRendering.model_validate(value)
+
+
 class ResponseRecord(BaseModel):
     """Accepted steps and execution outcomes, without live application objects."""
 

@@ -578,18 +578,6 @@ def translate_assistant_message_to_packets(
                         else None
                     )
                     if tool is None:
-                        if (result := tool_call.result) is not None:
-                            turn_tool_packets.extend(
-                                create_custom_tool_packets(
-                                    tool_name=result.tool_name,
-                                    display_name=tool_call.display_name
-                                    or result.tool_name,
-                                    response_type="text",
-                                    turn_index=turn_num,
-                                    tab_index=tool_call.tab_index,
-                                    data=result.text,
-                                )
-                            )
                         continue
 
                     # Handle different tool types

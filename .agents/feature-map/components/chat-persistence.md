@@ -525,10 +525,9 @@ Community downgrade clears it ([[billing]]).
    `run_python` builder parses the saved result JSON
    ([[code-execution#run-python-result-json]]).
 9. `tool-id-not-foreign-key` **`ToolCall.tool_id` is not a foreign key.**
-   After tool deletion, runtime replay reads the saved calls and results.
-   Legacy replay uses the name and text in `ToolCall.result` to show a generic
-   tool step. Before deleting a tool, backfill `result` for legacy calls whose
-   only output is in `tool_call_response`. Code mode has no tool row: `persistence.tool_ids`
+   Runtime replay skips a call and its child steps when the stored result type
+   is unknown. Legacy replay skips a call when its catalog row is missing.
+   Both keep the separately saved assistant answer. Code mode has no tool row: `persistence.tool_ids`
    maps `execute_code` and `wait_code` to None, and their calls save with a
    NULL `tool_id`.
 10. `shared-read-hides-deleted` **A shared read never returns a deleted
@@ -697,7 +696,7 @@ Community downgrade clears it ([[billing]]).
   the live answer".** Fetch
   `/api/chat/get-chat-session/{id}` through the frontend and compare its
   `packets` for the answer with the live stream. If a legacy tool step is missing,
-  check whether both its tool row and its saved `result` are absent
+  check whether its tool row still exists
   ([[#tool-id-not-foreign-key]]). Missing steps on any row
   can point at a missing replay branch ([[#replay-matches-live-stream]]). A tab
   that shows its start but no result has no saved result: query

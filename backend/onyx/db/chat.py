@@ -40,6 +40,7 @@ from onyx.chat.models import (
     PresentationMode,
     ResponseAncestry,
     SessionAncestor,
+    read_message_rendering,
 )
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
@@ -1348,7 +1349,7 @@ def get_chat_message_reasoning(chat_message: ChatMessage) -> str | None:
         if chat_message.response_status == RunStatus.COMPLETE and not item.is_answer:
             continue
         rendering = (
-            MessageRendering.model_validate(item.rendering)
+            read_message_rendering(item.rendering)
             if item.rendering is not None
             else MessageRendering()
         )

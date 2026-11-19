@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 import pytest
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.agents.models import (
@@ -13,7 +13,13 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.chat.models import ChatSearchResult, ToolReplayData
+from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES, CheckpointSerializer
+from onyx.chat.models import (
+    ChatSearchResult,
+    PresentationMode,
+    ToolReplayData,
+    read_message_rendering,
+)
 from onyx.chat.presentation import _collect_tool_history, replay_response
 from onyx.chat.renderer import ToolRenderer
 from onyx.chat.response import response_record
@@ -30,7 +36,6 @@ from onyx.server.query_and_chat.session_loading import (
 )
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
-    CustomToolDelta,
     MemoryToolNoAccess,
     OverallStop,
     PacketException,
@@ -54,7 +59,7 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
 @pytest.mark.parametrize(
-    "kind", ["search", "custom", "error", "public_error", "display_error", "no_details"]
+    "kind", ["search", "custom", "error", "display_error", "no_details"]
 )
 def test_live_and_saved_tool_cards_share_public_content_without_tool_definition(
     kind: str,
@@ -77,10 +82,6 @@ def test_live_and_saved_tool_cards_share_public_content_without_tool_definition(
     elif kind == "custom":
         details = CustomToolCallSummary(
             tool_name="lookup", response_type="json", tool_result={"value": "found"}
-        )
-    elif kind == "public_error":
-        details = CustomToolCallSummary(
-            tool_name=call.name, response_type="text", tool_result="command exited 1"
         )
     elif kind == "display_error":
         details = ToolExecutionError(message="lookup failed")
@@ -138,10 +139,6 @@ def test_live_and_saved_tool_cards_share_public_content_without_tool_definition(
     assert "stale" not in public_json
     if kind == "error":
         assert "lookup failed" not in public_json
-    if kind == "public_error":
-        assert [p.obj.data for p in restored if isinstance(p.obj, CustomToolDelta)] == [
-            "command exited 1"
-        ]
     if kind == "display_error":
         errors = [
             packet.obj for packet in restored if isinstance(packet.obj, PacketException)
@@ -430,3 +427,43 @@ def test_legacy_thinking_precedes_tool_groups_and_final_answer(
     ] == [("Final answer", final_turn)]
     assert isinstance(packets[-1].obj, OverallStop)
     assert packets[-1].placement.turn_index == final_turn
+
+
+def test_unknown_saved_display_mode_stays_hidden_and_cannot_resume() -> None:
+    raw: dict[str, JsonValue] = {"mode": "unavailable"}
+    assert read_message_rendering(raw).mode == PresentationMode.SILENT
+    with pytest.raises(ValidationError):
+        CheckpointSerializer(CHECKPOINT_PAYLOAD_TYPES).decode_payload(
+            {"tag": "chat.rendering.v1", "value": raw}
+        )
+    with pytest.raises(ValidationError):
+        read_message_rendering({**raw, "citation_mode": "invalid"})
+
+
+def test_legacy_deleted_tool_keeps_only_the_final_answer() -> None:
+    response = ChatMessage(
+        message="Saved answer",
+        message_type=MessageType.ASSISTANT,
+        tool_calls=[
+            ToolCall(
+                tool_id=1,
+                tool_call_id="call",
+                turn_number=0,
+                tab_index=0,
+                tool_call_arguments={"input": "sensitive input"},
+                result=StoredToolResult(
+                    tool_call_id="call",
+                    tool_name="removed",
+                    content="sensitive model result",
+                    is_error=True,
+                ),
+                legacy_response="sensitive legacy text",
+            )
+        ],
+    )
+    with Session() as session:
+        packets = translate_assistant_message_to_packets(response, {}, session)
+    assert [
+        p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
+    ] == ["Saved answer"]
+    assert not any("sensitive" in p.model_dump_json() for p in packets)
