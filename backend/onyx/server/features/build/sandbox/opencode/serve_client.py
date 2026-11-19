@@ -44,7 +44,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
@@ -73,6 +73,8 @@ from onyx.server.features.build.sandbox.event_schema import (
     AgentMessageChunk,
     AgentThoughtChunk,
     Error,
+    OnyxSearchMeta,
+    OnyxToolMeta,
     PromptResponse,
     TextPartMetadata,
     ToolCallProgress,
@@ -208,6 +210,7 @@ _TOOL_KIND: dict[str, str] = {
     "todo_write": "other",
     "webfetch": "fetch",
     "websearch": "search",
+    "web_search": "search",
     # opencode 1.15.x additions:
     "lsp": "other",
     "skill": "other",
@@ -231,6 +234,7 @@ _TOOL_TITLE: dict[str, str] = {
     "todo_write": "Updating todos",
     "webfetch": "Fetching web content",
     "websearch": "Searching web",
+    "web_search": "Searching web",
     # opencode 1.15.x additions:
     "lsp": "Checking code",
     "skill": "Running skill",
@@ -879,8 +883,35 @@ def _merge_field_meta(event: SandboxEvent, extra: dict[str, Any]) -> None:
     events; merge rather than overwrite so both survive ``model_dump``."""
     existing = getattr(event, "field_meta", None)  # ods: ignore[getattr]
     merged: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
-    merged.update(extra)
+    for key, value in extra.items():
+        # ``onyx`` is a namespace: merge its keys so neither side's are lost.
+        current = merged.get(key)
+        if key == "onyx" and isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = {**current, **value}
+        else:
+            merged[key] = value
     setattr(event, "field_meta", merged)  # noqa: B010
+
+
+def _onyx_search_meta(tool: str, part_state: dict[str, Any]) -> OnyxSearchMeta | None:
+    """The ``web_search`` plugin's queries and results, from its ``metadata``.
+
+    The plugin (``opencode-plugins/web-search.ts``) returns them as
+    ``metadata.onyxSearch``. Anything malformed is dropped, not raised: the
+    text output still reaches the model and the frontend."""
+    if tool != "web_search":
+        return None
+    metadata = part_state.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    search = metadata.get("onyxSearch")
+    if not isinstance(search, dict):
+        return None
+    try:
+        return OnyxSearchMeta.model_validate(search)
+    except ValidationError:
+        logger.warning("opencode-serve: web_search metadata did not validate")
+        return None
 
 
 def _emit_tool_events(
@@ -899,11 +930,12 @@ def _emit_tool_events(
 
     raw_status = part_state.get("status", "pending")
     status = _tool_status(raw_status)
-    if status == "completed":
-        metadata = part_state.get("metadata")
-        exit_code = metadata.get("exit") if isinstance(metadata, dict) else None
-        if isinstance(exit_code, int) and exit_code != 0:
-            status = "failed"
+    metadata = part_state.get("metadata")
+    exit_code = metadata.get("exit") if isinstance(metadata, dict) else None
+    if not isinstance(exit_code, int):
+        exit_code = None
+    if status == "completed" and exit_code is not None and exit_code != 0:
+        status = "failed"
     raw_input = part_state.get("input") or None
     raw_output = _wrap_raw_output(part_state)
     content = _synthesize_tool_content(tool, part_state)
@@ -916,8 +948,16 @@ def _emit_tool_events(
         # _meta is an ACP-reserved extensibility field. We use it to carry
         # the raw opencode tool name so the frontend can resolve a precise
         # title (otherwise tools with kind="other" — todowrite, task, lsp,
-        # skill, … — all fall through to "Running tool").
-        "_meta": {"toolName": tool},
+        # skill, … — all fall through to "Running tool"). ``onyx`` holds the
+        # Onyx data ACP has no field for (see ``OnyxToolMeta``).
+        "_meta": {
+            "toolName": tool,
+            "onyx": OnyxToolMeta(
+                cancelled=True if raw_status == "cancelled" else None,
+                search=_onyx_search_meta(tool, part_state),
+                exitCode=exit_code if tool == "bash" else None,
+            ).to_meta(),
+        },
     }
     if raw_input is not None:
         common["rawInput"] = raw_input

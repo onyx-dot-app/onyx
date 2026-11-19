@@ -29,6 +29,7 @@ from onyx.llm.models import (
     ToolCallDeltaEvent,
     ToolCallEndEvent,
     ToolCallStartEvent,
+    ToolChoice,
     ToolChoiceOptions,
     ToolDefinition,
     Usage,
@@ -461,9 +462,14 @@ def _unique_call_id(
 
 
 def to_assistant_message(
-    response: ModelResponse, request: GenerationRequest
+    response: ModelResponse,
+    request: GenerationRequest,
+    sent_tool_choice: ToolChoice | None = None,
 ) -> AssistantMessage:
-    """Convert a complete provider response without creating stream events."""
+    """Convert a complete provider response without creating stream events.
+
+    `sent_tool_choice` is the choice the provider received when it differs
+    from the request's choice."""
     source = response.choice.message
     message = AssistantMessage(
         stop_reason=response.choice.finish_reason,
@@ -498,9 +504,7 @@ def to_assistant_message(
         )
         _finish_tool_call(call, arguments, definitions.get(call.name))
         message.content.append(call)
-    if request.tools:
-        message = recover_tool_calls(message, request)
-    return message
+    return recover_tool_calls(message, request, sent_tool_choice)
 
 
 class _PendingToolCall:
@@ -662,12 +666,18 @@ class MessageAccumulator:
         return events
 
     def consume(
-        self, stream: Iterator[ModelResponseStream], request: GenerationRequest
+        self,
+        stream: Iterator[ModelResponseStream],
+        request: GenerationRequest,
+        sent_tool_choice: ToolChoice | None = None,
     ) -> Generator[GenerationEvent, None, None]:
-        """Stream provider text as events, then recover calls written as text."""
+        """Stream provider text as events, then recover calls written as text.
+
+        `sent_tool_choice` is the choice the provider received when it differs
+        from the request's choice."""
         ids: dict[int, str] = {}
         taken = _taken_call_ids(request)
-        recovery_enabled = bool(_recovery_tools(request))
+        recovery_enabled = _provider_may_call(request, sent_tool_choice)
         recover = recovery_enabled
         raw_text: list[str] = []
         raw_thinking: list[str] = []
@@ -715,14 +725,29 @@ class MessageAccumulator:
                         ]
                     ),
                     request,
+                    sent_tool_choice,
                 )
-            tail = content_filter.flush() if content_filter is not None else ""
+            recovered_calls = recovered.tool_calls if recovered is not None else []
+            # Like the complete path, XML that holds no call stays in the answer.
+            tail = (
+                content_filter.flush(keep_blocks=not self.calls and not recovered_calls)
+                if content_filter is not None
+                else ""
+            )
             if tail:
                 yield from self._add_text(TextContent(text=tail))
-            if not self.calls and recovered is not None and recovered.tool_calls:
-                yield from self._add_recovered_calls(recovered.tool_calls)
+            if not self.calls and recovered_calls:
+                yield from self._add_recovered_calls(recovered_calls)
             self.message.usage = usage
             self.message.stop_reason = stop_reason
+        except BaseException as error:
+            # A stream that ends early recovers no call, so keep the prose it
+            # held. Cancellation and consumer exit cannot yield; record it only.
+            if content_filter is not None and (held := content_filter.flush()):
+                held_events = self._add_text(TextContent(text=held))
+                if isinstance(error, Exception):
+                    yield from held_events
+            raise
         finally:
             if isinstance(stream, Closable):
                 stream.close()
@@ -769,35 +794,50 @@ class MessageAccumulator:
         return events
 
 
-def _recovery_tools(request: GenerationRequest) -> list[ToolDefinition]:
-    """Select candidates for implicit recovery; explicit calls retain provider names."""
-    if request.options.tool_choice == ToolChoiceOptions.NONE:
-        return []
-    allowed = request.allowed_tool_names
-    return [tool for tool in request.tools if allowed is None or tool.name in allowed]
+def _provider_may_call(
+    request: GenerationRequest, sent_tool_choice: ToolChoice | None
+) -> bool:
+    """Whether the provider could call a tool, so text may hold a call.
+
+    Providers that receive NONE write any call-like text as part of the answer."""
+    if not request.tools:
+        return False
+    if sent_tool_choice is not None:
+        return sent_tool_choice != ToolChoiceOptions.NONE
+    return request.options.tool_choice != ToolChoiceOptions.NONE and (
+        request.allowed_tool_names is None or bool(request.allowed_tool_names)
+    )
 
 
 def recover_tool_calls(
-    message: AssistantMessage, request: GenerationRequest
+    message: AssistantMessage,
+    request: GenerationRequest,
+    sent_tool_choice: ToolChoice | None = None,
 ) -> AssistantMessage:
     """Recover provider text tool payloads when native calls are absent."""
-    eligible_tools = _recovery_tools(request)
-    if message.tool_calls or not eligible_tools:
+    if message.tool_calls or not _provider_may_call(request, sent_tool_choice):
         return message
+    choice = request.options.tool_choice
     should_try = (
-        request.options.tool_choice == ToolChoiceOptions.REQUIRED
-        or isinstance(request.options.tool_choice, NamedToolChoice)
+        choice == ToolChoiceOptions.REQUIRED
+        or isinstance(choice, NamedToolChoice)
         or bool(message.thinking and not message.text)
         or looks_like_xml_tool_call_payload(message.text)
         or looks_like_xml_tool_call_payload(message.thinking)
     )
     if not should_try:
         return message
-    eligible_names = {tool.name for tool in eligible_tools}
+    allowed = request.allowed_tool_names
+    # A step that lets no tool run infers no call; the runtime denies explicit calls.
     implicit_names = (
-        eligible_names & {request.options.tool_choice.name}
-        if isinstance(request.options.tool_choice, NamedToolChoice)
-        else eligible_names
+        set()
+        if choice == ToolChoiceOptions.NONE
+        else {
+            tool.name
+            for tool in request.tools
+            if (allowed is None or tool.name in allowed)
+            and (not isinstance(choice, NamedToolChoice) or tool.name == choice.name)
+        }
     )
     calls = extract_tool_calls_from_response_text(
         message.text, request.tools, implicit_tool_names=implicit_names

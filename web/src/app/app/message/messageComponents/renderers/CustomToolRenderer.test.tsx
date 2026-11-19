@@ -1,4 +1,5 @@
 import { render, screen } from "@tests/setup/test-utils";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import {
   CustomToolErrorInfo,
   CustomToolPacket,
@@ -61,7 +62,8 @@ function renderStatus(
               data-surface={result.surfaceBackground}
               data-collapsible={String(result.supportsCollapsible)}
             >
-              {result.status}
+              {/* The header a done step shows. */}
+              {toPlainString(result.doneStatus ?? result.status ?? "")}
               {result.content}
             </div>
           ))}

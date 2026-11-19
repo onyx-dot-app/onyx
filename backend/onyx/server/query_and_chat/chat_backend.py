@@ -186,6 +186,7 @@ from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_deleted_chat_sessions,
 )
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
+from onyx.server.query_and_chat.acp_stream import ChatAcpTranslator
 from onyx.server.query_and_chat.chat_utils import (
     is_spreadsheet_mime_type,
     parse_spreadsheet_for_preview,
@@ -1178,6 +1179,8 @@ def handle_send_chat_message(
     # Streaming path, normal Onyx UI behavior
     def stream_generator() -> Generator[str, None, None]:
         response_future = Future[ChatResponseOutcome]()
+        # v2 re-shapes each object as an ACP update (acp_stream.py).
+        acp = ChatAcpTranslator() if chat_message_req.protocol_version == 2 else None
         try:
             for obj in handle_stream_message_objects(
                 new_msg_req=chat_message_req,
@@ -1193,11 +1196,20 @@ def handle_send_chat_message(
                 response_future=response_future,
                 approval_mode=approval_mode,
             ):
-                yield get_json_line(obj.model_dump())
+                if acp is None:
+                    yield get_json_line(obj.model_dump())
+                else:
+                    for update in acp.translate(obj.model_dump()):
+                        yield get_json_line(update)
 
         except Exception as e:
             logger.exception("Error in chat message streaming")
-            yield get_json_line(unhandled_stream_error(e).model_dump())
+            error = unhandled_stream_error(e).model_dump()
+            if acp is None:
+                yield get_json_line(error)
+            else:
+                for update in acp.translate(error):
+                    yield get_json_line(update)
 
         finally:
             logger.debug("Stream generator finished")

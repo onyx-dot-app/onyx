@@ -50,6 +50,7 @@ from onyx.db.file_record import (
     get_filerecord_by_file_id_for_update,
     get_filerecord_by_file_id_optional,
     get_filerecord_by_prefix,
+    get_object_keys_with_records,
     rename_filerecord,
     upsert_filerecord,
 )
@@ -91,6 +92,58 @@ def content_byte_size(file_content: object) -> int | None:
     if isinstance(file_content, str):
         return len(file_content.encode("utf-8"))
     return None
+
+
+def record_uploaded_object(
+    *,
+    file_id: str,
+    display_name: str | None,
+    file_origin: FileOrigin,
+    file_type: str,
+    file_metadata: dict[str, Any] | None,
+    file_size: int | None,
+    bucket_name: str,
+    object_key: str,
+    db_session: Session | None,
+    delete_object: Callable[[], None],
+) -> None:
+    """Writes and commits the record of an object that save_file uploaded.
+    When the write or commit fails, calls delete_object unless a committed
+    record points at the object, then raises the original error. Such a record
+    can be an earlier save of the same file ID, a renamed record or another ID
+    that sanitizes to the same key."""
+    try:
+        with get_session_with_current_tenant_if_none(db_session) as db_session:
+            upsert_filerecord(
+                file_id=file_id,
+                display_name=display_name or file_id,
+                file_origin=file_origin,
+                file_type=file_type,
+                bucket_name=bucket_name,
+                object_key=object_key,
+                db_session=db_session,
+                file_metadata=file_metadata,
+                file_size=file_size,
+            )
+            db_session.commit()
+    except Exception:
+        try:
+            with get_session_with_current_tenant() as cleanup_session:
+                referenced = get_object_keys_with_records(
+                    bucket_name, [object_key], cleanup_session
+                )
+            if not referenced:
+                delete_object()
+        except Exception:
+            logger.warning(
+                "Failed to delete orphaned object %s/%s after the record "
+                "write for file %s failed",
+                bucket_name,
+                object_key,
+                file_id,
+                exc_info=True,
+            )
+        raise
 
 
 _T = TypeVar("_T")
@@ -925,20 +978,22 @@ class S3BackedFileStore(PresignableFileStore):
         )
         self._put_legacy_object(bucket_name, s3_key, file_content, file_type, kwargs)
 
-        with get_session_with_current_tenant_if_none(db_session) as db_session:
-            # Save metadata to database
-            upsert_filerecord(
-                file_id=file_id,
-                display_name=display_name or file_id,
-                file_origin=file_origin,
-                file_type=file_type,
-                bucket_name=bucket_name,
-                object_key=s3_key,
-                db_session=db_session,
-                file_metadata=file_metadata,
-                file_size=content_byte_size(file_content),
-            )
-            db_session.commit()
+        def delete_upload() -> None:
+            self._delete_legacy_object(bucket_name, s3_key)
+            s3_client.delete_object(Bucket=bucket_name, Key=s3_key)
+
+        record_uploaded_object(
+            file_id=file_id,
+            display_name=display_name,
+            file_origin=file_origin,
+            file_type=file_type,
+            file_metadata=file_metadata,
+            file_size=content_byte_size(file_content),
+            bucket_name=bucket_name,
+            object_key=s3_key,
+            db_session=db_session,
+            delete_object=delete_upload,
+        )
 
         return file_id
 

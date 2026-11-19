@@ -52,7 +52,7 @@ func TestFindPostgresContainer(t *testing.T) {
 			want: "proj-relational_db-1",
 		},
 		{
-			name: "rejects unrelated legacy containers",
+			name: "rejects a stopped project container",
 			body: `if [ "$1" = inspect ]; then
   case "$4" in
     onyx-relational_db-1|relational_db) echo true ;;
@@ -62,28 +62,20 @@ fi`,
 			wantErr: `no running PostgreSQL container found for project "proj"; try: ods compose dev`,
 		},
 		{
-			name: "rejects unrelated postgres images",
-			body: `[ "$1" = inspect ] && exit 1
-printf 'web\tnginx:1.27\ndb\tpostgres:15.2-alpine\n'`,
-			wantErr: `no running PostgreSQL container found for project "proj"; try: ods compose dev`,
-		},
-		{
-			name: "errors when nothing matches",
-			body: `[ "$1" = inspect ] && exit 1
-printf 'web\tnginx:1.27\nmalformed\n'`,
-			wantErr: `no running PostgreSQL container found for project "proj"; try: ods compose dev`,
-		},
-		{
-			name:    "errors when docker ps fails",
+			name:    "errors when docker inspect fails",
 			body:    "exit 1",
 			wantErr: `no running PostgreSQL container found for project "proj"; try: ods compose dev`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fakeDocker(t, tt.body)
+			calls := fakeDocker(t, tt.body)
 
 			got, err := FindPostgresContainer("proj")
+			want := []string{"inspect -f {{.State.Running}} proj-relational_db-1"}
+			if calls := readCalls(t, calls); !slices.Equal(calls, want) {
+				t.Fatalf("expected calls %q, got %q", want, calls)
+			}
 			if tt.wantErr != "" {
 				if err == nil || err.Error() != tt.wantErr {
 					t.Fatalf("expected error %q, got %q, %v", tt.wantErr, got, err)
@@ -100,19 +92,6 @@ printf 'web\tnginx:1.27\nmalformed\n'`,
 	}
 }
 
-func TestFindPostgresContainer_queriesDockerInOrder(t *testing.T) {
-	calls := fakeDocker(t, "exit 1")
-
-	_, _ = FindPostgresContainer("proj")
-
-	want := []string{
-		"inspect -f {{.State.Running}} proj-relational_db-1",
-	}
-	if got := readCalls(t, calls); !slices.Equal(got, want) {
-		t.Fatalf("expected calls %q, got %q", want, got)
-	}
-}
-
 func TestFindPostgresContainerUsesOnlyTheNormalizedSelectedProject(t *testing.T) {
 	calls := fakeDocker(t, `echo true`)
 	container, err := FindPostgresContainer("Selected.Project")
@@ -122,7 +101,7 @@ func TestFindPostgresContainerUsesOnlyTheNormalizedSelectedProject(t *testing.T)
 	if got := readCalls(t, calls); !slices.Equal(got, []string{"inspect -f {{.State.Running}} selectedproject-relational_db-1"}) {
 		t.Fatalf("unexpected lookup %v", got)
 	}
-	if _, err := FindPostgresContainer(""); err == nil {
+	if _, err := FindPostgresContainer(""); err == nil || err.Error() != "a PostgreSQL project must be selected" {
 		t.Fatal("an empty project must not select a default database")
 	}
 }

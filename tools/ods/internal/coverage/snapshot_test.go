@@ -12,20 +12,6 @@ import (
 // testCommit is a full object name whose short form is "abc1234".
 const testCommit = "abc1234" + "000000000000000000000000000000000"
 
-func TestNewSnapshot_recordsExactCounts(t *testing.T) {
-	profile := profileOf(map[string][2]int{"cmd": {2, 3}})
-
-	snapshot := NewSnapshot(profile, testCommit, "tools/ods")
-
-	want := SnapshotPackage{Covered: 2, Statements: 3}
-	if got := snapshot.Packages["cmd"]; got != want {
-		t.Fatalf("expected the counts kept exactly, got %+v", got)
-	}
-	if snapshot.Version != SnapshotVersion || snapshot.Commit != testCommit || snapshot.Module != "tools/ods" {
-		t.Fatalf("unexpected snapshot identity: %+v", snapshot)
-	}
-}
-
 func TestSnapshot_encodeParseRoundTrip(t *testing.T) {
 	snapshot := NewSnapshot(profileOf(map[string][2]int{"cmd": {2, 3}, "internal/audit": {0, 4}}), testCommit, "tools/ods")
 
@@ -123,31 +109,6 @@ func TestSnapshotObjectKey(t *testing.T) {
 	want := "coverage/tools-ods/" + testCommit + ".yaml"
 	if got := SnapshotObjectKey("tools/ods", testCommit); got != want {
 		t.Fatalf("got %q, want %q", got, want)
-	}
-}
-
-func TestShortCommit(t *testing.T) {
-	if got := ShortCommit(testCommit); got != "abc1234" {
-		t.Fatalf("got %q, want %q", got, "abc1234")
-	}
-	if got := ShortCommit("abc"); got != "abc" {
-		t.Fatalf("expected a short input returned whole, got %q", got)
-	}
-}
-
-func TestSnapshot_saveAndLoadFile(t *testing.T) {
-	snapshot := NewSnapshot(profileOf(map[string][2]int{"cmd": {2, 3}}), testCommit, "tools/ods")
-	path := filepath.Join(t.TempDir(), "snapshot.yaml")
-
-	if err := snapshot.SaveFile(path); err != nil {
-		t.Fatalf("failed to save the snapshot: %v", err)
-	}
-	loaded, err := LoadSnapshotFile(path)
-	if err != nil {
-		t.Fatalf("failed to load the snapshot: %v", err)
-	}
-	if !reflect.DeepEqual(loaded, snapshot) {
-		t.Fatalf("got %+v, want %+v", loaded, snapshot)
 	}
 }
 

@@ -12253,9 +12253,6 @@
         "emptyState": {
           "text": "لم يتم توليد صور"
         },
-        "failedStatus": {
-          "text": "فشل توليد الصورة"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {تم توليد صورة واحدة} other {تم توليد # صور}}"
         },
@@ -12401,21 +12398,18 @@
             "status": "جارٍ توليد الخطة"
           }
         },
-        "doneStep": {
-          "header": "تم"
-        },
         "expandButton": {
           "ariaLabel": "توسيع الخط الزمني"
         },
         "fetch": {
           "reading": {
             "status": "جارٍ القراءة"
+          },
+          "read": {
+            "status": "تمت القراءة"
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "الأحرف {start, number}–{end, number} من {total, number}"
-          },
           "read": {
             "status": "قرأ {fileName} (الأحرف {start, number}–{end, number} من {total, number})"
           },
@@ -12492,9 +12486,14 @@
           "reading": {
             "status": "جارٍ القراءة"
           },
+          "read": {
+            "label": "تمت القراءة"
+          },
           "header": {
             "default": "جارٍ البحث في المستندات الداخلية",
+            "doneDefault": "تم البحث في المستندات الداخلية",
             "sources": "جارٍ البحث في {sources}",
+            "doneSources": "تم البحث في {sources}",
             "sourcesOverflow": "{sources} +{count} أخرى",
             "withTimeWindow": "{header} ({timeWindow})"
           },
@@ -12516,6 +12515,9 @@
           },
           "updating": {
             "status": "جارٍ تحديث الذاكرة"
+          },
+          "updated": {
+            "status": "تم تحديث الذاكرة"
           },
           "viewMemoriesButton": {
             "tooltip": "عرض الذكريات"
@@ -12581,20 +12583,8 @@
           }
         },
         "python": {
-          "completed": {
-            "status": "اكتمل تنفيذ Python"
-          },
-          "default": {
-            "status": "تنفيذ Python"
-          },
           "error": {
             "label": "خطأ:"
-          },
-          "executing": {
-            "status": "جارٍ تنفيذ كود Python..."
-          },
-          "failed": {
-            "status": "فشل تنفيذ Python"
           },
           "generatedFiles": {
             "label": "{count, plural, one {تم توليد ملف واحد} other {تم توليد # ملفات}}"
@@ -12605,6 +12595,12 @@
           "output": {
             "label": "الإخراج:"
           },
+          "running": {
+            "status": "جارٍ تشغيل Python"
+          },
+          "ran": {
+            "status": "تم تشغيل Python"
+          },
           "runningCode": {
             "label": "جارٍ تشغيل الكود..."
           },
@@ -12613,11 +12609,11 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "النص الكامل"
-          },
           "thinking": {
             "status": "جارٍ التفكير"
+          },
+          "thought": {
+            "status": "تم التفكير"
           }
         },
         "researchAgent": {
@@ -12638,9 +12634,6 @@
         },
         "stepsButton": {
           "label": "{count, plural, one {خطوة واحدة} other {# خطوات}}"
-        },
-        "stoppedStep": {
-          "header": "توقف"
         },
         "thoughtDuration": {
           "label": "فكّر لمدة {duration}"
@@ -12674,6 +12667,9 @@
         "webSearch": {
           "searching": {
             "status": "جارٍ البحث في الويب"
+          },
+          "searched": {
+            "status": "تم البحث في الويب"
           }
         },
         "sandbox": {
@@ -14872,9 +14868,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# استدعاء} other {# استدعاءات}}"
-        },
         "working": {
           "label": "قيد العمل"
         }

@@ -12253,9 +12253,6 @@
         "emptyState": {
           "text": "Nenhuma imagem gerada"
         },
-        "failedStatus": {
-          "text": "Falha na geração de imagens"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {# imagem gerada} other {# imagens geradas}}"
         },
@@ -12401,21 +12398,18 @@
             "status": "Gerando plano"
           }
         },
-        "doneStep": {
-          "header": "Concluído"
-        },
         "expandButton": {
           "ariaLabel": "Expandir a linha do tempo"
         },
         "fetch": {
           "reading": {
             "status": "Lendo"
+          },
+          "read": {
+            "status": "Lido"
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "caracteres {start, number}–{end, number} de {total, number}"
-          },
           "read": {
             "status": "Leu {fileName} (caracteres {start, number}–{end, number} de {total, number})"
           },
@@ -12492,9 +12486,14 @@
           "reading": {
             "status": "Lendo"
           },
+          "read": {
+            "label": "Lido"
+          },
           "header": {
             "default": "Pesquisando documentos internos",
+            "doneDefault": "Documentos internos pesquisados",
             "sources": "Pesquisando {sources}",
+            "doneSources": "Pesquisa em {sources} concluída",
             "sourcesOverflow": "{sources} +{count} mais",
             "withTimeWindow": "{header} ({timeWindow})"
           },
@@ -12516,6 +12515,9 @@
           },
           "updating": {
             "status": "Atualizando memória"
+          },
+          "updated": {
+            "status": "Memória atualizada"
           },
           "viewMemoriesButton": {
             "tooltip": "Ver memórias"
@@ -12581,20 +12583,8 @@
           }
         },
         "python": {
-          "completed": {
-            "status": "Execução do Python concluída"
-          },
-          "default": {
-            "status": "Execução do Python"
-          },
           "error": {
             "label": "Erro:"
-          },
-          "executing": {
-            "status": "Executando código Python..."
-          },
-          "failed": {
-            "status": "Falha na execução do Python"
           },
           "generatedFiles": {
             "label": "{count, plural, one {# arquivo gerado} other {# arquivos gerados}}"
@@ -12605,6 +12595,12 @@
           "output": {
             "label": "Saída:"
           },
+          "running": {
+            "status": "Executando Python"
+          },
+          "ran": {
+            "status": "Python executado"
+          },
           "runningCode": {
             "label": "Executando código..."
           },
@@ -12613,11 +12609,11 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "Texto completo"
-          },
           "thinking": {
             "status": "Pensando"
+          },
+          "thought": {
+            "status": "Pensou"
           }
         },
         "researchAgent": {
@@ -12638,9 +12634,6 @@
         },
         "stepsButton": {
           "label": "{count, plural, one {# etapa} other {# etapas}}"
-        },
-        "stoppedStep": {
-          "header": "Interrompido"
         },
         "thoughtDuration": {
           "label": "Pensou por {duration}"
@@ -12674,6 +12667,9 @@
         "webSearch": {
           "searching": {
             "status": "Pesquisando na web"
+          },
+          "searched": {
+            "status": "Pesquisa na web concluída"
           }
         },
         "sandbox": {
@@ -14872,9 +14868,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# chamada} other {# chamadas}}"
-        },
         "working": {
           "label": "Trabalhando"
         }

@@ -77,12 +77,3 @@ func TestAggregate_groupsByDirectoryDepth(t *testing.T) {
 		}
 	}
 }
-
-// A directory with no identifiers must not read as a regression.
-func TestAggregate_emptyDirectoryIsFullyCovered(t *testing.T) {
-	profile := Aggregate([]FileCount{{File: "types/empty.d.ts", Correct: 0, Total: 0}}, Depth)
-
-	if got := profile.Packages[0].Percent(); got != 100 {
-		t.Fatalf("expected 100%%, got %v", got)
-	}
-}

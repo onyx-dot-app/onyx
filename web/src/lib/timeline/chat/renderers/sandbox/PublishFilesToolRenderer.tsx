@@ -121,7 +121,6 @@ export function PublishFilesToolRenderer({
       icon: SvgFiles,
       status,
       supportsCollapsible: true,
-      noPaddingRight: true,
       content,
     },
   ]);

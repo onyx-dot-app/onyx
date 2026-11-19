@@ -64,11 +64,13 @@ if (typeof window !== "undefined") {
     }
   } as any;
 
-  // Mock window.matchMedia for responsive components
+  // Mock window.matchMedia for responsive components. jsdom runs no
+  // animations, so motion is reduced: Presence swaps without waiting for
+  // animation events that never fire.
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: jest.fn().mockImplementation((query) => ({
-      matches: false,
+      matches: query === "(prefers-reduced-motion: reduce)",
       media: query,
       onchange: null,
       addListener: jest.fn(), // deprecated

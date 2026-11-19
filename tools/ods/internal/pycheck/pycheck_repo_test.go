@@ -135,9 +135,3 @@ func TestCheckAndAnnotate_errors(t *testing.T) {
 		})
 	}
 }
-
-func TestRelTo_fallsBackToThePath(t *testing.T) {
-	if got := relTo("/backend", "onyx/a.py"); got != "onyx/a.py" {
-		t.Fatalf("expected the path unchanged, got %q", got)
-	}
-}

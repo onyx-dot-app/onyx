@@ -82,11 +82,21 @@ function renderMessage(packets: Packet[]) {
   );
 }
 
+// Opens the run card when it is folded, then its steps, which start closed.
+// The card's fold button is named by the step count.
+async function openRun() {
+  const fold = screen.queryByRole("button", { name: /^\d+ steps?$/ });
+  if (fold?.getAttribute("aria-expanded") === "false") {
+    await act(async () => fold.click());
+  }
+  for (const step of screen.queryAllByRole("button", { expanded: false })) {
+    await act(async () => step.click());
+  }
+}
+
 async function expandTimeline() {
   await screen.findByText("Done.");
-  await act(async () => {
-    screen.getByRole("button", { name: "Expand timeline" }).click();
-  });
+  await openRun();
 }
 
 const PATCH = [
@@ -147,6 +157,7 @@ test("a command shows its output while it runs and how it ended", async () => {
     expect(
       (await screen.findAllByText("Running command")).length
     ).toBeGreaterThan(0);
+    await openRun();
     expect(view.container).toHaveTextContent("$ make test");
     // While it runs, only the last lines of the output are in the page.
     expect(screen.getByText(/test_8 ok/)).toBeInTheDocument();
@@ -326,7 +337,7 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
   }
 });
 
-test("parallel edit and write calls are titled by their file tool", async () => {
+test("parallel edit and write calls render as separate steps", async () => {
   const edited = at({ turn_index: 0, tab_index: 0 });
   const written = at({ turn_index: 0, tab_index: 1 });
   const view = render(
@@ -348,8 +359,9 @@ test("parallel edit and write calls are titled by their file tool", async () => 
   );
   try {
     await expandTimeline();
-    expect(screen.getByText("Edit File")).toBeInTheDocument();
-    expect(screen.getByText("Write File")).toBeInTheDocument();
+    // Each call is its own step with its own patch head.
+    expect(screen.getAllByText(/\+print\('hi'\)/)).toHaveLength(2);
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   } finally {
     view.unmount();
   }
@@ -519,7 +531,6 @@ test("a call that spans two code mode observations shows all its output", async 
   );
   try {
     await screen.findByText("Done.");
-    expect(screen.getByText("1 step")).toBeInTheDocument();
     await expandTimeline();
     expect(screen.getByText(/step 1\s+step 2/)).toBeInTheDocument();
   } finally {
@@ -605,11 +616,9 @@ test("a call the user stopped shows as stopped, not as a result", async () => {
     ])
   );
   try {
-    await act(async () => {
-      (await screen.findByRole("button", { name: "Expand timeline" })).click();
-    });
-    // Both calls, and the timeline's own stopped step
-    expect(await screen.findAllByText("Stopped")).toHaveLength(3);
+    await openRun();
+    // Both calls show as stopped.
+    expect(await screen.findAllByText("Stopped")).toHaveLength(2);
     expect(screen.getByText("waiting")).toBeInTheDocument();
     expect(screen.queryByText("Ran command")).not.toBeInTheDocument();
     expect(screen.queryByText("No output")).not.toBeInTheDocument();
@@ -644,9 +653,7 @@ test("a code mode call that its cell's end cut off shows as stopped", async () =
   const view = render(renderMessage(cellPackets));
   try {
     // Stopped as soon as the cell ends, while the turn goes on
-    await act(async () => {
-      (await screen.findByRole("button", { name: "Expand timeline" })).click();
-    });
+    await openRun();
     expect(await screen.findByText("Stopped")).toBeInTheDocument();
     expect(screen.getByText("waiting")).toBeInTheDocument();
     expect(screen.queryByText("Command failed")).not.toBeInTheDocument();

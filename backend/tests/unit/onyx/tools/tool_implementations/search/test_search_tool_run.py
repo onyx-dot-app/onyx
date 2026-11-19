@@ -1078,7 +1078,6 @@ def _run_selection(
         patch(
             f"{MODULE}.convert_inference_sections_to_search_docs", return_value=[]
         ) as to_docs,
-        patch(f"{MODULE}.get_llm_token_counter", return_value=lambda _: 0),
         patch(f"{MODULE}.rank_sections_listwise", rank),
         patch(
             f"{MODULE}.select_sections_for_expansion",
@@ -1108,7 +1107,9 @@ def test_decision_rerank_selects_by_listwise_probability() -> None:
     scores[55], scores[3], scores[7] = 0.99, 0.5, 0.5
     rank = MagicMock(return_value=scores)
 
-    select, expand, merge, to_docs = _run_selection(tool, sections, rank, client)
+    with patch("onyx.llm.factory.get_llm_tokenizer_encode_func") as encoder:
+        select, expand, merge, to_docs = _run_selection(tool, sections, rank, client)
+    encoder.assert_not_called()
 
     select.assert_not_called()
     assert rank.call_args.args[0] == sections

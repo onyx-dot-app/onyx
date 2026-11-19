@@ -1,4 +1,5 @@
 import { useTranslations } from "next-intl";
+import { RetrievalBody } from "@/lib/timeline/components/bodies/RetrievalBody";
 import { FetchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
@@ -8,7 +9,10 @@ import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { OnyxDocument } from "@/lib/search/types";
 import { openExternalLink } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { SearchChipList, SourceInfo } from "../search/SearchChipList";
+import {
+  SearchChipList,
+  SourceInfo,
+} from "@/lib/timeline/components/bodies/SearchChipList";
 import { getMetadataTags } from "../search/searchStateUtils";
 import {
   constructCurrentFetchState,
@@ -16,7 +20,7 @@ import {
   URLS_PER_EXPANSION,
 } from "./fetchStateUtils";
 import { Text } from "@opal/components";
-import { SvgCircle } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 
 const urlToSourceInfo = (url: string, index: number): SourceInfo => ({
   id: `url-${index}`,
@@ -65,8 +69,9 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   if (!hasStarted) {
     return children([
       {
-        icon: SvgCircle,
+        icon: STEP_ICONS.fetch,
         status: t("fetch.reading.status"),
+        doneStatus: t("fetch.read.status"),
         content: <div />,
         supportsCollapsible: false,
         timelineLayout: "timeline",
@@ -125,40 +130,24 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
 
   return children([
     {
-      icon: SvgCircle,
+      icon: STEP_ICONS.fetch,
       status: t("fetch.reading.status"),
+      doneStatus: t("fetch.read.status"),
       supportsCollapsible: false,
       timelineLayout: "timeline",
       content: (
-        <div className="flex flex-col">
-          {displayDocuments ? (
-            <SearchChipList
-              items={documents}
-              initialCount={INITIAL_URLS_TO_SHOW}
-              expansionCount={URLS_PER_EXPANSION}
-              getKey={(doc: OnyxDocument) => doc.document_id}
-              toSourceInfo={(doc: OnyxDocument) => documentToSourceInfo(doc)}
-              onClick={(doc: OnyxDocument) => {
-                if (doc.link) openExternalLink(doc.link);
-              }}
-              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
-            />
-          ) : displayUrls ? (
-            <SearchChipList
-              items={urls}
-              initialCount={INITIAL_URLS_TO_SHOW}
-              expansionCount={URLS_PER_EXPANSION}
-              getKey={(url: string) => url}
-              toSourceInfo={urlToSourceInfo}
-              onClick={(url: string) => openExternalLink(url)}
-              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
-            />
-          ) : (
-            <div className="flex flex-wrap gap-x-2 gap-y-2 ms-1">
-              {!stopPacketSeen && <BlinkingBar />}
-            </div>
-          )}
-        </div>
+        <RetrievalBody
+          queries={[]}
+          results={
+            displayDocuments
+              ? documents.map(documentToSourceInfo)
+              : displayUrls
+                ? urls.map(urlToSourceInfo)
+                : []
+          }
+          isComplete={stopPacketSeen}
+          compact
+        />
       ),
     },
   ]);
