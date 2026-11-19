@@ -416,6 +416,30 @@ def test_a_pool_run_puts_each_question_on_its_shelf(run: dict[str, Any]) -> None
     }
 
 
+def test_a_failed_private_save_leaves_the_run_unrecorded(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    alice = uuid4()
+    run["candidates"] = [
+        CandidateDocument(
+            document_id="new", kind=QuestionKind.DOCUMENT, owner_ids=[alice]
+        )
+    ]
+
+    def lock_timed_out(*_args: Any) -> None:
+        raise CacheLockAcquisitionError("person's record is busy")
+
+    monkeypatch.setattr(tasks, "save_private_questions", lock_timed_out)
+    retry = MagicMock(side_effect=Retry())
+    monkeypatch.setattr(tasks.generate_suggested_questions_pool, "retry", retry)
+
+    with pytest.raises(Retry):
+        _pool_task()
+
+    # The pool, with this run's record, is not saved, so the retry may run.
+    assert run["saved"] is None
+
+
 def test_each_persons_shelf_is_excluded_for_them(
     run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
