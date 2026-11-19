@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "launcher",
+  "description": "The launcher panel: ask, search and open results.",
+  "local": true,
+  "windows": ["launcher"],
+  "permissions": [
+    "core:window:allow-start-dragging",
+    "allow-ask",
+    "allow-search",
+    "allow-open-chat-in-main",
+    "allow-open-external",
+    "allow-hide-launcher",
+    "allow-toggle-aonyx"
+  ]
+}

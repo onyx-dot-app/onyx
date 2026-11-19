@@ -84,10 +84,11 @@ On macOS. For Windows and Linux, see [Windows and Linux](#windows-and-linux).
 
 ## Security boundary
 
-- Only the bundled windows (onboarding, login, preferences, launcher)
+- Only the bundled windows (onboarding, login, preferences, launcher, aonyx)
   can call app commands. Every app command needs an explicit permission (`build.rs` app
-  manifest), and the capability in `src-tauri/capabilities/local.json` grants them to those
-  windows only. The remote main window gets no app command.
+  manifest). Each window has its own capability in `src-tauri/capabilities/` (file name =
+  window label) that grants only the commands its page uses. The remote main window gets no
+  app command.
 - The main window gets just two built-in window permissions, on the configured server's origin
   only: start dragging and title-bar zoom (for its drag regions).
 - Local windows have a strict CSP (`script-src 'self'`, `connect-src` limited to IPC). The

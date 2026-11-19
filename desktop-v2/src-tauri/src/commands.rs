@@ -1,5 +1,5 @@
-//! Commands for the bundled local windows. The capability in capabilities/local.json
-//! limits them to those windows; the remote main window cannot call any of them.
+//! Commands for the bundled local windows. Each window's capability in capabilities/
+//! grants only the commands its page uses; the remote main window cannot call any of them.
 
 use serde::Serialize;
 use tauri::ipc::Channel;
