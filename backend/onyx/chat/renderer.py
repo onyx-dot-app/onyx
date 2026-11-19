@@ -917,7 +917,9 @@ class ToolRenderer:
         else:
             self._last_details = details
             obj = packets.ExecEnd(
-                output=details.output,
+                output=details.output
+                if details.spilled is None
+                else _spilled_card_text(details.spilled),
                 exit_code=details.exit_code,
                 completion=details.completion,
                 session_id=details.session_id,

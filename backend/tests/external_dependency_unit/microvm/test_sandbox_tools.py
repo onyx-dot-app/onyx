@@ -107,6 +107,7 @@ from onyx.microvm.daemon_client import SandboxDaemonErrorReason
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2
 from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.features.build.sandbox import harness_factory
+from onyx.server.features.build.sandbox.exec_output import EXEC_CALL_OUTPUT_MAX_BYTES
 from onyx.server.features.build.sandbox.firecracker import (
     harness_sandbox,
     harness_state,
@@ -490,7 +491,7 @@ def test_a_chat_turn_streams_saves_and_replays_its_sandbox_calls(
     exec_text = last_tool_text(llm, "exec")
     assert exec_text.startswith("Wall time: ")
     assert exec_text.endswith(
-        "Process exited with code 0\nOriginal token count: 3\nOutput:\nhi there\n"
+        "Process exited with code 0\nOriginal character count: 9\nOutput:\nhi there\n"
     )
     assert last_tool_text(llm, "patch") == (
         "Success. Updated the following files:\nA a.txt\n"
@@ -541,8 +542,8 @@ def test_a_program_gets_a_dict_from_exec_command_and_a_failed_call_raises(
 
     text = last_tool_text(llm, "code")
     assert (
-        "['completion', 'exit_code', 'original_token_count', 'output', "
-        "'wall_time_seconds'] hi\n 0 exited" in text
+        "['completion', 'exit_code', 'output', 'wall_time_seconds'] hi\n 0 exited"
+        in text
     )
     assert "Success. Updated the following files:\nA a.txt" in text
     assert f"raised: {ExecSessionNotFoundError('nope')}" in text
@@ -1015,25 +1016,33 @@ def test_a_running_command_takes_input_polls_and_stops_through_write_stdin(
 
 
 @pytest.mark.usefixtures("sandbox", "node")
-def test_the_live_output_of_a_call_stops_at_its_token_budget(
+def test_the_live_output_of_a_call_stops_at_its_character_budget(
     make_tools: MakeTools,
 ) -> None:
     """The final output replaces the live preview, so the preview streams no
-    more than max_output_tokens x 4 bytes."""
+    more than max_output_chars characters."""
     tools = make_tools()
-    text = "a" * 200 + "z" * 200
+    # The budget counts a multi-byte character as one and never splits it.
+    text = "a" * 79 + "é" * 2 + "z" * 200
     result, progress = _run(
-        tools.exec_command, {"cmd": f"echo {text}", "max_output_tokens": 20}
+        tools.exec_command, {"cmd": f"echo {text}", "max_output_chars": 80}
     )
     streamed = "".join(
         update.details.text
         for update in progress
         if isinstance(update.details, ExecOutputDelta)
     )
-    assert streamed == "a" * 80
+    assert streamed == "a" * 79 + "é"
     details = result.details
     assert isinstance(details, SandboxExecResult)
-    assert details.output.startswith("a" * 40) and "tokens omitted" in details.output
+    # The card shows that the cut left output out.
+    assert details.truncated
+    assert details.output == (
+        "a" * 40
+        + "\n... [output truncated, 202 characters omitted] ...\n"
+        + "z" * 39
+        + "\n"
+    )
 
 
 @pytest.mark.usefixtures("node")
@@ -3199,3 +3208,209 @@ def test_the_oldest_spilled_results_of_any_chat_go_past_the_vm_limit(
 
     assert spilled(chats[0]) == []
     assert len(spilled(chats[1])) == 1
+
+
+def _seq(count: int) -> str:
+    """The output of `seq <count>` in the fake daemon."""
+    return "".join(f"{n}\n" for n in range(1, count + 1))
+
+
+def _cut(text: str, max_chars: int, omitted: int = 0) -> str:
+    """`text` (ASCII) cut in the middle to `max_chars`, as exec cuts it."""
+    if len(text) <= max_chars and not omitted:
+        return text
+    half = max_chars // 2
+    return (
+        text[:half]
+        + f"\n... [output truncated, {len(text) - max_chars + omitted} characters "
+        "omitted] ...\n" + text[len(text) - (max_chars - half) :]
+    )
+
+
+def _card(full: str) -> str:
+    """What the terminal card shows of spilled output."""
+    return f"{full[:2000]}\n\n[{SPILLED_OUTPUT_NOTE}]\n\n{full[-1000:]}"
+
+
+def _exec_end(parts: Sequence[object]) -> packets.ExecEnd:
+    [end] = [obj for obj in _sandbox_packets(parts) if isinstance(obj, packets.ExecEnd)]
+    return end
+
+
+@pytest.mark.parametrize(
+    "count",
+    [
+        pytest.param(20_000, id="over_the_cut"),
+        pytest.param(300_000, id="over_the_byte_cap"),
+    ],
+)
+@pytest.mark.usefixtures("node")
+def test_the_model_gets_its_cut_of_large_command_output_and_the_file_the_rest(
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+    count: int,
+) -> None:
+    llm = ChatLLM(
+        [
+            tool_step(ExecCommandTool.NAME, "seq", {"cmd": f"seq {count}"}),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat.send(llm)
+
+    output = _seq(count)
+    # The call keeps the head and the tail of the output, and the file marks
+    # the middle that the byte cap dropped.
+    half = EXEC_CALL_OUTPUT_MAX_BYTES // 2
+    dropped = max(len(output) - EXEC_CALL_OUTPUT_MAX_BYTES, 0)
+    head, tail = (output[:half], output[-half:]) if dropped else (output, "")
+    full = _cut(head + tail, len(head) + len(tail), dropped)
+    [(path, data)] = _spills(node, chat.ref(db_session)).items()
+    assert path.endswith("_seq.txt")
+    assert data == full.encode()
+    # The model gets exactly the default cut, whose one count includes the
+    # dropped middle, then the file's note.
+    cut = _cut(output, 40_000)
+    shown = last_tool_text(llm, "seq")
+    assert shown.startswith("Wall time: ")
+    assert shown.endswith(
+        f"Process exited with code 0\nOriginal character count: {len(output)}\n"
+        f"Output:\n{cut}\n\n" + _note(path, len(data), FULL_VALUE_NOTE)
+    )
+    # The history keeps the model's cut, and the card shows the file's head
+    # and tail with a plain note, the same live and on a reload.
+    [saved] = _saved_results(db_session, chat.chat_session_id)
+    assert saved.content == shown
+    assert isinstance(saved.details, SandboxExecResult)
+    assert saved.details.output == ""
+    # The card's output is cut either way.
+    assert saved.details.truncated
+    assert saved.details.spilled == SpilledOutput(head=full[:2000], tail=full[-1000:])
+    live = _exec_end(parts)
+    assert live.output == _card(full) and live.truncated
+    [replayed] = chat.replayed(db_session)
+    assert _exec_end(replayed) == live
+
+
+@pytest.mark.usefixtures("node")
+def test_command_output_that_its_cut_barely_shortens_still_spills(
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+) -> None:
+    output = _seq(20_000)
+    max_chars = len(output) - 1
+    llm = ChatLLM(
+        [
+            tool_step(
+                ExecCommandTool.NAME,
+                "seq",
+                {"cmd": "seq 20000", "max_output_chars": max_chars},
+            ),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm)
+
+    [data] = _spills(node, chat.ref(db_session)).values()
+    assert data == output.encode()
+    assert f"Output:\n{_cut(output, max_chars)}\n\n<persisted-output " in (
+        last_tool_text(llm, "seq")
+    )
+
+
+@pytest.mark.usefixtures("node")
+def test_command_output_that_the_vm_cannot_take_keeps_its_cut(
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+) -> None:
+    node.agent.write_file_error = SandboxDaemonErrorReason.INTERNAL
+    llm = ChatLLM(
+        [
+            tool_step(ExecCommandTool.NAME, "seq", {"cmd": "seq 20000"}),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm)
+
+    cut = _cut(_seq(20_000), 40_000)
+    shown = last_tool_text(llm, "seq")
+    assert shown.endswith(f"Output:\n{cut}\n\n{SPILL_FAILED_NOTE}")
+    [saved] = _saved_results(db_session, chat.chat_session_id)
+    assert isinstance(saved.details, SandboxExecResult)
+    assert (saved.details.output, saved.details.spilled) == (cut, None)
+
+
+@pytest.mark.usefixtures("node")
+def test_exec_results_are_exempt_from_the_step_budget(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+) -> None:
+    monkeypatch.setattr(spill, "STEP_MAX_CHARS", 10_000)
+    call_ids = ("first", "second")
+    step = Delta(
+        tool_calls=[
+            ChatCompletionDeltaToolCall(
+                id=call_id,
+                index=index,
+                function=ResponseFunctionCall(
+                    name=ExecCommandTool.NAME, arguments='{"cmd": "seq 5000"}'
+                ),
+            )
+            for index, call_id in enumerate(call_ids)
+        ]
+    )
+    llm = ChatLLM([step, Delta(content="Done.")])
+    chat.send(llm)
+
+    for call_id in call_ids:
+        assert last_tool_text(llm, call_id).endswith(f"Output:\n{_seq(5_000)}")
+    assert _spills(node, chat.ref(db_session)) == {}
+
+
+@pytest.mark.usefixtures("node")
+def test_a_program_gets_all_the_output_that_a_command_kept(
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+) -> None:
+    # Over the model's default cut, under the bytes that a call keeps.
+    output = _seq(20_000)
+    program = (
+        "result = await tools.exec_command(cmd='seq 20000')\n"
+        "print(len(result['output']), result['output'].endswith('19999\\n20000\\n'))\n"
+    )
+    llm = ChatLLM([code_step("count", program), Delta(content="Done.")])
+    chat.send(llm, code_mode=True)
+
+    assert last_tool_text(llm, "count").endswith(f"Output:\n{len(output)} True")
+    # Results of calls inside a program do not spill.
+    assert _spills(node, chat.ref(db_session)) == {}
+
+
+@pytest.mark.usefixtures("node")
+def test_a_program_that_prints_a_mebibyte_of_command_output_spills_its_cell(
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+) -> None:
+    program = (
+        "result = await tools.exec_command(cmd='seq 300000')\nprint(result['output'])\n"
+    )
+    llm = ChatLLM([code_step("big", program), Delta(content="Done.")])
+    chat.send(llm, code_mode=True)
+
+    [(path, data)] = _spills(node, chat.ref(db_session)).items()
+    assert path.endswith("_big.txt")
+    kept = data.decode()
+    # The cell keeps 640,000 characters of what the program printed.
+    assert kept.startswith("Output:\n1\n2\n3\n")
+    assert kept.rstrip().endswith("299999\n300000")
+    assert len(kept) < 650_000
+    shown = last_tool_text(llm, "big")
+    assert shown.startswith("Warning: truncated output")
+    assert len(shown) < 42_000

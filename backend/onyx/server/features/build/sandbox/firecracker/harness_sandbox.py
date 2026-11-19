@@ -571,10 +571,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         *,
         workdir: str | None = None,
         yield_time_ms: int | None = None,
-        max_output_tokens: int | None = None,
     ) -> Generator[ExecEvent]:
         """Starts the command when the iterator is first read."""
-        buffer = ExecOutputBuffer(max_output_tokens)
+        buffer = ExecOutputBuffer()
         yield_seconds = _clamp_ms(
             yield_time_ms,
             EXEC_DEFAULT_YIELD_MS,
@@ -636,10 +635,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         chars: str = "",
         *,
         yield_time_ms: int | None = None,
-        max_output_tokens: int | None = None,
     ) -> Generator[ExecEvent]:
         """Writes when the iterator is first read."""
-        buffer = ExecOutputBuffer(max_output_tokens)
+        buffer = ExecOutputBuffer()
         if chars:
             yield_seconds = _clamp_ms(
                 yield_time_ms,
@@ -789,18 +787,18 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             buffer.session_id = None
             if text := buffer.finish():
                 yield ExecOutputDelta(text=text)
-        output, truncated, original_token_count = buffer.cut()
         exited = result is not None and result.completion is ExecCompletion.EXITED
         yield ExecCommandResult(
-            output=output,
+            head=buffer.head,
+            tail=buffer.tail,
+            omitted_chars=buffer.omitted_chars,
             session_id=buffer.session_id,
             exit_code=result.exit_code if result is not None and exited else None,
             completion=None
             if result is None
             else _COMPLETION_NAMES.get(result.completion),
             wall_time_seconds=time.monotonic() - buffer.started_at,
-            original_token_count=original_token_count,
-            truncated=truncated,
+            truncated=buffer.truncated,
         )
 
     def _kill_if_stopped(

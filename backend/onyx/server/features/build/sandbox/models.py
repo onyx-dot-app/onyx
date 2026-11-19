@@ -193,8 +193,12 @@ class ExecCommandResult(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    # Output of this call, cut to max_output_tokens (head and tail).
-    output: str
+    # The output of this call that the byte cap kept: the first and the last
+    # half of EXEC_CALL_OUTPUT_MAX_BYTES, in arrival order, with
+    # `omitted_chars` characters dropped between them.
+    head: str
+    tail: str
+    omitted_chars: int
     # Set while the command runs: pass it to write_stdin.
     session_id: str | None
     # Set when the command exited. None while it runs, or when a signal,
@@ -204,9 +208,8 @@ class ExecCommandResult(BaseModel):
     # reported no kind of end.
     completion: ExecCompletionName | None
     wall_time_seconds: float
-    # Estimated tokens of the output before the token cut.
-    original_token_count: int
-    # True when the byte or token cap removed output.
+    # True when the byte cap dropped output, or the daemon lost some; a
+    # reader's own cut does not count.
     truncated: bool
 
     @property

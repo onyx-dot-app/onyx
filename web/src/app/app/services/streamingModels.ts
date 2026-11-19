@@ -433,8 +433,9 @@ export interface ExecEnd extends BaseObj {
   session_id: string | null;
   wall_time_seconds: number | null;
   truncated: boolean;
-  // The saved output the model saw (head and tail when cut by tokens); null
-  // only with error
+  // The saved output the model saw (head and tail when cut to its character
+  // budget), or, when the output went to the sandbox VM, its head and tail
+  // with a plain note; null only with error
   output: string | null;
   // Set when the call failed and has no process result
   error: string | null;

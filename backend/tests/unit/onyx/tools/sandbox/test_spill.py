@@ -22,7 +22,10 @@ from onyx.server.features.build.sandbox.harness_base import (
     TOOL_RESULTS_ROOT,
     HarnessSandbox,
 )
-from onyx.server.features.build.sandbox.models import HarnessSandboxRef
+from onyx.server.features.build.sandbox.models import (
+    ExecCommandResult,
+    HarnessSandboxRef,
+)
 from onyx.tools.constants import CODE_MODE_TOOL_NAME
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.code_mode.prompt import (
@@ -30,12 +33,20 @@ from onyx.tools.tool_implementations.code_mode.prompt import (
     observation_heading,
 )
 from onyx.tools.tool_implementations.sandbox import spill
-from onyx.tools.tool_implementations.sandbox.models import SpilledOutput
+from onyx.tools.tool_implementations.sandbox.models import (
+    SandboxExecResult,
+    SpilledOutput,
+)
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    ExecCommandTool,
+    _exec_result,
+)
 from onyx.tools.tool_implementations.sandbox.spill import (
     SPILL_FAILED_NOTE,
     spill_large_result,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
+from onyx.tools.tool_implementations.utils import truncation_marker
 
 _START = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -506,3 +517,34 @@ def test_a_cell_spills_even_when_its_cut_leaves_out_one_character(
 
     [data] = turn.files.values()
     assert data == output.encode()
+
+
+def test_an_exec_call_spills_all_the_output_that_it_kept(turn: _FakeVMTurn) -> None:
+    head, tail = "h" * 30_000, "t" * 20_000
+    result = _exec_result(
+        ExecCommandResult(
+            head=head,
+            tail=tail,
+            omitted_chars=7,
+            session_id=None,
+            exit_code=0,
+            completion="exited",
+            wall_time_seconds=1.0,
+            truncated=True,
+        ),
+        10_000,
+    )
+    assert isinstance(result.details, SandboxExecResult)
+    cut = result.details.output
+
+    result = _spill(turn, result, name=ExecCommandTool.NAME)
+
+    # The file marks the middle that the call did not keep.
+    full = head + truncation_marker(7) + tail
+    [data] = turn.files.values()
+    assert data == full.encode()
+    assert f"Output:\n{cut}\n\n<persisted-output " in result.content
+    saved = result.details
+    assert isinstance(saved, SandboxExecResult)
+    assert saved.output == ""
+    assert saved.spilled == SpilledOutput(head=full[:2_000], tail=full[-1_000:])

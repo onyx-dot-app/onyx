@@ -321,12 +321,13 @@ Agents become reachable when their signing-key registration carries
 
 Harness sandboxes (the agent harness runs outside the sandbox):
 - `backend/onyx/server/features/build/sandbox/harness_base.py:HarnessSandbox`
-  is the narrow interface the new harness calls: `ensure_running`, the Codex
+  is the narrow interface the new harness calls: `ensure_running`, the
   `exec_command` / `write_stdin` contract (yield time, head and tail output
   caps, "\x03" sends SIGINT; the exec limits live in
   `.../sandbox/exec_output.py`, whose `ExecOutputBuffer` keeps one call's
-  output: live deltas stop at what the result can show, `max_output_tokens`
-  x 4 bytes). A cancel of the current signal ends the wait and
+  output, 1 MiB head and tail, and counts the characters between them; live
+  deltas carry the head. The caller cuts what the model gets and what streams
+  ([[code-execution]])). A cancel of the current signal ends the wait and
   kills the command however the wait ends (also when the consumer drops the
   stream); a call cancelled before its command starts or its input is
   written does neither. `read_file` / `write_file` (exact bytes, a mode;

@@ -238,10 +238,21 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         each call: HarnessSandbox.begin_turn (an error is
                                         logged, the call still runs)
   ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin; each
-                                        ExecOutputDelta -> ToolProgress; the result is the
-                                        exec header text (wall time, exit code or ending,
-                                        session ID while it runs, token count, output) and
-                                        SandboxExecResult. A cancel of the current signal (a
+                                        ExecOutputDelta -> ToolProgress, which the tool
+                                        stops at max_output_chars; the result is the exec
+                                        header text (wall time, exit code or ending,
+                                        session ID while it runs, character count) and the
+                                        output that the harness kept (head, tail and the
+                                        count between them), cut in the middle to
+                                        max_output_chars (40,000 by default, at most
+                                        160,000) by tool_implementations/utils.py:cut_middle
+                                        with one marker (truncation_marker) that
+                                        counts every omitted character; SandboxExecResult
+                                        saves that cut, and its truncated flag says the
+                                        cut, the byte cap or the daemon left output out.
+                                        When the cut leaves output out, full_value holds
+                                        all the kept output (cut_middle with no cut),
+                                        truncated only for the byte cap or the daemon. A cancel of the current signal (a
                                         Stop, or the end of the calling cell) ends the wait,
                                         kills the command (SIGKILL) and raises AgentCancelled;
                                         the stopped call has no result and renders as stopped
@@ -340,7 +351,8 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         shows the head and tail with
                                         renderer.SPILLED_OUTPUT_NOTE
                                         (CustomToolCallSummary.spilled,
-                                        CodeModeExecutionResult.spilled), live and on
+                                        CodeModeExecutionResult.spilled,
+                                        SandboxExecResult.spilled), live and on
                                         replay. A failed write or a write past
                                         SPILL_WRITE_TIMEOUT_SECONDS gives the bounded view
                                         with SPILL_FAILED_NOTE; a Stop ends the wait with

@@ -36,7 +36,10 @@ from onyx.tools.constants import (
 )
 from onyx.tools.models import CustomToolCallSummary
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
-from onyx.tools.tool_implementations.sandbox.models import SpilledOutput
+from onyx.tools.tool_implementations.sandbox.models import (
+    SandboxExecResult,
+    SpilledOutput,
+)
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
     ExecCommandTool,
     WriteStdinTool,
@@ -240,6 +243,8 @@ def spill_large_result(
     out, the model gets the bounded view with SPILL_FAILED_NOTE."""
     result = context.result
     full = result.full_value
+    if isinstance(full, SandboxExecResult):
+        return _spill_full_text(turn, context, full.output, code_mode=code_mode)
     if isinstance(full, str):
         return _spill_full_text(turn, context, full, code_mode=code_mode)
     text = result.content
@@ -302,8 +307,9 @@ def _spill_full_text(
     turn: SandboxTurn, context: ToolResultContext, full: str, *, code_mode: bool
 ) -> ToolResult:
     """A result whose content is the tool's cut of `full`: `full` goes to
-    the file, and the model keeps the content with the file's path. A cell
-    observation's card shows the head and the tail of `full` with a note."""
+    the file, and the model keeps the content with the file's path. The card
+    of a cell observation or an exec call shows the head and the tail of
+    `full` with a note."""
     result = context.result
     try:
         saved = _save(turn, context, *_utf8_parts(full))
@@ -313,9 +319,9 @@ def _spill_full_text(
             update={"content": f"{result.content}\n\n{SPILL_FAILED_NOTE}"}
         )
     details = result.details
+    head, tail = _head_and_tail(full)
     if isinstance(details, CodeModeExecutionResult) and details.closing is None:
         # The output, the result and the error are all in `full`.
-        head, tail = _head_and_tail(full)
         details = details.model_copy(
             update={
                 "stdout": "",
@@ -323,6 +329,10 @@ def _spill_full_text(
                 "error": None,
                 "spilled": SpilledOutput(head=head, tail=tail),
             }
+        )
+    elif isinstance(details, SandboxExecResult):
+        details = details.model_copy(
+            update={"output": "", "spilled": SpilledOutput(head=head, tail=tail)}
         )
     return result.model_copy(
         update={
