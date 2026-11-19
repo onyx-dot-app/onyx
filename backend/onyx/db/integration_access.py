@@ -19,27 +19,49 @@ The rule, once:
 - On: turned on, and an admin did not turn the integration off
   (integration.enabled). An integration that an admin turned off keeps its
   access.
+
+The id of a plugin that holds an integration (plugin__integration) is only a
+handle: the API, the agent and task links and the tool options name an
+integration by it.
+
+The write functions flush and never commit.
 """
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import ColumnElement, and_, func, or_, select, true
+from sqlalchemy import ColumnElement, and_, delete, func, or_, select, true
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import KeyedColumnElement
 from sqlalchemy.sql.selectable import Select, Subquery
 
-from onyx.db.enums import PluginInstallationPolicy
+from onyx.db.enums import PluginInstallationPolicy, SandboxStatus, SkillSharePermission
 from onyx.db.models import (
     Integration,
     Integration__User,
     Integration__UserGroup,
+    Plugin__Integration,
+    Sandbox,
     User,
+    UserGroup,
     UserIntegrationPreference,
+)
+from onyx.db.plugin import (
+    AccessRows,
+    PluginAccessChange,
+    PluginGroupGrant,
+    PluginGroupRow,
+    PluginUserGrant,
+    check_access_change,
+    new_group_rows,
 )
 from onyx.db.plugin_access import (
     POLICY_OF_RANK,
+    PluginGroupShare,
+    PluginUserShare,
     enabled_under_setting,
     group_rows_of_users,
     non_default_group_counts,
@@ -48,6 +70,9 @@ from onyx.db.plugin_access import (
     setting_rank_for_user,
     with_share_floor,
 )
+from onyx.db.utils import is_fk_violation
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 
 
 class UserIntegrationState(BaseModel):
@@ -208,3 +233,236 @@ def user_can_use_integration(
     or an admin turned it off."""
     pairs = _user_integration_pairs(User.__table__.c.id == user_id, [integration_id])
     return db_session.scalar(select(pairs.c.integration_id).limit(1)) is not None
+
+
+def plugin_ids_of_accessible_integrations(user_id: UUID) -> Select[tuple[UUID]]:
+    """The plugins that hold an integration the user has access to, as a
+    subquery for ``in_``. An agent or task link can name such a plugin."""
+    return select(Plugin__Integration.plugin_id).where(
+        Plugin__Integration.integration_id.in_(accessible_integration_ids(user_id))
+    )
+
+
+def get_plugin_ids_of_accessible_integrations(
+    user_id: UUID, db_session: Session, plugin_ids: Collection[UUID] | None = None
+) -> set[UUID]:
+    """``plugin_ids_of_accessible_integrations``, or only those of
+    ``plugin_ids``."""
+    stmt = plugin_ids_of_accessible_integrations(user_id)
+    if plugin_ids is not None:
+        if not plugin_ids:
+            return set()
+        stmt = stmt.where(Plugin__Integration.plugin_id.in_(plugin_ids))
+    return set(db_session.scalars(stmt).all())
+
+
+def affected_user_ids_for_integrations(
+    integration_ids: Iterable[int], db_session: Session
+) -> set[UUID]:
+    """Users with a running sandbox who have access to at least one of the
+    integrations. Ignores user choices, so a change that removes access still
+    reaches the users who had it (read it before and after the change)."""
+    ids = sorted(set(integration_ids))
+    if not ids:
+        return set()
+    running = select(Sandbox.user_id).where(Sandbox.status == SandboxStatus.RUNNING)
+    pairs = _user_integration_pairs(User.__table__.c.id.in_(running), ids)
+    return set(db_session.scalars(select(pairs.c.user_id).distinct()))
+
+
+def set_integration_preferences__no_commit(
+    user_id: UUID,
+    integration_ids: Iterable[int],
+    enabled: bool,
+    db_session: Session,
+) -> None:
+    """Write the user's on/off choice. enabled_at is set each time the user
+    turns an integration on."""
+    ids = sorted(set(integration_ids))
+    if not ids:
+        return
+    stmt = insert(UserIntegrationPreference).values(
+        [
+            {
+                "user_id": user_id,
+                "integration_id": integration_id,
+                "enabled": enabled,
+                "enabled_at": func.now() if enabled else None,
+            }
+            for integration_id in ids
+        ]
+    )
+    db_session.execute(
+        stmt.on_conflict_do_update(
+            index_elements=[
+                UserIntegrationPreference.user_id,
+                UserIntegrationPreference.integration_id,
+            ],
+            set_={
+                "enabled": stmt.excluded.enabled,
+                "enabled_at": (
+                    func.now() if enabled else UserIntegrationPreference.enabled_at
+                ),
+            },
+        )
+    )
+
+
+class IntegrationShares(BaseModel):
+    """The shares of one integration. A group row with no permission is not
+    a share."""
+
+    model_config = ConfigDict(frozen=True)
+
+    user_shares: tuple[PluginUserShare, ...]
+    group_shares: tuple[PluginGroupShare, ...]
+
+
+def load_integration_shares(
+    integration_id: int, db_session: Session
+) -> IntegrationShares:
+    user_email: KeyedColumnElement[str] = User.__table__.c.email
+    return IntegrationShares(
+        user_shares=tuple(
+            PluginUserShare(user_id=user_id, email=email, permission=permission)
+            for user_id, email, permission in db_session.execute(
+                select(
+                    Integration__User.user_id, user_email, Integration__User.permission
+                )
+                .join(User.__table__, User.__table__.c.id == Integration__User.user_id)
+                .where(Integration__User.integration_id == integration_id)
+                .order_by(user_email)
+            )
+        ),
+        group_shares=tuple(
+            PluginGroupShare(group_id=group_id, group_name=name, permission=permission)
+            for group_id, name, permission in db_session.execute(
+                select(
+                    Integration__UserGroup.user_group_id,
+                    UserGroup.name,
+                    Integration__UserGroup.permission,
+                )
+                .join(UserGroup, UserGroup.id == Integration__UserGroup.user_group_id)
+                .where(
+                    Integration__UserGroup.integration_id == integration_id,
+                    Integration__UserGroup.permission.is_not(None),
+                )
+                .order_by(UserGroup.name, UserGroup.id)
+            )
+        ),
+    )
+
+
+def replace_integration_shares__no_commit(
+    integration: Integration,
+    user_ids: Collection[UUID],
+    group_ids: Collection[int],
+    actor: User,
+    db_session: Session,
+) -> None:
+    """Make the shares of a locked integration equal the users and groups.
+    Each share is a VIEWER row. A group keeps its install setting, and a kept
+    share keeps its created_at. The share rules of plugins apply
+    (``onyx.db.plugin.check_access_change``): the Sharing setting, the
+    managed group scope, no default group, and no share for a group whose
+    setting is NOT_AVAILABLE."""
+    viewer = SkillSharePermission.VIEWER
+    change = PluginAccessChange(
+        user_grants=tuple(
+            PluginUserGrant(user_id=user_id, permission=viewer)
+            for user_id in sorted(set(user_ids))
+        ),
+        group_grants=tuple(
+            PluginGroupGrant(group_id=group_id, permission=viewer)
+            for group_id in sorted(set(group_ids))
+        ),
+    )
+    group_rows = {
+        group_id: PluginGroupRow(permission=permission, installation_policy=policy)
+        for group_id, permission, policy in db_session.execute(
+            select(
+                Integration__UserGroup.user_group_id,
+                Integration__UserGroup.permission,
+                Integration__UserGroup.installation_policy,
+            ).where(Integration__UserGroup.integration_id == integration.id)
+        )
+    }
+    rows = AccessRows(
+        published=integration.installation_policy
+        != PluginInstallationPolicy.NOT_AVAILABLE,
+        user_grants=dict.fromkeys(
+            db_session.scalars(
+                select(Integration__User.user_id).where(
+                    Integration__User.integration_id == integration.id
+                )
+            ),
+            viewer,
+        ),
+        group_rows=group_rows,
+        new_user_grants=dict.fromkeys(set(user_ids), viewer),
+        new_group_rows=new_group_rows(group_rows, change),
+    )
+    check_access_change([rows], change, actor, db_session)
+    try:
+        with db_session.begin_nested():
+            _write_shares(integration.id, rows, db_session)
+    except IntegrityError as exc:
+        if is_fk_violation(exc):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "One or more share targets do not exist.",
+            ) from exc
+        raise
+
+
+def _write_shares(integration_id: int, rows: AccessRows, db_session: Session) -> None:
+    users = sorted(rows.new_user_grants or {})
+    groups = rows.new_group_rows or {}
+    db_session.execute(
+        delete(Integration__User).where(
+            Integration__User.integration_id == integration_id,
+            Integration__User.user_id.notin_(users),
+        )
+    )
+    if users:
+        db_session.execute(
+            insert(Integration__User)
+            .values(
+                [
+                    {"integration_id": integration_id, "user_id": user_id}
+                    for user_id in users
+                ]
+            )
+            .on_conflict_do_nothing()
+        )
+    db_session.execute(
+        delete(Integration__UserGroup).where(
+            Integration__UserGroup.integration_id == integration_id,
+            Integration__UserGroup.user_group_id.notin_(list(groups)),
+        )
+    )
+    if groups:
+        stmt = insert(Integration__UserGroup).values(
+            [
+                {
+                    "integration_id": integration_id,
+                    "user_group_id": group_id,
+                    "permission": row.permission,
+                    "installation_policy": row.installation_policy,
+                }
+                for group_id, row in sorted(groups.items())
+            ]
+        )
+        db_session.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[
+                    Integration__UserGroup.integration_id,
+                    Integration__UserGroup.user_group_id,
+                ],
+                set_={
+                    "permission": stmt.excluded.permission,
+                    "installation_policy": stmt.excluded.installation_policy,
+                },
+            )
+        )
+    db_session.flush()

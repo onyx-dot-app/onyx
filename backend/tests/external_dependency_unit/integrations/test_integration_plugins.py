@@ -12,8 +12,10 @@ from onyx.db.enums import (
     PluginInstallationPolicy,
     SkillSharePermission,
 )
+from onyx.db.integration_access import user_can_use_integration
 from onyx.db.models import (
     Integration,
+    Integration__User,
     MCPServer,
     Plugin,
     Plugin__Integration,
@@ -64,6 +66,7 @@ def _private_integration_plugin(db_session: Session, owner: User) -> Plugin:
         name=server.name,
         auth_mode=IntegrationAuthMode.NONE,
         mcp_server_id=server.id,
+        owner_user_id=owner.id,
     )
     db_session.add(integration)
     db_session.flush()
@@ -120,19 +123,24 @@ def test_share_and_publish_an_integration_plugin(db_session: Session) -> None:
 def test_user_delete_keeps_private_integrations_for_their_people(
     db_session: Session,
 ) -> None:
-    """A user delete moves each private integration of the user to the
-    Organization library as Not available, with its shares. It does not block
-    the delete as a private skill does."""
+    """A user delete leaves each private integration of the user private,
+    with no owner and with its shares. The plugin that names it moves to the
+    Organization library as Not available, so it stays. It does not block the
+    delete as a private skill does."""
     try:
         owner = create_test_user(db_session, "plugins_owner")
         other = create_test_user(db_session, "plugins_other")
         plugin = _private_integration_plugin(db_session, owner)
-        db_session.add(
-            Plugin__User(
-                plugin_id=plugin.id,
-                user_id=other.id,
-                permission=SkillSharePermission.VIEWER,
+        integration = db_session.scalars(
+            select(Integration)
+            .join(
+                Plugin__Integration,
+                Plugin__Integration.integration_id == Integration.id,
             )
+            .where(Plugin__Integration.plugin_id == plugin.id)
+        ).one()
+        db_session.add(
+            Integration__User(integration_id=integration.id, user_id=other.id)
         )
         db_session.flush()
 
@@ -143,9 +151,10 @@ def test_user_delete_keeps_private_integrations_for_their_people(
         assert plugin.installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
         assert plugin.published_version_id == plugin.current_version_id
         assert plugin.author_user_id is None
-        assert db_session.scalar(
-            select(Plugin__User.user_id).where(Plugin__User.plugin_id == plugin.id)
-        ) == (other.id)
+        db_session.refresh(integration)
+        assert integration.owner_user_id is None
+        assert integration.installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
+        assert user_can_use_integration(db_session, integration.id, other.id)
     finally:
         db_session.rollback()
 

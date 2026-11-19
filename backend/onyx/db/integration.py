@@ -4,7 +4,6 @@ from uuid import UUID
 
 from sqlalchemy import ColumnElement, Select, and_, delete, func, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased, load_only
-from sqlalchemy.sql.elements import KeyedColumnElement
 
 from onyx.db.enums import (
     ExternalAppType,
@@ -14,8 +13,8 @@ from onyx.db.enums import (
     IntegrationAuthMode,
     IntegrationKind,
     IntegrationOAuthProviderMode,
-    MarketplaceKind,
     MCPTransport,
+    PluginInstallationPolicy,
 )
 from onyx.db.external_app import delete_external_app__no_commit
 from onyx.db.models import (
@@ -25,14 +24,12 @@ from onyx.db.models import (
     IntegrationActionPolicy,
     IntegrationConnection,
     IntegrationOAuthClient,
-    Marketplace,
     MCPServer,
     Plugin,
     Plugin__Integration,
     PluginSkill,
     PluginVersion,
     Tool,
-    User,
 )
 from onyx.db.utils import UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -431,56 +428,50 @@ def replace_integration_actions__no_commit(
     db_session.flush()
 
 
+def holds_only_integrations() -> ColumnElement[bool]:
+    """True for a plugin that holds an integration and no skill."""
+    # An alias, so a query that joins plugin__integration can use this too.
+    link = aliased(Plugin__Integration)
+    return and_(
+        select(link.plugin_id).where(link.plugin_id == Plugin.id).exists(),
+        ~select(PluginSkill.id)
+        .where(PluginSkill.plugin_version_id == Plugin.current_version_id)
+        .exists(),
+    )
+
+
 def list_integration_plugin_rows(
     integration_ids: Collection[int], db_session: Session
 ) -> dict[int, list[IntegrationPluginRow]]:
-    """The plugins that hold each integration, in plugin name order. The
-    install setting falls back to the marketplace default."""
+    """The plugins that are the handle of each integration, in plugin name
+    order: each plugin that holds the integration and no skill. Their ids
+    stand for the integration in the API, in agent and task links and in tool
+    options. They give no access."""
     rows: dict[int, list[IntegrationPluginRow]] = {
         integration_id: [] for integration_id in integration_ids
     }
     if not integration_ids:
         return rows
-    owner_email: KeyedColumnElement[str] = User.__table__.c.email
-    for (
-        integration_id,
-        plugin_id,
-        name,
-        description,
-        kind,
-        author_user_id,
-        email,
-        policy,
-        default_policy,
-    ) in db_session.execute(
+    for integration_id, plugin_id, name, description in db_session.execute(
         select(
             Plugin__Integration.integration_id,
             Plugin.id,
             Plugin.name,
             Plugin.description,
-            Marketplace.kind,
-            Plugin.author_user_id,
-            owner_email,
-            Plugin.installation_policy,
-            Marketplace.default_installation_policy,
         )
         .join(Plugin, Plugin.id == Plugin__Integration.plugin_id)
-        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-        .outerjoin(User, User.__table__.c.id == Plugin.author_user_id)
-        .where(Plugin__Integration.integration_id.in_(integration_ids))
+        .where(
+            Plugin__Integration.integration_id.in_(integration_ids),
+            holds_only_integrations(),
+        )
         .order_by(Plugin.name, Plugin.id)
     ).tuples():
-        in_library = kind == MarketplaceKind.ORGANIZATION_LIBRARY
         rows[integration_id].append(
             IntegrationPluginRow(
                 integration_id=integration_id,
                 plugin_id=plugin_id,
                 plugin_name=name,
                 plugin_description=description,
-                in_organization_library=in_library,
-                author_user_id=author_user_id,
-                owner_email=None if in_library else email,
-                installation_policy=policy or default_policy,
             )
         )
     return rows
@@ -496,19 +487,6 @@ def list_integrations_by_ids(
             select(Integration)
             .where(Integration.id.in_(integration_ids))
             .order_by(Integration.id)
-        ).all()
-    )
-
-
-def list_integration_ids_held_by_plugins(
-    plugin_ids: Select[tuple[UUID]] | Collection[UUID], db_session: Session
-) -> list[int]:
-    return list(
-        db_session.scalars(
-            select(Plugin__Integration.integration_id)
-            .where(Plugin__Integration.plugin_id.in_(plugin_ids))
-            .distinct()
-            .order_by(Plugin__Integration.integration_id)
         ).all()
     )
 
@@ -535,6 +513,7 @@ def insert_integration__no_commit(
     name: str,
     description: str | None,
     owner_user_id: UUID | None,
+    installation_policy: PluginInstallationPolicy,
     auth_mode: IntegrationAuthMode,
     auth_method: IntegrationAuthMethod | None,
     credential_fields: list[dict[str, Any]] | None,
@@ -553,6 +532,7 @@ def insert_integration__no_commit(
         name=name,
         description=description,
         owner_user_id=owner_user_id,
+        installation_policy=installation_policy,
         auth_mode=auth_mode,
         auth_method=auth_method,
         credential_fields=credential_fields,
@@ -713,8 +693,8 @@ def delete_integration__no_commit(
     integration: Integration, db_session: Session
 ) -> None:
     """Delete the integration and then its kind row. The connections,
-    actions, policies, OAuth client and plugin links go by cascade. A plugin
-    that held only this integration and no skill goes too."""
+    actions, policies, OAuth client, shares, choices and plugin links go by
+    cascade. A plugin that held only this integration and no skill goes too."""
     other_link = aliased(Plugin__Integration)
     other_integration = (
         select(other_link.integration_id)

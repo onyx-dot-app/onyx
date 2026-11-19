@@ -24,6 +24,8 @@ from onyx.db.models import (
     DocumentSet__UserGroup,
     HierarchyNode,
     Hook,
+    Integration,
+    Integration__UserGroup,
     LLMProvider,
     LLMProvider__UserGroup,
     MCPServer,
@@ -246,6 +248,35 @@ def _make_group_shared_resources_public__no_commit(
             "Community downgrade published plugin %s to the organization as '%s'",
             plugin_id,
             published_name,
+        )
+    # A private integration shared with one of these groups becomes Available,
+    # so its members keep it. One with no owner stays closed: an admin closed
+    # it, or its owner was deleted.
+    not_available = PluginInstallationPolicy.NOT_AVAILABLE
+    for integration_id, name in db_session.execute(
+        update(Integration)
+        .where(
+            Integration.installation_policy == not_available,
+            Integration.owner_user_id.is_not(None),
+            Integration.id.in_(
+                select(Integration__UserGroup.integration_id).where(
+                    Integration__UserGroup.user_group_id.in_(group_ids),
+                    Integration__UserGroup.permission.is_not(None),
+                    or_(
+                        Integration__UserGroup.installation_policy.is_(None),
+                        Integration__UserGroup.installation_policy != not_available,
+                    ),
+                )
+            ),
+        )
+        .values(installation_policy=PluginInstallationPolicy.AVAILABLE)
+        .returning(Integration.id, Integration.name)
+    ):
+        logger.info(
+            "Community downgrade made integration %s ('%s') available to the "
+            "organization",
+            integration_id,
+            name,
         )
 
 

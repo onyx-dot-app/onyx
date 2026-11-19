@@ -46,18 +46,18 @@ class IntegrationResolver(CredentialResolver):
     def allows_destination(
         self, sandbox: ResolvedSandbox, scheme: str, host: str, port: int
     ) -> bool:
-        """Allow an internal origin only for an MCP integration of a plugin
-        that the user can see. A scheduled run can use a task plugin that the
-        user turned off; the gate matches each request."""
+        """Allow an internal origin only for an MCP integration that the
+        user has access to. A scheduled run can use a task integration that
+        the user turned off; the gate matches each request."""
         if scheme not in {"http", "https"}:
             return False
-        visible = self._usable.get(sandbox.tenant_id, sandbox.user_id).visible
+        accessible = self._usable.get(sandbox.tenant_id, sandbox.user_id).accessible
         return bool(
             host_targets(
                 tuple(
                     target
                     for target in self._tenant_targets(sandbox.tenant_id)
-                    if target.server_id in visible
+                    if target.server_id in accessible
                 ),
                 scheme,
                 host,

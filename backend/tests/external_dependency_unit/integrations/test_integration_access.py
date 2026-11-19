@@ -20,6 +20,8 @@ from onyx.db.models import (
     Integration,
     Integration__User,
     Integration__UserGroup,
+    Plugin,
+    Plugin__Integration,
     User,
     User__UserGroup,
     UserGroup,
@@ -29,12 +31,10 @@ from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_group,
+    make_skillless_plugin,
     share_plugin_with_user,
 )
-from tests.external_dependency_unit.integration_helpers import (
-    hold_in_plugin,
-    make_mcp_integration,
-)
+from tests.external_dependency_unit.integration_helpers import make_mcp_integration
 
 NOT_AVAILABLE = PluginInstallationPolicy.NOT_AVAILABLE
 AVAILABLE = PluginInstallationPolicy.AVAILABLE
@@ -162,19 +162,26 @@ def test_a_plugin_gives_no_access(db_session: Session) -> None:
     author = create_test_user(db_session, "access_plugin_author")
     shared = create_test_user(db_session, "access_plugin_shared")
     integration = _integration(db_session)
-    private_plugin = hold_in_plugin(
-        db_session, [integration], published=False, author_user_id=author.id
-    )
+    private_plugin = make_skillless_plugin(db_session, author_user_id=author.id)
     share_plugin_with_user(
         db_session, private_plugin.id, shared.id, SkillSharePermission.VIEWER
     )
-    hold_in_plugin(
-        db_session, [integration], published=True, installation_policy=REQUIRED
+    published_plugin = make_skillless_plugin(
+        db_session, published=True, installation_policy=REQUIRED
+    )
+    db_session.add_all(
+        Plugin__Integration(plugin_id=plugin.id, integration_id=integration.id)
+        for plugin in (private_plugin, published_plugin)
     )
     db_session.commit()
+    plugin_ids = [private_plugin.id, published_plugin.id]
 
-    assert not _has_access(db_session, integration, author)
-    assert not _has_access(db_session, integration, shared)
+    try:
+        assert not _has_access(db_session, integration, author)
+        assert not _has_access(db_session, integration, shared)
+    finally:
+        db_session.execute(delete(Plugin).where(Plugin.id.in_(plugin_ids)))
+        db_session.commit()
 
 
 def test_group_row_with_no_permission_gives_only_its_setting(

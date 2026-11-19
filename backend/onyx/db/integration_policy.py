@@ -5,7 +5,10 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecidedVia, IntegrationActionPolicyValue
-from onyx.db.integration import list_integration_actions_by_id
+from onyx.db.integration import (
+    holds_only_integrations,
+    list_integration_actions_by_id,
+)
 from onyx.db.models import (
     ApprovalRequest,
     ChatSession,
@@ -17,7 +20,6 @@ from onyx.db.models import (
     ScheduledTask__Plugin,
     Tool,
 )
-from onyx.db.plugin_access import visible_plugin_ids
 from onyx.integrations.models import (
     ActionSettings,
     LinkValue,
@@ -137,6 +139,24 @@ def list_plugin_integrations(
     ]
 
 
+def list_integration_holders(
+    db_session: Session, integration_ids: Collection[int]
+) -> list[tuple[UUID, Integration]]:
+    """Each plugin that holds one of the integrations, with the integration,
+    in integration order."""
+    if not integration_ids:
+        return []
+    return [
+        (plugin_id, integration)
+        for plugin_id, integration in db_session.execute(
+            select(Plugin__Integration.plugin_id, Integration)
+            .join(Integration, Integration.id == Plugin__Integration.integration_id)
+            .where(Plugin__Integration.integration_id.in_(integration_ids))
+            .order_by(Integration.id, Plugin__Integration.plugin_id)
+        ).tuples()
+    ]
+
+
 def get_chat_session_persona_id(
     db_session: Session, chat_session_id: UUID
 ) -> int | None:
@@ -192,38 +212,42 @@ def get_plugin_names(
 
 def plugin_ids_for_integrations(
     integration_ids: Collection[int],
-    user_id: UUID | None,
     db_session: Session,
     attached: Collection[UUID] = (),
 ) -> dict[int, UUID]:
+    """The plugin that names each integration on an agent: a plugin in
+    ``attached``, else a plugin that holds only integrations, else any plugin
+    that holds it."""
     if not integration_ids:
         return {}
-    visible = (
-        set(db_session.scalars(visible_plugin_ids(user_id)).all())
-        if user_id is not None
-        else set()
-    )
 
-    def rank(plugin_id: UUID) -> int:
+    def rank(plugin_id: UUID, only_integrations: bool) -> int:
         if plugin_id in attached:
             return 0
-        return 1 if plugin_id in visible else 2
+        return 1 if only_integrations else 2
 
-    chosen: dict[int, UUID] = {}
-    for integration_id, plugin_id in db_session.execute(
-        select(Plugin__Integration.integration_id, Plugin__Integration.plugin_id)
+    chosen: dict[int, tuple[int, UUID]] = {}
+    for integration_id, plugin_id, only_integrations in db_session.execute(
+        select(
+            Plugin__Integration.integration_id,
+            Plugin__Integration.plugin_id,
+            holds_only_integrations(),
+        )
+        .join(Plugin, Plugin.id == Plugin__Integration.plugin_id)
         .where(Plugin__Integration.integration_id.in_(integration_ids))
         .order_by(Plugin__Integration.integration_id, Plugin__Integration.plugin_id)
     ).tuples():
+        candidate = (rank(plugin_id, only_integrations), plugin_id)
         current = chosen.get(integration_id)
-        if current is None or rank(plugin_id) < rank(current):
-            chosen[integration_id] = plugin_id
-    return chosen
+        if current is None or candidate[0] < current[0]:
+            chosen[integration_id] = candidate
+    return {
+        integration_id: plugin_id for integration_id, (_, plugin_id) in chosen.items()
+    }
 
 
 def legacy_tool_plugin_links(
     tools: Sequence[Tool],
-    user_id: UUID | None,
     db_session: Session,
     attached: Collection[UUID] = (),
 ) -> list[PersonaPluginLink]:
@@ -256,7 +280,6 @@ def legacy_tool_plugin_links(
                 server_integrations[server_id] = integration_id
     plugins = plugin_ids_for_integrations(
         custom_integration_ids | set(server_integrations.values()),
-        user_id,
         db_session,
         attached,
     )

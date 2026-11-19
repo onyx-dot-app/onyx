@@ -22,7 +22,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import ColumnElement, Select, and_, delete, func, or_, select
+from sqlalchemy import Select, and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -36,7 +36,7 @@ from onyx.db.enums import (
     PluginPublishingPolicy,
     SkillSharePermission,
 )
-from onyx.db.integration import plugin_holds_integration
+from onyx.db.integration import holds_only_integrations, plugin_holds_integration
 from onyx.db.models import (
     Marketplace,
     Plugin,
@@ -585,22 +585,10 @@ def create_integration_plugin__no_commit(
     return plugin
 
 
-def _holds_only_integrations() -> ColumnElement[bool]:
-    """True for a plugin that holds an integration and no skill."""
-    return and_(
-        select(Plugin__Integration.plugin_id)
-        .where(Plugin__Integration.plugin_id == Plugin.id)
-        .exists(),
-        ~select(PluginSkill.id)
-        .where(PluginSkill.plugin_version_id == Plugin.current_version_id)
-        .exists(),
-    )
-
-
 def plugin_holds_only_integrations(plugin_id: UUID, db_session: Session) -> bool:
     return (
         db_session.scalar(
-            select(Plugin.id).where(Plugin.id == plugin_id, _holds_only_integrations())
+            select(Plugin.id).where(Plugin.id == plugin_id, holds_only_integrations())
         )
         is not None
     )
@@ -666,7 +654,7 @@ def _move_plugin__no_commit(
             holder_is_integration = (
                 db_session.scalar(
                     select(Plugin.id).where(
-                        Plugin.id == holder_id, _holds_only_integrations()
+                        Plugin.id == holder_id, holds_only_integrations()
                     )
                 )
                 is not None
@@ -706,23 +694,26 @@ def private_plugins_blocking_user_delete(user_id: UUID) -> Select[tuple[Plugin]]
         .where(
             Marketplace.kind == MarketplaceKind.USER_UPLOADS,
             Marketplace.owner_user_id == user_id,
-            ~_holds_only_integrations(),
+            ~holds_only_integrations(),
         )
         .order_by(Plugin.name, Plugin.id)
     )
 
 
 def release_private_integrations__no_commit(user_id: UUID, db_session: Session) -> None:
-    """Before a user delete: move each private integration of the user to the
-    Organization library as NOT_AVAILABLE. Its shares keep the same people, as
-    when its owner was deleted before integrations existed."""
+    """Before a user delete: move each plugin in the user's "My uploads" that
+    holds only integrations to the Organization library as NOT_AVAILABLE, so
+    the delete of "My uploads" does not take it. The plugin is only the handle
+    of its integration and gives no access. The integration needs no change:
+    it loses its owner, and its install setting and its shares keep the same
+    people."""
     plugins = db_session.scalars(
         select(Plugin)
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
         .where(
             Marketplace.kind == MarketplaceKind.USER_UPLOADS,
             Marketplace.owner_user_id == user_id,
-            _holds_only_integrations(),
+            holds_only_integrations(),
         )
         .order_by(Plugin.id)
         .with_for_update(of=Plugin)
@@ -776,59 +767,6 @@ def publish_plugin__no_commit(
     )
     plugin.published_version_id = plugin.current_version_id
     plugin.pending_version_id = None
-    db_session.flush()
-
-
-def unpublish_integration_plugin__no_commit(
-    plugin_id: UUID, db_session: Session
-) -> set[UUID]:
-    """Move an Organization library plugin that holds only integrations back
-    to its author's "My uploads". Only the MCP server alias of the public API
-    does this. A used name takes the next free name. Returns the affected
-    users."""
-    plugin = lock_plugin(plugin_id, db_session)
-    if plugin is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
-    if plugin.author_user_id is None or not plugin_holds_only_integrations(
-        plugin_id, db_session
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Only a plugin with an owner that holds only integrations can be "
-            "made private.",
-        )
-    before = affected_user_ids_for_plugins([plugin_id], db_session)
-    _move_plugin__no_commit(
-        plugin=plugin,
-        marketplace_id=get_or_create_user_uploads__no_commit(
-            plugin.author_user_id, db_session
-        ),
-        on_name_clash="rename",
-        clash_detail=lambda name: f"The owner already has a plugin named '{name}'.",
-        db_session=db_session,
-    )
-    plugin.published_version_id = None
-    plugin.pending_version_id = None
-    plugin.installation_policy = None
-    db_session.flush()
-    return before | affected_user_ids_for_plugins([plugin_id], db_session)
-
-
-def add_author_share__no_commit(
-    plugin_id: UUID, author_user_id: UUID, db_session: Session
-) -> None:
-    """Share the plugin with its own author. The MCP server alias of the
-    public API keeps the owner in the access list it returns this way. A
-    later share change through the plugin routes removes the row."""
-    db_session.execute(
-        insert(Plugin__User)
-        .values(
-            plugin_id=plugin_id,
-            user_id=author_user_id,
-            permission=SkillSharePermission.VIEWER,
-        )
-        .on_conflict_do_nothing()
-    )
     db_session.flush()
 
 
@@ -1037,16 +975,22 @@ class PluginAccessResult(BaseModel):
             raise self.failures[plugin_id]
 
 
-class _LockedPlugin(BaseModel):
+class AccessRows(BaseModel):
+    """The grants of one plugin or one integration, now and after a change."""
+
     model_config = ConfigDict(strict=True, arbitrary_types_allowed=True)
 
-    plugin: Plugin
+    # For an integration: its company setting is above NOT_AVAILABLE.
     published: bool
     user_grants: dict[UUID, SkillSharePermission]
     group_rows: dict[int, PluginGroupRow]
     # The grants and rows after the change; None when they do not change.
     new_user_grants: dict[UUID, SkillSharePermission] | None = None
     new_group_rows: dict[int, PluginGroupRow] | None = None
+
+
+class _LockedPlugin(AccessRows):
+    plugin: Plugin
 
 
 def _lock_for_access_change(
@@ -1105,7 +1049,7 @@ def _lock_for_access_change(
     }
     for item in locked.values():
         item.new_user_grants = _new_user_grants(item, change)
-        item.new_group_rows = _new_group_rows(item, change)
+        item.new_group_rows = new_group_rows(item.group_rows, change)
     return locked, missing
 
 
@@ -1128,8 +1072,8 @@ def _new_user_grants(
     }
 
 
-def _new_group_rows(
-    locked: _LockedPlugin, change: PluginAccessChange
+def new_group_rows(
+    current_rows: Mapping[int, PluginGroupRow], change: PluginAccessChange
 ) -> dict[int, PluginGroupRow] | None:
     """The group rows after the change, or None when they do not change. A
     group keeps its install setting unless a group setting sets one. On
@@ -1139,9 +1083,9 @@ def _new_group_rows(
         return None
     rows: dict[int, PluginGroupRow] = {}
     if change.group_grants is None:
-        rows = dict(locked.group_rows)
+        rows = dict(current_rows)
     else:
-        for group_id, row in locked.group_rows.items():
+        for group_id, row in current_rows.items():
             if change.mode == PluginAccessMode.ADD_ONLY:
                 rows[group_id] = row
             elif row.installation_policy is not None:
@@ -1149,7 +1093,7 @@ def _new_group_rows(
                     permission=None, installation_policy=row.installation_policy
                 )
         for grant in change.group_grants:
-            current = locked.group_rows.get(grant.group_id)
+            current = current_rows.get(grant.group_id)
             rows[grant.group_id] = PluginGroupRow(
                 permission=grant.permission,
                 installation_policy=(
@@ -1179,13 +1123,14 @@ def _group_shares(
     }
 
 
-def _check_access_change(
-    plugins: Mapping[UUID, _LockedPlugin],
+def check_access_change(
+    items: Collection[AccessRows],
     change: PluginAccessChange,
     actor: User | None,
     db_session: Session,
 ) -> None:
-    """The checks that apply to the whole set. They raise before any write."""
+    """The checks that apply to the whole set of plugins or integrations.
+    They raise before any write."""
     is_global_manager = actor is not None and has_global_permission(
         actor, Permission.MANAGE_PLUGINS
     )
@@ -1206,11 +1151,11 @@ def _check_access_change(
         # adds a share or changes its level. Removing a share stays allowed.
         adds_share = any(
             locked.user_grants.get(user_id) != permission
-            for locked in plugins.values()
+            for locked in items
             for user_id, permission in (locked.new_user_grants or {}).items()
         ) or any(
             _group_shares(locked.group_rows).get(group_id) != permission
-            for locked in plugins.values()
+            for locked in items
             for group_id, permission in _group_shares(
                 locked.new_group_rows or {}
             ).items()
@@ -1228,7 +1173,7 @@ def _check_access_change(
     assert_not_shared_with_default_group(
         db_session, sorted(set(requested_group_ids) | set(setting_group_ids))
     )
-    for locked in plugins.values():
+    for locked in items:
         for group_id, row in (locked.new_group_rows or {}).items():
             if (
                 row.permission is None
@@ -1253,7 +1198,7 @@ def _check_access_change(
     # reassignment cannot escape scope. Re-sending the current set is no change.
     changed = [
         locked
-        for locked in plugins.values()
+        for locked in items
         if _group_shares(locked.new_group_rows or {})
         != _group_shares(locked.group_rows)
     ]
@@ -1441,7 +1386,7 @@ def apply_plugin_access_change__no_commit(
     if not ids:
         return PluginAccessResult(affected_user_ids=set(), failures={})
     plugins, failures = _lock_for_access_change(ids, change, db_session)
-    _check_access_change(plugins, change, actor, db_session)
+    check_access_change(plugins.values(), change, actor, db_session)
 
     before = affected_user_ids_for_plugins(plugins, db_session)
     for plugin_id, locked in plugins.items():

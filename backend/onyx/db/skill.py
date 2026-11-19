@@ -237,7 +237,7 @@ def _user_skill_selection(
         )
         for state in load_user_plugin_states([user.id], db_session)
     }
-    app_skills = built_in_app_skills(states.values(), db_session)
+    app_skills = built_in_app_skills(user.id, db_session)
     built_ins = _runtime_built_in_skills(app_skills, db_session)
     return _UserSkillSelection(
         states=states,
@@ -415,10 +415,7 @@ def fetch_skill(
     if (
         skill is not None
         and skill.built_in_skill_id in EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
-        and skill.built_in_skill_id
-        not in built_in_app_skills(
-            load_user_plugin_states([user.id], db_session), db_session
-        )
+        and skill.built_in_skill_id not in built_in_app_skills(user.id, db_session)
     ):
         return None
     return skill

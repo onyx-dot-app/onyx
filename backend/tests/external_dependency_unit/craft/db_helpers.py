@@ -40,6 +40,7 @@ from onyx.db.enums import (
     SandboxStatus,
     SkillSharePermission,
 )
+from onyx.db.integration_access import set_integration_preferences__no_commit
 from onyx.db.models import (
     ActionApproval,
     ActionReceipt,
@@ -48,6 +49,7 @@ from onyx.db.models import (
     Credential,
     ExternalApp,
     Integration,
+    Integration__User,
     IntegrationActionPolicy,
     IntegrationOAuthClient,
     Plugin,
@@ -68,7 +70,6 @@ from onyx.db.plugin import (
     free_plugin_name,
     get_or_create_organization_library__no_commit,
     get_or_create_user_uploads__no_commit,
-    set_plugin_preferences__no_commit,
 )
 from onyx.db.users import assign_user_to_default_groups__no_commit
 
@@ -405,11 +406,20 @@ def hold_external_app(
 def make_app_plugin_for_user(
     db_session: Session, *, app: ExternalApp, user: User, enabled: bool = True
 ) -> Plugin:
-    """A private plugin of ``user`` that holds the integration of ``app``,
-    with the user's on/off choice set to ``enabled``."""
+    """Share the integration of ``app`` with ``user``, with the user's on/off
+    choice set to ``enabled``. Returns a plugin with no skill that names the
+    integration; the plugin gives no access."""
+    integration_id = app_integration_id(db_session, app)
     plugin = make_skillless_plugin(db_session, author_user_id=user.id)
     hold_external_app(db_session, app=app, plugin_id=plugin.id)
-    set_plugin_preferences__no_commit(user.id, [plugin.id], enabled, db_session)
+    db_session.execute(
+        pg_insert(Integration__User)
+        .values(integration_id=integration_id, user_id=user.id)
+        .on_conflict_do_nothing()
+    )
+    set_integration_preferences__no_commit(
+        user.id, [integration_id], enabled, db_session
+    )
     db_session.flush()
     return plugin
 

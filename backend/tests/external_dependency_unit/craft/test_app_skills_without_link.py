@@ -2,13 +2,13 @@
 
 A custom skill of an app is an ordinary plugin: it loads before the user
 connects the app and counts for the skill limits. A user gets the built-in
-skill of a preset when the user runs a plugin that holds an integration made
-from that preset (``onyx.db.app_skill``)."""
+skill of a preset when an integration made from that preset is on for the
+user (``onyx.db.app_skill``). A plugin that holds the integration does not
+give it."""
 
 from __future__ import annotations
 
 from collections.abc import Generator
-from uuid import UUID
 
 import pytest
 from sqlalchemy import select, update
@@ -60,7 +60,7 @@ def session(
 
 
 def _app_skills(user: User, session: Session) -> dict[str, int]:
-    return built_in_app_skills(load_user_plugin_states([user.id], session), session)
+    return built_in_app_skills(user.id, session)
 
 
 def test_custom_app_skill_runs_without_a_connection(session: Session) -> None:
@@ -103,7 +103,7 @@ def test_custom_app_skill_runs_without_a_connection(session: Session) -> None:
     assert usage - without == SkillUsage(bytes=1234, files=3)
 
 
-def test_built_in_app_skill_follows_the_plugin_the_user_runs(
+def test_built_in_app_skill_follows_the_integration_the_user_has_on(
     session: Session,
 ) -> None:
     runner = make_user(session)
@@ -152,53 +152,16 @@ def test_built_in_app_skill_follows_the_plugin_the_user_runs(
         assert not skill_user_states(user, [built_in.id], session)[built_in.id].enabled
 
 
-def test_invalid_plugin_version_gives_no_built_in_skill(session: Session) -> None:
-    user = make_user(session)
-    slack_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.SLACK]
-    reset_built_in_skill_row(session, built_in_skill_id=slack_id)
-    app = make_external_app(
-        session, app_type=ExternalAppType.SLACK, auth_template=_AUTH_TEMPLATE
-    )
-    plugin = make_app_plugin_for_user(session, app=app, user=user)
-    assert _app_skills(user, session) == {slack_id: app.id}
-
-    session.execute(
-        update(PluginVersion)
-        .where(PluginVersion.id == plugin.current_version_id)
-        .values(is_valid=False)
-    )
-
-    assert _app_skills(user, session) == {}
-
-
-def test_left_out_plugin_gives_no_built_in_skill(session: Session) -> None:
-    user = make_user(session)
-    slack_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.SLACK]
-    reset_built_in_skill_row(session, built_in_skill_id=slack_id)
-    app = make_external_app(
-        session, app_type=ExternalAppType.SLACK, auth_template=_AUTH_TEMPLATE
-    )
-    plugin = make_app_plugin_for_user(session, app=app, user=user)
-
-    def runtime_built_ins(left_out: set[UUID]) -> set[str]:
-        return {
-            r.name
-            for r in list_runtime_skills_for_user(
-                db_session=session, user=user, left_out=left_out
-            )
-            if r.built_in_skill_id == slack_id
-        }
-
-    assert runtime_built_ins(set()) != set()
-    assert runtime_built_ins({plugin.id}) == set()
-
-
-def test_turned_off_integration_gives_no_built_in_skill(session: Session) -> None:
+def test_a_skill_plugin_that_holds_the_app_gives_no_built_in_skill(
+    session: Session,
+) -> None:
+    """A user who runs a custom skill of an app, and has no access to the
+    integration of the app, gets the custom skill and not the built-in one."""
     user = make_user(session)
     slack_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.SLACK]
     reset_built_in_skill_row(session, built_in_skill_id=slack_id)
     custom = make_skill(session, is_public=True)
-    app = make_external_app(
+    make_external_app(
         session,
         skill=custom,
         app_type=ExternalAppType.SLACK,
@@ -206,13 +169,6 @@ def test_turned_off_integration_gives_no_built_in_skill(session: Session) -> Non
     )
     set_skill_enabled_for_user(
         skill_id=custom.id, enabled=True, user=user, db_session=session
-    )
-    assert _app_skills(user, session) == {slack_id: app.id}
-
-    session.execute(
-        update(Integration)
-        .where(Integration.external_app_id == app.id)
-        .values(enabled=False)
     )
 
     assert _app_skills(user, session) == {}
@@ -222,6 +178,28 @@ def test_turned_off_integration_gives_no_built_in_skill(session: Session) -> Non
     }
     assert custom.id in runtime
     assert slack_id not in runtime.values()
+
+
+def test_turned_off_integration_gives_no_built_in_skill(session: Session) -> None:
+    user = make_user(session)
+    slack_id = EXTERNAL_APP_BUILT_IN_SKILL_IDS[ExternalAppType.SLACK]
+    reset_built_in_skill_row(session, built_in_skill_id=slack_id)
+    app = make_external_app(
+        session, app_type=ExternalAppType.SLACK, auth_template=_AUTH_TEMPLATE
+    )
+    make_app_plugin_for_user(session, app=app, user=user)
+    assert _app_skills(user, session) == {slack_id: app.id}
+
+    session.execute(
+        update(Integration)
+        .where(Integration.external_app_id == app.id)
+        .values(enabled=False)
+    )
+
+    assert _app_skills(user, session) == {}
+    assert slack_id not in {
+        r.name for r in list_runtime_skills_for_user(db_session=session, user=user)
+    }
 
 
 def _free_built_in_app_type(session: Session) -> ExternalAppType:

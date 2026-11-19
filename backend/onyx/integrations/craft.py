@@ -12,10 +12,17 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ExternalAppType, IntegrationKind
 from onyx.db.integration import (
     get_external_app_for_integration,
+    list_enabled_integrations_by_id,
     list_integration_actions,
+    list_integration_plugin_rows,
+)
+from onyx.db.integration_access import (
+    get_plugin_ids_of_accessible_integrations,
+    load_user_integration_states,
 )
 from onyx.db.integration_policy import (
     get_plugin_names,
+    list_integration_holders,
     list_plugin_integrations,
     list_task_plugin_links,
     replace_task_plugin_links__no_commit,
@@ -27,7 +34,6 @@ from onyx.db.models import (
     ScheduledTask__Plugin,
     User,
 )
-from onyx.db.plugin_access import load_user_plugin_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
@@ -60,23 +66,20 @@ def _enabled(holdings: Sequence[tuple[UUID, Integration]]) -> list[Integration]:
 
 
 def list_runnable_integrations(db_session: Session, user_id: UUID) -> list[Integration]:
-    """The enabled integrations of the plugins that the user can see and has
-    turned on, in integration order."""
-    return _enabled(
-        list_plugin_integrations(
-            db_session,
-            [
-                state.plugin_id
-                for state in load_user_plugin_states([user_id], db_session)
-                if state.enabled
-            ],
-        )
+    """The integrations that are on for the user, in integration order."""
+    return list_enabled_integrations_by_id(
+        db_session,
+        [
+            state.integration_id
+            for state in load_user_integration_states([user_id], db_session)
+            if state.on
+        ],
     )
 
 
 class TaskPlugins(BaseModel):
-    """The plugins of a task that the owner can still see, also one the owner
-    turned off, with the integrations that each one holds."""
+    """The plugin links of a task, with the integrations of each plugin that
+    the owner still has access to, also one the owner turned off."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -103,31 +106,39 @@ class TaskPlugins(BaseModel):
 
 def load_task_plugins(db_session: Session, task_id: UUID, user_id: UUID) -> TaskPlugins:
     links = list_task_plugin_links(db_session, task_id)
-    visible = [
-        state.plugin_id
-        for state in load_user_plugin_states(
-            [user_id], db_session, [link.plugin_id for link in links]
+    holdings = list_plugin_integrations(db_session, [link.plugin_id for link in links])
+    accessible = {
+        state.integration_id
+        for state in load_user_integration_states(
+            [user_id], db_session, {integration.id for _, integration in holdings}
         )
-    ]
+    }
     return TaskPlugins(
-        links=links, holdings=list_plugin_integrations(db_session, visible)
+        links=links,
+        holdings=[
+            (plugin_id, integration)
+            for plugin_id, integration in holdings
+            if integration.id in accessible
+        ],
     )
 
 
 def load_usable_integration_ids(
     db_session: Session, user_id: UUID
 ) -> UsableIntegrationIds:
-    states = load_user_plugin_states([user_id], db_session)
-    turned_on = {state.plugin_id for state in states if state.enabled}
-    by_plugin: dict[UUID, set[int]] = {state.plugin_id: set() for state in states}
-    for plugin_id, integration in list_plugin_integrations(db_session, by_plugin):
-        if integration.enabled:
-            by_plugin[plugin_id].add(integration.id)
+    states = [
+        state
+        for state in load_user_integration_states([user_id], db_session)
+        if state.integration_enabled
+    ]
+    accessible = frozenset(state.integration_id for state in states)
+    by_plugin: dict[UUID, set[int]] = {}
+    for plugin_id, integration in list_integration_holders(db_session, accessible):
+        by_plugin.setdefault(plugin_id, set()).add(integration.id)
     return UsableIntegrationIds(
-        turned_on=frozenset().union(
-            *(ids for plugin_id, ids in by_plugin.items() if plugin_id in turned_on)
-        ),
-        by_visible_plugin={
+        on=frozenset(state.integration_id for state in states if state.on),
+        accessible=accessible,
+        accessible_by_plugin={
             plugin_id: frozenset(ids) for plugin_id, ids in by_plugin.items()
         },
     )
@@ -276,12 +287,13 @@ def _known_actions(settings: ActionSettings, keys: set[str]) -> ActionSettings:
 def list_task_plugin_views(
     db_session: Session, user: User, task_id: UUID | None
 ) -> list[TaskPluginView]:
-    """Each plugin that the user runs and that holds an enabled integration
-    other than OpenAPI, and each visible plugin of the task, also one with no enabled
-    integration, so that a save keeps its settings. ``task_id`` None gives
-    the catalog for a new task: no plugin is enabled and each action
-    inherits. The stored settings leave out action keys that no integration
-    of the plugin has any more, so a save does not send them back."""
+    """Each plugin that names an integration, other than OpenAPI, that is on
+    for the user, and each plugin of the task that holds an integration the
+    user has access to, also one that is off, so that a save keeps its
+    settings. ``task_id`` None gives the catalog for a new task: no plugin is
+    enabled and each action inherits. The stored settings leave out action
+    keys that no integration of the plugin has any more, so a save does not
+    send them back."""
     links = (
         {
             link.plugin_id: parse_action_settings(link.action_settings)
@@ -290,24 +302,33 @@ def list_task_plugin_views(
         if task_id is not None
         else {}
     )
-    plugin_ids = [
-        state.plugin_id
-        for state in load_user_plugin_states([user.id], db_session)
-        if state.enabled or state.plugin_id in links
-    ]
-    integrations_by_plugin: dict[UUID, list[Integration]] = {
-        plugin_id: [] for plugin_id in plugin_ids if plugin_id in links
+    states = {
+        state.integration_id: state
+        for state in load_user_integration_states([user.id], db_session)
     }
+    plugins_of_on_integrations = {
+        row.plugin_id
+        for rows in list_integration_plugin_rows(
+            [integration_id for integration_id, state in states.items() if state.on],
+            db_session,
+        ).values()
+        for row in rows
+    }
+    integrations_by_plugin: dict[UUID, list[Integration]] = {}
     action_keys: dict[UUID, set[str]] = {}
     actions: dict[int, list[IntegrationAction]] = {}
-    for plugin_id, integration in list_plugin_integrations(db_session, plugin_ids):
-        if plugin_id not in links and not integration.enabled:
+    for plugin_id, integration in list_plugin_integrations(
+        db_session, plugins_of_on_integrations | set(links)
+    ):
+        state = states.get(integration.id)
+        if state is None or (plugin_id not in links and not state.on):
             continue
         if integration.id not in actions:
             actions[integration.id] = list_integration_actions(
                 integration.id, db_session
             )
         if plugin_id in links:
+            integrations_by_plugin.setdefault(plugin_id, [])
             action_keys.setdefault(plugin_id, set()).update(
                 action.key for action in actions[integration.id]
             )
@@ -343,15 +364,12 @@ def replace_task_plugins__no_commit(
     plugins: list[PluginLinkConfiguration],
 ) -> None:
     """Save the plugins of a task with their action settings. Each plugin must
-    be visible to the owner, and each action key must be an action of one of
-    its integrations."""
+    hold an integration that the owner has access to, and each action key
+    must be an action of one of its integrations."""
     ids = [plugin.plugin_id for plugin in plugins]
     if len(set(ids)) != len(ids):
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "A plugin can appear only once")
-    visible = {
-        state.plugin_id for state in load_user_plugin_states([user.id], db_session, ids)
-    }
-    if set(ids) - visible:
+    if set(ids) - get_plugin_ids_of_accessible_integrations(user.id, db_session, ids):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found")
     keys: dict[UUID, set[str]] = {plugin_id: set() for plugin_id in ids}
     for plugin_id, integration in list_plugin_integrations(db_session, ids):

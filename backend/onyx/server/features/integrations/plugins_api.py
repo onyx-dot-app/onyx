@@ -1,6 +1,6 @@
-"""Routes of a plugin that holds only integrations: the plugins an agent
-runs for the user, the user's on/off switch, the shares and publishing of a private plugin, and the install
-setting of an Organization library plugin."""
+"""Routes that name an integration by the plugin that holds it: the plugins
+an agent runs for the user, the user's on/off switch, the shares and
+publishing of a private integration, and the install setting."""
 
 from uuid import UUID
 
@@ -99,14 +99,11 @@ def publish_plugin(
     user: User = Depends(_member),
     db_session: Session = Depends(get_session),
 ) -> PluginPublishResponse:
-    """A name that the Organization library has for a skill is refused with
-    CONFLICT, as for a skill publish."""
     name, affected = publish_plugin_for_user__no_commit(
         user,
         plugin_id,
         db_session,
         token_may_manage=token_allows(http_request, Permission.MANAGE_ACTIONS),
-        on_name_clash="raise",
     )
     db_session.commit()
     reload_craft_sessions(affected, db_session)
@@ -117,11 +114,11 @@ def publish_plugin(
 def set_plugin_installation_policy(
     plugin_id: UUID,
     request: PluginInstallationPolicyUpdate,
-    user: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
+    _: User = Depends(require_permission(Permission.MANAGE_ACTIONS)),
     db_session: Session = Depends(get_session),
 ) -> PluginInstallationPolicyUpdate:
     affected = set_installation_policy__no_commit(
-        user, plugin_id, request.installation_policy, db_session
+        plugin_id, request.installation_policy, db_session
     )
     db_session.commit()
     reload_craft_sessions(affected, db_session)

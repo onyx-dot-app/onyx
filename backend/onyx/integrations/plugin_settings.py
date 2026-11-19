@@ -1,37 +1,35 @@
-"""The settings of a plugin that holds only integrations: the user's on/off
-choice, the install setting, the shares and publishing. A plugin that holds
-a skill keeps the skill routes, which also write the legacy skill rows."""
+"""The access settings of an integration, for the routes that name it by the
+plugin that holds it: the user's on/off choice, the install setting, the
+shares and publishing. Each read and write is on the integration. The plugin
+id is only its handle. A plugin that holds a skill keeps the skill routes."""
 
+from collections.abc import Collection
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
 from onyx.db.enums import Permission, PluginInstallationPolicy
-from onyx.db.integration_policy import list_persona_plugin_snapshots
-from onyx.db.models import User
+from onyx.db.integration import lock_integration
+from onyx.db.integration_access import (
+    UserIntegrationState,
+    affected_user_ids_for_integrations,
+    load_integration_shares,
+    load_user_integration_states,
+    replace_integration_shares__no_commit,
+    set_integration_preferences__no_commit,
+)
+from onyx.db.integration_policy import (
+    get_plugin_names,
+    list_persona_plugin_snapshots,
+    list_plugin_integrations,
+)
+from onyx.db.models import Integration, User
 from onyx.db.persona import get_persona_by_id
-from onyx.db.plugin import (
-    NameClashAction,
-    PluginAccessChange,
-    PluginGroupGrant,
-    PluginUserGrant,
-    apply_plugin_access_change__no_commit,
-    lock_plugin,
-    plugin_holds_only_integrations,
-    publish_or_request_review__no_commit,
-    set_plugin_preferences__no_commit,
-)
-from onyx.db.plugin_access import (
-    PluginAccess,
-    UserPluginState,
-    affected_user_ids_for_plugins,
-    load_plugin_access,
-    load_user_plugin_states,
-)
+from onyx.db.plugin import plugin_holds_only_integrations
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.policy import agent_plugin_settings
+from onyx.integrations import policy
 from onyx.server.features.integrations.models import (
     MemberPluginState,
     PluginAccessUpdate,
@@ -45,35 +43,72 @@ def _not_found() -> OnyxError:
     return OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
 
 
-def _user_state(user: User, plugin_id: UUID, db_session: Session) -> UserPluginState:
-    states = load_user_plugin_states([user.id], db_session, [plugin_id])
-    if not states:
+def _single_integration(
+    plugin_id: UUID, held: list[tuple[UUID, Integration]], db_session: Session
+) -> Integration:
+    """The integration that the plugin id names: the one integration of a
+    plugin that holds no skill."""
+    if not held:
         raise _not_found()
-    return states[0]
-
-
-def _check_holds_only_integrations(plugin_id: UUID, db_session: Session) -> None:
     if not plugin_holds_only_integrations(plugin_id, db_session):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "This plugin holds a skill. Change it on the page of its skill.",
         )
+    if len(held) > 1:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This plugin holds more than one integration.",
+        )
+    return held[0][1]
+
+
+def _integration_of_plugin(
+    plugin_id: UUID, db_session: Session, *, lock: bool
+) -> Integration:
+    integration = _single_integration(
+        plugin_id, list_plugin_integrations(db_session, [plugin_id]), db_session
+    )
+    if lock and lock_integration(integration.id, db_session) is None:
+        raise _not_found()
+    return integration
+
+
+def _user_state(
+    user: User, integration: Integration, db_session: Session
+) -> UserIntegrationState | None:
+    states = load_user_integration_states([user.id], db_session, [integration.id])
+    return states[0] if states else None
+
+
+def _accessible_integration(
+    user: User, plugin_id: UUID, db_session: Session
+) -> tuple[Integration, UserIntegrationState]:
+    """The integration of the plugin with its state for the user. NOT_FOUND
+    when the user has no access, whatever the plugin holds."""
+    held = list_plugin_integrations(db_session, [plugin_id])
+    states = load_user_integration_states(
+        [user.id], db_session, [integration.id for _, integration in held]
+    )
+    if not states:
+        raise _not_found()
+    return _single_integration(plugin_id, held, db_session), states[0]
 
 
 def member_plugin_state(
     user: User, plugin_id: UUID, db_session: Session
 ) -> MemberPluginState:
-    state = _user_state(user, plugin_id, db_session)
+    _, state = _accessible_integration(user, plugin_id, db_session)
     return MemberPluginState(
         plugin_id=plugin_id,
-        enabled=state.enabled,
+        enabled=state.turned_on,
         installation_policy=state.installation_policy,
     )
 
 
 def agent_plugin_ids(user: User, persona_id: int, db_session: Session) -> list[UUID]:
-    """The plugins whose integrations a chat of the agent uses for the user,
-    the list that chat tool construction reads."""
+    """The plugins that name the integrations a chat of the agent uses for
+    the user, the list that chat tool construction reads."""
     try:
         get_persona_by_id(persona_id, user, db_session, is_for_edit=False)
     except ValueError as e:
@@ -85,103 +120,94 @@ def agent_plugin_ids(user: User, persona_id: int, db_session: Session) -> list[U
         snapshot.plugin_id: snapshot.action_settings
         for snapshot in list_persona_plugin_snapshots(persona_id, db_session)
     }
-    return sorted(
-        agent_plugin_settings(
-            db_session,
-            user.id,
-            persona_id,
-            links,
-            published_only=user.is_anonymous,
-        ),
-        key=str,
+    return policy.agent_plugin_ids(
+        db_session,
+        user.id,
+        persona_id,
+        links,
+        for_everyone_only=user.is_anonymous,
     )
 
 
 def set_plugin_enabled__no_commit(
     user: User, plugin_id: UUID, enabled: bool, db_session: Session
 ) -> None:
-    state = _user_state(user, plugin_id, db_session)
-    _check_holds_only_integrations(plugin_id, db_session)
+    integration, state = _accessible_integration(user, plugin_id, db_session)
     if not enabled and state.installation_policy == PluginInstallationPolicy.REQUIRED:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "Your admin made this plugin Required. You cannot turn it off.",
         )
-    set_plugin_preferences__no_commit(user.id, [plugin_id], enabled, db_session)
+    set_integration_preferences__no_commit(
+        user.id, [integration.id], enabled, db_session
+    )
 
 
-def _integration_plugin_access(
-    user: User, plugin_id: UUID, db_session: Session
-) -> PluginAccess:
-    access = load_plugin_access([plugin_id], user.id, db_session).get(plugin_id)
-    if access is None:
-        raise _not_found()
-    _check_holds_only_integrations(plugin_id, db_session)
-    return access
+def set_company_policy__no_commit(
+    integration: Integration, policy: PluginInstallationPolicy, db_session: Session
+) -> set[UUID]:
+    """Set the company install setting of a locked integration. Returns the
+    affected users."""
+    before = affected_user_ids_for_integrations([integration.id], db_session)
+    integration.installation_policy = policy
+    db_session.flush()
+    return before | affected_user_ids_for_integrations([integration.id], db_session)
 
 
 def set_installation_policy__no_commit(
+    plugin_id: UUID, policy: PluginInstallationPolicy, db_session: Session
+) -> set[UUID]:
+    """Set the company install setting. NOT_AVAILABLE makes the integration
+    private: only its owner and its shares keep access. The caller checked
+    organization-wide manage-actions. Returns the affected users."""
+    integration = _integration_of_plugin(plugin_id, db_session, lock=True)
+    return set_company_policy__no_commit(integration, policy, db_session)
+
+
+def _owned_private_integration(
     user: User,
     plugin_id: UUID,
-    policy: PluginInstallationPolicy,
     db_session: Session,
-) -> set[UUID]:
-    """The caller checked organization-wide manage-actions. Returns the
-    affected users."""
-    access = _integration_plugin_access(user, plugin_id, db_session)
-    if not access.published:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Only a plugin in the Organization library has an install setting.",
-        )
-    result = apply_plugin_access_change__no_commit(
-        [plugin_id],
-        PluginAccessChange(company_installation_policy=policy),
-        None,
-        db_session,
-    )
-    result.raise_first_failure()
-    return result.affected_user_ids
-
-
-def _owned_private_plugin(
-    user: User, plugin_id: UUID, db_session: Session, *, token_may_manage: bool
-) -> PluginAccess:
-    """A private plugin that holds only integrations, which the user owns or
-    manages as an organization-wide action manager. ``token_may_manage`` is
-    False when the token of the request does not allow Manage actions."""
-    access = _integration_plugin_access(user, plugin_id, db_session)
-    if access.author_user_id != user.id and not (
+    *,
+    token_may_manage: bool,
+    lock: bool,
+) -> Integration:
+    """The private integration of the plugin, which the user owns or manages
+    as an organization-wide action manager. ``token_may_manage`` is False
+    when the token of the request does not allow Manage actions."""
+    integration = _integration_of_plugin(plugin_id, db_session, lock=lock)
+    if integration.owner_user_id != user.id and not (
         token_may_manage and has_global_permission(user, Permission.MANAGE_ACTIONS)
     ):
-        if load_user_plugin_states([user.id], db_session, [plugin_id]):
+        if _user_state(user, integration, db_session) is not None:
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "Only the owner of this plugin can share or publish it.",
             )
         raise _not_found()
-    if access.published:
+    if integration.installation_policy != PluginInstallationPolicy.NOT_AVAILABLE:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "This plugin is in the Organization library. Change its install "
+            "This plugin is available to the organization. Change its install "
             "setting instead.",
         )
-    return access
+    return integration
 
 
 def plugin_access_view(
     user: User, plugin_id: UUID, db_session: Session, *, token_may_manage: bool
 ) -> PluginAccessView:
-    access = _owned_private_plugin(
-        user, plugin_id, db_session, token_may_manage=token_may_manage
+    integration = _owned_private_integration(
+        user, plugin_id, db_session, token_may_manage=token_may_manage, lock=False
     )
+    shares = load_integration_shares(integration.id, db_session)
     return PluginAccessView(
         plugin_id=plugin_id,
         user_shares=[
             PluginUserShareView(
                 user_id=share.user_id, email=share.email, permission=share.permission
             )
-            for share in access.user_shares
+            for share in shares.user_shares
         ],
         group_shares=[
             PluginGroupShareView(
@@ -189,7 +215,7 @@ def plugin_access_view(
                 group_name=share.group_name,
                 permission=share.permission,
             )
-            for share in access.group_shares
+            for share in shares.group_shares
         ],
     )
 
@@ -202,28 +228,35 @@ def share_plugin__no_commit(
     *,
     token_may_manage: bool,
 ) -> set[UUID]:
-    """Replace the shares. The Sharing setting and the group scope rules of
-    skills apply. Returns the affected users."""
-    _owned_private_plugin(
-        user, plugin_id, db_session, token_may_manage=token_may_manage
+    """Replace the shares of the integration. Each share lets a person use
+    the integration, so each is saved as a viewer. The Sharing setting and
+    the group scope rules of skills apply. Returns the affected users."""
+    integration = _owned_private_integration(
+        user, plugin_id, db_session, token_may_manage=token_may_manage, lock=True
     )
-    result = apply_plugin_access_change__no_commit(
-        [plugin_id],
-        PluginAccessChange(
-            user_grants=tuple(
-                PluginUserGrant(user_id=share.user_id, permission=share.permission)
-                for share in request.user_shares
-            ),
-            group_grants=tuple(
-                PluginGroupGrant(group_id=share.group_id, permission=share.permission)
-                for share in request.group_shares
-            ),
-        ),
+    return share_integration__no_commit(
         user,
+        integration,
+        [share.user_id for share in request.user_shares],
+        [share.group_id for share in request.group_shares],
         db_session,
     )
-    result.raise_first_failure()
-    return result.affected_user_ids
+
+
+def share_integration__no_commit(
+    user: User,
+    integration: Integration,
+    user_ids: Collection[UUID],
+    group_ids: Collection[int],
+    db_session: Session,
+) -> set[UUID]:
+    """Replace the shares of a locked integration that the caller checked
+    the user may share. Returns the affected users."""
+    before = affected_user_ids_for_integrations([integration.id], db_session)
+    replace_integration_shares__no_commit(
+        integration, user_ids, group_ids, user, db_session
+    )
+    return before | affected_user_ids_for_integrations([integration.id], db_session)
 
 
 def publish_plugin_for_user__no_commit(
@@ -232,32 +265,32 @@ def publish_plugin_for_user__no_commit(
     db_session: Session,
     *,
     token_may_manage: bool,
-    on_name_clash: NameClashAction,
 ) -> tuple[str, set[UUID]]:
-    """Move the plugin to the Organization library. Only an
-    organization-wide action manager publishes a plugin that holds an
-    integration, with no review: there is no review of such a plugin. A used
-    name follows ``on_name_clash``. Returns the name in the library and the
-    affected users."""
-    _owned_private_plugin(
-        user, plugin_id, db_session, token_may_manage=token_may_manage
+    """Make the private integration Available to the organization. Only an
+    organization-wide action manager does this. The shares stay. Returns the
+    name of the plugin and the affected users."""
+    integration = _owned_private_integration(
+        user, plugin_id, db_session, token_may_manage=token_may_manage, lock=True
     )
-    if not token_may_manage:
+    affected = publish_integration__no_commit(
+        user, integration, db_session, token_may_manage=token_may_manage
+    )
+    return get_plugin_names(db_session, [plugin_id])[plugin_id], affected
+
+
+def publish_integration__no_commit(
+    user: User, integration: Integration, db_session: Session, *, token_may_manage: bool
+) -> set[UUID]:
+    """Make a locked private integration Available to the organization.
+    Returns the affected users."""
+    if not token_may_manage or not has_global_permission(
+        user, Permission.MANAGE_ACTIONS
+    ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only an organization-wide action manager can publish a plugin "
-            "that holds an integration.",
+            "Only an organization-wide action manager can make an integration "
+            "available to the organization.",
         )
-    plugin = lock_plugin(plugin_id, db_session)
-    if plugin is None:
-        raise _not_found()
-    before = affected_user_ids_for_plugins([plugin_id], db_session)
-    publish_or_request_review__no_commit(
-        plugin,
-        plugin.current_version_id,
-        None,
-        on_name_clash,
-        db_session,
-        approver=user,
+    return set_company_policy__no_commit(
+        integration, PluginInstallationPolicy.AVAILABLE, db_session
     )
-    return plugin.name, before | affected_user_ids_for_plugins([plugin_id], db_session)

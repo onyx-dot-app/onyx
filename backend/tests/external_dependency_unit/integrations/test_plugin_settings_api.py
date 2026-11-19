@@ -1,6 +1,6 @@
-"""The settings of a plugin that holds only integrations, called through its
-route functions against the database: the plugins an agent runs, the user's
-on/off switch, the install setting, the shares and publishing."""
+"""The access settings of an integration, called through the route functions
+that name it by its plugin, against the database: the plugins an agent runs,
+the user's on/off switch, the install setting, the shares and publishing."""
 
 from collections.abc import Generator
 from typing import Any
@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import Request
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DEFAULT_PERSONA_ID
@@ -21,11 +21,18 @@ from onyx.db.enums import (
     PluginInstallationPolicy,
     SkillSharePermission,
 )
-from onyx.db.models import Marketplace, Persona, Plugin, PluginSkill, Skill, User
-from onyx.db.plugin_access import load_user_plugin_states
+from onyx.db.models import (
+    Integration,
+    Marketplace,
+    Persona,
+    Plugin,
+    Plugin__Integration,
+    PluginSkill,
+    User,
+)
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.models import ActionSettings
-from onyx.integrations.policy import agent_plugin_settings
+from onyx.integrations.models import ActionSettings, LinkValue
+from onyx.integrations.policy import agent_link_settings_by_integration
 from onyx.server.features.integrations import admin_api, api, plugins_api
 from onyx.server.features.integrations.models import (
     IntegrationCreate,
@@ -36,7 +43,7 @@ from onyx.server.features.integrations.models import (
     PluginUserShare,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
-from tests.external_dependency_unit.craft.db_helpers import make_skill
+from tests.external_dependency_unit.craft.db_helpers import share_plugin_with_user
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     link_persona,
@@ -120,6 +127,16 @@ def _create(
     return detail.plugins[0].plugin_id
 
 
+def _integration(db_session: Session, plugin_id: UUID) -> Integration:
+    """The integration that the plugin id names, read again from the database."""
+    db_session.expire_all()
+    return db_session.scalars(
+        select(Integration)
+        .join(Plugin__Integration, Plugin__Integration.integration_id == Integration.id)
+        .where(Plugin__Integration.plugin_id == plugin_id)
+    ).one()
+
+
 def _enabled_in_member_list(
     user: User, plugin_id: UUID, db_session: Session
 ) -> bool | None:
@@ -189,51 +206,44 @@ def _persona(
 # Plugins an agent runs
 
 
-@pytest.mark.parametrize("default_agent", [False, True])
-@pytest.mark.parametrize("published_only", [False, True])
-def test_agent_state_filter_preserves_settings(
+@pytest.mark.parametrize("for_everyone_only", [False, True])
+def test_agent_integrations_keep_the_settings_of_their_links(
     db_session: Session,
     admin: User,
     scoped: User,
     created: list[int],
-    default_agent: bool,
-    published_only: bool,
+    for_everyone_only: bool,
 ) -> None:
-    visible_id = _create(admin, db_session, created, for_organization=True)
+    """The default agent uses the integrations that the user turned on. A
+    custom agent uses the linked integrations that the user has access to.
+    Each one keeps the settings of its link."""
+    available_id = _create(admin, db_session, created, for_organization=True)
     private_id = _create(scoped, db_session, created, for_organization=False)
     _create(admin, db_session, created, for_organization=True)
-    states = load_user_plugin_states([scoped.id], db_session)
-    if published_only:
-        states = [state for state in states if state.published]
-    persona_id = DEFAULT_PERSONA_ID if default_agent else 7
-    for links in (
-        {
-            visible_id: ActionSettings(),
-            private_id: ActionSettings(),
-            uuid4(): ActionSettings(),
-        },
-        {},
-    ):
-        if default_agent:
-            expected = {
-                state.plugin_id: links.get(state.plugin_id)
-                for state in states
-                if state.enabled
-            }
-        else:
-            visible = {state.plugin_id for state in states}
-            expected = {key: value for key, value in links.items() if key in visible}
-        with patch(
-            "onyx.integrations.policy.load_user_plugin_states",
-            wraps=load_user_plugin_states,
-        ) as load:
-            actual = agent_plugin_settings(
-                db_session, scoped.id, persona_id, links, published_only=published_only
+    blocked = ActionSettings(default=LinkValue.BLOCKED)
+    links = {available_id: blocked, private_id: ActionSettings(), uuid4(): blocked}
+
+    def settings(persona_id: int) -> dict[UUID, ActionSettings | None]:
+        held = agent_link_settings_by_integration(
+            db_session,
+            scoped.id,
+            persona_id,
+            links,
+            for_everyone_only=for_everyone_only,
+        )
+        return {
+            plugin_id: setting
+            for links_of in held.values()
+            for plugin_id, setting in zip(
+                links_of.plugin_ids, links_of.settings, strict=True
             )
-        assert actual == expected
-        assert load.call_args is not None
-        requested = load.call_args.kwargs.get("plugin_ids")
-        assert requested == (None if default_agent else list(links))
+        }
+
+    private = {} if for_everyone_only else {private_id: ActionSettings()}
+    # The owner has the private integration on. No user turned on the
+    # available ones.
+    assert settings(DEFAULT_PERSONA_ID) == private
+    assert settings(7) == {available_id: blocked, **private}
 
 
 def test_default_agent_runs_the_plugins_the_user_turned_on(
@@ -390,22 +400,38 @@ def test_admin_sets_each_install_setting(
     assert _enabled_in_member_list(member, plugin_id, db_session) is None
     for policy in PluginInstallationPolicy:
         _set_policy(admin, plugin_id, policy, db_session)
-        db_session.expire_all()
-        stored = db_session.get(Plugin, plugin_id)
-        assert stored is not None and stored.installation_policy is policy
+        assert _integration(db_session, plugin_id).installation_policy is policy
 
 
-def test_install_setting_needs_an_organization_library_plugin(
-    db_session: Session, admin: User, scoped: User, created: list[int]
+def test_install_setting_opens_a_private_integration(
+    db_session: Session, admin: User, scoped: User, member: User, created: list[int]
 ) -> None:
     plugin_id = _create(scoped, db_session, created, for_organization=False)
+    assert _enabled_in_member_list(member, plugin_id, db_session) is None
+
+    _set_policy(admin, plugin_id, PluginInstallationPolicy.DEFAULT, db_session)
+    assert _enabled_in_member_list(member, plugin_id, db_session) is True
+
+
+def test_a_share_of_the_plugin_gives_no_integration(
+    db_session: Session, scoped: User, member: User, created: list[int]
+) -> None:
+    """The plugin id only names the integration. A person who can see the
+    plugin has no access to the integration."""
+    plugin_id = _create(scoped, db_session, created, for_organization=False)
+    share_plugin_with_user(
+        db_session, plugin_id, member.id, SkillSharePermission.VIEWER
+    )
+    db_session.commit()
+
+    assert _enabled_in_member_list(member, plugin_id, db_session) is None
     assert (
         _status(
-            lambda: _set_policy(
-                admin, plugin_id, PluginInstallationPolicy.DEFAULT, db_session
+            lambda: plugins_api.set_plugin_enabled(
+                plugin_id, PluginEnableRequest(enabled=True), member, db_session
             )
         )
-        == 400
+        == 404
     )
 
 
@@ -520,9 +546,11 @@ def test_a_basic_token_reaches_only_the_plugins_of_its_user(
     )
 
 
-def test_publish_returns_the_new_name_and_refuses_the_name_of_a_skill(
+def test_publish_keeps_the_plugin_as_it_is(
     db_session: Session, admin: User, created: list[int]
 ) -> None:
+    """A publish changes the install setting of the integration. The plugin
+    keeps its name and its place, also when the organization has the name."""
     name = f"weather-{uuid4().hex[:8]}"
     _create(admin, db_session, created, for_organization=True, name=name)
     plugin_id = _create(admin, db_session, created, for_organization=False, name=name)
@@ -530,27 +558,14 @@ def test_publish_returns_the_new_name_and_refuses_the_name_of_a_skill(
     published = plugins_api.publish_plugin(
         _http_request(), plugin_id, admin, db_session
     )
-    assert published.name == f"{name}-2"
 
-    skill = make_skill(db_session, name=f"skill-{uuid4().hex[:8]}", is_public=True)
-    db_session.commit()
-    try:
-        clashing = _create(
-            admin, db_session, created, for_organization=False, name=skill.name
-        )
-        assert (
-            _status(
-                lambda: plugins_api.publish_plugin(
-                    _http_request(), clashing, admin, db_session
-                )
-            )
-            == 409
-        )
-        db_session.rollback()
-    finally:
-        db_session.execute(delete(Plugin).where(Plugin.id == skill.id))
-        db_session.execute(delete(Skill).where(Skill.id == skill.id))
-        db_session.commit()
+    assert published.name == name
+    plugin = db_session.get(Plugin, plugin_id)
+    assert plugin is not None
+    kind = db_session.scalar(
+        select(Marketplace.kind).where(Marketplace.id == plugin.marketplace_id)
+    )
+    assert kind is MarketplaceKind.USER_UPLOADS
 
 
 def test_sharing_setting_off_stops_a_new_share(
@@ -583,16 +598,12 @@ def test_publish_needs_an_organization_wide_action_manager(
     db_session.rollback()
 
     published = publish(admin)
-    db_session.expire_all()
-    plugin = db_session.get(Plugin, plugin_id)
-    assert plugin is not None
-    assert plugin.published_version_id == plugin.current_version_id
-    assert (published.plugin_id, published.name) == (plugin_id, plugin.name)
-    kind = db_session.scalar(
-        select(Marketplace.kind).where(Marketplace.id == plugin.marketplace_id)
+    assert published.plugin_id == plugin_id
+    assert (
+        _integration(db_session, plugin_id).installation_policy
+        is PluginInstallationPolicy.AVAILABLE
     )
-    assert kind is MarketplaceKind.ORGANIZATION_LIBRARY
     assert _enabled_in_member_list(member, plugin_id, db_session) is False
 
-    # A published plugin has an install setting, not shares.
+    # An integration of the organization has an install setting, not shares.
     assert _status(lambda: _share(admin, plugin_id, [member.id], db_session)) == 400

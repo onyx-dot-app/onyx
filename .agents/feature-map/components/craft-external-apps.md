@@ -106,10 +106,10 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
 ```
 
 **Recognition.** `sandbox_proxy/request_evaluator.py:IntegrationRequestEvaluator`
-loads the integrations the sandbox owner can use. These are the enabled
-integrations of the plugins that the user can see and has turned on. A
-scheduled run uses only the integrations of the task plugins that the owner
-can see, on or off. `GateAddon._running_task_id` finds the task from the
+loads the integrations the sandbox owner can use. These are the integrations
+that are on for the user ([[mcp-and-custom-tools]] has the access rule). A
+scheduled run uses only the enabled integrations of the task plugins that the
+owner has access to, also those the owner turned off. `GateAddon._running_task_id` finds the task from the
 session tag in one query. `sandbox_proxy/usable_integrations.py:UsableIntegrations`
 caches the integration ids of each user for 30 seconds, and the evaluator and
 the resolver share it. It also caches, for 30 seconds per tenant, one
@@ -181,7 +181,8 @@ request and stashes the context to answer it in the cache
 `backend/onyx/server/features/build/external_apps/api.py:resolve_connect_app_request` answers the
 permission on the sandbox: allow for connected, reject for declined.
 
-**Craft catalog.** Craft uses the integrations of the plugins the user runs.
+**Craft catalog.** Craft uses the integrations that are on for the user
+(`integrations/craft.py:list_runnable_integrations`).
 `server/features/build/sandbox/util/mcp_config.py:resolve_craft_mcp_servers`
 writes the MCP integrations whose `integration_status` is connected (or that
 have no sign-in) into the opencode config, with each Blocked action as a
@@ -210,7 +211,7 @@ refresh reads the tenant from the context. It checks again that
 the integration is enabled and that the request still matches the endpoint in
 its kind row, because the gate matched against cached targets. Otherwise, or on
 a connection problem, it refuses with `CredentialUnavailableError`. An internal MCP host is reachable only
-when the server belongs to a plugin that the user can see
+when the user has access to the integration of the server
 (`IntegrationResolver.allows_destination`).
 
 **OAuth connect.** `backend/onyx/integrations/oauth.py` binds each
@@ -354,7 +355,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
   (`integrations/kinds/mcp_server.py:mcp_action_default_policy`). The proxy and
   chat tool construction read it from the `integration_action` row.
 - The evaluator loads the kind rows of each integration the user can use on
-  each request. A change to the plugins of a user reaches the proxy after up
+  each request. A change to the access or the on/off choice of a user reaches the proxy after up
   to 30 seconds.
 - An external app or MCP server that the old admin routes create has no
   integration row until the integration routes replace them, so the proxy does

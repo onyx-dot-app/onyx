@@ -110,10 +110,11 @@ a quick click on a new run does not fail.
 
 **Plugins and action settings.** Task create and patch accept
 `plugins: [{plugin_id, action_settings}]`.
-`integrations/craft.py:replace_task_plugins__no_commit` checks that the owner
-can see each plugin and that each action key belongs to one of its
-integrations, then stores `scheduled_task__plugin` rows. A run can use only the
-integrations of these plugins; the proxy blocks each other integration. Each
+`integrations/craft.py:replace_task_plugins__no_commit` checks that each
+plugin holds an integration the owner has access to and that each action key
+belongs to one of its integrations, then stores `scheduled_task__plugin` rows.
+A run can use only the integrations of these plugins that the owner has
+access to; the proxy blocks each other integration. Each
 action value is Allow, Ask, Blocked or Inherit (the integration setting).
 `GET /scheduled-tasks/{id}/action-policies` and the new-task catalog
 `GET /build/action-policies` return `TaskPluginView` rows

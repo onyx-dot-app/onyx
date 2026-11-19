@@ -34,7 +34,7 @@ from onyx.db.models import (
     Persona,
     Persona__Plugin,
     User,
-    UserPluginPreference,
+    UserIntegrationPreference,
 )
 from onyx.integrations.models import (
     ActionSettings,
@@ -284,53 +284,55 @@ def _recheck(
         db_session.commit()
 
 
-def test_the_approval_recheck_ignores_plugins_the_user_cannot_use(
+def test_the_approval_recheck_reads_the_integrations_the_user_can_use(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     integrations: list[int],
     make_test_user: MakeTestUser,
 ) -> None:
-    """Chat tool construction offers an action through the plugins the user
-    can use, so a hidden or turned-off plugin must not block its approval."""
+    """Chat tool construction offers an action of an integration that the
+    user can use on the agent, so the approval check reads the same
+    integrations: the user's on/off choice counts only on the default agent,
+    and an integration with no access is Blocked."""
     user = make_test_user("policy_recheck")
-    integration, _ = make_mcp_integration(
-        db_session,
-        server_url="https://mcp.example.test/mcp",
-        name=f"recheck-{uuid4().hex[:8]}",
-        tools=("update",),
+
+    def integration_in_plugin(
+        policy: PluginInstallationPolicy,
+    ) -> tuple[Integration, UUID]:
+        integration, _ = make_mcp_integration(
+            db_session,
+            server_url="https://mcp.example.test/mcp",
+            name=f"recheck-{uuid4().hex[:8]}",
+            tools=("update",),
+        )
+        integrations.append(integration.id)
+        plugin = hold_in_plugin(db_session, [integration], installation_policy=policy)
+        return integration, plugin.id
+
+    turned_off, turned_off_plugin = integration_in_plugin(
+        PluginInstallationPolicy.DEFAULT
     )
-    integrations.append(integration.id)
-    blocked = {"actions": {"update": "blocked"}}
-    visible = hold_in_plugin(
-        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
-    )
-    hidden = hold_in_plugin(
-        db_session,
-        [integration],
-        installation_policy=PluginInstallationPolicy.NOT_AVAILABLE,
-    )
-    turned_off = hold_in_plugin(
-        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
+    no_access, no_access_plugin = integration_in_plugin(
+        PluginInstallationPolicy.NOT_AVAILABLE
     )
     db_session.add(
-        UserPluginPreference(user_id=user.id, plugin_id=turned_off.id, enabled=False)
+        UserIntegrationPreference(
+            user_id=user.id, integration_id=turned_off.id, enabled=False
+        )
     )
     db_session.commit()
     persona = create_test_persona(db_session, user)
     try:
-        link_persona(db_session, persona.id, visible.id)
-        link_persona(db_session, persona.id, hidden.id, blocked)
-        link_persona(db_session, DEFAULT_PERSONA_ID, turned_off.id, blocked)
+        link_persona(db_session, persona.id, turned_off_plugin)
+        link_persona(db_session, persona.id, no_access_plugin)
 
-        assert _recheck(db_session, integration, user, persona.id) is (
+        assert _recheck(db_session, turned_off, user, persona.id) is (
             EffectivePolicy.ASK
         )
-        assert _recheck(db_session, integration, user, DEFAULT_PERSONA_ID) is (
-            EffectivePolicy.ASK
+        assert _recheck(db_session, turned_off, user, DEFAULT_PERSONA_ID) is (
+            EffectivePolicy.BLOCKED
         )
-
-        link_persona(db_session, persona.id, turned_off.id, blocked)
-        assert _recheck(db_session, integration, user, persona.id) is (
+        assert _recheck(db_session, no_access, user, persona.id) is (
             EffectivePolicy.BLOCKED
         )
     finally:

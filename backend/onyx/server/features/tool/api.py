@@ -27,14 +27,16 @@ from onyx.db.integration import (
     list_mcp_tools_with_integration,
     list_openapi_tools_with_integration,
 )
+from onyx.db.integration_access import (
+    load_user_integration_states,
+    set_integration_preferences__no_commit,
+)
 from onyx.db.integration_connection import (
     get_connection,
     list_connections,
     upsert_connection__no_commit,
 )
 from onyx.db.models import Integration, IntegrationConnection, Tool, User
-from onyx.db.plugin import lock_plugin, set_plugin_preferences__no_commit
-from onyx.db.plugin_access import get_visible_plugin_ids, load_user_plugin_states
 from onyx.db.tools import get_tools, get_tools_by_ids
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -153,20 +155,18 @@ def _check_default_chat_permission(enabled: bool | None, user: User) -> None:
 def _set_default_chat(
     integration: Integration, enabled: bool | None, db_session: Session
 ) -> None:
-    """Default Chat availability is the install setting of the plugins that
-    hold the integration: Installed by default, or Available."""
+    """Default Chat availability is the company install setting of the
+    integration. On makes it Installed by default for each user, unless it
+    is Required. Off makes an integration that is Installed by default or
+    Required Available; a private integration stays private. The caller
+    locked the integration."""
     if enabled is None:
         return
-    for row in list_integration_plugin_rows([integration.id], db_session)[
-        integration.id
-    ]:
-        plugin = lock_plugin(row.plugin_id, db_session)
-        if plugin is not None:
-            plugin.installation_policy = (
-                PluginInstallationPolicy.DEFAULT
-                if enabled
-                else PluginInstallationPolicy.AVAILABLE
-            )
+    is_default_chat = integration.installation_policy in _DEFAULT_CHAT_POLICIES
+    if enabled and not is_default_chat:
+        integration.installation_policy = PluginInstallationPolicy.DEFAULT
+    elif not enabled and is_default_chat:
+        integration.installation_policy = PluginInstallationPolicy.AVAILABLE
     db_session.flush()
 
 
@@ -246,9 +246,7 @@ def _alias_snapshot(
         oauth_config_id=None,
         oauth_config_name=None,
         enabled=integration.enabled,
-        default_chat_enabled=any(
-            plugin.installation_policy in _DEFAULT_CHAT_POLICIES for plugin in plugins
-        ),
+        default_chat_enabled=integration.installation_policy in _DEFAULT_CHAT_POLICIES,
         plugin_ids=[plugin.plugin_id for plugin in plugins],
     )
 
@@ -427,15 +425,15 @@ def _openapi_snapshots(
         [integration.id for _, integration, _ in tools], db_session
     )
     states = {
-        state.plugin_id: state
-        for state in load_user_plugin_states([user.id], db_session)
+        state.integration_id: state
+        for state in load_user_integration_states([user.id], db_session)
     }
     snapshots: list[ToolSnapshot] = []
     for tool, integration, organization in tools:
         plugins = plugin_rows[integration.id]
-        visible = [plugin for plugin in plugins if plugin.plugin_id in states]
-        can_manage = manages_integration(user, plugins)
-        if not visible and not (include_managed and can_manage):
+        state = states.get(integration.id)
+        can_manage = manages_integration(user, integration)
+        if state is None and not (include_managed and can_manage):
             continue
         if not include_managed and not integration.enabled:
             continue
@@ -449,11 +447,9 @@ def _openapi_snapshots(
                 organization,
                 plugins,
             )
-        snapshot.user_enabled_in_chat = (
-            any(states[p.plugin_id].enabled for p in visible) if visible else True
-        )
-        snapshot.default_chat_enabled = any(
-            plugin.installation_policy in _DEFAULT_CHAT_POLICIES for plugin in plugins
+        snapshot.user_enabled_in_chat = state.turned_on if state is not None else True
+        snapshot.default_chat_enabled = (
+            integration.installation_policy in _DEFAULT_CHAT_POLICIES
         )
         if include_managed:
             snapshot.permissions = tool_permissions(can_manage=can_manage)
@@ -499,7 +495,7 @@ def get_custom_tool(
         return snapshots[0]
     raise OnyxError(
         OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-        "You can only view actions you manage, or ones a plugin you can see holds.",
+        "You can only view actions you manage, or ones you have access to.",
     )
 
 
@@ -510,7 +506,7 @@ def update_tool_user_preferences(
     db_session: Session = Depends(get_session),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> ToolUserPreferences:
-    """Turn the plugins that hold the custom tool on or off for the user."""
+    """Turn the integration of the custom tool on or off for the user."""
     tools = get_tools_by_ids([tool_id], db_session)
     if tools and (
         tools[0].in_code_tool_id is not None or tools[0].mcp_server_id is not None
@@ -520,20 +516,12 @@ def update_tool_user_preferences(
             "Only OpenAPI plugins support these preferences",
         )
     _, integration, _ = _openapi_tool_or_404(tool_id, db_session)
-    visible = get_visible_plugin_ids(user.id, db_session)
-    plugin_ids = [
-        row.plugin_id
-        for row in list_integration_plugin_rows([integration.id], db_session)[
-            integration.id
-        ]
-        if row.plugin_id in visible
-    ]
-    if not plugin_ids:
+    if not load_user_integration_states([user.id], db_session, [integration.id]):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS, "Plugin is not available"
         )
-    set_plugin_preferences__no_commit(
-        user.id, plugin_ids, request.enabled_in_chat, db_session
+    set_integration_preferences__no_commit(
+        user.id, [integration.id], request.enabled_in_chat, db_session
     )
     db_session.commit()
     return ToolUserPreferences(enabled_in_chat=request.enabled_in_chat)

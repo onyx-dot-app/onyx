@@ -20,6 +20,7 @@ from onyx.db.enums import (
     MCPTransport,
     Permission,
     PermissionAuthority,
+    PluginInstallationPolicy,
 )
 from onyx.db.external_app import associate_built_in_skill__no_commit
 from onyx.db.integration import (
@@ -37,7 +38,6 @@ from onyx.db.integration import (
     list_action_summaries,
     list_external_apps_by_integration,
     list_integration_actions,
-    list_integration_ids_held_by_plugins,
     list_integration_plugin_rows,
     list_integrations,
     list_integrations_by_ids,
@@ -49,11 +49,17 @@ from onyx.db.integration import (
     set_policy_rows__no_commit,
     upsert_oauth_client__no_commit,
 )
+from onyx.db.integration_access import (
+    UserIntegrationState,
+    affected_user_ids_for_integrations,
+    load_user_integration_states,
+    set_integration_preferences__no_commit,
+    user_can_use_integration,
+)
 from onyx.db.integration_connection import (
     get_oauth_client,
     get_oauth_clients,
     list_connections,
-    user_can_see_integration,
 )
 from onyx.db.integration_policy import get_policy_rows, list_admin_policy_rows
 from onyx.db.models import (
@@ -63,17 +69,7 @@ from onyx.db.models import (
     IntegrationOAuthClient,
     User,
 )
-from onyx.db.plugin import (
-    create_integration_plugin__no_commit,
-    set_plugin_preferences__no_commit,
-)
-from onyx.db.plugin_access import (
-    UserPluginState,
-    affected_user_ids_for_plugins,
-    get_visible_plugin_ids,
-    load_user_plugin_states,
-    visible_plugin_ids,
-)
+from onyx.db.plugin import create_integration_plugin__no_commit
 from onyx.db.users import fetch_users_by_ids
 from onyx.db.utils import UNSET
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -187,17 +183,21 @@ _TOKEN_METHODS = frozenset(
 )
 
 
-def manages_integration(user: User, plugins: Collection[IntegrationPluginRow]) -> bool:
-    """A scoped manager manages it only when each holding plugin is in its
-    own My uploads."""
+def is_private(integration: Integration) -> bool:
+    """Private: only the owner and the shares have access."""
+    return integration.installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
+
+
+def manages_integration(user: User, integration: Integration) -> bool:
+    """An organization-wide action manager manages each integration. A scoped
+    manager manages the integrations that it owns, while they are private."""
     authority = has_permission(user, Permission.MANAGE_ACTIONS)
     if authority is PermissionAuthority.GLOBAL:
         return True
-    if authority is PermissionAuthority.NONE or not plugins:
-        return False
-    return all(
-        not plugin.in_organization_library and plugin.author_user_id == user.id
-        for plugin in plugins
+    return (
+        authority is not PermissionAuthority.NONE
+        and integration.owner_user_id == user.id
+        and is_private(integration)
     )
 
 
@@ -218,10 +218,9 @@ def get_viewable_integration(
     user: User, integration_id: int, db_session: Session
 ) -> Integration:
     integration = _integration_or_404(integration_id, db_session)
-    plugins = list_integration_plugin_rows([integration.id], db_session)[integration.id]
     if not (
-        manages_integration(user, plugins)
-        or user_can_see_integration(db_session, integration.id, user.id)
+        manages_integration(user, integration)
+        or user_can_use_integration(db_session, integration.id, user.id)
     ):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration not found.")
     return integration
@@ -231,10 +230,9 @@ def get_manageable_integration(
     user: User, integration_id: int, db_session: Session, *, lock: bool = False
 ) -> Integration:
     integration = _integration_or_404(integration_id, db_session, lock=lock)
-    plugins = list_integration_plugin_rows([integration.id], db_session)[integration.id]
-    if manages_integration(user, plugins):
+    if manages_integration(user, integration):
         return integration
-    if user_can_see_integration(db_session, integration.id, user.id):
+    if user_can_use_integration(db_session, integration.id, user.id):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Only an organization-wide action manager can change this integration.",
@@ -652,7 +650,9 @@ def create_integration__no_commit(
     save_unreachable_server: bool = False,
 ) -> Integration:
     """Make the integration, its kind row, its OAuth client, one plugin that
-    holds it, and its actions. The caller commits; an error leaves nothing.
+    holds it, and its actions. The user is its owner. For the organization,
+    it is Available to each user; else it is private and on for its owner.
+    The caller commits; an error leaves nothing.
     With ``save_unreachable_server``, an MCP server with no sign-in that
     cannot be reached is saved with no actions until a refresh."""
     if request.for_organization and not has_global_permission(
@@ -776,6 +776,11 @@ def create_integration__no_commit(
         name=name,
         description=request.description,
         owner_user_id=user.id,
+        installation_policy=(
+            PluginInstallationPolicy.AVAILABLE
+            if request.for_organization
+            else PluginInstallationPolicy.NOT_AVAILABLE
+        ),
         auth_mode=request.auth_mode,
         auth_method=auth_method,
         credential_fields=(
@@ -800,7 +805,8 @@ def create_integration__no_commit(
             db_session=db_session,
         )
 
-    plugin = create_integration_plugin__no_commit(
+    # The id of this plugin names the integration in the API and in links.
+    create_integration_plugin__no_commit(
         integration_id=integration.id,
         name=name,
         description=request.description or "",
@@ -809,7 +815,9 @@ def create_integration__no_commit(
         db_session=db_session,
     )
     if not request.for_organization:
-        set_plugin_preferences__no_commit(user.id, [plugin.id], True, db_session)
+        set_integration_preferences__no_commit(
+            user.id, [integration.id], True, db_session
+        )
 
     if mcp_actions is not None:
         replace_integration_actions__no_commit(
@@ -1039,13 +1047,18 @@ def delete_integration_for_user__no_commit(
     delete_integration__no_commit(integration, db_session)
 
 
-def _plugin_ref(row: IntegrationPluginRow) -> IntegrationPluginRef:
+def _plugin_ref(
+    row: IntegrationPluginRow, integration: Integration, owner_email: str | None
+) -> IntegrationPluginRef:
+    """The plugin id that names the integration, with the access values of
+    the integration. A private integration with an owner is personal."""
+    personal = is_private(integration) and integration.owner_user_id is not None
     return IntegrationPluginRef(
         plugin_id=row.plugin_id,
         plugin_name=row.plugin_name,
-        scope="organization" if row.in_organization_library else "personal",
-        owner_email=row.owner_email,
-        installation_policy=row.installation_policy,
+        scope="personal" if personal else "organization",
+        owner_email=owner_email if personal else None,
+        installation_policy=integration.installation_policy,
     )
 
 
@@ -1164,17 +1177,23 @@ def organization_status(
     return _organization_statuses([integration], db_session)[integration.id]
 
 
-def _creator_emails(
+def _owner_emails(
     integrations: Collection[Integration], db_session: Session
-) -> dict[UUID, str]:
-    creator_ids = {
-        integration.owner_user_id
+) -> dict[int, str]:
+    """The email of the owner of each integration that has one."""
+    owner_ids = {
+        integration.id: integration.owner_user_id
         for integration in integrations
         if integration.owner_user_id is not None
     }
+    emails = {
+        owner.id: owner.email
+        for owner in fetch_users_by_ids(db_session, list(set(owner_ids.values())))
+    }
     return {
-        creator.id: creator.email
-        for creator in fetch_users_by_ids(db_session, list(creator_ids))
+        integration_id: emails[owner_id]
+        for integration_id, owner_id in owner_ids.items()
+        if owner_id in emails
     }
 
 
@@ -1184,7 +1203,7 @@ def _admin_views(
     plugin_rows: Mapping[int, list[IntegrationPluginRow]],
     db_session: Session,
 ) -> list[AdminIntegration]:
-    creator_emails = _creator_emails(integrations, db_session)
+    owner_emails = _owner_emails(integrations, db_session)
     statuses = _organization_statuses(integrations, db_session)
     shapes = _shapes(integrations, _external_apps(integrations, db_session))
     action_counts = count_integration_actions(
@@ -1195,7 +1214,7 @@ def _admin_views(
         org_status = statuses[integration.id]
         needs_setup = org_status.state is ConnectionState.NOT_SET_UP
         shape, preset_id = shapes[integration.id]
-        plugins = plugin_rows[integration.id]
+        owner_email = owner_emails.get(integration.id)
         views.append(
             AdminIntegration(
                 id=integration.id,
@@ -1207,12 +1226,11 @@ def _admin_views(
                 enabled=integration.enabled,
                 auth_mode=integration.auth_mode,
                 auth_method=integration.auth_method,
-                plugins=[_plugin_ref(row) for row in plugins],
-                created_by_email=(
-                    creator_emails.get(integration.owner_user_id)
-                    if integration.owner_user_id is not None
-                    else None
-                ),
+                plugins=[
+                    _plugin_ref(row, integration, owner_email)
+                    for row in plugin_rows[integration.id]
+                ],
+                created_by_email=owner_email,
                 action_count=action_counts[integration.id],
                 needs_setup=needs_setup,
                 setup_reason=org_status.reason if needs_setup else None,
@@ -1221,7 +1239,7 @@ def _admin_views(
                     if integration.auth_mode is IntegrationAuthMode.SHARED
                     else None
                 ),
-                can_manage=manages_integration(user, plugins),
+                can_manage=manages_integration(user, integration),
             )
         )
     return views
@@ -1229,28 +1247,21 @@ def _admin_views(
 
 def list_admin_integrations(user: User, db_session: Session) -> list[AdminIntegration]:
     """Each integration for an organization-wide manager. Another manager
-    gets the ones it manages and the ones it can see through a plugin."""
+    gets the ones it manages and the ones it has access to."""
     integrations = list_integrations(db_session)
-    plugin_rows = list_integration_plugin_rows(
-        [integration.id for integration in integrations], db_session
-    )
-    visible: set[int] | None = None
     if not has_global_permission(user, Permission.MANAGE_ACTIONS):
-        visible = set(
-            list_integration_ids_held_by_plugins(
-                visible_plugin_ids(user.id), db_session
-            )
-        )
-    return _admin_views(
-        user,
-        [
+        accessible = set(_integration_states(user, db_session))
+        integrations = [
             integration
             for integration in integrations
-            if visible is None
-            or integration.id in visible
-            or manages_integration(user, plugin_rows[integration.id])
-        ],
-        plugin_rows,
+            if integration.id in accessible or manages_integration(user, integration)
+        ]
+    return _admin_views(
+        user,
+        integrations,
+        list_integration_plugin_rows(
+            [integration.id for integration in integrations], db_session
+        ),
         db_session,
     )
 
@@ -1439,34 +1450,44 @@ def refresh_actions__no_commit(
         _discover_and_sync(integration, user, db_session)
 
 
-def _plugin_states(user: User, db_session: Session) -> dict[UUID, UserPluginState]:
-    """Each plugin the user can see, with the user's install setting and
-    choice."""
+def _integration_states(
+    user: User, db_session: Session
+) -> dict[int, UserIntegrationState]:
+    """Each integration the user has access to, with the user's install
+    setting and choice."""
     return {
-        state.plugin_id: state
-        for state in load_user_plugin_states([user.id], db_session)
+        state.integration_id: state
+        for state in load_user_integration_states([user.id], db_session)
     }
 
 
-def _visible_plugin_refs(
-    states: Mapping[UUID, UserPluginState],
-    integration_ids: Collection[int],
+def _member_plugin_refs(
+    states: Mapping[int, UserIntegrationState],
+    integrations: Collection[Integration],
     db_session: Session,
 ) -> dict[int, list[MemberPluginRef]]:
-    return {
-        integration_id: [
+    """The plugin ids that name each integration, with the install setting
+    and the choice of the user for the integration. An integration that the
+    user has no access to gets none."""
+    owner_emails = _owner_emails(integrations, db_session)
+    plugin_rows = list_integration_plugin_rows(
+        [integration.id for integration in integrations], db_session
+    )
+    refs: dict[int, list[MemberPluginRef]] = {}
+    for integration in integrations:
+        state = states.get(integration.id)
+        refs[integration.id] = [
             MemberPluginRef(
-                **_plugin_ref(row).model_dump(exclude={"installation_policy"}),
-                installation_policy=states[row.plugin_id].installation_policy,
-                enabled=states[row.plugin_id].enabled,
+                **_plugin_ref(
+                    row, integration, owner_emails.get(integration.id)
+                ).model_dump(exclude={"installation_policy"}),
+                installation_policy=state.installation_policy,
+                enabled=state.turned_on,
             )
-            for row in rows
-            if row.plugin_id in states
+            for row in plugin_rows[integration.id]
+            if state is not None
         ]
-        for integration_id, rows in list_integration_plugin_rows(
-            integration_ids, db_session
-        ).items()
-    }
+    return refs
 
 
 def _saved_credential_values(
@@ -1543,16 +1564,16 @@ def _member_views(
 def list_member_integrations(
     user: User, db_session: Session
 ) -> list[MemberIntegration]:
-    states = _plugin_states(user, db_session)
-    integration_ids = list_integration_ids_held_by_plugins(list(states), db_session)
+    states = _integration_states(user, db_session)
+    integrations = [
+        integration
+        for integration in list_integrations_by_ids(list(states), db_session)
+        if integration.enabled
+    ]
     return _member_views(
         user,
-        [
-            integration
-            for integration in list_integrations_by_ids(integration_ids, db_session)
-            if integration.enabled
-        ],
-        _visible_plugin_refs(states, integration_ids, db_session),
+        integrations,
+        _member_plugin_refs(states, integrations, db_session),
         db_session,
     )
 
@@ -1561,7 +1582,7 @@ def get_member_integration(
     user: User, integration_id: int, db_session: Session
 ) -> Integration:
     integration = _integration_or_404(integration_id, db_session)
-    if not user_can_see_integration(db_session, integration_id, user.id):
+    if not user_can_use_integration(db_session, integration_id, user.id):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration not found.")
     return integration
 
@@ -1590,8 +1611,8 @@ def member_actions(
 def member_detail(
     user: User, integration: Integration, db_session: Session
 ) -> MemberIntegrationDetail:
-    plugin_refs = _visible_plugin_refs(
-        _plugin_states(user, db_session), [integration.id], db_session
+    plugin_refs = _member_plugin_refs(
+        _integration_states(user, db_session), [integration], db_session
     )
     return MemberIntegrationDetail(
         **_member_views(user, [integration], plugin_refs, db_session)[0].model_dump(),
@@ -1656,11 +1677,12 @@ def set_action_grants__no_commit(
 
 
 def agent_catalog(user: User, db_session: Session) -> list[AgentPluginOption]:
-    visible = get_visible_plugin_ids(user.id, db_session)
+    """Each integration that the user has access to and that an admin did
+    not turn off, under each plugin id that names it."""
     integrations = [
         integration
         for integration in list_integrations_by_ids(
-            list_integration_ids_held_by_plugins(visible, db_session), db_session
+            list(_integration_states(user, db_session)), db_session
         )
         if integration.enabled
     ]
@@ -1686,8 +1708,6 @@ def agent_catalog(user: User, db_session: Session) -> list[AgentPluginOption]:
         list(integration_options), db_session
     ).items():
         for row in rows:
-            if row.plugin_id not in visible:
-                continue
             option = options.setdefault(
                 row.plugin_id,
                 AgentPluginOption(
@@ -1702,17 +1722,9 @@ def agent_catalog(user: User, db_session: Session) -> list[AgentPluginOption]:
 
 
 def craft_users_of_integration(integration_id: int, db_session: Session) -> set[UUID]:
-    """The users with a running sandbox who can see a plugin that holds the
-    integration. Read it before a delete."""
-    return affected_user_ids_for_plugins(
-        [
-            row.plugin_id
-            for row in list_integration_plugin_rows([integration_id], db_session)[
-                integration_id
-            ]
-        ],
-        db_session,
-    )
+    """The users with a running sandbox who have access to the integration.
+    Read it before a delete."""
+    return affected_user_ids_for_integrations([integration_id], db_session)
 
 
 def reload_craft_sessions(user_ids: set[UUID], db_session: Session) -> None:

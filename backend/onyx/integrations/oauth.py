@@ -25,7 +25,6 @@ from onyx.db.enums import (
 from onyx.db.integration import (
     get_integration_by_id,
     get_mcp_server_for_integration,
-    list_integration_plugin_rows,
     lock_integration__no_commit,
 )
 from onyx.db.integration_connection import (
@@ -132,7 +131,7 @@ def _configuration_fingerprint(
 
 
 def _check_may_connect(
-    integration: Integration, user: User, db_session: Session, token_may_manage: bool
+    integration: Integration, user: User, token_may_manage: bool
 ) -> bool:
     """Returns whether the connection is the organization connection.
     ``token_may_manage`` is False when the token of the request does not
@@ -150,10 +149,7 @@ def _check_may_connect(
             f"{integration.name} does not use OAuth sign-in.",
         )
     if integration.auth_mode is IntegrationAuthMode.SHARED:
-        plugins = list_integration_plugin_rows([integration.id], db_session)[
-            integration.id
-        ]
-        if not token_may_manage or not manages_integration(user, plugins):
+        if not token_may_manage or not manages_integration(user, integration):
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 f"Only an admin can connect {integration.name} for the organization.",
@@ -270,9 +266,7 @@ def start_integration_oauth(
     *,
     token_may_manage: bool = True,
 ) -> str:
-    for_organization = _check_may_connect(
-        integration, user, db_session, token_may_manage
-    )
+    for_organization = _check_may_connect(integration, user, token_may_manage)
     oauth_client = _oauth_client_or_raise(integration, db_session)
     attempt = IntegrationOAuthAttemptPayload(
         integration_id=integration.id,
@@ -476,9 +470,7 @@ def complete_integration_oauth(
     integration = get_integration_by_id(payload.integration_id, db_session)
     if integration is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "The integration no longer exists.")
-    for_organization = _check_may_connect(
-        integration, user, db_session, token_may_manage
-    )
+    for_organization = _check_may_connect(integration, user, token_may_manage)
     if for_organization != payload.for_organization:
         _raise_settings_changed()
     oauth_client = _check_settings_unchanged(integration, payload, db_session)

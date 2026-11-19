@@ -206,8 +206,8 @@ def provision_sandbox() -> ProvisionSandbox:
 
 
 def _hold_in_default_plugin(db: Session, integration_id: int) -> None:
-    """The proxy matches only the integrations of the plugins that the sandbox
-    owner runs; every user runs a published DEFAULT plugin."""
+    """A plugin that names the integration. It gives no access: the install
+    setting of the integration does."""
     plugin_id = uuid4()
     version_id = uuid4()
     db.add(
@@ -255,6 +255,9 @@ def slack_external_app() -> None:
                 auth_method=IntegrationAuthMethod.API_KEY,
                 header_template={"Authorization": "Bearer {access_token}"},
                 external_app_id=app.id,
+                # The proxy matches only the integrations that are on for the
+                # sandbox owner. Installed by default is on for each user.
+                installation_policy=PluginInstallationPolicy.DEFAULT,
             )
             db.add(integration)
             db.flush()

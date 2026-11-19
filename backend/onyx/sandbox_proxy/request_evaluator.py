@@ -137,11 +137,11 @@ class IntegrationRequestEvaluator(RequestEvaluator):
         usable = self._usable.get(tenant_id, user_id)
         with get_session_with_tenant(tenant_id=tenant_id) as db:
             if scheduled_task_id is None:
-                ids = set(usable.turned_on)
+                ids = set(usable.on)
             else:
                 ids = set()
                 for link in list_task_plugin_links(db, scheduled_task_id):
-                    ids |= usable.by_visible_plugin.get(link.plugin_id, frozenset())
+                    ids |= usable.accessible_by_plugin.get(link.plugin_id, frozenset())
             candidates = [c for c in candidates if c.integration_id in ids]
             if not candidates:
                 return None

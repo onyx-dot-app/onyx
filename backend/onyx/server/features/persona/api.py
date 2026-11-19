@@ -30,6 +30,7 @@ from onyx.configs.constants import PUBLIC_API_TAGS, FileOrigin, MilestoneRecordT
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, PermissionAuthority, PersonaSharePermission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
+from onyx.db.integration_access import get_plugin_ids_of_accessible_integrations
 from onyx.db.integration_policy import (
     list_persona_mcp_tools,
     list_persona_openapi_tools,
@@ -66,7 +67,6 @@ from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
     persona_ownership_is_vacant,
 )
-from onyx.db.plugin_access import get_visible_plugin_ids
 from onyx.db.users import get_active_admin_count
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -759,12 +759,12 @@ def get_persona(
     snapshot = FullPersonaSnapshot.from_model(persona)
     snapshot.plugins = list_persona_plugin_snapshots(persona.id, db_session)
     # Old custom and MCP tool ids come from the plugin links, so they
-    # round-trip through tool_ids. A tool of a plugin that the viewer cannot
-    # see keeps its id and gives nothing else of the tool.
+    # round-trip through tool_ids. A tool of an integration that the viewer
+    # has no access to keeps its id and gives nothing else of the tool.
     visible_plugins = (
         None
         if has_global_permission(user, Permission.MANAGE_ACTIONS)
-        else get_visible_plugin_ids(user.id, db_session)
+        else get_plugin_ids_of_accessible_integrations(user.id, db_session)
     )
 
     def viewer_snapshot(plugin_id: UUID, tool: ToolSnapshot) -> ToolSnapshot:

@@ -11,7 +11,6 @@ from onyx.db.enums import (
     IntegrationActionSource,
     IntegrationAuthMethod,
     MCPTransport,
-    PluginInstallationPolicy,
 )
 from onyx.external_apps.providers.base import ExternalAppProvider
 
@@ -179,16 +178,17 @@ class CallCredentials(BaseModel):
 
 
 class UsableIntegrationIds(BaseModel):
+    """The integrations that an admin did not turn off, of one user."""
+
     model_config = ConfigDict(frozen=True)
 
-    # Of the plugins that the user turned on.
-    turned_on: frozenset[int]
-    # Of each plugin that the user can see, on or off.
-    by_visible_plugin: dict[UUID, frozenset[int]]
-
-    @property
-    def visible(self) -> frozenset[int]:
-        return frozenset().union(*self.by_visible_plugin.values())
+    # The integrations that are on for the user.
+    on: frozenset[int]
+    # The integrations that the user has access to, on or off.
+    accessible: frozenset[int]
+    # The accessible integrations by each plugin that holds them. A task link
+    # names its integrations by such a plugin.
+    accessible_by_plugin: dict[UUID, frozenset[int]]
 
 
 class PersonaPluginLink(BaseModel):
@@ -203,7 +203,7 @@ class PersonaPluginSnapshot(PersonaPluginLink):
 
 
 class IntegrationPluginRow(BaseModel):
-    """One plugin that holds an integration, with where it lives."""
+    """One plugin that is the handle of an integration."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -211,7 +211,3 @@ class IntegrationPluginRow(BaseModel):
     plugin_id: UUID
     plugin_name: str
     plugin_description: str
-    in_organization_library: bool
-    author_user_id: UUID | None
-    owner_email: str | None
-    installation_policy: PluginInstallationPolicy | None

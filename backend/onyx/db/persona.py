@@ -22,6 +22,7 @@ from onyx.db.enums import (
     PersonaSharePermission,
 )
 from onyx.db.hierarchy import filter_accessible_hierarchy_node_ids
+from onyx.db.integration_access import get_plugin_ids_of_accessible_integrations
 from onyx.db.integration_policy import (
     legacy_tool_plugin_links,
     list_persona_mcp_tools,
@@ -55,7 +56,6 @@ from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
     persona_ownership_is_vacant,
 )
-from onyx.db.plugin_access import visible_plugin_ids
 from onyx.db.scoped_permissions import (
     fetch_managed_group_ids,
     scoped_group_ids_subquery,
@@ -1643,7 +1643,6 @@ def upsert_persona(
             raise ValueError("Tools not found")
         legacy_links = legacy_tool_plugin_links(
             [tool for tool in requested if tool.in_code_tool_id is None],
-            user.id if user is not None else None,
             db_session,
             attached=(
                 {link.plugin_id for link in plugin_links}
@@ -1909,9 +1908,9 @@ def _write_persona_plugins(
     db_session: Session,
 ) -> None:
     """Write the plugin links of an agent. A plugin that is new on the
-    agent must be one the user can see. With no ``plugin_links``, the old
-    tool ids replace the links of the plugins that hold a custom tool or an
-    old MCP tool. A link whose MCP tool selection did not change keeps its
+    agent must hold an integration the user has access to. With no
+    ``plugin_links``, the old tool ids replace the links of the plugins that
+    hold a custom tool or an old MCP tool. A link whose MCP tool selection did not change keeps its
     settings."""
     rows = list_persona_plugin_links(db_session, persona_id)
     existing = {row.plugin_id for row in rows}
@@ -1959,8 +1958,9 @@ def _write_persona_plugins(
     links += [link for link in legacy_links if link.plugin_id not in linked]
     added = {link.plugin_id for link in links} - existing
     if added and user is not None:
-        visible = set(db_session.scalars(visible_plugin_ids(user.id)).all())
-        if not added <= visible:
+        if not added <= get_plugin_ids_of_accessible_integrations(
+            user.id, db_session, added
+        ):
             raise ValueError("You do not have access to one or more of the plugins.")
     if added:
         # Holds the new plugins until commit, so a concurrent delete waits.

@@ -26,6 +26,7 @@ from onyx.db.enums import (
     IntegrationKind,
     IntegrationOAuthProviderMode,
     MarketplaceKind,
+    PluginInstallationPolicy,
     PluginPublishingPolicy,
 )
 from onyx.db.integration import (
@@ -40,6 +41,7 @@ from onyx.db.integration_policy import list_persona_plugin_links
 from onyx.db.models import (
     ExternalApp,
     Integration,
+    Integration__User,
     IntegrationOAuthClient,
     Marketplace,
     MCPServer,
@@ -184,6 +186,14 @@ def _plugin_of(db_session: Session, integration_id: int) -> Plugin:
         .join(Plugin__Integration, Plugin__Integration.plugin_id == Plugin.id)
         .where(Plugin__Integration.integration_id == integration_id)
     ).one()
+
+
+def _make_available(db_session: Session, integration_id: int) -> None:
+    """Make the integration Available to the organization."""
+    integration = db_session.get(Integration, integration_id)
+    assert integration is not None
+    integration.installation_policy = PluginInstallationPolicy.AVAILABLE
+    db_session.commit()
 
 
 def _marketplace_kind(db_session: Session, plugin: Plugin) -> MarketplaceKind:
@@ -596,11 +606,7 @@ def test_organization_library_integration_needs_global_manager(
         _openapi_create(for_organization=False), scoped, db_session
     )
     created.add(detail.id)
-    plugin = _plugin_of(db_session, detail.id)
-    publish_or_request_review__no_commit(
-        plugin, plugin.current_version_id, None, "rename", db_session
-    )
-    db_session.commit()
+    _make_available(db_session, detail.id)
 
     view = admin_api.get_integration_admin(detail.id, scoped, db_session)
     assert view.can_manage is False
@@ -616,16 +622,13 @@ def test_organization_library_integration_needs_global_manager(
 def test_group_manager_of_a_shared_plugin_cannot_change_it(
     db_session: Session, scoped: User, admin: User, created: Created
 ) -> None:
-    """A plugin in the scope of a group manager (here: shared with it) does
-    not give the right to change its integration."""
+    """A share of an integration with a group manager does not give the right
+    to change it."""
     detail = admin_api.create_integration(
         _openapi_create(for_organization=False), admin, db_session
     )
     created.add(detail.id)
-    plugin = _plugin_of(db_session, detail.id)
-    from onyx.db.models import Plugin__User
-
-    db_session.add(Plugin__User(plugin_id=plugin.id, user_id=scoped.id))
+    db_session.add(Integration__User(integration_id=detail.id, user_id=scoped.id))
     db_session.commit()
     with pytest.raises(OnyxError) as error:
         admin_api.delete_integration(detail.id, scoped, db_session)
@@ -1824,7 +1827,6 @@ def test_saving_a_legacy_oauth_client_keeps_its_credentials(
 def test_turning_default_chat_off_makes_the_plugin_available(
     db_session: Session, admin: User, created: Created
 ) -> None:
-    from onyx.db.enums import PluginInstallationPolicy
 
     snapshot = tool_api.create_custom_tool(
         CustomToolCreate(
@@ -1854,8 +1856,8 @@ def test_turning_default_chat_off_makes_the_plugin_available(
             admin,
         )
         assert updated.default_chat_enabled is enabled
-        db_session.expire_all()
-        assert _plugin_of(db_session, integration.id).installation_policy is policy
+        db_session.refresh(integration)
+        assert integration.installation_policy is policy
 
 
 def _linear_create() -> IntegrationCreate:
@@ -1929,19 +1931,17 @@ def test_cloud_protects_onyx_managed_presets(
 def test_member_plugin_refs_carry_the_users_install_setting(
     db_session: Session, admin: User, member: User, created: Created
 ) -> None:
-    from onyx.db.enums import PluginInstallationPolicy
-    from onyx.db.models import Plugin__UserGroup, User__UserGroup, UserGroup
+    from onyx.db.models import Integration__UserGroup, User__UserGroup, UserGroup
 
     detail = admin_api.create_integration(_openapi_create(), admin, db_session)
     created.add(detail.id)
-    plugin_id = detail.plugins[0].plugin_id
     group = UserGroup(name=f"u6-required-{uuid4().hex[:8]}")
     db_session.add(group)
     db_session.flush()
     db_session.add(User__UserGroup(user_id=member.id, user_group_id=group.id))
     db_session.add(
-        Plugin__UserGroup(
-            plugin_id=plugin_id,
+        Integration__UserGroup(
+            integration_id=detail.id,
             user_group_id=group.id,
             permission=None,
             installation_policy=PluginInstallationPolicy.REQUIRED,
@@ -2005,11 +2005,7 @@ def test_literal_header_values_are_masked_and_kept_on_save(
     assert error.value.status_code == 400
 
     # A reader that cannot manage the integration gets no header values.
-    plugin = _plugin_of(db_session, detail.id)
-    publish_or_request_review__no_commit(
-        plugin, plugin.current_version_id, None, "rename", db_session
-    )
-    db_session.commit()
+    _make_available(db_session, detail.id)
     view = admin_api.get_integration_admin(detail.id, scoped, db_session)
     assert view.can_manage is False
     assert view.header_template is None

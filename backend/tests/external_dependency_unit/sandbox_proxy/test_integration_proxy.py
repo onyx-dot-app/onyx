@@ -41,7 +41,6 @@ from onyx.db.models import (
     ScheduledTask__Plugin,
     ScheduledTaskRun,
     User,
-    UserPluginPreference,
 )
 from onyx.db.scheduled_task import get_scheduled_task_id_for_session
 from onyx.external_apps.matching.engine import (
@@ -75,6 +74,7 @@ from tests.external_dependency_unit.integration_helpers import (
     make_app_integration,
     make_mcp_integration,
     make_openapi_integration,
+    turn_off_integrations,
 )
 from tests.external_dependency_unit.integrations.conftest import add_connection
 from tests.unit.sandbox_proxy.conftest import StubResolver, make_flow
@@ -442,11 +442,8 @@ def test_an_integration_the_user_does_not_run_is_not_matched(
     mcp = _mcp(db_session, created, f"https://{host}/mcp")
     app_host = _host()
     app = _custom_app(db_session, created, app_host)
-    plugin = _run(db_session, [mcp, app])
-    db_session.add(
-        UserPluginPreference(user_id=user.id, plugin_id=plugin.id, enabled=False)
-    )
-    db_session.commit()
+    _run(db_session, [mcp, app])
+    turn_off_integrations(db_session, user.id, [mcp, app])
 
     request = _request(f"https://{host}/mcp", _tool_call("search"))
     assert _evaluate(request, user) is None
@@ -705,11 +702,8 @@ def test_the_craft_mcp_config_lists_only_connected_integrations_of_enabled_plugi
     )
     turned_off = _mcp(db_session, created, f"https://{_host()}/mcp")
     _run(db_session, [open_mcp, unconnected, connected])
-    off_plugin = _run(db_session, [turned_off])
-    db_session.add(
-        UserPluginPreference(user_id=user.id, plugin_id=off_plugin.id, enabled=False)
-    )
-    db_session.commit()
+    _run(db_session, [turned_off])
+    turn_off_integrations(db_session, user.id, [turned_off])
     add_connection(
         db_session, connected, user.id, ConnectionSecret(fields={"api_key": "k"})
     )
@@ -728,10 +722,7 @@ def test_a_scheduled_run_matches_a_task_plugin_that_the_owner_turned_off(
     host = _host()
     mcp = _mcp(db_session, created, f"https://{host}/mcp")
     plugin = _run(db_session, [mcp])
-    db_session.add(
-        UserPluginPreference(user_id=user.id, plugin_id=plugin.id, enabled=False)
-    )
-    db_session.commit()
+    turn_off_integrations(db_session, user.id, [mcp])
     ctx = _session_ctx(db_session, user)
     task = _task_run(
         db_session,
@@ -903,10 +894,7 @@ def test_a_scheduled_session_config_lists_the_task_plugins_the_owner_turned_off(
     other = _mcp(db_session, created, f"https://{_host()}/mcp")
     plugin = _run(db_session, [mcp])
     _run(db_session, [other])
-    db_session.add(
-        UserPluginPreference(user_id=user.id, plugin_id=plugin.id, enabled=False)
-    )
-    db_session.commit()
+    turn_off_integrations(db_session, user.id, [mcp])
     ctx = _session_ctx(db_session, user)
     task = _task_run(
         db_session,

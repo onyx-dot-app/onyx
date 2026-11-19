@@ -1,9 +1,9 @@
 """The chat tools of the integrations that an agent can use.
 
 Who can use an integration on an agent: a person who can use the agent and
-can see a plugin of the agent that holds it. The user's on/off choice applies
-only to the default agent, which uses each plugin the user runs. A caller
-with no user sees the plugins of the Organization library and uses only an
+has access to the integration. The user's on/off choice applies only to the
+default agent, which uses each integration that the user turned on. A caller
+with no user gets the integrations that each user has, and uses only an
 integration with no sign-in or shared sign-in.
 """
 
@@ -25,7 +25,6 @@ from onyx.db.integration import (
 from onyx.db.integration_connection import list_connections
 from onyx.db.integration_policy import list_policy_rows, list_session_granted_actions
 from onyx.db.models import Integration, IntegrationAction, IntegrationConnection, User
-from onyx.db.plugin_access import load_user_plugin_states
 from onyx.integrations.call_credentials import resolve_call_credentials
 from onyx.integrations.connections import ConnectionProblem
 from onyx.integrations.kinds.api import ApiKindHandler
@@ -138,29 +137,23 @@ def _kept_actions(
     return kept
 
 
-def _keep_required_plugins(
-    db_session: Session,
+def _keep_required_integrations(
     user: User,
     request: IntegrationChatRequest,
     held: Mapping[int, AgentIntegrationLinks],
 ) -> IntegrationChatRequest:
-    """Add each plugin that the admin made Required for the user to the tool
-    options, with all its actions. A member cannot turn a Required plugin off,
-    so tool options that leave it out cannot drop it."""
+    """Add each plugin of an integration that the admin made Required for
+    the user to the tool options, with all its actions. A member cannot turn
+    a Required integration off, so tool options that leave it out cannot
+    drop it."""
     if request.allowed_plugins is None or user.is_anonymous:
         return request
-    left_out = {
+    required = {
         plugin_id
         for links in held.values()
+        if links.installation_policy == PluginInstallationPolicy.REQUIRED
         for plugin_id in links.plugin_ids
         if plugin_id not in request.allowed_plugins
-    }
-    if not left_out:
-        return request
-    required = {
-        state.plugin_id
-        for state in load_user_plugin_states([user.id], db_session, left_out)
-        if state.installation_policy == PluginInstallationPolicy.REQUIRED
     }
     if not required:
         return request
@@ -186,9 +179,9 @@ def build_integration_chat_tools(
         user.id,
         request.persona_id,
         {link.plugin_id: link.action_settings for link in request.plugin_links},
-        published_only=user.is_anonymous,
+        for_everyone_only=user.is_anonymous,
     )
-    request = _keep_required_plugins(db_session, user, request, held)
+    request = _keep_required_integrations(user, request, held)
     # The tool options pick the integrations and actions. The settings of
     # every agent link still apply, so a request cannot drop a Blocked one.
     tools: list[Tool] = []

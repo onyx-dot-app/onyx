@@ -22,9 +22,11 @@ Group or user restriction needs EE.
   action manager sees "For the organization"; everyone else adds "For me".
   Admin > Plugins (`/admin/plugins`) lists the plugins that hold integrations,
   built from the `plugins` refs of that list
-  (`sections/integrations/AdminPluginsPage.tsx`). Each Organization library
-  plugin has an install setting select, which a global action manager changes
-  through `PUT /admin/plugins/{id}/installation-policy`. The detail page
+  (`sections/integrations/AdminPluginsPage.tsx`). Each plugin whose
+  integration is not personal has an install setting select, which a global
+  action manager changes through `PUT /admin/plugins/{id}/installation-policy`.
+  The select sets the install setting of the integration. An integration is
+  personal while it is private (NOT_AVAILABLE) and has an owner. The detail page
   `/admin/integrations/[id]` has Overview (name, description, switch),
   Configuration (sign-in settings, the preset account settings and the
   organization connection) and Actions ("Default for new actions", then
@@ -49,9 +51,11 @@ Group or user restriction needs EE.
   users save it, each action that asks offers "Always allow". A member with
   manage:actions adds a personal integration ("For me" only); its plugin goes
   to My uploads. The Overview tab has the user's on/off switch ("Use this
-  plugin"), off with a reason when the plugin is Required. The owner of a
-  private plugin that holds only integrations gets Share and Publish; Publish
-  is off for a user without global manage:actions.
+  plugin"), off with a reason when the integration is Required for the user.
+  The owner of a personal integration gets Share and Publish on its plugin;
+  Publish is off for a user without global manage:actions. A share gives use
+  only. Publish makes the integration Available to the organization and keeps
+  its shares.
 - **In chat**, the tools popover lists the current agent's plugins that hold
   integrations and switches each one; the choice is saved for the agent. An
   "integrations need sign-in" prompt lists the integrations of the plugins
@@ -123,11 +127,14 @@ manual clients, `/mcp/oauth/callback` for MCP) renders
 
 **Default Chat at turn time.** Chat reads no tool preference row.
 `integrations/chat_tools.py:build_integration_chat_tools` gives the default
-assistant the integrations of each plugin the user runs (visible and enabled in
-`db/plugin_access.py:load_user_plugin_states`), with the settings of its
-persona 0 link. A custom agent uses each plugin of its links that the user can
-see, whatever the user's on/off choice. `PATCH /tool/{id}/preferences` sets
-the on/off of the plugins that hold the custom tool. The member routes send that choice as
+assistant each integration that is on for the user
+(`db/integration_access.py:load_user_integration_states`), with the settings
+of its persona 0 link. A custom agent uses each integration of its links that
+the user has access to, whatever the user's on/off choice. The plugin of a
+link gives no access; its id only names the integration
+([[mcp-and-custom-tools#access-grants-default-chat-only]]).
+`PATCH /tool/{id}/preferences` sets the user's on/off choice on the
+integration of the custom tool. The member routes send that choice as
 `enabled` on each plugin ref, and the chat popover of the default agent shows
 only the plugins that are on. On the web,
 `lib/plugins/chat.ts:effectiveChatPreference` names a built-in tool of the agent,
@@ -141,7 +148,7 @@ keeps one that another client saved, and pinning a built-in tool releases it.
 tool states by tool id and plugin states by plugin id. The plugins are the
 agent's (`lib/plugins/hooks.ts:useAgentPluginIds`): `GET /plugins/agents/{id}`
 (`integrations/plugin_settings.py:agent_plugin_ids`) returns the plugins that
-chat tool construction reads (`integrations/policy.py:agent_plugin_settings`). A failed read
+chat tool construction reads (`integrations/policy.py:agent_link_settings_by_integration`). A failed read
 leaves the list null, not empty, so the composer never sends an allow-list
 that leaves out every plugin. The agent viewer passes its own agent id, and
 the composer reads and saves that agent's plugins. A switch in
@@ -172,10 +179,10 @@ only the configuration of a chat that does not exist yet.
 
 ## Contracts and traps
 
-1. `default-chat-is-persona-tool` **Default Chat for an integration is the
-   install setting of its plugin.** Built-in tools are `Persona__Tool` rows on
-   the default assistant. The `/admin/tool/custom` aliases map
-   `default_chat_enabled` to DEFAULT
+1. `default-chat-is-persona-tool` **Default Chat for an integration is its
+   company install setting** (`integration.installation_policy`). Built-in
+   tools are `Persona__Tool` rows on the default assistant. The
+   `/admin/tool/custom` aliases map `default_chat_enabled` to DEFAULT
    (`server/features/tool/api.py:_set_default_chat`).
 2. `default-chat-full-admin-only` **Only `FULL_ADMIN_PANEL_ACCESS` changes
    Default Chat.** `server/features/tool/api.py:_check_default_chat_permission`
@@ -189,9 +196,10 @@ only the configuration of a chat that does not exist yet.
    enabled.** Both preference tables default to true. Preferences apply only to
    Default Chat and Craft; custom agents ignore them.
    `server/features/tool/api.py:update_tool_user_preferences` sets the
-   user's choice on the plugins that hold the custom tool.
-   Craft no longer reads `enabled_in_craft`: the sandbox proxy and the Craft
-   MCP config use the integrations of the plugins the user runs
+   user's choice on the integration of the custom tool
+   (`user_integration_preference`).
+   Craft does not read `enabled_in_craft`: the sandbox proxy and the Craft
+   MCP config use the integrations that are on for the user
    (`integrations/craft.py:list_runnable_integrations`).
 5. `openapi-enabled-default-chat-only` **OpenAPI tools use `Tool.enabled` only
    for Default Chat.** `server/features/tool/models.py:CustomToolCreate`

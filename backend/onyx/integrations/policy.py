@@ -22,17 +22,18 @@ from pydantic import BaseModel, InstanceOf, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DEFAULT_PERSONA_ID
-from onyx.db.enums import IntegrationActionPolicyValue
+from onyx.db.enums import IntegrationActionPolicyValue, PluginInstallationPolicy
 from onyx.db.integration import list_integration_actions
+from onyx.db.integration_access import load_user_integration_states
 from onyx.db.integration_policy import (
     get_chat_session_persona_id,
     get_policy_rows,
     get_session_granted_actions,
+    list_integration_holders,
     list_persona_plugin_links,
     list_plugin_integrations,
 )
 from onyx.db.models import Integration, IntegrationAction
-from onyx.db.plugin_access import load_user_plugin_states
 from onyx.integrations.models import (
     ActionSettings,
     ApprovalMode,
@@ -63,10 +64,12 @@ _STRICTNESS: dict[EffectivePolicy, int] = {
 
 
 class AgentIntegrationLinks(BaseModel):
-    """An integration that plugins of an agent hold, with each such plugin
-    and its agent settings."""
+    """An integration that an agent uses for a user, with each plugin that
+    names it and the agent settings of that plugin."""
 
     integration: InstanceOf[Integration]
+    # The install setting for the user.
+    installation_policy: PluginInstallationPolicy
     plugin_ids: list[UUID] = []
     settings: list[ActionSettings | None] = []
 
@@ -220,62 +223,78 @@ def resolve_action_policies(
     }
 
 
-def agent_plugin_settings(
-    db_session: Session,
-    user_id: UUID,
-    persona_id: int,
-    links: Mapping[UUID, ActionSettings],
-    *,
-    published_only: bool = False,
-) -> dict[UUID, ActionSettings | None]:
-    """The plugins whose integrations a chat of the agent uses, with the
-    settings of the agent for each. The default agent uses each plugin the
-    user runs; another agent uses each linked plugin the user can see.
-    ``published_only`` keeps only the Organization library."""
-    states = load_user_plugin_states(
-        [user_id],
-        db_session,
-        plugin_ids=None if persona_id == DEFAULT_PERSONA_ID else list(links),
-    )
-    if published_only:
-        states = [state for state in states if state.published]
-    if persona_id == DEFAULT_PERSONA_ID:
-        return {
-            state.plugin_id: links.get(state.plugin_id)
-            for state in states
-            if state.enabled
-        }
-    visible = {state.plugin_id for state in states}
-    return {
-        plugin_id: settings
-        for plugin_id, settings in links.items()
-        if plugin_id in visible
-    }
-
-
 def agent_link_settings_by_integration(
     db_session: Session,
     user_id: UUID,
     persona_id: int,
     links: Mapping[UUID, ActionSettings],
     *,
-    published_only: bool = False,
+    for_everyone_only: bool = False,
 ) -> dict[int, AgentIntegrationLinks]:
-    """Each integration that a plugin from ``agent_plugin_settings`` holds,
-    with the agent settings of each such plugin, in integration order."""
-    settings_by_plugin = agent_plugin_settings(
-        db_session, user_id, persona_id, links, published_only=published_only
-    )
+    """Each integration that a chat of the agent uses for the user, in
+    integration order, with each plugin that names it and the settings of the
+    agent for that plugin. The default agent uses each integration that the
+    user turned on; a link only gives it settings. Another agent uses each
+    integration of its links that the user has access to: the user's on/off
+    choice does not apply. ``for_everyone_only`` keeps only the integrations
+    that each user has."""
+    is_default = persona_id == DEFAULT_PERSONA_ID
+    holdings = [] if is_default else list_plugin_integrations(db_session, list(links))
+    states = {
+        state.integration_id: state
+        for state in load_user_integration_states(
+            [user_id],
+            db_session,
+            None if is_default else {integration.id for _, integration in holdings},
+        )
+        if (state.turned_on or not is_default)
+        and (state.for_everyone or not for_everyone_only)
+    }
+    if is_default:
+        holdings = list_integration_holders(db_session, list(states))
     by_integration: dict[int, AgentIntegrationLinks] = {}
-    for plugin_id, integration in list_plugin_integrations(
-        db_session, list(settings_by_plugin)
-    ):
+    for plugin_id, integration in holdings:
+        state = states.get(integration.id)
+        if state is None:
+            continue
         held = by_integration.setdefault(
-            integration.id, AgentIntegrationLinks(integration=integration)
+            integration.id,
+            AgentIntegrationLinks(
+                integration=integration,
+                installation_policy=state.installation_policy,
+            ),
         )
         held.plugin_ids.append(plugin_id)
-        held.settings.append(settings_by_plugin[plugin_id])
+        held.settings.append(links.get(plugin_id))
     return by_integration
+
+
+def agent_plugin_ids(
+    db_session: Session,
+    user_id: UUID,
+    persona_id: int,
+    links: Mapping[UUID, ActionSettings],
+    *,
+    for_everyone_only: bool = False,
+) -> list[UUID]:
+    """The plugins that name the integrations of
+    ``agent_link_settings_by_integration``, in id order. Tool options name
+    an integration by such a plugin."""
+    held = agent_link_settings_by_integration(
+        db_session,
+        user_id,
+        persona_id,
+        links,
+        for_everyone_only=for_everyone_only,
+    )
+    return sorted(
+        {
+            plugin_id
+            for held_links in held.values()
+            for plugin_id in held_links.plugin_ids
+        },
+        key=str,
+    )
 
 
 def resolve_chat_action_policy(
@@ -288,9 +307,8 @@ def resolve_chat_action_policy(
 ) -> EffectivePolicy:
     """The current policy of one action for the agent of a chat, before the
     chat grants. The approval check uses it to see that an action is not
-    Blocked now. It reads the plugins that chat tool construction reads, so
-    a plugin the user cannot use does not change the result, and an action
-    that no such plugin holds is Blocked."""
+    Blocked now. It reads the integrations that chat tool construction reads,
+    so an integration the user cannot use on the agent is Blocked."""
     persona_id = get_chat_session_persona_id(db_session, chat_session_id)
     held = (
         agent_link_settings_by_integration(

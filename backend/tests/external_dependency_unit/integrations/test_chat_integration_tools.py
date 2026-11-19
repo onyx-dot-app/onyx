@@ -21,9 +21,11 @@ from onyx.db.enums import (
 )
 from onyx.db.models import (
     Integration,
+    Integration__User,
     Plugin,
+    Plugin__User,
     User,
-    UserPluginPreference,
+    UserIntegrationPreference,
 )
 from onyx.integrations.chat_tools import (
     _integration_tools,
@@ -488,6 +490,42 @@ def test_a_slack_channel_run_uses_shared_sign_in_and_the_bot_freeze(
     assert all(tool.approval is None for tool in tools.values())
 
 
+def test_a_share_of_the_integration_gives_its_actions_on_an_agent(
+    db_session: Session,
+    user: User,
+    # Set up first so the private plugin goes before its owner.
+    make_test_user: MakeTestUser,
+    integration_ids: list[int],
+) -> None:
+    """On an agent that links a private integration, a user with a share of
+    the integration gets its actions. A user of the same agent with no access
+    gets none, also when the user can see the plugin that names it."""
+    owner = make_test_user("chat_share_owner")
+    plugin_viewer = make_test_user("chat_share_plugin_viewer")
+    mcp = _mcp(db_session, integration_ids)
+    private = hold_in_plugin(
+        db_session, [mcp], published=False, author_user_id=owner.id
+    )
+    db_session.add(Integration__User(integration_id=mcp.id, user_id=user.id))
+    db_session.add(Plugin__User(plugin_id=private.id, user_id=plugin_viewer.id))
+    db_session.commit()
+    configuration = _configuration({private.id: {}})
+
+    def actions(member: User, on: PersonaToolConfiguration) -> set[str]:
+        return {
+            name for name in _build(db_session, member, on) if f"__{mcp.id}__" in name
+        }
+
+    assert actions(user, configuration) == {
+        f"mcp__{mcp.id}__crm__search",
+        f"mcp__{mcp.id}__crm__update",
+    }
+    assert actions(plugin_viewer, configuration) == set()
+    # The share gives Available, which is off on the default agent until the
+    # user turns it on.
+    assert actions(user, _configuration({}, persona_id=DEFAULT_PERSONA_ID)) == set()
+
+
 def test_an_anonymous_user_sees_only_organization_plugins(
     db_session: Session,
     # Set up first so the private plugin goes before its owner.
@@ -512,10 +550,10 @@ def test_the_default_agent_uses_the_plugins_the_user_runs(
     off = _openapi(db_session, integration_ids)
     available = _openapi(db_session, integration_ids)
     on_plugin = _plugin(db_session, [on])
-    off_plugin = _plugin(db_session, [off])
+    _plugin(db_session, [off])
     _plugin(db_session, [available], PluginInstallationPolicy.AVAILABLE)
     db_session.add(
-        UserPluginPreference(user_id=user.id, plugin_id=off_plugin.id, enabled=False)
+        UserIntegrationPreference(user_id=user.id, integration_id=off.id, enabled=False)
     )
     db_session.commit()
 

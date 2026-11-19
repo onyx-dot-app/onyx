@@ -270,7 +270,7 @@ class MemberPluginState(BaseModel):
 
 class PluginPublishResponse(BaseModel):
     plugin_id: UUID
-    # The name in the Organization library, which can differ from the old name.
+    # The name of the plugin. A publish does not change it.
     name: str
 
 

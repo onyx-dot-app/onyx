@@ -159,7 +159,8 @@ read. `seed_pinned_personas_from_featured` runs once, at account creation.
    added document set and folder is readable by the caller, and that each
    added file is the caller's own. For every signed-in caller, each added
    plugin link (also one that an old MCP or custom tool id maps to) needs a
-   plugin the caller can see (`backend/onyx/db/persona.py:_write_persona_plugins`). Attached items stay when
+   plugin that holds an integration the caller has access to
+   (`backend/onyx/db/persona.py:_write_persona_plugins`). Attached items stay when
    the editor loses access. Single documents are filtered for every caller:
    unreadable ids are dropped, and the call fails only when none remain.
 6. `sharing-not-document-access` **Sharing an agent does not share its

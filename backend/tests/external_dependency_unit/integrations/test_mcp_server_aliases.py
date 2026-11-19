@@ -15,10 +15,10 @@ from onyx.configs.constants import MASK_CREDENTIAL_SHORT
 from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
-    MarketplaceKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPTransport,
+    PluginInstallationPolicy,
 )
 from onyx.db.integration import (
     count_integration_actions,
@@ -28,10 +28,7 @@ from onyx.db.integration_connection import get_connection
 from onyx.db.integration_policy import list_persona_plugin_links
 from onyx.db.models import (
     Integration,
-    Marketplace,
     MCPServer,
-    Plugin,
-    Plugin__Integration,
     Tool,
     User,
 )
@@ -118,12 +115,11 @@ def _integration(db_session: Session, server_id: int) -> Integration:
     return integration
 
 
-def _marketplace_kind(db_session: Session, integration_id: int) -> MarketplaceKind:
+def _installation_policy(
+    db_session: Session, integration_id: int
+) -> PluginInstallationPolicy:
     return db_session.scalars(
-        select(Marketplace.kind)
-        .join(Plugin, Plugin.marketplace_id == Marketplace.id)
-        .join(Plugin__Integration, Plugin__Integration.plugin_id == Plugin.id)
-        .where(Plugin__Integration.integration_id == integration_id)
+        select(Integration.installation_policy).where(Integration.id == integration_id)
     ).one()
 
 
@@ -160,8 +156,8 @@ def test_create_get_update_and_delete_keep_the_old_shapes(
         "no_user_authentication_required": True,
     }
     assert integration.auth_mode is IntegrationAuthMode.NONE
-    assert _marketplace_kind(db_session, integration.id) is (
-        MarketplaceKind.ORGANIZATION_LIBRARY
+    assert _installation_policy(db_session, integration.id) is (
+        PluginInstallationPolicy.AVAILABLE
     )
 
     server = mcp_api.get_mcp_server_alias(response.server_id, db_session, admin)
@@ -233,8 +229,8 @@ def test_create_get_update_and_delete_keep_the_old_shapes(
     assert server_row is not None
     db_session.refresh(server_row)
     assert server_row.name == "renamed"
-    assert _marketplace_kind(db_session, integration.id) is (
-        MarketplaceKind.USER_UPLOADS
+    assert _installation_policy(db_session, integration.id) is (
+        PluginInstallationPolicy.NOT_AVAILABLE
     )
 
     mcp_api.update_mcp_server_alias(
@@ -243,8 +239,8 @@ def test_create_get_update_and_delete_keep_the_old_shapes(
         db_session,
         admin,
     )
-    assert _marketplace_kind(db_session, integration.id) is (
-        MarketplaceKind.ORGANIZATION_LIBRARY
+    assert _installation_policy(db_session, integration.id) is (
+        PluginInstallationPolicy.AVAILABLE
     )
 
     assert mcp_api.delete_mcp_server_alias(

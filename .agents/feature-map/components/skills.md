@@ -462,12 +462,13 @@ the app from the same rule
    such check.
 10. `built-in-app-skill-rule` **One rule decides who gets a built-in app
     skill.** `db/app_skill.py:built_in_app_skills` gives a user the
-    built-in skill of a preset when the user runs (`can_run` in
-    `load_user_plugin_states`: visible, enabled and not invalid) a plugin
-    that holds (`plugin__integration`) an integration whose `external_app` row has an `app_type` in
-    `skills/built_in.py:EXTERNAL_APP_BUILT_IN_SKILL_IDS`. The integration must
-    be on (`integration.enabled`); `external_app.enabled` is an old copy and is
-    not read. The app of that integration renders the skill
+    built-in skill of a preset when an integration whose `external_app` row
+    has an `app_type` in `skills/built_in.py:EXTERNAL_APP_BUILT_IN_SKILL_IDS`
+    is on for the user (`on` in
+    `db/integration_access.py:load_user_integration_states`: the user has
+    access, the user's choice under the install setting is on, and
+    `integration.enabled` is true). No plugin takes part in the rule.
+    `external_app.enabled` is an old copy and is not read. The app of that integration renders the skill
     (`db/skill.py:RuntimeSkill`, `external_app_id`). The runtime list, the
     reserved chat names, `db/skill.py:skill_user_states` (on only for a user
     who gets it, never toggled), `db/skill.py:fetch_skill` (VIEW), the Skills
@@ -630,7 +631,9 @@ the app from the same rule
     integrations (`plugin__integration`, migration `730bce2814a0`) has a
     version with no bundle and no `plugin_skill` row. An integration stands
     alone: several plugins can hold it, and a plugin delete does not delete
-    it. A join from `plugin` to
+    it. Such a plugin gives no access to its integration; its id only names
+    the integration ([[mcp-and-custom-tools#access-grants-default-chat-only]]),
+    and its marketplace, shares and preference rows give or remove no access. A join from `plugin` to
     `plugin_skill` must be an outer join or filter on purpose. A
     name held by such a plugin does not block a skill publish or transfer:
     the skill's plugin label takes a free name
@@ -653,9 +656,11 @@ the app from the same rule
     runtime names and descriptions come from the frontmatter of the version
     the user runs. An old custom skill row with no plugin is ignored. Migration
     `65f8d8cd1bf3` drops `ck_private_skill_has_owner`: old rows go stale, and
-    the check would refuse a user delete. A user delete moves the
-    user's private integrations to the Organization library as NOT_AVAILABLE
-    (`db/plugin.py:release_private_integrations__no_commit`), then is refused
+    the check would refuse a user delete. A user delete moves each plugin
+    of the user's "My uploads" that holds only integrations to the
+    Organization library as NOT_AVAILABLE
+    (`db/plugin.py:release_private_integrations__no_commit`); the integration
+    loses its owner and keeps its install setting and shares. The delete then is refused
     while the user's "My uploads" holds a plugin
     (`db/plugin.py:private_plugins_blocking_user_delete`,
     `db/users.py:delete_user_from_db__no_commit`); the `CONFLICT` body lists
@@ -839,9 +844,9 @@ the app from the same rule
   every failure ([[#push-holds-row-locks]]), so a sandbox can keep old files
   until its next push.
 - **A new app gives its built-in skill to nobody.** Creating an external app
-  does not create an integration or a plugin that holds it, so
+  does not create an integration, so
   [[#built-in-app-skill-rule]] finds no user for that app. Apps that existed
-  at migration `730bce2814a0` got their integration and plugin from it.
+  at migration `730bce2814a0` got their integration from it.
 
 ---
 
