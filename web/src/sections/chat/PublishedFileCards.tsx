@@ -77,7 +77,9 @@ export function PublishedFileCards({ files }: PublishedFileCardsProps) {
                       ? t("card.updated.description", { details })
                       : details
                   }
-                  aria-label={t("card.preview.ariaLabel", { name: file.name })}
+                  aria-label={t("card.preview.ariaLabel", {
+                    name: stripBidiControls(file.name),
+                  })}
                   onClick={() => {
                     setPreviewing(file);
                     previewModal.toggle(true);
