@@ -165,12 +165,20 @@ def test_the_limiter_keeps_the_listing_under_the_quota(
 
 class _RecordingLimiter(SourceApiLimiter):
     def __init__(self) -> None:
+        self.bulk: list[bool] = []
         self.acquired: list[tuple[str, int, str | None, int]] = []
         self.reports: list[tuple[str, str | None, bool, int]] = []
 
     def acquire(
-        self, api: str, cost: int, user: str | None = None, request_count: int = 1
+        self,
+        api: str,
+        cost: int,
+        user: str | None = None,
+        request_count: int = 1,
+        *,
+        bulk: bool = False,
     ) -> None:
+        self.bulk.append(bulk)
         self.acquired.append((api, cost, user, request_count))
 
     def report_rate_limit(

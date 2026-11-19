@@ -50,13 +50,20 @@ class SourceApiLimiter(abc.ABC):
 
     @abc.abstractmethod
     def acquire(
-        self, api: str, cost: int, user: str | None = None, request_count: int = 1
+        self,
+        api: str,
+        cost: int,
+        user: str | None = None,
+        request_count: int = 1,
+        *,
+        bulk: bool = False,
     ) -> None:
         """Waits until the call fits the budget of ``api``, and of ``user``
         when the source also limits each user. Call it before each request.
         ``request_count`` is the number of requests in the call, more than 1 for a
         batch: a source that counts requests charges that number, not
-        ``cost``."""
+        ``cost``. A ``bulk`` call, such as a content read of conversion, waits
+        after the other calls."""
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -64,10 +71,11 @@ class SourceApiLimiter(abc.ABC):
         self, api: str, user: str | None, user_scope: bool, count: int = 1
     ) -> None:
         """Tells the limiter that the source refused ``count`` requests for
-        its rate. Report each refused try: the limiter cuts on the refused
-        share of the recent requests, not on one refusal. ``user_scope`` is
-        True when the source limited the user, and False when it limited the
-        whole credential."""
+        its rate. Report each refused try, from the thread that acquired its
+        slot: the limiter cuts on the refused share of the recent requests,
+        not on one refusal, and does not count a refusal of a request sent
+        before its last cut. ``user_scope`` is True when the source limited
+        the user, and False when it limited the whole credential."""
         raise NotImplementedError
 
 
