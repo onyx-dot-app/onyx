@@ -493,6 +493,33 @@ def test_no_save_when_the_pool_lock_may_have_expired(
     assert run["saved"] is None
 
 
+def test_the_lease_is_checked_before_each_private_write(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    alice, bob = uuid4(), uuid4()
+    run["candidates"] = [
+        CandidateDocument(document_id=d, kind=QuestionKind.DOCUMENT, owner_ids=[o])
+        for d, o in (("a", alice), ("b", bob))
+    ]
+    run["found"] = [_question("a"), _question("b")]
+    written: list[Any] = []
+
+    def write_that_uses_up_the_lease(user_id: Any, *_args: Any) -> None:
+        written.append(user_id)
+        monkeypatch.setattr(tasks, "SQ_POOL_LOCK_HELD_S", 0.0)
+        monkeypatch.setattr(tasks, "SQ_SAVE_MARGIN_S", 0.0)
+
+    monkeypatch.setattr(tasks, "save_private_questions", write_that_uses_up_the_lease)
+    retry = MagicMock(side_effect=Retry())
+    monkeypatch.setattr(tasks.generate_suggested_questions_pool, "retry", retry)
+
+    with pytest.raises(Retry):
+        _pool_task()
+
+    assert written == [alice]
+    assert run["saved"] is None
+
+
 def test_a_retry_finishes_its_recorded_topup(
     run: dict[str, Any], person: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
