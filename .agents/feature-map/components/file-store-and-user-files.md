@@ -93,6 +93,14 @@ the `FileRecord` row for every backend. The Postgres backend adds a
 through `get_default_file_store` and never branch on the backend. The one
 exception is presigned URLs: only the cloud backends have them, so a caller
 checks `isinstance(store, PresignableFileStore)` first.
+
+The S3, GCS and Azure stores upload the object first, then write and commit
+the record through `file_store/file_store.py:record_uploaded_object`. When the
+record write or commit fails, it deletes the upload unless a committed record
+points at that object, then raises the original error. The S3 store also
+deletes the copy in the legacy MinIO store ([[#minio-dual-store]]). The Postgres
+store writes its large object in the record's transaction.
+
 `upsert_filerecord` also stamps a blob saved during a `USAGE_ONLY` incognito
 turn with its session id (`CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR`, set by
 `chat/execution.py:start_chat_turn`). The incognito cleanup finds blobs only
