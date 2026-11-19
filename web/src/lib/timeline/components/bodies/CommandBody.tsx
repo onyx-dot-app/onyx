@@ -2,6 +2,7 @@
 
 import { CodePanel } from "@opal/components";
 import { useCodeLines } from "@/lib/timeline/components/bodies/useCodeLines";
+import type { RichStr } from "@opal/types";
 
 interface CommandBodyProps {
   /** The command or code that ran. */
@@ -17,6 +18,8 @@ interface CommandBodyProps {
   error?: string;
   /** Shown when there is no command, output or error. */
   emptyLabel: string;
+  /** A closing line under the output, such as "Exit code 2". */
+  footer?: string | RichStr;
 }
 
 /**
@@ -32,6 +35,7 @@ export function CommandBody({
   output,
   error,
   emptyLabel,
+  footer,
 }: CommandBodyProps) {
   const codeLines = useCodeLines(command, language);
   // A shell prompt leads the first line, in place of line numbers.
@@ -64,6 +68,7 @@ export function CommandBody({
       {!command && !output && !error && (
         <CodePanel.Output>{emptyLabel}</CodePanel.Output>
       )}
+      {footer && <CodePanel.Footer title={footer} />}
     </CodePanel>
   );
 }

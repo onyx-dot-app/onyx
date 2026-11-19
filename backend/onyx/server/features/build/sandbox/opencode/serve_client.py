@@ -930,11 +930,12 @@ def _emit_tool_events(
 
     raw_status = part_state.get("status", "pending")
     status = _tool_status(raw_status)
-    if status == "completed":
-        metadata = part_state.get("metadata")
-        exit_code = metadata.get("exit") if isinstance(metadata, dict) else None
-        if isinstance(exit_code, int) and exit_code != 0:
-            status = "failed"
+    metadata = part_state.get("metadata")
+    exit_code = metadata.get("exit") if isinstance(metadata, dict) else None
+    if not isinstance(exit_code, int):
+        exit_code = None
+    if status == "completed" and exit_code is not None and exit_code != 0:
+        status = "failed"
     raw_input = part_state.get("input") or None
     raw_output = _wrap_raw_output(part_state)
     content = _synthesize_tool_content(tool, part_state)
@@ -954,6 +955,7 @@ def _emit_tool_events(
             "onyx": OnyxToolMeta(
                 cancelled=True if raw_status == "cancelled" else None,
                 search=_onyx_search_meta(tool, part_state),
+                exitCode=exit_code if tool == "bash" else None,
             ).to_meta(),
         },
     }

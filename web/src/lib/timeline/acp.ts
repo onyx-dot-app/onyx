@@ -26,6 +26,8 @@ export interface OnyxMeta {
   version?: number;
   /** A web search's structured queries and results. */
   search?: OnyxSearch;
+  /** A shell command's exit code, once it has one. */
+  exitCode?: number;
   /**
    * The tool call was stopped before it finished. ACP's tool status has no
    * cancelled state, so this is kept apart from `failed`.

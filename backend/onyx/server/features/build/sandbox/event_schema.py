@@ -83,6 +83,8 @@ class OnyxToolMeta(BaseModel):
     # this set, so a stopped call reads apart from one that errored.
     cancelled: bool | None = None
     search: OnyxSearchMeta | None = None
+    # A shell command's exit code, once it has one.
+    exitCode: int | None = None
 
     def to_meta(self) -> dict[str, Any]:
         return self.model_dump(exclude_none=True)

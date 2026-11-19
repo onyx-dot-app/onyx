@@ -221,7 +221,7 @@ turn. Tool starts, mode updates and terminal packets are not saved.
     `cancelled`, set beside `status: "failed"` because ACP has no cancelled
     status, and `search`, the `web_search` plugin's queries and results
     (`serve_client._onyx_search_meta` copies them from the tool's
-    `metadata.onyxSearch`). It sits beside the flat keys (`toolName`, the sub-agent ids), which
+    `metadata.onyxSearch`), and `exitCode`, a bash call's exit code. It sits beside the flat keys (`toolName`, the sub-agent ids), which
     stay where they are. `_merge_field_meta` merges `onyx` key by key, so a
     later merge keeps it. Saved rows keep the shape they were written with.
 
