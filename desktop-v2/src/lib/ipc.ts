@@ -117,6 +117,33 @@ export const openExternal = (url: string): Promise<void> =>
 
 export const hideLauncher = (): Promise<void> => invoke("hide_launcher");
 
+// Why the server could not be reached (reachability.rs).
+export type Unreachable =
+  | { kind: "noNetwork" }
+  | { kind: "dns" }
+  | { kind: "tls" }
+  | { kind: "timeout" }
+  | { kind: "refused" }
+  | { kind: "serverError"; status: number }
+  | { kind: "unknown" };
+
+export interface OfflineStatus {
+  host: string;
+  reason: Unreachable;
+  checking: boolean;
+  // Milliseconds until the next automatic check.
+  nextRetryMs: number | null;
+  // Managed policy locks the server, so Change server is hidden.
+  serverLocked: boolean;
+}
+
+export const OFFLINE_STATUS_EVENT = "offline-status";
+
+export const getOfflineStatus = (): Promise<OfflineStatus | null> =>
+  invoke("get_offline_status");
+
+export const retryConnection = (): Promise<void> => invoke("retry_connection");
+
 export function errorMessage(error: unknown): string {
   if (typeof error === "string") return error;
   if (error instanceof Error) return error.message;

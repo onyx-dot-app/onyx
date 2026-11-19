@@ -211,12 +211,22 @@ async fn end_session(app: &AppHandle) -> Result<(), String> {
     };
     let (token, cleared) = state.end_session(&server);
     crate::sso::cancel(app);
-    if let Some(token) = token {
-        state.api.logout(&server, &token).await;
-    }
+    crate::offline::dismiss(app);
+    let revoked = match token {
+        Some(token) => crate::revocation::end_server_session(app, &server, &token).await,
+        None => true,
+    };
     cleared?;
     main_window::close(app, &server);
     windows::reset_launcher(app);
+    if !revoked {
+        windows::notify(
+            app,
+            "Signed out",
+            "Signed out on this computer. Onyx could not reach the server to end the \
+             session. Onyx tries again while it is open.",
+        );
+    }
     Ok(())
 }
 
@@ -365,4 +375,14 @@ pub fn aonyx_clicked(app: AppHandle) {
 #[tauri::command]
 pub fn aonyx_menu(app: AppHandle) -> Result<(), String> {
     crate::aonyx::show_menu(&app)
+}
+
+#[tauri::command]
+pub fn get_offline_status(app: AppHandle) -> Option<crate::offline::OfflineStatus> {
+    crate::offline::status(&app)
+}
+
+#[tauri::command]
+pub fn retry_connection(app: AppHandle) {
+    crate::offline::retry_now(&app);
 }

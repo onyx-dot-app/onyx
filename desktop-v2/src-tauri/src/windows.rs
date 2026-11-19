@@ -1,16 +1,18 @@
-//! Local (bundled) windows: onboarding, login, preferences and the launcher panel.
+//! Local (bundled) windows: onboarding, login, preferences, offline and the launcher panel.
 
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use url::Url;
 
 use crate::main_window;
+use crate::reachability::Unreachable;
 use crate::state::AppState;
 
 pub const ONBOARDING: &str = "onboarding";
 pub const LOGIN: &str = "login";
 pub const PREFERENCES: &str = "preferences";
 pub const LAUNCHER: &str = "launcher";
+pub const OFFLINE: &str = "offline";
 
 /// Local windows may only show bundled pages; anything else opens in the browser.
 pub(crate) fn local_navigation_allowed(app: &AppHandle, url: &Url) -> bool {
@@ -127,6 +129,10 @@ pub fn open_preferences(app: &AppHandle) -> Result<WebviewWindow, String> {
     )
 }
 
+pub fn open_offline(app: &AppHandle) -> Result<WebviewWindow, String> {
+    local_window(app, OFFLINE, "offline.html", "Onyx", (460.0, 300.0))
+}
+
 pub fn close(app: &AppHandle, label: &str) {
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.destroy();
@@ -172,8 +178,23 @@ fn open_failed(app: &AppHandle, title: &str, error: &str) {
     });
 }
 
+/// A message with an OK button, over the app's windows.
+pub fn notify(app: &AppHandle, title: &str, text: &str) {
+    let dialog = rfd::MessageDialog::new()
+        .set_title(title)
+        .set_description(crate::dialog::text(text))
+        .set_buttons(rfd::MessageButtons::Ok);
+    crate::dialog::show(app, dialog, |_, _| {});
+}
+
 pub fn route(app: &AppHandle) {
+    route_to(app, "/app");
+}
+
+/// Like `route`, but a signed-in session opens `path` on the server.
+pub fn route_to(app: &AppHandle, path: &str) {
     let state = app.state::<AppState>();
+    let epoch = state.epoch();
     let Ok(server) = state.server() else {
         let _ = open_onboarding(app);
         return;
@@ -183,13 +204,17 @@ pub fn route(app: &AppHandle) {
         return;
     };
     let app = app.clone();
+    let path = path.to_string();
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
         match state.api.session_valid(&server, &token).await {
             Ok(true) => {
-                if let Err(e) = main_window::open(&app, &server, &token, "/app").await {
+                if let Err(e) = main_window::open(&app, &server, &token, &path).await {
                     log::warn!("could not open main window: {e}");
-                    open_failed(&app, "Could not open Onyx", &e);
+                    match state.api.health(&server).await {
+                        Err(reason) => show_offline(&app, &server, &path, reason, epoch),
+                        Ok(()) => open_failed(&app, "Could not open Onyx", &e),
+                    }
                 }
                 // After the window is up, so a slow refresh never delays it.
                 // The renewed token reaches the window only if this session
@@ -201,23 +226,31 @@ pub fn route(app: &AppHandle) {
                 if matches!(state.clear_rejected_token(&server, &token), Ok(false)) {
                     return;
                 }
-                // The rejected account's answers must not reach the next one.
+                // The rejected account's answers and pages (a main window
+                // kept hidden during an outage) must not reach the next one.
                 reset_launcher(&app);
+                main_window::close(&app, &server);
                 let _ = open_login(&app);
             }
             // Unreachable is not signed out: the session is kept, and
             // Sign in is only for a rejected session or the user's choice.
-            Err(e) => {
-                log::warn!("server check failed: {e}");
-                open_failed(&app, "Could not reach the server", &e);
-            }
+            Err(reason) => show_offline(&app, &server, &path, reason, epoch),
         }
     });
 }
 
+/// The offline window, or the "Try Again / Sign In" dialog if it cannot open.
+fn show_offline(app: &AppHandle, server: &str, path: &str, reason: Unreachable, epoch: u64) {
+    if let Err(e) = crate::offline::show(app, path, reason, epoch) {
+        log::warn!("showing the dialog instead of the offline window: {e}");
+        open_failed(app, "Could not open Onyx", &reason.message(server));
+    }
+}
+
 /// Dock click, tray "Open Onyx" and second launches.
 pub fn show_primary(app: &AppHandle) {
-    for label in [main_window::LABEL, ONBOARDING, LOGIN] {
+    // The main window is hidden while the offline window shows.
+    for label in [OFFLINE, main_window::LABEL, ONBOARDING, LOGIN] {
         if let Some(window) = app.get_webview_window(label) {
             bring_forward(app, &window);
             return;

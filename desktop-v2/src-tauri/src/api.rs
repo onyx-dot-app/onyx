@@ -8,10 +8,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use url::Url;
 
+use crate::reachability::{self, Unreachable};
+
 const USER_AGENT: &str = concat!("OnyxDesktop/", env!("CARGO_PKG_VERSION"));
 
 pub struct Api {
     http: Client,
+    /// Follows no redirects: any answer from the web UI counts, wherever it points.
+    probe: Client,
 }
 
 const MAX_REDIRECTS: usize = 10;
@@ -242,6 +246,20 @@ async fn error_detail(response: Response) -> String {
     }
 }
 
+/// A connection error or a 5xx status fails; any other answer passes.
+async fn probe(client: &Client, url: &str) -> Result<(), Unreachable> {
+    let response = client
+        .get(url)
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| Unreachable::from_reqwest(&e).unwrap_or(Unreachable::Unknown))?;
+    match Unreachable::from_status(response.status()) {
+        Some(reason) => Err(reason),
+        None => Ok(()),
+    }
+}
+
 impl Api {
     pub fn new() -> Self {
         let http = Client::builder()
@@ -256,7 +274,13 @@ impl Api {
             }))
             .build()
             .expect("failed to build HTTP client");
-        Self { http }
+        let probe = Client::builder()
+            .user_agent(USER_AGENT)
+            .connect_timeout(Duration::from_secs(10))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .expect("failed to build HTTP client");
+        Self { http, probe }
     }
 
     pub async fn version(&self, server: &str) -> Result<String, String> {
@@ -266,7 +290,7 @@ impl Api {
             .timeout(Duration::from_secs(15))
             .send()
             .await
-            .map_err(|e| format!("Could not reach {server}: {e}"))?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if !response.status().is_success() {
             return Err(format!(
                 "{server} does not look like an Onyx server ({}).",
@@ -290,7 +314,7 @@ impl Api {
             .timeout(Duration::from_secs(5))
             .send()
             .await
-            .map_err(|e| format!("Could not reach {server}: {e}"))?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if !response.status().is_success() {
             return Err(error_detail(response).await);
         }
@@ -312,7 +336,7 @@ impl Api {
             .timeout(Duration::from_secs(15))
             .send()
             .await
-            .map_err(|e| format!("Could not reach the server: {e}"))?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if !response.status().is_success() {
             return Err(error_detail(response).await);
         }
@@ -359,7 +383,7 @@ impl Api {
             .timeout(Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| format!("Could not reach the server: {e}"))?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if response.status() == StatusCode::NOT_FOUND {
             return Err(
                 "This server does not support desktop sign-in. Update it to v4.2 or later.".into(),
@@ -375,8 +399,16 @@ impl Api {
             .map_err(|e| format!("Unexpected sign-in response: {e}"))
     }
 
+    /// Whether both the API (`GET /api/version`) and the web UI (`GET /`)
+    /// answer without a 5xx error. Behind a proxy they are separate servers,
+    /// so one can fail while the other answers. No sign-in needed.
+    pub async fn health(&self, server: &str) -> Result<(), Unreachable> {
+        probe(&self.http, &format!("{server}/api/version")).await?;
+        probe(&self.probe, &format!("{server}/")).await
+    }
+
     /// `Ok(false)` means the server rejected the stored token.
-    pub async fn session_valid(&self, server: &str, token: &str) -> Result<bool, String> {
+    pub async fn session_valid(&self, server: &str, token: &str) -> Result<bool, Unreachable> {
         let response = self
             .http
             .get(format!("{server}/api/me"))
@@ -385,11 +417,11 @@ impl Api {
             .timeout(Duration::from_secs(5))
             .send()
             .await
-            .map_err(|e| format!("Could not reach {server}: {e}"))?;
+            .map_err(|e| Unreachable::from_reqwest(&e).unwrap_or(Unreachable::Unknown))?;
         match response.status() {
             s if s.is_success() => Ok(true),
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Ok(false),
-            s => Err(format!("The server returned {s}.")),
+            s => Err(Unreachable::ServerError { status: s.as_u16() }),
         }
     }
 
@@ -413,14 +445,23 @@ impl Api {
             .map_err(|e| e.to_string())
     }
 
-    pub async fn logout(&self, server: &str, token: &str) {
-        let _ = self
+    /// Ends the session on the server. Returns false if the request did not
+    /// reach a working server (no answer, or a 5xx), so it can be tried again.
+    pub async fn logout(&self, server: &str, token: &str) -> bool {
+        match self
             .http
             .post(format!("{server}/api/auth/mobile/logout"))
             .bearer_auth(token)
             .timeout(Duration::from_secs(10))
             .send()
-            .await;
+            .await
+        {
+            Ok(response) => !response.status().is_server_error(),
+            Err(e) => {
+                log::warn!("server sign-out failed: {e}");
+                false
+            }
+        }
     }
 
     pub async fn create_chat_session(&self, server: &str, token: &str) -> Result<String, String> {
@@ -432,7 +473,7 @@ impl Api {
             .timeout(Duration::from_secs(30))
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if !response.status().is_success() {
             return Err(error_detail(response).await);
         }
@@ -470,7 +511,7 @@ impl Api {
         let response = tokio::time::timeout(Duration::from_secs(120), request)
             .await
             .map_err(|_| "The server did not start answering.".to_string())?
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if !response.status().is_success() {
             return Err(error_detail(response).await);
         }
@@ -496,7 +537,7 @@ impl Api {
             .timeout(Duration::from_secs(60))
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| reachability::describe(server, &e))?;
         if response.status() == StatusCode::NOT_FOUND || response.status() == StatusCode::FORBIDDEN
         {
             return Err("Knowledge search is not available on this server.".into());
@@ -536,6 +577,7 @@ mod tests {
         normalize_managed_server_url, normalize_server_url, redirect_allowed, sso_options, Api,
         AuthTypeResponse,
     };
+    use crate::reachability::Unreachable;
     use url::Url;
 
     /// A local HTTP server that answers every request with `response(path)`
@@ -695,5 +737,39 @@ mod tests {
         );
         assert!(normalize_managed_server_url("ftp://onyx.corp.internal").is_err());
         assert!(normalize_server_url("  ").is_err());
+    }
+
+    fn status(code: &str) -> String {
+        format!("HTTP/1.1 {code}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+    }
+
+    fn health(root: impl Fn() -> String + Send + 'static) -> Result<(), Unreachable> {
+        let (server, _) = serve(move |path| {
+            if path == "/api/version" {
+                OK.to_string()
+            } else {
+                root()
+            }
+        });
+        tauri::async_runtime::block_on(Api::new().health(&server))
+    }
+
+    #[test]
+    fn health_fails_while_the_web_ui_fails() {
+        assert_eq!(
+            health(|| status("502 Bad Gateway")),
+            Err(Unreachable::ServerError { status: 502 })
+        );
+    }
+
+    #[test]
+    fn health_passes_for_any_web_ui_answer() {
+        assert_eq!(health(|| OK.to_string()), Ok(()));
+        assert_eq!(health(|| redirect_to("/app")), Ok(()));
+        assert_eq!(health(|| status("404 Not Found")), Ok(()));
+        // A redirect to another site (cloud landing page) is not followed.
+        let (other, other_hits) = serve(|_| status("500 Internal Server Error"));
+        assert_eq!(health(move || redirect_to(&other)), Ok(()));
+        assert_eq!(other_hits.load(Ordering::SeqCst), 0);
     }
 }

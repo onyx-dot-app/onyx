@@ -51,6 +51,23 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   `native_app_sso`. SAML, cloud workspaces and older servers use the web login page in an app
   window.
 - The app renews the session on launch and every 12 hours, so regular use never signs you out.
+- Offline window (`src-tauri/src/offline.rs`, `src/pages/Offline.tsx`). If the server cannot
+  be reached at launch, or a main-window page does not load and the server then fails two
+  health checks (`GET /api/version` for the API and `GET /` for the web UI, every 5 seconds
+  for up to a minute while the page has not finished loading), the main window hides and a small window shows "Can't
+  reach <host>" with the reason: no network, DNS, TLS certificate, timeout, connection refused
+  or a 5xx error. It checks again after 2, 4, 8, 15, 30, then every 60 seconds, at once when
+  the network comes back, and on **Retry**. When the server answers, the main window loads the
+  page again, after the server also answers the session check (`GET /api/me`). A session
+  check that fails keeps the window and its backoff. A page that already loaded stays when
+  the network drops for a short time. Closing the window stops the checks. For a TLS error,
+  the window says that a company proxy that inspects secure traffic, or a missing company
+  root certificate, is a common cause.
+- Sign out and **Change server** remove the session on this computer at once. If the server
+  cannot be reached to end the session, a dialog says so, and the app tries the server
+  sign-out again in the background while it runs. The token stays in memory only: it is not
+  written back to the keychain, so after a quit the server session ends only when it expires. The launcher shows one line for the same errors:
+  "Can't reach <host>. Check your connection." (`src-tauri/src/reachability.rs`).
 
 Closing the main window keeps the app running in the menu bar; the Dock icon, the tray's
 **Open Onyx** or a second launch brings it back.
@@ -254,7 +271,7 @@ On macOS. For Windows and Linux, see [Windows and Linux](#windows-and-linux).
 
 ## Security boundary
 
-- Only the bundled windows (onboarding, login, preferences, launcher, aonyx)
+- Only the bundled windows (onboarding, login, preferences, launcher, aonyx, offline)
   can call app commands. Every app command needs an explicit permission (`build.rs` app
   manifest). Each window has its own capability in `src-tauri/capabilities/` (file name =
   window label) that grants only the commands its page uses. The remote main window gets no
@@ -416,6 +433,9 @@ need the physical mouse or keyboard).
 
 - wry calls the navigation hook for iframes too, so a cross-origin iframe in the web UI
   opens in the browser instead of rendering inline.
+- Tauri does not give the app the HTTP status or load error of a main-window page. The
+  offline window uses the health checks only. If one page fails while `GET /api/version`
+  and `GET /` answer, the main window keeps that failed page.
 - Browser SSO needs a server with the native-app sign-in pass-through in its web OAuth
   callback. v1 also registers the `onyx://` scheme; with both apps installed, macOS sends the
   sign-in link to whichever app registered it last.
@@ -425,3 +445,9 @@ need the physical mouse or keyboard).
 - On Windows, if the launcher opens while another app holds the foreground lock, Windows can
   refuse it focus. Click the launcher once to type.
 - The shell-side React and Opal dependencies resolve from `web/node_modules`.
+- Proxies: the main window uses the OS WebView and follows every OS proxy setting. The
+  app's own requests (health check, sign-in, launcher) use `reqwest`, which reads
+  `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY` and `NO_PROXY`, and the fixed HTTP and HTTPS
+  proxies in macOS network settings and the Windows Internet Options. It does not read PAC
+  files or WPAD, or the Linux desktop proxy settings. Behind such a proxy the offline window
+  can show while the server is reachable; set `HTTPS_PROXY` for the app as a workaround.
