@@ -357,7 +357,9 @@ pub fn refresh(app: &AppHandle) {
     let old = state.policy();
     let mut new = read(app);
     new.server_url = old.server_url.clone();
-    new.lock_server_url = old.lock_server_url;
+    // The server keeps its startup value, but a lock can still turn on
+    // (for example when the policy becomes unreadable); it never turns off.
+    new.lock_server_url = old.lock_server_url || new.lock_server_url;
     if new != old {
         state.set_policy(new.clone());
         if new.disable_auto_update {
