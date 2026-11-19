@@ -103,7 +103,7 @@ Craft skips that Skill and logs a warning. The saved bundle stays unchanged. Oth
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | Slug                | Generated from the Skill name when written in Onyx or uploaded as `SKILL.md`; otherwise, the folder name or ZIP filename without `.zip`.     |
 | Root instructions   | One UTF-8 `SKILL.md` with valid YAML frontmatter at the Skill root.                                                                         |
-| Skills per ZIP      | One. Select multiple ZIP files to import a batch.                                                                                            |
+| Skills per ZIP      | One. Select multiple ZIP files to import a batch. A plugin ZIP can hold several Skills in `skills/<name>/SKILL.md`.                          |
 | Maximum ZIP size    | 25 MiB for the ZIP file.                                                                                                                     |
 | Maximum file count  | 500 files. Folders do not count.                                                                                                            |
 | Maximum file size   | 25 MiB per file in the extracted bundle.                                                                                                     |
@@ -128,6 +128,32 @@ If your reverse proxy sets a request size limit, allow space for the bundle and 
 The upload is rejected when the bundle has unsafe paths, symbolic links, files ending in `.template`,
 missing or invalid frontmatter, an invalid slug source, a duplicate Skill slug,
 or a slug reserved by a built-in Skill or App.
+
+### Uploaded plugins
+
+Users can upload a Claude Code or Codex plugin on **Customize → Plugins** with **Add → Upload plugin**.
+The plugin ZIP uses the same limits as a Skill bundle. Onyx uses only two parts of a plugin:
+
+- the Skills in `skills/<name>/SKILL.md`,
+- the MCP servers in `.mcp.json` or in `mcpServers` of `plugin.json`.
+
+Onyx keeps commands, agents, hooks and the other parts in the stored bundle, but does not use them.
+A plugin with no Skill and no MCP server is refused, with the reason in the upload dialog.
+
+A plugin keeps the name in its `plugin.json`.
+When a user uploads a plugin with the name of a plugin that they own or can edit, the upload becomes its next version.
+The user can select **Save as a New Plugin** to keep the old plugin and get a new one with the next free name.
+You publish, share and set the installation policy of an uploaded plugin as of any other Skill.
+
+A plugin never gives access to an integration. Onyx matches each MCP server of the plugin to an integration by its URL,
+and each user sees their own state of that integration. The row of the plugin shows **N of M integrations available**.
+When a user turns a plugin on, Onyx turns on each needed integration that the user can already use.
+It does not share an integration and does not sign the user in. To let users get an integration that a plugin needs,
+add an MCP integration with the same server URL and give the users access.
+A user who manages integrations can click **Add for your team** on the plugin page,
+which opens the **Add an Integration** page with the name and the URL filled in. If two integrations have the same URL,
+the plugin shows **More than one match** until only one has it.
+See [Upload a plugin](/overview/core_features/plugins#upload-a-plugin).
 
 ## Review a Skill before publishing
 

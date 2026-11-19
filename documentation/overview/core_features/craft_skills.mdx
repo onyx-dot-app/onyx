@@ -170,6 +170,15 @@ description: Create a concise weekly customer update from meeting notes and acco
   </Step>
 </Steps>
 
+### Upload a plugin with several skills
+
+A Claude Code or Codex plugin can hold several skills in `skills/<name>/SKILL.md`,
+and it can name the MCP servers that it needs. Upload it on the **Plugins** tab with **Add → Upload plugin**.
+Onyx keeps the skills together as one plugin with versions.
+A later upload of a plugin with the same name becomes its next version, unless you select **Save as a New Plugin**.
+If you upload a zip with a `SKILL.md` and no `plugin.json` there, Onyx continues with the skill flow on this page.
+See [Upload a plugin](/overview/core_features/plugins#upload-a-plugin).
+
 ### Import from GitHub
 
 Select **Add** > **Import from GitHub** and enter the repository, such as `owner/repo`.

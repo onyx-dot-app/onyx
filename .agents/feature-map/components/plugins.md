@@ -134,9 +134,17 @@ skill (a custom skill's id is its plugin id). `GET /skills` also lists
 uploaded plugins: each row has `kind` (`skill` or `plugin`) and
 `available_count` of `needed_count` integrations. `GET /skills/{id}` adds
 `plugin`: the skills, the plugin.json fields and the needs with their state
-for the user ([[skills#plugin-upload]]). The web does not read them yet. And
-`lib/plugins/directory.ts:pluginSwitch` gives its switch
-(`PUT /skills/{id}/enabled`). Each integration row carries `access`; its
+for the user ([[skills#plugin-upload]]). A plugin row shows "N of M
+integrations available"; a `kind: plugin` page reads `GET /skills/{id}`
+(`lib/plugins/hooks.ts:usePluginDetail`) for its Skills and Integrations tabs
+and does not redirect to the skill page. `sections/plugins/PluginNeedList.tsx`
+shows each need: `lib/plugins/needs.ts:liveNeedState` reads the state of the
+matched integration from `GET /integrations`, so a row follows a switch or a
+sign-in at once, and `needAction` maps the state to one action (Turn on,
+Connect, Add for your team with `newIntegrationHref` filling the Add page, or a
+note). `lib/plugins/directory.ts:pluginSwitch` gives its switch
+(`PUT /skills/{id}/enabled`); when the response leaves a supported need not
+on, `sections/modals/plugins/PluginTurnOnModal.tsx` lists the needs. Each integration row carries `access`; its
 `installation_policy` is the user's own setting (group settings and shares
 included). `sections/plugins/ShareIntegrationModal.tsx` reads and replaces the
 shares through `/integrations/{id}/access`; it reuses `AddPeoplePicker` with

@@ -42,8 +42,9 @@ Integrations and [connectors](/overview/core_features/connectors) give agents di
 
 Select **Customize** in the Chat sidebar or the Craft sidebar. Customize has three tabs: **Skills**,
 **Integrations** and **Plugins**. It opens on **Skills**. A plugin packages skills that you turn on together.
-Each skill that you add comes in its own plugin. Integrations are not in plugins. They are on the **Integrations** tab.
-The **Plugins** tab shows each plugin that you can use, in three groups:
+Each skill that you add comes in its own plugin. You can also [upload a plugin](#upload-a-plugin)
+from Claude Code or Codex. A plugin can name the integrations that it needs, but it does not hold them.
+Integrations are on the **Integrations** tab. The **Plugins** tab shows each plugin that you can use, in three groups:
 
 | Group | Plugins |
 | --- | --- |
@@ -51,21 +52,94 @@ The **Plugins** tab shows each plugin that you can use, in three groups:
 | **From your organization** | The plugins that your admin published for the organization |
 | **Shared with you** | The plugins that other people added and shared with you |
 
-Each row shows how many skills the plugin holds. Search by name,
+Each row shows how many skills the plugin holds.
+The row of a plugin that needs integrations shows how many of them you can use,
+for example **3 of 5 integrations available**. Search by name,
 or use the filter to show only the plugins that are on or off.
 
 The **Skills** tab lists each skill, and the **Integrations** tab lists each integration with its state.
 
-<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugins_directory.webp" alt="The Plugins tab of Customize, with its description and plugins in the Created by you and From your organization groups"/>
+<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugins_directory.webp" alt="The Plugins tab of Customize, with an uploaded plugin that shows 3 of 5 integrations available and skills in the Created by you group"/>
 
 Click a plugin to open it. A plugin that holds only one skill opens that skill. The plugin page has these tabs.
 A tab with nothing to show does not appear.
 
 | Tab | What it shows |
 | --- | --- |
-| **Overview** | The description, the group, and the owner |
+| **Overview** | The description, the group, the owner, and for an uploaded plugin the version, author, license and the parts that Onyx does not use |
 | **Skills** | The skills of the plugin |
-| **Versions** | The versions of a skill that you own or can edit |
+| **Integrations** | The integrations that an uploaded plugin needs, each with your state and one action |
+| **Versions** | The versions of a plugin that you own or can edit |
+
+## Upload a plugin
+
+You can upload a Claude Code or Codex plugin. Onyx uses two parts of the plugin:
+
+- the skills in `skills/<name>/SKILL.md`,
+- the MCP servers in `.mcp.json` or in `mcpServers` of `plugin.json`.
+
+Onyx does not use commands, agents, hooks, LSP servers, output styles, executables (`bin/`), themes or monitors.
+The upload shows these parts under **Not used in Onyx**. A plugin with no skill and no MCP server is refused.
+
+<Steps>
+  <Step title="Open the upload dialog">
+    Select **Customize → Plugins**, then click **Add → Upload plugin**.
+  </Step>
+
+  <Step title="Choose the plugin">
+    Drop the `.zip` file or the plugin folder, or click to choose it. The plugin must have `.claude-plugin/plugin.json`,
+    `.codex-plugin/plugin.json` or `plugin.json` at the root or in one top-level folder.
+  </Step>
+
+  <Step title="Check the preview">
+    Onyx shows the name, the version, the skills, each integration that the plugin needs with your state,
+    the parts that Onyx does not use, and the warnings. If the zip is not valid, the dialog shows the reason.
+  </Step>
+
+  <Step title="Save">
+    Click **Save**. Onyx opens the plugin page.
+  </Step>
+</Steps>
+
+A zip that holds a `SKILL.md` and no `plugin.json` is a skill. The dialog shows **This upload is a skill**.
+Click **Continue** to add it with the skill flow. See [Craft Skills](/overview/core_features/craft_skills).
+
+### Upload a new version
+
+The name in `plugin.json` decides where the upload goes. The preview shows the result above the skills:
+
+| Preview | Result |
+| --- | --- |
+| **Updates *name* to v*n*** | You own or can edit a plugin with the same name. The upload becomes its next version. |
+| **New plugin: *name*** | No plugin of yours has this name. Onyx adds a new plugin to your uploads and turns it on, unless another skill that is on has the name of one of its skills. |
+
+To keep the plugin that has this name as it is, select **Save as a New Plugin**.
+Onyx then saves the upload as a new plugin with the next free name, for example `eng-toolkit-2`.
+A new version does not change whether the plugin is on.
+
+### Integrations that a plugin needs
+
+A plugin never gives access to an integration. Each integration owns its access.
+Onyx matches each MCP server of the plugin to an integration by its URL. The scheme and the host are not case sensitive,
+and a trailing slash or a default port does not change the match.
+The plugin works without the integrations that you cannot use.
+
+The **Integrations** tab of the plugin page shows one state and one action for each integration:
+
+| State | What you see |
+| --- | --- |
+| **On** | Nothing to do. The agent can use the integration. |
+| **Off** | **Turn on** turns the integration on for you, everywhere. |
+| **Not signed in** | **Connect** opens the sign-in of the integration. |
+| **No access** | **Ask an admin**. The integration is not shared with you. |
+| **Turned off** | **Turned off by your admin**. |
+| **Not added** | No integration has this URL. If you can add integrations, **Add for your team** opens the **Add an Integration** page with the name and the URL filled in. Other users see **Ask an admin**. |
+| **More than one match** | More than one integration has this URL, so Onyx cannot choose. Ask an admin. |
+| **Not supported** | **Not supported in Onyx**. The server runs a local command, has no type, or has a `${...}` variable in its URL. |
+
+When you turn a plugin on, or save a new plugin, Onyx also turns on each needed integration that you can already use.
+Onyx does not sign you in. If an integration that the plugin needs is still not on,
+a dialog lists the integrations with their states and actions.
 
 ### Turn a plugin on or off
 

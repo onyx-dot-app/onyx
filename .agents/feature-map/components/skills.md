@@ -37,8 +37,11 @@
 - **Plugin upload.** A user uploads a Claude Code or Codex plugin zip
   ([[#plugin-upload]]). `POST /skills/plugins/inspect` shows the skills, the
   MCP servers the plugin needs with their state for the user, the parts Onyx
-  does not use, and the save target. `POST /skills/plugins` saves it. The
-  web for this stage is not built yet.
+  does not use, and the save target. `POST /skills/plugins` saves it. On the
+  web, Add > Upload plugin on the Plugins tab of Customize opens
+  `web/src/sections/modals/plugins/UploadPluginModal.tsx`; a zip with no
+  plugin.json (`lib/plugins/upload.ts:pluginUploadKind`) goes on to the skill
+  flow.
 - **Admins** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), required (on,
   and the user cannot turn it off), or not available (hidden). With no own
