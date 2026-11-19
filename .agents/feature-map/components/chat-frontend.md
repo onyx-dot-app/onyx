@@ -414,7 +414,13 @@ session's `loadedPublishedFiles` holds the list and the file IDs that the
 loads' packets replayed (`addLoadedPublishedFiles`; every load and settle
 applies it, and an older page adds its packets). A replayed file that the
 list leaves out stays out: an older copy, a file without a path or
-one whose object is missing. Without a list, the packets give all the files.
+one whose object is missing. So does a packet file that no load replayed and
+that comes before a file the list holds for its path. Without a list, the
+packets give all the files. A file tab says "earlier version" only when the
+listed file of its path comes after the tab's file in
+`lib/chat/publishedFiles.ts:publishOrder`: the replayed files, then the files
+that only the list holds, then the later packet files. A tab of a newest copy
+whose object is missing does not say it.
 A shared chat has no live publishes, so its load's list alone gives its
 files. A file tab keeps the file that it opened with
 (`ChatRightPanelState.fileTabs`), so a card always opens its own file, also
