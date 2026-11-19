@@ -3,7 +3,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { SvgFold, SvgExpand } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, Presence, Text } from "@opal/components";
 import { TextLoader } from "@opal/loaders";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { formatDurationSeconds } from "@opal/time";
@@ -37,11 +37,11 @@ export const StreamingHeader = React.memo(function StreamingHeader({
     toolProcessingDuration
   );
   const showElapsedTime =
-    isExpanded && streamingStartTime && elapsedSeconds > 0;
+    isExpanded && streamingStartTime !== undefined && elapsedSeconds > 0;
 
   return (
     <>
-      <div className="px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+      <div className="flex-1 min-w-0 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
         <TextLoader>{headerText}</TextLoader>
       </div>
 
@@ -56,30 +56,35 @@ export const StreamingHeader = React.memo(function StreamingHeader({
           >
             {buttonTitle}
           </Button>
-        ) : showElapsedTime ? (
-          <Button
-            prominence="tertiary"
-            size="md"
-            onClick={onToggle}
-            rightIcon={SvgFold}
-            aria-label={t("collapseButton.ariaLabel")}
-            aria-expanded={true}
-          >
-            {formatDurationSeconds(elapsedSeconds)}
-          </Button>
         ) : (
-          <Button
-            prominence="tertiary"
-            size="md"
-            onClick={onToggle}
-            icon={isExpanded ? SvgFold : SvgExpand}
-            aria-label={
-              isExpanded
-                ? t("collapseButton.ariaLabel")
-                : t("expandButton.ariaLabel")
-            }
-            aria-expanded={isExpanded}
-          />
+          <>
+            {/* The timer is plain text beside the button: a button label
+                animates its changes, so each tick would flash. */}
+            <Presence show={showElapsedTime} from="end" width="fit">
+              <div className="px-(--padding-text-4)">
+                <Text
+                  as="p"
+                  font="secondary-body"
+                  color="text-03"
+                  wordWrap="whitespace-nowrap"
+                >
+                  {formatDurationSeconds(elapsedSeconds)}
+                </Text>
+              </div>
+            </Presence>
+            <Button
+              prominence="tertiary"
+              size="md"
+              onClick={onToggle}
+              icon={isExpanded ? SvgFold : SvgExpand}
+              aria-label={
+                isExpanded
+                  ? t("collapseButton.ariaLabel")
+                  : t("expandButton.ariaLabel")
+              }
+              aria-expanded={isExpanded}
+            />
+          </>
         ))}
     </>
   );

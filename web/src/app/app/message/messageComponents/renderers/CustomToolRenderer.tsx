@@ -15,7 +15,8 @@ import {
 } from "@/app/app/message/messageComponents/types";
 import { buildImgUrl } from "../../../components/files/images/utils";
 import { ShadowDiv, Text } from "@opal/components";
-import { SvgActions, SvgDownload, SvgExternalLink } from "@opal/icons";
+import { SvgDownload, SvgExternalLink } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import json from "highlight.js/lib/languages/json";
@@ -145,7 +146,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     return null;
   }, [toolName, responseType, error, isComplete, isRunning, t]);
 
-  const icon = SvgActions;
+  const icon = STEP_ICONS.tool;
 
   const toolArgsJson = useMemo(
     () => (toolArgs ? JSON.stringify(toolArgs, null, 2) : null),

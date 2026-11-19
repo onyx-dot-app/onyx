@@ -22,6 +22,8 @@ export interface TimelineStepComposerProps {
   getCollapsedIcon?: (
     result: TimelineRendererResult
   ) => FunctionComponent<IconProps> | undefined;
+  /** Replaces the first row's icon, for a running or failed step. */
+  statusIcon?: FunctionComponent<IconProps>;
 }
 
 /**
@@ -35,6 +37,7 @@ export function TimelineStepComposer({
   isSingleStep = false,
   collapsible = true,
   getCollapsedIcon,
+  statusIcon,
 }: TimelineStepComposerProps) {
   const t = useTranslations("chat.messages.timeline");
   return (
@@ -45,7 +48,10 @@ export function TimelineStepComposer({
         ) : (
           <StepContainer
             key={index}
-            stepIcon={result.icon as FunctionComponent<IconProps> | undefined}
+            stepIcon={
+              (index === 0 ? statusIcon : undefined) ??
+              (result.icon as FunctionComponent<IconProps> | undefined)
+            }
             header={result.status}
             isExpanded={result.isExpanded}
             onToggle={result.onToggle}

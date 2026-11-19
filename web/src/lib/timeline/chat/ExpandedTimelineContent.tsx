@@ -9,7 +9,8 @@ import {
   TransformedStep,
   toChatTimelineGroup,
 } from "@/lib/timeline/chat/transformers";
-import { SvgCheckCircle, SvgStopCircle } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
+import type { TimelineEntryStatus } from "@/lib/timeline/types";
 import { IconProps } from "@opal/types";
 import {
   TimelineRendererComponent,
@@ -37,6 +38,8 @@ interface TimelineStepProps {
   isFirstStep: boolean;
   isSingleStep: boolean;
   isStreaming?: boolean;
+  /** Replaces the step's icon while it runs or after it failed. */
+  statusIcon?: FunctionComponent<IconProps>;
 }
 
 const TimelineStep = React.memo(function TimelineStep({
@@ -48,6 +51,7 @@ const TimelineStep = React.memo(function TimelineStep({
   isFirstStep,
   isSingleStep,
   isStreaming = false,
+  statusIcon,
 }: TimelineStepProps) {
   const isSearchTool = useMemo(
     () => isSearchToolPackets(step.packets),
@@ -72,9 +76,10 @@ const TimelineStep = React.memo(function TimelineStep({
         isSingleStep={isSingleStep}
         collapsible={true}
         getCollapsedIcon={getCollapsedIcon}
+        statusIcon={statusIcon}
       />
     ),
-    [isFirstStep, isLastStep, isSingleStep, getCollapsedIcon]
+    [isFirstStep, isLastStep, isSingleStep, getCollapsedIcon, statusIcon]
   );
 
   return (
@@ -142,6 +147,11 @@ export const ExpandedTimelineContent = React.memo(
               isFirstStep={position.isFirst}
               isSingleStep={isSingleStep}
               isStreaming={!stopPacketSeen && !userStopped}
+              statusIcon={stepStatusIcon(
+                entry.status,
+                stopPacketSeen,
+                userStopped
+              )}
             />
           )}
         />
@@ -149,7 +159,7 @@ export const ExpandedTimelineContent = React.memo(
         {/* Done indicator */}
         {showDoneStep && (
           <StepContainer
-            stepIcon={SvgCheckCircle}
+            stepIcon={STEP_ICONS.done}
             header={t("doneStep.header")}
             isLastStep={true}
             isFirstStep={false}
@@ -161,7 +171,7 @@ export const ExpandedTimelineContent = React.memo(
         {/* Stopped indicator */}
         {showStoppedStep && (
           <StepContainer
-            stepIcon={SvgStopCircle}
+            stepIcon={STEP_ICONS.stopped}
             header={t("stoppedStep.header")}
             isLastStep={true}
             isFirstStep={false}
@@ -175,3 +185,18 @@ export const ExpandedTimelineContent = React.memo(
 );
 
 export default ExpandedTimelineContent;
+
+/**
+ * As in Craft: a running step shows the spinner, and a failed or stopped one
+ * the alert. A step without an end after a finished stream counts as done.
+ */
+function stepStatusIcon(
+  status: TimelineEntryStatus,
+  stopPacketSeen: boolean,
+  userStopped: boolean
+): FunctionComponent<IconProps> | undefined {
+  if (status === "error") return STEP_ICONS.failed;
+  if (status !== "streaming") return undefined;
+  if (!stopPacketSeen) return STEP_ICONS.running;
+  return userStopped ? STEP_ICONS.failed : undefined;
+}

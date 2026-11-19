@@ -149,8 +149,12 @@ into rail blocks (consecutive tool calls and thinking) and inline items
 (messages, notices), in arrival order. An entry is keyed by tool-call id or
 part id, so a late update changes it in place.
 `web/src/lib/timeline/craft/components/CraftTimeline.tsx` draws a block on the rail that
-chat uses (`web/src/lib/timeline/`, [[chat-frontend]]). A block with more than
-one entry gets a "Working" header that folds it once a text reply follows.
+chat uses (`web/src/lib/timeline/`, [[chat-frontend]]), with chat's layout:
+every block has the shared run header (`RunHeaderRow`), the first block's
+header carries the logo, and text sits outside the rail. A response that does
+not start with a block gets a logo-only header row. A block with more than one
+entry folds once a text reply follows; one entry always stays on the rail.
+Chat's `AgentTimeline` follows the same open and fold rules.
 
 ---
 

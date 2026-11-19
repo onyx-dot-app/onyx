@@ -3,8 +3,8 @@
 import type { ReactNode } from "react";
 import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgAlertCircle, SvgLoader, SvgSparkle } from "@opal/icons";
-import type { IconFunctionComponent, IconProps } from "@opal/types";
+import type { IconFunctionComponent } from "@opal/types";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import BashBody from "@/lib/timeline/craft/components/tool-cards/BashBody";
 import DiffBody from "@/lib/timeline/craft/components/tool-cards/DiffBody";
 import ReadBody from "@/lib/timeline/craft/components/tool-cards/ReadBody";
@@ -12,10 +12,7 @@ import SearchBody from "@/lib/timeline/craft/components/tool-cards/SearchBody";
 import WebSearchBody from "@/lib/timeline/craft/components/tool-cards/WebSearchBody";
 import WebFetchBody from "@/lib/timeline/craft/components/tool-cards/WebFetchBody";
 import GenericBody from "@/lib/timeline/craft/components/tool-cards/GenericBody";
-import {
-  getToolIcon,
-  isSkillInvocation,
-} from "@/lib/timeline/craft/components/tool-cards/helpers";
+import { isSkillInvocation } from "@/lib/timeline/craft/components/tool-cards/helpers";
 import type { ToolCallState } from "@/app/craft/types/displayTypes";
 
 /**
@@ -156,24 +153,33 @@ export function hasToolCallBody(toolCall: ToolCallState): boolean {
   }
 }
 
-function SpinningLoader({ className, ...props }: IconProps) {
-  return <SvgLoader {...props} className={cn(className, "animate-spin")} />;
-}
-
-/** The rail icon: a spinner while running, otherwise the tool's own icon. */
+/** The rail icon: the status while running or failed, else the kind's icon. */
 export function getToolCallStepIcon(
   toolCall: ToolCallState
 ): IconFunctionComponent {
   if (toolCall.status === "pending" || toolCall.status === "in_progress") {
-    return SpinningLoader;
+    return STEP_ICONS.running;
   }
   // A stopped call must not look finished.
   if (toolCall.status === "failed" || toolCall.status === "cancelled") {
-    return SvgAlertCircle;
+    return STEP_ICONS.failed;
   }
-  // A finished skill leads with its sparkle.
-  if (isSkillInvocation(toolCall) && toolCall.status === "completed") {
-    return SvgSparkle;
+  if (isSkillInvocation(toolCall)) return STEP_ICONS.skill;
+  if (toolCall.toolName === "websearch") return STEP_ICONS.webSearch;
+  if (toolCall.toolName === "webfetch") return STEP_ICONS.fetch;
+  switch (toolCall.kind) {
+    case "execute":
+      return STEP_ICONS.execute;
+    case "read":
+      return STEP_ICONS.read;
+    case "edit":
+      return STEP_ICONS.edit;
+    case "search":
+      return STEP_ICONS.search;
+    case "task":
+      return STEP_ICONS.agent;
+    case "other":
+    default:
+      return STEP_ICONS.tool;
   }
-  return getToolIcon(toolCall.kind);
 }

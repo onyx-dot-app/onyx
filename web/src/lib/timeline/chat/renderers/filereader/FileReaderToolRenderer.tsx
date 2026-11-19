@@ -3,7 +3,7 @@ import { FileBody } from "@/lib/timeline/components/bodies/FileBody";
 import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
-import { SvgFileText } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import {
   PacketType,
   FileReaderToolPacket,
@@ -85,7 +85,7 @@ export const FileReaderToolRenderer: MessageRenderer<
   if (isCompact) {
     return children([
       {
-        icon: SvgFileText,
+        icon: STEP_ICONS.read,
         status: statusText,
         supportsCollapsible: true,
         timelineLayout: "timeline",
@@ -98,7 +98,7 @@ export const FileReaderToolRenderer: MessageRenderer<
 
   return children([
     {
-      icon: SvgFileText,
+      icon: STEP_ICONS.read,
       status: statusText,
       supportsCollapsible: true,
       timelineLayout: "timeline",

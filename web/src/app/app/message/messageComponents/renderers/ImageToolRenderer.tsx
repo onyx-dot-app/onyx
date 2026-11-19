@@ -1,5 +1,5 @@
 import { useTranslations } from "next-intl";
-import { SvgImage } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import { Text } from "@opal/components";
 import { CardGrid, Section } from "@opal/layouts";
 import {
@@ -95,7 +95,7 @@ export const ImageToolRenderer: MessageRenderer<
 
   return children([
     {
-      icon: SvgImage,
+      icon: STEP_ICONS.image,
       status,
       supportsCollapsible: false,
       content,

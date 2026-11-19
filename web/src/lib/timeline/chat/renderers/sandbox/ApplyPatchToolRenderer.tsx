@@ -2,7 +2,7 @@ import { type ComponentProps, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { Text, type TextColor } from "@opal/components";
-import { SvgEdit } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import {
   ApplyPatchEnd,
   ApplyPatchFileChange,
@@ -163,7 +163,7 @@ export function ApplyPatchToolRenderer({
 
   return children([
     {
-      icon: SvgEdit,
+      icon: STEP_ICONS.edit,
       status,
       supportsCollapsible: true,
       noPaddingRight: true,

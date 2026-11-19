@@ -278,9 +278,10 @@ test("a failed response keeps partial text and ends search activity", async () =
     ]),
   });
   render(<ChatUI {...props} />);
+  // The run header and its open step both name the search.
   expect(
-    await screen.findByText("Searching internal documents")
-  ).toBeInTheDocument();
+    await screen.findAllByText("Searching internal documents")
+  ).not.toHaveLength(0);
 
   const finishedPackets: Packet[] = [
     ...packets,
@@ -309,10 +310,10 @@ test("a failed response keeps partial text and ends search activity", async () =
     await screen.findByText("Provider declined the request")
   ).toBeInTheDocument();
   expect(await screen.findByText("Partial answer")).toBeInTheDocument();
+  // The run header settles; the open step keeps its own title.
   await waitFor(() => {
-    expect(
-      screen.queryByText("Searching internal documents")
-    ).not.toBeInTheDocument();
+    expect(screen.getByText(/^Thought for/)).toBeInTheDocument();
+    expect(screen.getAllByText("Searching internal documents")).toHaveLength(1);
     expect(screen.getByTestId("onyx-ai-message")).toBeInTheDocument();
   });
 });

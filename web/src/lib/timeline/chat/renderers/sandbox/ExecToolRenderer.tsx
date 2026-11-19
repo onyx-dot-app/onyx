@@ -2,7 +2,7 @@ import { type ComponentProps, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { Text } from "@opal/components";
-import { SvgTerminal } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import {
   ExecCommandStart,
   ExecEnd,
@@ -178,7 +178,7 @@ export function ExecToolRenderer({
 
   return children([
     {
-      icon: SvgTerminal,
+      icon: STEP_ICONS.execute,
       status,
       supportsCollapsible: true,
       noPaddingRight: true,

@@ -1,5 +1,5 @@
 import { useLocale, useTranslations } from "next-intl";
-import { SvgSearchMenu } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
@@ -83,7 +83,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
   if (queries.length === 0) {
     return children([
       {
-        icon: SvgSearchMenu,
+        icon: STEP_ICONS.search,
         status: queriesHeader,
         content: <></>,
         supportsCollapsible: true,
@@ -201,7 +201,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
   // FULL and COMPACT modes: single combined step (queries + results together)
   return children([
     {
-      icon: SvgSearchMenu,
+      icon: STEP_ICONS.search,
       status: queriesHeader,
       supportsCollapsible: true,
       timelineLayout: "timeline",

@@ -2,7 +2,7 @@ import React, { FunctionComponent } from "react";
 import { cn, richNodes } from "@opal/utils";
 import { SvgFold, SvgExpand, SvgXOctagon } from "@opal/icons";
 import { IconProps } from "@opal/types";
-import { Button, Text } from "@opal/components";
+import { Button, Collapsible, Text } from "@opal/components";
 import { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
 
 export interface TimelineStepContentProps {
@@ -21,6 +21,8 @@ export interface TimelineStepContentProps {
   collapsedIcon?: FunctionComponent<IconProps>;
   noPaddingRight?: boolean;
   surfaceBackground?: TimelineSurfaceBackground;
+  /** Fold the body open and closed with `isExpanded`, animated. */
+  foldBody?: boolean;
 }
 
 /**
@@ -41,8 +43,20 @@ export function TimelineStepContent({
   collapsedIcon: CollapsedIconComponent,
   noPaddingRight = false,
   surfaceBackground,
+  foldBody = false,
 }: TimelineStepContentProps) {
   const showCollapseControls = collapsible && supportsCollapsible && onToggle;
+  const body = (
+    <div
+      className={cn(
+        "ps-1 pb-1",
+        !noPaddingRight && "pe-(--timeline-step-header-right-section-width)",
+        hideHeader && "pt-(--timeline-step-top-padding)"
+      )}
+    >
+      {children}
+    </div>
+  );
 
   return (
     <div className="flex flex-col px-1 pb-1">
@@ -94,18 +108,14 @@ export function TimelineStepContent({
         </div>
       )}
 
-      {children && (
-        <div
-          className={cn(
-            "ps-1 pb-1",
-            !noPaddingRight &&
-              "pe-(--timeline-step-header-right-section-width)",
-            hideHeader && "pt-(--timeline-step-top-padding)"
-          )}
-        >
-          {children}
-        </div>
-      )}
+      {children &&
+        (foldBody ? (
+          <Collapsible.Root open={isExpanded} onOpenChange={onToggle}>
+            <Collapsible.Content>{body}</Collapsible.Content>
+          </Collapsible.Root>
+        ) : (
+          body
+        ))}
     </div>
   );
 }

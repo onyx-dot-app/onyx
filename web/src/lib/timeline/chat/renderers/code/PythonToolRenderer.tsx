@@ -14,7 +14,7 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/types";
-import { SvgTerminal } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import { ShadowDiv } from "@opal/components";
 
 // Helper function to construct current Python execution state
@@ -162,7 +162,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   if (renderType === RenderType.FULL) {
     return children([
       {
-        icon: SvgTerminal,
+        icon: STEP_ICONS.execute,
         status,
         content,
         supportsCollapsible: true,
@@ -174,7 +174,7 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   // Compact mode: wrap content in FadeDiv
   return children([
     {
-      icon: SvgTerminal,
+      icon: STEP_ICONS.execute,
       status,
       supportsCollapsible: true,
       alwaysCollapsible: true,
