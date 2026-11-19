@@ -649,3 +649,31 @@ def test_a_folder_path_error_fails_only_its_target() -> None:
     assert failure.failed_document.document_id == (
         "https://docs.google.com/document/d/file-a"
     )
+
+
+def _rate_limited() -> GoogleDriveHttpError:
+    return GoogleDriveHttpError(
+        status_code=403,
+        reasons=("rateLimitExceeded",),
+        access_denied=False,
+        message="Rate Limit Exceeded",
+    )
+
+
+def test_a_rate_limited_drive_member_read_is_not_an_empty_drive() -> None:
+    """With no members, the drive's files would go to weaker readers."""
+    connector = _make_connector()
+    with (
+        patch(f"{_CONN_MODULE}.list_drive_members", side_effect=_rate_limited()),
+        pytest.raises(GoogleDriveHttpError),
+    ):
+        connector._drive_member_emails("drive-1")
+
+
+def test_a_denied_drive_member_read_gives_no_members() -> None:
+    connector = _make_connector()
+    denied = GoogleDriveHttpError(
+        status_code=403, reasons=(), access_denied=True, message="Forbidden"
+    )
+    with patch(f"{_CONN_MODULE}.list_drive_members", side_effect=denied):
+        assert connector._drive_member_emails("drive-1") == []

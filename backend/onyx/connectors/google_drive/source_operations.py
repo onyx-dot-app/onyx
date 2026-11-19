@@ -428,6 +428,21 @@ _retry_transient_drive_call = retry_builder(
 )
 
 
+class _TransientBatchCalls(Exception):
+    """Google refused some calls of a batch for their rate, or failed them
+    with a server error. They are sent again."""
+
+
+# For the single calls of a batch that Google refused for their rate. Each
+# try spends from the limiter again, as a new batch of those calls.
+_retry_transient_batch_calls = retry_builder(
+    tries=_DOCS_FETCH_TRIES,
+    delay=_DOCS_FETCH_RETRY_DELAY_SECONDS,
+    max_delay=_DOCS_FETCH_RETRY_MAX_DELAY_SECONDS,
+    exceptions=_TransientBatchCalls,
+)
+
+
 @contextmanager
 def _google_errors() -> Iterator[None]:
     try:
@@ -1071,11 +1086,14 @@ class GoogleDriveSourceOperations(SourceOperations):
         self, *, user_email: str, file_ids_by_key: dict[str, str], fields: str
     ) -> DriveBatchResult:
         """files.get for many files in batch requests, keyed by the caller's
-        key. Per-file errors go to ``errors``."""
+        key. Per-file errors go to ``errors``. A call that Google refused for
+        its rate, or failed with a server error, is sent again with backoff,
+        so only a denial or a refusal that outlasts the retries is an
+        error."""
         result = DriveBatchResult()
         keys = list(file_ids_by_key)
         for start in range(0, len(keys), _MAX_BATCH_SIZE):
-            files, errors = self._batch_get_chunk(
+            files, errors = self._batch_get_chunk_with_retries(
                 user_email,
                 {
                     key: file_ids_by_key[key]
@@ -1088,6 +1106,41 @@ class GoogleDriveSourceOperations(SourceOperations):
                 logger.warning("Error retrieving file %s: %s", request_id, exception)
                 result.errors[request_id] = _translate(exception)
         return result
+
+    def _batch_get_chunk_with_retries(
+        self, user_email: str, file_ids_by_key: dict[str, str], fields: str
+    ) -> tuple[dict[str, GoogleDriveFileType], dict[str, Exception]]:
+        """One chunk of files.get calls. The calls that got a rate limit or a
+        server error go again in a new batch, with backoff. After the last
+        try, their errors stay."""
+        files: dict[str, GoogleDriveFileType] = {}
+        errors: dict[str, Exception] = {}
+        pending = dict(file_ids_by_key)
+
+        def read_pending() -> None:
+            read, failed = self._batch_get_chunk(user_email, pending, fields)
+            files.update(read)
+            for key in read:
+                pending.pop(key)
+                errors.pop(key, None)
+            errors.update(failed)
+            transient = {
+                key for key, error in failed.items() if _is_transient_drive_error(error)
+            }
+            for key in list(pending):
+                if key not in transient:
+                    pending.pop(key)
+            if pending:
+                raise _TransientBatchCalls(
+                    f"{len(pending)} of the batch's files.get calls failed for "
+                    "the rate or with a server error"
+                )
+
+        try:
+            _retry_transient_batch_calls(read_pending)()
+        except _TransientBatchCalls:
+            pass
+        return files, errors
 
     def _batch_get_chunk(
         self, user_email: str, file_ids_by_key: dict[str, str], fields: str

@@ -140,7 +140,11 @@ parent and is not marked as seen, so a later child can add a reader. A
 document that arrives before its folder gets a STUB parent in docfetching, so
 the connector yields children and parents in any order. A folder subtree gets
 no `FOLDERS` shard: the folders it walks are the nodes. `reindex` reads the
-parents of its files the same way.
+parents of its files the same way. It reads the files with batches of
+files.get (`connectors/google_drive/source_operations.py:batch_get_files`). A call of a batch that
+Google refuses for its rate, or fails with a server error, goes again in a new
+batch through the limiter, so only a denial, or a refusal that outlasts the
+retries, fails the document.
 
 A checkpoint with no listing state starts the listing again from the window
 start. A checkpoint of the serial crawl that came before (`phase_progress`,
