@@ -148,6 +148,17 @@ def request_user_topup(
         logger.exception("Suggested questions: could not request a top-up")
 
 
+def release_pool_flag(tenant_id: str) -> None:
+    """Called by the pool task when it starts: the queued run is now running,
+    so a new request may queue the next one."""
+    get_cache_backend(tenant_id=tenant_id).delete(_POOL_QUEUED_KEY)
+
+
+def release_topup_flag(tenant_id: str, user_id: UUID) -> None:
+    """Called by the top-up task when it starts, like release_pool_flag."""
+    get_cache_backend(tenant_id=tenant_id).delete(_TOPUP_QUEUED_KEY.format(user_id))
+
+
 def drop_orphaned_questions(tenant_id: str) -> None:
     """Remove questions whose document was deleted, then ask for a refill. If
     a run holds the pool, leave it: the run's save step drops them too."""
@@ -184,6 +195,13 @@ def topup_allowed(record: UserRecord, now: datetime) -> bool:
     return len(recent) < SQ_TOPUPS_PER_USER_PER_DAY and (
         not recent or now - recent[-1] >= timedelta(minutes=SQ_TOPUP_GAP_MIN)
     )
+
+
+def fresh_document_ids(pool: QuestionPool, now: datetime) -> set[str]:
+    """Documents with a question young enough to show. A document whose
+    question expired may get a new one."""
+    max_age = timedelta(days=SQ_QUESTION_MAX_AGE_DAYS)
+    return {q.document_id for q in pool.questions if now - q.created_at < max_age}
 
 
 def count_usable_questions(
