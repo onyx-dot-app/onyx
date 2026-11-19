@@ -659,8 +659,13 @@ def test_the_factory_builds_the_drive_limiter_and_wires_the_stop_signal(
         "drive",
         source_api_limiter.GOOGLE_DRIVE_BUDGETS["drive"].model_copy(
             # 1800 units a minute is 300 in each 10 s window. Units, whatever
-            # quota model the environment sets.
-            update={"per_credential": 1800, "count_requests": False}
+            # quota model the environment sets. The full window from the
+            # start: test_source_api_limiter_gates tests the start share.
+            update={
+                "per_credential": 1800,
+                "count_requests": False,
+                "start_share": None,
+            }
         ),
     )
     assert source_api_limiter.build_source_api_limiter(DocumentSource.SLACK, 1) is None

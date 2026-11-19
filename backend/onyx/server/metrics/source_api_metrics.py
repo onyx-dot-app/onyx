@@ -92,6 +92,20 @@ LIMITER_WAIT_SECONDS = Counter(
     ["source", "api"],
 )
 
+LIMITER_LOCAL_WAITERS = Gauge(
+    "onyx_source_api_limiter_local_waiters",
+    "Calls of this process in the shared limiter: the call at the head of "
+    "each gate and the calls that wait behind it",
+    ["source", "api"],
+)
+
+LIMITER_REDIS_WAITERS = Gauge(
+    "onyx_source_api_limiter_redis_waiters",
+    "Waiters in the Redis queue of the project budget, at the last try of "
+    "this process. Each process holds about one for each class.",
+    ["source", "api"],
+)
+
 # A user budget counts toward the user gauges for this long after its last use.
 USER_BUDGET_RECENT_SECONDS = 120.0
 # The user gauges are computed again at most once in this interval.
@@ -128,6 +142,14 @@ def set_project_ceiling(source: str, api: str, allowed: int) -> None:
 def record_limiter_wait(source: str, api: str, seconds: float) -> None:
     if seconds > 0:
         LIMITER_WAIT_SECONDS.labels(source=source, api=api).inc(seconds)
+
+
+def add_local_waiters(source: str, api: str, count: int) -> None:
+    LIMITER_LOCAL_WAITERS.labels(source=source, api=api).inc(count)
+
+
+def set_redis_waiters(source: str, api: str, count: int) -> None:
+    LIMITER_REDIS_WAITERS.labels(source=source, api=api).set(count)
 
 
 def allowed_units(limit: int, share: float) -> int:

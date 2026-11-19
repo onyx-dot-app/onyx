@@ -27,11 +27,23 @@ The share grows back fast below SLOW_ZONE of
 the ceiling and slowly from there. When the share grows past the ceiling
 with no new cut, the ceiling moves up with it, so the window finds a higher
 rate when the service allows more.
+
+A window with a start share keeps its share past an idle time. It stores its
+share in Redis whenever the share changes, for STORED_SHARE_TTL_SECONDS. A
+window with no state, for example in a new run, starts from the stored share
+and grows slowly from it. With no stored share, it starts from its start
+share and grows with the recovery above.
+
+One try does a small, bounded amount of work, whatever the number of
+requests in the window. Each request in the log carries the units of the log
+up to it, so a search by rank finds when enough units leave the window. A try
+reads at most _MAX_SCAN waiters before its place.
 """
 
 import threading
 import time
 from collections.abc import Sequence
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict
 from redis.exceptions import RedisError
@@ -78,18 +90,33 @@ GROW_INTERVAL_SECONDS = 10.0
 # Bulk callers leave this share of each window to priority callers.
 PRIORITY_RESERVE = 0.05
 # A waiter that has not tried again for this long leaves the queue, for
-# example when its process died. A waiting caller tries at least every few
-# seconds.
+# example when its process died. A waiting caller tries at least every
+# WAITER_STALE_SECONDS / 2.
 WAITER_STALE_SECONDS = 20.0
 # While Redis cannot be reached, log one warning in each interval.
 _UNREACHABLE_WARNING_INTERVAL_SECONDS = 60.0
 # The adaptive state outlives an idle window by this long.
 _META_TTL_SECONDS = 600
+# A stored share outlives its last change by this long.
+STORED_SHARE_TTL_SECONDS = 7 * 24 * 3600
 # Bulk waiters sort after every priority waiter: the place of a waiter is the
 # time of its first try in ms, plus this for a bulk waiter.
 _BULK_RANK_OFFSET_MS = 10**13
-# One try reads at most this many waiters, and this many requests of the log.
-_MAX_SCAN = 2000
+# One try reads at most this many waiters before its place. The calls of one
+# process wait behind one waiter (see the source-API limiter), so a queue
+# holds about one waiter for each process and class.
+_MAX_SCAN = 128
+
+
+class WindowStart(int, Enum):
+    """Where a window's share came from, when a try found it with no state."""
+
+    # The window had state, or it does not store its share.
+    NONE = 0
+    # The share that the window stored.
+    STORED = 1
+    # No share was stored: the window's start share.
+    COLD = 2
 
 
 class AcquireResult(BaseModel):
@@ -102,6 +129,14 @@ class AcquireResult(BaseModel):
     # The epoch (the number of cuts) of each window, in the order of the
     # windows. Empty when Redis cannot be reached.
     epochs: list[int]
+    # For each window, True when the request did not fit it. Empty when Redis
+    # cannot be reached.
+    blocked: list[bool] = []
+    # For each window, where its share came from when this try found it with
+    # no state.
+    starts: list[WindowStart] = []
+    # The number of waiters in the queue of each window after this try.
+    queued: list[int] = []
 
 
 class RefusalResult(BaseModel):
@@ -131,6 +166,10 @@ class RateWindow(BaseModel):
     key: str
     limit: int
     period_seconds: float
+    # With a start share, the window stores its share, and a window with no
+    # state starts from the stored share, or from this share when none is
+    # stored. None starts at the full limit and stores nothing.
+    start_share: float | None = None
 
 
 class WaitTurn(BaseModel):
@@ -144,10 +183,11 @@ class WaitTurn(BaseModel):
     bulk: bool = False
 
 
-# Each window has a log (a sorted set of requests by start time, with the cost
-# in the member), a meta hash (the running total and the adaptive state), a
-# queue (a sorted set of waiters by place, with the cost in the member) and a
-# seen set (the waiters by the time of their last try). The scripts read the
+# Each window has a log (a sorted set of requests by start time; the member
+# holds the units of the log up to the request and the request's cost), a
+# meta hash (the running total and the adaptive state), a queue (a sorted set
+# of waiters by place, with the cost in the member), a seen set (the waiters
+# by the time of their last try) and the stored share. The scripts read the
 # Redis clock, so clock skew between pods has no effect.
 #
 # The meta hash counts the requests and the refusals of the current epoch for
@@ -177,13 +217,26 @@ end
 local function member_cost(member)
   return tonumber(string.match(member, ':(%d+)$'))
 end
+-- The units of the log up to and with this request, or nil for a member of
+-- the older form, which has no such count.
+local function member_units(member)
+  local units = string.match(member, '^%d+:%d+:(%d+):%d+$')
+  if units then
+    return tonumber(units)
+  end
+  return nil
+end
+local function store_share(stored, factor, ttl)
+  redis.call('SET', stored, tostring(factor), 'PX', ttl)
+end
 """
 
 # Returns a list: first 0 when the request took its units from every window,
 # or the ms until the window that is full can have room for it (it then takes
-# nothing). Then the share of its limit that each window allows, in
-# thousandths, and then the epoch of each window. A request that took its
-# units counts ``requests`` toward the refused share of each window.
+# nothing). Then five values for each window: the share of its limit that it
+# allows in thousandths, its epoch, 1 when the request did not fit it, its
+# WindowStart, and the number of waiters in its queue. A request that took
+# its units counts ``requests`` toward the refused share of each window.
 #
 # A caller fits a window when its cost and the costs of the waiters before it
 # fit the room in the window; a bulk caller does not use the reserve of the
@@ -191,6 +244,10 @@ end
 # class. A caller that does not fit gets a place in the queue
 # of each window that it did not fit. ``force`` takes the units with no
 # check.
+#
+# The wait is until enough units leave the window. The units of the log up
+# to each request rise with its rank, so a binary search over the ranks finds
+# the request whose exit frees them, in O(log n) reads.
 _ACQUIRE_SCRIPT = (
     _ROLL_FUNCTIONS
     + """
@@ -210,20 +267,61 @@ local stale_ms = tonumber(ARGV[11])
 local force = ARGV[12] == '1'
 local max_scan = tonumber(ARGV[13])
 local reserve = tonumber(ARGV[14])
-local base = 14
-local n = #KEYS / 4
+local stored_ttl = tonumber(ARGV[15])
+local base = 15
+local n = #KEYS / 5
 local wait = 0
 local shares = {}
 local epochs = {}
 local blocked = {}
+local starts = {}
 local places = {}
+local function at_rank(log, rank)
+  return redis.call('ZRANGE', log, rank, rank, 'WITHSCORES')
+end
+-- The ms until ``need`` units have left the log, or the period when the log
+-- does not hold them.
+local function wait_for_units(log, need, period)
+  local card = redis.call('ZCARD', log)
+  if card == 0 then
+    return period
+  end
+  local first = at_rank(log, 0)
+  local first_units = member_units(first[1])
+  if not first_units then
+    -- A log of the older form: one unit for each request.
+    if need > card then
+      return period
+    end
+    return tonumber(at_rank(log, need - 1)[2]) + period - now
+  end
+  local before = first_units - member_cost(first[1])
+  local last_units = member_units(at_rank(log, card - 1)[1])
+  if not last_units or last_units - before < need then
+    return period
+  end
+  local lo = 0
+  local hi = card - 1
+  while lo < hi do
+    local mid = math.floor((lo + hi) / 2)
+    local units = member_units(at_rank(log, mid)[1])
+    if units and units - before >= need then
+      hi = mid
+    else
+      lo = mid + 1
+    end
+  end
+  return tonumber(at_rank(log, lo)[2]) + period - now
+end
 for i = 1, n do
-  local log = KEYS[4 * i - 3]
-  local meta = KEYS[4 * i - 2]
-  local queue = KEYS[4 * i - 1]
-  local seen = KEYS[4 * i]
-  local limit = tonumber(ARGV[base + 2 * i - 1])
-  local period = tonumber(ARGV[base + 2 * i])
+  local log = KEYS[5 * i - 4]
+  local meta = KEYS[5 * i - 3]
+  local queue = KEYS[5 * i - 2]
+  local seen = KEYS[5 * i - 1]
+  local stored = KEYS[5 * i]
+  local limit = tonumber(ARGV[base + 3 * i - 2])
+  local period = tonumber(ARGV[base + 3 * i - 1])
+  local start_share = tonumber(ARGV[base + 3 * i])
   local old = redis.call('ZRANGEBYSCORE', log, '-inf', now - period)
   if #old > 0 then
     local freed = 0
@@ -238,7 +336,29 @@ for i = 1, n do
     total = 0
     redis.call('HSET', meta, 'total', 0)
   end
-  local factor = tonumber(redis.call('HGET', meta, 'factor') or '1')
+  starts[i] = 0
+  local factor_value = redis.call('HGET', meta, 'factor')
+  local factor = 1
+  if factor_value then
+    factor = tonumber(factor_value)
+  elseif start_share >= 0 then
+    -- No state: start from the stored share, or from the start share.
+    local stored_share = redis.call('GET', stored)
+    if stored_share then
+      factor = math.min(1, tonumber(stored_share))
+      starts[i] = 1
+      redis.call('HSET', meta, 'factor', tostring(factor), 'grown_at', now)
+      if factor < 1 then
+        -- The service accepted the stored share: grow slowly from it.
+        redis.call('HSET', meta, 'ceiling', tostring(factor))
+      end
+    else
+      factor = start_share
+      starts[i] = 2
+      redis.call('HSET', meta, 'factor', tostring(factor), 'grown_at', now)
+    end
+    redis.call('PEXPIRE', meta, math.max(period, meta_ttl))
+  end
   if factor < 1 then
     local hold_until = tonumber(redis.call('HGET', meta, 'hold_until') or '0')
     local grown_at = tonumber(redis.call('HGET', meta, 'grown_at') or '0')
@@ -256,6 +376,9 @@ for i = 1, n do
         -- No cut up to here: the service allows this share, so the
         -- ceiling moves up with it.
         redis.call('HSET', meta, 'ceiling', tostring(factor))
+      end
+      if start_share >= 0 then
+        store_share(stored, factor, stored_ttl)
       end
     end
   end
@@ -277,6 +400,7 @@ for i = 1, n do
     place = now + rank_offset
   end
   places[i] = place
+  blocked[i] = false
   if not force then
     -- One request always fits an empty window, however large its cost.
     local allowed = math.max(cost, math.floor(limit * factor * (1 - reserve)))
@@ -291,35 +415,33 @@ for i = 1, n do
       blocked[i] = true
       -- The units that must leave the window before this caller fits. The
       -- wait is until the oldest requests that hold them leave.
-      local need = total + cost + ahead - allowed
-      local window_wait = period
-      local entries = redis.call('ZRANGE', log, 0,
-                                 math.min(need, max_scan) - 1, 'WITHSCORES')
-      local freed = 0
-      for j = 1, #entries, 2 do
-        freed = freed + member_cost(entries[j])
-        if freed >= need then
-          window_wait = tonumber(entries[j + 1]) + period - now
-          break
-        end
-      end
+      local window_wait = wait_for_units(log, total + cost + ahead - allowed,
+                                         period)
       wait = math.max(wait, math.max(1, window_wait))
     end
   end
 end
-local result = {wait}
-for i = 1, n do
-  result[#result + 1] = shares[i]
-end
-for i = 1, n do
-  result[#result + 1] = epochs[i]
+local function result()
+  local values = {wait}
+  for i = 1, n do
+    local is_blocked = 0
+    if blocked[i] then
+      is_blocked = 1
+    end
+    values[#values + 1] = shares[i]
+    values[#values + 1] = epochs[i]
+    values[#values + 1] = is_blocked
+    values[#values + 1] = starts[i]
+    values[#values + 1] = redis.call('ZCARD', KEYS[5 * i - 2])
+  end
+  return values
 end
 if wait > 0 then
   if member ~= '' then
     for i = 1, n do
-      local queue = KEYS[4 * i - 1]
-      local seen = KEYS[4 * i]
-      local period = tonumber(ARGV[base + 2 * i])
+      local queue = KEYS[5 * i - 2]
+      local seen = KEYS[5 * i - 1]
+      local period = tonumber(ARGV[base + 3 * i - 1])
       if blocked[i] then
         redis.call('ZADD', queue, 'NX', places[i], member)
       end
@@ -331,25 +453,26 @@ if wait > 0 then
       end
     end
   end
-  return result
+  return result()
 end
 for i = 1, n do
-  local log = KEYS[4 * i - 3]
-  local meta = KEYS[4 * i - 2]
-  local period = tonumber(ARGV[base + 2 * i])
+  local log = KEYS[5 * i - 4]
+  local meta = KEYS[5 * i - 3]
+  local period = tonumber(ARGV[base + 3 * i - 1])
   if member ~= '' then
-    redis.call('ZREM', KEYS[4 * i - 1], member)
-    redis.call('ZREM', KEYS[4 * i], member)
+    redis.call('ZREM', KEYS[5 * i - 2], member)
+    redis.call('ZREM', KEYS[5 * i - 1], member)
   end
   local seq = redis.call('HINCRBY', meta, 'seq', 1)
-  redis.call('ZADD', log, now, now .. ':' .. seq .. ':' .. cost)
+  local units = redis.call('HINCRBY', meta, 'units', cost)
+  redis.call('ZADD', log, now, now .. ':' .. seq .. ':' .. units .. ':' .. cost)
   redis.call('HINCRBY', meta, 'total', cost)
   roll(meta, now, window_ms)
   redis.call('HINCRBY', meta, 'req_cur', requests)
   redis.call('PEXPIRE', log, period)
   redis.call('PEXPIRE', meta, math.max(period, meta_ttl))
 end
-return result
+return result()
 """
 )
 
@@ -369,13 +492,15 @@ return 0
 # re-cut time. A cut starts a new epoch and resets the counts. Returns the
 # share in thousandths, 0 (no cut), 1 (gentle cut) or 2 (storm cut), the
 # refused share in thousandths, 1 when the report was late, and the accepted
-# share and the ceiling in thousandths (0 with no cut).
+# share and the ceiling in thousandths (0 with no cut). A window that stores
+# its share stores the share after a cut.
 _REPORT_SCRIPT = (
     _ROLL_FUNCTIONS
     + """
 local t = redis.call('TIME')
 local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
 local meta = KEYS[1]
+local stored = KEYS[2]
 local count = tonumber(ARGV[1])
 local threshold = tonumber(ARGV[2])
 local min_refusals = tonumber(ARGV[3])
@@ -393,6 +518,8 @@ local sent_epoch = tonumber(ARGV[14])
 local margin = tonumber(ARGV[15])
 local smallest = tonumber(ARGV[16])
 local keep = tonumber(ARGV[17])
+local stored_ttl = tonumber(ARGV[18])
+local stores = ARGV[19] == '1'
 local factor = tonumber(redis.call('HGET', meta, 'factor') or '1')
 local epoch = tonumber(redis.call('HGET', meta, 'epoch') or '0')
 -- The running total in the meta hash must live as long as the log.
@@ -437,6 +564,9 @@ if refused >= min_refusals and refused_share >= threshold then
                'epoch', epoch + 1, 'hold_until', now + hold_ms,
                'grown_at', now + hold_ms, 'last_cut', now, 'bucket_at', now,
                'req_prev', 0, 'ref_prev', 0, 'req_cur', 0, 'ref_cur', 0)
+    if stores then
+      store_share(stored, factor, stored_ttl)
+    end
   end
 end
 return {math.floor(factor * 1000 + 0.5), applied,
@@ -480,6 +610,11 @@ def _seen_key(window: RateWindow) -> str:
     return f"{window.key}:seen"
 
 
+def stored_share_key(window: RateWindow) -> str:
+    """The key of the share that a window with a start share stores."""
+    return f"{window.key}:learned"
+
+
 def _member(turn: WaitTurn, cost: int) -> str:
     # The member carries the cost, so that the callers after it know the
     # units that it waits for.
@@ -507,12 +642,14 @@ class RedisRateWindows:
         turn: WaitTurn | None = None,
         force: bool = False,
     ) -> AcquireResult:
-        """``try_acquire``, which also returns the share of its limit and the
-        epoch of each window. ``requests`` is the number of requests that the
-        units pay for, which the refused share counts. With ``turn``, a caller
-        that does not fit keeps a place in the queue of each full window
-        until it fits or calls ``leave``. With no turn, the caller goes after
-        every waiter. ``force`` takes the units even when they do not fit."""
+        """``try_acquire``, which also returns the state of each window: its
+        share of its limit, its epoch, whether the request fit it, where its
+        share came from, and its waiters. ``requests`` is the number of
+        requests that the units pay for, which the refused share counts.
+        With ``turn``, a caller that does not fit keeps a place in the queue
+        of each full window until it fits or calls ``leave``. With no turn,
+        the caller goes after every waiter. ``force`` takes the units even
+        when they do not fit."""
         if not windows:
             return AcquireResult(wait_seconds=0, shares=[], epochs=[])
         keys: list[str] = []
@@ -531,6 +668,7 @@ class RedisRateWindows:
             "1" if force else "0",
             str(_MAX_SCAN),
             str(PRIORITY_RESERVE if turn is not None and turn.bulk else 0),
+            str(STORED_SHARE_TTL_SECONDS * 1000),
         ]
         for window in windows:
             keys.extend(
@@ -539,20 +677,30 @@ class RedisRateWindows:
                     _meta_key(window),
                     _queue_key(window),
                     _seen_key(window),
+                    stored_share_key(window),
                 ]
             )
-            args.extend([str(window.limit), str(int(window.period_seconds * 1000))])
+            args.extend(
+                [
+                    str(window.limit),
+                    str(int(window.period_seconds * 1000)),
+                    str(-1 if window.start_share is None else window.start_share),
+                ]
+            )
         try:
             result = self._redis.eval(_ACQUIRE_SCRIPT, keys=keys, args=args)
         except RedisError as error:
             _warn_redis_unreachable(error)
             return AcquireResult(wait_seconds=0, shares=[], epochs=[])
         values = [int(value) for value in result]
-        count = len(windows)
+        per_window = [values[1 + 5 * i : 6 + 5 * i] for i in range(len(windows))]
         return AcquireResult(
             wait_seconds=values[0] / 1000,
-            shares=[value / 1000 for value in values[1 : 1 + count]],
-            epochs=values[1 + count : 1 + 2 * count],
+            shares=[state[0] / 1000 for state in per_window],
+            epochs=[state[1] for state in per_window],
+            blocked=[state[2] == 1 for state in per_window],
+            starts=[WindowStart(state[3]) for state in per_window],
+            queued=[state[4] for state in per_window],
         )
 
     def leave(self, windows: Sequence[RateWindow], turn: WaitTurn, cost: int) -> None:
@@ -579,7 +727,7 @@ class RedisRateWindows:
         try:
             result = self._redis.eval(
                 _REPORT_SCRIPT,
-                keys=[_meta_key(window)],
+                keys=[_meta_key(window), stored_share_key(window)],
                 args=[
                     str(count),
                     str(CUT_THRESHOLD),
@@ -598,6 +746,8 @@ class RedisRateWindows:
                     str(CUT_MARGIN),
                     str(SMALLEST_CUT),
                     str(CEILING_KEEP),
+                    str(STORED_SHARE_TTL_SECONDS * 1000),
+                    "0" if window.start_share is None else "1",
                 ],
             )
         except RedisError as error:
@@ -621,5 +771,9 @@ class RedisRateWindows:
     def delete(self, window: RateWindow) -> None:
         """Removes the window's state. For tests."""
         self._redis.delete(
-            _log_key(window), _meta_key(window), _queue_key(window), _seen_key(window)
+            _log_key(window),
+            _meta_key(window),
+            _queue_key(window),
+            _seen_key(window),
+            stored_share_key(window),
         )
