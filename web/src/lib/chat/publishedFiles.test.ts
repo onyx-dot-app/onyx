@@ -240,6 +240,26 @@ describe("chatPublishedFiles", () => {
     ]);
   });
 
+  test("a packet file that no load replayed stays out before a listed copy of its path", () => {
+    // A running answer publishes the report twice. A load whose list holds
+    // the second copy does not replay the answer.
+    const answer = response(-1, undefined, [
+      publishEnd([published("first", "/w/report.md")]),
+      publishEnd([published("second", "/w/report.md")]),
+    ]);
+    const loaded = load([published("second", "/w/report.md")], []);
+
+    expect(fileIds(chatPublishedFiles(loaded, tree([answer])))).toEqual([
+      "second",
+    ]);
+
+    // A copy published after the listed one is newer.
+    answer.packets.push(publishEnd([published("third", "/w/report.md")]));
+    expect(fileIds(chatPublishedFiles(loaded, tree([answer])))).toEqual([
+      "third",
+    ]);
+  });
+
   test("a shared chat shows its load's list, or its packets without one", () => {
     const answer = response(2, 2, [
       publishEnd([published("missing", "/w/report.md")]),

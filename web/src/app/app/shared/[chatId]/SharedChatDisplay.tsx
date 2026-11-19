@@ -27,6 +27,7 @@ import {
   addLoadedPublishedFiles,
   chatPublishedFiles,
   NO_LOADED_PUBLISHED_FILES,
+  publishOrder,
 } from "@/lib/chat/publishedFiles";
 import { PublishedFilesButton } from "@/sections/chat/PublishedFileViews";
 import { ChatRightPanel } from "@/sections/chat/ChatRightPanel";
@@ -100,10 +101,11 @@ export default function SharedChatDisplay({
   const firstMessage = messages[0];
   // A shared chat has no live publishes: its load's list, or without one
   // its packets, gives the files
-  const publishedFiles = chatPublishedFiles(
-    addLoadedPublishedFiles(NO_LOADED_PUBLISHED_FILES, chatSession),
-    messageTree
+  const loadedPublishedFiles = addLoadedPublishedFiles(
+    NO_LOADED_PUBLISHED_FILES,
+    chatSession
   );
+  const publishedFiles = chatPublishedFiles(loadedPublishedFiles, messageTree);
   const openPublishedFile = (file: PublishedFile) =>
     dispatchRightPanel({ type: "openFile", file });
 
@@ -144,6 +146,7 @@ export default function SharedChatDisplay({
             state={rightPanel}
             dispatch={dispatchRightPanel}
             files={publishedFiles}
+            publishOrder={publishOrder(loadedPublishedFiles, messageTree)}
             sources={null}
             hasSources={false}
           />

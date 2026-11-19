@@ -467,6 +467,18 @@ test("file tabs of one shown name show their paths, and an older publish says so
   await preview("Q3 report");
 });
 
+test("a tab of a newer publish whose object is missing is not an earlier version", async () => {
+  // The newest copy's object is missing, so the server lists the older copy
+  const older = { ...REPORT, file_id: "file-old" };
+  renderChat([[older], [REPORT]]);
+  applyLoad([older], [[older], [REPORT]]);
+
+  act(() => openPublishedFileInChat(REPORT));
+  expect(screen.getByRole("tab", { name: "Q3 report" })).toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: /earlier version/ })).toBeNull();
+  await preview("Q3 report");
+});
+
 test("the keyboard and a double click resize the panel and keep the width for the chat", () => {
   setReplies([[REPORT]]);
   render(<Chat replies={[[REPORT]]} workspaceWidth={1000} />);

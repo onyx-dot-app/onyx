@@ -10,6 +10,7 @@ import {
   useRef,
 } from "react";
 import { useTranslations } from "next-intl";
+import { useShallow } from "zustand/react/shallow";
 import { Button } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgFiles, SvgSearchMenu, SvgX } from "@opal/icons";
@@ -22,6 +23,7 @@ import {
 import { useCurrentPublishedFiles } from "@/lib/chat/hooks";
 import {
   filesSharingALabel,
+  publishOrder,
   publishedFileLabel,
   publishedFilePath,
 } from "@/lib/chat/publishedFiles";
@@ -63,6 +65,8 @@ interface ChatRightPanelProps {
   dispatch: (action: ChatRightPanelAction) => void;
   // The newest publish of each path, newest first
   files: PublishedFile[];
+  // The place of each of the chat's files in publish order, by file ID
+  publishOrder: ReadonlyMap<string, number>;
   // The Sources tab's content; `hasSources` says whether it has any
   sources: ReactNode;
   hasSources: boolean;
@@ -82,6 +86,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   state,
   dispatch,
   files,
+  publishOrder,
   sources,
   hasSources,
 }: ChatRightPanelProps) {
@@ -119,27 +124,31 @@ export const ChatRightPanel = memo(function ChatRightPanel({
         ]
       : []),
   ];
-  // Tabs of one shown name show their path; an older publish of a path says so
+  // Tabs of one shown name show their path. A tab says it is an earlier
+  // version when the listed file of its path was published after its file.
   const sharingALabel = filesSharingALabel(state.fileTabs);
-  const newestByPath = new Map(files.map((file) => [file.path, file.file_id]));
+  const listedByPath = new Map(files.map((file) => [file.path, file.file_id]));
+  const publishedAt = (fileId: string) => publishOrder.get(fileId) ?? -1;
   const tabs: PanelTabItem[] = [
     ...fixedTabs,
     ...state.fileTabs.map((file): PanelTabItem => {
-      const tabId = rightPanelFileTab(file.file_id);
       const name = sharingALabel.has(file.file_id)
         ? publishedFilePath(file)
         : publishedFileLabel(file);
-      const newest = newestByPath.get(file.path);
-      if (newest === undefined || newest === file.file_id)
-        return {
-          id: tabId,
-          label: name,
-          icon: getFileIcon(file.name),
-          closable: true,
-          movable: true,
-        };
+      const listed = listedByPath.get(file.path);
+      const tab = {
+        id: rightPanelFileTab(file.file_id),
+        icon: getFileIcon(file.name),
+        closable: true,
+        movable: true,
+      };
+      if (
+        listed === undefined ||
+        publishedAt(listed) <= publishedAt(file.file_id)
+      )
+        return { ...tab, label: name };
       return {
-        id: tabId,
+        ...tab,
         label: t.markup("fileTab.earlierVersion", {
           name,
           isolate: (chunks) => chunks,
@@ -151,9 +160,6 @@ export const ChatRightPanel = memo(function ChatRightPanel({
             isolate: (chunks) => <bdi>{chunks}</bdi>,
           })
         ),
-        icon: getFileIcon(file.name),
-        closable: true,
-        movable: true,
       };
     }),
   ];
@@ -429,6 +435,8 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   );
 });
 
+const NO_PUBLISH_ORDER: ReadonlyMap<string, number> = new Map();
+
 interface CurrentChatRightPanelProps {
   open: boolean;
   sources: ReactNode;
@@ -446,6 +454,14 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
   const state = useCurrentRightPanelState();
   const dispatch = useChatSessionStore.getState().updateCurrentRightPanel;
   const files = useCurrentPublishedFiles();
+  const order = useChatSessionStore(
+    useShallow((store) => {
+      const session = store.sessions.get(store.currentSessionId ?? "");
+      return session
+        ? publishOrder(session.loadedPublishedFiles, session.messageTree)
+        : NO_PUBLISH_ORDER;
+    })
+  );
   return (
     <ChatRightPanel
       {...props}
@@ -453,6 +469,7 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
       state={state}
       dispatch={dispatch}
       files={files}
+      publishOrder={order}
     />
   );
 }

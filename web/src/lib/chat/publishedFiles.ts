@@ -58,7 +58,9 @@ export function addLoadedPublishedFiles(
  * path, newest first. They are the server's list, then the files that packets
  * published after the loads, such as live publishes. A replayed file that the
  * list leaves out stays out: an older copy, a file whose object is missing or
- * a file without a stamped path. Without a list, the packets give the files.
+ * a file without a path. So does a packet file that no load replayed
+ * but that comes before a file the list holds for its path. Without a list,
+ * the packets give the files.
  */
 export function chatPublishedFiles(
   loaded: LoadedPublishedFiles,
@@ -67,15 +69,23 @@ export function chatPublishedFiles(
   const packetFiles = [...messageTree.values()].flatMap((message) =>
     readPublishedFiles(message.packets)
   );
-  const files =
-    loaded.listed === null
-      ? packetFiles
-      : [
-          ...loaded.listed,
-          ...packetFiles.filter(
-            (file) => !loaded.replayedFileIds.has(file.file_id)
-          ),
-        ];
+  let files = packetFiles;
+  if (loaded.listed !== null) {
+    const listedIds = new Set(loaded.listed.map((file) => file.file_id));
+    const unreplayed = packetFiles.filter(
+      (file) => !loaded.replayedFileIds.has(file.file_id)
+    );
+    const lastListedIndex = new Map<string, number>();
+    unreplayed.forEach((file, index) => {
+      if (listedIds.has(file.file_id)) lastListedIndex.set(file.path, index);
+    });
+    files = [
+      ...loaded.listed,
+      ...unreplayed.filter(
+        (file, index) => index >= (lastListedIndex.get(file.path) ?? -1)
+      ),
+    ];
+  }
   const seenFileIds = new Set<string>();
   const newestByPath = new Map<string, PublishedFile>();
   for (const file of files) {
@@ -86,6 +96,29 @@ export function chatPublishedFiles(
     newestByPath.set(file.path, file);
   }
   return [...newestByPath.values()].reverse();
+}
+
+/**
+ * The order in which the chat's files were published, by file ID: the files
+ * that the loads replayed, then the files that only the server's list holds,
+ * then the files that packets published after the loads.
+ */
+export function publishOrder(
+  loaded: LoadedPublishedFiles,
+  messageTree: MessageTreeState
+): Map<string, number> {
+  const packetFiles = [...messageTree.values()].flatMap((message) =>
+    readPublishedFiles(message.packets)
+  );
+  const packetFileIds = new Set(packetFiles.map((file) => file.file_id));
+  const order = new Map<string, number>();
+  for (const file of [
+    ...packetFiles.filter((file) => loaded.replayedFileIds.has(file.file_id)),
+    ...(loaded.listed ?? []).filter((file) => !packetFileIds.has(file.file_id)),
+    ...packetFiles,
+  ])
+    if (!order.has(file.file_id)) order.set(file.file_id, order.size);
+  return order;
 }
 
 /**
