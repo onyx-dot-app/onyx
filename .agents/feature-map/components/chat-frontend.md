@@ -64,7 +64,7 @@
   card then becomes a one-line record of the outcome, or of "No longer
   waiting" when the server returns 409 or 404. The record shows in the region
   until the resolution packet arrives; from then on the reply's timeline
-  shows it next to its tool call (`AgentMessage`, `orderRecordsByTurn`), and
+  shows it next to its tool call (`AgentMessage:buildSectionSegments`), and
   a reload replays it there. While the turn waits, its stream ends with
   `stop(awaiting_user)` and the chat goes idle. That stop pauses the
   answer: `processPackets` does not count it. No stop changes a card: the
