@@ -218,8 +218,10 @@ replacement and agent prompts, and the files attached to the new message. Then
 smallest model of the turn, to decide whether project files go inline
 ([[projects]]). On each model call, the runtime counts the whole assembled
 request, tool definitions included, against `agents/compaction.py:context_budget`.
-That count uses `cl100k_base` and a fixed estimate per image
-(`agents/compaction.py:request_tokens`), not the model's tokenizer. It caps the output with `llm/token_budget.py:resolve_token_budget`
+When the run has no cached counts, a byte upper bound can prove the request
+fits below the compaction trigger with full output capacity. Otherwise the
+runtime counts text with `cl100k_base`. Both paths include a fixed estimate
+per image and cap output with `llm/token_budget.py:resolve_token_budget`
 ([[agent-runtime]]).
 
 **Compaction.** The runtime summarizes or truncates older history before a model

@@ -463,7 +463,6 @@ def _chat_agent(agent: Agent, max_steps: int = 1) -> ChatAgent:
         persona=None,
         user_memory_context=None,
         llm=agent.llm,
-        token_counter=len,
     )
     Agent.__init__(
         chat_agent,

@@ -470,7 +470,6 @@ def test_code_mode_names_preferred_tools_without_changing_definitions(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
         preferred_tool=CapabilityEntry(tool_id=preferred_tool_id),
     )
     run_agent(agent, messages=[UserMessage(content="Find")], max_steps=3)
@@ -508,7 +507,6 @@ def test_code_mode_keeps_identical_tool_definitions_on_the_final_step() -> None:
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
     )
     run_agent(agent, messages=[UserMessage(content="Find")], max_steps=2)
 
@@ -557,7 +555,6 @@ def test_the_next_run_of_the_same_agent_starts_new_cells() -> None:
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
     )
     run_agent(agent, messages=[UserMessage(content="First")], max_steps=3)
     run_agent(agent, messages=[UserMessage(content="Again")], max_steps=3)
@@ -594,7 +591,6 @@ def test_the_code_mode_step_cap_applies_when_code_mode_does(
         persona=None,
         user_memory_context=None,
         llm=ScriptedLLM([]),
-        token_counter=len,
     )
     assert agent.max_steps == step_cap
     assert CODE_MODE_MAX_LLM_CYCLES >= MAX_LLM_CYCLES
@@ -618,7 +614,6 @@ def test_the_file_notice_names_a_tool_that_runs_inside_programs() -> None:
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
         all_injected_file_metadata={
             "file-1": FileToolMetadata(
                 file_id="file-1", filename="report.pdf", approx_char_count=90_000
