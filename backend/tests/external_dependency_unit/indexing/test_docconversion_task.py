@@ -196,7 +196,10 @@ class _Run:
 def run(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Generator[_Run, None, None]:
+    # The tests expect the default window; a test of the window sets its own.
+    monkeypatch.setattr(run_docconversion, "DOCCONVERSION_WINDOW_BATCHES", 32)
     ensure_source_node_exists(db_session, DocumentSource.MOCK_CONNECTOR)
     pair = make_cc_pair(db_session)
     run = _Run(db_session, pair)
@@ -284,6 +287,9 @@ def test_a_worker_builds_the_connector_once_for_an_attempt(run: _Run) -> None:
     run.convert(1)
 
     assert run.build.call_count == 1  # ty: ignore[unresolved-attribute]
+    # The conversion threads' calls wait after listing and permission sync.
+    build_kwargs = run.build.call_args.kwargs  # ty: ignore[unresolved-attribute]
+    assert build_kwargs["bulk_source_api_calls"] is True
     assert len(run.connector.calls) == 2
 
 
