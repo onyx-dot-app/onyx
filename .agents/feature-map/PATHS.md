@@ -273,6 +273,9 @@ covers new files that match it.
 | `web/src/lib/timeline/` | chat-frontend, craft-frontend |
 | `web/src/lib/app/hooks.ts` | chat-frontend, whitelabelling-and-theme |
 | `web/src/lib/hooks.ts` | chat-frontend |
+| `web/src/hooks/useHighlightLanguages.ts`, `web/src/hooks/useSmoothStreaming.ts`, `web/src/hooks/useTypewriter.ts`, `web/src/hooks/useBrowserInfo.ts`, `web/src/providers/FullWidthChatProvider.tsx` | chat-frontend |
+| `web/src/hooks/useEscapeInterrupt.ts` | craft-frontend |
+| `web/src/sections/oauth/DesktopOAuthHandoff.tsx` | desktop-widget-extensions |
 | `web/src/providers/IncognitoProvider.tsx` | chat-frontend, chat-persistence |
 | `web/src/sections/model-selector/` | chat-frontend, llm-providers |
 | `web/src/lib/search/streamingUtils.ts`, `web/src/app/app/services/streamingModels.ts` | streaming-protocol |
@@ -422,4 +425,5 @@ the admin routes and check that each has a row above, run
 | `web/src/lib/types.ts` | Shared frontend types for users, preferences, permissions, and connectors. Read the component that owns the changed type. |
 | `web/src/sections/admin/` | Admin UI that several admin pages share, such as `ProviderCard` (Tracing, Voice, Web Search) and the Lite-mode indexing notice. Read the calling page's component. |
 | `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/`, `web/src/hooks/useContainerCenter.ts`, `web/src/hooks/usePaginatedFetch.ts`, `web/src/hooks/useUnsavedChangesGuard.ts`, `web/src/hooks/useDraft.ts` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
-| `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/not-found.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/tailwind-themes/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |
+| `web/src/hooks/useIsDisplayed.ts`, `web/src/hooks/useOnMount.ts`, `web/src/hooks/useVisibilityGatedInterval.ts`, `web/src/lib/dateUtils.ts`, `web/src/lib/typingUtils.ts` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
+| `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/not-found.tsx`, `web/src/app/global-error.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/tailwind-themes/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |
