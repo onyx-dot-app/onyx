@@ -298,6 +298,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
       }
       focusOnOpen={false}
       animate={!layout.dragging}
+      shows={shown}
     >
       <aside
         aria-label={

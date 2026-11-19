@@ -4,14 +4,15 @@ import { ChatSidePanel } from "@/sections/chat/ChatSidePanel";
 interface ViewProps {
   open: boolean;
   onClose: () => void;
+  shows?: string;
 }
 
-function View({ open, onClose }: ViewProps) {
+function View({ open, onClose, shows }: ViewProps) {
   return (
     <>
       <button type="button">Open</button>
       <button type="button">Switch</button>
-      <ChatSidePanel open={open} onEscape={onClose}>
+      <ChatSidePanel open={open} onEscape={onClose} shows={shows}>
         <button type="button">Inside</button>
       </ChatSidePanel>
     </>
@@ -36,6 +37,27 @@ test("a closed panel is inert, and closing returns focus to its opener", () => {
 
   rerender(<View open={false} onClose={onClose} />);
   expect(document.activeElement).toBe(opener);
+});
+
+test("closing returns focus to the element outside that last switched the panel", () => {
+  const onClose = jest.fn();
+  const { rerender } = render(
+    <View open={false} onClose={onClose} shows="sources" />
+  );
+  const opener = screen.getByText("Open");
+  const switcher = screen.getByText("Switch");
+  const inside = screen.getByText("Inside");
+
+  opener.focus();
+  rerender(<View open onClose={onClose} shows="sources" />);
+  switcher.focus();
+  rerender(<View open onClose={onClose} shows="files" />);
+  // A switch from inside the panel keeps the element outside that switched it
+  inside.focus();
+  rerender(<View open onClose={onClose} shows="file:report" />);
+
+  rerender(<View open={false} onClose={onClose} shows="file:report" />);
+  expect(document.activeElement).toBe(switcher);
 });
 
 test("Escape closes an open preview first, and the panel on the next press", () => {
