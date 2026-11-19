@@ -17,6 +17,19 @@ after the other calls, such as listing and permission sync, so a few of those
 do not starve behind many conversion threads. The calls of one class go in
 the order they came.
 
+The calls of one process wait at a gate: one for each credential, API and
+class. Only the call at the head of a gate talks to Redis and holds a place
+in its queues, so Redis sees about one waiter for each process and class,
+not one for each thread. The head sleeps until Redis says that its slot is
+due. When it takes its slot, the next call of the gate becomes the head and
+gets a new place at the back of the Redis queue, so the processes take turns.
+A head that only its user's windows block waits alone, so that one user's
+cut does not hold up the other users of the process.
+
+A credential window keeps its share past a run (see redis_rate_window). A new
+run starts from the share that the source accepted before, or from a
+conservative start share, and not at the full budget.
+
 Each budget is for a period (a minute for Google), but the window that
 enforces it is shorter, with the same rate. A window of the whole period lets
 the full budget go in one burst, and then lets requests in only as the burst
@@ -29,6 +42,7 @@ whole period, with the full budget, stops that.
 import math
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from uuid import uuid4
 
@@ -50,9 +64,17 @@ from onyx.connectors.models import ConnectorStopSignal
 
 # no-direct-redis: allow the budget is shared by every indexing and sync worker
 from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_rate_window import RateWindow, RedisRateWindows, WaitTurn
+from onyx.redis.redis_rate_window import (
+    WAITER_STALE_SECONDS,
+    AcquireResult,
+    RateWindow,
+    RedisRateWindows,
+    WaitTurn,
+    WindowStart,
+)
 from onyx.server.metrics.source_api_metrics import (
     LimiterScope,
+    add_local_waiters,
     allowed_units,
     observe_user_budget,
     record_late_refusals,
@@ -61,6 +83,7 @@ from onyx.server.metrics.source_api_metrics import (
     record_limiter_wait,
     set_project_budget,
     set_project_ceiling,
+    set_redis_waiters,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -75,6 +98,63 @@ _STOP_CHECK_INTERVAL_SECONDS = 5.0
 # can serve in this time. The source's own answer then decides, and the
 # connector's retries handle a refusal.
 MAX_WAIT_SECONDS = 300.0
+# A head that waits tries again at least this often, so that its place in the
+# Redis queue does not go stale.
+_REFRESH_SECONDS = WAITER_STALE_SECONDS / 2
+
+
+class _Ticket:
+    """One call that waits at a gate."""
+
+    __slots__ = ("token", "turn")
+
+    def __init__(self) -> None:
+        self.token = uuid4().hex
+        # Set when the call is at the head of its gate.
+        self.turn = threading.Event()
+
+
+class _Gate:
+    """The calls of this process that wait for one budget of one class, in
+    the order they came."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._tickets: deque[_Ticket] = deque()
+
+    def join(self, ticket: _Ticket) -> None:
+        with self._lock:
+            self._tickets.append(ticket)
+            if len(self._tickets) == 1:
+                ticket.turn.set()
+
+    def leave(self, ticket: _Ticket) -> None:
+        """Removes the call, and wakes the next call when it was the head.
+        A call that already left is ignored."""
+        with self._lock:
+            if not self._tickets:
+                return
+            was_head = self._tickets[0] is ticket
+            try:
+                self._tickets.remove(ticket)
+            except ValueError:
+                return
+            if was_head and self._tickets:
+                self._tickets[0].turn.set()
+
+
+_gates: dict[tuple[str, str, bool], _Gate] = {}
+_gates_lock = threading.Lock()
+
+
+def _gate(tenant_id: str, budget_key: str, bulk: bool) -> _Gate:
+    key = (tenant_id, budget_key, bulk)
+    with _gates_lock:
+        gate = _gates.get(key)
+        if gate is None:
+            gate = _Gate()
+            _gates[key] = gate
+        return gate
 
 
 class SourceApiBudget(BaseModel):
@@ -89,6 +169,10 @@ class SourceApiBudget(BaseModel):
     # True when the source counts requests, so a call costs its number of
     # requests whatever cost the connector gives.
     count_requests: bool = False
+    # The share of the credential budget that a new run starts from when no
+    # accepted share is stored. None starts at the full budget and stores
+    # nothing.
+    start_share: float | None = None
 
 
 class RedisSourceApiLimiter(SourceApiLimiter):
@@ -103,6 +187,7 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         bulk: bool = False,
     ) -> None:
         self._source = source.value
+        self._tenant_id = tenant_id
         self._prefix = f"{_KEY_PREFIX}:{credential_key}"
         self._budgets = budgets
         self._should_stop = should_stop
@@ -118,7 +203,12 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         budget = self._budgets.get(api)
         if budget is None or budget.per_credential is None:
             return None
-        return _window(f"{self._prefix}:{api}:all", budget.per_credential, budget)
+        return _window(
+            f"{self._prefix}:{api}:all",
+            budget.per_credential,
+            budget,
+            budget.start_share,
+        )
 
     def user_window(self, api: str, user: str | None) -> RateWindow | None:
         budget = self._budgets.get(api)
@@ -172,9 +262,21 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         """Takes the call's units and returns 0, or returns the seconds until
         a full window can have room for it. ``turn`` keeps the call's place
         among the waiters; ``force`` takes the units over the budget."""
+        return self._try(api, cost, user, request_count, turn, force).wait_seconds
+
+    def _try(
+        self,
+        api: str,
+        cost: int,
+        user: str | None,
+        request_count: int,
+        turn: WaitTurn | None,
+        force: bool,
+    ) -> AcquireResult:
         if api not in self._budgets:
-            return 0
+            return AcquireResult(wait_seconds=0, shares=[], epochs=[])
         user_window = self.user_window(api, user)
+        credential_window = self.credential_window(api)
         windows = self._all_windows(api, user)
         result = self._windows.try_acquire_with_shares(
             windows,
@@ -189,11 +291,24 @@ class RedisSourceApiLimiter(SourceApiLimiter):
             if window.key.endswith(":period"):
                 continue
             self._record_budget(api, window, share, window == user_window)
+        for window, start, queued, share in zip(
+            windows, result.starts, result.queued, result.shares, strict=False
+        ):
+            if window != credential_window:
+                continue
+            set_redis_waiters(self._source, api, queued)
+            if start != WindowStart.NONE:
+                logger.info(
+                    "The shared budget %s starts at %.0f%% of its limit (%s).",
+                    window.key,
+                    share * 100,
+                    "stored" if start == WindowStart.STORED else "cold start",
+                )
         if result.wait_seconds == 0:
             epochs: dict[str, int] = vars(self._thread_epochs).setdefault("epochs", {})
             for window, epoch in zip(windows, result.epochs, strict=False):
                 epochs[window.key] = epoch
-        return result.wait_seconds
+        return result
 
     def _record_budget(
         self, api: str, window: RateWindow, share: float, user_scope: bool
@@ -209,6 +324,29 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         else:
             set_project_budget(self._source, api, allowed)
 
+    def _blocked_by_user_only(
+        self, api: str, user: str | None, result: AcquireResult
+    ) -> bool:
+        """True when only the user's windows did not fit the call."""
+        windows = self._all_windows(api, user)
+        shared = {self.credential_window(api), self.credential_guard(api)}
+        blocked = [
+            window
+            for window, is_blocked in zip(windows, result.blocked, strict=False)
+            if is_blocked
+        ]
+        return bool(blocked) and all(window not in shared for window in blocked)
+
+    def _sleep(self, seconds: float) -> None:
+        """Sleeps, and checks the stop signal at least every few seconds."""
+        end = time.monotonic() + seconds
+        while True:
+            left = end - time.monotonic()
+            if left <= 0:
+                return
+            time.sleep(min(left, _STOP_CHECK_INTERVAL_SECONDS))
+            self._check_stop()
+
     @override
     def acquire(
         self,
@@ -221,24 +359,53 @@ class RedisSourceApiLimiter(SourceApiLimiter):
     ) -> None:
         if api not in self._budgets:
             return
-        turn = WaitTurn(token=uuid4().hex, bulk=bulk or self._bulk)
+        is_bulk = bulk or self._bulk
+        gate = _gate(self._tenant_id, f"{self._prefix}:{api}", is_bulk)
+        ticket = _Ticket()
+        turn = WaitTurn(token=ticket.token, bulk=is_bulk)
         started = time.monotonic()
-        slept = 0.0
+        waited_at_all = False
         taken = False
+        tried = False
+        # A call that only its user's windows block waits alone, out of
+        # the gate.
+        alone = False
+        gate.join(ticket)
+        add_local_waiters(self._source, api, 1)
         try:
             while True:
                 waited = time.monotonic() - started
                 force = waited >= MAX_WAIT_SECONDS
-                wait = self.try_acquire(api, cost, user, request_count, turn, force)
-                if wait == 0:
+                if not force and not alone and not ticket.turn.is_set():
+                    # Another call of this process is at the head.
+                    self._check_stop()
+                    waited_at_all = True
+                    ticket.turn.wait(
+                        min(_STOP_CHECK_INTERVAL_SECONDS, MAX_WAIT_SECONDS - waited)
+                    )
+                    continue
+                result = self._try(api, cost, user, request_count, turn, force)
+                tried = True
+                if result.wait_seconds == 0:
                     taken = True
                     break
+                if not alone and self._blocked_by_user_only(api, user, result):
+                    alone = True
+                    gate.leave(ticket)
                 self._check_stop()
-                sleep = min(
-                    wait, _STOP_CHECK_INTERVAL_SECONDS, MAX_WAIT_SECONDS - waited
+                waited_at_all = True
+                # Redis gives the time when the slot is due. A long wait
+                # still tries again before its place goes stale.
+                self._sleep(
+                    max(
+                        0.0,
+                        min(
+                            result.wait_seconds,
+                            _REFRESH_SECONDS,
+                            MAX_WAIT_SECONDS - waited,
+                        ),
+                    )
                 )
-                time.sleep(max(0.0, sleep))
-                slept += sleep
             if force:
                 record_limiter_overdraft(self._source, api)
                 logger.warning(
@@ -247,17 +414,20 @@ class RedisSourceApiLimiter(SourceApiLimiter):
                     api,
                     waited,
                 )
-            # A stop during the last sleep ends the call before its request.
-            if slept > 0:
+            # A stop during the last wait ends the call before its request.
+            if waited_at_all:
                 self._check_stop()
         finally:
-            if not taken:
+            gate.leave(ticket)
+            add_local_waiters(self._source, api, -1)
+            if tried and not taken:
                 self._windows.leave(
                     self._all_windows(api, user),
                     turn,
                     self._units(api, cost, request_count),
                 )
-            record_limiter_wait(self._source, api, slept)
+            if waited_at_all:
+                record_limiter_wait(self._source, api, time.monotonic() - started)
 
     def _check_stop(self) -> None:
         if self._should_stop is not None and self._should_stop():
@@ -302,14 +472,25 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         )
 
 
-def _window(key: str, limit: int, budget: SourceApiBudget) -> RateWindow:
+def _window(
+    key: str,
+    limit: int,
+    budget: SourceApiBudget,
+    start_share: float | None = None,
+) -> RateWindow:
     """The window that enforces ``limit`` for the budget's period."""
     if budget.window_seconds is None or budget.window_seconds >= budget.period_seconds:
-        return RateWindow(key=key, limit=limit, period_seconds=budget.period_seconds)
+        return RateWindow(
+            key=key,
+            limit=limit,
+            period_seconds=budget.period_seconds,
+            start_share=start_share,
+        )
     return RateWindow(
         key=key,
         limit=max(1, math.floor(limit * budget.window_seconds / budget.period_seconds)),
         period_seconds=budget.window_seconds,
+        start_share=start_share,
     )
 
 
@@ -326,6 +507,10 @@ def _period_guard(key: str, limit: int, budget: SourceApiBudget) -> RateWindow |
 # Google's quotas are for one minute. A window of 10 seconds keeps the rate
 # steady; see the module docstring.
 _GOOGLE_WINDOW_SECONDS = 10.0
+# With no accepted share stored, a run starts at this share of the project
+# budget and grows from it. Google accepted about 0.25-0.29 of the bench
+# budget; a start at the full budget refused most calls in the first minutes.
+GOOGLE_START_SHARE = 0.25
 
 # The budgets of Google's Drive and Docs quotas, from the configuration.
 GOOGLE_DRIVE_BUDGETS: dict[str, SourceApiBudget] = {
@@ -334,11 +519,13 @@ GOOGLE_DRIVE_BUDGETS: dict[str, SourceApiBudget] = {
         per_user=GOOGLE_DRIVE_QUOTA_PER_USER,
         count_requests=GOOGLE_DRIVE_QUOTA_MODEL == "requests",
         window_seconds=_GOOGLE_WINDOW_SECONDS,
+        start_share=GOOGLE_START_SHARE,
     ),
     DriveQuotaApi.DOCS.value: SourceApiBudget(
         per_credential=GOOGLE_DOCS_READS_PER_PROJECT,
         per_user=GOOGLE_DOCS_READS_PER_USER,
         window_seconds=_GOOGLE_WINDOW_SECONDS,
+        start_share=GOOGLE_START_SHARE,
     ),
 }
 

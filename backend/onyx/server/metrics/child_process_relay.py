@@ -38,6 +38,8 @@ from onyx.server.metrics.source_api_metrics import (
     LIMITER_BUDGET,
     LIMITER_CUT_USERS,
     LIMITER_CUTS,
+    LIMITER_LOCAL_WAITERS,
+    LIMITER_REDIS_WAITERS,
     LIMITER_WAIT_SECONDS,
     SOURCE_API_REQUESTS,
 )
@@ -69,6 +71,8 @@ RELAYED_COUNTERS: tuple[Counter, ...] = (
 RELAYED_GAUGES: tuple[tuple[Gauge, GaugeMerge], ...] = (
     (LIMITER_BUDGET, GaugeMerge.MIN),
     (LIMITER_CUT_USERS, GaugeMerge.MAX),
+    (LIMITER_LOCAL_WAITERS, GaugeMerge.SUM),
+    (LIMITER_REDIS_WAITERS, GaugeMerge.MAX),
     (ADAPTIVE_POOL_LIMIT, GaugeMerge.SUM),
     (ADAPTIVE_POOL_IN_FLIGHT, GaugeMerge.SUM),
 )

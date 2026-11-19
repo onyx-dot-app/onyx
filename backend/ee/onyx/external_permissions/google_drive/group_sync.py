@@ -265,8 +265,9 @@ def _get_drive_members(
         # the Google Workspace directory — the connector is misconfigured
         # (primary admin is not an admin, or delegation isn't granted).
         # Raise PermissionError so the caller marks the sync attempt as a
-        # clean failure instead of treating this as an unhandled crash.
-        if e.status_code == 403:
+        # clean failure instead of treating this as an unhandled crash. A
+        # 403 for the rate is no such denial: it raises as it is.
+        if e.access_denied and e.status_code == 403:
             raise PermissionError(
                 f"Primary admin {google_drive_connector.primary_admin_email} "
                 "is not authorized on the Google Workspace directory API. "
@@ -296,7 +297,9 @@ def _get_drive_members(
                 elif permission["type"] == PermissionType.USER:
                     user_emails.add(permission["emailAddress"])
         except GoogleDriveHttpError as e:
-            if e.status_code in (403, 404):
+            # Only a denial means "no access". A rate refusal must fail the
+            # sync: a drive with no members would remove its users' access.
+            if e.access_denied:
                 logger.warning(
                     "Error getting permissions for drive id %s. User '%s' likely does not have access to this drive (status=%s). Exception: %s",
                     drive_id,

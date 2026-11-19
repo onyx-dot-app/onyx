@@ -13,6 +13,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import HttpRequest
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.google_drive import source_operations
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import GoogleDriveAuth, GoogleSharedDrive
@@ -985,3 +986,36 @@ def test_drive_and_member_listings_spend_list_units() -> None:
         )
 
     assert limiter.spent == [("drive", 100, "a@co.com"), ("drive", 5, "a@co.com")]
+
+
+def _rate_limited_403() -> GoogleDriveHttpError:
+    return GoogleDriveHttpError(
+        status_code=403,
+        reasons=("userRateLimitExceeded",),
+        access_denied=False,
+        message="User Rate Limit Exceeded",
+    )
+
+
+def test_a_rate_limit_in_validation_is_not_a_permission_error() -> None:
+    """A permission error marks the pair invalid. Google's 403 for a rate
+    limit is a temporary error."""
+    connector = GoogleDriveConnector(include_my_drives=True)
+    ops = mock.MagicMock(spec=GoogleDriveSourceOperations)
+    ops.list_files.side_effect = _rate_limited_403()
+    connector._ops = ops
+    connector._primary_admin_email = "admin@co.com"
+
+    with pytest.raises(UnexpectedValidationError):
+        connector.validate_connector_settings()
+
+
+def test_a_rate_limit_in_the_directory_probe_is_not_a_permission_error() -> None:
+    connector = GoogleDriveConnector(include_my_drives=True)
+    ops = mock.MagicMock(spec=GoogleDriveSourceOperations)
+    ops.get_admin_user.side_effect = _rate_limited_403()
+    connector._ops = ops
+    connector._primary_admin_email = "admin@co.com"
+
+    with pytest.raises(UnexpectedValidationError):
+        connector.probe_directory_admin_permission()

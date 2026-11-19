@@ -23,6 +23,7 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
+    UnexpectedValidationError,
 )
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.doc_conversion import (
@@ -2116,6 +2117,13 @@ class GoogleDriveConnector(
 
         except GoogleDriveHttpError as e:
             status_code = e.status_code
+            if e.rate_limited:
+                # Google refused the call for its rate, after the retries.
+                # The credential is fine, so the pair must not become
+                # invalid.
+                raise UnexpectedValidationError(
+                    f"Google Drive refused the validation call for its rate: {e}"
+                ) from e
             if status_code == 401:
                 raise CredentialExpiredError(
                     "Invalid or expired Google Drive credentials (401)."
@@ -2157,6 +2165,11 @@ class GoogleDriveConnector(
             self.ops.get_admin_user()
         except GoogleDriveHttpError as e:
             status_code = e.status_code
+            if e.rate_limited:
+                raise UnexpectedValidationError(
+                    "The Google Workspace directory API refused the probe for "
+                    f"its rate: {e}"
+                ) from e
             if status_code == 403:
                 raise InsufficientPermissionsError(
                     f"Primary admin {self.primary_admin_email} is not authorized "
