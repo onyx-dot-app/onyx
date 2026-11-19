@@ -53,6 +53,12 @@ function setChatState(chatState: ChatState) {
   );
 }
 
+/** The spacer sits where the messages end, 1000px down. */
+function placeContentEnd(container: HTMLElement) {
+  const spacer = container.querySelector<HTMLElement>("[data-dynamic-spacer]");
+  if (spacer) spacer.getBoundingClientRect = () => ({ top: 1000 }) as DOMRect;
+}
+
 function spacerHeight(container: HTMLElement): string | undefined {
   return container.querySelector<HTMLElement>("[data-dynamic-spacer]")?.style
     .height;
@@ -82,6 +88,7 @@ test("a run the page resumes does not push the history up", async () => {
 
 test("a message sent from the page pushes the history up", async () => {
   const { container } = render(<Chat spacerHeightRef={{ current: 0 }} />);
+  placeContentEnd(container);
 
   setChatState("loading");
   setChatState("streaming");
@@ -95,6 +102,7 @@ test("removing the spacer clears the height the scroll container reads", async (
   const { container, rerender } = render(
     <Chat spacerHeightRef={spacerHeightRef} />
   );
+  placeContentEnd(container);
   setChatState("loading");
   setChatState("streaming");
   await waitFor(() => expect(spacerHeight(container)).toBe("484px"));

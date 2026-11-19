@@ -64,6 +64,15 @@ export interface ChatScrollContainerProps {
   fullWidth?: boolean;
 }
 
+// Following new content scrolls to the real end, spacer included. So only
+// that end counts as "at bottom" for following.
+function isAtScrollEnd(container: HTMLElement, thresholdPx: number): boolean {
+  return (
+    container.scrollHeight - container.clientHeight - container.scrollTop <=
+    thresholdPx
+  );
+}
+
 // Build a CSS mask that fades content opacity at top/bottom edges
 function buildContentMask(): string {
   // Mask uses black = visible, transparent = hidden
@@ -220,13 +229,17 @@ const ChatScrollContainer = React.memo(
                 };
               }
               // A user can interrupt the glide before it reaches the bottom.
-              isAtBottomRef.current = updateScrollState().isAtBottom;
+              updateScrollState();
+              isAtBottomRef.current = isAtScrollEnd(
+                container,
+                buttonThresholdPx
+              );
             }, 600);
           } else {
             isAutoScrollingRef.current = false;
           }
         },
-        [updateScrollState]
+        [updateScrollState, buttonThresholdPx]
       );
 
       useEffect(
@@ -281,20 +294,24 @@ const ChatScrollContainer = React.memo(
           height: container.scrollHeight,
         };
 
-        // Only upward movement can stop following new content.
+        // Only upward movement can stop following new content. Measure from
+        // the real end: the spacer below a new message hides no content, but
+        // following would still pull the user back down through it.
+        const atScrollEnd = isAtScrollEnd(container, buttonThresholdPx);
         if (scrolledUp) {
           followOpeningUntilRef.current = 0;
-          isAtBottomRef.current = updateScrollState().isAtBottom;
+          updateScrollState();
+          isAtBottomRef.current = atScrollEnd;
         } else {
           // Returning to the bottom resumes following.
           const state = getScrollState();
-          if (state.isAtBottom) isAtBottomRef.current = true;
+          if (atScrollEnd) isAtBottomRef.current = true;
           setHasContentAbove(state.hasContentAbove);
           setHasContentBelow(state.hasContentBelow);
           // Update button visibility based on actual position
           onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
         }
-      }, [updateScrollState, getScrollState]);
+      }, [updateScrollState, getScrollState, buttonThresholdPx]);
 
       // MutationObserver (structural) + ResizeObserver (height growth).
       // Re-attached per session: the scroll element remounts on a session
