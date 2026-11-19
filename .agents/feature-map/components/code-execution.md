@@ -553,11 +553,13 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     `tools/tool_implementations/code_mode/cells.py:PARK_REFUSED_MESSAGE`, and the program continues. A dump that
     still runs out of memory loses the worker, so the program stops with
     `tools/tool_implementations/code_mode/sandbox.py:PARK_MEMORY_MESSAGE`. When the run
-    suspends, a parked cell whose observation waits is saved with the Monty
-    version that dumped it; other cells close. The cell keeps the request of
-    each waiting call (`SavedCodeCell.requests`).
-    After the answers, the observation's continuation builds the cell, takes a
-    running-cell slot, waiting for one, and loads the dump on a new worker.
+    suspends, a cell whose program is parked for input is saved with the Monty
+    version that dumped it, with or without an observation; other cells close.
+    The cell keeps the request of each waiting call (`SavedCodeCell.requests`).
+    After the answers, the cell continues as the `CodeCells.resume` (an
+    observation waited) or `CodeCells.continue_open` (no observation) row of
+    the Architecture flow says: it takes a running-cell slot, waiting for one,
+    and loads the dump on a new worker.
     A dump from another Monty version stops the program with
     `tools/tool_implementations/code_mode/cells.py:PROGRAM_VERSION_MESSAGE`. An approved call runs then, unless its
     tool is gone, its function name now names another tool, or its parameters

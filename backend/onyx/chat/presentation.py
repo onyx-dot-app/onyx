@@ -427,8 +427,8 @@ class ResponsePresenter:
         settings: dict[str, MessageRendering],
     ) -> None:
         """Send the saved output of a suspended response that this stream
-        continues, then `ReplayEnd`; its calls that wait stay open for their
-        live events."""
+        continues, then `ReplayEnd`; the live events of its calls reuse their
+        cards, and its calls that wait stay open."""
         for packet in replay_response(
             response,
             replay.tools,
@@ -495,26 +495,20 @@ class ResponsePresenter:
                 return
             key = (event.run_id, event.message_id, event.tool_call.id)
             tool = self.tools.get(key)
+            amended = isinstance(event, ToolResultAmendedEvent)
             if tool is None:
-                # A call recorded before a restore has no card in this stream.
-                # An amended result or an input request of a program that
-                # still runs renders in a new card, which later events of the
-                # call reuse.
+                # A call that this stream did not draw gets an open card, which
+                # later events of the call reuse. An amended result completes it.
                 renderer = self.renderers.get(event.run_id)
-                amended = event if isinstance(event, ToolResultAmendedEvent) else None
                 tool = self.tools[key] = tool_renderer(
                     event.tool_call,
                     renderer.tool_placement(event.tool_call.id)
                     if renderer is not None
                     else self.layout.next_section(parent.placement if parent else None),
                     self.tool_ids.get(event.tool_call.name),
-                    amended.display_name if amended is not None else None,
-                    ended=amended is None,
+                    event.display_name if amended else None,
                 )
-            if isinstance(event, ToolResultAmendedEvent):
-                output = tool.amend(event.result)
-            else:
-                output = tool.consume(event)
+            output = tool.amend(event.result) if amended else tool.consume(event)
         elif isinstance(event, AgentEndEvent):
             # The response owner reports classified failures separately.
             for key in tuple(self.tools):
@@ -570,8 +564,9 @@ def replay_response(
     the same way. The
     calls of a suspended response that have no result stay open, as its stream
     left them. With `open_calls`, the replay starts a stream that continues the
-    response: it collects those calls' renderers, by run, message and call ID,
-    for their live events, and sends no stop. The session response carries the saved message error separately.
+    response: it collects the renderer of each call it draws, ended or open
+    and in child runs too, by run, message and call ID, so that the call's
+    live events reuse its card, and sends no stop. The session response carries the saved message error separately.
     Stop packets close rendering; they do not classify execution success or
     failure.
     """
@@ -694,15 +689,13 @@ def replay_response(
                         layout,
                         tool_placement,
                         approvals=approvals,
+                        open_calls=open_calls,
                     )
                 )
-            if waits:
-                if open_calls is not None:
-                    open_calls[(response.run_id, message_id, call.id)] = (
-                        renderer_of_call
-                    )
-                continue
-            packets.extend(renderer_of_call.complete(result))
+            if open_calls is not None:
+                open_calls[(response.run_id, message_id, call.id)] = renderer_of_call
+            if not waits:
+                packets.extend(renderer_of_call.complete(result))
     if response.parent_run_id is None and open_calls is None:
         packets.append(
             Packet(

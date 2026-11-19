@@ -315,10 +315,10 @@ Onyx starts that stream before the decision call returns, and `continuation` in 
 | `continuation.stream_id` | The ID of the new stream. It is not a message ID. |
 | `continuation.response_ids` | The IDs of the assistant messages that the stream writes, in model order for a turn that compares models. |
 
-A decision that the user makes while another part of the answer still runs applies in the stream that you read.
-That stream does not stop with `awaiting_user`. Keep reading it. In the answer's first stream, `continuation` is `null`.
-In a continuation stream, `continuation` names that stream.
-A request that the user decides while the model writes the final answer ends with the answer, and its call does not run.
+A decision made while another part of the answer runs applies in the stream you read;
+that stream does not stop with `awaiting_user`.
+A request of a background program that the user decides while the model writes the final answer ends with the answer,
+and its call does not run.
 
 `continuation` names a stream when a continuation stream of the answer runs after the decision.
 Ignore a `continuation` whose `stream_id` is the stream that you read. It is `null` in these cases:

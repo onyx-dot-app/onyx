@@ -251,7 +251,7 @@ The continuation returns a result, or another `NestedInputWait`.
 A tool that stops waiting, for example because its program ended, ends the request with `NestedCallGate.withdraw`.
 A request that no `NestedInputWait` holds stays open: the run saves it in `RunProgress.open_inputs`, also while it suspends.
 Its answer goes to `AgentTool.continue_open_input` of the tool that made the call, such as for a program that waits in the background.
-The tool returns the requests that it took; the run ends those, and offers the others again later.
+The tool returns the requests that it took; the run ends those, and offers the others again when the call's answered requests change.
 Open requests end with the run.
 A hook that raises fails the run, as for a direct call: `decide` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
 A code mode program stops at the failure; the observation that reports its end raises it.
@@ -291,10 +291,9 @@ The `ToolInvocation` argument provides everything the tool needs:
   The details type defines snapshot or delta semantics. Return the complete value in `ToolResult`.
 - `agents` — the subagent coordinator (next section).
 - `run_work` — the run's work. A tool that starts work which outlives the call, such as a code mode
-  program's driver, adds it with `run_work.track_operation(future)`. The tool phase does not suspend
-  and the run does not drain until this work ends; an answer or Stop wakes the wait.
-  `run_work.track_detached(future)` holds only the drain, for work such as a tool call that a program
-  left running when it ended. The run calls `on_drained` and becomes idle after both.
+  program's driver, adds it with `run_work.track_operation(future)`, which holds the tool phase and
+  the drain. `run_work.track_detached(future)` holds only the drain, for work such as a tool call that
+  a program left running when it ended.
 
 Tool calls run in parallel by default. `SEQUENTIAL` orders calls to the same registered tool name
 within one step. Sequential tools with the same `sequence_group`, such as the sandbox file tools,
@@ -532,7 +531,8 @@ The runtime finishes in-flight tools and callbacks before releasing its workers.
 It can suspend during the tool phase with unanswered calls, or before the next step after its feature hooks finish.
 Snapshots taken during provider I/O or arbitrary callbacks support inspection only.
 
-The tool phase suspends only when no call of the step runs and the run's work is idle (see `run_work` in [Tools](#tools)).
+The tool phase suspends only when no call of the step runs and no `run_work.track_operation` work runs (see `run_work` in [Tools](#tools)).
+An answer or Stop wakes the wait.
 A code cell's lifetime bounds its program; a tool call that the program left running does not hold the phase.
 `OPERATION_TIMEOUT_SECONDS` bounds the wait as a backstop. The runtime does not stop work to suspend.
 An answer that arrives first is applied in the same execution, without a suspension.
@@ -547,7 +547,7 @@ A request takes answers once the run saves it, a direct call's request or one in
 A `standing` approval also approves later calls of the same action; the application that answers applies it to those calls.
 Approval executes the exact pending call. A result answer completes the question without repeating its tool code.
 The run publishes `input_ended` with the call and its answer when it applies the answer.
-Repeated identical answers do not repeat actions; conflicting answers fail. An answer that changes only `standing` replaces the recorded one.
+Repeated identical answers do not repeat actions; conflicting answers fail. An answer that only makes the recorded approval `standing` replaces it; one that only drops `standing` repeats it.
 
 `run.wait_until_settled(timeout=...)` waits for suspension or terminal output.
 `run.result()` remains terminal-only, so use the settled wait when the run can request input.

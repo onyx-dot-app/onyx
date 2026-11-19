@@ -37,7 +37,9 @@ from onyx.agents.tools import (
     ToolOutcome,
 )
 from onyx.chat.emitter import Emitter
+from onyx.chat.models import ResponseReplayData
 from onyx.chat.presentation import ResponsePresenter
+from onyx.chat.response import response_record
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -49,7 +51,14 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.server.query_and_chat.streaming_models import Packet, ToolApprovalRequest
+from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import (
+    CodeModeStart,
+    Packet,
+    SectionEnd,
+    ToolApprovalRequest,
+    ToolApprovalResolved,
+)
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.code_mode import sandbox
@@ -529,6 +538,33 @@ def _background_send_agents() -> Agents:
             _read_cell(1),
         )
     )
+
+
+def test_a_background_cell_keeps_its_request_across_a_handoff() -> None:
+    """The background cell saves without an observer, the parked program with
+    one; another process runs both approved calls."""
+    agents = _background_send_agents()
+    run = agents.agent().start(max_steps=5, messages=[UserMessage(content="Send")])
+    _suspended(run)
+    checkpoint = _transferred(run)
+    assert checkpoint.run_state.progress is not None
+    cells = SavedCells.model_validate(checkpoint.run_state.progress.feature_state)
+    assert {cell.cell_id: cell.observer is None for cell in cells.cells} == {
+        1: True,
+        2: False,
+    }
+
+    resumed = agents.agent(checkpoint.agent_state).resume(
+        checkpoint.run_state,
+        answers=[
+            _answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID),
+            _answer(InputDecision.APPROVE),
+        ],
+    )
+    resumed.result(timeout=20)
+    assert resumed.wait_for_idle(10)
+
+    assert set(agents.sent) == {"bg", "x"} and len(agents.sent) == 2
 
 
 def test_a_background_cell_continues_once_its_request_has_an_answer() -> None:
@@ -1038,29 +1074,34 @@ def test_a_continued_background_program_shows_its_next_request_at_its_call() -> 
         assert run.wait_for_idle(10)
 
 
-def test_a_resumed_background_program_shows_its_next_request() -> None:
-    """In another process, the stream has no card for the call that started
-    the background cell; the request gets one."""
+def test_a_resumed_background_program_shows_its_next_request_in_its_saved_card() -> (
+    None
+):
+    """Another process replays the saved response first. The next request
+    shows in the replayed card of the call that started the background cell,
+    at the placement that the live stream gave that card."""
     agents = _second_request_agents()
-    first: list[AgentEvent] = []
+    live: list[Packet] = []
     run = agents.agent().start(
-        max_steps=5, messages=[UserMessage(content="Send")], on_event=first.append
+        max_steps=5,
+        messages=[UserMessage(content="Send")],
+        on_event=ResponsePresenter(Emitter(live.append)).consume,
     )
-    _suspended(run)
+    state = _suspended(run)
     checkpoint = _transferred(run)
 
-    events: list[AgentEvent] = []
     packets: list[Packet] = []
     presenter = ResponsePresenter(Emitter(packets.append))
-
-    def on_event(event: AgentEvent) -> None:
-        events.append(event)
-        presenter.consume(event)
-
+    presenter.replay(
+        response_record(state),
+        ResponseReplayData(tools={}, documents={}, approvals={}),
+        {},
+    )
+    replayed = len(packets)
     resumed = agents.agent(checkpoint.agent_state).resume(
         checkpoint.run_state,
         answers=[_answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID)],
-        on_event=on_event,
+        on_event=presenter.consume,
     )
     try:
         until(
@@ -1069,11 +1110,42 @@ def test_a_resumed_background_program_shows_its_next_request() -> None:
                 in {request.request_id for request in resumed.pending_inputs}
             )
         )
-
-        assert _placement(events, SECOND_BACKGROUND_REQUEST_ID) == _placement(
-            first, BACKGROUND_REQUEST_ID
+        resumed.submit(_answer(InputDecision.APPROVE, SECOND_BACKGROUND_REQUEST_ID))
+        until(
+            lambda: any(
+                isinstance(packet.obj, ToolApprovalResolved) for packet in packets
+            )
         )
-        assert _approval_cards(packets) == [SECOND_BACKGROUND_REQUEST_ID]
     finally:
         resumed.cancel()
         assert resumed.wait_for_idle(10)
+
+    card = _card_placement(live, BACKGROUND_SEND_TWICE)
+    assert _card_placement(packets[:replayed], BACKGROUND_SEND_TWICE) == card
+    later = packets[replayed:]
+    assert [
+        (packet.placement, packet.obj.approval_id)
+        for packet in later
+        if isinstance(packet.obj, ToolApprovalRequest)
+    ] == [(card, SECOND_BACKGROUND_REQUEST_ID)]
+    assert [
+        (packet.placement, packet.obj.approval_id, packet.obj.outcome)
+        for packet in later
+        if isinstance(packet.obj, ToolApprovalResolved)
+    ] == [(card, SECOND_BACKGROUND_REQUEST_ID, "approved")]
+    # The ended card neither starts again nor ends again when the run ends.
+    assert not [
+        packet
+        for packet in later
+        if packet.placement == card
+        and isinstance(packet.obj, (CodeModeStart, SectionEnd))
+    ]
+
+
+def _card_placement(packets: list[Packet], code: str) -> Placement:
+    [placement] = [
+        packet.placement
+        for packet in packets
+        if isinstance(packet.obj, CodeModeStart) and packet.obj.code == code
+    ]
+    return placement

@@ -2328,14 +2328,15 @@ def _record_answer(
     requests: Sequence[PendingToolInput],
 ) -> bool:
     """Record an answer to one of `requests`; False when it repeats the
-    recorded answer. An answer that changes only `standing`, such as an
-    approval that the user later approves for the chat, replaces the recorded
-    one. Raises ValueError for a conflicting or unmatched answer."""
+    recorded answer. An answer that only makes the recorded one standing,
+    such as an approval that the user later approves for the chat, replaces
+    it; one that only drops `standing` repeats it. Raises ValueError for a
+    conflicting or unmatched answer."""
     existing = progress.human_tool_answers.get(answer.request_id)
     if existing is not None:
         if _conflicts(existing, answer):
             raise ValueError("Conflicting answer for request")
-        if existing == answer:
+        if existing.standing or not answer.standing:
             return False
         progress.human_tool_answers[answer.request_id] = answer.model_copy(deep=True)
         return True

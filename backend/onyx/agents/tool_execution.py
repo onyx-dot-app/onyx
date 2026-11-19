@@ -108,6 +108,8 @@ class ToolBatch:
         self.tools = {tool.name: tool for tool in tools}
         self.call_indices = {call.id: index for index, call in enumerate(self.calls)}
         self.futures: dict[str, Future[ToolOutcome]] = {}
+        # The answered open requests last offered to each call's tool, by call ID.
+        self._offered: dict[str, frozenset[str]] = {}
 
     def _context(self, call: ToolCall) -> ToolCallContext:
         return ToolCallContext(
@@ -339,8 +341,8 @@ class ToolBatch:
 
     def _continue_open_inputs(self) -> None:
         """Give the answers of open requests to the tools that made their
-        calls, one call's requests at a time; see
-        AgentTool.continue_open_input."""
+        calls, one call's requests at a time, when that call's answered
+        requests changed; see AgentTool.continue_open_input."""
         with self.run.execution_lock:
             answers = self.progress.human_tool_answers
             by_call: dict[str, list[NestedInputAnswer]] = {}
@@ -350,8 +352,11 @@ class ToolBatch:
                     by_call.setdefault(request.tool_call.id, []).append(
                         NestedInputAnswer(request=request, answer=answer)
                     )
-        for answered in by_call.values():
-            # Later requests show at the place of the call, as the first did.
+        for call_id, answered in by_call.items():
+            offered = frozenset(item.request.request.request_id for item in answered)
+            if self._offered.get(call_id) == offered:
+                continue
+            self._offered[call_id] = offered
             opened = answered[0].request
             call = opened.tool_call
             tool = self.tools.get(call.name)

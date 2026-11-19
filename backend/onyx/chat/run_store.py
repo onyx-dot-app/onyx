@@ -1607,6 +1607,13 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                         continue
                     try:
                         run.submit(answer)
+                    except (InputNotWaiting, RunReleased):
+                        # The request ended, or the run parked, after the read.
+                        logger.debug(
+                            "Run %s no longer waits for request %s",
+                            run.id,
+                            request.request_id,
+                        )
                     except Exception:
                         logger.exception("Run %s did not take a Stop's answer", run.id)
                 run.cancel()

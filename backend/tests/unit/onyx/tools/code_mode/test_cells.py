@@ -382,10 +382,10 @@ def test_a_continuing_program_takes_the_next_slot_before_new_cells() -> None:
     continued = start_thread_future(
         lambda: running.acquire("tenant", wait=cancellation), name="continued"
     )
-    until(lambda: running._waiting == 1)
+    assert not running.acquire("tenant")
 
     running.release("tenant", 0.0)
-    # The freed slot goes to the waiting program, not to a new cell.
+    # The freed slot goes to the continuing program, not to a new cell.
     assert not running.acquire("tenant")
     assert continued.result(timeout=10)
     running.release("tenant", 0.0)

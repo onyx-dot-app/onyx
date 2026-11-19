@@ -268,10 +268,8 @@ class ToolInvocation:
         # Decides the calls that the tool makes for the model, such as a
         # program's tool calls; None when no hook or approval decides calls.
         self.nested_calls = nested_calls
-        # The run's work. Work that outlives this call, such as threads it
-        # starts, joins it (`track_operation`): the tool phase does not suspend
-        # and the run does not drain until this work ends; an answer or Stop
-        # wakes the wait. Work of `track_detached` holds only the drain.
+        # The run's work, which work that outlives this call joins; see
+        # "Suspend and accept input" in agents/README.md for how it holds the run.
         self.run_work = run_work
         self._agents = agents
 
@@ -337,7 +335,8 @@ class AgentTool:
         # requests have answers, such as a background program's, with the
         # answers of the requests that `invocation`'s call opened. Returns
         # the IDs of the requests it took; the run ends those. The others
-        # stay open, and the run offers them again later.
+        # stay open, and the run offers them again when the call's answered
+        # requests change.
         self.continue_open_input = continue_open_input
         self.execution_mode = execution_mode
         self.sequence_group = sequence_group

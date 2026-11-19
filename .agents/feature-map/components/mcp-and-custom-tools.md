@@ -873,7 +873,8 @@ default agent, is Blocked.
     call's ID. A stream that continues a suspended response replays its
     records, the resolutions of its waiting requests and its background
     agents' requests included, then `replay_end`; the run's live events send
-    a waiting request's resolution again (`ResponsePresenter.replay`). A
+    a waiting request's resolution again, and the later requests of a call,
+    an ended call's too, show in its replayed card (`ResponsePresenter.replay`). A
     root's `question_request` rows replay the same way:
     `tool_question_request`, then `tool_question_resolved` for an ended row,
     with the card's answers or the typed `message`, at the asking call

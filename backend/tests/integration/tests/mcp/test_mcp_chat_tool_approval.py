@@ -2177,6 +2177,8 @@ def test_a_decision_during_the_live_wait_continues_in_the_same_stream(
     ]
     tool_result = mock_llm.requests_in("chat")[-1].tool_result(CALL_ID)
     assert tool_result is not None and "Hello, team!" in tool_result
+    held_result = mock_llm.requests_in("chat")[-1].tool_result(held.id)
+    assert held_result is not None and "released" in held_result
 
 
 def _decide_while_streaming(

@@ -1003,12 +1003,6 @@ class CodeCell:
             )
 
     @property
-    def waits_for_input(self) -> bool:
-        """Whether the program is parked for the user's input."""
-        with self._lock:
-            return self._parked is not None
-
-    @property
     def waiting_call_id(self) -> str | None:
         """The call whose observation ended with NestedInputWait while the
         parked program waits for its answers."""
@@ -2092,7 +2086,7 @@ class CodeCells:
             if unresumed:
                 self._saved.clear()
         closing = [
-            cell for cell in cells if reason != "suspended" or not cell.waits_for_input
+            cell for cell in cells if reason != "suspended" or cell._parked is None
         ]
         for cell in closing:
             cell.stop("terminated")

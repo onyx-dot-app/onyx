@@ -4,6 +4,7 @@ import os
 import sys
 
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_http_headers
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
@@ -31,7 +32,7 @@ def echo_header(header: str) -> str:
     return f"{header}={get_http_headers().get(header.lower(), '')}"
 
 
-# A held call answers by this time even if the test never releases it.
+# A held call fails after this time if the test never releases it.
 HOLD_SECONDS = 60
 _releases: dict[str, asyncio.Event] = {}
 
@@ -44,8 +45,8 @@ async def hold(key: str) -> str:
         await asyncio.wait_for(
             _releases.setdefault(key, asyncio.Event()).wait(), HOLD_SECONDS
         )
-    except TimeoutError:
-        return "not released"
+    except TimeoutError as error:
+        raise ToolError(f"The test did not let hold {key} answer in time") from error
     return "released"
 
 

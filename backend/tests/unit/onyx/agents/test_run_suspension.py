@@ -613,6 +613,13 @@ def test_an_answer_that_changes_only_standing_applies_on_resume() -> None:
         progress = resumed.snapshot().progress
         assert progress is not None
         assert progress.human_tool_answers["permission"] == standing
+        # A stale answer without `standing` repeats the recorded one.
+        revision = resumed.snapshot().revision
+        resumed.submit(_approve())
+        snapshot = resumed.snapshot()
+        assert snapshot.revision == revision
+        assert snapshot.progress is not None
+        assert snapshot.progress.human_tool_answers["permission"] == standing
         resumed.submit(
             HumanToolAnswer(
                 request_id="question",
