@@ -1267,7 +1267,7 @@ describe("with stubbed server checks", () => {
     await settle();
     expect(
       useChatSessionStore.getState().sessions.get("session")
-        ?.branchPublishedFiles
+        ?.branchPublishedFiles?.files
     ).toEqual([subagentFile]);
   });
 });

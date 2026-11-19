@@ -5,7 +5,6 @@ import {
   Message,
   ChatSessionSharedStatus,
   BackendChatSession,
-  ChatPublishedFile,
   ChatStream,
   FeedbackType,
 } from "@/app/app/types";
@@ -30,6 +29,10 @@ import {
   type ChatRightPanelState,
 } from "@/lib/chat/rightPanel";
 import type { ChatToolOptions } from "@/lib/tools/types";
+import {
+  loadedPublishedFiles,
+  type LoadedPublishedFiles,
+} from "@/lib/chat/publishedFiles";
 
 /** An error that belongs to the session, not to a saved message. */
 export interface SessionError {
@@ -65,8 +68,9 @@ interface ChatSessionData {
   isFetchingChatMessages: boolean;
   // Paged loading: the current branch has messages above the loaded ones.
   hasOlderMessages: boolean;
-  // The latest load's files published on the branch, loaded messages or not.
-  branchPublishedFiles: ChatPublishedFile[];
+  // The latest load's files published on the branch, loaded messages or
+  // not; null before a load
+  branchPublishedFiles: LoadedPublishedFiles | null;
   // The branch switch whose latest page is loading, so the branch's
   // published files are not known yet (lib/chat/pagedSession.ts)
   latestPageSwitch: number | null;
@@ -250,7 +254,7 @@ const createInitialSessionData = (
   // Session-specific state defaults
   isFetchingChatMessages: false,
   hasOlderMessages: false,
-  branchPublishedFiles: [],
+  branchPublishedFiles: null,
   latestPageSwitch: null,
   isLoadingOlderMessages: false,
   uncaughtError: null,
@@ -326,7 +330,7 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   ) => {
     get().updateSessionData(sessionId, {
       approvalsVersion: loaded.approvals_version,
-      branchPublishedFiles: loaded.published_files ?? [],
+      branchPublishedFiles: loadedPublishedFiles(loaded),
       ...updates,
     });
   },

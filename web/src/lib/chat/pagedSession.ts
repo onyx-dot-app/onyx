@@ -2,6 +2,7 @@ import type { BackendChatSession, Message } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { loadedPublishedFiles } from "@/lib/chat/publishedFiles";
 import { readWaitingToolRequests } from "@/lib/chat/toolApprovals";
 import type { ChatHistoryPage } from "@/lib/chat/types";
 
@@ -198,7 +199,7 @@ export async function reloadLatestChatPage(
     if (!replacesMessages) {
       // Only the files: the shown approvals come from the load that shows them
       store.updateSessionData(sessionId, {
-        branchPublishedFiles: page.published_files ?? [],
+        branchPublishedFiles: loadedPublishedFiles(page),
       });
       return;
     }
