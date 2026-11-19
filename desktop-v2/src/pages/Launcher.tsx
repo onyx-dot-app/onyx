@@ -860,6 +860,11 @@ function Launcher() {
       flash("Remove the files that could not be attached.");
       return;
     }
+    // Files returned from a refused question can join newer ones.
+    if (attachments.length > MAX_ATTACHMENTS) {
+      flash(`Remove files to send at most ${MAX_ATTACHMENTS}.`);
+      return;
+    }
     const sent = attachments.filter((a) => a.file !== null);
     // Sent files stay on the server; their chips leave without a delete.
     for (const a of attachments) liveKeys.current.delete(a.key);
