@@ -12575,25 +12575,6 @@
         "toggleRow": {
           "ariaLabel": "타임라인 전환"
         },
-        "toolNames": {
-          "codeInterpreter": "코드 인터프리터",
-          "customTool": "사용자 지정 도구",
-          "generateImage": "이미지 생성",
-          "generatePlan": "계획 생성",
-          "internalSearch": "내부 검색",
-          "knowledgeBaseQuery": "지식 베이스 쿼리",
-          "memory": "메모리",
-          "openUrls": "URL 열기",
-          "researchAgent": "리서치 에이전트",
-          "thinking": "생각 중",
-          "tool": "도구",
-          "webSearch": "웹 검색",
-          "terminal": "터미널",
-          "applyPatch": "패치 적용",
-          "editFile": "파일 편집",
-          "writeFile": "파일 쓰기",
-          "publishFiles": "파일 게시"
-        },
         "webSearch": {
           "searching": {
             "status": "웹 검색 중"
@@ -12640,16 +12621,13 @@
             "title": "패치",
             "progress": {
               "writing": {
-                "status": "{path} 쓰는 중… {lines, plural, one {#줄} other {#줄}}"
+                "status": "{named, select, true {{path} 쓰는 중… {lines, plural, one {#줄} other {#줄}}} other {파일 쓰는 중…}}"
               },
               "editing": {
-                "status": "{path} 편집 중… {lines, plural, one {#줄} other {#줄}}"
+                "status": "{named, select, true {{path} 편집 중… {lines, plural, one {#줄} other {#줄}}} other {파일 편집 중…}}"
               },
               "patching": {
                 "status": "{count, plural, =0 {파일 패치 중…} one {파일 #개 패치 중…} other {파일 #개 패치 중…}}"
-              },
-              "starting": {
-                "status": "{tool, select, write {파일 쓰는 중…} other {파일 편집 중…}}"
               }
             }
           },

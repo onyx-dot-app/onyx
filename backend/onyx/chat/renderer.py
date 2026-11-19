@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from time import monotonic
-from typing import Literal
+from typing import Literal, TypeGuard
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 from typing_extensions import override
@@ -148,7 +148,6 @@ _STRING = TypeAdapter(str)
 _OPTIONAL_STRING = TypeAdapter(str | None)
 _INT = TypeAdapter(int)
 _STRINGS = TypeAdapter(list[str])
-_FILE_TOOL_NAME: TypeAdapter[FileToolName] = TypeAdapter(FileToolName)
 logger = setup_logger()
 
 
@@ -164,6 +163,10 @@ def _string_argument(arguments: Mapping[str, JsonValue], key: str) -> str:
     return value if isinstance(value, str) else ""
 
 
+def is_file_tool(name: str) -> TypeGuard[FileToolName]:
+    return name in PATCH_TOOL_NAMES
+
+
 def file_tool_progress(
     tool_name: FileToolName, arguments: dict[str, JsonValue], complete: bool
 ) -> packets.FileToolProgress:
@@ -173,15 +176,18 @@ def file_tool_progress(
     its line ends, and `file_path` once a later key follows it.
     """
     text = _string_argument(arguments, FILE_TOOL_TEXT_ARGUMENTS[tool_name])
-    lines = text.split("\n")
     if tool_name == ApplyPatchTool.NAME:
+        lines = text.split("\n")
         headers = (line.strip() for line in (lines if complete else lines[:-1]))
-        paths = [
-            header[len(marker) :].strip()
-            for header in headers
-            for marker in HUNK_HEADER_MARKERS
-            if header.startswith(marker)
-        ]
+        # Two hunks of one file name it once.
+        paths = list(
+            dict.fromkeys(
+                header[len(marker) :].strip()
+                for header in headers
+                for marker in HUNK_HEADER_MARKERS
+                if header.startswith(marker)
+            )
+        )
     else:
         path = _string_argument(arguments, FILE_PATH_ARGUMENT)
         whole = complete or next(reversed(arguments), None) != FILE_PATH_ARGUMENT
@@ -190,16 +196,22 @@ def file_tool_progress(
         tool_name=tool_name,
         paths=paths,
         # A text that does not end with a newline ends with a partial line.
-        lines=len(lines) - (lines[-1] == ""),
+        lines=text.count("\n") + (1 if text and not text.endswith("\n") else 0),
     )
 
 
 class _ArgumentStream(BaseModel):
     """A tool call whose arguments the browser sees while the model writes them."""
 
-    call: ToolCall
+    id: str
+    name: str
+    # How the arguments show: as code or as a file tool's progress.
+    report: Literal["code"] | FileToolName
+    arguments: dict[str, JsonValue] = {}
     fragments: list[str] = []
     reported_at: float = float("-inf")
+    # The last progress a file tool call sent.
+    progress: packets.FileToolProgress | None = None
 
 
 class ResponseLayout:
@@ -360,17 +372,17 @@ class MessageRenderer:
             self._raw_thinking += event.text
             return self._append(event.text, thinking=True)
         if isinstance(event, ToolCallStartEvent):
-            if (
-                event.tool_name in CODE_ARGUMENT_TOOLS
-                or event.tool_name in PATCH_TOOL_NAMES
-            ):
+            name = event.tool_name
+            report: Literal["code"] | FileToolName | None = (
+                "code"
+                if name in CODE_ARGUMENT_TOOLS
+                else name
+                if is_file_tool(name)
+                else None
+            )
+            if report is not None:
                 self._argument_streams[event.content_index] = _ArgumentStream(
-                    call=ToolCall(
-                        id=event.tool_call_id,
-                        name=event.tool_name,
-                        arguments={},
-                        arguments_complete=False,
-                    )
+                    id=event.tool_call_id, name=name, report=report
                 )
             if event.tool_name in HIDDEN_TOOLS:
                 return []
@@ -382,11 +394,14 @@ class MessageRenderer:
         if stream is None:
             return []
         if isinstance(event, ToolCallEndEvent):
-            del self._argument_streams[event.content_index]
-            if event.tool_call.argument_error is not None:
-                # The arguments of an invalid call are empty, not complete.
-                return []
-            return self._report_arguments(stream, event.tool_call.arguments, True)
+            # An invalid call's final arguments are empty; it shows what streamed.
+            result = (
+                self._report_fragments(event.content_index)
+                if event.tool_call.argument_error is not None
+                else self._report_arguments(stream, event.tool_call.arguments, True)
+            )
+            self._argument_streams.pop(event.content_index, None)
+            return result
         stream.fragments.append(event.arguments_delta)
         now = monotonic()
         if now - stream.reported_at < ARGUMENT_REPORT_INTERVAL_SECONDS:
@@ -411,25 +426,23 @@ class MessageRenderer:
     def _report_arguments(
         self, stream: _ArgumentStream, arguments: dict[str, JsonValue], complete: bool
     ) -> list[packets.Packet]:
-        """The packets that show a call's arguments: progress for file tools,
-        and the appended text for code."""
-        call = stream.call
-        previous = call.arguments
-        call.arguments = arguments
+        """The packets that show a call's arguments as its stream reports them."""
+        previous = stream.arguments
+        stream.arguments = arguments
         obj: packets.PacketObj
-        if call.name in PATCH_TOOL_NAMES:
-            tool_name = _FILE_TOOL_NAME.validate_python(call.name)
-            obj = file_tool_progress(tool_name, arguments, complete)
-            if obj == file_tool_progress(tool_name, previous, False):
-                return []
-        else:
+        if stream.report == "code":
             deltas = appended_text(previous, arguments)
             if not deltas:
                 return []
             obj = packets.ToolCallArgumentDelta(
-                tool_type=call.name, argument_deltas=deltas
+                tool_type=stream.name, argument_deltas=deltas
             )
-        return [packets.Packet(placement=self.tool_placement(call.id), obj=obj)]
+        else:
+            progress = file_tool_progress(stream.report, arguments, complete)
+            if progress == stream.progress:
+                return []
+            obj = stream.progress = progress
+        return [packets.Packet(placement=self.tool_placement(stream.id), obj=obj)]
 
     def _flush_arguments(self) -> list[packets.Packet]:
         """Report the fragments that arrived since each open stream's last
@@ -758,23 +771,22 @@ class ToolRenderer:
             objects = [
                 packets.WriteStdinStart(session_id=write.session_id, chars=write.chars)
             ]
-        elif name in PATCH_TOOL_NAMES:
-            # Wrong-typed arguments still show the patch card, as their
-            # streamed progress did; the end packet carries the error.
-            tool_name = _FILE_TOOL_NAME.validate_python(name)
-            text = _string_argument(args, FILE_TOOL_TEXT_ARGUMENTS[tool_name])
+        elif is_file_tool(name):
+            # A missing or wrong-typed argument reads as empty, so every file
+            # tool call shows a patch card; its end packet carries the error.
+            text = _string_argument(args, FILE_TOOL_TEXT_ARGUMENTS[name])
             path = _string_argument(args, FILE_PATH_ARGUMENT)
-            if tool_name == EditTool.NAME:
+            if name == EditTool.NAME:
                 # An empty old_string creates the file.
                 patch = display_patch(
                     path, _string_argument(args, "old_string") or None, text
                 )
-            elif tool_name == WriteTool.NAME:
+            elif name == WriteTool.NAME:
                 # The end packet tells an added file from an updated one.
                 patch = display_patch(path, None, text)
             else:
                 patch = text
-            objects = [packets.ApplyPatchStart(patch=patch, tool_name=tool_name)]
+            objects = [packets.ApplyPatchStart(patch=patch, tool_name=name)]
         elif name == PublishFilesTool.NAME:
             # Invalid or interrupted arguments still show the publish card.
             try:

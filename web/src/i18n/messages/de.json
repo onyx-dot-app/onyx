@@ -12575,25 +12575,6 @@
         "toggleRow": {
           "ariaLabel": "Zeitleiste umschalten"
         },
-        "toolNames": {
-          "codeInterpreter": "Code-Interpreter",
-          "customTool": "Benutzerdefiniertes Werkzeug",
-          "generateImage": "Bild generieren",
-          "generatePlan": "Plan erstellen",
-          "internalSearch": "Interne Suche",
-          "knowledgeBaseQuery": "Wissensdatenbank-Abfrage",
-          "memory": "Erinnerung",
-          "openUrls": "URLs öffnen",
-          "researchAgent": "Recherche-Agent",
-          "thinking": "Nachdenken",
-          "tool": "Werkzeug",
-          "webSearch": "Websuche",
-          "terminal": "Terminal",
-          "applyPatch": "Patch anwenden",
-          "editFile": "Datei bearbeiten",
-          "writeFile": "Datei schreiben",
-          "publishFiles": "Dateien veröffentlichen"
-        },
         "webSearch": {
           "searching": {
             "status": "Durchsucht das Web"
@@ -12640,16 +12621,13 @@
             "title": "Patch",
             "progress": {
               "writing": {
-                "status": "Schreibe {path}… {lines, plural, one {# Zeile} other {# Zeilen}}"
+                "status": "{named, select, true {Schreibe {path}… {lines, plural, one {# Zeile} other {# Zeilen}}} other {Schreibe eine Datei…}}"
               },
               "editing": {
-                "status": "Bearbeite {path}… {lines, plural, one {# Zeile} other {# Zeilen}}"
+                "status": "{named, select, true {Bearbeite {path}… {lines, plural, one {# Zeile} other {# Zeilen}}} other {Bearbeite eine Datei…}}"
               },
               "patching": {
                 "status": "{count, plural, =0 {Patche Dateien…} one {Patche # Datei…} other {Patche # Dateien…}}"
-              },
-              "starting": {
-                "status": "{tool, select, write {Schreibe eine Datei…} other {Bearbeite eine Datei…}}"
               }
             }
           },

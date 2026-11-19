@@ -202,7 +202,8 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.PUBLISH_FILES_START,
 ]);
 
-// Packets of a tool call that the model is still writing; its start follows.
+// Packets that open a call before its start packet: the pre-start rule in
+// .agents/feature-map/components/streaming-protocol.md.
 const PRE_START_PACKET_TYPES = new Set<PacketType>([
   PacketType.TOOL_CALL_ARGUMENT_DELTA,
   PacketType.FILE_TOOL_PROGRESS,

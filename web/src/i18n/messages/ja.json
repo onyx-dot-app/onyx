@@ -12575,25 +12575,6 @@
         "toggleRow": {
           "ariaLabel": "タイムラインを切り替え"
         },
-        "toolNames": {
-          "codeInterpreter": "コードインタープリター",
-          "customTool": "カスタムツール",
-          "generateImage": "画像生成",
-          "generatePlan": "プラン生成",
-          "internalSearch": "社内検索",
-          "knowledgeBaseQuery": "ナレッジベースクエリ",
-          "memory": "メモリ",
-          "openUrls": "URL を開く",
-          "researchAgent": "リサーチエージェント",
-          "thinking": "思考",
-          "tool": "ツール",
-          "webSearch": "ウェブ検索",
-          "terminal": "ターミナル",
-          "applyPatch": "パッチを適用",
-          "editFile": "ファイルを編集",
-          "writeFile": "ファイルを書き込む",
-          "publishFiles": "ファイルを公開"
-        },
         "webSearch": {
           "searching": {
             "status": "ウェブを検索中"
@@ -12640,16 +12621,13 @@
             "title": "パッチ",
             "progress": {
               "writing": {
-                "status": "{path} を書き込み中… {lines, plural, one {# 行} other {# 行}}"
+                "status": "{named, select, true {{path} を書き込み中… {lines, plural, one {# 行} other {# 行}}} other {ファイルを書き込み中…}}"
               },
               "editing": {
-                "status": "{path} を編集中… {lines, plural, one {# 行} other {# 行}}"
+                "status": "{named, select, true {{path} を編集中… {lines, plural, one {# 行} other {# 行}}} other {ファイルを編集中…}}"
               },
               "patching": {
                 "status": "{count, plural, =0 {ファイルにパッチを適用中…} one {# 個のファイルにパッチを適用中…} other {# 個のファイルにパッチを適用中…}}"
-              },
-              "starting": {
-                "status": "{tool, select, write {ファイルを書き込み中…} other {ファイルを編集中…}}"
               }
             }
           },

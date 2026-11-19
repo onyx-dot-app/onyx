@@ -207,15 +207,27 @@ response from its `approval_request` row, and a suspended response ends with
 `stop(awaiting_user)` ([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
 `chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
 model writes it, with the tool name as `tool_type`. Native model reasoning streams
-as reasoning packets. Streamed arguments report at most once per
-`chat/renderer.py:ARGUMENT_REPORT_INTERVAL_SECONDS`: the first fragment
-reports, later fragments wait for the interval, and the call's end, or the
-message's completion when the stream stops, reports the rest. The file tools
-(`write`, `edit`, `apply_patch`) report `file_tool_progress` instead of their
-arguments: `tool_name`, the whole `paths` so far, and the `lines` of the file
-text or patch (`chat/renderer.py:file_tool_progress`). A report that changes
-nothing sends no packet. Replay sends no progress, and the call's
-`apply_patch_start` replaces it (`ApplyPatchToolRenderer`). Code mode (`code_mode_start`,
+as reasoning packets.
+
+Streamed arguments report at most once per
+`chat/renderer.py:ARGUMENT_REPORT_INTERVAL_SECONDS`. The first fragment
+reports, and later fragments wait for the interval. The call's end reports the
+rest: the complete arguments, or, for invalid arguments, what the fragments
+parse to. A stream that stops without an end reports the rest when its message
+completes or its agent ends (`MessageRenderer.complete`,
+`MessageRenderer.finish`). The file tools (`write`, `edit`, `apply_patch`)
+report `file_tool_progress` instead of their arguments: `tool_name`, the whole
+`paths` so far without repeats, and the `lines` of the file text or patch
+(`chat/renderer.py:file_tool_progress`). A report that changes nothing sends
+no packet. Replay sends no progress.
+
+Pre-start packets: `tool_call_argument_delta` and `file_tool_progress` open a
+call before its start packet, and clients do not count them as its start
+(`server/query_and_chat/acp_stream.py:_PRE_START_TYPES`,
+`web/src/lib/timeline/chat/hooks/packetProcessor.ts`). The call's start
+packet, such as `apply_patch_start`, follows them at the same placement.
+
+Code mode (`code_mode_start`,
 `code_mode_delta`) renders each tool call its program makes with that tool's
 own packets at `sub_turn_index` = call index, inside the code mode tab. A
 call that runs across observations keeps its `sub_turn_index` in each tab, so
@@ -252,7 +264,7 @@ from its arguments (`patch.display_patch`: an update of the old lines to the
 new ones, or an added file), live and on replay, and its `apply_patch_end`
 says whether `write` added or updated the file. A missing or wrong-typed
 argument reads as empty, so every file tool call gets a patch card. `apply_patch_start.tool_name`
-names the file tool, which titles the call (`toolDisplayHelpers.getToolName`, as in parallel tabs). `exec_end.output` is the output
+names the file tool. `exec_end.output` is the output
 that the model got (cut to its character budget), which replaces the streamed
 preview. When the output went to a file in the sandbox VM, it is the head and
 tail of the output with a plain note instead ([[code-execution]]); `session_id` is set while the command runs, and `error` (with no

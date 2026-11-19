@@ -12575,25 +12575,6 @@
         "toggleRow": {
           "ariaLabel": "Alternar a linha do tempo"
         },
-        "toolNames": {
-          "codeInterpreter": "Interpretador de código",
-          "customTool": "Ferramenta personalizada",
-          "generateImage": "Gerar imagem",
-          "generatePlan": "Gerar plano",
-          "internalSearch": "Pesquisa interna",
-          "knowledgeBaseQuery": "Consulta à base de conhecimento",
-          "memory": "Memória",
-          "openUrls": "Abrir URLs",
-          "researchAgent": "Agente de pesquisa",
-          "thinking": "Pensando",
-          "tool": "Ferramenta",
-          "webSearch": "Pesquisa na web",
-          "terminal": "Terminal",
-          "applyPatch": "Aplicar patch",
-          "editFile": "Editar arquivo",
-          "writeFile": "Gravar arquivo",
-          "publishFiles": "Publicar arquivos"
-        },
         "webSearch": {
           "searching": {
             "status": "Pesquisando na web"
@@ -12640,16 +12621,13 @@
             "title": "Patch",
             "progress": {
               "writing": {
-                "status": "Escrevendo {path}… {lines, plural, one {# linha} other {# linhas}}"
+                "status": "{named, select, true {Escrevendo {path}… {lines, plural, one {# linha} other {# linhas}}} other {Escrevendo um arquivo…}}"
               },
               "editing": {
-                "status": "Editando {path}… {lines, plural, one {# linha} other {# linhas}}"
+                "status": "{named, select, true {Editando {path}… {lines, plural, one {# linha} other {# linhas}}} other {Editando um arquivo…}}"
               },
               "patching": {
                 "status": "{count, plural, =0 {Aplicando patch aos arquivos…} one {Aplicando patch a # arquivo…} other {Aplicando patch a # arquivos…}}"
-              },
-              "starting": {
-                "status": "{tool, select, write {Escrevendo um arquivo…} other {Editando um arquivo…}}"
               }
             }
           },

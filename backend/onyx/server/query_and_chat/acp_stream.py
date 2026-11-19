@@ -54,7 +54,8 @@ _TOOL_STARTS: dict[str, tuple[str, str]] = {
 _ARGUMENT_TOOL_TYPES: dict[str, tuple[str, str]] = {
     "python": ("execute", "Writing code"),
 }
-# Packets that open a call before its start packet.
+# Packets that open a call before its start packet: the pre-start rule in
+# .agents/feature-map/components/streaming-protocol.md.
 _PRE_START_TYPES = {"tool_call_argument_delta", "file_tool_progress"}
 
 _MESSAGE_TYPES = {"message_start", "message_delta"}

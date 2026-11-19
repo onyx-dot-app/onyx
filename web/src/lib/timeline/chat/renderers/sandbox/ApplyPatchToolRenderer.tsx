@@ -2,12 +2,13 @@ import { type ComponentProps, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { Text, type TextColor } from "@opal/components";
-import { richNodes } from "@opal/utils";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import {
   ApplyPatchEnd,
   ApplyPatchFileChange,
+  ApplyPatchStart,
   ApplyPatchToolPacket,
+  FileToolName,
   FileToolProgress,
   PacketType,
 } from "@/app/app/services/streamingModels";
@@ -15,6 +16,7 @@ import { MessageRenderer } from "@/app/app/message/messageComponents/types";
 import type { TimelineTranslate } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import {
+  isolateText,
   SandboxCallContent,
   SandboxCallError,
 } from "@/lib/timeline/chat/renderers/sandbox/sandboxCall";
@@ -34,6 +36,14 @@ const COLLAPSED_PATCH_LINES = 6;
 // Lines that get their own colored element. The rest of a larger patch shows
 // as one plain block, so even a 1 MiB patch opens quickly.
 const MAX_COLORED_PATCH_LINES = 2000;
+// Patch lines that name a file; the name follows the marker.
+const FILE_HEADER =
+  /^(\*\*\* (?:Add File|Update File|Delete File|Move to): )(.*)$/;
+
+function patchLineText(line: string): string {
+  const header = FILE_HEADER.exec(line);
+  return header ? `${header[1]}${isolateText(header[2] ?? "")}` : line;
+}
 
 function renderPatchLines(text: string) {
   const patch = text.endsWith("\n") ? text.slice(0, -1) : text;
@@ -57,7 +67,7 @@ function renderPatchLines(text: string) {
                   : "text-04"
           }
         >
-          {`${line}\n`}
+          {`${patchLineText(line)}\n`}
         </Text>
       ))}
       {plainRest && (
@@ -69,34 +79,23 @@ function renderPatchLines(text: string) {
   );
 }
 
-// Unicode isolates keep a path's own direction from reordering the sentence.
-const isolate = (path: string) => `\u2068${path}\u2069`;
+const PROGRESS_STATUS = {
+  apply_patch: "sandbox.patch.progress.patching.status",
+  edit: "sandbox.patch.progress.editing.status",
+  write: "sandbox.patch.progress.writing.status",
+} as const satisfies Record<FileToolName, string>;
 
 function progressStatus(
   progress: FileToolProgress,
   t: TimelineTranslate
 ): string {
   const [path] = progress.paths;
-  switch (progress.tool_name) {
-    case "apply_patch":
-      return t("sandbox.patch.progress.patching.status", {
-        count: progress.paths.length,
-      });
-    case "write":
-      return path === undefined
-        ? t("sandbox.patch.progress.starting.status", { tool: "write" })
-        : t("sandbox.patch.progress.writing.status", {
-            path: isolate(path),
-            lines: progress.lines,
-          });
-    case "edit":
-      return path === undefined
-        ? t("sandbox.patch.progress.starting.status", { tool: "edit" })
-        : t("sandbox.patch.progress.editing.status", {
-            path: isolate(path),
-            lines: progress.lines,
-          });
-  }
+  return t(PROGRESS_STATUS[progress.tool_name], {
+    count: progress.paths.length,
+    named: path === undefined ? "false" : "true",
+    path: isolateText(path ?? ""),
+    lines: progress.lines,
+  });
 }
 
 interface FileRow {
@@ -128,17 +127,9 @@ function FileList({ files }: { files: FileRow[] }) {
             </Text>
           )}
           <Text font="secondary-mono" color="text-04" wordWrap="break-all">
-            {richNodes(
-              <>
-                <bdi>{file.path}</bdi>
-                {file.movePath !== null && (
-                  <>
-                    {" → "}
-                    <bdi>{file.movePath}</bdi>
-                  </>
-                )}
-              </>
-            )}
+            {file.movePath === null
+              ? isolateText(file.path)
+              : `${isolateText(file.path)} → ${isolateText(file.movePath)}`}
           </Text>
         </Section>
       ))}
@@ -159,23 +150,22 @@ export function ApplyPatchToolRenderer({
   children,
 }: ApplyPatchToolRendererProps) {
   const t = useTranslations("chat.messages.timeline");
-  const { started, patch, end, progress } = useMemo(() => {
-    let started = false;
-    let patch = "";
+  const { start, end, progress } = useMemo(() => {
+    let start: ApplyPatchStart | null = null;
     let end: ApplyPatchEnd | null = null;
     let progress: FileToolProgress | null = null;
     for (const { obj } of packets) {
       if (obj.type === PacketType.APPLY_PATCH_START) {
-        started = true;
-        patch = obj.patch;
+        start = obj;
       } else if (obj.type === PacketType.APPLY_PATCH_END) {
         end = obj;
       } else if (obj.type === PacketType.FILE_TOOL_PROGRESS) {
         progress = obj;
       }
     }
-    return { started, patch, end, progress };
+    return { start, end, progress };
   }, [packets]);
+  const patch = start?.patch ?? "";
   const { isComplete, error, stopped } = useSandboxCallStatus(
     packets,
     end,
@@ -198,7 +188,7 @@ export function ApplyPatchToolRenderer({
   // While the model writes the arguments, their progress names the step; the
   // start packet replaces it with the card that replay shows. A call that
   // ends without a start shows only how it ended.
-  const liveProgress = started || isComplete ? null : progress;
+  const liveProgress = start !== null || isComplete ? null : progress;
 
   const status = stopped
     ? t("sandbox.stopped.status")

@@ -359,9 +359,9 @@ class FileToolProgress(BaseObj):
     type: Literal["file_tool_progress"] = StreamingType.FILE_TOOL_PROGRESS.value
     tool_name: FileToolName
     # The files the arguments name so far, in order.
-    paths: list[str] = []
+    paths: list[str]
     # The lines of the file text or patch so far.
-    lines: int = 0
+    lines: int
 
 
 ################################################
