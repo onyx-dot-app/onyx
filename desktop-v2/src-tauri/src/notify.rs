@@ -4,7 +4,7 @@
 //! the question or the answer: lock screens and notification history keep it.
 
 use tauri::plugin::{PermissionState, Plugin, TauriPlugin};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_notification::{ActionPerformed, NotificationExt};
 
 use crate::state::AppState;
@@ -84,6 +84,9 @@ impl Answer {
     }
 }
 
+/// Tells the launcher page to show its answer (Ask mode).
+const SHOW_ANSWER_EVENT: &str = "launcher-show-answer";
+
 pub fn init(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.notification().on_action(move |performed| {
@@ -94,7 +97,14 @@ pub fn init(app: &AppHandle) {
         // answer, and showing another chat would be wrong.
         crate::launcher::show(
             &handle,
-            move |app| answer.is_current(&app.state::<AppState>()),
+            move |app| {
+                let current = answer.is_current(&app.state::<AppState>());
+                if current {
+                    // The launcher may be in Search mode; the click is for the answer.
+                    let _ = app.emit_to(crate::windows::LAUNCHER, SHOW_ANSWER_EVENT, ());
+                }
+                current
+            },
             crate::windows::route,
         );
     });
