@@ -172,6 +172,54 @@ export class ChatPage {
     await expect(this.publishedFilesPanel).toBeHidden();
   }
 
+  async closeRightPanel(): Promise<void> {
+    await this.page.getByRole("button", { name: "Close panel" }).click();
+  }
+
+  /** The right panel's width in pixels, as its resize handle reports it. */
+  async rightPanelWidth(): Promise<number> {
+    return Number(
+      await this.rightPanelResizeHandle().getAttribute("aria-valuenow")
+    );
+  }
+
+  /** Drags the right panel's edge toward the chat by `distance` pixels. */
+  async widenRightPanel(distance: number): Promise<void> {
+    const handle = this.rightPanelResizeHandle();
+    const width = await this.rightPanelWidth();
+    const viewport = this.page.viewportSize();
+    if (!viewport) throw new Error("The page has no viewport");
+    // The panel slides open: drag once its edge is in place
+    await expect
+      .poll(async () => (await handle.boundingBox())?.x ?? Infinity)
+      .toBeLessThan(viewport.width - width + 2);
+    const box = await handle.boundingBox();
+    if (!box) throw new Error("The resize handle has no box");
+    const y = box.y + box.height / 2;
+    await this.page.mouse.move(box.x + box.width / 2, y);
+    await this.page.mouse.down();
+    await this.page.mouse.move(box.x - distance, y, { steps: 10 });
+    await this.page.mouse.up();
+  }
+
+  async expandRightPanel(): Promise<void> {
+    await this.page.getByRole("button", { name: "Expand panel" }).click();
+    await this.expectRightPanelExpanded(true);
+  }
+
+  /** Checks whether the right panel fills the workspace. */
+  async expectRightPanelExpanded(expanded: boolean): Promise<void> {
+    await expect(
+      this.page.getByRole("button", {
+        name: expanded ? "Restore panel" : "Expand panel",
+      })
+    ).toBeVisible();
+  }
+
+  private rightPanelResizeHandle(): Locator {
+    return this.page.getByRole("separator", { name: "Resize panel" });
+  }
+
   /** The tiles of the right panel's Files list, from the top. */
   publishedFilesPanelCards(): Locator {
     return this.publishedFilesPanel.getByRole("button", { name: /^Open / });
