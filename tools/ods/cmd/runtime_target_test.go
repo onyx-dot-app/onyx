@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -45,7 +46,13 @@ esac`)
 	if err := runCompose("dev", &ComposeOptions{Down: true}); err != nil {
 		t.Fatal(err)
 	}
-	for _, call := range composeCalls(t, bin, "docker") {
+	calls := composeCalls(t, bin, "docker")
+	for _, verb := range []string{" logs ", " pull", " down"} {
+		if !slices.ContainsFunc(calls, func(call string) bool { return strings.HasPrefix(call, "compose ") && strings.Contains(call, verb) }) {
+			t.Fatalf("expected a compose%s call, got %q", verb, calls)
+		}
+	}
+	for _, call := range calls {
 		if strings.HasPrefix(call, "compose ") && !strings.Contains(call, "-p shared-data ") {
 			t.Fatalf("different infrastructure target: %s", call)
 		}
