@@ -337,7 +337,12 @@ pub fn watch_load(app: &AppHandle, url: &Url) {
         let offline = app.state::<Offline>();
         let deadline = Instant::now() + LOAD_WATCH_LIMIT;
         // A newer load has its own check; a new session has its own windows.
-        let current = || offline.loads().is_latest(load) && state.epoch() == epoch;
+        // A closed main window has no page to recover.
+        let current = || {
+            offline.loads().is_latest(load)
+                && state.epoch() == epoch
+                && app.get_webview_window(main_window::LABEL).is_some()
+        };
         loop {
             let Ok(server) = state.server() else {
                 return;
