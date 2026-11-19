@@ -69,8 +69,7 @@ export function PublishedFileCards({ files }: PublishedFileCardsProps) {
               <Card padding={0} border="solid">
                 <AttachmentItemButton
                   icon={getFileIcon(file.name)}
-                  // The title is its own flex item, so it cannot reorder
-                  // the text around it.
+                  // A flex item: stripped, not isolated.
                   title={stripBidiControls(file.title ?? file.name)}
                   description={
                     file.version > 1

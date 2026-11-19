@@ -12620,8 +12620,12 @@
             },
             "title": "Patch",
             "progress": {
-              "named": "{tool, select, write {Writing {path}… {lines, plural, one {# line} other {# lines}}} other {Editing {path}… {lines, plural, one {# line} other {# lines}}}}",
-              "unnamed": "{tool, select, write {Writing a file…} other {Editing a file…}}",
+              "named": {
+                "status": "{tool, select, write {Writing {path}… {lines, plural, one {# line} other {# lines}}} other {Editing {path}… {lines, plural, one {# line} other {# lines}}}}"
+              },
+              "unnamed": {
+                "status": "{tool, select, write {Writing a file…} other {Editing a file…}}"
+              },
               "patching": {
                 "status": "{count, plural, =0 {Patching files…} one {Patching # file…} other {Patching # files…}}"
               }

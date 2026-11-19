@@ -41,8 +41,6 @@ export function SandboxCallError({ error }: SandboxCallErrorProps) {
   return (
     <div className="whitespace-pre-wrap wrap-break-word">
       <Text as="p" font="secondary-body" color="status-error-05">
-        {/* dir: the sandbox's text cannot reorder the text around it, and
-            the paragraph keeps the page's direction. */}
         {richNodes(<span dir="ltr">{error}</span>)}
       </Text>
     </div>

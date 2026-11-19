@@ -75,8 +75,6 @@ const INLINE_COMPONENTS = {
       </a>
     );
   },
-  // dir="ltr": code is always LTR, and the attribute isolates it, so a path
-  // in a sentence cannot reorder the words around it.
   code: ({ children }: { children?: ReactNode }) => (
     <code
       dir="ltr"

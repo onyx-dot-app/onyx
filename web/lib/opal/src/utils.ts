@@ -55,9 +55,14 @@ const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069\u200E\u200F\u061C]/g;
 
 /**
  * Text without its bidi controls, for display or parsing only: a path or label
- * from a sandbox shows its characters in their own order. A caller that shows
- * the text isolates it in markup (`dir`), which keeps it from reordering the
- * text around it.
+ * from a sandbox shows its characters in their own order.
+ *
+ * Bidi isolation rule for untrusted text (sandbox paths, labels, patches,
+ * errors): strip its controls with this function, and show it in an element
+ * with a `dir` attribute, which isolates it so it cannot reorder the text
+ * around it. Use `dir="ltr"` for code and paths, and `dir="auto"` for labels.
+ * Text that is its own flex item cannot reorder its neighbors, so it needs
+ * only the strip.
  */
 export function stripBidiControls(text: string): string {
   return text.replace(BIDI_CONTROLS, "");

@@ -96,8 +96,6 @@ export function PublishFilesToolRenderer({
               gap={0.5}
               height="fit"
             >
-              {/* dir isolates the sandbox's text, so it cannot reorder the
-                  text around it; a path is always LTR. */}
               <Text dir="auto" font="secondary-action" color="text-04">
                 {stripBidiControls(row.label)}
               </Text>

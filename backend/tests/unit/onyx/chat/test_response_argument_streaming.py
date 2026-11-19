@@ -26,7 +26,7 @@ from onyx.chat.models import MessageRendering, ResponseRecord
 from onyx.chat.presentation import ResponsePresenter, replay_response
 from onyx.chat.renderer import (
     ARGUMENT_REPORT_INTERVAL_SECONDS,
-    FILE_TOOL_TEXT_ARGUMENTS,
+    FILE_TOOL_ARGUMENTS,
     MessageRenderer,
     ResponseLayout,
     file_tool_progress,
@@ -639,5 +639,5 @@ def test_a_call_with_wrong_typed_arguments_keeps_its_own_card(
     ] == [start]
 
 
-def test_each_file_tool_names_its_text_argument() -> None:
-    assert set(FILE_TOOL_TEXT_ARGUMENTS) == set(get_args(FileToolName))
+def test_each_file_tool_names_its_arguments() -> None:
+    assert set(FILE_TOOL_ARGUMENTS) == set(get_args(FileToolName))
