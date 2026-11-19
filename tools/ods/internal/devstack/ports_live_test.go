@@ -10,20 +10,31 @@ import (
 	"time"
 )
 
-func TestBindableRejectsLoopbackListeners(t *testing.T) {
-	for _, network := range []string{"tcp4", "tcp6"} {
-		t.Run(network, func(t *testing.T) {
-			address := "127.0.0.1:0"
-			if network == "tcp6" {
-				address = "[::1]:0"
-			}
-			listener := listenPortProbe(t, network, address)
+func TestBindable(t *testing.T) {
+	for _, probe := range []struct{ network, address string }{
+		{"tcp4", "127.0.0.1:0"},
+		{"tcp6", "[::1]:0"},
+		{"tcp4", "0.0.0.0:0"},
+		{"tcp6", "[::]:0"},
+	} {
+		t.Run(probe.address, func(t *testing.T) {
+			listener := listenPortProbe(t, probe.network, probe.address)
 			port := listener.Addr().(*net.TCPAddr).Port
 			if bindable(port) {
-				t.Fatalf("occupied %s loopback port %d is bindable", network, port)
+				t.Fatalf("occupied %s port %d is bindable", probe.address, port)
 			}
 		})
 	}
+	t.Run("released", func(t *testing.T) {
+		listener := listenPortProbe(t, "tcp4", "127.0.0.1:0")
+		port := listener.Addr().(*net.TCPAddr).Port
+		if err := listener.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if !bindable(port) {
+			t.Fatalf("released port %d is not bindable", port)
+		}
+	})
 }
 
 func listenPortProbe(t *testing.T, network, address string) net.Listener {
@@ -37,32 +48,6 @@ func listenPortProbe(t *testing.T, network, address string) net.Listener {
 	}
 	t.Cleanup(func() { _ = listener.Close() })
 	return listener
-}
-
-func TestBindableRejectsWildcardListeners(t *testing.T) {
-	for _, probe := range []struct{ network, address string }{
-		{"tcp4", "0.0.0.0:0"},
-		{"tcp6", "[::]:0"},
-	} {
-		t.Run(probe.network, func(t *testing.T) {
-			listener := listenPortProbe(t, probe.network, probe.address)
-			port := listener.Addr().(*net.TCPAddr).Port
-			if bindable(port) {
-				t.Fatalf("occupied %s wildcard port %d is bindable", probe.network, port)
-			}
-		})
-	}
-}
-
-func TestBindableAcceptsReleasedPort(t *testing.T) {
-	listener := listenPortProbe(t, "tcp4", "127.0.0.1:0")
-	port := listener.Addr().(*net.TCPAddr).Port
-	if err := listener.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if !bindable(port) {
-		t.Fatalf("released port %d is not bindable", port)
-	}
 }
 
 func TestLeaseAvoidsLoopbackPortAndPreservesForeignListener(t *testing.T) {

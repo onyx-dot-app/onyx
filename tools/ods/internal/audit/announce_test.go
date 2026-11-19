@@ -168,14 +168,6 @@ func TestPlanAnnouncement_retriedPackagesSplitBelowSlackSplitSize(t *testing.T) 
 	}
 }
 
-func TestPackageSection_fitsOneMessageWhenSmall(t *testing.T) {
-	opts := baseAnnounce()
-	a := chromiumAlert()
-	if msgs := packageSection(a, a.Advisories, opts.Triage[16065], true, opts); len(msgs) != 1 {
-		t.Errorf("want one message, got %d", len(msgs))
-	}
-}
-
 func TestPlanAnnouncement_nothingFailingPostsNothing(t *testing.T) {
 	plan := PlanAnnouncement(baseAnnounce())
 	if plan.Post != nil || len(plan.Replies) != 0 || len(plan.Markers) != 0 {

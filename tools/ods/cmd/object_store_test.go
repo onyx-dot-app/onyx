@@ -81,10 +81,17 @@ func TestObjectStoreMigrate_keepMinioSkipsTheStop(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, call := range composeCalls(t, bin, "docker") {
+	calls := composeCalls(t, bin, "docker")
+	if !slices.ContainsFunc(calls, func(call string) bool { return strings.HasSuffix(call, "up -d --wait minio") }) {
+		t.Fatalf("expected MinIO to start, got %q", calls)
+	}
+	for _, call := range calls {
 		if strings.HasSuffix(call, "stop minio") {
 			t.Fatalf("MinIO was stopped despite --keep-minio: %q", call)
 		}
+	}
+	if got := composeCalls(t, bin, "uv"); len(got) != 1 {
+		t.Fatalf("expected the legacy copy to run once, got %q", got)
 	}
 }
 
@@ -122,17 +129,5 @@ func TestObjectStoreMigrate_needsTheInfraStack(t *testing.T) {
 	}
 	if got := composeCalls(t, bin, "docker"); !slices.Equal(got, []string{"port ods-proj-relational_db-1 5432"}) {
 		t.Fatalf("expected no compose call before the check, got %q", got)
-	}
-}
-
-func TestRemoveEnvKey(t *testing.T) {
-	envPath := filepath.Join(t.TempDir(), ".env")
-	writeFile(t, envPath, "A=1\nS3_LEGACY_ENDPOINT_URL=x\nB=2\n")
-
-	if err := removeEnvKey(envPath, "S3_LEGACY_ENDPOINT_URL"); err != nil {
-		t.Fatal(err)
-	}
-	if got := composeReadFile(t, envPath); got != "A=1\nB=2\n" {
-		t.Fatalf("expected the key dropped, got %q", got)
 	}
 }

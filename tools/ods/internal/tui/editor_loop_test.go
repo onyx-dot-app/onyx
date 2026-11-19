@@ -9,6 +9,11 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
+var testCols = []Column{
+	{Key: "id", Title: "ID", Required: true},
+	{Key: "note", Title: "Note"},
+}
+
 func runEditorScript(t *testing.T, w, h int, cols []Column, rows []map[string]string, sc script) ([]map[string]string, bool, []frame) {
 	t.Helper()
 	var got []map[string]string
@@ -77,8 +82,9 @@ func TestRunEditor_editsTheRowUnderTheCursor(t *testing.T) {
 }
 
 func TestRunEditor_ignoresEditAndDeleteWithoutRows(t *testing.T) {
-	// If e, enter or d opened a form or prompt, "s" would not save.
-	got, saved, frames := runEditorScript(t, 100, 30, testCols, nil, script{}.text("e").key(tcell.KeyEnter).text("ds"))
+	// If e, enter or d opened a form or prompt, "s" would not save. Moving
+	// first checks that the cursor stays on the empty table.
+	got, saved, frames := runEditorScript(t, 100, 30, testCols, nil, script{}.text("jG").key(tcell.KeyPgDn).text("e").key(tcell.KeyEnter).text("ds"))
 	if !saved || len(got) != 0 {
 		t.Fatalf("expected an empty saved table, got saved=%t rows=%v", saved, got)
 	}
@@ -91,10 +97,14 @@ func TestRunEditor_ignoresEditAndDeleteWithoutRows(t *testing.T) {
 }
 
 func TestRunEditor_cancelLeavesTheCallerRowsUntouched(t *testing.T) {
-	for _, cancel := range []tcell.Key{tcell.KeyEscape, tcell.KeyCtrlC} {
-		t.Run(tcell.KeyNames[cancel], func(t *testing.T) {
+	for name, cancel := range map[string]script{
+		"escape": script{}.key(tcell.KeyEscape),
+		"ctrl-c": script{}.key(tcell.KeyCtrlC),
+		"q":      script{}.text("q"),
+	} {
+		t.Run(name, func(t *testing.T) {
 			initial := idRows("A")
-			sc := script{}.text("eZ").key(tcell.KeyEnter).key(cancel)
+			sc := append(script{}.text("eZ").key(tcell.KeyEnter), cancel...)
 
 			_, saved, _ := runEditorScript(t, 100, 30, testCols, initial, sc)
 			if saved {
@@ -128,6 +138,7 @@ func TestRunEditor_formEditingKeys(t *testing.T) {
 		key(tcell.KeyEnd).key(tcell.KeyRight).text("y").                 // xabcy
 		key(tcell.KeyHome).key(tcell.KeyDelete).                         // abcy
 		key(tcell.KeyRight).key(tcell.KeyRight).key(tcell.KeyBackspace). // acy
+		text("z").key(tcell.KeyBackspace2).                              // DEL also erases
 		key(tcell.KeyHome).key(tcell.KeyBackspace).                      // no-op at the start
 		key(tcell.KeyEnd).key(tcell.KeyDelete).                          // no-op at the end
 		key(tcell.KeyTab).text("n").                                     // note: n
