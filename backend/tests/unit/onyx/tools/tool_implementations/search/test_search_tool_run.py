@@ -1648,10 +1648,10 @@ def test_focused_queries_do_not_wait_for_message_analysis() -> None:
     tool = _make_tool()
 
     def count_terms(_: str) -> KeywordTermCounts:
-        # Fails the analysis if focused retrieval waits for it.
-        if not focused_searched.wait(timeout=5):
-            raise TimeoutError("focused retrieval waited for analysis")
-        return KeywordTermCounts(total=1, distinct=1)
+        # Rejects the message if focused retrieval waits for its analysis.
+        if focused_searched.wait(timeout=5):
+            return KeywordTermCounts(total=1, distinct=1)
+        return KeywordTermCounts(total=QUERY_MAX_TERMS + 1, distinct=1)
 
     def search(**kwargs: Any) -> list[InferenceChunk]:
         if kwargs["chunk_search_request"].query == "ticket":

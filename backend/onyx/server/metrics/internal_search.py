@@ -1,13 +1,17 @@
 """Prometheus metrics for the internal search tool.
 
 Tracks which retrieval lanes pass the query size check, the latency of that
-check, and the latency of a whole search call. Labels carry no user text.
+check, and the latency of a whole search call. Labels carry no user text. The
+admission counter carries a `tenant_id` label, so it shows which tenants send
+oversized queries. The histograms describe the process and have no tenant label.
 """
 
 import logging
 from enum import Enum
 
 from prometheus_client import Counter, Histogram
+
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +42,8 @@ class UserMessageSize(str, Enum):
 
 _query_admissions = Counter(
     "onyx_internal_search_query_admissions_total",
-    "Retrieval lanes checked for query size, labeled by lane and outcome",
-    ["lane", "admission"],
+    "Retrieval lanes checked for query size, labeled by tenant, lane and outcome",
+    ["tenant_id", "lane", "admission"],
 )
 
 _analyze_duration = Histogram(
@@ -58,7 +62,11 @@ _search_duration = Histogram(
 
 def record_query_admission(lane: SearchLane, admission: QueryAdmission) -> None:
     try:
-        _query_admissions.labels(lane=lane.value, admission=admission.value).inc()
+        _query_admissions.labels(
+            tenant_id=CURRENT_TENANT_ID_CONTEXTVAR.get() or "unknown",
+            lane=lane.value,
+            admission=admission.value,
+        ).inc()
     except Exception:
         logger.warning("Failed to record query admission metric.", exc_info=True)
 

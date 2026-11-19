@@ -9,14 +9,21 @@ from onyx.server.metrics.internal_search import (
     observe_query_analyze,
     record_query_admission,
 )
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
-def test_records_admission_by_lane_and_outcome() -> None:
-    with patch.object(internal_search, "_query_admissions") as counter:
-        record_query_admission(SearchLane.USER_MESSAGE, QueryAdmission.TOO_MANY_TERMS)
+def test_records_admission_by_tenant_lane_and_outcome() -> None:
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set("tenant_a")
+    try:
+        with patch.object(internal_search, "_query_admissions") as counter:
+            record_query_admission(
+                SearchLane.USER_MESSAGE, QueryAdmission.TOO_MANY_TERMS
+            )
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
     counter.labels.assert_called_once_with(
-        lane="user_message", admission="too_many_terms"
+        tenant_id="tenant_a", lane="user_message", admission="too_many_terms"
     )
     counter.labels.return_value.inc.assert_called_once_with()
 
