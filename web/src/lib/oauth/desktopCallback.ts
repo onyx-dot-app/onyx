@@ -28,7 +28,6 @@ export function isDesktopOAuthCallback(
   return isOAuthCallbackPath(pathname);
 }
 
-/** True for a page that an OAuth provider redirects back to. */
 export function isOAuthCallbackPath(pathname: string): boolean {
   return (
     CALLBACK_PATHS.has(pathname) ||

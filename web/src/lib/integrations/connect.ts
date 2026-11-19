@@ -18,10 +18,6 @@ export function connectAction(integration: MemberIntegration): ConnectAction {
   return null;
 }
 
-/**
- * The integrations an admin made Required that the user must still sign in
- * to, and can. An integration that only an admin can fix does not count.
- */
 export function requiredSignIns(
   integrations: readonly MemberIntegration[]
 ): MemberIntegration[] {

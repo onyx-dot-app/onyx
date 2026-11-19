@@ -26,10 +26,6 @@ import IntegrationConnectButton from "@/sections/plugins/IntegrationConnectButto
 
 const LOGO_SIZE_PX = 44;
 
-/**
- * Blocks the app until the user connects each integration an admin made
- * Required for them. Admins can continue without connecting.
- */
 export default function RequiredIntegrationGate() {
   const { user } = useUser();
   const pathname = usePathname();
@@ -43,7 +39,6 @@ export default function RequiredIntegrationGate() {
 function GateForUser() {
   const { isAdmin } = useUser();
   const { data, error } = useMemberIntegrations();
-  // Rows stay after they connect, so the user sees them turn to Connected.
   const [trackedIds, setTrackedIds] = useState<number[]>([]);
   const [adminDismissed, setAdminDismissed] = useState(false);
 

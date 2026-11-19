@@ -76,7 +76,6 @@ test("a member continues only after each required integration connects", async (
   await user.click(within(modal).getByRole("button", { name: "Connect" }));
 
   await waitFor(() => expect(next).toBeEnabled());
-  // The row stays and shows that it connected.
   expect(within(gate).getByText(copy.connected)).toBeInTheDocument();
   expect(within(gate).getByText("Reports API")).toBeInTheDocument();
 

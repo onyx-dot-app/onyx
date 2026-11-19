@@ -4,12 +4,8 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { RequiredIntegrationGate } from "@tests/e2e/pages/RequiredIntegrationGate";
 import type { IntegrationCreate } from "@/lib/integrations/types";
 
-/**
- * An integration that an admin made Required for the company, with a per-user
- * API key. A member must connect it before they use the app. An admin can
- * continue without connecting. The gate blocks every user while the
- * integration exists, so the spec runs alone in the exclusive project.
- */
+// A company-wide Required integration blocks every user, so this spec runs
+// alone in the exclusive project.
 test.describe("Required integration gate @exclusive", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -103,13 +99,11 @@ test.describe("Required integration gate @exclusive", () => {
     await gate.continue();
     await gate.expectHidden();
 
-    // A connected member is not asked again.
     await page.reload();
     await gate.expectAppUsable();
   });
 
   test("an admin can continue without connecting", async ({ page }) => {
-    // The page signs in as the admin of the exclusive project.
     const gate = new RequiredIntegrationGate(page);
 
     await gate.gotoApp();
@@ -119,7 +113,6 @@ test.describe("Required integration gate @exclusive", () => {
     await gate.continue();
     await gate.expectAppUsable();
 
-    // The choice lasts only for the page session.
     await page.reload();
     await gate.expectVisible();
   });

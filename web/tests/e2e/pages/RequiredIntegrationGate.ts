@@ -1,7 +1,6 @@
 import { type Locator, type Page, expect } from "@playwright/test";
 import { IntegrationCredentialsDialog } from "@tests/e2e/pages/IntegrationCredentialsDialog";
 
-/** The full-screen page that asks for each Required integration. */
 export class RequiredIntegrationGate {
   readonly page: Page;
   readonly gate: Locator;
@@ -52,7 +51,6 @@ export class RequiredIntegrationGate {
     await expect(this.adminNote).toBeVisible();
   }
 
-  /** The gate is gone and the chat input takes typing. */
   async expectAppUsable(): Promise<void> {
     await this.expectHidden();
     const input = this.page.locator("#onyx-chat-input-textbox");
@@ -69,7 +67,6 @@ export class RequiredIntegrationGate {
     await expect(this.continueButton).toBeEnabled();
   }
 
-  /** Escape must not close the gate. */
   async pressEscape(): Promise<void> {
     await this.page.keyboard.press("Escape");
   }
