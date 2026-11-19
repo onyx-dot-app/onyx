@@ -260,6 +260,8 @@ const ChatScrollContainer = React.memo(
             autoScrollTimeoutRef.current = setTimeout(() => {
               autoScrollTimeoutRef.current = null;
               isAutoScrollingRef.current = false;
+              // The chat changed during the glide: its element is detached.
+              if (container !== scrollContainerRef.current) return;
               if (container) {
                 // Rows that mounted on the way can move the end; settle on
                 // it, unless the user scrolled away during the glide.
@@ -341,10 +343,16 @@ const ChatScrollContainer = React.memo(
         const baseline = scrollBaselineRef.current;
         const shrinkage = Math.max(0, baseline.height - container.scrollHeight);
         const scrolledUp = currentScrollTop < baseline.top - shrinkage - 5; // 5px threshold to ignore micro-movements
-        scrollBaselineRef.current = {
-          top: currentScrollTop,
-          height: container.scrollHeight,
-        };
+        // A small upward step keeps the baseline, so slow upward scrolling
+        // (a trackpad's few pixels per event) adds up to the threshold.
+        const smallStepUp =
+          !scrolledUp && currentScrollTop < baseline.top - shrinkage;
+        if (!smallStepUp) {
+          scrollBaselineRef.current = {
+            top: currentScrollTop,
+            height: container.scrollHeight,
+          };
+        }
 
         // Only upward movement can stop following new content. Measure from
         // the real end: the spacer below a new message hides no content, but
@@ -447,6 +455,12 @@ const ChatScrollContainer = React.memo(
           setIsScrollReady(false);
           scrollBaselineRef.current = { top: 0, height: 0 };
           isAtBottomRef.current = true;
+          // A glide in the previous chat must not settle into this one.
+          if (autoScrollTimeoutRef.current !== null) {
+            clearTimeout(autoScrollTimeoutRef.current);
+            autoScrollTimeoutRef.current = null;
+          }
+          isAutoScrollingRef.current = false;
         }
 
         const shouldScroll =
@@ -473,10 +487,14 @@ const ChatScrollContainer = React.memo(
         const isLoadingExistingContent =
           isNewSession || scrolledForSessionRef.current === null;
 
-        // A new anchor while the user reads elsewhere (a refresh brought in a
-        // turn from another tab): keep their position. A send anchors through
-        // DynamicBottomSpacer, and a following view still moves.
-        if (!isLoadingExistingContent && !isAtBottomRef.current) {
+        // A new anchor while the user reads elsewhere, or with auto-scroll off
+        // (a refresh brought in a turn from another tab): keep their
+        // position. A send anchors through DynamicBottomSpacer, and a
+        // following view still moves.
+        if (
+          !isLoadingExistingContent &&
+          (!isAtBottomRef.current || !autoScrollRef.current)
+        ) {
           prevAnchorSelectorRef.current = anchorSelector ?? null;
           return;
         }

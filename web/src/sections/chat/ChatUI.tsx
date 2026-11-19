@@ -163,10 +163,12 @@ const ChatUI = React.memo(
     const firstRowId = firstMessage ? messageRowId(firstMessage) : undefined;
     useLayoutEffect(() => {
       const root = scrollContainerRef?.current;
-      if (!root || firstRowId === undefined) return;
+      if (firstRowId === undefined) return;
 
+      // Record the first row even before the scroll root attaches (they can
+      // mount in the same commit); only the correction needs the root.
       const previous = firstRowRef.current;
-      if (previous && previous.rowId !== firstRowId) {
+      if (root && previous && previous.rowId !== firstRowId) {
         const previousRow = document.getElementById(previous.rowId);
         if (previousRow) {
           // A no-op where the browser's anchoring already moved it.
