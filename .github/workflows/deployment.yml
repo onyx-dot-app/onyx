@@ -1153,6 +1153,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
+          build-contexts: agent-plugin=./extensions/agent-plugin
           target: runtime
           platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
@@ -1177,6 +1178,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
+          build-contexts: agent-plugin=./extensions/agent-plugin
           target: dev
           platforms: linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
@@ -1255,6 +1257,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
+          build-contexts: agent-plugin=./extensions/agent-plugin
           target: runtime
           platforms: linux/arm64
           labels: ${{ steps.meta.outputs.labels }}
@@ -1279,6 +1282,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
+          build-contexts: agent-plugin=./extensions/agent-plugin
           target: dev
           platforms: linux/arm64
           labels: ${{ steps.meta.outputs.labels }}

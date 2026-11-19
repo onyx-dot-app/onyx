@@ -269,6 +269,7 @@ export const SWR_KEYS = {
     `/api/admin/integrations/${integrationId}/actions`,
   adminPluginInstallationPolicy: (pluginId: string) =>
     `/api/admin/plugins/${pluginId}/installation-policy`,
+  onyxPluginExport: "/api/plugins/onyx-plugin/export",
   plugin: (pluginId: string) => `/api/plugins/${pluginId}`,
   agentPluginIds: (agentId: number) => `/api/plugins/agents/${agentId}`,
   pluginAccess: (pluginId: string) => `/api/plugins/${pluginId}/access`,

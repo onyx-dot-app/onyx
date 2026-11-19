@@ -1,6 +1,6 @@
 ---
 title: "Claude"
-description: "Connect Claude Desktop and claude.ai to the Onyx MCP server as a custom connector."
+description: "Connect Claude Desktop and claude.ai to the Onyx MCP server with the Onyx plugin or as a custom connector."
 icon: "message"
 ---
 
@@ -9,7 +9,38 @@ icon: "message"
   Your Onyx MCP URL must be reachable from the internet, not only through a VPN.
 </Note>
 
+## Upload the Onyx plugin
+
+The Onyx plugin holds the Onyx MCP server of your deployment and a skill that tells Claude when to search Onyx.
+You do not add a connector or enter a URL.
+
+<Steps>
+  <Step title="Download the plugin from Onyx">
+    In Onyx, open **Settings > Accounts & Access**. Under **Connect AI Tools**, select **Download** for the Onyx plugin.
+    The file `onyx-plugin.zip` holds the address of your deployment and no credentials.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/onyx_export_plugin.webp" alt="Connect AI Tools section in Onyx settings with the MCP URL, its Copy button, and the Download button for the Onyx plugin."/>
+
+    If **Connect AI Tools** does not show, Onyx cannot sign in MCP clients with OAuth.
+    Self-hosted Onyx needs HTTPS for OAuth. If the section shows no **Onyx Plugin**, ask your administrator.
+  </Step>
+
+  <Step title="Upload the plugin to Claude">
+    In Claude, open **Customize > Plugins** and select **Add > Upload plugin**. Select `onyx-plugin.zip`.
+  </Step>
+
+  <Step title="Use Onyx in a chat">
+    Send the [test prompt](/overview/onyx_anywhere/mcp_server#test-the-connection) in a new chat.
+    If Claude shows Onyx as not connected, open the plugin's **Connectors** tab and select **Connect**.
+    Sign in and select **Allow access**.
+  </Step>
+</Steps>
+
+The plugin file does not update. Download and upload the plugin again after you upgrade Onyx or change its web address.
+
 ## Add the Onyx connector
+
+If you do not use the Onyx plugin, add Onyx as a custom connector.
 
 <Steps>
   <Step title="Open Add custom connector">

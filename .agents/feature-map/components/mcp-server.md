@@ -41,6 +41,21 @@
   search tool is still worth a call, and with strict retrieval nudges one when
   a question turn ends on the prefetch alone.
   `extensions/agent-plugin/README.md` is the user-facing description.
+- **A user exports that plugin for claude.ai.** The Connect AI Tools section
+  of Accounts & Access in user settings
+  (`sections/oauth-provider/ConnectAiTools.tsx`) has a Download button, which
+  gets a zip from
+  `GET /plugins/onyx-plugin/export`, which any member can call. The zip is the plugin folder
+  without the marketplace file and the `*.test.ts` files. The Claude files are edited: the deployment's
+  MCP URL is fixed in `.mcp.json`, with no token header and no URL option,
+  because claude.ai chat takes no install options. The user
+  uploads it in Claude and signs in through OAuth. The section also shows
+  the deployment's MCP URL with a copy button and links the setup guides. The
+  URL is the `onyx_mcp_url` setting, which is set only with the Onyx OAuth
+  provider on, and the section shows only then. The Download row shows only
+  with the plugin files in the image. The export is for Claude only: ChatGPT on the
+  web marks a plugin that declares an MCP server as Desktop only, and a user
+  adds Onyx there as a custom MCP server.
 - **When it fails**, a bad or expired token gets a 401. A PAT or API key
   gets a 401 for every rejection, including an API server outage. An OAuth
   token that the API server refuses for scope gets a 403 `insufficient_scope`
@@ -195,6 +210,19 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
 11. `ssrf-env-false-lead` **`MCP_SERVER_ALLOW_PRIVATE_NETWORK` and
     `MCP_SERVER_ALLOW_LOOPBACK` are not settings of this server.** They seed
     the SSRF level for the MCP client in [[mcp-and-custom-tools]].
+12. `plugin-build-context` **The plugin export reads `extensions/agent-plugin/`,
+    which is outside the backend build context.** `backend/Dockerfile` copies
+    it to `/extensions/agent-plugin` from the `agent-plugin` named build
+    context. `.github/workflows/deployment.yml`, the Compose files and the CI
+    builds with a direct build step pass it. The two Craft matrix builds do
+    not, and a build without the context still succeeds: the stage is empty,
+    `PLUGIN_DIR` in `backend/onyx/server/features/onyx_plugin/export.py` is
+    `None`, the route answers `NOT_FOUND`, and the
+    `onyx_plugin_export_enabled` setting hides the Download row. The export finds
+    the `onyx_url` and `onyx_api_token` manifest options and the `onyx` server
+    in `.mcp.json` by name, and sets the `ONYX_URL` variable that
+    `extensions/agent-plugin/scripts/hook.ts` reads. A rename in the plugin
+    needs the same rename in that module.
 
 ---
 

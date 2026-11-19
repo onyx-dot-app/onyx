@@ -1,3 +1,4 @@
+import { downloadFile } from "@/lib/download";
 import { parseErrorDetail } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
@@ -15,6 +16,8 @@ import type {
   PluginAccessView,
   PluginPublishResponse,
 } from "@/lib/integrations/types";
+
+const ONYX_PLUGIN_FILENAME = "onyx-plugin.zip";
 
 type RequestBody =
   | IntegrationCreate
@@ -39,6 +42,10 @@ async function request(
       body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  return ensureOk(res);
+}
+
+async function ensureOk(res: Response): Promise<Response> {
   if (!res.ok) {
     throw new Error(
       await parseErrorDetail(res, `Request failed (${res.status})`)
@@ -126,6 +133,11 @@ export async function setPluginInstallationPolicy(
   await request(SWR_KEYS.adminPluginInstallationPolicy(pluginId), "PUT", {
     installation_policy: installationPolicy,
   });
+}
+
+export async function downloadOnyxPlugin(): Promise<void> {
+  const res = await ensureOk(await fetch(SWR_KEYS.onyxPluginExport));
+  downloadFile(ONYX_PLUGIN_FILENAME, { content: await res.blob() });
 }
 
 export function startOrganizationOAuth(

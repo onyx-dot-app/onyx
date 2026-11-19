@@ -39,6 +39,7 @@ from onyx.server.features.build.utils import (
     is_craft_locked_by_tier,
 )
 from onyx.server.features.notifications.models import NotificationResponse
+from onyx.server.features.onyx_plugin.export import PLUGIN_DIR
 from onyx.server.manage.llm.provider_cache import invalidate_provider_listing_cache
 from onyx.server.settings.build_info import get_build_info
 from onyx.server.settings.models import (
@@ -248,6 +249,15 @@ def fetch_settings(
     return UserSettings(
         **general_settings.model_dump(),
         oauth_provider_enabled=OAUTH_PROVIDER_SETTINGS is not None,
+        # The exported plugin signs in through the OAuth provider.
+        onyx_plugin_export_enabled=(
+            OAUTH_PROVIDER_SETTINGS is not None and PLUGIN_DIR is not None
+        ),
+        onyx_mcp_url=(
+            OAUTH_PROVIDER_SETTINGS.mcp_resource_url
+            if OAUTH_PROVIDER_SETTINGS is not None
+            else None
+        ),
         notifications=settings_notifications,
         needs_reindexing=needs_reindexing,
         onyx_craft_enabled=onyx_craft_enabled_for_user,

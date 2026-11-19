@@ -332,6 +332,7 @@ jobs:
         with:
           context: ./backend
           file: ./backend/Dockerfile
+          build-contexts: agent-plugin=./extensions/agent-plugin
           # The production image; the Dockerfile's default (last) stage is the dev variant.
           target: runtime
           platforms: linux/arm64

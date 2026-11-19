@@ -5,6 +5,8 @@ x-backend: &backend
   build:
     context: ../../backend
     dockerfile: Dockerfile
+    additional_contexts:
+      agent-plugin: ../../extensions/agent-plugin
     target: runtime
   environment:
     POSTGRES_HOST: relational_db

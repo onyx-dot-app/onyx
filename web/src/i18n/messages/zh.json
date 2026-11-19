@@ -19,6 +19,21 @@
       "loadFailed": "Onyx 无法加载此请求。请重试。",
       "retry": "重试"
     },
+    "connectTools": {
+      "title": "连接 AI 工具",
+      "description": "在 Claude、ChatGPT、Codex 和其他 MCP 客户端中使用此 Onyx 部署。每个人使用自己的 Onyx 账户登录。",
+      "guides": "设置指南",
+      "mcpUrl": {
+        "title": "MCP URL",
+        "copy": "复制"
+      },
+      "plugin": {
+        "title": "Onyx 插件",
+        "description": "适用于 Claude。插件已内置 Onyx MCP 服务器。",
+        "download": "下载"
+      },
+      "downloadFailed": "无法下载插件。"
+    },
     "connections": {
       "cancel": "取消",
       "title": "已连接的应用",
