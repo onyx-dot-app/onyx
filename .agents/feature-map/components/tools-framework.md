@@ -381,9 +381,12 @@ are plain `AgentTool` objects with no `Tool` row, and
    call is finalized at once: `after_tool_call` (`ChatAgent._finalize_tool`)
    runs one call at a time on the run's thread. `Run.finish_tool` then writes
    the finalized result into the run record that chat saves, and publishes
-   `ToolEndEvent`. After a cancel between `Run.record_tool_results` and
-   `finish_tool`, the saved result is the raw result and no `ToolEndEvent` is
-   sent. A tool whose calls must not overlap
+   `ToolEndEvent`. Before `Run.record_tool_results` records and streams a
+   result, `Agent.prepare_tool_result` can replace it, one result at a time in
+   completion order. After a cancel between `Run.record_tool_results` and
+   `finish_tool`, the saved result is the recorded result, before
+   `after_tool_call`, and no `ToolEndEvent` is sent. A tool whose calls must
+   not overlap
    returns `ToolExecutionMode.SEQUENTIAL` from `execution_mode`, as
    `MemoryTool` does. This orders only calls with the same name, or with the
    same `sequence_group` (the sandbox file tools share one): each starts
