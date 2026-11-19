@@ -478,14 +478,10 @@ class FileStoreType(str, Enum):
 
 
 # Key in FileRecord.file_metadata naming the chat session that produced a
-# chat output file (CHAT_OUTPUT_FILE_ORIGINS). user_can_access_chat_file gives
-# the file to the session's readers.
+# generated image (FileOrigin.CHAT_IMAGE_GEN). user_can_access_chat_file gives
+# the file to the session's readers. A published file's chat is its
+# chat_artifact row.
 CHAT_SESSION_ID_FILE_METADATA_KEY = "chat_session_id"
-# Keys in FileRecord.file_metadata of a published file (FileOrigin.CHAT_ARTIFACT),
-# which publish_files writes: the absolute, normalized VM path, which is the
-# file's identity, and the title that the model gave, when it gave one.
-PUBLISHED_FILE_PATH_METADATA_KEY = "published_path"
-PUBLISHED_FILE_TITLE_METADATA_KEY = "published_title"
 
 
 class FileOrigin(str, Enum):

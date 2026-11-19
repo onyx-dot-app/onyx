@@ -111,18 +111,19 @@ GET /chat/get-chat-session/{id}
   get_chat_messages_by_session             that page, or all branches without
                                            `limit`; two ToolCall levels
   get_chat_published_files                 latest-page and shared loads only; one
-                                           query of the chat's published files
-                                           by file ID prefix (CHAT_ARTIFACT_FILE_PREFIX
-                                           and the root chat, which subagents
-                                           share): the newest publish of each
-                                           path (DISTINCT ON the path), in
-                                           publish order (FileRecord.created_at,
-                                           then file ID). Path and title come
-                                           from the file record's file_metadata,
-                                           which publish_files writes (keys in
-                                           configs/constants.py). Files without a
-                                           path and files whose object is missing
-                                           (file_size -1) are left out
+                                           query of the chat's chat_artifact rows
+                                           (by chat_session_id: the root chat,
+                                           which subagents share) joined to
+                                           their file records: the newest
+                                           publish of each path (DISTINCT ON the
+                                           path), in publish order
+                                           (ChatArtifact.created_at, then file
+                                           ID). Path and title come from the
+                                           row, which publish_files writes with
+                                           the file record. Files without a
+                                           path (backfilled rows only) and files
+                                           whose object is missing (file_size
+                                           -1) are left out
   translate_assistant_message_to_packets   runtime rows: read_chat_execution,
                                            read_response_replay_data ->
                                            chat/presentation.py:replay_response;
@@ -413,10 +414,10 @@ Hard delete
 `db/chat.py:delete_messages_and_files_from_chat_session` over the session and
 its child sessions: message files (`save_chat_turn` also adds each
 `publish_files` call's `PublishedFiles` to the response's `ChatMessage.files`
-in its one save), then by file ID prefix under the root session ID the
-checkpoint blobs and the published files (`CHAT_ARTIFACT_FILE_PREFIX`; this
-covers a response that ended without its save, such as an interrupted parked
-one), then messages (tool calls,
+in its one save), then the checkpoint blobs by file ID prefix under the root
+session ID and the published files through the root session's `chat_artifact`
+rows (this covers a response that ended without its save, such as an
+interrupted parked one), then messages (tool calls,
 response items and checkpoints cascade), then `SearchDoc` rows no message links
 to. The EE task
 `ee/onyx/background/celery/tasks/ttl_management/tasks.py:perform_ttl_management_task`

@@ -1,7 +1,8 @@
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from typing import NoReturn, Tuple
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter
 from sqlalchemy import (
@@ -45,18 +46,19 @@ from onyx.chat.models import (
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
-    PUBLISHED_FILE_PATH_METADATA_KEY,
-    PUBLISHED_FILE_TITLE_METADATA_KEY,
+    FileOrigin,
     MessageType,
 )
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
 from onyx.db.document_set import require_document_set_access
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     IncognitoRecordMode,
     record_mode_persists_content,
 )
 from onyx.db.models import (
+    ChatArtifact,
     ChatInput,
     ChatMessage,
     ChatMessage__SearchDoc,
@@ -71,10 +73,7 @@ from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.persona import get_best_persona_id_for_user
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.constants import (
-    AGENT_CHECKPOINT_FILE_PREFIX,
-    CHAT_ARTIFACT_FILE_PREFIX,
-)
+from onyx.file_store.constants import AGENT_CHECKPOINT_FILE_PREFIX
 from onyx.file_store.file_store import (
     FILE_SIZE_MISSING_SENTINEL,
     get_default_file_store,
@@ -346,13 +345,13 @@ def delete_messages_and_files_from_chat_session(
     session_files = db_session.scalars(
         select(FileRecord.file_id)
         .where(
-            or_(
-                FileRecord.file_id.startswith(
-                    f"{AGENT_CHECKPOINT_FILE_PREFIX}{chat_session_id}/"
-                ),
-                FileRecord.file_id.startswith(
-                    f"{CHAT_ARTIFACT_FILE_PREFIX}{chat_session_id}-"
-                ),
+            FileRecord.file_id.startswith(
+                f"{AGENT_CHECKPOINT_FILE_PREFIX}{chat_session_id}/"
+            )
+        )
+        .union_all(
+            select(ChatArtifact.file_id).where(
+                ChatArtifact.chat_session_id == chat_session_id
             )
         )
         .execution_options(yield_per=FILE_CLEANUP_BATCH_SIZE)
@@ -909,36 +908,69 @@ def get_chat_message_page_ids(
     return page_ids, start > 0
 
 
+def save_chat_artifact(
+    content: bytes,
+    *,
+    display_name: str,
+    file_type: str,
+    chat_session_id: UUID,
+    path: str,
+    title: str | None,
+) -> str:
+    """Save a file that the model published in the root chat
+    `chat_session_id`, with its `ChatArtifact` row in the file record's
+    transaction. The file gets the chat's access, the chat's file list, and
+    its hard delete. Returns the file ID."""
+    file_id = str(uuid4())
+    with get_session_with_current_tenant() as db_session:
+        db_session.add(
+            ChatArtifact(
+                file_id=file_id, chat_session_id=chat_session_id, path=path, title=title
+            )
+        )
+        # save_file writes the file record and commits; without the autoflush
+        # the artifact row, which references the record, flushes in that
+        # commit after it.
+        with db_session.no_autoflush:
+            get_default_file_store().save_file(
+                content=BytesIO(content),
+                display_name=display_name,
+                file_origin=FileOrigin.CHAT_ARTIFACT,
+                file_type=file_type,
+                file_id=file_id,
+                db_session=db_session,
+            )
+    return file_id
+
+
 def get_chat_published_files(
     chat_session_id: UUID, db_session: Session
 ) -> list[PublishedFileView]:
     """The files that the model published in a chat, its subagents' files
-    included: the newest publish of each path, oldest first. A published
-    file's ID names the root chat (`chat_artifact_file_id`), and its record
-    holds the path and title that `publish_files` stamped. Files without a
+    included: the newest publish of each path, oldest first. Files without a
     path and files whose object is missing are left out."""
-    path = FileRecord.file_metadata[PUBLISHED_FILE_PATH_METADATA_KEY].astext
     newest = (
         select(
-            FileRecord.file_id,
+            ChatArtifact.file_id,
+            ChatArtifact.path,
+            ChatArtifact.title,
+            ChatArtifact.created_at,
             FileRecord.display_name,
             FileRecord.file_type,
             FileRecord.file_size,
-            FileRecord.created_at,
-            path.label("path"),
-            FileRecord.file_metadata[PUBLISHED_FILE_TITLE_METADATA_KEY].astext.label(
-                "title"
-            ),
         )
+        .join(FileRecord, FileRecord.file_id == ChatArtifact.file_id)
         .where(
-            FileRecord.file_id.startswith(
-                f"{CHAT_ARTIFACT_FILE_PREFIX}{chat_session_id}-"
-            ),
-            path.is_not(None),
+            ChatArtifact.chat_session_id == chat_session_id,
+            ChatArtifact.path.is_not(None),
             FileRecord.file_size.is_distinct_from(FILE_SIZE_MISSING_SENTINEL),
         )
-        .distinct(path)
-        .order_by(path, FileRecord.created_at.desc(), FileRecord.file_id.desc())
+        .distinct(ChatArtifact.path)
+        .order_by(
+            ChatArtifact.path,
+            ChatArtifact.created_at.desc(),
+            ChatArtifact.file_id.desc(),
+        )
         .subquery()
     )
     rows = db_session.execute(

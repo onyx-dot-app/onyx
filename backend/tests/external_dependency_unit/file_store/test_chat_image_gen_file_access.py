@@ -19,7 +19,7 @@ from onyx.access.access import user_can_access_chat_file
 from onyx.configs.constants import CHAT_SESSION_ID_FILE_METADATA_KEY, FileOrigin
 from onyx.db.chat import create_chat_session
 from onyx.db.enums import ChatSessionSharedStatus
-from onyx.db.models import ChatSession, FileRecord, User
+from onyx.db.models import ChatArtifact, ChatSession, FileRecord, User
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
@@ -147,13 +147,13 @@ def test_malformed_session_stamp_is_denied(db_session: Session, users: _Users) -
     ("origin", "shared"),
     [
         (FileOrigin.CHAT_IMAGE_GEN, True),
-        (FileOrigin.CHAT_ARTIFACT, True),
-        # A stamp on another origin, such as an agent checkpoint file, grants
-        # nothing.
+        # A published file's chat is its chat_artifact row, and a stamp on
+        # another origin, such as an agent checkpoint file, grants nothing.
+        (FileOrigin.CHAT_ARTIFACT, False),
         (FileOrigin.OTHER, False),
     ],
 )
-def test_only_chat_output_files_are_shared_by_their_session_stamp(
+def test_only_generated_images_are_shared_by_their_session_stamp(
     db_session: Session, users: _Users, origin: FileOrigin, shared: bool
 ) -> None:
     session = _new_session(db_session, users.owner.id)
@@ -164,3 +164,23 @@ def test_only_chat_output_files_are_shared_by_their_session_stamp(
     )
 
     assert user_can_access_chat_file(file_id, users.intruder, db_session) is shared
+
+
+def test_a_published_file_follows_its_chat_artifact_row(
+    db_session: Session, users: _Users
+) -> None:
+    session = _new_session(db_session, users.owner.id)
+    file_id = _seed_generated_file(db_session, users, None, FileOrigin.CHAT_ARTIFACT)
+    # Unlike an unstamped generated image, a published file without its row
+    # is denied.
+    assert not user_can_access_chat_file(file_id, users.owner, db_session)
+    db_session.add(
+        ChatArtifact(file_id=file_id, chat_session_id=session.id, path="/w/a.md")
+    )
+    db_session.commit()
+
+    assert user_can_access_chat_file(file_id, users.owner, db_session)
+    assert not user_can_access_chat_file(file_id, users.intruder, db_session)
+    session.shared_status = ChatSessionSharedStatus.PUBLIC
+    db_session.commit()
+    assert user_can_access_chat_file(file_id, users.intruder, db_session)

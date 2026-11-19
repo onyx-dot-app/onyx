@@ -256,9 +256,9 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
       or directly shared via `Persona.users`).
     - `ChatMessage.files` of a session the user owns or that is shared as
       `ChatSessionSharedStatus.PUBLIC`.
-    - A chat output file (`CHAT_OUTPUT_FILE_ORIGINS`: generated images and
-      published files) whose stamped chat session the user may read (owned,
-      or shared as `PUBLIC`). The stamp grants nothing on other origins.
+    - A chat output file whose chat session the user may read (owned, or
+      shared as `PUBLIC`): a generated image by its stamped session, a
+      published file by its `chat_artifact` row.
     - `Document` whose ACL grants access (covers connector-ingested files).
 
     TODO(auth-perf): split `/chat/file` into per-asset-class endpoints so the
@@ -276,19 +276,23 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
 
     # Generated images never reach ChatMessage.files, a code-interpreter file
     # reaches it only when the reply cites the id, and a published file only
-    # when its response is saved, so the stamp is the real access path for
-    # them. Kept above the connector branch so previews hit a PK lookup.
+    # when its response is saved, so the stamp and the chat_artifact row are
+    # the real access paths for them. Kept above the connector branch so
+    # previews hit a PK lookup.
     record = get_chat_output_file_row(db_session, file_id)
     if record is not None:
-        origin, file_metadata = record
+        origin, file_metadata, artifact_session_id = record
+        if origin == FileOrigin.CHAT_ARTIFACT:
+            return artifact_session_id is not None and user_can_read_chat_session(
+                db_session, artifact_session_id, user.id
+            )
         raw_session_id = (
             file_metadata.get(CHAT_SESSION_ID_FILE_METADATA_KEY)
             if isinstance(file_metadata, dict)
             else None
         )
         if raw_session_id is None:
-            # Generated images written before files were stamped with their
-            # session.
+            # An unstamped generated image is open to every signed-in user.
             return origin == FileOrigin.CHAT_IMAGE_GEN
         try:
             chat_session_id = UUID(str(raw_session_id))

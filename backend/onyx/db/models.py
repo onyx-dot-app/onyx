@@ -5615,6 +5615,36 @@ class FileContent(Base):
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
+class ChatArtifact(Base):
+    """A file that the model published from its sandbox (publish_files,
+    FileOrigin.CHAT_ARTIFACT). The file inherits its chat's access, and a hard
+    chat delete deletes it (db/chat.py:delete_messages_and_files_from_chat_session)
+    before the cascade from the chat removes the row."""
+
+    __tablename__ = "chat_artifact"
+
+    file_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("file_record.file_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # The root chat: a subagent run publishes into its root chat.
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # The absolute, normalized VM path: the file's identity. A later publish
+    # of a path is the newer copy of that file. NULL for a file published
+    # without a recorded path.
+    path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Skill(Base):
     """A built-in skill. Old custom rows stay in the table for a rollback, with
     columns this model does not map (``alembic/env.py``)."""

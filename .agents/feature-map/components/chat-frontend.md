@@ -413,7 +413,7 @@ approval, each file ID once, with the newest publish of each path. The
 session's `loadedPublishedFiles` holds the list and the file IDs that the
 loads' packets replayed (`addLoadedPublishedFiles`; every load and settle
 applies it, and an older page adds its packets). A replayed file that the
-list leaves out stays out: an older copy, a file without a stamped path or
+list leaves out stays out: an older copy, a file without a path or
 one whose object is missing. Without a list, the packets give all the files.
 A shared chat has no live publishes, so its load's list alone gives its
 files. A file tab keeps the file that it opened with

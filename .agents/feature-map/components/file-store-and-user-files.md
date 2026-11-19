@@ -125,13 +125,15 @@ does them ([[indexing-pipeline]]).
 `FileOrigin.CHAT_IMAGE_GEN` and the session stamp, through
 `file_store/utils.py:save_chat_output_file`. The sandbox tool
 `publish_files` saves files from the user's VM with `FileOrigin.CHAT_ARTIFACT`
-and the stamp of the root chat session
-(`tools/tool_implementations/sandbox/sandbox_tools.py:PublishFilesTool`). They
-get a `FileRecord` but no `UserFile`. The chat shows them through
-`/chat/file/{file_id}`. A published file has an ID under
-`CHAT_ARTIFACT_FILE_PREFIX` and the root chat session ID, by which a chat
-delete deletes it, also when its response never saved; a saved response also
-lists it in `ChatMessage.files` ([[chat-persistence]]).
+(`tools/tool_implementations/sandbox/sandbox_tools.py:PublishFilesTool`)
+through `db/chat.py:save_chat_artifact`, which writes the file record and its
+`db/models.py:ChatArtifact` row in one commit. The row holds the root chat
+session, the VM path and the title. They get a `FileRecord` but no
+`UserFile`. The chat shows them through `/chat/file/{file_id}`. A chat delete
+deletes a published file through its row, also when its response never saved;
+a saved response also lists it in `ChatMessage.files` ([[chat-persistence]]).
+The row cascades from both the file record and the chat session, so a chat
+delete must delete the files before the session.
 
 **Serving.** `server/query_and_chat/chat_backend.py:fetch_chat_file` resolves
 the id, calls `backend/onyx/access/access.py:user_can_access_chat_file`, and
@@ -148,29 +150,28 @@ preview.
 1. `read-check-404` **Every read checks the acting user, and denial is a
    404.** `backend/onyx/access/access.py:user_can_access_chat_file` admits, in order: the file owner;
    readers of an agent the file is attached to; readers of a session whose
-   `ChatMessage.files` lists it; readers of the session stamped on a chat
-   output file (`configs/constants.py:CHAT_OUTPUT_FILE_ORIGINS`: generated
-   images and published files); and the document ACL for connector files. A new kind of file must fit
+   `ChatMessage.files` lists it; readers of the session of a chat output file
+   (`configs/constants.py:CHAT_OUTPUT_FILE_ORIGINS`: the session stamped on a
+   generated image, the `chat_artifact` row's session of a published file);
+   and the document ACL for connector files. A new kind of file must fit
    one of these branches, or nobody can read it.
    `FileStore.presign_download` checks no user: a caller that hands a URL to
    anyone else must authorize first.
-2. `generated-file-session-stamp` **Every chat output file must carry the
-   session stamp, and only chat output files are shared by it.** On a
-   `CHAT_OUTPUT_FILE_ORIGINS` origin (`CHAT_IMAGE_GEN`, `CHAT_ARTIFACT`), a
-   `chat_session_id` in `file_metadata` gives the file to every reader of
-   that session: its owner, and everyone while it is shared as `PUBLIC`. On
-   any other origin the stamp grants nothing. A `CHAT_IMAGE_GEN` file with no
-   stamp is open to every signed-in user
-   (`backend/onyx/access/access.py:user_can_access_chat_file`). Files written
-   before stamping depend on this, so the open branch must stay. A new writer
+2. `generated-file-session-stamp` **Every generated image must carry the
+   session stamp, and every published file its `chat_artifact` row.** A
+   `chat_session_id` in the `file_metadata` of a `CHAT_IMAGE_GEN` file gives
+   the file to every reader of that session: its owner, and everyone while
+   it is shared as `PUBLIC`. On any other origin the stamp grants nothing. A
+   `CHAT_IMAGE_GEN` file with no stamp is open to every signed-in user
+   (`backend/onyx/access/access.py:user_can_access_chat_file`). Unstamped
+   generated images depend on this, so the open branch must stay. A new writer
    that forgets the stamp creates an open file, and nothing fails. Save
-   through `file_store/utils.py:save_chat_output_file`, which stamps the file
-   and accepts only these origins. A new kind of chat output that every
-   reader of the chat may download needs its origin in the set. A
-   `CHAT_ARTIFACT` file must also get its VM path, and its title when the
-   model gave one, under `PUBLISHED_FILE_PATH_METADATA_KEY` and
-   `PUBLISHED_FILE_TITLE_METADATA_KEY` (`configs/constants.py`); the chat's
-   file list reads them, and leaves out a file without the path.
+   through `file_store/utils.py:save_chat_output_file`, which stamps the
+   file. A `CHAT_ARTIFACT` file gets its chat from its `chat_artifact` row
+   instead; without the row nobody can read it, and the chat's file list
+   leaves it out. A backfilled row can have no path: access and chat delete
+   still use it, and the file list leaves it out. Save it through
+   `db/chat.py:save_chat_artifact`, which always sets the path.
 3. `say-which-id` **Say which id you mean.** A new route or tool that accepts
    "a file id" must state whether it is a blob id or a `UserFile.id`. Pass a
    `UserFile.id` to `FileStore.read_file` and you get "not found" for a file
@@ -311,8 +312,8 @@ preview.
   in `OnyxFileExtensions`. Then check the upload branch in
   `categorize_uploaded_files` ([[#upload-rejects-indexing-does-not]]).
 - `add-generated-file-writer` **Add a generated-file writer.** Copy `file_store/utils.py:save_file_from_base64`:
-  save through `file_store/utils.py:save_chat_output_file` with a
-  `CHAT_OUTPUT_FILE_ORIGINS` origin ([[#generated-file-session-stamp]]). List
+  save through `file_store/utils.py:save_chat_output_file`
+  ([[#generated-file-session-stamp]]). List
   the current writers with `git grep -n "save_chat_output_file(" backend/onyx`.
 - `add-storage-backend` **Add a storage backend.** Copy `file_store/gcs_file_store.py`. List the
   current backends in `file_store/file_store.py:get_default_file_store`.
@@ -327,7 +328,8 @@ preview.
   sent ([[#say-which-id]]). Then walk the branches of
   `user_can_access_chat_file` in order for that user: `user_file.user_id`,
   agent links, `chat_message.files`, the `chat_session_id` in
-  `file_record.file_metadata`, and the connector document ACL.
+  `file_record.file_metadata` (a published file: its `chat_artifact` row),
+  and the connector document ACL.
 - `investigate-file-processing` **Investigate a file stuck in processing, or
   `COMPLETED` with no answers.**
   Read `user_file.status`, `chunk_count` and the sync flags. Search the
