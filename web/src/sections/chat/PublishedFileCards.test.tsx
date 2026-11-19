@@ -104,3 +104,23 @@ test("an HTML file previews as source, not as a rendered page", async () => {
   expect(dialog).toHaveTextContent(HTML);
   expect(view.container.ownerDocument.querySelector("iframe")).toBeNull();
 });
+
+test("a card shows its type without the name's bidi controls", () => {
+  render(
+    <PublishedFileCards
+      files={[
+        {
+          file_id: "file-1",
+          name: "photo.‮gpj",
+          title: null,
+          path: "/home/onyx/photo.gpj",
+          size: 512,
+          mime_type: "image/jpeg",
+          version: 1,
+        },
+      ]}
+    />
+  );
+
+  expect(screen.getByText(/^GPJ · 512/)).toBeInTheDocument();
+});

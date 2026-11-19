@@ -22,7 +22,8 @@ interface PublishedFileCardsProps {
   files: PublishedFileVersion[];
 }
 
-function fileTypeLabel(name: string): string {
+function fileTypeLabel(fileName: string): string {
+  const name = stripBidiControls(fileName);
   const dot = name.lastIndexOf(".");
   return dot > 0 && dot < name.length - 1
     ? name.slice(dot + 1).toUpperCase()
