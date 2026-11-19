@@ -3,7 +3,7 @@
 import { memo, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
-import { Section } from "@opal/layouts";
+import { CardGrid, Section } from "@opal/layouts";
 import { SvgFiles } from "@opal/icons";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
@@ -18,7 +18,6 @@ import { WorkspaceHome } from "@/sections/output-panel/WorkspaceHome";
 import {
   OutputImageThumbnail,
   OutputTileFrame,
-  OutputTileGrid,
 } from "@/sections/output-panel/OutputTile";
 import {
   ChatFilePreviewBody,
@@ -59,7 +58,7 @@ export const PublishedFilesGrid = memo(function PublishedFilesGrid({
           </Text>
         </div>
       )}
-      <OutputTileGrid>
+      <CardGrid columns="two-to-three">
         {files.map((file) => {
           const label = publishedFileLabel(file);
           const FileIcon = getFileIcon(file.name);
@@ -98,7 +97,7 @@ export const PublishedFilesGrid = memo(function PublishedFilesGrid({
             </div>
           );
         })}
-      </OutputTileGrid>
+      </CardGrid>
     </WorkspaceHome>
   );
 });

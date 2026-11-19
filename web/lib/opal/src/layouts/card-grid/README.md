@@ -15,5 +15,6 @@ A grid of cards: one column, and two once the grid is at least `@xl` (36rem) wid
 | ---------- | ----------- | ------- | -------------------------------------------------------- |
 | `children` | `ReactNode` | —       | The grid's cards                                         |
 | `gap`      | `Spacing`   | `2`     | Space between the cards, as a spacing step (`N / 4` rem) |
+| `columns`  | `"one-to-two" \| "two-to-three"` | `"one-to-two"` | `"two-to-three"`: two columns, three once the grid is 24rem wide, for small tiles such as output thumbnails |
 
 Use it for a set of peer cards, such as the provider cards on Language Models and Decision Models, instead of a hand-rolled grid `div`.
