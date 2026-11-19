@@ -97,12 +97,11 @@ from onyx.db.chat import (
     get_chat_message,
     get_chat_message_page_ids,
     get_chat_messages_by_session,
+    get_chat_published_files,
     get_chat_session_by_id,
     get_chat_sessions_by_user,
-    get_current_branch,
     get_incognito_session_ids_for_user,
     get_owned_chat_session,
-    get_published_files_on_branch,
     get_selected_branch,
     set_as_latest_chat_message,
     set_chat_session_tool_options__no_commit,
@@ -202,7 +201,6 @@ from onyx.server.query_and_chat.models import (
     ChatApprovalDecisionRequest,
     ChatFeedbackRequest,
     ChatMessageIdentifier,
-    ChatPublishedFile,
     ChatQuestionAnswersRequest,
     ChatRenameRequest,
     ChatSearchResponse,
@@ -558,31 +556,27 @@ def get_chat_session(
         )
     version = approvals_version(db_session, session_id)
 
-    # The client keeps the branch's file list from a latest-page load, and the
-    # shared view from its full load; an older page does not need it.
-    lists_published_files = before_message_id is None and (
-        limit is not None or is_shared
-    )
     page_message_ids: set[int] | None = None
     has_older_messages = False
-    published_files: list[ChatPublishedFile] = []
-    if limit is not None or lists_published_files:
-        current_branch = get_current_branch(session_id, db_session)
-        if limit is not None:
-            # The latest page reaches back to every waiting card's reply, so a
-            # client that loads only that page shows every waiting card.
-            page_message_ids, has_older_messages = get_chat_message_page_ids(
-                current_branch=current_branch,
-                limit=limit,
-                before_message_id=before_message_id,
-                waiting_reply_ids=waiting_approval_reply_ids(db_session, session_id)
-                if before_message_id is None
-                else (),
-            )
-        if lists_published_files:
-            published_files = get_published_files_on_branch(
-                current_branch.message_ids, db_session
-            )
+    if limit is not None:
+        # The latest page reaches back to every waiting card's reply, so a
+        # client that loads only that page shows every waiting card.
+        page_message_ids, has_older_messages = get_chat_message_page_ids(
+            chat_session_id=session_id,
+            db_session=db_session,
+            limit=limit,
+            before_message_id=before_message_id,
+            waiting_reply_ids=waiting_approval_reply_ids(db_session, session_id)
+            if before_message_id is None
+            else (),
+        )
+    # The client keeps the list from a latest-page load, and the shared view
+    # from its full load; an older page does not need it.
+    published_files = (
+        get_chat_published_files(session_id, db_session)
+        if before_message_id is None and (limit is not None or is_shared)
+        else None
+    )
 
     session_messages = get_chat_messages_by_session(
         chat_session_id=session_id,

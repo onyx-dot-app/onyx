@@ -2454,12 +2454,13 @@ def test_a_publish_that_fails_on_one_file_publishes_none(
 
 
 @pytest.mark.usefixtures("node", "initialize_file_store")
-def test_a_paged_chat_load_lists_every_file_published_on_the_branch(
+def test_a_paged_chat_load_lists_the_newest_file_of_each_path(
     db_session: Session, sandbox: FirecrackerHarnessSandbox, chat: SandboxChat
 ) -> None:
     """A first answer publishes a report and a chart. A later answer's code
     mode program publishes the report's path again. A load of only the latest
-    message lists all three, oldest first, each with its path and title."""
+    message lists the chart and the newer report, oldest first, each with its
+    path and title."""
     ref = chat.ref(db_session)
     sandbox.write_file(ref, "report.md", b"# Draft\n")
     sandbox.write_file(ref, "chart.svg", b"<svg/>")
@@ -2516,44 +2517,21 @@ def test_a_paged_chat_load_lists_every_file_published_on_the_branch(
 
     assert first_answer.id not in {message.message_id for message in detail.messages}
     workspace = session_workspace(chat.chat_session_id)
+    assert detail.published_files is not None
     assert [
-        (file.name, file.title, file.path, file.size, file.mime_type, file.message_id)
+        (file.name, file.title, file.path, file.size, file.mime_type)
         for file in detail.published_files
     ] == [
-        (
-            "report.md",
-            "Report",
-            f"{workspace}/report.md",
-            8,
-            "text/markdown",
-            first_answer.id,
-        ),
-        (
-            "chart.svg",
-            None,
-            f"{workspace}/chart.svg",
-            6,
-            "image/svg+xml",
-            first_answer.id,
-        ),
-        (
-            "report.md",
-            None,
-            f"{workspace}/report.md",
-            15,
-            "text/markdown",
-            last_answer.id,
-        ),
+        ("chart.svg", None, f"{workspace}/chart.svg", 6, "image/svg+xml"),
+        ("report.md", None, f"{workspace}/report.md", 15, "text/markdown"),
     ]
     assert [file.display_path for file in detail.published_files] == [
-        "report.md",
         "chart.svg",
         "report.md",
     ]
     assert [file.file_id for file in detail.published_files] == [
-        descriptor["id"]
-        for answer in (first_answer, last_answer)
-        for descriptor in answer.files or []
+        (first_answer.files or [])[1]["id"],
+        (last_answer.files or [])[0]["id"],
     ]
     delete_chat_session_by_id(
         chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
