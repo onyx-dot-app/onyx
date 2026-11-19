@@ -39,7 +39,7 @@ from onyx.server.features.skill.response_helpers import skills_list_response_for
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.skills.models import SkillUsage
 from tests.external_dependency_unit.craft.db_helpers import (
-    make_app_plugin_for_user,
+    give_app_to_user,
     make_external_app,
     make_skill,
     make_user,
@@ -115,8 +115,8 @@ def test_built_in_app_skill_follows_the_integration_the_user_has_on(
     app = make_external_app(
         session, app_type=ExternalAppType.SLACK, auth_template=_AUTH_TEMPLATE
     )
-    make_app_plugin_for_user(session, app=app, user=runner)
-    make_app_plugin_for_user(session, app=app, user=turned_off, enabled=False)
+    give_app_to_user(session, app=app, user=runner)
+    give_app_to_user(session, app=app, user=turned_off, enabled=False)
 
     assert _app_skills(runner, session) == {slack_id: app.id}
     for user in (turned_off, no_plugin):
@@ -187,7 +187,7 @@ def test_turned_off_integration_gives_no_built_in_skill(session: Session) -> Non
     app = make_external_app(
         session, app_type=ExternalAppType.SLACK, auth_template=_AUTH_TEMPLATE
     )
-    make_app_plugin_for_user(session, app=app, user=user)
+    give_app_to_user(session, app=app, user=user)
     assert _app_skills(user, session) == {slack_id: app.id}
 
     session.execute(

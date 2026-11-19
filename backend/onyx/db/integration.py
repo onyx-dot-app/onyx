@@ -3,7 +3,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import ColumnElement, Select, and_, delete, func, select, update
-from sqlalchemy.orm import InstrumentedAttribute, Session, aliased, load_only
+from sqlalchemy.orm import InstrumentedAttribute, Session, load_only
 
 from onyx.db.enums import (
     ExternalAppType,
@@ -25,10 +25,6 @@ from onyx.db.models import (
     IntegrationConnection,
     IntegrationOAuthClient,
     MCPServer,
-    Plugin,
-    Plugin__Integration,
-    PluginSkill,
-    PluginVersion,
     Tool,
 )
 from onyx.db.utils import UnsetType, is_set
@@ -428,18 +424,6 @@ def replace_integration_actions__no_commit(
     db_session.flush()
 
 
-def holds_only_integrations() -> ColumnElement[bool]:
-    """True for a plugin that holds an integration and no skill."""
-    # An alias, so a query that joins plugin__integration can use this too.
-    link = aliased(Plugin__Integration)
-    return and_(
-        select(link.plugin_id).where(link.plugin_id == Plugin.id).exists(),
-        ~select(PluginSkill.id)
-        .where(PluginSkill.plugin_version_id == Plugin.current_version_id)
-        .exists(),
-    )
-
-
 def list_integrations_by_ids(
     integration_ids: Collection[int], db_session: Session
 ) -> list[Integration]:
@@ -645,34 +629,8 @@ def delete_integration__no_commit(
     integration: Integration, db_session: Session
 ) -> None:
     """Delete the integration and then its kind row. The connections,
-    actions, policies, OAuth client, shares, choices and plugin links go by
-    cascade. A plugin that held only this integration and no skill goes too."""
-    other_link = aliased(Plugin__Integration)
-    other_integration = (
-        select(other_link.integration_id)
-        .where(
-            other_link.plugin_id == Plugin.id,
-            other_link.integration_id != integration.id,
-        )
-        .exists()
-    )
-    any_skill = (
-        select(PluginSkill.id)
-        .join(PluginVersion, PluginVersion.id == PluginSkill.plugin_version_id)
-        .where(PluginVersion.plugin_id == Plugin.id)
-        .exists()
-    )
-    emptied_plugin_ids = list(
-        db_session.scalars(
-            select(Plugin.id)
-            .join(Plugin__Integration, Plugin__Integration.plugin_id == Plugin.id)
-            .where(
-                Plugin__Integration.integration_id == integration.id,
-                ~other_integration,
-                ~any_skill,
-            )
-        ).all()
-    )
+    actions, policies, OAuth client, shares, choices and links go by
+    cascade."""
     mcp_server_id = integration.mcp_server_id
     tool_id = integration.tool_id
     external_app_id = integration.external_app_id
@@ -687,13 +645,6 @@ def delete_integration__no_commit(
     if external_app_id is not None:
         delete_external_app__no_commit(db_session, external_app_id)
     db_session.flush()
-    if emptied_plugin_ids:
-        db_session.execute(
-            delete(Plugin)
-            .where(Plugin.id.in_(emptied_plugin_ids))
-            .execution_options(synchronize_session="fetch")
-        )
-        db_session.flush()
 
 
 def set_policy_rows__no_commit(

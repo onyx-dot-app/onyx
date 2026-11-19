@@ -251,11 +251,10 @@ it.
   `shared_with_everyone` and `state`. `state` is one of `on`, `turn_on`,
   `sign_in`, `no_access` and `turned_off`
   (`integrations/service.py:member_state`); a client does not derive it.
-- Migration `730bce2814a0` fills the access tables, `persona__integration` and
-  `scheduled_task__integration`. Create still makes one plugin for each
-  integration (`plugin__integration`); no code reads it, and the old
-  `persona__plugin`, `scheduled_task__plugin` and `disabled_plugin_ids` have
-  no reader.
+- Migration `730bce2814a0` fills the access tables, `persona__integration`,
+  `scheduled_task__integration` and `disabled_integration_ids` from the
+  released tables. No plugin holds an integration: the migration and create
+  make no plugin, and no table links a plugin to an integration.
 - The released mobile app names an integration by `plugin_ids` of the tool
   list. Four aliases keep it working, each with the integration id as text:
   `ToolSnapshot.plugin_ids`, `GET /plugins/agents/{id}`,
@@ -332,9 +331,8 @@ admin value is not Ask.
 - Create (`create_integration__no_commit`) writes, in one transaction, the
   kind row (`mcp_server`, the OpenAPI `tool` row, or `external_app` with the
   preset or URL patterns), then the `integration` row with exactly one of
-  `mcp_server_id`, `tool_id` or `external_app_id`, the OAuth client, one
-  plugin that holds it (`db/plugin.py:create_integration_plugin__no_commit`;
-  no code reads this plugin) and the actions. The creator is the owner. "For the organization"
+  `mcp_server_id`, `tool_id` or `external_app_id`, the OAuth client
+  and the actions. It writes no plugin row. The creator is the owner. "For the organization"
   sets the install setting AVAILABLE; else the integration is private and
   starts on for its owner. A public MCP server (`auth_mode` none) is asked for its
   tools before the first insert (`_discover_new_server`); a failure gives a
@@ -348,8 +346,7 @@ admin value is not Ask.
   constant
   (`backend/tests/external_dependency_unit/integrations/test_list_query_counts.py`).
 - Delete (`db/integration.py:delete_integration__no_commit`) deletes the
-  integration and then its kind row. A plugin left with no skill and no
-  integration goes too. A deleted kind row deletes its integration by cascade.
+  integration and then its kind row. A deleted kind row deletes its integration by cascade.
 - A preset keeps its client id, secret and host settings (Zendesk
   `subdomain`) on `integration_oauth_client`; the host settings are in
   `additional_params`, which

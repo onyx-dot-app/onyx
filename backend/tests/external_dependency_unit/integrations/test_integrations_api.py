@@ -12,7 +12,7 @@ import pytest
 from httpx import ConnectError, HTTPStatusError, Request, Response
 from mcp.types import Tool as MCPLibTool
 from mcp.types import ToolAnnotations
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -25,7 +25,6 @@ from onyx.db.enums import (
     IntegrationConnectionStatus,
     IntegrationKind,
     IntegrationOAuthProviderMode,
-    MarketplaceKind,
     PluginInstallationPolicy,
 )
 from onyx.db.integration import (
@@ -46,7 +45,6 @@ from onyx.db.models import (
     MCPServer,
     Persona,
     Plugin,
-    Plugin__Integration,
     Tool,
     User,
 )
@@ -176,12 +174,12 @@ def _openapi_create(
     )
 
 
-def _plugin_of(db_session: Session, integration_id: int) -> Plugin:
-    return db_session.scalars(
-        select(Plugin)
-        .join(Plugin__Integration, Plugin__Integration.plugin_id == Plugin.id)
-        .where(Plugin__Integration.integration_id == integration_id)
-    ).one()
+def _plugin_rows(db_session: Session) -> tuple[int, int]:
+    """The count of plugins and of marketplaces."""
+    return (
+        db_session.scalar(select(func.count()).select_from(Plugin)) or 0,
+        db_session.scalar(select(func.count()).select_from(Marketplace)) or 0,
+    )
 
 
 def _make_available(db_session: Session, integration_id: int) -> None:
@@ -192,18 +190,13 @@ def _make_available(db_session: Session, integration_id: int) -> None:
     db_session.commit()
 
 
-def _marketplace_kind(db_session: Session, plugin: Plugin) -> MarketplaceKind:
-    return db_session.scalars(
-        select(Marketplace.kind).where(Marketplace.id == plugin.marketplace_id)
-    ).one()
-
-
 # Create
 
 
-def test_create_openapi_makes_integration_tool_plugin_and_actions(
+def test_create_openapi_makes_integration_tool_and_actions_and_no_plugin(
     db_session: Session, admin: User, created: Created
 ) -> None:
+    plugin_rows = _plugin_rows(db_session)
     detail = admin_api.create_integration(_openapi_create(), admin, db_session)
     created.add(detail.id)
 
@@ -214,9 +207,7 @@ def test_create_openapi_makes_integration_tool_plugin_and_actions(
     assert detail.can_manage is True
     tool = get_openapi_tool_for_integration(detail.id, db_session)
     assert tool is not None and tool.openapi_schema == OPENAPI_SPEC
-    plugin = _plugin_of(db_session, detail.id)
-    assert _marketplace_kind(db_session, plugin) is MarketplaceKind.ORGANIZATION_LIBRARY
-    assert plugin.published_version_id == plugin.current_version_id
+    assert _plugin_rows(db_session) == plugin_rows
     assert detail.installation_policy is PluginInstallationPolicy.AVAILABLE
     assert detail.access.shared_with_everyone is True
     actions = {
@@ -308,6 +299,7 @@ def test_create_mcp_discovers_tools_of_a_public_server(
             )
         ]
 
+    plugin_rows = _plugin_rows(db_session)
     with patch(
         "onyx.integrations.service.discover_mcp_tools", side_effect=discover
     ) as fetch:
@@ -328,9 +320,12 @@ def test_create_mcp_discovers_tools_of_a_public_server(
     assert [a.key for a in list_integration_actions(detail.id, db_session)] == [
         "search"
     ]
-    plugin = _plugin_of(db_session, detail.id)
-    assert _marketplace_kind(db_session, plugin) is MarketplaceKind.USER_UPLOADS
-    assert plugin.author_user_id == scoped.id
+    # A private integration makes no plugin and no "My uploads".
+    assert _plugin_rows(db_session) == plugin_rows
+    integration = db_session.get(Integration, detail.id)
+    assert integration is not None
+    assert integration.owner_user_id == scoped.id
+    assert integration.installation_policy is PluginInstallationPolicy.NOT_AVAILABLE
     # No MCP tool row is written.
     assert server is not None
     assert (
@@ -483,7 +478,7 @@ def test_create_rolls_back_when_a_step_fails(db_session: Session, admin: User) -
     name = f"rollback-{uuid4().hex[:8]}"
     with (
         patch(
-            "onyx.integrations.service.create_integration_plugin__no_commit",
+            "onyx.integrations.service.sync_integration_actions__no_commit",
             side_effect=RuntimeError("boom"),
         ),
         pytest.raises(RuntimeError),
@@ -505,7 +500,7 @@ def test_create_rolls_back_when_a_step_fails(db_session: Session, admin: User) -
     ],
 )
 @pytest.mark.usefixtures("craft_available")
-def test_delete_removes_the_kind_row_and_the_emptied_plugin(
+def test_delete_removes_the_kind_row(
     db_session: Session,
     admin: User,
     created: Created,
@@ -529,14 +524,12 @@ def test_delete_removes_the_kind_row_and_the_emptied_plugin(
     if integration.external_app_id is not None:
         kind_row = (ExternalApp, integration.external_app_id)
     assert kind_row[1] is not None
-    plugin_id = _plugin_of(db_session, detail.id).id
 
     admin_api.delete_integration(detail.id, admin, db_session)
 
     db_session.expire_all()
     assert db_session.get(Integration, detail.id) is None
     assert db_session.get(kind_row[0], kind_row[1]) is None
-    assert db_session.get(Plugin, plugin_id) is None
 
 
 # Permissions

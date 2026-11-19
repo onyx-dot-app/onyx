@@ -4,8 +4,6 @@ the install setting."""
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -19,7 +17,6 @@ from onyx.db.external_app import (
 from onyx.db.models import (
     Plugin,
     Plugin__UserGroup,
-    Sandbox,
     User,
     UserPluginPreference,
 )
@@ -33,7 +30,6 @@ from onyx.db.plugin import (
     get_or_create_organization_library__no_commit,
     get_or_create_user_uploads__no_commit,
     lock_plugin,
-    set_organization_library_default__no_commit,
     set_plugin_preferences__no_commit,
 )
 from onyx.db.plugin_access import load_user_plugin_states, order_skill_names
@@ -44,15 +40,12 @@ from onyx.db.skill import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills import push
 from onyx.skills.models import PluginSkillContent, PluginVersionContent
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_external_app,
     make_group,
-    make_sandbox,
     make_skill,
-    make_skillless_plugin,
     make_user,
     share_plugin_with_group,
     share_plugin_with_user,
@@ -191,58 +184,6 @@ def test_a_version_with_a_new_skill_name(
 
     hidden = order_skill_names(load_user_plugin_states([user.id], db_session))
     assert len(hidden & {holder.id, plugin.id}) == 1
-
-
-def test_setting_changes_on_a_plugin_with_no_skills_push(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Default Access, the company setting and a group setting of a plugin
-    with no skills: each write returns the member, and the push to the member
-    lands. The session rolls back, so the library default is restored."""
-    admin = make_user(db_session, is_admin=True)
-    group = make_group(db_session)
-    member = make_user(db_session, standard_account=True)
-    add_user_to_group(db_session, member, group)
-    plugin = make_skillless_plugin(db_session, published=True)
-    sandbox = make_sandbox(db_session, member)
-
-    affected = set_organization_library_default__no_commit(
-        PluginInstallationPolicy.NOT_AVAILABLE, db_session
-    )
-    assert member.id in affected
-    result = apply_plugin_access_change__no_commit(
-        [plugin.id],
-        PluginAccessChange(
-            company_installation_policy=PluginInstallationPolicy.NOT_AVAILABLE,
-            group_settings=(
-                PluginGroupSetting(
-                    group_id=group.id,
-                    installation_policy=PluginInstallationPolicy.REQUIRED,
-                ),
-            ),
-        ),
-        admin,
-        db_session,
-    )
-    assert result.failures == {}
-    assert member.id in result.affected_user_ids
-    [state] = load_user_plugin_states([member.id], db_session, [plugin.id])
-    assert state.installation_policy == PluginInstallationPolicy.REQUIRED
-    assert state.enabled
-
-    manager = MagicMock()
-    manager.push_to_sandboxes.return_value = SimpleNamespace(failures=[])
-    manager.push_to_sandbox.return_value = SimpleNamespace(
-        failures=[], succeeded=1, targets=1
-    )
-    monkeypatch.setattr(push, "get_sandbox_manager", lambda: manager)
-    push.push_skills_for_users({member.id}, db_session)
-    assert (
-        db_session.scalar(select(Sandbox.skills_hash).where(Sandbox.id == sandbox.id))
-        is not None
-    )
 
 
 def test_toggle_and_auto_enable_read_the_group_setting(

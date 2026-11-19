@@ -20,21 +20,21 @@ from onyx.db.models import (
     Integration,
     Integration__User,
     Integration__UserGroup,
-    Plugin,
-    Plugin__Integration,
     User,
     User__UserGroup,
     UserGroup,
     UserIntegrationPreference,
 )
+from onyx.db.users import delete_user_from_db__no_commit
 from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_group,
-    make_skillless_plugin,
-    share_plugin_with_user,
 )
-from tests.external_dependency_unit.integration_helpers import make_mcp_integration
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    make_mcp_integration,
+)
 
 NOT_AVAILABLE = PluginInstallationPolicy.NOT_AVAILABLE
 AVAILABLE = PluginInstallationPolicy.AVAILABLE
@@ -154,34 +154,6 @@ def test_private_integration_is_for_its_owner_and_its_shares(
         assert state.is_owner is is_owner
         assert not state.for_everyone
         assert (state.choice, state.turned_on, state.on) == (None, False, False)
-
-
-def test_a_plugin_gives_no_access(db_session: Session) -> None:
-    """A user who can see a plugin that holds the integration, through a
-    share of the plugin or because the plugin is published, has no access."""
-    author = create_test_user(db_session, "access_plugin_author")
-    shared = create_test_user(db_session, "access_plugin_shared")
-    integration = _integration(db_session)
-    private_plugin = make_skillless_plugin(db_session, author_user_id=author.id)
-    share_plugin_with_user(
-        db_session, private_plugin.id, shared.id, SkillSharePermission.VIEWER
-    )
-    published_plugin = make_skillless_plugin(
-        db_session, published=True, installation_policy=REQUIRED
-    )
-    db_session.add_all(
-        Plugin__Integration(plugin_id=plugin.id, integration_id=integration.id)
-        for plugin in (private_plugin, published_plugin)
-    )
-    db_session.commit()
-    plugin_ids = [private_plugin.id, published_plugin.id]
-
-    try:
-        assert not _has_access(db_session, integration, author)
-        assert not _has_access(db_session, integration, shared)
-    finally:
-        db_session.execute(delete(Plugin).where(Plugin.id.in_(plugin_ids)))
-        db_session.commit()
 
 
 def test_group_row_with_no_permission_gives_only_its_setting(
@@ -342,3 +314,37 @@ def test_states_of_many_users_in_one_read(db_session: Session) -> None:
     }
     assert load_user_integration_states([], db_session) == []
     assert load_user_integration_states([owner.id], db_session, []) == []
+
+
+def test_user_delete_leaves_the_integration_with_no_owner(db_session: Session) -> None:
+    """A user delete does not stop for a private integration that the user
+    owns, as it does for a private skill. The integration stays private, with
+    no owner and with its shares. The choice of the user goes."""
+    owner = create_test_user(db_session, "access_deleted_owner")
+    shared = create_test_user(db_session, "access_deleted_shared")
+    integration = _integration(db_session, owner=owner)
+    _share_with_user(db_session, integration, shared)
+    _choose(db_session, integration, owner, True)
+    owner_id = owner.id
+
+    try:
+        delete_user_from_db__no_commit(owner, db_session)
+        db_session.commit()
+
+        db_session.expire_all()
+        assert db_session.get(User, owner_id) is None
+        kept = db_session.get(Integration, integration.id)
+        assert kept is not None
+        assert kept.owner_user_id is None
+        assert kept.installation_policy == NOT_AVAILABLE
+        assert _has_access(db_session, kept, shared)
+        assert (
+            db_session.scalar(
+                select(UserIntegrationPreference.user_id).where(
+                    UserIntegrationPreference.integration_id == integration.id
+                )
+            )
+            is None
+        )
+    finally:
+        delete_integrations(db_session, [integration.id])

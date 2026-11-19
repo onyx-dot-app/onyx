@@ -68,7 +68,6 @@ from onyx.db.models import (
     IntegrationOAuthClient,
     User,
 )
-from onyx.db.plugin import create_integration_plugin__no_commit
 from onyx.db.users import fetch_users_by_ids
 from onyx.db.utils import UNSET
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -801,15 +800,6 @@ def create_integration__no_commit(
             db_session=db_session,
         )
 
-    # No code reads this plugin. It goes with plugin__integration.
-    create_integration_plugin__no_commit(
-        integration_id=integration.id,
-        name=name,
-        description=request.description or "",
-        author=user,
-        for_organization=request.for_organization,
-        db_session=db_session,
-    )
     if not request.for_organization:
         set_integration_preferences__no_commit(
             user.id, [integration.id], True, db_session

@@ -32,8 +32,6 @@ from onyx.db.models import (
     IntegrationOAuthClient,
     MCPServer,
     Persona__Integration,
-    Plugin,
-    Plugin__Integration,
     Tool,
     UserIntegrationPreference,
 )
@@ -328,14 +326,6 @@ def delete_integrations(db_session: Session, integration_ids: Sequence[int]) -> 
     db_session.rollback()
     if not integration_ids:
         return
-    # The home plugin that the create route still makes.
-    plugin_ids = list(
-        db_session.scalars(
-            select(Plugin__Integration.plugin_id).where(
-                Plugin__Integration.integration_id.in_(integration_ids)
-            )
-        )
-    )
     integrations = db_session.scalars(
         select(Integration).where(Integration.id.in_(integration_ids))
     ).all()
@@ -348,6 +338,4 @@ def delete_integrations(db_session: Session, integration_ids: Sequence[int]) -> 
     db_session.execute(delete(Tool).where(Tool.id.in_(tool_ids)))
     db_session.execute(delete(MCPServer).where(MCPServer.id.in_(server_ids)))
     db_session.execute(delete(ExternalApp).where(ExternalApp.id.in_(app_ids)))
-    if plugin_ids:
-        db_session.execute(delete(Plugin).where(Plugin.id.in_(plugin_ids)))
     db_session.commit()

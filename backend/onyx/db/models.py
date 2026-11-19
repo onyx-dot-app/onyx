@@ -5061,10 +5061,6 @@ class Assistant__UserSpecificConfig(Base):
     disabled_tool_ids: Mapped[list[int]] = mapped_column(
         postgresql.ARRAY(Integer), nullable=False
     )
-    # No code reads it. disabled_integration_ids holds the choices.
-    disabled_plugin_ids: Mapped[list[UUID]] = mapped_column(
-        postgresql.ARRAY(PGUUID(as_uuid=True)), nullable=False, server_default="{}"
-    )
     disabled_integration_ids: Mapped[list[int]] = mapped_column(
         postgresql.ARRAY(Integer), nullable=False, server_default="{}"
     )
@@ -6378,26 +6374,6 @@ class IntegrationActionPolicy(Base):
 # missing key is inherit.
 
 
-class Persona__Plugin(Base):
-    """No code reads it. ``persona__integration`` holds the agent links."""
-
-    __tablename__ = "persona__plugin"
-
-    persona_id: Mapped[int] = mapped_column(
-        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
-    )
-    plugin_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("plugin.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    action_settings: Mapped[dict[str, Any]] = mapped_column(
-        PGJSONB(), nullable=False, default=dict, server_default=text("'{}'::jsonb")
-    )
-
-    __table_args__ = (Index("ix_persona__plugin_plugin_id", "plugin_id"),)
-
-
 class Persona__Integration(Base):
     """An integration on an agent. The link gives no access: each user of
     the agent needs access to the integration."""
@@ -6417,48 +6393,6 @@ class Persona__Integration(Base):
     __table_args__ = (
         Index("ix_persona__integration_integration_id", "integration_id"),
     )
-
-
-class Plugin__Integration(Base):
-    """An integration that a plugin holds. The plugin gives no access to the
-    integration, and no code names an integration by it. Only the code that
-    makes and deletes the plugin of a new integration writes it."""
-
-    __tablename__ = "plugin__integration"
-
-    plugin_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("plugin.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    integration_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
-    )
-
-    __table_args__ = (Index("ix_plugin__integration_integration_id", "integration_id"),)
-
-
-class ScheduledTask__Plugin(Base):
-    """No code reads it. ``scheduled_task__integration`` holds the task
-    links."""
-
-    __tablename__ = "scheduled_task__plugin"
-
-    scheduled_task_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    plugin_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("plugin.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    action_settings: Mapped[dict[str, Any]] = mapped_column(
-        PGJSONB(), nullable=False, default=dict, server_default=text("'{}'::jsonb")
-    )
-
-    __table_args__ = (Index("ix_scheduled_task__plugin_plugin_id", "plugin_id"),)
 
 
 class ScheduledTask__Integration(Base):

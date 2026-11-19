@@ -1,7 +1,7 @@
 """Migration 730bce2814a0 copies each MCP server, external app and OpenAPI
-custom tool into the integration tables, with its access, and makes a plugin
-that holds each. The rows are seeded at the revision before it, then the chain
-upgrades."""
+custom tool into the integration tables, with its access and its agent and
+task links. It makes no plugin. The rows are seeded at the revision before it,
+then the chain upgrades."""
 
 import hashlib
 import json
@@ -50,6 +50,16 @@ OLD_TABLES = (
     "user_action_policy",
     "scheduled_task_enabled_app",
     "scheduled_task_action_policy",
+)
+
+# The copy makes no plugin, so the rows of these tables must not change.
+PLUGIN_TABLES = (
+    "plugin_marketplace",
+    "plugin",
+    "plugin_version",
+    "plugin__user",
+    "plugin__user_group",
+    "user_plugin_preference",
 )
 
 OPENAPI_SCHEMA = {
@@ -789,8 +799,6 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
         seeded.custom_disabled,
     ]
     if conn.execute(text("SELECT to_regclass('integration')")).scalar_one():
-        # An integration stands alone, so a plugin delete leaves it: delete
-        # the seeded integrations and their plugins.
         params = {
             "gated": list(seeded.gated.values()),
             "tools": custom_tools,
@@ -799,13 +807,6 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
         seeded_integrations = (
             "SELECT id FROM integration WHERE id = ANY(:gated) "
             "OR tool_id = ANY(:tools) OR external_app_id = ANY(:apps)"
-        )
-        conn.execute(
-            text(
-                "DELETE FROM plugin WHERE id IN (SELECT plugin_id "
-                f"FROM plugin__integration WHERE integration_id IN ({seeded_integrations}))"
-            ),
-            params,
         )
         conn.execute(
             text(f"DELETE FROM integration WHERE id IN ({seeded_integrations})"),
@@ -950,16 +951,8 @@ class Copied:
     id: int
     kind: str
     name: str
-    plugin_id: UUID
-    plugin_name: str
-    marketplace_id: UUID
-    marketplace_kind: str
-    author_user_id: UUID | None
-    published: bool
-    installation_policy: str | None
-    # The access that the integration itself holds.
     owner_user_id: UUID | None
-    integration_policy: str
+    installation_policy: str
     auth_mode: str
     auth_method: str | None
     header_template: dict[str, str] | None
@@ -967,22 +960,12 @@ class Copied:
     users_can_save_always_allow: bool
 
 
-# The plugin that the copy made for an integration.
-FIRST_PLUGIN = "md5('integration_plugin:' || i.id::text)::uuid"
-
-
 def _copied(conn: Connection, where: str, **params: Any) -> Copied:
     row = conn.execute(
         text(
-            "SELECT i.id, i.kind, i.name, p.id AS plugin_id, p.name AS plugin_name, "
-            "p.marketplace_id, m.kind AS marketplace_kind, p.author_user_id, "
-            "p.published_version_id IS NOT NULL AS published, "
-            "p.installation_policy, i.owner_user_id, "
-            "i.installation_policy AS integration_policy, i.auth_mode, "
-            "i.auth_method, i.header_template, i.credential_fields, "
-            "i.users_can_save_always_allow "
-            f"FROM integration i JOIN plugin p ON p.id = {FIRST_PLUGIN} "
-            f"JOIN plugin_marketplace m ON m.id = p.marketplace_id WHERE {where}"
+            "SELECT i.id, i.kind, i.name, i.owner_user_id, i.installation_policy, "
+            "i.auth_mode, i.auth_method, i.header_template, i.credential_fields, "
+            f"i.users_can_save_always_allow FROM integration i WHERE {where}"
         ),
         params,
     ).one()
@@ -996,7 +979,8 @@ def _has_tool_selection(conn: Connection) -> bool:
     return conn.execute(
         text(
             "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
-            "WHERE table_name = 'chat_session' AND column_name = 'tool_selection')"
+            "WHERE table_schema = current_schema() "
+            "AND table_name = 'chat_session' AND column_name = 'tool_selection')"
         )
     ).scalar_one()
 
@@ -1071,32 +1055,22 @@ def _integration_shares(
     )
 
 
-def _link_differences(conn: Connection, table: str, owner: str) -> int:
-    """The links of ``table``__plugin and ``table``__integration that do not
-    match: a link with no twin, or with other settings."""
+def _settings(
+    conn: Connection, table: str, key: str, owner: Any, integration_id: int
+) -> Any:
+    """The action settings of an agent or task link. None: no link."""
     return conn.execute(
         text(
-            f"SELECT count(*) FROM {table}__plugin p FULL JOIN ("
-            f"  SELECT {owner}, action_settings, "
-            "    md5('integration_plugin:' || integration_id::text)::uuid AS plugin_id"
-            f"  FROM {table}__integration"
-            f") i USING ({owner}, plugin_id) "
-            "WHERE p.action_settings IS DISTINCT FROM i.action_settings"
-        )
-    ).scalar_one()
-
-
-def _settings(conn: Connection, table: str, key: str, owner: Any, plugin: UUID) -> Any:
-    return conn.execute(
-        text(
-            f"SELECT action_settings FROM {table} WHERE {key} = :o AND plugin_id = :p"
+            f"SELECT action_settings FROM {table} "
+            f"WHERE {key} = :o AND integration_id = :i"
         ),
-        {"o": owner, "p": plugin},
+        {"o": owner, "i": integration_id},
     ).scalar_one_or_none()
 
 
 def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
     before = _fingerprint(engine, OLD_TABLES)
+    plugins_before = _fingerprint(engine, PLUGIN_TABLES)
     with engine.connect() as conn:
         max_gated = conn.execute(text("SELECT max(id) FROM gated_app")).scalar_one()
 
@@ -1132,51 +1106,29 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         ).scalar_one()
         assert next_id > max(c.id for c in custom.values())
 
-        # Each plugin that the copy made has one version, with no bundle and
-        # no skill.
-        for copied in (public, private, orphan, slack, app_custom, *custom.values()):
-            version = conn.execute(
-                text(
-                    "SELECT v.version_number, v.bundle_file_id, "
-                    "(SELECT count(*) FROM plugin_skill s "
-                    " WHERE s.plugin_version_id = v.id) AS skills "
-                    "FROM plugin p JOIN plugin_version v "
-                    "ON v.id = p.current_version_id AND v.plugin_id = p.id "
-                    "WHERE p.id = :id"
-                ),
-                {"id": copied.plugin_id},
-            ).one()
-            assert (version.version_number, version.bundle_file_id) == (1, None)
-            assert version.skills == 0
+        # The copy makes no plugin and no marketplace, and the schema has
+        # no table or column that names an integration by a plugin.
+        assert _fingerprint(engine, PLUGIN_TABLES) == plugins_before
+        for table in (
+            "plugin__integration",
+            "persona__plugin",
+            "scheduled_task__plugin",
+        ):
             assert (
-                conn.execute(
-                    text("SELECT count(*) FROM skill WHERE id = :id"),
-                    {"id": copied.plugin_id},
-                ).scalar_one()
-                == 0
+                conn.execute(text(f"SELECT to_regclass('{table}')")).scalar_one()
+                is None
             )
-
-        # Placement.
-        assert public.marketplace_id == ORGANIZATION_LIBRARY_ID and public.published
-        assert slack.marketplace_kind == "organization_library" and slack.published
-        # An app that is on stays available. An app that is off is not.
-        assert slack.installation_policy is None
-        assert app_custom.installation_policy == "NOT_AVAILABLE"
-        assert {public.plugin_name, slack.plugin_name} == {
-            seeded.names["shared"],
-            f"{seeded.names['shared']}-2",
-        }
-        assert slack.name == seeded.names["shared"]
-        assert private.marketplace_kind == "user_uploads"
-        assert private.author_user_id == seeded.owner and not private.published
-        assert orphan.marketplace_kind == "organization_library"
-        assert orphan.installation_policy == "NOT_AVAILABLE" and orphan.published
-        assert custom["private"].marketplace_kind == "user_uploads"
-        assert custom["shared"].marketplace_kind == "organization_library"
-        assert custom["default"].marketplace_kind == "organization_library"
-        assert custom["default"].installation_policy == "DEFAULT"
-        assert custom["shared"].installation_policy is None
-        assert custom["private"].author_user_id == seeded.owner
+        assert (
+            conn.execute(
+                text(
+                    "SELECT count(*) FROM information_schema.columns "
+                    "WHERE table_schema = current_schema() "
+                    "AND column_name = 'disabled_plugin_ids'"
+                )
+            ).scalar_one()
+            == 0
+        )
+        assert slack.name == public.name == seeded.names["shared"]
 
         # Each kind table points at its integration.
         for table, row_id, copied in (
@@ -1412,25 +1364,6 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             == 0
         )
 
-        # A private MCP server keeps its people. The default group becomes its
-        # members.
-        shared_users = set(
-            conn.execute(
-                text("SELECT user_id FROM plugin__user WHERE plugin_id = :p"),
-                {"p": private.plugin_id},
-            ).scalars()
-        )
-        assert shared_users == {seeded.other, seeded.admin}
-        shared_groups = set(
-            conn.execute(
-                text(
-                    "SELECT user_group_id FROM plugin__user_group WHERE plugin_id = :p"
-                ),
-                {"p": private.plugin_id},
-            ).scalars()
-        )
-        assert shared_groups == {seeded.group}
-
         # Policies.
         policies = {
             (row.integration_id, row.action, row.user_id): row.policy
@@ -1457,7 +1390,7 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         # Each agent with "query" keeps it with no question. The tool that the
         # admin did not select gets no allow.
         assert _settings(
-            conn, "persona__plugin", "persona_id", seeded.own_persona, private.plugin_id
+            conn, "persona__integration", "persona_id", seeded.own_persona, private.id
         ) == {
             "default": "blocked",
             "actions": {"query": "allow", "drop_table": "inherit"},
@@ -1473,27 +1406,6 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
                 {"ids": [c.id for c in custom.values()]},
             )
         } == {(c.id, "", None, "allow") for c in custom.values()}
-        # Each app gets a plugin of its own, and the plugin of each of its
-        # skills holds the integration too. A skill can be deleted, so the
-        # plugin of a skill is never the only plugin of an integration.
-        assert user_key.plugin_id != seeded.only_skill
-        assert org_key.plugin_id not in seeded.shared_skills
-        assert {
-            (row.plugin_id, row.integration_id)
-            for row in conn.execute(
-                text(
-                    "SELECT plugin_id, integration_id FROM plugin__integration "
-                    "WHERE integration_id = ANY(:i)"
-                ),
-                {"i": [org_key.id, user_key.id, slack.id]},
-            )
-        } == {
-            (seeded.only_skill, user_key.id),
-            (user_key.plugin_id, user_key.id),
-            (org_key.plugin_id, org_key.id),
-            *((skill_id, org_key.id) for skill_id in seeded.shared_skills),
-            (slack.plugin_id, slack.id),
-        }
         # The integration holds its own access. Its owner is the person who
         # set it up. An integration of the organization is Available, or what
         # its source gives. Each other integration is private.
@@ -1502,12 +1414,12 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         assert orphan.owner_user_id is None and slack.owner_user_id is None
         assert custom["private"].owner_user_id == seeded.owner
         assert {
-            "public": public.integration_policy,
-            "slack": slack.integration_policy,
-            "app_custom": app_custom.integration_policy,
-            "private": private.integration_policy,
-            "orphan": orphan.integration_policy,
-            **{f"custom_{key}": c.integration_policy for key, c in custom.items()},
+            "public": public.installation_policy,
+            "slack": slack.installation_policy,
+            "app_custom": app_custom.installation_policy,
+            "private": private.installation_policy,
+            "orphan": orphan.installation_policy,
+            **{f"custom_{key}": c.installation_policy for key, c in custom.items()},
         } == {
             "public": "AVAILABLE",
             "slack": "AVAILABLE",
@@ -1521,7 +1433,7 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             "custom_oauth": "NOT_AVAILABLE",
             "custom_disabled": "NOT_AVAILABLE",
         }
-        # A private server keeps its people, as its plugin does. The agents
+        # A private server keeps its people. The agents
         # that have one of its selected tools add their users: the owner of
         # each agent, and the shares of an agent that is listed. A default
         # group becomes its members.
@@ -1538,7 +1450,7 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         ) == {seeded.group, seeded.agent_group, seeded.agent_owner_group}
         # A server with no owner stays private and gets the users of its agent.
         agent_orphan = _copied(conn, "i.id = :id", id=seeded.gated["mcp_agent_orphan"])
-        assert agent_orphan.integration_policy == "NOT_AVAILABLE"
+        assert agent_orphan.installation_policy == "NOT_AVAILABLE"
         assert _integration_shares(
             conn, "integration__user", "user_id", agent_orphan.id
         ) == {seeded.other, seeded.admin, seeded.agent_user}
@@ -1547,8 +1459,7 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         ) == {seeded.agent_group}
         # Each user could use a public agent, so its server is Available.
         agent_public = _copied(conn, "i.id = :id", id=seeded.gated["mcp_agent_public"])
-        assert agent_public.integration_policy == "AVAILABLE"
-        assert agent_public.marketplace_kind == "user_uploads"
+        assert agent_public.installation_policy == "AVAILABLE"
         assert _integration_shares(
             conn, "integration__user", "user_id", agent_public.id
         ) == {seeded.other, seeded.unlisted_user}
@@ -1604,20 +1515,6 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         assert _has_tool_selection(conn) is False
 
         # Choices of users.
-        preferences = {
-            row.plugin_id: row.enabled
-            for row in conn.execute(
-                text(
-                    "SELECT plugin_id, enabled FROM user_plugin_preference "
-                    "WHERE user_id = :u"
-                ),
-                {"u": seeded.other},
-            )
-        }
-        assert preferences == {
-            public.plugin_id: False,
-            custom["default"].plugin_id: False,
-        }
         assert {
             row.integration_id: (row.enabled, row.enabled_at)
             for row in conn.execute(
@@ -1628,17 +1525,6 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
                 {"u": seeded.other},
             )
         } == {public.id: (False, None), custom["default"].id: (False, None)}
-        disabled = {
-            row.assistant_id: row.disabled_plugin_ids
-            for row in conn.execute(
-                text(
-                    "SELECT assistant_id, disabled_plugin_ids "
-                    "FROM assistant__user_specific_config WHERE assistant_id = ANY(:p)"
-                ),
-                {"p": [seeded.persona, seeded.own_persona]},
-            )
-        }
-        assert disabled == {seeded.persona: [public.plugin_id], seeded.own_persona: []}
         assert {
             row.assistant_id: row.disabled_integration_ids
             for row in conn.execute(
@@ -1652,10 +1538,10 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
 
         # Agents keep the same actions and no other.
         assert _settings(
-            conn, "persona__plugin", "persona_id", seeded.persona, public.plugin_id
+            conn, "persona__integration", "persona_id", seeded.persona, public.id
         ) == {"default": "blocked", "actions": {"list_issues": "inherit"}}
         assert _settings(
-            conn, "persona__plugin", "persona_id", seeded.own_persona, public.plugin_id
+            conn, "persona__integration", "persona_id", seeded.own_persona, public.id
         ) == {
             "default": "blocked",
             "actions": {"list_issues": "inherit", "create_issue": "inherit"},
@@ -1663,90 +1549,67 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         assert (
             _settings(
                 conn,
-                "persona__plugin",
+                "persona__integration",
                 "persona_id",
                 seeded.persona,
-                custom["shared"].plugin_id,
+                custom["shared"].id,
             )
             == {}
         )
         assert (
             _settings(
                 conn,
-                "persona__plugin",
+                "persona__integration",
                 "persona_id",
                 seeded.persona,
-                private.plugin_id,
+                private.id,
             )
             is None
         )
         # The bot freeze.
         assert _settings(
-            conn, "persona__plugin", "persona_id", seeded.bot_persona, public.plugin_id
+            conn, "persona__integration", "persona_id", seeded.bot_persona, public.id
         ) == {"default": "blocked", "actions": {"create_issue": "allow"}}
         assert _settings(
             conn,
-            "persona__plugin",
+            "persona__integration",
             "persona_id",
             seeded.bot_persona,
-            custom["oauth"].plugin_id,
+            custom["oauth"].id,
         ) == {"default": "allow"}
         assert (
             _settings(
-                conn, "persona__plugin", "persona_id", 0, custom["default"].plugin_id
+                conn, "persona__integration", "persona_id", 0, custom["default"].id
             )
             is not None
         )
         # The default agent leaves out a turned-off tool; a custom agent keeps it.
-        assert custom["disabled"].installation_policy is None
         # Its only other agent is its owner's own, so it stays private.
-        assert custom["disabled"].marketplace_kind == "user_uploads"
+        assert custom["disabled"].installation_policy == "NOT_AVAILABLE"
         assert (
             _settings(
-                conn, "persona__plugin", "persona_id", 0, custom["disabled"].plugin_id
+                conn, "persona__integration", "persona_id", 0, custom["disabled"].id
             )
             is None
         )
         assert (
             _settings(
                 conn,
-                "persona__plugin",
+                "persona__integration",
                 "persona_id",
                 seeded.own_persona,
-                custom["disabled"].plugin_id,
+                custom["disabled"].id,
             )
             == {}
         )
 
-        # Each agent and task link has a twin for the integration, with the
-        # same settings.
-        assert _link_differences(conn, "persona", "persona_id") == 0
-        assert _link_differences(conn, "scheduled_task", "scheduled_task_id") == 0
-        assert conn.execute(
-            text(
-                "SELECT action_settings FROM persona__integration "
-                "WHERE persona_id = :p AND integration_id = :i"
-            ),
-            {"p": seeded.bot_persona, "i": public.id},
-        ).scalar_one() == {"default": "blocked", "actions": {"create_issue": "allow"}}
-        assert conn.execute(
-            text(
-                "SELECT action_settings FROM scheduled_task__integration "
-                "WHERE scheduled_task_id = :t AND integration_id = :i"
-            ),
-            {"t": seeded.task, "i": slack.id},
-        ).scalar_one() == {
-            "default": "ask",
-            "actions": {"slack.messages.write": "allow"},
-        }
-
         # A task keeps its pre-approvals, and each other action asks.
         assert _settings(
             conn,
-            "scheduled_task__plugin",
+            "scheduled_task__integration",
             "scheduled_task_id",
             seeded.task,
-            slack.plugin_id,
+            slack.id,
         ) == {"default": "ask", "actions": {"slack.messages.write": "allow"}}
 
         for table in ("action_receipt", "action_approval"):
@@ -1791,15 +1654,7 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
         "integration_action",
         "integration_oauth_client",
         "integration_action_policy",
-        "persona__plugin",
-        "scheduled_task__plugin",
-        "plugin__integration",
         "integration_connection",
-        "plugin",
-        "plugin_version",
-        "plugin__user",
-        "plugin__user_group",
-        "user_plugin_preference",
         "integration__user",
         "integration__user_group",
         "user_integration_preference",
@@ -1834,6 +1689,7 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
         )
     first = _fingerprint(engine, new_tables)
     old = _fingerprint(engine, OLD_TABLES)
+    plugins = _fingerprint(engine, PLUGIN_TABLES)
     # An approval of an integration made after the upgrade has no gated_app.
     no_gated_app = uuid4()
     with engine.begin() as conn:
@@ -1847,34 +1703,6 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
                 "WHERE gated_app_id = :g"
             ),
             {"id": no_gated_app, "g": seeded.gated["mcp_public"]},
-        )
-        # A plugin that the app made for an integration after the upgrade.
-        app_plugin = uuid4()
-        conn.execute(
-            text(
-                "INSERT INTO plugin (id, name, description, marketplace_id, "
-                "current_version_id, published_version_id) VALUES "
-                "(:id, :name, '', :m, :id, :id)"
-            ),
-            {
-                "id": app_plugin,
-                "name": f"u1-app-{app_plugin}",
-                "m": ORGANIZATION_LIBRARY_ID,
-            },
-        )
-        conn.execute(
-            text(
-                "INSERT INTO plugin_version (id, plugin_id, version_number) "
-                "VALUES (:id, :id, 1)"
-            ),
-            {"id": app_plugin},
-        )
-        conn.execute(
-            text(
-                "INSERT INTO plugin__integration (plugin_id, integration_id) "
-                "VALUES (:p, :i)"
-            ),
-            {"p": app_plugin, "i": seeded.gated["mcp_orphan"]},
         )
 
     _migrate("downgrade", PREVIOUS_REVISION)
@@ -1900,8 +1728,7 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
                     "SELECT count(*) FROM information_schema.columns "
                     "WHERE table_schema = current_schema() "
                     "AND table_name = 'assistant__user_specific_config' "
-                    "AND column_name IN "
-                    "('disabled_integration_ids', 'disabled_plugin_ids')"
+                    "AND column_name = 'disabled_integration_ids'"
                 )
             ).scalar_one()
             == 0
@@ -1918,50 +1745,15 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
             conn.execute(
                 text(
                     "SELECT is_nullable FROM information_schema.columns "
-                    "WHERE table_name = 'approval_request' "
+                    "WHERE table_schema = current_schema() "
+                    "AND table_name = 'approval_request' "
                     "AND column_name = 'gated_app_id'"
                 )
             ).scalar_one()
             == "NO"
         )
-        assert (
-            conn.execute(
-                text("SELECT count(*) FROM plugin WHERE id = :id"),
-                {
-                    "id": hashlib.md5(
-                        f"integration_plugin:{seeded.gated['mcp_public']}".encode()
-                    ).hexdigest()
-                },
-            ).scalar_one()
-            == 0
-        )
-        # A plugin with no integration left to hold goes, whoever made it.
-        assert (
-            conn.execute(
-                text("SELECT count(*) FROM plugin WHERE id = :id"), {"id": app_plugin}
-            ).scalar_one()
-            == 0
-        )
-        # The "My uploads" that the upgrade made for the owner of a private
-        # server goes, because it holds no plugin now.
-        assert (
-            conn.execute(
-                text(
-                    "SELECT count(*) FROM plugin_marketplace "
-                    "WHERE kind = 'user_uploads' AND owner_user_id = :u"
-                ),
-                {"u": seeded.owner},
-            ).scalar_one()
-            == 0
-        )
-        # The plugin of a skill stays, also when it holds an integration.
-        assert (
-            conn.execute(
-                text("SELECT count(*) FROM plugin WHERE id = :id"),
-                {"id": seeded.only_skill},
-            ).scalar_one()
-            == 1
-        )
+    # The downgrade leaves each plugin, also the plugin of a skill.
+    assert _fingerprint(engine, PLUGIN_TABLES) == plugins
     assert _fingerprint(engine, OLD_TABLES) == old
 
     _migrate("upgrade", REVISION)
@@ -1990,35 +1782,16 @@ def test_each_integration_has_one_row_of_its_kind(
             )
 
     with engine.begin() as conn:
-        # A plugin delete keeps the integration, with its actions and
-        # policies: only the row that put it in the plugin goes.
-        integration_id = seeded.gated["mcp_private"]
+        # A delete of a skill plugin leaves the integration of its app.
+        app_integration = _kind_integration(conn, "external_app", seeded.app_user_key)
+        assert app_integration is not None
         conn.execute(
-            text(
-                "DELETE FROM plugin WHERE id IN (SELECT plugin_id "
-                "FROM plugin__integration WHERE integration_id = :id)"
-            ),
-            {"id": integration_id},
+            text("DELETE FROM plugin WHERE id = :id"), {"id": seeded.only_skill}
         )
-        assert _kind_integration(conn, "mcp_server", seeded.mcp_private) == (
-            integration_id
+        assert (
+            _kind_integration(conn, "external_app", seeded.app_user_key)
+            == app_integration
         )
-        counts = {
-            table: conn.execute(
-                text(f"SELECT count(*) FROM {table} WHERE integration_id = :id"),
-                {"id": integration_id},
-            ).scalar_one()
-            for table in (
-                "integration_action",
-                "integration_action_policy",
-                "plugin__integration",
-            )
-        }
-        assert counts == {
-            "integration_action": 2,
-            "integration_action_policy": 1,
-            "plugin__integration": 0,
-        }
 
         integration_id = _kind_integration(conn, "mcp_server", seeded.mcp_orphan)
         assert integration_id is not None

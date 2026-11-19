@@ -22,7 +22,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Select, and_, delete, func, or_, select
+from sqlalchemy import Select, and_, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -36,11 +36,9 @@ from onyx.db.enums import (
     PluginPublishingPolicy,
     SkillSharePermission,
 )
-from onyx.db.integration import holds_only_integrations
 from onyx.db.models import (
     Marketplace,
     Plugin,
-    Plugin__Integration,
     Plugin__User,
     Plugin__UserGroup,
     PluginSkill,
@@ -530,87 +528,6 @@ def create_skill_plugin__no_commit(
     return plugin
 
 
-def create_integration_plugin__no_commit(
-    *,
-    integration_id: int,
-    name: str,
-    description: str,
-    author: User,
-    for_organization: bool,
-    db_session: Session,
-) -> Plugin:
-    """Add a plugin that holds one integration: version 1 with no files, in
-    the Organization library (published) or in the author's "My uploads". A
-    used name takes the next free name."""
-    marketplace_id = (
-        get_or_create_organization_library__no_commit(db_session)
-        if for_organization
-        else get_or_create_user_uploads__no_commit(author.id, db_session)
-    )
-    plugin_id = uuid4()
-    version_id = uuid4()
-    try:
-        with db_session.begin_nested():
-            plugin = Plugin(
-                id=plugin_id,
-                name=free_plugin_name(marketplace_id, name[:64], db_session),
-                description=description,
-                marketplace_id=marketplace_id,
-                author_user_id=author.id,
-                current_version_id=version_id,
-                published_version_id=version_id if for_organization else None,
-            )
-            db_session.add(plugin)
-            db_session.flush()
-            db_session.add(
-                PluginVersion(
-                    id=version_id,
-                    plugin_id=plugin_id,
-                    version_number=1,
-                    created_by_user_id=author.id,
-                    created_by_email=author.email,
-                )
-            )
-            db_session.add(
-                Plugin__Integration(plugin_id=plugin_id, integration_id=integration_id)
-            )
-            db_session.flush()
-    except IntegrityError as exc:
-        if not is_unique_violation(exc, _PLUGIN_NAME_INDEX):
-            raise
-        raise OnyxError(
-            OnyxErrorCode.CONFLICT,
-            f"Another plugin named '{name}' was saved at the same time. Try again.",
-        ) from exc
-    return plugin
-
-
-def _skill_name_is_taken(
-    marketplace_id: UUID, skill_name: str, plugin_id: UUID, db_session: Session
-) -> bool:
-    """True when another plugin of the marketplace holds a skill with this
-    name in its current or published version."""
-    return (
-        db_session.scalar(
-            select(Plugin.id)
-            .join(
-                PluginSkill,
-                or_(
-                    PluginSkill.plugin_version_id == Plugin.current_version_id,
-                    PluginSkill.plugin_version_id == Plugin.published_version_id,
-                ),
-            )
-            .where(
-                Plugin.marketplace_id == marketplace_id,
-                Plugin.id != plugin_id,
-                PluginSkill.frontmatter["name"].astext == skill_name,
-            )
-            .limit(1)
-        )
-        is not None
-    )
-
-
 def _move_plugin__no_commit(
     *,
     plugin: Plugin,
@@ -626,41 +543,27 @@ def _move_plugin__no_commit(
             PluginSkill.plugin_version_id == plugin.current_version_id
         )
     ).all()
-    skill_name = rows[0][1] if is_skill_version(path for path, _ in rows) else None
-    preferred = skill_name or plugin.name
+    preferred = (
+        rows[0][1]
+        if is_skill_version(path for path, _ in rows) and rows[0][1]
+        else plugin.name
+    )
     # A concurrent writer can take the chosen name before this move commits.
     # "rename" then picks the next free name again.
     for attempt in range(1, _RENAME_ATTEMPTS + 1):
         name = preferred
-        holder_id = db_session.scalar(
-            select(Plugin.id).where(
-                Plugin.marketplace_id == marketplace_id,
-                Plugin.name == name,
-                Plugin.id != plugin.id,
+        name_taken = (
+            db_session.scalar(
+                select(Plugin.id).where(
+                    Plugin.marketplace_id == marketplace_id,
+                    Plugin.name == name,
+                    Plugin.id != plugin.id,
+                )
             )
+            is not None
         )
-        if holder_id is not None:
-            # A plugin that holds only integrations has no skill name, so
-            # it does not clash with one; the label takes a free name.
-            holder_is_integration = (
-                db_session.scalar(
-                    select(Plugin.id).where(
-                        Plugin.id == holder_id, holds_only_integrations()
-                    )
-                )
-                is not None
-            )
-            # Behind that plugin, a skill with this name can hold a
-            # "-2" label, and that skill does clash.
-            if on_name_clash == "raise" and (
-                not holder_is_integration
-                or (
-                    skill_name is not None
-                    and _skill_name_is_taken(
-                        marketplace_id, skill_name, plugin.id, db_session
-                    )
-                )
-            ):
+        if name_taken:
+            if on_name_clash == "raise":
                 raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name))
             name = free_plugin_name(marketplace_id, name, db_session)
         try:
@@ -677,55 +580,17 @@ def _move_plugin__no_commit(
 
 
 def private_plugins_blocking_user_delete(user_id: UUID) -> Select[tuple[Plugin]]:
-    """The plugins in the user's "My uploads" that a user delete does not
-    release: each one that holds a skill."""
+    """The plugins in the user's "My uploads". A user delete does not release
+    them."""
     return (
         select(Plugin)
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
         .where(
             Marketplace.kind == MarketplaceKind.USER_UPLOADS,
             Marketplace.owner_user_id == user_id,
-            ~holds_only_integrations(),
         )
         .order_by(Plugin.name, Plugin.id)
     )
-
-
-def release_private_integrations__no_commit(user_id: UUID, db_session: Session) -> None:
-    """Before a user delete: move each plugin in the user's "My uploads" that
-    holds only integrations to the Organization library as NOT_AVAILABLE, so
-    the delete of "My uploads" does not take it. The plugin is only the handle
-    of its integration and gives no access. The integration needs no change:
-    it loses its owner, and its install setting and its shares keep the same
-    people."""
-    plugins = db_session.scalars(
-        select(Plugin)
-        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-        .where(
-            Marketplace.kind == MarketplaceKind.USER_UPLOADS,
-            Marketplace.owner_user_id == user_id,
-            holds_only_integrations(),
-        )
-        .order_by(Plugin.id)
-        .with_for_update(of=Plugin)
-    ).all()
-    if not plugins:
-        return
-    library_id = get_or_create_organization_library__no_commit(db_session)
-    for plugin in plugins:
-        _move_plugin__no_commit(
-            plugin=plugin,
-            marketplace_id=library_id,
-            on_name_clash="rename",
-            clash_detail=lambda name: (
-                f"The organization already has a plugin named '{name}'."
-            ),
-            db_session=db_session,
-        )
-        plugin.installation_policy = PluginInstallationPolicy.NOT_AVAILABLE
-        plugin.published_version_id = plugin.current_version_id
-        plugin.pending_version_id = None
-        db_session.flush()
 
 
 def publish_plugin__no_commit(
