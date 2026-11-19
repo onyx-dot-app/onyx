@@ -63,6 +63,7 @@ function NeedActionControl({
     case "turnOn":
       return (
         <Button
+          size="md"
           prominence="secondary"
           disabled={busy}
           aria-label={t("turnOn.ariaLabel", { name: need.name })}
@@ -81,6 +82,7 @@ function NeedActionControl({
     case "add":
       return (
         <Button
+          size="md"
           prominence="secondary"
           icon={SvgPlus}
           aria-label={t("add.ariaLabel", { name: need.name })}
@@ -162,6 +164,7 @@ export default function PluginNeedList({
                 title: t(`state.${state}`),
                 color: state === "on" ? "success" : "default",
               }}
+              descriptionMaxLines={1}
               padding={1}
               rightChildren={
                 interactive ? (

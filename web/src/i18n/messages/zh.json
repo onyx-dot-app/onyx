@@ -17151,7 +17151,7 @@
       "reading": "正在读取…",
       "requirements": {
         "title": "Onyx 使用插件的以下部分：",
-        "skills": "skills/<name>/SKILL.md 中的技能",
+        "skills": "skills/'<name>'/SKILL.md 中的技能",
         "mcp": ".mcp.json 或 plugin.json 中的 MCP 服务器",
         "other": "Onyx 不使用命令、代理、钩子或其他部分。"
       },

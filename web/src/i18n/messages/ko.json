@@ -17151,7 +17151,7 @@
       "reading": "읽는 중…",
       "requirements": {
         "title": "Onyx는 플러그인의 다음 부분을 사용합니다:",
-        "skills": "skills/<name>/SKILL.md의 스킬",
+        "skills": "skills/'<name>'/SKILL.md의 스킬",
         "mcp": ".mcp.json 또는 plugin.json의 MCP 서버",
         "other": "Onyx는 명령, 에이전트, 훅 및 기타 부분을 사용하지 않습니다."
       },

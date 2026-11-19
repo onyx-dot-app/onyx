@@ -17151,7 +17151,7 @@
       "reading": "Leyendo…",
       "requirements": {
         "title": "Onyx usa estas partes de un plugin:",
-        "skills": "Skills en skills/<name>/SKILL.md",
+        "skills": "Skills en skills/'<name>'/SKILL.md",
         "mcp": "Servidores MCP en .mcp.json o plugin.json",
         "other": "Onyx no usa comandos, agentes, hooks ni las demás partes."
       },

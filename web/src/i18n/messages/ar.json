@@ -17151,7 +17151,7 @@
       "reading": "جارٍ القراءة…",
       "requirements": {
         "title": "يستخدم Onyx هذه الأجزاء من الإضافة:",
-        "skills": "المهارات في skills/<name>/SKILL.md",
+        "skills": "المهارات في skills/'<name>'/SKILL.md",
         "mcp": "خوادم MCP في ‎.mcp.json أو plugin.json",
         "other": "لا يستخدم Onyx الأوامر أو الوكلاء أو الخطافات أو الأجزاء الأخرى."
       },
