@@ -10364,47 +10364,16 @@
         }
       }
     },
-    "plugins": {
-      "title": "插件",
-      "description": "插件将人们一起开启的技能和集成打包在一起。此列表显示包含集成的插件。请在技能页面管理技能。",
-      "search": "搜索插件",
-      "loadFailed": "无法加载插件。",
-      "columns": {
-        "name": "插件",
-        "library": "库",
-        "installation": "安装设置",
-        "integrations": "集成"
-      },
-      "library": {
-        "organization": "组织库",
-        "personal": "个人上传"
-      },
-      "installationSelect": "{name} 的安装设置",
-      "installationSaved": "{name} 现在为 {policy}。",
-      "installationSaveFailed": "无法保存安装设置。",
-      "openIntegration": "打开 {name}",
-      "empty": {
-        "title": "没有包含集成的插件",
-        "description": "添加集成后，Onyx 会创建一个包含它的插件。"
-      },
-      "contents": "{count, plural, other {# 个集成}}",
-      "filters": {
-        "label": "库",
-        "all": "所有库",
-        "organization": "组织库",
-        "personal": "个人上传"
-      }
-    },
     "integrations": {
       "title": "集成",
-      "description": "连接 MCP 服务器和应用。每个集成都包含在一个插件中，由插件为用户提供访问权限。",
+      "description": "连接 MCP 服务器和应用。每个集成都有所有者、安装设置和自己的共享。",
       "search": "搜索集成",
       "open": "打开 {name}",
       "loadFailed": "无法加载集成。",
       "add": {
         "label": "添加",
         "title": "添加集成",
-        "description": "连接一项服务，让人们可以在聊天和 Craft 中使用它。Onyx 会将每个集成放入各自的插件中。",
+        "description": "连接服务，以便人们在对话和 Craft 中使用它。",
         "created": "已添加 {name}。",
         "createFailed": "无法添加集成。",
         "openapi": {
@@ -10467,8 +10436,8 @@
           "title": "所有者",
           "personal": "仅供我使用",
           "organization": "供组织使用",
-          "personalDescription": "Onyx 会将集成放入“我的上传”中的一个插件。您之后可以共享该插件。",
-          "organizationDescription": "Onyx 会将集成放入组织库中的一个插件。"
+          "personalDescription": "只有你可以使用此集成。你可以稍后共享它。",
+          "organizationDescription": "组织中的每个用户都可以开启此集成。"
         },
         "submit": "添加",
         "adding": "正在添加…",
@@ -10506,8 +10475,8 @@
         "name": "名称",
         "type": "类型",
         "signIn": "登录",
-        "access": "访问权限",
-        "status": "状态"
+        "status": "状态",
+        "installation": "安装设置"
       },
       "empty": {
         "title": "没有集成",
@@ -10522,13 +10491,6 @@
         "custom": "自定义应用"
       },
       "signInSummary": "{mode, select, none {无需登录} shared {{method, select, oauth2 {组织账户 (OAuth)} api_key {组织 API 密钥} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {组织账户}}} individual {{method, select, oauth2 {每个用户 (OAuth)} api_key {每个用户 (API 密钥)} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {每个用户}}} other {未知}}",
-      "access": {
-        "none": "不在任何插件中",
-        "many": "{count, plural, one {# 个插件} other {# 个插件}}",
-        "organization": "{plugin}（组织库）",
-        "personal": "{plugin}（{owner}）",
-        "personalOwner": "个人上传"
-      },
       "status": {
         "needsSetup": "需要设置",
         "off": "已关闭",
@@ -10608,10 +10570,6 @@
           "createdBy": "添加者",
           "needsSetup": "需要设置",
           "needsSetupDefault": "请在“配置”选项卡中完成登录设置。",
-          "plugins": {
-            "title": "插件",
-            "organization": "{policy, select, REQUIRED {组织库，必需} DEFAULT {组织库，默认开启} AVAILABLE {组织库，可用} NOT_AVAILABLE {组织库，不可用} other {组织库}}"
-          },
           "enabled": {
             "title": "已启用",
             "description": "关闭后，任何智能体或用户都无法使用此集成。"
@@ -10619,7 +10577,7 @@
           "delete": {
             "label": "删除",
             "confirmTitle": "删除 {name}？",
-            "confirmDescription": "Onyx 会从每个插件中移除此集成，并删除其连接和操作设置。此操作无法撤销。",
+            "confirmDescription": "Onyx 会删除该集成及其连接和操作设置，并将其从每个智能体和任务中移除。此操作无法撤销。",
             "confirm": "删除"
           },
           "deleted": "已删除 {name}。",
@@ -10637,7 +10595,8 @@
             "saveFailed": "无法保存名称和描述。"
           },
           "description": "描述",
-          "menu": "更多操作"
+          "menu": "更多操作",
+          "owner": "所有者"
         },
         "configuration": {
           "readOnly": "您可以查看此集成，但无法更改。",
@@ -10707,11 +10666,19 @@
             "title": "请先连接服务器",
             "description": "MCP 服务器连接后，Onyx 才会加载其操作。",
             "open": "打开配置",
-            "individualDescription": "每位用户都需登录此服务器。请在插件页面连接你自己的账户，然后点击刷新。",
-            "openPlugins": "打开插件"
+            "individualDescription": "每个用户都需登录此服务器。请在集成页面连接你自己的账户，然后点击“刷新”。",
+            "openIntegration": "打开集成"
           }
         }
-      }
+      },
+      "installation": {
+        "select": "{name} 的安装设置",
+        "saved": "{name} 现在为 {policy}。",
+        "saveFailed": "无法保存安装设置。",
+        "title": "安装设置",
+        "description": "谁会获得此集成。“不可用”会使其保持私有：只有其所有者和被共享的人可以使用。"
+      },
+      "ownedBy": "所有者：{owner}"
     }
   },
   "agents": {
@@ -10835,52 +10802,6 @@
       "page": {
         "ariaLabel": "智能体编辑器页面"
       },
-      "plugins": {
-        "askHint": "要在不询问的情况下运行，请更改智能体设置，或由管理员在集成中将其设为允许，或每位用户选择始终允许。",
-        "askHintAdminOnly": "要在不询问的情况下运行，管理员需在集成中将其设为允许。",
-        "askHintAgent": "要在无需确认的情况下运行，请更改智能体设置，或由每个用户选择始终允许。",
-        "askHintAgentOnly": "要在无需确认的情况下运行，请更改智能体设置。",
-        "choice": {
-          "inherit": "使用集成设置",
-          "agentDefault": "使用智能体默认设置"
-        },
-        "default": {
-          "description": "适用于没有自身设置的每个操作，也适用于集成以后添加的操作。",
-          "title": "其他操作的默认设置"
-        },
-        "description": "为智能体添加插件。除非您另选设置，否则每个操作都使用集成设置。",
-        "effective": "{policy, select, allow {允许} ask {询问} other {已阻止}}（{source, select, integration {集成设置} agentDefault {智能体默认设置} other {智能体设置}}）",
-        "empty": "没有可供您使用的带集成的插件。",
-        "loadFailed": "无法加载插件。",
-        "lock": {
-          "adminBlocked": "无法选择允许：管理员已阻止此操作。",
-          "alwaysAsks": "无法使用允许：Craft 会为每个此类请求请求批准。",
-          "adminFinal": "无法选择允许：此集成的管理员设置为最终设置。",
-          "defaultFinal": "无法选择允许：这些集成的管理员设置为最终设置。"
-        },
-        "noActions": "此集成还没有操作。",
-        "notVisible": "您无法查看此插件的操作。其设置保持不变。",
-        "title": "插件",
-        "add": {
-          "placeholder": "添加插件"
-        },
-        "remove": {
-          "ariaLabel": "移除 {plugin}"
-        },
-        "retry": {
-          "label": "重试"
-        },
-        "actionSetting": {
-          "label": "{action} 的设置"
-        },
-        "defaultSetting": {
-          "label": "{plugin} 的默认设置"
-        },
-        "openIntegration": {
-          "label": "打开 {integration} 的操作"
-        },
-        "stricterPlugin": "此智能体的 {plugin} 插件为此操作设置了更严格的设置。"
-      },
       "prompts": {
         "instructions": {
           "description": "添加说明以定制此智能体的响应。",
@@ -10972,6 +10893,51 @@
       },
       "warnings": {
         "openUrl": "没有打开 URL 能力的网络搜索可能会导致网络结果明显变差。"
+      },
+      "integrations": {
+        "askHint": "要在不询问的情况下运行，请更改智能体设置，或由管理员在集成中将其设为允许，或每位用户选择始终允许。",
+        "askHintAdminOnly": "要在不询问的情况下运行，管理员需在集成中将其设为允许。",
+        "askHintAgent": "要在无需确认的情况下运行，请更改智能体设置，或由每个用户选择始终允许。",
+        "askHintAgentOnly": "要在无需确认的情况下运行，请更改智能体设置。",
+        "choice": {
+          "inherit": "使用集成设置",
+          "agentDefault": "使用智能体默认设置"
+        },
+        "default": {
+          "description": "适用于没有自身设置的每个操作，也适用于集成以后添加的操作。",
+          "title": "其他操作的默认设置"
+        },
+        "description": "为智能体添加集成。除非你选择其他设置，否则每个操作都使用集成的设置。",
+        "effective": "{policy, select, allow {允许} ask {询问} other {已阻止}}（{source, select, integration {集成设置} agentDefault {智能体默认设置} other {智能体设置}}）",
+        "empty": "没有可供你使用的集成。",
+        "loadFailed": "无法加载集成。",
+        "lock": {
+          "adminBlocked": "无法选择允许：管理员已阻止此操作。",
+          "alwaysAsks": "无法使用允许：Craft 会为每个此类请求请求批准。",
+          "adminFinal": "无法选择允许：此集成的管理员设置为最终设置。"
+        },
+        "noActions": "此集成还没有操作。",
+        "notVisible": "你无法查看此集成的操作。其设置保持不变。",
+        "title": "集成",
+        "add": {
+          "placeholder": "添加集成"
+        },
+        "remove": {
+          "ariaLabel": "移除 {integration}"
+        },
+        "retry": {
+          "label": "重试"
+        },
+        "actionSetting": {
+          "label": "{action} 的设置"
+        },
+        "defaultSetting": {
+          "label": "{integration} 的默认设置"
+        },
+        "openIntegration": {
+          "label": "打开 {integration} 的操作"
+        },
+        "sharedWider": "部分可以使用此智能体的人无法使用 {integration}。他们的对话将在没有该集成的情况下运行。与他们共享 {integration} 以授予访问权限。"
       }
     },
     "filters": {
@@ -11112,7 +11078,8 @@
           "empty": {
             "title": "无操作"
           },
-          "title": "操作与工具"
+          "title": "操作与工具",
+          "noAccess": "你无法使用此集成。与此智能体的对话将在没有它的情况下运行。"
         },
         "conversationStarters": {
           "title": "对话开场白"
@@ -15151,7 +15118,7 @@
       "appTitle": "{name} 审批设置",
       "title": "审批设置",
       "personalDescription": "这些设置决定 Craft 对话、新任务和聊天中的 MCP 工具调用是自动运行还是需要批准；现有任务保留各自的设置。",
-      "taskDescription": "选择此任务可使用的插件，并管理哪些操作可自动执行。更改仅适用于此任务。",
+      "taskDescription": "选择此任务可以使用的集成，然后管理哪些操作自动运行。更改仅适用于此任务。",
       "userManagement": "允许用户管理审批设置",
       "userManagementDescription": "用户可以更改可用操作的审批设置。",
       "loading": "正在加载审批设置…",
@@ -15165,9 +15132,9 @@
       "enableAppForTask": "为此任务启用 {app}",
       "enabledForTask": "已为此任务启用",
       "disabledForTask": "已为此任务禁用",
-      "taskAppsTitle": "插件",
-      "taskAccessTitle": "插件访问权限",
-      "noEnabledApps": "此任务未启用任何插件。",
+      "taskAppsTitle": "集成",
+      "taskAccessTitle": "集成访问",
+      "noEnabledApps": "此任务未开启任何集成。",
       "actionPolicies": "审批设置",
       "manageActions": "管理操作",
       "taskModalDescription": "更改将在保存任务时生效。工作区限制始终适用。",
@@ -15178,8 +15145,6 @@
       "saveChanges": "保存更改",
       "resetDefaults": "全部重置为默认值",
       "resetAll": "全部重置为工作区默认值",
-      "newTaskPluginsDescription": "开启此任务可以使用的插件。在你更改之前，每个操作都使用其集成的设置。",
-      "emptyPlugins": "没有包含集成的插件。",
       "needsSignIn": "{name} 需要登录。",
       "taskPolicyCounts": "允许 {allow} · 询问 {ask} · 已阻止 {blocked}",
       "actionSetting": "{action} 的设置",
@@ -15189,7 +15154,9 @@
         "allow": "允许",
         "ask": "询问",
         "blocked": "已阻止"
-      }
+      },
+      "newTaskIntegrationsDescription": "开启此任务可以使用的集成。在你更改之前，每个操作都使用其集成的设置。",
+      "emptyIntegrations": "没有可用的集成。"
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, other {# 个技能未加载}}",
@@ -16170,9 +16137,6 @@
         "llmGateway": {
           "label": "LLM 网关"
         },
-        "plugins": {
-          "label": "插件"
-        },
         "plansAndBilling": {
           "label": "套餐与账单"
         },
@@ -17023,7 +16987,6 @@
         "tabs": {
           "overview": "概览",
           "skills": "技能",
-          "integrations": "集成",
           "versions": "版本"
         },
         "overview": {
@@ -17031,7 +16994,6 @@
           "location": "位置",
           "owner": "所有者",
           "skills": "技能",
-          "integrations": "集成",
           "description": "描述"
         },
         "skills": {
@@ -17043,20 +17005,8 @@
           "description": "开启后，默认智能体可以使用此插件。",
           "label": "使用 {name}",
           "required": "管理员已将此插件设为必需。你无法将其关闭。",
-          "notAvailable": "管理员已将此插件设为不可用。",
           "unavailable": "你无法开启或关闭此插件。",
           "failed": "无法更改插件。"
-        },
-        "share": {
-          "label": "共享"
-        },
-        "publish": {
-          "label": "发布",
-          "blocked": "只有拥有组织范围“管理操作”权限的用户才能发布包含集成的插件。",
-          "confirmTitle": "发布 {name}？",
-          "confirmMessage": "插件将移至组织库。此操作无法撤消。之后由管理员设置其安装设置。",
-          "done": "{name} 现已在组织库中。",
-          "failed": "无法发布插件。"
         }
       },
       "connection": {
@@ -17115,49 +17065,30 @@
         "invalidLink": "此登录链接无效。请重新开始登录。",
         "failed": "登录未完成。请重试。",
         "back": {
-          "label": "返回插件"
+          "label": "返回集成"
         }
-      },
-      "search": {
-        "placeholder": "搜索插件"
-      },
-      "share": {
-        "title": "共享 {name}",
-        "description": "授予用户和群组访问此插件的权限。",
-        "sharedSignIn": "{names} 使用一个账户。有访问权限的用户使用你连接的账户。",
-        "loadFailed": "无法加载有访问权限的用户。",
-        "empty": "只有你有访问权限。",
-        "remove": {
-          "label": "移除 {name}"
-        },
-        "cancel": {
-          "label": "取消"
-        },
-        "submit": {
-          "label": "保存",
-          "pendingLabel": "正在保存..."
-        },
-        "saved": "已保存 {name} 的访问权限。",
-        "failed": "无法保存访问权限。"
       }
     },
     "chat": {
       "popover": {
-        "empty": "此智能体没有包含集成的插件。",
-        "searchEmpty": "没有与搜索匹配的插件。",
-        "loading": "正在加载插件",
-        "loadError": "部分插件无法加载。请重试。",
+        "empty": "此智能体没有集成。",
+        "searchEmpty": "没有与搜索匹配的集成。",
+        "loading": "正在加载集成",
+        "loadError": "部分集成无法加载。请重试。",
         "trigger": {
-          "label": "插件"
+          "label": "集成"
         },
         "retry": {
           "label": "重试"
         },
         "browse": {
-          "label": "浏览插件"
+          "label": "浏览集成"
         },
         "toggle": {
           "label": "在此智能体中使用 {name}"
+        },
+        "search": {
+          "placeholder": "搜索集成"
         }
       },
       "connectPrompt": {
@@ -17175,7 +17106,63 @@
     }
   },
   "integrations": {
-    "connectionState": "{state, select, connected {已连接} not_connected {未连接} needs_reconnect {需要重新连接} not_set_up {未设置} other {未知}}"
+    "connectionState": "{state, select, connected {已连接} not_connected {未连接} needs_reconnect {需要重新连接} not_set_up {未设置} other {未知}}",
+    "share": {
+      "title": "共享 {name}",
+      "description": "授予特定人员使用此集成的权限。共享仅授予使用权限。",
+      "sharedSignIn": "{name} 使用一个账户。有访问权限的人使用你连接的账户。",
+      "loadFailed": "无法加载有访问权限的用户。",
+      "empty": "只有你有访问权限。",
+      "remove": {
+        "label": "移除 {name}"
+      },
+      "cancel": {
+        "label": "取消"
+      },
+      "submit": {
+        "label": "保存",
+        "pendingLabel": "正在保存..."
+      },
+      "saved": "已保存 {name} 的访问权限。",
+      "failed": "无法保存访问权限。"
+    },
+    "memberState": {
+      "on": {
+        "label": "已开启"
+      },
+      "turn_on": {
+        "label": "开启"
+      },
+      "sign_in": {
+        "label": "登录"
+      },
+      "no_access": {
+        "label": "无访问权限",
+        "reason": "无访问权限：此集成未与你共享。",
+        "reasonOwner": "无访问权限：{owner} 未与你共享。"
+      },
+      "turned_off": {
+        "label": "已关闭",
+        "reason": "已被管理员关闭。"
+      },
+      "switch": {
+        "label": "使用 {name}",
+        "required": "管理员已将此集成设为必需。你无法将其关闭。",
+        "failed": "无法更改集成。"
+      }
+    },
+    "menu": {
+      "label": "{name} 的更多操作",
+      "share": "共享",
+      "publish": {
+        "label": "发布到组织",
+        "blocked": "只有拥有组织范围“管理操作”权限的用户才能发布集成。",
+        "confirmTitle": "将 {name} 发布到组织？",
+        "confirmMessage": "之后组织中的每个用户都可以开启它。管理员设置其安装设置。你共享过的人保留访问权限。",
+        "done": "{name} 现已对组织可用。",
+        "failed": "无法发布集成。"
+      }
+    }
   },
   "customize": {
     "title": "自定义",
@@ -17270,22 +17257,20 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, =0 {} one {1 个技能} other {{skills} 个技能}}{both, select, yes { · } other {}}{integrations, plural, =0 {} one {1 个集成} other {{integrations} 个集成}}",
-      "needsSignIn": "{count, plural, other {# 个需要登录}}",
+      "contents": "{skills, plural, one {1 个技能} other {{skills} 个技能}}",
       "loadFailed": "无法加载你的插件。",
-      "switchFailed": "无法更改插件。",
       "filter": {
         "all": "所有插件"
       },
       "empty": {
         "title": "还没有插件",
-        "description": "创建技能或添加集成。每一个都是一个插件。"
+        "description": "创建技能。每个技能都是一个插件。"
       },
       "noMatches": {
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
       },
-      "intro": "插件将你一起开启的技能和集成打包在一起。你添加的每个技能和集成都位于各自的插件中。"
+      "intro": "插件将你一起开启的技能打包在一起。你添加的每个技能都有自己的插件。集成位于“集成”标签页。"
     },
     "skillPage": {
       "title": "技能",
@@ -17360,7 +17345,14 @@
         "type": "类型",
         "signIn": "登录",
         "url": "服务器 URL",
-        "plugins": "所属插件"
+        "owner": "所有者",
+        "organization": "组织",
+        "status": "状态",
+        "switch": {
+          "title": "使用此集成",
+          "description": "开启后，你可以在对话和 Craft 中使用它。",
+          "required": "管理员已将此集成设为必需。你无法将其关闭。"
+        }
       },
       "configuration": {
         "description": "{mode, select, individual {你与此集成的连接。只有你使用它。} shared {此集成的账户。所有有权访问的人都使用它。} other {此集成无需登录。}}"
@@ -17368,8 +17360,7 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "技能 · {count}",
-        "integrations": "集成 · {count}"
+        "skills": "技能 · {count}"
       }
     },
     "search": "搜索"

@@ -1,19 +1,15 @@
 import { type Locator, type Page, expect } from "@playwright/test";
 import { IntegrationCredentialsDialog } from "@tests/e2e/pages/IntegrationCredentialsDialog";
 
-export type MemberPluginTab =
-  | "Overview"
-  | "Skills"
-  | "Integrations"
-  | "Versions";
+export type IntegrationPageTab = "Overview" | "Configuration" | "Actions";
 export type IntegrationStatusLabel =
   | "Connected"
   | "Not connected"
   | "Needs reconnect"
   | "Not set up";
 
-/** One plugin at /app/customize/plugins/[pluginId]. */
-export class MemberPluginDetailPage {
+/** One integration of a member at /app/customize/integrations/[id]. */
+export class CustomizeIntegrationPage {
   readonly page: Page;
   readonly credentials: IntegrationCredentialsDialog;
 
@@ -22,40 +18,32 @@ export class MemberPluginDetailPage {
     this.credentials = new IntegrationCredentialsDialog(page);
   }
 
-  async goto(pluginId: string, tab?: MemberPluginTab): Promise<void> {
+  async goto(integrationId: number, tab?: IntegrationPageTab): Promise<void> {
     const query = tab && tab !== "Overview" ? `?tab=${tab.toLowerCase()}` : "";
-    await this.page.goto(`/app/customize/plugins/${pluginId}${query}`);
+    await this.page.goto(
+      `/app/customize/integrations/${integrationId}${query}`
+    );
+    await expect(
+      this.page.getByRole("tab", { name: tab ?? "Overview", exact: true })
+    ).toHaveAttribute("aria-selected", "true");
   }
 
-  /** Skills and Integrations show a count, for example "Skills · 2". */
-  private tab(tab: MemberPluginTab): Locator {
-    return this.page.getByRole("tab", {
-      name: new RegExp(`^${tab}( · \\d+)?$`),
-    });
-  }
-
-  async openTab(tab: MemberPluginTab): Promise<void> {
-    const trigger = this.tab(tab);
+  async openTab(tab: IntegrationPageTab): Promise<void> {
+    const trigger = this.page.getByRole("tab", { name: tab, exact: true });
     await trigger.click();
     await expect(trigger).toHaveAttribute("aria-selected", "true");
   }
 
-  async expectTabs(tabs: MemberPluginTab[]): Promise<void> {
-    await expect(this.page.getByRole("tab")).toHaveText(
-      tabs.map((tab) => new RegExp(`^${tab}( · \\d+)?$`))
-    );
-  }
-
-  pluginSwitch(plugin: string): Locator {
+  integrationSwitch(integration: string): Locator {
     return this.page.getByRole("switch", {
-      name: `Use ${plugin}`,
+      name: `Use ${integration}`,
       exact: true,
     });
   }
 
-  /** The user's on/off switch on the Overview tab. */
-  async setPluginEnabled(plugin: string, enabled: boolean): Promise<void> {
-    const toggle = this.pluginSwitch(plugin);
+  /** The user's on/off switch on the Overview tab. On means on everywhere. */
+  async setEnabled(integration: string, enabled: boolean): Promise<void> {
+    const toggle = this.integrationSwitch(integration);
     await expect(toggle).toBeEnabled();
     if ((await toggle.getAttribute("aria-checked")) !== String(enabled))
       await toggle.click();
@@ -122,7 +110,7 @@ export class MemberPluginDetailPage {
     });
   }
 
-  /** Saves the user's Always allow choice of one action on the Integrations tab. */
+  /** Saves the user's Always allow choice of one action on the Actions tab. */
   async setAlwaysAllow(action: string, allow: boolean): Promise<void> {
     const toggle = this.alwaysAllowSwitch(action);
     await expect(toggle).toBeEnabled();
@@ -136,5 +124,32 @@ export class MemberPluginDetailPage {
     await toggle.click();
     expect((await response).ok()).toBeTruthy();
     await expect(toggle).toHaveAttribute("aria-checked", String(allow));
+  }
+
+  /** Opens "Share" from the "..." menu and adds one person by email. */
+  async shareWith(integration: string, email: string): Promise<void> {
+    await this.page
+      .getByRole("button", { name: `More actions for ${integration}` })
+      .click();
+    await this.page
+      .getByRole("menuitem", { name: "Share", exact: true })
+      .click();
+    const dialog = this.page.getByRole("dialog", {
+      name: `Share ${integration}`,
+    });
+    await expect(dialog).toBeVisible();
+    await dialog
+      .getByPlaceholder("Add users, groups, and accounts")
+      .fill(email);
+    await this.page.getByRole("option", { name: email }).click();
+    const response = this.page.waitForResponse(
+      (candidate) =>
+        /\/api\/integrations\/\d+\/access$/.test(
+          new URL(candidate.url()).pathname
+        ) && candidate.request().method() === "PUT"
+    );
+    await dialog.getByRole("button", { name: "Save", exact: true }).click();
+    expect((await response).ok()).toBeTruthy();
+    await expect(dialog).toBeHidden();
   }
 }

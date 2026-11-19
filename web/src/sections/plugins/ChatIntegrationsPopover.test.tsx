@@ -1,13 +1,12 @@
 import { PointerEventsCheckLevel } from "@testing-library/user-event";
 import { render, screen, setupUser } from "@tests/setup/test-utils";
-import ChatPluginsPopover from "@/sections/plugins/ChatPluginsPopover";
+import ChatIntegrationsPopover from "@/sections/plugins/ChatIntegrationsPopover";
 import messages from "@/i18n/messages/en.json";
-import type { AgentChatPlugins } from "@/lib/plugins/hooks";
+import type { AgentChatIntegrations } from "@/lib/integrations/hooks";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import {
-  LINEAR_PLUGIN_ID,
+  makeAccess,
   makeMemberIntegration,
-  REPORTS_PLUGIN_ID,
 } from "@tests/setup/memberIntegrationTestUtils";
 
 const copy = messages.plugins.chat.popover;
@@ -22,7 +21,7 @@ jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({ chat: () => "chat-1", project: () => null }),
 }));
 
-function handle(disabled: string[] = []): ToolConfigurationHandle {
+function handle(disabled: number[] = []): ToolConfigurationHandle {
   return {
     stateOf: () => null,
     setToolState: jest.fn(),
@@ -31,8 +30,8 @@ function handle(disabled: string[] = []): ToolConfigurationHandle {
     preferredToolId: null,
     preferredAction: null,
     disabledToolIds: [],
-    isPluginEnabled: (id) => !disabled.includes(id),
-    setPluginEnabled: jest.fn(),
+    isIntegrationEnabled: (id) => !disabled.includes(id),
+    setIntegrationEnabled: jest.fn(),
     allowed: null,
     ready: true,
     optionsLoaded: true,
@@ -48,29 +47,15 @@ function handle(disabled: string[] = []): ToolConfigurationHandle {
   };
 }
 
-const catalog: AgentChatPlugins = {
-  pluginIds: [LINEAR_PLUGIN_ID, REPORTS_PLUGIN_ID],
-  plugins: [
-    {
-      pluginId: LINEAR_PLUGIN_ID,
-      name: "Linear",
-      required: false,
-      integrations: [
-        makeMemberIntegration({
-          status: {
-            state: "connected",
-            reason: null,
-          },
-        }),
-      ],
-    },
-    {
-      pluginId: REPORTS_PLUGIN_ID,
-      name: "Reports",
-      required: false,
-      integrations: [makeMemberIntegration({ id: 2, name: "Reports API" })],
-    },
-  ],
+const linear = makeMemberIntegration({
+  status: { state: "connected", reason: null },
+  access: makeAccess({ state: "on" }),
+});
+const reports = makeMemberIntegration({ id: 2, name: "Reports API" });
+
+const catalog: AgentChatIntegrations = {
+  integrationIds: [1, 2],
+  integrations: [linear, reports],
   isLoading: false,
   error: undefined,
   refresh: jest.fn(),
@@ -80,12 +65,12 @@ function user() {
   return setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
 }
 
-test("a plugin that needs sign-in keeps its switch, and Connect turns it on", async () => {
-  const configuration = handle([REPORTS_PLUGIN_ID]);
+test("an integration that needs sign-in keeps its switch, and Connect turns it on", async () => {
+  const configuration = handle([2]);
   const onConnect = jest.fn();
   const u = user();
   render(
-    <ChatPluginsPopover
+    <ChatIntegrationsPopover
       agentId={8}
       toolConfiguration={configuration}
       catalog={catalog}
@@ -95,30 +80,37 @@ test("a plugin that needs sign-in keeps its switch, and Connect turns it on", as
   );
   await u.click(screen.getByRole("button", { name: copy.trigger.label }));
   expect(
-    await screen.findByRole("switch", { name: "Use Reports with this agent" })
+    await screen.findByRole("switch", {
+      name: "Use Reports API with this agent",
+    })
   ).not.toBeChecked();
   await u.click(
     screen.getByRole("button", {
       name: messages.plugins.member.connection.connect.label,
     })
   );
-  expect(configuration.setPluginEnabled).toHaveBeenCalledWith(
-    [REPORTS_PLUGIN_ID],
-    true
-  );
-  expect(onConnect).toHaveBeenCalledWith(catalog.plugins[1]);
+  expect(configuration.setIntegrationEnabled).toHaveBeenCalledWith([2], true);
+  expect(onConnect).toHaveBeenCalledWith(reports);
 });
 
-test("a Required plugin shows on and its switch is locked", async () => {
-  const configuration = handle([LINEAR_PLUGIN_ID]);
+test("a Required integration shows on and its switch is locked", async () => {
+  const configuration = handle([1]);
   const u = user();
   render(
-    <ChatPluginsPopover
+    <ChatIntegrationsPopover
       agentId={8}
       toolConfiguration={configuration}
       catalog={{
         ...catalog,
-        plugins: [{ ...catalog.plugins[0]!, required: true }],
+        integrations: [
+          {
+            ...linear,
+            access: makeAccess({
+              state: "on",
+              installation_policy: "REQUIRED",
+            }),
+          },
+        ],
       }}
       onConnect={jest.fn()}
       onBrowse={jest.fn()}
@@ -131,17 +123,17 @@ test("a Required plugin shows on and its switch is locked", async () => {
   expect(toggle).toBeChecked();
   expect(toggle).toHaveAttribute("aria-disabled", "true");
   expect(
-    screen.getByText(messages.plugins.member.detail.switch.required)
+    screen.getByText(messages.integrations.memberState.switch.required)
   ).toBeVisible();
 });
 
-test("says when the agent has no plugins with integrations", async () => {
+test("says when the agent has no integrations", async () => {
   const u = user();
   render(
-    <ChatPluginsPopover
+    <ChatIntegrationsPopover
       agentId={8}
       toolConfiguration={handle()}
-      catalog={{ ...catalog, pluginIds: [], plugins: [] }}
+      catalog={{ ...catalog, integrationIds: [], integrations: [] }}
       onConnect={jest.fn()}
       onBrowse={jest.fn()}
     />

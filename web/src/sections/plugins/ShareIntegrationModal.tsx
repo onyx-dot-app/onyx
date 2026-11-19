@@ -11,98 +11,80 @@ import useShareableGroups, {
   type MinimalUserGroupSnapshot,
 } from "@/hooks/useShareableGroups";
 import useShareableUsers from "@/hooks/useShareableUsers";
-import { updatePluginAccess } from "@/lib/integrations/svc";
+import { updateIntegrationShares } from "@/lib/integrations/svc";
 import type {
-  PluginAccessView,
-  PluginSharePermission,
+  IntegrationSharesView,
+  MemberIntegration,
 } from "@/lib/integrations/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
-import {
-  applyStagedShares,
-  type ShareDraftState,
-} from "@/sections/modals/shareDraftState";
 
-type PluginShareDraft = ShareDraftState<PluginSharePermission>;
+type UserShare = IntegrationSharesView["user_shares"][number];
+type GroupShare = IntegrationSharesView["group_shares"][number];
 
-function draftFrom(view: PluginAccessView): PluginShareDraft {
-  return {
-    userShares: view.user_shares.map((share) => ({
-      user: { id: share.user_id, email: share.email },
-      permission: share.permission,
-    })),
-    groupShares: view.group_shares,
-    isPublic: false,
-    publicPermission: "VIEWER",
-  };
+interface ShareDraft {
+  users: UserShare[];
+  groups: GroupShare[];
 }
 
-export interface SharePluginModalProps {
-  pluginId: string;
-  pluginName: string;
-  /** Names of its integrations with shared sign-in: people with a share use
-   * the account that the owner connected. */
-  sharedSignIn: string[];
+export interface ShareIntegrationModalProps {
+  integration: Pick<MemberIntegration, "id" | "name" | "auth_mode">;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export default function SharePluginModal({
-  pluginId,
-  pluginName,
-  sharedSignIn,
+/** Share a private integration with specific people, and with groups in
+ * the Enterprise edition. A share gives use of the integration only. */
+export default function ShareIntegrationModal({
+  integration,
   onClose,
   onSaved,
-}: SharePluginModalProps) {
-  const t = useTranslations("plugins.member.share");
-  const { data, error, mutate } = useSWR<PluginAccessView, Error>(
-    SWR_KEYS.pluginAccess(pluginId),
+}: ShareIntegrationModalProps) {
+  const t = useTranslations("integrations.share");
+  const { data, error, mutate } = useSWR<IntegrationSharesView, Error>(
+    SWR_KEYS.integrationAccess(integration.id),
     errorHandlingFetcher
   );
   const { data: users } = useShareableUsers({ includeApiKeys: false });
   const { data: groups } = useShareableGroups();
-  const [edited, setEdited] = useState<PluginShareDraft | null>(null);
+  const [edited, setEdited] = useState<ShareDraft | null>(null);
   const [stagedUsers, setStagedUsers] = useState<MinimalUserSnapshot[]>([]);
   const [stagedGroups, setStagedGroups] = useState<MinimalUserGroupSnapshot[]>(
     []
   );
-  const [stagedPermission, setStagedPermission] =
-    useState<PluginSharePermission>("VIEWER");
   const [busy, setBusy] = useState(false);
 
-  const draft = edited ?? (data ? draftFrom(data) : null);
-  const currentUsers = draft?.userShares ?? [];
-  const currentGroups = draft?.groupShares ?? [];
+  const draft: ShareDraft | null =
+    edited ??
+    (data ? { users: data.user_shares, groups: data.group_shares } : null);
+  const currentUsers = draft?.users ?? [];
+  const currentGroups = draft?.groups ?? [];
 
-  function edit(change: (current: PluginShareDraft) => PluginShareDraft) {
+  function edit(change: (current: ShareDraft) => ShareDraft) {
     if (draft) setEdited(change(draft));
   }
 
   async function save() {
     if (!draft) return;
-    const next = applyStagedShares(
-      draft,
-      stagedUsers,
-      stagedGroups,
-      stagedPermission
-    );
+    const userIds = new Set([
+      ...draft.users.map((share) => share.user_id),
+      ...stagedUsers.map((user) => user.id),
+    ]);
+    const groupIds = new Set([
+      ...draft.groups.map((share) => share.group_id),
+      ...stagedGroups.map((group) => group.id),
+    ]);
     setBusy(true);
     try {
-      const saved = await updatePluginAccess(pluginId, {
-        user_shares: next.userShares.map((share) => ({
-          user_id: share.user.id,
-          permission: share.permission,
-        })),
-        group_shares: next.groupShares.map((share) => ({
-          group_id: share.group_id,
-          permission: share.permission,
-        })),
+      const saved = await updateIntegrationShares(integration.id, {
+        user_ids: [...userIds],
+        group_ids: [...groupIds],
       });
       // A reopened dialog starts from the cache, so it must hold the saved list.
       await mutate(saved, { revalidate: false });
-      toast.success(t("saved", { name: pluginName }));
+      toast.success(t("saved", { name: integration.name }));
       onSaved();
     } catch (saveError) {
       toast.error(saveError instanceof Error ? saveError.message : t("failed"));
@@ -116,22 +98,22 @@ export default function SharePluginModal({
       <Modal.Content width="md" preventAccidentalClose={false}>
         <Modal.Header
           icon={SvgShare}
-          title={t("title", { name: pluginName })}
+          title={t("title", { name: integration.name })}
           description={t("description")}
           onClose={busy ? undefined : onClose}
         />
         <Modal.Body padding={4} gap={4} alignItems="stretch">
-          {sharedSignIn.length > 0 && (
+          {integration.auth_mode === "shared" && (
             <MessageCard
               variant="info"
-              title={t("sharedSignIn", { names: sharedSignIn.join(", ") })}
+              title={t("sharedSignIn", { name: integration.name })}
             />
           )}
           {error && <MessageCard variant="error" title={t("loadFailed")} />}
           <AddPeoplePicker
             disabled={busy || draft === null}
             existingUserIds={
-              new Set(currentUsers.map((share) => share.user.id))
+              new Set(currentUsers.map((share) => share.user_id))
             }
             existingGroupIds={
               new Set(currentGroups.map((share) => share.group_id))
@@ -140,8 +122,6 @@ export default function SharePluginModal({
             groups={groups ?? []}
             stagedUsers={stagedUsers}
             stagedGroups={stagedGroups}
-            stagedPermission={stagedPermission}
-            onStagedPermissionChange={setStagedPermission}
             onAddUser={(user) => setStagedUsers((staged) => [...staged, user])}
             onAddGroup={(group) =>
               setStagedGroups((staged) => [...staged, group])
@@ -163,22 +143,22 @@ export default function SharePluginModal({
             )}
             {currentUsers.map((share) => (
               <ShareAccessRow
-                key={share.user.id}
+                key={share.user_id}
                 icon={SvgUser}
-                avatarInitial={share.user.email.charAt(0).toUpperCase()}
-                title={share.user.email}
+                avatarInitial={share.email.charAt(0).toUpperCase()}
+                title={share.email}
                 rightChildren={
                   <Button
                     size="sm"
                     prominence="tertiary"
                     icon={SvgX}
                     disabled={busy}
-                    aria-label={t("remove.label", { name: share.user.email })}
+                    aria-label={t("remove.label", { name: share.email })}
                     onClick={() =>
                       edit((current) => ({
                         ...current,
-                        userShares: current.userShares.filter(
-                          (other) => other.user.id !== share.user.id
+                        users: current.users.filter(
+                          (other) => other.user_id !== share.user_id
                         ),
                       }))
                     }
@@ -202,7 +182,7 @@ export default function SharePluginModal({
                     onClick={() =>
                       edit((current) => ({
                         ...current,
-                        groupShares: current.groupShares.filter(
+                        groups: current.groups.filter(
                           (other) => other.group_id !== share.group_id
                         ),
                       }))

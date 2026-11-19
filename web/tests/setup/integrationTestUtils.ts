@@ -1,3 +1,4 @@
+import { makeAccess } from "@tests/setup/memberIntegrationTestUtils";
 import type {
   AdminIntegration,
   AdminIntegrationDetail,
@@ -17,15 +18,8 @@ export function makeIntegration(
     enabled: true,
     auth_mode: "individual",
     auth_method: "oauth2",
-    plugins: [
-      {
-        plugin_id: "plugin-linear",
-        plugin_name: "Linear",
-        scope: "organization",
-        owner_email: null,
-        installation_policy: "AVAILABLE",
-      },
-    ],
+    installation_policy: "AVAILABLE",
+    access: makeAccess({ can_manage: true }),
     created_by_email: "admin@example.com",
     action_count: 3,
     needs_setup: false,

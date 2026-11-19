@@ -568,8 +568,8 @@ so another browser starts again. The input lock is a comparison against
 `disabled` prop in `AppPage`; a change to the step order must keep it.
 
 **Action preference.** At send time `onSubmit` filters the selected Action through
-`web/src/lib/plugins/chat.ts:effectiveChatPreference`, which keeps a built-in
-tool of the agent, else a saved plugin action whose plugin is on. Sending a message
+`web/src/lib/tools/chat.ts:effectiveChatPreference`, which keeps a built-in
+tool of the agent, else a saved integration action whose integration is on. Sending a message
 preserves the selected preference for later messages in that chat. Each request
 sends the current eligible selection, except Deep Research requests send no
 preference. A preference does not restrict which available tools may run.

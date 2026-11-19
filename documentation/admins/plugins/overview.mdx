@@ -10,11 +10,13 @@ An agent can use a plugin to read current data or to take an action, such as pos
 Admins manage plugins and integrations in the **Agents & Plugins** section of the Admin Panel:
 
 - **Admin Panel → Integrations** (`/admin/integrations`) lists each MCP server and app. Add, configure and approve
-  actions here.
-- **Admin Panel → Plugins** (`/admin/plugins`) lists the plugins that hold integrations. A plugin gives people access
-  to its integrations.
+  actions, and set the install setting of each integration here.
 
-Users connect their accounts and set personal defaults in **Customize** in the main sidebar (`/app/customize`).
+Each integration has its own access: an owner, an install setting, and the people it is shared with.
+A plugin holds skills only. It does not hold an integration and gives no access to one.
+
+Users turn integrations on, connect their accounts,
+and set personal defaults in **Customize → Integrations** in the main sidebar (`/app/customize/integrations`).
 The [release notes](/changelog) list the old admin pages and where they are now.
 
 ## Plugin types
@@ -67,8 +69,8 @@ Onyx has three plugin types. Each type connects to a different kind of external 
   </Step>
 
   <Step title="Select the owner and add">
-    **For me** puts the integration in a plugin in your **My uploads**.
-    **For the organization** puts it in a plugin in the **Organization library**. Click **Add**.
+    **For me** makes a private integration. Only you can use it until you share it.
+    **For the organization** makes an integration with the install setting **Available**. Click **Add**.
   </Step>
 </Steps>
 
@@ -77,39 +79,50 @@ or [Craft Apps](/admins/plugins/craft_apps).
 
 Users with the **Manage Actions** permission can add integrations.
 Only users with the organization-wide **Manage Actions** permission see **For the organization**.
-A user with **Manage Actions** for some groups adds integrations **For me** and manages only the integrations of plugins
-in their **My uploads**.
+A user with **Manage Actions** for some groups adds integrations **For me** and manages only the private integrations
+that they own.
 
 ## The Integrations page
 
-The list shows **Name**, **Type**, **Sign-in**, **Access**, and **Status** for each integration.
-Use the type filter and the search field to find an integration.
+The list shows **Name**, **Type**, **Sign-in**, **Install Setting**, and **Status** for each integration.
+Under the name, a private integration shows its owner. If you manage an integration that is not shared with you,
+the row shows **No access** and the reason. Use the type filter and the search field to find an integration.
 An integration that needs setup comes first and shows **Needs setup**. Point to the status to see the reason,
 for example a missing organization connection or OAuth client.
 
-Deleting an integration removes it from each plugin that holds it, and deletes its connections and action settings.
+Deleting an integration removes it from each agent and scheduled task, and deletes its connections and action settings.
 To keep an integration but stop all use of it, turn off **Enabled** on its **Overview** tab instead.
 
-## The Plugins page
+## Access and install setting
 
-**Admin Panel → Plugins** lists each plugin that holds integrations, with its library, its install setting,
-and its integrations. Search by name, or filter the list by library.
-Each **Organization library** plugin has an install setting:
+Each integration has a company install setting.
+Set it in the **Install Setting** column of **Admin Panel → Integrations**,
+or on the **Overview** tab of the integration.
 
 | Install setting | Effect |
 | --- | --- |
 | **Required** | On for each user. Users cannot turn it off. |
 | **Installed** | On for each user. Each user can turn it off. |
-| **Available** | Off for each user. Each user can turn it on in **Customize**. |
-| **Not available** | Hidden from users. |
+| **Available** | Off for each user. Each user can turn it on in **Customize → Integrations**. |
+| **Not available** | Private. Only its owner and the people it is shared with can use it. |
 
 Only users with the organization-wide **Manage Actions** permission can change the install setting.
-The default agent uses only the plugins that a user has on.
-A custom agent uses each plugin that it holds and that the user can see.
 
-A plugin in a **My uploads** has no install setting. Its owner shares it with people and groups,
-or publishes it to the **Organization library**. To publish a plugin that holds an integration,
-a user needs the organization-wide **Manage Actions** permission.
+Each user has one on/off choice for each integration. When an integration is on,
+the user can use it in Chat and in Craft. The default agent uses only the integrations that a user has on.
+A custom agent uses each integration that it links to, if the user has access to the integration and is signed in.
+An agent gives no access: a person who can use an agent but not one of its integrations chats without that integration.
+The agent editor shows a warning when the agent is shared with more people than an integration.
+
+### Share or publish a private integration
+
+The owner of a private integration, and each user who manages it, can share it. In **Customize → Integrations**,
+click **...** on the integration row or its page, then click **Share**. Add specific people. On the Enterprise plan,
+you can also add groups. A share gives use of the integration only. It does not let the person change the integration.
+
+To make a private integration available to the whole organization, click **...**, then **Publish to Org**.
+The install setting becomes **Available**, and the existing shares stay.
+Only users with the organization-wide **Manage Actions** permission can publish.
 
 ## Integration settings
 
@@ -117,7 +130,7 @@ Click an integration to open its detail page.
 
 | Tab | Settings |
 | --- | --- |
-| **Overview** | Name, description, type, sign-in, the plugins that hold it, **Enabled**, and **Delete** |
+| **Overview** | Name, description, type, sign-in, owner, **Install Setting**, **Enabled**, and **Delete** |
 | **Configuration** | Server URL, OpenAPI schema, or URL patterns, sign-in mode and method, OAuth client, header template, **Users Can Save Always Allow**, and the organization connection |
 | **Actions** | **Default for New Actions**, then the read-only actions and the write actions, each with **Allow**, **Ask**, or **Blocked** |
 
@@ -146,7 +159,7 @@ and to actions that the integration adds later. Each action shows **Uses default
 Turn on **Users Can Save Always Allow** on the **Configuration** tab to let each user save **Always allow** for an
 action with the **Ask** policy. Users cannot run an action with the **Blocked** policy.
 
-An Agent can also set each action of its plugins. See [Action Settings](/admins/agents/overview#action-settings).
+An Agent can also set each action of its integrations. See [Action Settings](/admins/agents/overview#action-settings).
 
 The Slack and Discord bots cannot show approval requests, so a tool with the **Ask** policy is not available to them.
 Each tool that the agent of a bot had before integrations were added keeps running without approval.

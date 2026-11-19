@@ -8,16 +8,12 @@ import {
 } from "@tests/setup/test-utils";
 import IntegrationConnectPrompt from "@/sections/plugins/IntegrationConnectPrompt";
 import messages from "@/i18n/messages/en.json";
-import type { ChatPluginEntry } from "@/lib/plugins/hooks";
+import type { MemberIntegration } from "@/lib/integrations/types";
 import { mockFetch, requestBody } from "@tests/setup/integrationTestUtils";
-import {
-  LINEAR_PLUGIN_ID,
-  makeMemberIntegration,
-  REPORTS_PLUGIN_ID,
-} from "@tests/setup/memberIntegrationTestUtils";
+import { makeMemberIntegration } from "@tests/setup/memberIntegrationTestUtils";
 
 const copy = messages.plugins.chat.connectPrompt;
-let mockPlugins: ChatPluginEntry[] = [];
+let mockIntegrations: MemberIntegration[] = [];
 const mockRefresh = jest.fn(() => Promise.resolve());
 
 jest.mock("next/navigation", () => ({
@@ -31,10 +27,10 @@ jest.mock("@opal/navigation", () => ({
   ...jest.requireActual<typeof import("@opal/navigation")>("@opal/navigation"),
   loadPage: jest.fn(),
 }));
-jest.mock("@/lib/plugins/hooks", () => ({
-  useAgentChatPlugins: () => ({
-    pluginIds: mockPlugins.map((plugin) => plugin.pluginId),
-    plugins: mockPlugins,
+jest.mock("@/lib/integrations/hooks", () => ({
+  useAgentChatIntegrations: () => ({
+    integrationIds: mockIntegrations.map((integration) => integration.id),
+    integrations: mockIntegrations,
     isLoading: false,
     error: undefined,
     refresh: mockRefresh,
@@ -61,31 +57,18 @@ function user() {
 }
 
 beforeEach(() => {
-  mockPlugins = [
-    {
-      pluginId: LINEAR_PLUGIN_ID,
-      name: "Linear",
-      required: false,
-      integrations: [linear, shared],
-    },
-    {
-      pluginId: REPORTS_PLUGIN_ID,
-      name: "Reports",
-      required: false,
-      integrations: [reports],
-    },
-  ];
+  mockIntegrations = [linear, shared, reports];
 });
 afterEach(() => {
   jest.restoreAllMocks();
   mockRefresh.mockClear();
 });
 
-test("lists the integrations of plugins that are on and need sign-in", async () => {
+test("lists the integrations that are on and need sign-in", async () => {
   render(
     <IntegrationConnectPrompt
       agentId={8}
-      toolConfiguration={{ ready: true, isPluginEnabled: () => true }}
+      toolConfiguration={{ ready: true, isIntegrationEnabled: () => true }}
     />
   );
   const trigger = screen.getByRole("button", {
@@ -106,13 +89,13 @@ test("lists the integrations of plugins that are on and need sign-in", async () 
   expect(within(dialog).getByText(copy.hint)).toBeVisible();
 });
 
-test("skips the plugins that are off in this chat", () => {
+test("skips the integrations that are off in this chat", () => {
   render(
     <IntegrationConnectPrompt
       agentId={8}
       toolConfiguration={{
         ready: true,
-        isPluginEnabled: (id) => id !== REPORTS_PLUGIN_ID,
+        isIntegrationEnabled: (id) => id !== reports.id,
       }}
     />
   );
@@ -122,25 +105,13 @@ test("skips the plugins that are off in this chat", () => {
 });
 
 test("shows nothing when every integration is connected", () => {
-  mockPlugins = [
-    {
-      pluginId: LINEAR_PLUGIN_ID,
-      name: "Linear",
-      required: false,
-      integrations: [
-        makeMemberIntegration({
-          status: {
-            state: "connected",
-            reason: null,
-          },
-        }),
-      ],
-    },
+  mockIntegrations = [
+    makeMemberIntegration({ status: { state: "connected", reason: null } }),
   ];
   render(
     <IntegrationConnectPrompt
       agentId={8}
-      toolConfiguration={{ ready: true, isPluginEnabled: () => true }}
+      toolConfiguration={{ ready: true, isIntegrationEnabled: () => true }}
     />
   );
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
@@ -150,13 +121,13 @@ test("reads the statuses again when the user opens it, not on each render", asyn
   const { rerender } = render(
     <IntegrationConnectPrompt
       agentId={8}
-      toolConfiguration={{ ready: true, isPluginEnabled: () => true }}
+      toolConfiguration={{ ready: true, isIntegrationEnabled: () => true }}
     />
   );
   rerender(
     <IntegrationConnectPrompt
       agentId={8}
-      toolConfiguration={{ ready: true, isPluginEnabled: () => true }}
+      toolConfiguration={{ ready: true, isIntegrationEnabled: () => true }}
     />
   );
   expect(mockRefresh).not.toHaveBeenCalled();

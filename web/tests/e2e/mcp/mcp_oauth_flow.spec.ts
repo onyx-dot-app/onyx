@@ -8,9 +8,9 @@ import {
 } from "@tests/e2e/utils/mcpServer";
 import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
-import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
+import { ChatIntegrationsPopover } from "@tests/e2e/pages/ChatIntegrationsPopover";
 import { IntegrationConnectPrompt } from "@tests/e2e/pages/IntegrationConnectPrompt";
-import { MemberPluginDetailPage } from "@tests/e2e/pages/MemberPluginDetailPage";
+import { CustomizeIntegrationPage } from "@tests/e2e/pages/CustomizeIntegrationPage";
 import { CustomizePage } from "@tests/e2e/pages/CustomizePage";
 import {
   McpOAuthFlow,
@@ -53,8 +53,8 @@ function buildMcpServerUrl(baseUrl: string): string {
 
 /**
  * An MCP server where each user signs in with OAuth. The admin adds it on the
- * integration pages; members connect from a plugin page and from chat; a
- * scoped manager adds one "For me" from the Plugins page.
+ * integration pages; members connect from the integration page and from
+ * chat; a scoped manager adds one "For me" from the Integrations tab.
  */
 test.describe("MCP OAuth flows", () => {
   test.describe.configure({ mode: "serial" });
@@ -66,7 +66,6 @@ test.describe("MCP OAuth flows", () => {
   );
   let serverName = "";
   let integrationId: number | null = null;
-  let pluginId = "";
   let agentId: number | null = null;
   let agentName = "";
   const createdIntegrationIds: number[] = [];
@@ -127,7 +126,7 @@ test.describe("MCP OAuth flows", () => {
     if (serverProcess) await serverProcess.stop();
   });
 
-  test("Admin adds an OAuth MCP server and connects from its plugin page", async ({
+  test("Admin adds an OAuth MCP server and connects from its integration page", async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "admin", "Runs in the admin project");
@@ -153,17 +152,10 @@ test.describe("MCP OAuth flows", () => {
     createdIntegrationIds.push(integrationId);
 
     const adminClient = new OnyxApiClient(page.request);
-    const detailResponse = await page.request.get(
-      `/api/admin/integrations/${integrationId}`
-    );
-    const detail: { plugins: { plugin_id: string }[] } =
-      await detailResponse.json();
-    pluginId = detail.plugins[0]?.plugin_id ?? "";
-    expect(pluginId).not.toBe("");
 
     // MCP actions load after a connection, so the admin connects first.
-    const member = new MemberPluginDetailPage(page);
-    await member.goto(pluginId, "Integrations");
+    const member = new CustomizeIntegrationPage(page);
+    await member.goto(integrationId, "Configuration");
     await member.expectStatus("Not connected");
     await new McpOAuthFlow(page, oauthConfig()).completeFlowInNewTab(() =>
       member.startConnect(serverName)
@@ -176,12 +168,14 @@ test.describe("MCP OAuth flows", () => {
       [TOOL_NAME]: "allow",
     });
     agentName = `PW OAuth Agent ${Date.now()}`;
-    agentId = await adminClient.createAgentWithPlugins(agentName, [pluginId], {
-      isPublic: true,
-    });
+    agentId = await adminClient.createAgentWithIntegrations(
+      agentName,
+      [integrationId],
+      { isPublic: true }
+    );
   });
 
-  test("A member connects from a plugin page and uses the tool", async ({
+  test("A member connects from the integration page and uses the tool", async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== "admin", "Runs in the admin project");
@@ -189,12 +183,12 @@ test.describe("MCP OAuth flows", () => {
     await page.context().clearCookies();
     await loginAsWorkerUser(page, testInfo.workerIndex);
 
-    const plugins = new CustomizePage(page);
-    await plugins.goto("Plugins");
-    await plugins.search(serverName);
-    await plugins.openPlugin(serverName);
-    const detail = new MemberPluginDetailPage(page);
-    await detail.openTab("Integrations");
+    const customize = new CustomizePage(page);
+    await customize.goto("Integrations");
+    await customize.search(serverName);
+    await customize.openIntegration(serverName);
+    const detail = new CustomizeIntegrationPage(page);
+    await detail.openTab("Configuration");
     if (await detail.connectButton(serverName).isVisible()) {
       await new McpOAuthFlow(page, oauthConfig()).completeFlowInNewTab(() =>
         detail.startConnect(serverName)
@@ -226,7 +220,7 @@ test.describe("MCP OAuth flows", () => {
       serverName
     );
 
-    const popover = new ChatPluginsPopover(page);
+    const popover = new ChatIntegrationsPopover(page);
     await popover.expectConnected(serverName);
     await popover.close();
     await expectMcpToolInvoked(
@@ -251,12 +245,12 @@ test.describe("MCP OAuth flows", () => {
     const plugins = new CustomizePage(page);
     await plugins.goto("Integrations");
     const personalName = `PW MCP Personal ${Date.now()}`;
-    const created = await plugins.addMcpServer({
+    const createdId = await plugins.addMcpServer({
       name: personalName,
       url: serverUrl,
       oauth: { client: manualOAuthClient() },
     });
-    createdIntegrationIds.push(created.integrationId);
+    createdIntegrationIds.push(createdId);
 
     await plugins.goto("Integrations");
     await plugins.expectIntegrationVisible(personalName);
@@ -268,7 +262,7 @@ test.describe("MCP OAuth flows", () => {
     await otherIntegrations.goto();
     await otherIntegrations.expectIntegrationAbsent(personalName);
     const read = await otherPage.request.get(
-      `/api/admin/integrations/${created.integrationId}`
+      `/api/admin/integrations/${createdId}`
     );
     expect([403, 404]).toContain(read.status());
     await otherContext.close();

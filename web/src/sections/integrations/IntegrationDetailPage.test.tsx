@@ -98,7 +98,9 @@ test("shows the overview and turns the integration off", async () => {
   expect(await view.findByText("Manage issues")).toBeInTheDocument();
   expect(view.getByText("Each user (OAuth)")).toBeInTheDocument();
   expect(view.getByText("admin@example.com")).toBeInTheDocument();
-  expect(view.getByText("Organization library, available")).toBeInTheDocument();
+  expect(
+    view.getByRole("combobox", { name: "Install setting of Linear" })
+  ).toHaveValue(messages.skills.installationPolicy.AVAILABLE.label);
 
   await u.click(
     screen.getByRole("switch", { name: detailCopy.overview.enabled.title })

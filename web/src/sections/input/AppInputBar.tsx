@@ -25,7 +25,7 @@ import { MinimalOnyxDocument } from "@/lib/search/types";
 import { ChatState } from "@/app/app/types";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { effectiveChatPreference } from "@/lib/plugins/chat";
+import { effectiveChatPreference } from "@/lib/tools/chat";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import type {
@@ -469,7 +469,7 @@ const AppInputBar = React.memo(
       requestedAction: toolConfiguration.preferredAction,
       agent: activeAgent,
       incognito: incognitoEnabled,
-      isPluginEnabled: toolConfiguration.isPluginEnabled,
+      isIntegrationEnabled: toolConfiguration.isIntegrationEnabled,
     });
     const preferredToolId =
       preference?.type === "capability" ? preference.tool_id : null;

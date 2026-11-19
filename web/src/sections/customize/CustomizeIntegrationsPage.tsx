@@ -11,7 +11,7 @@ import {
   type TableColumn,
 } from "@opal/components";
 import { IllustrationContent, Section } from "@opal/layouts";
-import { SvgCheck, SvgPlug, SvgPlus, SvgSettings } from "@opal/icons";
+import { SvgPlug, SvgPlus, SvgSettings } from "@opal/icons";
 import { SvgUnPlugged } from "@opal/illustrations";
 import { useScreenSize } from "@opal/hooks";
 import { useNavigation } from "@opal/navigation";
@@ -27,35 +27,12 @@ import { Permission } from "@/lib/types";
 import CustomizeLayout from "@/sections/customize/CustomizeLayout";
 import { CustomizeEmpty } from "@/sections/customize/CustomizeList";
 import { useIntegrationLabels } from "@/sections/integrations/integrationLabels";
-import IntegrationConnectButton from "@/sections/plugins/IntegrationConnectButton";
+import {
+  IntegrationMenu,
+  IntegrationStateControl,
+} from "@/sections/customize/IntegrationAccessControls";
 
 const RETURN_PATH = customizeTabHref("integrations");
-
-interface IntegrationStatusCellProps {
-  integration: MemberIntegration;
-}
-
-function IntegrationStatusCell({ integration }: IntegrationStatusCellProps) {
-  const t = useTranslations("customize.integrations");
-  if (integration.status.state === "connected")
-    return (
-      <Section
-        flexDirection="row"
-        justifyContent="start"
-        width="auto"
-        height="auto"
-        aria-label={t("status.connected")}
-      >
-        <IconContainer icon={SvgCheck} />
-      </Section>
-    );
-  return (
-    <IntegrationConnectButton
-      integration={integration}
-      returnPath={RETURN_PATH}
-    />
-  );
-}
 
 export default function CustomizeIntegrationsPage() {
   const t = useTranslations("customize.integrations");
@@ -116,8 +93,12 @@ export default function CustomizeIntegrationsPage() {
       title: t("columns.name"),
       weight: 34,
       truncate: true,
-      cell: (name) => (
-        <Text font="main-ui-action" color="text-04" maxLines={1}>
+      cell: (name, row) => (
+        <Text
+          font="main-ui-action"
+          color={row.access.state === "no_access" ? "text-03" : "text-04"}
+          maxLines={1}
+        >
           {name}
         </Text>
       ),
@@ -127,8 +108,19 @@ export default function CustomizeIntegrationsPage() {
       kind: "display",
       id: "status",
       title: t("columns.status"),
-      width: { weight: 18 },
-      cell: (row) => <IntegrationStatusCell integration={row} />,
+      width: { weight: 24 },
+      cell: (row) => (
+        <Section
+          flexDirection="row"
+          justifyContent="end"
+          alignItems="center"
+          height="auto"
+          gap={1}
+        >
+          <IntegrationStateControl integration={row} returnPath={RETURN_PATH} />
+          <IntegrationMenu integration={row} />
+        </Section>
+      ),
     },
   ];
 

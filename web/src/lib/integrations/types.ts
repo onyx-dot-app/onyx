@@ -29,52 +29,42 @@ export interface CredentialField {
   secret: boolean;
 }
 
-export interface IntegrationPluginRef {
-  plugin_id: string;
-  plugin_name: string;
-  scope: "organization" | "personal";
-  owner_email: string | null;
-  installation_policy: InstallationPolicy | null;
-}
+/** What one user gets from an integration (`access.state`). */
+export type MemberIntegrationState =
+  | "on"
+  | "turn_on"
+  | "sign_in"
+  | "no_access"
+  | "turned_off";
 
-export interface MemberPluginRef extends IntegrationPluginRef {
-  enabled: boolean;
-}
-
-/** `PUT /plugins/{id}/enabled`: the user's state of the plugin. */
-export interface MemberPluginState {
-  plugin_id: string;
-  enabled: boolean;
+/** The access facts of one integration for the user who reads it. */
+export interface IntegrationAccess {
+  state: MemberIntegrationState;
+  /** The install setting for the user, with the group settings. */
   installation_policy: InstallationPolicy;
+  /** The saved on/off choice of the user. Null: the user made no choice. */
+  user_choice: boolean | null;
+  /** The choice under the install setting. */
+  user_enabled: boolean;
+  owner_email: string | null;
+  is_owner: boolean;
+  /** The user can change the integration, its shares and its actions. */
+  can_manage: boolean;
+  /** The company setting is above Not available, so each user has access. */
+  shared_with_everyone: boolean;
 }
 
-/** `POST /plugins/{id}/publish`: the name can change on a clash. */
-export interface PluginPublishResponse {
-  plugin_id: string;
-  name: string;
-}
-
-export type PluginSharePermission = "EDITOR" | "VIEWER";
-
-/** The shares of a private plugin that holds only integrations. */
-export interface PluginAccessView {
-  plugin_id: string;
-  user_shares: {
-    user_id: string;
-    email: string;
-    permission: PluginSharePermission;
-  }[];
-  group_shares: {
-    group_id: number;
-    group_name: string;
-    permission: PluginSharePermission;
-  }[];
+/** The shares of a private integration. A share gives use only. */
+export interface IntegrationSharesView {
+  integration_id: number;
+  user_shares: { user_id: string; email: string }[];
+  group_shares: { group_id: number; group_name: string }[];
 }
 
 /** The new set of shares; a share left out is removed. */
-export interface PluginAccessUpdate {
-  user_shares: { user_id: string; permission: PluginSharePermission }[];
-  group_shares: { group_id: number; permission: PluginSharePermission }[];
+export interface IntegrationSharesUpdate {
+  user_ids: string[];
+  group_ids: number[];
 }
 
 export interface IntegrationAction {
@@ -89,21 +79,15 @@ export interface IntegrationAction {
   always_asks: boolean;
 }
 
-/** One integration of a plugin in `GET /integrations/agent-catalog`. */
+/** One integration in `GET /integrations/agent-catalog`. */
 export interface AgentCatalogIntegration {
   id: number;
   name: string;
+  description: string | null;
   kind: IntegrationKind;
   shape: IntegrationShape;
   users_can_save_always_allow: boolean;
   actions: IntegrationAction[];
-}
-
-export interface AgentPluginOption {
-  plugin_id: string;
-  plugin_name: string;
-  description: string | null;
-  integrations: AgentCatalogIntegration[];
 }
 
 export interface AdminIntegration {
@@ -116,7 +100,10 @@ export interface AdminIntegration {
   enabled: boolean;
   auth_mode: AuthMode;
   auth_method: AuthMethod | null;
-  plugins: IntegrationPluginRef[];
+  /** The company install setting. */
+  installation_policy: InstallationPolicy;
+  /** What the user who reads the row gets from the integration. */
+  access: IntegrationAccess;
   created_by_email: string | null;
   action_count: number;
   needs_setup: boolean;
@@ -219,7 +206,7 @@ export interface MemberIntegration {
   auth_method: AuthMethod | null;
   credential_fields: CredentialField[];
   status: IntegrationStatus;
-  plugins: MemberPluginRef[];
+  access: IntegrationAccess;
   users_can_save_always_allow: boolean;
   /** The user's saved credential values, masked. */
   credential_values: Record<string, string>;
@@ -242,9 +229,4 @@ export interface MemberActionPolicies {
 export interface IntegrationOAuthCallbackResult {
   integration_id: number;
   return_path: string | null;
-}
-
-export interface AdminPluginEntry {
-  plugin: IntegrationPluginRef;
-  integrations: AdminIntegration[];
 }

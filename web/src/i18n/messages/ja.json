@@ -10364,47 +10364,16 @@
         }
       }
     },
-    "plugins": {
-      "title": "プラグイン",
-      "description": "プラグインは、一緒にオンにするスキルと連携をまとめたものです。この一覧には、連携を含むプラグインが表示されます。スキルは「スキル」ページで管理します。",
-      "search": "プラグインを検索",
-      "loadFailed": "プラグインを読み込めませんでした。",
-      "columns": {
-        "name": "プラグイン",
-        "library": "ライブラリ",
-        "installation": "インストール設定",
-        "integrations": "連携"
-      },
-      "library": {
-        "organization": "組織ライブラリ",
-        "personal": "個人のアップロード"
-      },
-      "installationSelect": "{name} のインストール設定",
-      "installationSaved": "{name} は {policy} になりました。",
-      "installationSaveFailed": "インストール設定を保存できませんでした。",
-      "openIntegration": "{name} を開く",
-      "empty": {
-        "title": "連携を含むプラグインはありません",
-        "description": "連携を追加してください。Onyx がそれを含むプラグインを作成します。"
-      },
-      "contents": "{count, plural, other {# 件の連携}}",
-      "filters": {
-        "label": "ライブラリ",
-        "all": "すべてのライブラリ",
-        "organization": "組織ライブラリ",
-        "personal": "個人のアップロード"
-      }
-    },
     "integrations": {
       "title": "連携",
-      "description": "MCP サーバーとアプリを接続します。各連携はプラグインに含まれ、プラグインがユーザーにアクセスを提供します。",
+      "description": "MCP サーバーとアプリを接続します。各統合には所有者、インストール設定、独自の共有があります。",
       "search": "連携を検索",
       "open": "{name} を開く",
       "loadFailed": "連携を読み込めませんでした。",
       "add": {
         "label": "追加",
         "title": "連携を追加",
-        "description": "サービスを接続して、チャットとCraftで使えるようにします。Onyxは各連携を専用のプラグインに入れます。",
+        "description": "サービスを接続すると、チャットと Craft で使えるようになります。",
         "created": "{name} を追加しました。",
         "createFailed": "連携を追加できませんでした。",
         "openapi": {
@@ -10467,8 +10436,8 @@
           "title": "所有者",
           "personal": "自分用",
           "organization": "組織用",
-          "personalDescription": "Onyx は連携をマイアップロード内のプラグインに追加します。プラグインは後で共有できます。",
-          "organizationDescription": "Onyx は連携を組織ライブラリ内のプラグインに追加します。"
+          "personalDescription": "この統合を使えるのはあなただけです。後で共有できます。",
+          "organizationDescription": "組織の各ユーザーがこの統合をオンにできます。"
         },
         "submit": "追加",
         "adding": "追加しています…",
@@ -10506,8 +10475,8 @@
         "name": "名前",
         "type": "種類",
         "signIn": "ログイン",
-        "access": "アクセス",
-        "status": "ステータス"
+        "status": "ステータス",
+        "installation": "インストール設定"
       },
       "empty": {
         "title": "連携はありません",
@@ -10522,13 +10491,6 @@
         "custom": "カスタムアプリ"
       },
       "signInSummary": "{mode, select, none {ログインなし} shared {{method, select, oauth2 {組織アカウント (OAuth)} api_key {組織の API キー} onyx_login {Onyx ログイン} managed {Onyx が管理} other {組織アカウント}}} individual {{method, select, oauth2 {各ユーザー (OAuth)} api_key {各ユーザー (API キー)} onyx_login {Onyx ログイン} managed {Onyx が管理} other {各ユーザー}}} other {不明}}",
-      "access": {
-        "none": "プラグインに含まれていません",
-        "many": "{count, plural, one {# 個のプラグイン} other {# 個のプラグイン}}",
-        "organization": "{plugin}（組織ライブラリ）",
-        "personal": "{plugin}（{owner}）",
-        "personalOwner": "個人のアップロード"
-      },
       "status": {
         "needsSetup": "要セットアップ",
         "off": "オフ",
@@ -10608,10 +10570,6 @@
           "createdBy": "追加したユーザー",
           "needsSetup": "要セットアップ",
           "needsSetupDefault": "「設定」タブでログイン設定を完了してください。",
-          "plugins": {
-            "title": "プラグイン",
-            "organization": "{policy, select, REQUIRED {組織ライブラリ、必須} DEFAULT {組織ライブラリ、デフォルトでオン} AVAILABLE {組織ライブラリ、利用可能} NOT_AVAILABLE {組織ライブラリ、利用不可} other {組織ライブラリ}}"
-          },
           "enabled": {
             "title": "有効",
             "description": "オフにすると、エージェントもユーザーもこの連携を使用できません。"
@@ -10619,7 +10577,7 @@
           "delete": {
             "label": "削除",
             "confirmTitle": "{name} を削除しますか？",
-            "confirmDescription": "Onyx は各プラグインから連携を削除し、その接続とアクション設定を削除します。この操作は元に戻せません。",
+            "confirmDescription": "Onyx は統合とその接続およびアクション設定を削除し、各エージェントとタスクから外します。元に戻すことはできません。",
             "confirm": "削除"
           },
           "deleted": "{name} を削除しました。",
@@ -10637,7 +10595,8 @@
             "saveFailed": "名前と説明を保存できませんでした。"
           },
           "description": "説明",
-          "menu": "その他の操作"
+          "menu": "その他の操作",
+          "owner": "所有者"
         },
         "configuration": {
           "readOnly": "この連携は表示できますが、変更はできません。",
@@ -10707,11 +10666,19 @@
             "title": "まずサーバーに接続してください",
             "description": "Onyx は MCP サーバーの接続後にそのアクションを読み込みます。",
             "open": "設定を開く",
-            "individualDescription": "各ユーザーがこのサーバーにサインインします。プラグインページで自分のアカウントを接続してから、「更新」をクリックしてください。",
-            "openPlugins": "プラグインを開く"
+            "individualDescription": "各ユーザーがこのサーバーにサインインします。統合のページで自分のアカウントを接続してから、[更新]をクリックしてください。",
+            "openIntegration": "統合を開く"
           }
         }
-      }
+      },
+      "installation": {
+        "select": "{name} のインストール設定",
+        "saved": "{name} は {policy} になりました。",
+        "saveFailed": "インストール設定を保存できませんでした。",
+        "title": "インストール設定",
+        "description": "この統合を受け取るユーザーです。利用不可にすると非公開になり、所有者と共有先のユーザーだけが使えます。"
+      },
+      "ownedBy": "所有者: {owner}"
     }
   },
   "agents": {
@@ -10835,52 +10802,6 @@
       "page": {
         "ariaLabel": "エージェントエディターページ"
       },
-      "plugins": {
-        "askHint": "確認なしで実行するには、エージェントの設定を変更するか、管理者が統合でこれを許可に設定するか、各ユーザーが常に許可を選びます。",
-        "askHintAdminOnly": "確認なしで実行するには、管理者が統合でこれを許可に設定します。",
-        "askHintAgent": "確認なしで実行するには、エージェントの設定を変更するか、各ユーザーが常に許可を選びます。",
-        "askHintAgentOnly": "確認なしで実行するには、エージェントの設定を変更します。",
-        "choice": {
-          "inherit": "統合の設定を使う",
-          "agentDefault": "エージェントのデフォルトを使用"
-        },
-        "default": {
-          "description": "独自の設定がない各アクションに適用されます。統合が後で追加するアクションにも適用されます。",
-          "title": "その他のアクションのデフォルト"
-        },
-        "description": "エージェントにプラグインを付与します。別の設定を選ばない限り、各アクションは統合の設定を使います。",
-        "effective": "{policy, select, allow {許可} ask {確認} other {ブロック}}（{source, select, integration {統合の設定} agentDefault {エージェントのデフォルト} other {エージェントの設定}}）",
-        "empty": "利用できる統合付きのプラグインはありません。",
-        "loadFailed": "プラグインを読み込めませんでした。",
-        "lock": {
-          "adminBlocked": "許可は選べません: 管理者がこのアクションをブロックしました。",
-          "alwaysAsks": "許可は使用できません: Craft はこれらのリクエストごとに承認を求めます。",
-          "adminFinal": "許可は選べません: この統合の管理者設定は確定しています。",
-          "defaultFinal": "許可は選べません: これらの統合の管理者設定は確定しています。"
-        },
-        "noActions": "この統合にはまだアクションがありません。",
-        "notVisible": "このプラグインのアクションは表示できません。設定はそのまま保持されます。",
-        "title": "プラグイン",
-        "add": {
-          "placeholder": "プラグインを追加"
-        },
-        "remove": {
-          "ariaLabel": "{plugin} を削除"
-        },
-        "retry": {
-          "label": "再試行"
-        },
-        "actionSetting": {
-          "label": "{action} の設定"
-        },
-        "defaultSetting": {
-          "label": "{plugin} のデフォルト設定"
-        },
-        "openIntegration": {
-          "label": "{integration} のアクションを開く"
-        },
-        "stricterPlugin": "このエージェントの {plugin} プラグインが、このアクションにより厳しい設定を適用しています。"
-      },
       "prompts": {
         "instructions": {
           "description": "このエージェントの応答を調整するための指示を追加します。",
@@ -10972,6 +10893,51 @@
       },
       "warnings": {
         "openUrl": "URLを開く機能なしのウェブ検索では、ウェブベースの結果が大幅に悪化する可能性があります。"
+      },
+      "integrations": {
+        "askHint": "確認なしで実行するには、エージェントの設定を変更するか、管理者が統合でこれを許可に設定するか、各ユーザーが常に許可を選びます。",
+        "askHintAdminOnly": "確認なしで実行するには、管理者が統合でこれを許可に設定します。",
+        "askHintAgent": "確認なしで実行するには、エージェントの設定を変更するか、各ユーザーが常に許可を選びます。",
+        "askHintAgentOnly": "確認なしで実行するには、エージェントの設定を変更します。",
+        "choice": {
+          "inherit": "統合の設定を使う",
+          "agentDefault": "エージェントのデフォルトを使用"
+        },
+        "default": {
+          "description": "独自の設定がない各アクションに適用されます。統合が後で追加するアクションにも適用されます。",
+          "title": "その他のアクションのデフォルト"
+        },
+        "description": "エージェントに統合を追加します。別の設定を選ばない限り、各アクションは統合の設定を使います。",
+        "effective": "{policy, select, allow {許可} ask {確認} other {ブロック}}（{source, select, integration {統合の設定} agentDefault {エージェントのデフォルト} other {エージェントの設定}}）",
+        "empty": "利用できる統合はありません。",
+        "loadFailed": "統合を読み込めませんでした。",
+        "lock": {
+          "adminBlocked": "許可は選べません: 管理者がこのアクションをブロックしました。",
+          "alwaysAsks": "許可は使用できません: Craft はこれらのリクエストごとに承認を求めます。",
+          "adminFinal": "許可は選べません: この統合の管理者設定は確定しています。"
+        },
+        "noActions": "この統合にはまだアクションがありません。",
+        "notVisible": "この統合のアクションは表示できません。設定はそのまま残ります。",
+        "title": "統合",
+        "add": {
+          "placeholder": "統合を追加"
+        },
+        "remove": {
+          "ariaLabel": "{integration}を削除"
+        },
+        "retry": {
+          "label": "再試行"
+        },
+        "actionSetting": {
+          "label": "{action} の設定"
+        },
+        "defaultSetting": {
+          "label": "{integration}のデフォルト設定"
+        },
+        "openIntegration": {
+          "label": "{integration} のアクションを開く"
+        },
+        "sharedWider": "このエージェントを使える一部のユーザーは{integration}を使えません。そのユーザーのチャットはこの統合なしで動作します。アクセスを付与するには、{integration}を共有してください。"
       }
     },
     "filters": {
@@ -11112,7 +11078,8 @@
           "empty": {
             "title": "アクションなし"
           },
-          "title": "アクションとツール"
+          "title": "アクションとツール",
+          "noAccess": "この統合は使用できません。このエージェントとのチャットは統合なしで動作します。"
         },
         "conversationStarters": {
           "title": "会話のきっかけ"
@@ -15151,7 +15118,7 @@
       "appTitle": "{name} の承認設定",
       "title": "承認設定",
       "personalDescription": "これらの設定は、Craftの会話、新しいタスク、チャットでのMCPツール呼び出しでアクションを自動実行するか承認を必要とするかを制御し、既存のタスクは独自の設定を保持します。",
-      "taskDescription": "このタスクが使用できるプラグインを選び、自動実行するアクションを管理します。変更はこのタスクにのみ適用されます。",
+      "taskDescription": "このタスクで使える統合を選び、自動で実行するアクションを管理します。変更はこのタスクにのみ適用されます。",
       "userManagement": "ユーザーによる承認設定の管理を許可",
       "userManagementDescription": "ユーザーは利用可能なアクションの承認設定を変更できます。",
       "loading": "承認設定を読み込み中…",
@@ -15165,9 +15132,9 @@
       "enableAppForTask": "このタスクで{app}を有効にする",
       "enabledForTask": "このタスクで有効",
       "disabledForTask": "このタスクで無効",
-      "taskAppsTitle": "プラグイン",
-      "taskAccessTitle": "プラグインへのアクセス",
-      "noEnabledApps": "このタスクで有効なプラグインはありません。",
+      "taskAppsTitle": "統合",
+      "taskAccessTitle": "統合へのアクセス",
+      "noEnabledApps": "このタスクでオンになっている統合はありません。",
       "actionPolicies": "承認設定",
       "manageActions": "アクションを管理",
       "taskModalDescription": "変更はタスクの保存時に適用されます。ワークスペースの制限は常に適用されます。",
@@ -15178,8 +15145,6 @@
       "saveChanges": "変更を保存",
       "resetDefaults": "すべて既定値に戻す",
       "resetAll": "すべてワークスペースの既定値に戻す",
-      "newTaskPluginsDescription": "このタスクで使用できるプラグインをオンにします。変更するまで、各アクションは連携の設定を使用します。",
-      "emptyPlugins": "連携を含むプラグインはありません。",
       "needsSignIn": "{name} にはサインインが必要です。",
       "taskPolicyCounts": "許可 {allow} · 確認 {ask} · ブロック {blocked}",
       "actionSetting": "{action} の設定",
@@ -15189,7 +15154,9 @@
         "allow": "許可",
         "ask": "確認",
         "blocked": "ブロック"
-      }
+      },
+      "newTaskIntegrationsDescription": "このタスクで使える統合をオンにします。変更するまで、各アクションは統合の設定を使います。",
+      "emptyIntegrations": "利用できる統合はありません。"
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, other {# 件のスキルを読み込めませんでした}}",
@@ -16170,9 +16137,6 @@
         "llmGateway": {
           "label": "LLM ゲートウェイ"
         },
-        "plugins": {
-          "label": "プラグイン"
-        },
         "plansAndBilling": {
           "label": "プランと請求"
         },
@@ -17023,7 +16987,6 @@
         "tabs": {
           "overview": "概要",
           "skills": "スキル",
-          "integrations": "連携",
           "versions": "バージョン"
         },
         "overview": {
@@ -17031,7 +16994,6 @@
           "location": "場所",
           "owner": "所有者",
           "skills": "スキル",
-          "integrations": "連携",
           "description": "説明"
         },
         "skills": {
@@ -17043,20 +17005,8 @@
           "description": "オンにすると、デフォルトのエージェントがこのプラグインを使用できます。",
           "label": "{name} を使用",
           "required": "管理者がこのプラグインを必須にしました。オフにできません。",
-          "notAvailable": "管理者がこのプラグインを利用不可にしました。",
           "unavailable": "このプラグインのオンとオフを切り替えることはできません。",
           "failed": "プラグインを変更できませんでした。"
-        },
-        "share": {
-          "label": "共有"
-        },
-        "publish": {
-          "label": "公開",
-          "blocked": "連携を含むプラグインを公開できるのは、組織全体のアクション管理権限を持つユーザーだけです。",
-          "confirmTitle": "{name} を公開しますか？",
-          "confirmMessage": "プラグインは組織ライブラリに移動します。元に戻すことはできません。その後、管理者がインストール設定を決めます。",
-          "done": "{name} は組織ライブラリに移動しました。",
-          "failed": "プラグインを公開できませんでした。"
         }
       },
       "connection": {
@@ -17115,49 +17065,30 @@
         "invalidLink": "このサインインリンクは無効です。もう一度サインインを始めてください。",
         "failed": "サインインが完了しませんでした。もう一度お試しください。",
         "back": {
-          "label": "プラグインに戻る"
+          "label": "統合に戻る"
         }
-      },
-      "search": {
-        "placeholder": "プラグインを検索"
-      },
-      "share": {
-        "title": "{name} を共有",
-        "description": "ユーザーとグループにこのプラグインへのアクセス権を付与します。",
-        "sharedSignIn": "{names} は 1 つのアカウントを使用します。アクセス権を持つユーザーは、あなたが接続したアカウントを使用します。",
-        "loadFailed": "アクセス権を持つユーザーを読み込めませんでした。",
-        "empty": "アクセス権を持つのはあなただけです。",
-        "remove": {
-          "label": "{name} を削除"
-        },
-        "cancel": {
-          "label": "キャンセル"
-        },
-        "submit": {
-          "label": "保存",
-          "pendingLabel": "保存中..."
-        },
-        "saved": "{name} のアクセス権を保存しました。",
-        "failed": "アクセス権を保存できませんでした。"
       }
     },
     "chat": {
       "popover": {
-        "empty": "このエージェントには連携を含むプラグインがありません。",
-        "searchEmpty": "検索に一致するプラグインはありません。",
-        "loading": "プラグインを読み込み中",
-        "loadError": "一部のプラグインを読み込めませんでした。もう一度お試しください。",
+        "empty": "このエージェントには統合がありません。",
+        "searchEmpty": "検索に一致する統合はありません。",
+        "loading": "統合を読み込み中",
+        "loadError": "一部の統合を読み込めませんでした。もう一度お試しください。",
         "trigger": {
-          "label": "プラグイン"
+          "label": "統合"
         },
         "retry": {
           "label": "再試行"
         },
         "browse": {
-          "label": "プラグインを見る"
+          "label": "統合を参照"
         },
         "toggle": {
           "label": "このエージェントで {name} を使用"
+        },
+        "search": {
+          "placeholder": "統合を検索"
         }
       },
       "connectPrompt": {
@@ -17175,7 +17106,63 @@
     }
   },
   "integrations": {
-    "connectionState": "{state, select, connected {接続済み} not_connected {未接続} needs_reconnect {要再接続} not_set_up {未設定} other {不明}}"
+    "connectionState": "{state, select, connected {接続済み} not_connected {未接続} needs_reconnect {要再接続} not_set_up {未設定} other {不明}}",
+    "share": {
+      "title": "{name} を共有",
+      "description": "特定のユーザーにこの統合の使用を許可します。共有で付与されるのは使用のみです。",
+      "sharedSignIn": "{name}は1つのアカウントを使います。アクセス権のあるユーザーは、あなたが接続したアカウントを使います。",
+      "loadFailed": "アクセス権を持つユーザーを読み込めませんでした。",
+      "empty": "アクセス権を持つのはあなただけです。",
+      "remove": {
+        "label": "{name} を削除"
+      },
+      "cancel": {
+        "label": "キャンセル"
+      },
+      "submit": {
+        "label": "保存",
+        "pendingLabel": "保存中..."
+      },
+      "saved": "{name} のアクセス権を保存しました。",
+      "failed": "アクセス権を保存できませんでした。"
+    },
+    "memberState": {
+      "on": {
+        "label": "オン"
+      },
+      "turn_on": {
+        "label": "オンにする"
+      },
+      "sign_in": {
+        "label": "サインイン"
+      },
+      "no_access": {
+        "label": "アクセス権なし",
+        "reason": "アクセス権なし: この統合はあなたと共有されていません。",
+        "reasonOwner": "アクセス権なし: {owner}はあなたと共有していません。"
+      },
+      "turned_off": {
+        "label": "オフ",
+        "reason": "管理者がオフにしました。"
+      },
+      "switch": {
+        "label": "{name}を使用",
+        "required": "管理者がこの統合を必須にしました。オフにすることはできません。",
+        "failed": "統合を変更できませんでした。"
+      }
+    },
+    "menu": {
+      "label": "{name}のその他の操作",
+      "share": "共有",
+      "publish": {
+        "label": "組織に公開",
+        "blocked": "統合を公開できるのは、組織全体のアクション管理権限を持つユーザーだけです。",
+        "confirmTitle": "{name}を組織に公開しますか？",
+        "confirmMessage": "組織の各ユーザーがオンにできるようになります。インストール設定は管理者が決めます。共有したユーザーはアクセス権を保持します。",
+        "done": "{name}は組織で利用できるようになりました。",
+        "failed": "統合を公開できませんでした。"
+      }
+    }
   },
   "customize": {
     "title": "カスタマイズ",
@@ -17270,22 +17257,20 @@
       }
     },
     "plugins": {
-      "contents": "{skills, plural, =0 {} one {スキル 1 件} other {スキル {skills} 件}}{both, select, yes { · } other {}}{integrations, plural, =0 {} one {インテグレーション 1 件} other {インテグレーション {integrations} 件}}",
-      "needsSignIn": "{count, plural, other {# 件のサインインが必要}}",
+      "contents": "{skills, plural, one {スキル 1 件} other {スキル {skills} 件}}",
       "loadFailed": "プラグインを読み込めませんでした。",
-      "switchFailed": "プラグインを変更できませんでした。",
       "filter": {
         "all": "すべてのプラグイン"
       },
       "empty": {
         "title": "プラグインはまだありません",
-        "description": "スキルを作成するか、インテグレーションを追加します。それぞれがプラグインです。"
+        "description": "スキルを作成します。各スキルが1つのプラグインです。"
       },
       "noMatches": {
         "title": "一致するプラグインはありません",
         "clear": "すべてのプラグインを表示"
       },
-      "intro": "プラグインは、一緒にオンにするスキルとインテグレーションをまとめたものです。追加した各スキルと各インテグレーションは、それぞれ専用のプラグインに入ります。"
+      "intro": "プラグインは、まとめてオンにするスキルをパッケージ化したものです。追加した各スキルは個別のプラグインになります。統合は[統合]タブにあります。"
     },
     "skillPage": {
       "title": "スキル",
@@ -17360,7 +17345,14 @@
         "type": "種類",
         "signIn": "サインイン",
         "url": "サーバー URL",
-        "plugins": "含まれるプラグイン"
+        "owner": "所有者",
+        "organization": "組織",
+        "status": "ステータス",
+        "switch": {
+          "title": "この統合を使用",
+          "description": "オンにすると、チャットと Craft で使えます。",
+          "required": "管理者がこの統合を必須にしました。オフにすることはできません。"
+        }
       },
       "configuration": {
         "description": "{mode, select, individual {このインテグレーションへの接続です。使用するのはあなただけです。} shared {このインテグレーションのアカウントです。アクセス権を持つ全員が使用します。} other {このインテグレーションにサインインは不要です。}}"
@@ -17368,8 +17360,7 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "スキル · {count}",
-        "integrations": "インテグレーション · {count}"
+        "skills": "スキル · {count}"
       }
     },
     "search": "検索"

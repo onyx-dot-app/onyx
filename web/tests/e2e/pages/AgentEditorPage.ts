@@ -110,13 +110,13 @@ export class AgentEditorPage {
     });
   }
 
-  async addPlugin(pluginName: string): Promise<void> {
-    const add = this.page.getByRole("combobox", { name: "Add a plugin" });
+  async addIntegration(integrationName: string): Promise<void> {
+    const add = this.page.getByRole("combobox", { name: "Add an integration" });
     await add.scrollIntoViewIfNeeded();
     await add.click();
-    await this.page.getByRole("option", { name: pluginName }).click();
+    await this.page.getByRole("option", { name: integrationName }).click();
     await expect(
-      this.page.getByRole("button", { name: `Remove ${pluginName}` })
+      this.page.getByRole("button", { name: `Remove ${integrationName}` })
     ).toBeVisible();
   }
 

@@ -10,7 +10,7 @@ import {
   Popover,
   Text,
 } from "@opal/components";
-import { SvgBlocks, SvgChevronRight, SvgPlug } from "@opal/icons";
+import { SvgChevronRight, SvgPlug } from "@opal/icons";
 import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
 import { useFocusOnMount } from "@opal/hooks";
@@ -19,38 +19,40 @@ import useScreenSize from "@/hooks/useScreenSize";
 import { connectAction, needsAdmin } from "@/lib/integrations/connect";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import {
-  useAgentPluginPreferences,
-  type AgentChatPlugins,
-  type ChatPluginEntry,
-} from "@/lib/plugins/hooks";
+  useAgentIntegrationPreferences,
+  type AgentChatIntegrations,
+} from "@/lib/integrations/hooks";
+import type { MemberIntegration } from "@/lib/integrations/types";
 import { useUser } from "@/providers/UserProvider";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { customizeTabHref } from "@/lib/customize/paths";
 
-export interface ChatPluginsPopoverProps {
+export interface ChatIntegrationsPopoverProps {
   agentId: number;
   toolConfiguration: ToolConfigurationHandle;
-  /** The agent's plugins (persona detail `plugins`). */
-  catalog: AgentChatPlugins;
+  /** The integrations a chat of the agent uses for the user. */
+  catalog: AgentChatIntegrations;
   disabled?: boolean;
-  onConnect: (plugin: ChatPluginEntry) => void;
+  onConnect: (integration: MemberIntegration) => void;
   onBrowse: () => void;
 }
 
-export default function ChatPluginsPopover({
+/** One switch for each integration of the agent. The switch saves the
+ * integrations that the user turned off for this agent. */
+export default function ChatIntegrationsPopover({
   agentId,
   toolConfiguration,
   catalog,
   disabled = false,
   onConnect,
   onBrowse,
-}: ChatPluginsPopoverProps) {
+}: ChatIntegrationsPopoverProps) {
   const t = useTranslations("plugins.chat.popover");
-  const memberCopy = useTranslations("plugins.member");
+  const stateCopy = useTranslations("integrations.memberState");
   const connectionCopy = useTranslations("plugins.member.connection");
-  const { plugins, isLoading, refresh } = catalog;
+  const { integrations, isLoading, refresh } = catalog;
   const { user } = useUser();
-  const preferences = useAgentPluginPreferences(
+  const preferences = useAgentIntegrationPreferences(
     user !== null && !user.is_anonymous_user
   );
   const error = catalog.error ?? preferences.error;
@@ -62,8 +64,8 @@ export default function ChatPluginsPopover({
   const trigger = useRef<HTMLElement | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
-  const matching = plugins.filter((plugin) =>
-    plugin.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())
+  const matching = integrations.filter((integration) =>
+    integration.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())
   );
   const browseLink = navigation.linkTo(customizeTabHref("integrations"));
 
@@ -101,27 +103,26 @@ export default function ChatPluginsPopover({
     []
   );
 
-  function row(plugin: ChatPluginEntry) {
-    const adminOnly = plugin.integrations.every(needsAdmin);
+  function row(integration: MemberIntegration) {
+    const required = integration.access.installation_policy === "REQUIRED";
     const enabled =
-      plugin.required || toolConfiguration.isPluginEnabled(plugin.pluginId);
-    const action =
-      plugin.integrations.map(connectAction).find((a) => a !== null) ?? null;
+      required || toolConfiguration.isIntegrationEnabled(integration.id);
+    const action = connectAction(integration);
     return (
       <LineItemButton
         font="main-ui-action"
-        key={plugin.pluginId}
-        title={plugin.name}
+        key={integration.id}
+        title={integration.name}
         titleMaxLines={1}
         description={
-          plugin.required
-            ? memberCopy("detail.switch.required")
-            : adminOnly
+          required
+            ? stateCopy("switch.required")
+            : needsAdmin(integration)
               ? connectionCopy("askAdmin")
               : undefined
         }
         descriptionMaxLines={1}
-        icon={SvgBlocks}
+        icon={SvgPlug}
         padding={0}
         rounding={2}
         presentational
@@ -140,10 +141,13 @@ export default function ChatPluginsPopover({
                 disabled={disabled}
                 onClick={() => {
                   setOpen(false);
-                  // Connect shows that the member wants to use the plugin.
+                  // Connect shows that the member wants to use it.
                   if (!enabled && toolConfiguration.ready)
-                    toolConfiguration.setPluginEnabled([plugin.pluginId], true);
-                  onConnect(plugin);
+                    toolConfiguration.setIntegrationEnabled(
+                      [integration.id],
+                      true
+                    );
+                  onConnect(integration);
                 }}
               >
                 {connectionCopy(`${action}.label`)}
@@ -151,10 +155,13 @@ export default function ChatPluginsPopover({
             )}
             <InputSwitch
               checked={enabled}
-              disabled={disabled || plugin.required || !toolConfiguration.ready}
-              aria-label={t("toggle.label", { name: plugin.name })}
+              disabled={disabled || required || !toolConfiguration.ready}
+              aria-label={t("toggle.label", { name: integration.name })}
               onCheckedChange={(checked) =>
-                toolConfiguration.setPluginEnabled([plugin.pluginId], checked)
+                toolConfiguration.setIntegrationEnabled(
+                  [integration.id],
+                  checked
+                )
               }
             />
           </Section>
@@ -256,8 +263,8 @@ export default function ChatPluginsPopover({
               icon="search"
               variant="internal"
               value={search}
-              placeholder={memberCopy("search.placeholder")}
-              aria-label={memberCopy("search.placeholder")}
+              placeholder={t("search.placeholder")}
+              aria-label={t("search.placeholder")}
               onChange={(event) => setSearch(event.target.value)}
             />,
             isLoading && (

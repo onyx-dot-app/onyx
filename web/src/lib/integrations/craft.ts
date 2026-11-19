@@ -4,7 +4,7 @@ import {
 } from "@/app/craft/v1/apps/registry";
 import type { MemberIntegration } from "@/lib/integrations/types";
 
-/** An app integration of a plugin that the user has turned on. */
+/** An app integration that is on for the user. */
 export interface CraftApp {
   /** The external app id that Craft cards and skills name. */
   id: number;
@@ -16,7 +16,7 @@ export interface CraftApp {
   supports_oauth: boolean;
 }
 
-/** An MCP integration of a plugin that the user has turned on. */
+/** An MCP integration that is on for the user. */
 export interface CraftMcpServer {
   /** The MCP server id. */
   id: number;
@@ -30,8 +30,10 @@ function appType(presetId: string | null): ExternalAppType {
   return EXTERNAL_APP_TYPES.find((type) => type === presetId) ?? "CUSTOM";
 }
 
+/** On for the user, with or without a working connection. */
 function turnedOn(integration: MemberIntegration): boolean {
-  return integration.plugins.some((plugin) => plugin.enabled);
+  const { state } = integration.access;
+  return state === "on" || state === "sign_in";
 }
 
 export function toCraftApps(integrations: MemberIntegration[]): CraftApp[] {

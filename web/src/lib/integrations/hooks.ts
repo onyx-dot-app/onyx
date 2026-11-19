@@ -1,12 +1,13 @@
 "use client";
 
+import { useCallback, useMemo } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   AdminIntegration,
   AdminIntegrationDetail,
-  AgentPluginOption,
+  AgentCatalogIntegration,
   IntegrationActionsResponse,
   IntegrationPreset,
   MemberActionPolicies,
@@ -21,10 +22,10 @@ export function useAdminIntegrations() {
   );
 }
 
-/** Plugins with integrations that the user can attach to an agent. */
-export function useAgentPluginCatalog() {
-  return useSWR<AgentPluginOption[], Error>(
-    SWR_KEYS.agentPluginCatalog,
+/** The integrations that the user can attach to an agent. */
+export function useAgentIntegrationCatalog() {
+  return useSWR<AgentCatalogIntegration[], Error>(
+    SWR_KEYS.agentIntegrationCatalog,
     errorHandlingFetcher,
     { onErrorRetry: skipRetryOnAuthError }
   );
@@ -69,4 +70,157 @@ export function useIntegrationPresets(enabled: boolean) {
     errorHandlingFetcher,
     { onErrorRetry: skipRetryOnAuthError }
   );
+}
+
+export interface AgentChatIntegrations {
+  /** Every integration of the agent, null until it loads. Tool options name
+   * these. */
+  integrationIds: number[] | null;
+  /** The agent's integrations that the user can read, sorted by name. */
+  integrations: MemberIntegration[];
+  isLoading: boolean;
+  error: Error | undefined;
+  /** Reads the integration statuses again. */
+  refresh: () => Promise<void>;
+}
+
+/**
+ * The integrations a chat of the agent uses for the user, as the server
+ * decides them. Null until it loads and on a failed read: an empty list would
+ * read as a complete catalog, and the composer would leave every integration
+ * out of a send.
+ */
+export function useAgentIntegrationIds(agentId: number | undefined) {
+  const { data, error, isLoading } = useSWR<number[], Error>(
+    agentId === undefined ? null : SWR_KEYS.agentIntegrationIds(agentId),
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError, revalidateOnFocus: false }
+  );
+  const integrationIds = useMemo(
+    () =>
+      data === undefined ? null : [...new Set(data)].sort((a, b) => a - b),
+    [data]
+  );
+  return { integrationIds, error, isLoading };
+}
+
+/** The integrations of an agent that a chat uses for the user. */
+export function useAgentChatIntegrations(
+  agentId: number | undefined
+): AgentChatIntegrations {
+  const members = useMemberIntegrations();
+  const ids = useAgentIntegrationIds(agentId);
+  const data = members.data;
+  const { integrationIds } = ids;
+
+  const integrations = useMemo(() => {
+    const wanted = new Set(integrationIds ?? []);
+    return (data ?? [])
+      .filter((integration) => wanted.has(integration.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [data, integrationIds]);
+
+  const { mutate: refreshIntegrations } = members;
+  const refresh = useCallback(async () => {
+    await refreshIntegrations();
+  }, [refreshIntegrations]);
+
+  return {
+    integrationIds,
+    integrations,
+    isLoading: members.isLoading || ids.isLoading,
+    error: members.error ?? ids.error,
+    refresh,
+  };
+}
+
+interface AgentPreference {
+  disabled_integration_ids?: number[] | null;
+}
+
+type AgentPreferences = Record<string, AgentPreference>;
+
+interface PendingWrite {
+  body: AgentPreference | null;
+}
+
+// The PATCH replaces the agent's record, so writes run one at a time.
+let preferenceWrites: Promise<unknown> = Promise.resolve();
+
+/** The integrations the user turned off for each agent
+ * (`disabled_integration_ids`). */
+export function useAgentIntegrationPreferences(enabled: boolean) {
+  const { data, error, mutate } = useSWR<AgentPreferences | null, Error>(
+    enabled ? SWR_KEYS.assistantPreferences : null,
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError, revalidateOnFocus: false }
+  );
+  // A failed read is not loaded: an empty list would show each integration on,
+  // and a switch could not save.
+  const loaded = !enabled || data !== undefined;
+
+  const disabledIntegrationIds = useCallback(
+    (agentId: number): number[] | null =>
+      loaded ? (data?.[String(agentId)]?.disabled_integration_ids ?? []) : null,
+    [data, loaded]
+  );
+  const retry = useCallback(() => mutate(), [mutate]);
+
+  const setIntegrationsDisabled = useCallback(
+    async (
+      agentId: number,
+      integrationIds: readonly number[],
+      disabled: boolean
+    ): Promise<void> => {
+      const key = String(agentId);
+      const pending: PendingWrite = { body: null };
+      await mutate(
+        (current) => {
+          // Not loaded: a write would drop the saved choices.
+          if (current === undefined) return current;
+          const record = current?.[key];
+          const saved = record?.disabled_integration_ids ?? [];
+          const next = disabled
+            ? [...new Set([...saved, ...integrationIds])]
+            : saved.filter((id) => !integrationIds.includes(id));
+          pending.body = { disabled_integration_ids: next };
+          return {
+            ...current,
+            [key]: { ...record, disabled_integration_ids: next },
+          };
+        },
+        { revalidate: false }
+      );
+      const sent = pending.body;
+      if (sent === null)
+        throw new Error("The integration preferences have not loaded.");
+      const write = preferenceWrites.then(async () => {
+        const response = await fetch(
+          `/api/user/assistant/${agentId}/preferences`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(sent),
+          }
+        );
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      });
+      preferenceWrites = write.catch(() => undefined);
+      try {
+        await write;
+      } catch (writeError) {
+        void mutate();
+        throw writeError;
+      }
+    },
+    [mutate]
+  );
+
+  return {
+    loaded,
+    error,
+    retry,
+    disabledIntegrationIds,
+    setIntegrationsDisabled,
+  };
 }

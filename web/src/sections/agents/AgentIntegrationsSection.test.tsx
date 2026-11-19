@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { PointerEventsCheckLevel } from "@testing-library/user-event";
 import { render, screen, setupUser, within } from "@tests/setup/test-utils";
-import AgentPluginsSection from "@/sections/agents/AgentPluginsSection";
-import type { AgentPluginDraft } from "@/lib/agents/plugins";
-import type {
-  AgentCatalogIntegration,
-  AgentPluginOption,
-} from "@/lib/integrations/types";
+import AgentIntegrationsSection from "@/sections/agents/AgentIntegrationsSection";
+import type { AgentIntegrationDraft } from "@/lib/agents/integrations";
+import type { PersonaSharingStatus } from "@/lib/agents/types";
+import type { AgentCatalogIntegration } from "@/lib/integrations/types";
 import messages from "@/i18n/messages/en.json";
 import { makeAction, mockFetch } from "@tests/setup/integrationTestUtils";
+import {
+  makeAccess,
+  makeMemberIntegration,
+} from "@tests/setup/memberIntegrationTestUtils";
 
 let mockManage = false;
 jest.mock("@/lib/permissions/hooks", () => ({
@@ -20,7 +22,7 @@ jest.mock("@/lib/permissions/hooks", () => ({
 
 Element.prototype.scrollIntoView = jest.fn();
 
-const copy = messages.agents.editor.plugins;
+const copy = messages.agents.editor.integrations;
 const CATALOG = "/api/integrations/agent-catalog";
 
 function linear(
@@ -29,6 +31,7 @@ function linear(
   return {
     id: 7,
     name: "Linear",
+    description: "Issues and projects",
     kind: "mcp",
     shape: "mcp_server",
     users_can_save_always_allow: true,
@@ -56,27 +59,19 @@ function linear(
   };
 }
 
-function plugin(overrides: Partial<AgentPluginOption> = {}): AgentPluginOption {
-  return {
-    plugin_id: "plugin-linear",
-    plugin_name: "Linear plugin",
-    description: "Issues and projects",
-    integrations: [linear()],
-    ...overrides,
-  };
-}
-
-const jira = plugin({
-  plugin_id: "plugin-jira",
-  plugin_name: "Jira plugin",
+const jira = linear({
+  id: 8,
+  name: "Jira",
   description: null,
-  integrations: [],
+  actions: [],
 });
 
-function draft(overrides: Partial<AgentPluginDraft> = {}): AgentPluginDraft {
+function draft(
+  overrides: Partial<AgentIntegrationDraft> = {}
+): AgentIntegrationDraft {
   return {
-    plugin_id: "plugin-linear",
-    plugin_name: "Linear plugin",
+    integration_id: 7,
+    integration_name: "Linear",
     default: "inherit",
     actions: {},
     ...overrides,
@@ -84,15 +79,17 @@ function draft(overrides: Partial<AgentPluginDraft> = {}): AgentPluginDraft {
 }
 
 interface HarnessProps {
-  initial: AgentPluginDraft[];
-  onChange: (value: AgentPluginDraft[]) => void;
+  initial: AgentIntegrationDraft[];
+  onChange: (value: AgentIntegrationDraft[]) => void;
+  sharingStatus: PersonaSharingStatus;
 }
 
-function Harness({ initial, onChange }: HarnessProps) {
+function Harness({ initial, onChange, sharingStatus }: HarnessProps) {
   const [value, setValue] = useState(initial);
   return (
-    <AgentPluginsSection
+    <AgentIntegrationsSection
       value={value}
+      sharingStatus={sharingStatus}
       onChange={(next) => {
         setValue(next);
         onChange(next);
@@ -102,12 +99,30 @@ function Harness({ initial, onChange }: HarnessProps) {
 }
 
 function setup(
-  initial: AgentPluginDraft[],
-  catalog: AgentPluginOption[] = [plugin(), jira]
+  initial: AgentIntegrationDraft[],
+  catalog: AgentCatalogIntegration[] = [linear(), jira],
+  {
+    sharingStatus = "PRIVATE",
+    sharedWithEveryone = true,
+  }: { sharingStatus?: PersonaSharingStatus; sharedWithEveryone?: boolean } = {}
 ) {
-  mockFetch({ [CATALOG]: catalog });
+  mockFetch({
+    [CATALOG]: catalog,
+    "/api/integrations": [
+      makeMemberIntegration({
+        id: 7,
+        access: makeAccess({ shared_with_everyone: sharedWithEveryone }),
+      }),
+    ],
+  });
   const onChange = jest.fn();
-  render(<Harness initial={initial} onChange={onChange} />);
+  render(
+    <Harness
+      initial={initial}
+      onChange={onChange}
+      sharingStatus={sharingStatus}
+    />
+  );
   return onChange;
 }
 
@@ -142,38 +157,38 @@ afterEach(() => {
 
 // ── Catalog, add and remove ──────────────────────────────────────────────────
 
-test("adds a plugin from the catalog with every action inherited", async () => {
+test("adds an integration from the catalog with every action inherited", async () => {
   const onChange = setup([]);
   await screen.findByRole("combobox", { name: copy.add.placeholder });
-  await pick(copy.add.placeholder, "Linear plugin");
+  await pick(copy.add.placeholder, "Linear");
 
   expect(onChange).toHaveBeenLastCalledWith([draft()]);
   expect(await screen.findByText("Issues and projects")).toBeInTheDocument();
   expect(screen.getByText("List issues")).toBeInTheDocument();
   expect(screen.getByText("Create issue")).toBeInTheDocument();
-  expect(await optionsOf(copy.add.placeholder)).toEqual(["Jira plugin"]);
+  expect(await optionsOf(copy.add.placeholder)).toEqual(["Jira"]);
 });
 
-test("removes a plugin", async () => {
+test("removes an integration", async () => {
   const onChange = setup([draft()]);
   await user().click(
-    await screen.findByRole("button", { name: "Remove Linear plugin" })
+    await screen.findByRole("button", { name: "Remove Linear" })
   );
   expect(onChange).toHaveBeenLastCalledWith([]);
   expect(screen.queryByText("List issues")).not.toBeInTheDocument();
 });
 
-test("keeps a plugin the user cannot see, with its settings", async () => {
+test("keeps an integration the user cannot see, with its settings", async () => {
   const onChange = setup(
-    [draft({ plugin_id: "hidden", plugin_name: "Hidden plugin" })],
+    [draft({ integration_id: 99, integration_name: "Hidden app" })],
     [jira]
   );
-  expect(await screen.findByText("Hidden plugin")).toBeInTheDocument();
+  expect(await screen.findByText("Hidden app")).toBeInTheDocument();
   expect(screen.getByText(copy.notVisible)).toBeInTheDocument();
   expect(onChange).not.toHaveBeenCalled();
 });
 
-test("says when no plugin holds an integration", async () => {
+test("says when no integration is available", async () => {
   setup([], []);
   expect(await screen.findByText(copy.empty)).toBeInTheDocument();
 });
@@ -223,32 +238,9 @@ test("shows a migrated inherit action as the integration setting under a blocked
   ).toHaveValue(copy.choice.agentDefault);
 });
 
-test("shows the stricter setting of another plugin that holds the integration", async () => {
-  const other = plugin({
-    plugin_id: "plugin-other",
-    plugin_name: "Other plugin",
-  });
-  setup(
-    [
-      draft(),
-      draft({
-        plugin_id: "plugin-other",
-        plugin_name: "Other plugin",
-        actions: { list_issues: "blocked" },
-      }),
-    ],
-    [plugin(), other]
-  );
-  expect(
-    await screen.findByText(
-      copy.stricterPlugin.replace("{plugin}", "Other plugin")
-    )
-  ).toBeInTheDocument();
-});
-
 test("sets the default for other actions", async () => {
   const onChange = setup([draft()]);
-  const defaultRow = "Default setting for Linear plugin";
+  const defaultRow = "Default setting for Linear";
   await screen.findByRole("combobox", { name: defaultRow });
   expect(await optionsOf(defaultRow)).toEqual([
     copy.choice.inherit,
@@ -277,18 +269,12 @@ test("does not offer Allow on an action the admin blocked", async () => {
 });
 
 test("does not offer Allow when users cannot save Always allow", async () => {
-  setup(
-    [draft()],
-    [plugin({ integrations: [linear({ users_can_save_always_allow: false })] })]
-  );
+  setup([draft()], [linear({ users_can_save_always_allow: false })]);
   const createIssue = "Setting for Create issue";
   await screen.findByRole("combobox", { name: createIssue });
   expect(await optionsOf(createIssue)).not.toContain("Allow");
-  expect(await optionsOf("Default setting for Linear plugin")).not.toContain(
-    "Allow"
-  );
-  expect(screen.getAllByText(copy.lock.adminFinal)).toHaveLength(2);
-  expect(screen.getByText(copy.lock.defaultFinal)).toBeInTheDocument();
+  expect(await optionsOf("Default setting for Linear")).not.toContain("Allow");
+  expect(screen.getAllByText(copy.lock.adminFinal)).toHaveLength(3);
   expect(screen.getAllByText(copy.askHintAdminOnly)).toHaveLength(1);
 });
 
@@ -296,20 +282,16 @@ test("does not offer Allow on an action that always asks", async () => {
   setup(
     [draft()],
     [
-      plugin({
-        integrations: [
-          linear({
-            kind: "api",
-            shape: "custom",
-            actions: [
-              makeAction({
-                key: "unspecified",
-                display_name: "Any request",
-                default_policy: "ask",
-                effective_admin_policy: "ask",
-                always_asks: true,
-              }),
-            ],
+      linear({
+        kind: "api",
+        shape: "custom",
+        actions: [
+          makeAction({
+            key: "unspecified",
+            display_name: "Any request",
+            default_policy: "ask",
+            effective_admin_policy: "ask",
+            always_asks: true,
           }),
         ],
       }),
@@ -363,7 +345,7 @@ test("names the agent setting in the hint for an integration Ask that the agent 
 test("leaves out Always allow from the agent hint when users cannot save it", async () => {
   setup(
     [draft({ actions: { list_issues: "ask" } })],
-    [plugin({ integrations: [linear({ users_can_save_always_allow: false })] })]
+    [linear({ users_can_save_always_allow: false })]
   );
   expect(await screen.findByText("Asks (agent setting)")).toBeInTheDocument();
   expect(screen.getAllByText(copy.askHintAgentOnly)).toHaveLength(1);
@@ -375,4 +357,29 @@ test("links an admin to the Actions tab of the integration", async () => {
   expect(
     await screen.findByRole("link", { name: "Open Linear actions" })
   ).toHaveAttribute("href", "/admin/integrations/7?tab=actions");
+});
+
+// ── Sharing ──────────────────────────────────────────────────────────────────
+
+test("warns when the agent is shared wider than the integration", async () => {
+  setup([draft()], [linear(), jira], {
+    sharingStatus: "SHARED",
+    sharedWithEveryone: false,
+  });
+  expect(
+    await screen.findByText(
+      copy.sharedWider.replaceAll("{integration}", "Linear")
+    )
+  ).toBeInTheDocument();
+});
+
+test("does not warn for a private agent or an integration of everyone", async () => {
+  setup([draft()], [linear(), jira], {
+    sharingStatus: "PUBLIC",
+    sharedWithEveryone: true,
+  });
+  expect(await screen.findByText("List issues")).toBeInTheDocument();
+  expect(
+    screen.queryByText(copy.sharedWider.replaceAll("{integration}", "Linear"))
+  ).not.toBeInTheDocument();
 });

@@ -31,18 +31,6 @@ export function useIntegrationLabels() {
         mode: integration.auth_mode,
         method: integration.auth_method ?? "none",
       }),
-    access: (integration: AdminIntegration) => {
-      const [first] = integration.plugins;
-      if (!first) return t("access.none");
-      if (integration.plugins.length > 1)
-        return t("access.many", { count: integration.plugins.length });
-      return first.scope === "organization"
-        ? t("access.organization", { plugin: first.plugin_name })
-        : t("access.personal", {
-            plugin: first.plugin_name,
-            owner: first.owner_email ?? t("access.personalOwner"),
-          });
-    },
     status: (
       integration: AdminIntegration
     ): Pick<BadgeProps, "title" | "color" | "tooltip"> => {

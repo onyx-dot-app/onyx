@@ -2,12 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  Button,
-  Dropdown,
-  useCreateModal,
-  type DropdownMenuItem,
-} from "@opal/components";
+import { Button, Dropdown, useCreateModal } from "@opal/components";
 import { SvgEdit, SvgPlus, SvgUploadCloud } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
 import { useNavigation } from "@opal/navigation";
@@ -17,11 +12,7 @@ import { useRefreshSkillLists } from "@/lib/skills/hooks";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
 
-interface AddSkillMenuProps {
-  extraItems?: DropdownMenuItem[];
-}
-
-export default function AddSkillMenu({ extraItems = [] }: AddSkillMenuProps) {
+export default function AddSkillMenu() {
   const t = useTranslations("customize.skills.add");
   const navigation = useNavigation();
   const revalidate = useRefreshSkillLists();
@@ -58,7 +49,6 @@ export default function AddSkillMenu({ extraItems = [] }: AddSkillMenuProps) {
               title: t("github"),
               onSelect: () => githubModal.toggle(true),
             },
-            ...extraItems,
           ]}
         />
       </Dropdown>

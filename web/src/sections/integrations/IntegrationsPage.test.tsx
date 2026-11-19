@@ -16,6 +16,7 @@ import {
   mockFetch,
   requestBody,
 } from "@tests/setup/integrationTestUtils";
+import { makeAccess } from "@tests/setup/memberIntegrationTestUtils";
 
 const copy = messages.admin.integrations;
 const mockPush = jest.fn();
@@ -78,15 +79,13 @@ const reports = makeIntegration({
   auth_method: "api_key",
   needs_setup: true,
   setup_reason: "Connect the organization account",
-  plugins: [
-    {
-      plugin_id: "plugin-reports",
-      plugin_name: "Reports",
-      scope: "personal",
-      owner_email: "owner@example.com",
-      installation_policy: null,
-    },
-  ],
+  installation_policy: "NOT_AVAILABLE",
+  access: makeAccess({
+    installation_policy: "NOT_AVAILABLE",
+    owner_email: "owner@example.com",
+    shared_with_everyone: false,
+    can_manage: true,
+  }),
 });
 
 function mockList(extra: Parameters<typeof mockFetch>[0] = {}) {
@@ -109,7 +108,7 @@ afterEach(() => jest.restoreAllMocks());
 
 // ── List ─────────────────────────────────────────────────────────────────────
 
-test("shows each integration with its type, sign-in, access and status", async () => {
+test("shows each integration with its type, sign-in, install setting and status", async () => {
   mockList();
   render(<IntegrationsPage />);
 
@@ -122,7 +121,9 @@ test("shows each integration with its type, sign-in, access and status", async (
   const row = within(linearRow as HTMLElement);
   expect(row.getByText(copy.shape.mcp_server)).toBeInTheDocument();
   expect(row.getByText("Each user (OAuth)")).toBeInTheDocument();
-  expect(row.getByText("Linear (Organization library)")).toBeInTheDocument();
+  expect(
+    row.getByRole("combobox", { name: "Install setting of Linear" })
+  ).toHaveValue(messages.skills.installationPolicy.AVAILABLE.label);
   expect(row.getByText(copy.status.ready)).toBeInTheDocument();
 
   const reportsRow = within(
@@ -131,9 +132,49 @@ test("shows each integration with its type, sign-in, access and status", async (
   expect(reportsRow.getByText(copy.shape.openapi)).toBeInTheDocument();
   expect(reportsRow.getByText("Organization API key")).toBeInTheDocument();
   expect(
-    reportsRow.getByText("Reports (owner@example.com)")
+    reportsRow.getByText("Owned by owner@example.com")
   ).toBeInTheDocument();
+  expect(
+    reportsRow.getByRole("combobox", { name: "Install setting of Reports API" })
+  ).toHaveValue(messages.skills.installationPolicy.NOT_AVAILABLE.label);
   expect(reportsRow.getByText(copy.status.needsSetup)).toBeInTheDocument();
+});
+
+test("an organization-wide action manager changes the install setting", async () => {
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  const fetchMock = mockList({
+    "PUT /api/admin/integrations/1/installation-policy": {
+      installation_policy: "REQUIRED",
+    },
+  });
+  render(<IntegrationsPage />);
+  await user.click(
+    await screen.findByRole("combobox", { name: "Install setting of Linear" })
+  );
+  await user.click(
+    screen.getByRole("option", {
+      name: new RegExp(messages.skills.installationPolicy.REQUIRED.label),
+    })
+  );
+  await waitFor(() =>
+    expect(
+      requestBody(
+        fetchMock,
+        "PUT",
+        "/api/admin/integrations/1/installation-policy"
+      )
+    ).toEqual({ installation_policy: "REQUIRED" })
+  );
+});
+
+test("a scoped manager sees the install setting and cannot change it", async () => {
+  mockGlobalHolder = false;
+  mockScopedManager = true;
+  mockList();
+  render(<IntegrationsPage />);
+  expect(
+    await screen.findByRole("combobox", { name: "Install setting of Linear" })
+  ).toBeDisabled();
 });
 
 test("lists an integration that needs setup first", async () => {

@@ -30,7 +30,7 @@ import { Permission } from "@/lib/types";
 import EnabledCount from "@/lib/tools/components/EnabledCount";
 import { useUser } from "@/providers/UserProvider";
 import { useIncognito } from "@/providers/IncognitoProvider";
-import { isBlockedInIncognito } from "@/lib/plugins/chat";
+import { isBlockedInIncognito } from "@/lib/tools/chat";
 
 // Names the hover group that swaps the source count for the disable button.
 const HOVER_GROUP = "ToolLineItem";

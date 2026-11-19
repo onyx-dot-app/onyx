@@ -40,7 +40,6 @@ function matches(
         entry.name,
         entry.description ?? "",
         ...entry.skills.map((skill) => skill.name),
-        ...entry.integrations.map((integration) => integration.name),
       ]
         .join(" ")
         .toLocaleLowerCase(options.locale)

@@ -168,6 +168,11 @@ const nextConfig = {
         permanent: false,
       },
       {
+        source: "/admin/plugins",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
         source: "/admin/plugins/mcp/:id",
         destination: "/admin/integrations",
         permanent: false,

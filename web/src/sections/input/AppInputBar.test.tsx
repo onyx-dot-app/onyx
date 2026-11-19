@@ -122,27 +122,27 @@ jest.mock("@/lib/navigation/hooks", () => ({
     project: () => null,
   }),
 }));
-jest.mock("@/lib/plugins/hooks", () => ({
-  ...jest.requireActual<typeof import("@/lib/plugins/hooks")>(
-    "@/lib/plugins/hooks"
+jest.mock("@/lib/integrations/hooks", () => ({
+  ...jest.requireActual<typeof import("@/lib/integrations/hooks")>(
+    "@/lib/integrations/hooks"
   ),
-  useAgentPluginIds: () => ({
-    pluginIds: [],
+  useAgentIntegrationIds: () => ({
+    integrationIds: [],
     isLoading: false,
     error: undefined,
   }),
-  useAgentChatPlugins: () => ({
-    pluginIds: [],
-    plugins: [],
+  useAgentChatIntegrations: () => ({
+    integrationIds: [],
+    integrations: [],
     isLoading: false,
     error: undefined,
     refresh: jest.fn(),
   }),
-  useAgentPluginPreferences: () => ({
+  useAgentIntegrationPreferences: () => ({
     loaded: true,
     error: undefined,
-    disabledPluginIds: () => [],
-    setPluginsDisabled: jest.fn(),
+    disabledIntegrationIds: () => [],
+    setIntegrationsDisabled: jest.fn(),
     retry: jest.fn(),
   }),
 }));

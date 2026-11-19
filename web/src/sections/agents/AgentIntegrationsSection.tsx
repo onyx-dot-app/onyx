@@ -17,13 +17,15 @@ import {
   effectiveSetting,
   lockReason,
   ownSetting,
-  stricterPlugin,
-  type AgentPluginDraft,
-} from "@/lib/agents/plugins";
-import { useAgentPluginCatalog } from "@/lib/integrations/hooks";
+  type AgentIntegrationDraft,
+} from "@/lib/agents/integrations";
+import type { PersonaSharingStatus } from "@/lib/agents/types";
+import {
+  useAgentIntegrationCatalog,
+  useMemberIntegrations,
+} from "@/lib/integrations/hooks";
 import type {
   AgentCatalogIntegration,
-  AgentPluginOption,
   IntegrationAction,
 } from "@/lib/integrations/types";
 import { integrationDetailHref } from "@/lib/integrations/utils";
@@ -51,7 +53,7 @@ function SettingSelect({
   offerAgentDefault,
   onChange,
 }: SettingSelectProps) {
-  const t = useTranslations("agents.editor.plugins");
+  const t = useTranslations("agents.editor.integrations");
   const policyOptions = usePolicyOptions();
   const options: { value: SettingChoice; title: string }[] = [
     ...(offerAgentDefault
@@ -92,9 +94,7 @@ function askHintKey(
 interface ActionRowProps {
   integration: AgentCatalogIntegration;
   action: IntegrationAction;
-  draft: AgentPluginDraft;
-  /** The other plugins of the agent that hold the integration. */
-  others: readonly AgentPluginDraft[];
+  draft: AgentIntegrationDraft;
   canManageIntegrations: boolean;
   onChange: (value: SettingChoice) => void;
 }
@@ -103,16 +103,13 @@ function ActionRow({
   integration,
   action,
   draft,
-  others,
   canManageIntegrations,
   onChange,
 }: ActionRowProps) {
-  const t = useTranslations("agents.editor.plugins");
+  const t = useTranslations("agents.editor.integrations");
   const navigation = useNavigation();
   const lock = lockReason(integration, action);
-  const stricter = stricterPlugin(integration, action, draft, others);
-  const effective =
-    stricter?.setting ?? effectiveSetting(integration, action, draft);
+  const effective = effectiveSetting(integration, action, draft);
   const value: SettingChoice = ownSetting(draft, action.key) ?? AGENT_DEFAULT;
 
   return (
@@ -139,11 +136,6 @@ function ActionRow({
           source: effective.source,
         })}
       </Text>
-      {stricter && (
-        <Text font="secondary-body" color="text-03">
-          {t("stricterPlugin", { plugin: stricter.draft.plugin_name })}
-        </Text>
-      )}
       {lock && (
         <Text font="secondary-body" color="text-03">
           {t(`lock.${lock}`)}
@@ -183,29 +175,26 @@ function ActionRow({
   );
 }
 
-interface PluginCardProps {
-  draft: AgentPluginDraft;
-  option: AgentPluginOption | undefined;
-  /** The other plugins of the agent that hold each integration, by id. */
-  othersByIntegration: ReadonlyMap<number, readonly AgentPluginDraft[]>;
+interface IntegrationCardProps {
+  draft: AgentIntegrationDraft;
+  integration: AgentCatalogIntegration | undefined;
+  /** Some people who can use the agent cannot use the integration. */
+  sharedWider: boolean;
   canManageIntegrations: boolean;
-  onChange: (draft: AgentPluginDraft) => void;
+  onChange: (draft: AgentIntegrationDraft) => void;
   onRemove: () => void;
 }
 
-function PluginCard({
+function IntegrationCard({
   draft,
-  option,
-  othersByIntegration,
+  integration,
+  sharedWider,
   canManageIntegrations,
   onChange,
   onRemove,
-}: PluginCardProps) {
-  const t = useTranslations("agents.editor.plugins");
-  const integrations = option?.integrations ?? [];
-  const offerDefaultAllow = integrations.some(
-    (integration) => integration.users_can_save_always_allow
-  );
+}: IntegrationCardProps) {
+  const t = useTranslations("agents.editor.integrations");
+  const name = draft.integration_name;
 
   function setAction(key: string, value: SettingChoice) {
     const { [key]: _removed, ...rest } = draft.actions;
@@ -220,20 +209,26 @@ function PluginCard({
       <Section gap={4} alignItems="stretch" height="auto">
         <ContentAction
           font="main-ui-action"
-          title={draft.plugin_name}
-          description={option?.description ?? undefined}
+          title={name}
+          description={integration?.description ?? undefined}
           padding={0}
           rightChildren={
             <Button
               size="sm"
               prominence="tertiary"
               icon={SvgTrash}
-              aria-label={t("remove.ariaLabel", { plugin: draft.plugin_name })}
+              aria-label={t("remove.ariaLabel", { integration: name })}
               onClick={onRemove}
             />
           }
         />
-        {!option ? (
+        {sharedWider && (
+          <MessageCard
+            variant="warning"
+            title={t("sharedWider", { integration: name })}
+          />
+        )}
+        {!integration ? (
           <Text font="secondary-body" color="text-03">
             {t("notVisible")}
           </Text>
@@ -248,11 +243,9 @@ function PluginCard({
                 fillRight
                 rightChildren={
                   <SettingSelect
-                    label={t("defaultSetting.label", {
-                      plugin: draft.plugin_name,
-                    })}
+                    label={t("defaultSetting.label", { integration: name })}
                     value={draft.default}
-                    offerAllow={offerDefaultAllow}
+                    offerAllow={integration.users_can_save_always_allow}
                     offerAgentDefault={false}
                     onChange={(value) => {
                       if (value !== AGENT_DEFAULT)
@@ -261,43 +254,28 @@ function PluginCard({
                   />
                 }
               />
-              {!offerDefaultAllow && (
+              {!integration.users_can_save_always_allow && (
                 <Text font="secondary-body" color="text-03">
-                  {t("lock.defaultFinal")}
+                  {t("lock.adminFinal")}
                 </Text>
               )}
             </Section>
-            {integrations.map((integration) => (
-              <Section
-                key={integration.id}
-                gap={2}
-                alignItems="stretch"
-                height="auto"
-              >
-                <Text font="main-ui-action" color="text-04">
-                  {integration.name}
-                </Text>
-                {integration.actions.length === 0 ? (
-                  <Text font="secondary-body" color="text-03">
-                    {t("noActions")}
-                  </Text>
-                ) : (
-                  integration.actions.map((action) => (
-                    <ActionRow
-                      key={action.key}
-                      integration={integration}
-                      action={action}
-                      draft={draft}
-                      others={(
-                        othersByIntegration.get(integration.id) ?? []
-                      ).filter((other) => other.plugin_id !== draft.plugin_id)}
-                      canManageIntegrations={canManageIntegrations}
-                      onChange={(value) => setAction(action.key, value)}
-                    />
-                  ))
-                )}
-              </Section>
-            ))}
+            {integration.actions.length === 0 ? (
+              <Text font="secondary-body" color="text-03">
+                {t("noActions")}
+              </Text>
+            ) : (
+              integration.actions.map((action) => (
+                <ActionRow
+                  key={action.key}
+                  integration={integration}
+                  action={action}
+                  draft={draft}
+                  canManageIntegrations={canManageIntegrations}
+                  onChange={(value) => setAction(action.key, value)}
+                />
+              ))
+            )}
           </>
         )}
       </Section>
@@ -305,52 +283,53 @@ function PluginCard({
   );
 }
 
-interface AgentPluginsSectionProps {
-  value: AgentPluginDraft[];
-  onChange: (value: AgentPluginDraft[]) => void;
+interface AgentIntegrationsSectionProps {
+  value: AgentIntegrationDraft[];
+  onChange: (value: AgentIntegrationDraft[]) => void;
+  /** Who can use the agent. A link gives no access to the integration. */
+  sharingStatus: PersonaSharingStatus;
 }
 
-/** The plugins of an agent, each with a setting for each action. */
-export default function AgentPluginsSection({
+/** The integrations of an agent, each with a setting for each action. */
+export default function AgentIntegrationsSection({
   value,
   onChange,
-}: AgentPluginsSectionProps) {
-  const t = useTranslations("agents.editor.plugins");
-  const { data, error, isLoading, mutate } = useAgentPluginCatalog();
+  sharingStatus,
+}: AgentIntegrationsSectionProps) {
+  const t = useTranslations("agents.editor.integrations");
+  const { data, error, isLoading, mutate } = useAgentIntegrationCatalog();
+  const members = useMemberIntegrations();
   const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_ACTIONS
   );
   const canManageIntegrations = isGlobalHolder || isScopedManager;
   const catalog = data ?? [];
-  const added = new Set(value.map((draft) => draft.plugin_id));
-  const addable = catalog.filter((option) => !added.has(option.plugin_id));
+  const added = new Set(value.map((draft) => draft.integration_id));
+  const addable = catalog.filter((option) => !added.has(option.id));
 
-  function add(pluginId: string) {
-    const option = catalog.find((entry) => entry.plugin_id === pluginId);
+  function add(id: string) {
+    const option = catalog.find((entry) => String(entry.id) === id);
     if (!option) return;
     onChange([
       ...value,
       {
-        plugin_id: option.plugin_id,
-        plugin_name: option.plugin_name,
+        integration_id: option.id,
+        integration_name: option.name,
         default: "inherit",
         actions: {},
       },
     ]);
   }
 
-  const draftsByIntegration = new Map<number, AgentPluginDraft[]>();
-  for (const draft of value) {
-    const option = catalog.find((entry) => entry.plugin_id === draft.plugin_id);
-    for (const integration of option?.integrations ?? []) {
-      draftsByIntegration.set(integration.id, [
-        ...(draftsByIntegration.get(integration.id) ?? []),
-        draft,
-      ]);
-    }
+  // An agent gives no access: a person the agent is shared with uses the
+  // integration only with access of their own.
+  function sharedWider(integrationId: number): boolean {
+    if (sharingStatus === "PRIVATE" || members.data === undefined) return false;
+    const member = members.data.find((entry) => entry.id === integrationId);
+    return !member?.access.shared_with_everyone;
   }
 
-  function replace(index: number, draft: AgentPluginDraft) {
+  function replace(index: number, draft: AgentIntegrationDraft) {
     onChange(value.map((entry, i) => (i === index ? draft : entry)));
   }
 
@@ -369,8 +348,8 @@ export default function AgentPluginsSection({
               placeholder={t("add.placeholder")}
               value=""
               options={addable.map((option) => ({
-                value: option.plugin_id,
-                title: option.plugin_name,
+                value: String(option.id),
+                title: option.name,
               }))}
               onValueChange={add}
             />
@@ -396,18 +375,20 @@ export default function AgentPluginsSection({
       ) : null}
       {data &&
         value.map((draft, index) => (
-          <PluginCard
-            key={draft.plugin_id}
+          <IntegrationCard
+            key={draft.integration_id}
             draft={draft}
-            option={catalog.find(
-              (entry) => entry.plugin_id === draft.plugin_id
+            integration={catalog.find(
+              (entry) => entry.id === draft.integration_id
             )}
-            othersByIntegration={draftsByIntegration}
+            sharedWider={sharedWider(draft.integration_id)}
             canManageIntegrations={canManageIntegrations}
             onChange={(next) => replace(index, next)}
             onRemove={() =>
               onChange(
-                value.filter((entry) => entry.plugin_id !== draft.plugin_id)
+                value.filter(
+                  (entry) => entry.integration_id !== draft.integration_id
+                )
               )
             }
           />

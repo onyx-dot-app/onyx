@@ -2,9 +2,8 @@ import { useState, type ReactElement } from "react";
 import { render, screen, setupUser } from "@tests/setup/test-utils";
 import TaskActionPolicies from "@/app/craft/v1/tasks/components/TaskActionPolicies";
 import type {
+  TaskIntegrationLink,
   TaskIntegrationView,
-  TaskPluginLink,
-  TaskPluginView,
 } from "@/app/craft/v1/tasks/types";
 
 jest.mock("next/navigation", () => ({
@@ -17,7 +16,7 @@ jest.mock("next/navigation", () => ({
 
 const LINEAR_MCP: TaskIntegrationView = {
   id: 7,
-  name: "Linear MCP",
+  name: "Linear",
   kind: "mcp",
   app_type: null,
   status: { state: "connected", reason: null },
@@ -37,25 +36,23 @@ const LINEAR_MCP: TaskIntegrationView = {
       locked: false,
     },
   ],
+  enabled: false,
+  action_settings: null,
+  runnable: true,
 };
 
-function pluginView(overrides: Partial<TaskPluginView> = {}): TaskPluginView {
-  return {
-    plugin_id: "plugin-1",
-    plugin_name: "Linear",
-    enabled: false,
-    action_settings: null,
-    integrations: [LINEAR_MCP],
-    ...overrides,
-  };
+function integrationView(
+  overrides: Partial<TaskIntegrationView> = {}
+): TaskIntegrationView {
+  return { ...LINEAR_MCP, ...overrides };
 }
 
-let mockData: TaskPluginView[] = [pluginView()];
+let mockData: TaskIntegrationView[] = [integrationView()];
 const mockSave = jest.fn();
 let fetchSpy: jest.SpyInstance;
 
 function Form({ taskId = null }: { taskId?: string | null }) {
-  const [value, setValue] = useState<TaskPluginLink[] | null>(null);
+  const [value, setValue] = useState<TaskIntegrationLink[] | null>(null);
   return (
     <>
       <TaskActionPolicies taskId={taskId} value={value} onChange={setValue} />
@@ -72,7 +69,7 @@ async function renderLoaded(ui: ReactElement) {
 }
 
 beforeEach(() => {
-  mockData = [pluginView()];
+  mockData = [integrationView()];
   mockSave.mockClear();
   fetchSpy = jest
     .spyOn(global, "fetch")
@@ -83,7 +80,7 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-it("starts a new task with no plugins and turns a plugin on with inherited actions", async () => {
+it("starts a new task with no integrations and turns one on with inherited actions", async () => {
   const user = setupUser();
   await renderLoaded(<Form />);
   expect(screen.getByText("Disabled for this task")).toBeInTheDocument();
@@ -97,7 +94,7 @@ it("starts a new task with no plugins and turns a plugin on with inherited actio
   await user.click(screen.getByRole("button", { name: "Save task" }));
   expect(mockSave).toHaveBeenLastCalledWith([
     {
-      plugin_id: "plugin-1",
+      integration_id: 7,
       action_settings: { default: "inherit", actions: {} },
     },
   ]);
@@ -112,7 +109,7 @@ it("starts a new task with no plugins and turns a plugin on with inherited actio
 it("keeps the stored settings of an existing task", async () => {
   const user = setupUser();
   mockData = [
-    pluginView({
+    integrationView({
       enabled: true,
       action_settings: { default: "ask", actions: { search: "allow" } },
     }),
@@ -125,16 +122,16 @@ it("keeps the stored settings of an existing task", async () => {
   await user.click(screen.getByRole("button", { name: "Save task" }));
   expect(mockSave).toHaveBeenLastCalledWith([
     {
-      plugin_id: "plugin-1",
+      integration_id: 7,
       action_settings: { default: "ask", actions: { search: "allow" } },
     },
   ]);
 });
 
-it("turning a plugin off and on again keeps its action settings", async () => {
+it("turning an integration off and on again keeps its action settings", async () => {
   const user = setupUser();
   mockData = [
-    pluginView({
+    integrationView({
       enabled: true,
       action_settings: { default: "ask", actions: { search: "allow" } },
     }),
@@ -148,16 +145,16 @@ it("turning a plugin off and on again keeps its action settings", async () => {
   await user.click(screen.getByRole("button", { name: "Save task" }));
   expect(mockSave).toHaveBeenLastCalledWith([
     {
-      plugin_id: "plugin-1",
+      integration_id: 7,
       action_settings: { default: "ask", actions: { search: "allow" } },
     },
   ]);
 });
 
-it("editing a plugin that was turned off keeps its other settings", async () => {
+it("editing an integration that was turned off keeps its other settings", async () => {
   const user = setupUser();
   mockData = [
-    pluginView({
+    integrationView({
       enabled: true,
       action_settings: { default: "ask", actions: { search: "blocked" } },
     }),
@@ -175,7 +172,7 @@ it("editing a plugin that was turned off keeps its other settings", async () => 
   await user.click(screen.getByRole("button", { name: "Save task" }));
   expect(mockSave).toHaveBeenLastCalledWith([
     {
-      plugin_id: "plugin-1",
+      integration_id: 7,
       action_settings: {
         default: "ask",
         actions: { search: "blocked", create: "blocked" },
@@ -187,16 +184,11 @@ it("editing a plugin that was turned off keeps its other settings", async () => 
 it("does not offer Allow for a locked action", async () => {
   const user = setupUser();
   mockData = [
-    pluginView({
-      integrations: [
-        {
-          ...LINEAR_MCP,
-          actions: LINEAR_MCP.actions.map((action) => ({
-            ...action,
-            locked: action.key === "create",
-          })),
-        },
-      ],
+    integrationView({
+      actions: LINEAR_MCP.actions.map((action) => ({
+        ...action,
+        locked: action.key === "create",
+      })),
     }),
   ];
   await renderLoaded(<Form />);
@@ -212,18 +204,13 @@ it("does not offer Allow for a locked action", async () => {
 
 it("counts a locked task Allow with the integration policy", async () => {
   mockData = [
-    pluginView({
+    integrationView({
       enabled: true,
       action_settings: { default: "allow", actions: {} },
-      integrations: [
-        {
-          ...LINEAR_MCP,
-          actions: LINEAR_MCP.actions.map((action) => ({
-            ...action,
-            locked: action.key === "create",
-          })),
-        },
-      ],
+      actions: LINEAR_MCP.actions.map((action) => ({
+        ...action,
+        locked: action.key === "create",
+      })),
     }),
   ];
   await renderLoaded(<Form taskId="task-1" />);
@@ -251,7 +238,7 @@ it("sets an action to Allow, Ask, Blocked or the integration setting", async () 
   await user.click(screen.getByRole("button", { name: "Save task" }));
   expect(mockSave).toHaveBeenLastCalledWith([
     {
-      plugin_id: "plugin-1",
+      integration_id: 7,
       action_settings: { default: "inherit", actions: { create: "blocked" } },
     },
   ]);
@@ -259,21 +246,16 @@ it("sets an action to Allow, Ask, Blocked or the integration setting", async () 
 
 it("shows the sign-in reason of an integration that is not connected", async () => {
   mockData = [
-    pluginView({
-      integrations: [
-        {
-          ...LINEAR_MCP,
-          status: {
-            state: "not_connected",
-            reason: "Connect your Linear MCP account to use it.",
-          },
-        },
-      ],
+    integrationView({
+      status: {
+        state: "not_connected",
+        reason: "Connect your Linear account to use it.",
+      },
     }),
   ];
   await renderLoaded(<Form />);
   expect(
-    screen.getByText("Connect your Linear MCP account to use it.")
+    screen.getByText("Connect your Linear account to use it.")
   ).toBeInTheDocument();
 });
 

@@ -37,6 +37,8 @@ import {
   useIntegrationLabels,
 } from "@/sections/integrations/integrationLabels";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import IntegrationInstallSetting from "@/sections/integrations/IntegrationInstallSetting";
+import { useIntegrationStateCopy } from "@/sections/customize/IntegrationAccessControls";
 
 type KindFilter = "all" | IntegrationKind;
 const KIND_FILTERS: readonly KindFilter[] = ["all", "mcp", "api"];
@@ -46,6 +48,7 @@ export default function IntegrationsPage() {
   const locale = useLocale();
   const navigation = useNavigation();
   const labels = useIntegrationLabels();
+  const accessCopy = useIntegrationStateCopy();
   const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_ACTIONS
   );
@@ -74,7 +77,12 @@ export default function IntegrationsPage() {
         <Content
           icon={INTEGRATION_SHAPE_ICONS[row.shape]}
           title={name}
-          description={row.description ?? undefined}
+          description={
+            accessCopy.reason(row) ??
+            (row.access.owner_email
+              ? t("ownedBy", { owner: row.access.owner_email })
+              : (row.description ?? undefined))
+          }
           titleMaxLines={1}
           descriptionMaxLines={1}
         />
@@ -104,13 +112,17 @@ export default function IntegrationsPage() {
     },
     {
       kind: "display",
-      id: "access",
-      title: t("columns.access"),
+      id: "installation",
+      title: t("columns.installation"),
       width: { weight: 22 },
       cell: (row) => (
-        <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
-          {labels.access(row)}
-        </Text>
+        <Section
+          height="auto"
+          alignItems="stretch"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <IntegrationInstallSetting integration={row} />
+        </Section>
       ),
     },
     {

@@ -70,10 +70,14 @@ From this page, you can:
     Use **Actions** to let the Agent do work. Turn on the built-in tools that the Agent needs, such as Web Search,
     Image Generation, and Code Interpreter.
 
-    Then use **Plugins** to give the Agent the MCP servers and apps from [Plugins](/admins/plugins/overview).
-    Select **Add a plugin** and pick a plugin.
-    The list shows each plugin that you can see and that holds an integration. To remove a plugin,
-    click its delete icon.
+    Then use **Integrations** to give the Agent the MCP servers and apps from [Plugins](/admins/plugins/overview).
+    Select **Add an integration** and pick an integration. The list shows each integration that you can use.
+    To remove an integration, click its delete icon.
+
+    An Agent gives no access to its integrations.
+    A person who can use the Agent but not one of its integrations chats without that integration.
+    When the Agent is shared,
+    the editor shows a warning on each integration that is not available to the whole organization.
 
     <img className="rounded-image" src="/assets/admins/agents/agent_actions.webp" alt="Onyx Agent Configuration page"/>
   </Step>
@@ -93,21 +97,19 @@ From this page, you can:
 
 ## Action Settings
 
-Each plugin of an Agent lists the actions of its integrations. Each action has one setting:
+Each integration of an Agent lists its actions. Each action has one setting:
 
 | Setting | Effect |
 | --- | --- |
-| **Use the agent default** | The action uses the **Default for Other Actions** row of the plugin. This is the default. |
+| **Use the agent default** | The action uses the **Default for Other Actions** row of the integration. This is the default. |
 | **Use the integration setting** | The action follows the policy that an admin set on the integration. |
 | **Allow** | The action runs without a prompt in this Agent. |
 | **Ask** | Onyx asks the user before the action runs. |
 | **Blocked** | The Agent cannot use the action. |
 
-The first row of each plugin, **Default for Other Actions**, applies to each action set to **Use the agent default**.
-It also applies to actions that the integration adds later. Its own default is **Use the integration setting**.
-
-When two plugins of an Agent hold the same integration, the strictest setting of the two applies.
-The editor tells you when another plugin sets a stricter setting for an action.
+The first row of each integration, **Default for Other Actions**,
+applies to each action set to **Use the agent default**. It also applies to actions that the integration adds later.
+Its own default is **Use the integration setting**.
 
 **Allow** is not available when:
 

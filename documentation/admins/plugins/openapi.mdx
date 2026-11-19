@@ -33,7 +33,8 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
   </Step>
 
   <Step title="Name and describe the integration">
-    Enter a **Name** and a **Description**. Users see the description on the plugin card and in the plugin details.
+    Enter a **Name** and a **Description**.
+    Users see the description in the integration list and on the integration page.
     The agent reads the operations in the schema, not this description.
   </Step>
 
@@ -42,10 +43,10 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
   </Step>
 
   <Step title="Add the plugin">
-    Select the **Owner** if the page shows it, then click **Add**. Onyx puts the integration in a plugin.
-    To make the plugin available in chats without a custom agent,
-    set its install setting to **Default** or **Required** on **Admin Panel → Plugins**.
-    Only full admins can change default Chat availability.
+    Select the **Owner** if the page shows it, then click **Add**. To turn the integration on for each user,
+    so that default Chat uses it,
+    set its install setting to **Installed** or **Required** on **Admin Panel → Integrations**.
+    Only users with the organization-wide **Manage Actions** permission can change the install setting.
   </Step>
 </Steps>
 
@@ -56,7 +57,7 @@ Use an OpenAPI plugin for internal services, such as a ticket system or an inven
 | **No sign-in** | None | Onyx sends requests without credentials. |
 | **One account for the organization** | **API key** | Onyx adds the headers that you set, such as `Authorization: Bearer {api_key}`, to every request. An admin enters the values on the **Configuration** tab. All users share these credentials. |
 | **One account for the organization** | **OAuth** | An admin connects one account on the **Configuration** tab. |
-| **Each user signs in** | **API key** or **OAuth** | Each user connects their own account from the [Plugins page](/overview/core_features/plugins) before the agent can call the API for them. |
+| **Each user signs in** | **API key** or **OAuth** | Each user connects their own account in [Customize → Integrations](/overview/core_features/plugins) before the agent can call the API for them. |
 | **Each user signs in** | **Onyx login** | Onyx sends the user's Onyx sign-in token to the API. Only an admin who manages actions for the whole organization can select it. |
 
 For **API key**, put each credential in braces in the **Header Value**. Each placeholder becomes a credential field.
@@ -86,7 +87,7 @@ Onyx replaces them with the values of the current request at call time.
 
 | Tab | Contents |
 | --- | --- |
-| **Overview** | Name, description, **Enabled**, the plugins that hold the integration, and **Delete**. |
+| **Overview** | Name, description, owner, **Install Setting**, **Enabled**, and **Delete**. |
 | **Configuration** | The schema, the sign-in, and **Users Can Save Always Allow**. |
 | **Actions** | The operations that Onyx found in the schema, each with **Allow**, **Ask**, or **Blocked**. |
 
@@ -95,7 +96,7 @@ Onyx replaces them with the values of the current request at call time.
 To add, remove, or change an operation, edit the schema on the **Configuration** tab.
 Onyx syncs the actions again when you save a changed schema.
 
-Changing the install setting of the plugin does not remove it from custom agents.
+Changing the install setting of the integration does not remove it from custom agents.
 To remove the integration from all agents, delete it on the **Overview** tab.
 
 <Note>
@@ -104,7 +105,7 @@ To remove the integration from all agents, delete it on the **Overview** tab.
 
 ## Use the plugin in custom agents
 
-Open the agent editor and select the plugin under **Actions**. See [Agents](/admins/agents/overview).
+Open the agent editor and select **Add an integration** under **Actions**. See [Agents](/admins/agents/overview).
 
 ## Example
 

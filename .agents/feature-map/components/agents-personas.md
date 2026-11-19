@@ -15,17 +15,20 @@ adds group shares, group ownership and per-agent usage stats.
   sets, single documents, connector folders, or the user's own files), tools,
   starter messages and an icon. CE grants `ADD_AGENTS` to every user. EE grants
   it through groups.
-- **Plugins in the editor.** The agent editor attaches plugins, not single MCP
-  or OpenAPI tools. `web/src/sections/agents/AgentPluginsSection.tsx` offers
-  the plugins of `GET /integrations/agent-catalog`. For each action the owner
+- **Integrations in the editor.** The agent editor links integrations by id,
+  not single MCP or OpenAPI tools. `web/src/sections/agents/AgentIntegrationsSection.tsx`
+  offers the integrations of `GET /integrations/agent-catalog` and saves
+  `integrations: [{integration_id, action_settings}]`. For each action the owner
   picks Use the agent default (no key), Use the integration setting
   (`inherit`), Allow, Ask or Blocked, and a "Default for other actions" row
   covers the actions with no key. Allow is hidden when the admin value is
-  locked (`web/src/lib/agents/plugins.ts:lockReason`), except an Allow that is
+  locked (`web/src/lib/agents/integrations.ts:lockReason`), except an Allow that is
   already stored. Each action shows the value that applies
-  (`effectiveSetting`, the backend policy order without the user's grant), or
-  the stricter value of another attached plugin that holds the integration
-  (`stricterPlugin`). Save sends each action key as loaded, so a migrated
+  (`effectiveSetting`, the backend policy order without the user's grant).
+  An agent gives no access: when the agent is shared and an integration is
+  not shared with everyone (`access.shared_with_everyone`), the card shows a
+  warning; the agent viewer marks an integration the viewer cannot use. Save
+  sends each action key as loaded, so a migrated
   `{"default": "blocked", "actions": {"x": "inherit"}}` stays as it is, and
   `tool_ids` holds only built-in tools.
 - **In chat**, picking an agent applies its instructions, scopes search to its

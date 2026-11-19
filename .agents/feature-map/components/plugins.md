@@ -15,20 +15,22 @@ Group or user restriction needs EE.
 
 - **An admin** opens the Agents & Plugins sidebar section. Admin >
   Integrations (`/admin/integrations`) lists the MCP servers and apps from
-  `GET /admin/integrations`, with Name, Type, Sign-in, Access and Status, a
-  type filter, search and "Needs setup". "Add" opens `/admin/integrations/new`
+  `GET /admin/integrations`, with Name (and the owner of a private one, or the
+  "No access" reason for a manager with no access of its own), Type, Sign-in,
+  Install Setting and Status, a type filter, search and "Needs setup". "Add" opens `/admin/integrations/new`
   (`/app/customize/integrations/new` from Customize): MCP Server, OpenAPI App
   or App (only with Craft; Start From is a preset or Custom app), then posts
   to `POST /admin/integrations`. Only a global
   action manager sees "For the organization"; everyone else adds "For me".
-  Admin > Plugins (`/admin/plugins`) lists the plugins that hold integrations,
-  built from the `plugins` refs of that list
-  (`sections/integrations/AdminPluginsPage.tsx`). Each plugin whose
-  integration is not personal has an install setting select, which a global
-  action manager changes through `PUT /admin/plugins/{id}/installation-policy`.
-  The select sets the install setting of the integration. An integration is
-  personal while it is private (NOT_AVAILABLE) and has an owner. The detail page
-  `/admin/integrations/[id]` has Overview (name, description, switch),
+  The install setting select (`sections/integrations/IntegrationInstallSetting.tsx`,
+  in the list and on the Overview tab) is the company setting; a global action
+  manager changes it through `PUT /admin/integrations/{id}/installation-policy`.
+  Not available keeps the integration private: its owner and its shares use it.
+  There is no admin Plugins page: a plugin holds skills only. The web has no
+  control for group install settings of an integration (the backend has no
+  route for them). The detail page
+  `/admin/integrations/[id]` has Overview (name, description, owner, install
+  setting, switch),
   Configuration (sign-in settings, the preset account settings and the
   organization connection) and Actions ("Default for new actions", then
   Read-only and Write actions, each Allow, Ask or Blocked). The tabs stay
@@ -47,34 +49,35 @@ Group or user restriction needs EE.
   `/app/customize` opens), Integrations and Plugins (`/app/customize/plugins`). Plugins lists each plugin of
   `lib/plugins/directory.ts:memberPluginEntries` in the groups Created by you
   (the user's own, published or not), From your organization and Shared with you
-  (`lib/customize/plugins.ts:groupPlugins`), with its skill and integration
-  counts, a "needs sign-in" count, Turn on and a row menu (Turn on/off, Share).
-  A plugin holds many items: an upgraded skill that used an app shares its plugin
-  with the app's integration (migration `730bce2814a0`). Integrations
+  (`lib/customize/plugins.ts:groupPlugins`), with its skill count, Turn on and a
+  row menu (Turn on/off, Share). A plugin holds custom skills only; there is no
+  "Add integration" in its Add menu. Integrations
   (`sections/customize/CustomizeIntegrationsPage.tsx`) is a table: Integration,
-  Type, Authorization and Status (a check, Connect, Reconnect or "Ask your
-  admin" from `sections/plugins/IntegrationConnectButton.tsx`); a row opens
+  Type, Authorization and Status. Status shows the one row state of
+  `access.state` (`sections/customize/IntegrationAccessControls.tsx`): On and
+  Turn on are the user's switch (`PUT /integrations/{id}/enabled`, locked when
+  Required), Sign in adds Connect, No access and Turned off show the reason.
+  `GET /integrations` returns only integrations the user can use, so a No
+  access row shows only on the admin list. A user who manages a private
+  integration (`access.can_manage`) gets a "..." menu with Share
+  (`sections/plugins/ShareIntegrationModal.tsx`: specific people, groups in
+  EE, no permission picker, `PUT /integrations/{id}/access`) and Publish to Org
+  (`POST /integrations/{id}/publish`, off without global manage:actions). A row opens
   `/app/customize/integrations/[id]` (`sections/customize/CustomizeIntegrationPage.tsx`):
-  the status and Connect in the header, then Overview (type, sign-in, the
-  plugins that hold it), Configuration (the user's connection, Disconnect)
+  the status, Connect and the "..." menu in the header, then Overview (type,
+  sign-in, owner, state, and the "Use This Integration" switch),
+  Configuration (the user's connection, Disconnect)
   and Actions (each action with the admin's Allow, Ask or Blocked, and the
   user's Always allow switch when the admin allows it). The admin sets the
   policy only on `/admin/integrations/[id]`. A plugin page (`/app/customize/plugins/[pluginId]`) has Overview,
-  Skills, Integrations and Versions; a tab with nothing to show is hidden, and a
-  plugin that is one skill and no integration replaces itself with the skill
-  page. The Integrations tab shows one status
-  per integration: Connected, Not connected (Connect), Needs reconnect (the
-  reason and Reconnect) or Not set up ("Ask your admin"). When the admin lets
-  users save it, each action that asks offers "Always allow". A member with
-  manage:actions adds a personal integration ("For me" only) from the Add menu;
-  its plugin shows under Created by you. The page header has the user's on/off switch ("Use this
-  plugin"), off with a reason when the plugin is Required. The owner of a
-  private plugin that holds only integrations gets Share and Publish; Publish
-  is off for a user without global manage:actions.
-- **In chat**, the tools popover lists the current agent's plugins that hold
-  integrations and switches each one; the choice is saved for the agent. An
-  "integrations need sign-in" prompt lists the integrations of the plugins
-  that are on and need the user to connect. An integration with no usable
+  Skills and Versions; a plugin that is one skill replaces itself with the
+  skill page. When the admin lets users save it, each action that asks offers
+  "Always allow". A member with manage:actions adds a private integration
+  ("For me" only) from the Integrations Add menu.
+- **In chat**, the tools popover lists the current agent's integrations
+  (`sections/plugins/ChatIntegrationsPopover.tsx`) and switches each one; the
+  choice is saved for the agent. An "integrations need sign-in" prompt lists
+  the integrations that are on and need the user to connect. An integration with no usable
   credential gives the model no action, so the user can keep chatting.
 
 ---
@@ -115,26 +118,18 @@ through `POST /admin/mcp/probe` to suggest the sign-in, and opens
 `PolicyEditor` and `PolicyToggle`, which take the API values
 `allow|ask|blocked`.
 
-**Web is behind the backend.** The backend names an integration by its id:
-`PUT /integrations/{id}/enabled`, `GET`/`PUT /integrations/{id}/access`,
-`POST /integrations/{id}/publish`,
-`PUT /admin/integrations/{id}/installation-policy` and
-`GET /integrations/agents/{id}`, and each integration row carries `access`
-in place of `plugins` ([[mcp-and-custom-tools]]). The web code that this
-section describes still calls the `/plugins/{id}` routes and reads the
-`plugins` refs, which the backend no longer has.
-
 **Member flow.** `web/src/sections/customize/` (the three tabs, in
 `CustomizeLayout`) and `web/src/sections/plugins/MemberPluginDetailPage.tsx`
 read only member endpoints: the user's skills
 (`GET /skills`, as the Skills page) and `GET /integrations`.
-`lib/plugins/directory.ts:memberPluginEntries` joins them by plugin id (a
-custom skill's id is its plugin id). The API decides which plugins the user
-sees, and each ref's `installation_policy` is the user's own setting (group
-overrides and shares included). `lib/plugins/directory.ts:pluginSwitch` gives
-the switch state, locked for Required: a skill plugin uses `PUT /skills/{id}/enabled`, a plugin that holds only
-integrations `PUT /plugins/{id}/enabled`. `sections/plugins/SharePluginModal.tsx`
-reads and replaces the shares through `/plugins/{id}/access`.
+`lib/plugins/directory.ts:memberPluginEntries` makes one plugin of each custom
+skill (a custom skill's id is its plugin id), and
+`lib/plugins/directory.ts:pluginSwitch` gives its switch
+(`PUT /skills/{id}/enabled`). Each integration row carries `access`; its
+`installation_policy` is the user's own setting (group settings and shares
+included). `sections/plugins/ShareIntegrationModal.tsx` reads and replaces the
+shares through `/integrations/{id}/access`; it reuses `AddPeoplePicker` with
+no permission menu.
 `sections/plugins/IntegrationConnectionRow.tsx` shows the
 status of one integration and its action; the API key form
 (`web/src/sections/plugins/IntegrationCredentialsModal.tsx`, which the Craft
@@ -163,30 +158,32 @@ link gives no access; its id only names the integration
 ([[mcp-and-custom-tools#access-grants-default-chat-only]]).
 `PATCH /tool/{id}/preferences` sets the user's on/off choice on the
 integration of the custom tool. The member routes send that choice as
-`enabled` on each plugin ref, and the chat popover of the default agent shows
-only the plugins that are on. On the web,
-`lib/plugins/chat.ts:effectiveChatPreference` names a built-in tool of the agent,
-else a saved plugin action (`tool_options.preferred` with `type: "action"`)
-whose plugin is on. The web has no control that sets an action preference; it
+`access.user_enabled`, and `GET /integrations/agents/0` lists only the
+integrations that are on. On the web,
+`lib/tools/chat.ts:effectiveChatPreference` names a built-in tool of the agent,
+else a saved integration action (`tool_options.preferred` with `type: "action"`
+and `integration_id`) whose integration is on. The web has no control that sets an action preference; it
 keeps one that another client saved, and pinning a built-in tool releases it.
 
 **Tool options of an existing chat.** The server owns them.
 `lib/tools/hooks.ts:useToolConfiguration` reads them from the chat-session detail
 (`tool_options`, held in the chat session store). The composer keeps built-in
-tool states by tool id and plugin states by plugin id. The plugins are the
-agent's (`lib/plugins/hooks.ts:useAgentPluginIds`): `GET /plugins/agents/{id}`
-(the backend route is now `GET /integrations/agents/{id}`,
-`integrations/access.py:agent_integration_ids_for_user`) returns the integrations that
+tool states by tool id and integration states by integration id. The
+integrations are the agent's (`lib/integrations/hooks.ts:useAgentIntegrationIds`):
+`GET /integrations/agents/{id}`
+(`integrations/access.py:agent_integration_ids_for_user`) returns the integrations that
 chat tool construction reads (`integrations/policy.py:agent_link_settings_by_integration`). A failed read
 leaves the list null, not empty, so the composer never sends an allow-list
-that leaves out every plugin. The agent viewer passes its own agent id, and
-the composer reads and saves that agent's plugins. A switch in
-`ChatPluginsPopover` calls `setPluginEnabled`, which also saves the agent's
-`disabled_plugin_ids` (`lib/plugins/hooks.ts:useAgentPluginPreferences`,
+that leaves out every integration. The agent viewer passes its own agent id,
+and the composer reads and saves that agent's integrations. A switch in
+`ChatIntegrationsPopover` calls `setIntegrationEnabled`, which also saves the
+agent's `disabled_integration_ids`
+(`lib/integrations/hooks.ts:useAgentIntegrationPreferences`,
 `PATCH /user/assistant/{id}/preferences`); a chat that does not exist yet
 starts from them, and so does an existing chat whose `allowed` is null. When something is off, `allowed` names each built-in tool
-that is on and each plugin of the agent that is on, because the server leaves
-out each plugin that the list does not name.
+that is on and each integration of the agent that is on (`{type: "integration",
+integration_id}`), because the server leaves out each integration that the
+list does not name.
 `sections/plugins/IntegrationConnectPrompt.tsx` is the chat connect prompt. It
 reads the integration statuses again when the user opens it. A tool sign-in
 card (`web/src/app/app/message/messageComponents/CustomToolAuthCard.tsx`) also reads them again; a turn does not.
@@ -256,7 +253,7 @@ only the configuration of a chat that does not exist yet.
    shown only with manage:actions.
 10. `old-admin-routes-redirect` **Old admin plugin URLs only redirect.**
     `redirects()` in `web/next.config.js` sends `/admin/mcp-actions*`,
-    `/admin/openapi-actions`, `/admin/craft/apps` and
+    `/admin/openapi-actions`, `/admin/craft/apps`, `/admin/plugins` and
     `/admin/plugins/{mcp,openapi,external-app}/[id]` to `/admin/integrations`.
     A server, tool or app id is not an integration id, so they go to the list,
     not a detail. New links go to `/admin/integrations`.
