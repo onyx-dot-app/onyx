@@ -135,12 +135,14 @@ cargo test --manifest-path src-tauri/Cargo.toml
   an unsigned app on first launch: right-click it, choose **Open**, then **Open** again.
 - The same pull requests also run the checks on Windows and Linux, and build unsigned x64
   installers as artifacts: NSIS (`.exe`) and MSI on Windows, AppImage and `.deb` on Linux.
-  Windows SmartScreen warns about an unsigned installer: choose **More info**, then **Run
-  anyway**.
-- Run the workflow by hand with a version (for example `0.2.0`) to publish a signed and
-  notarized universal DMG, its update archive and `latest.json`. They go to a GitHub
+  These installers are not signed. They are for review only, not for customers. Each one has
+  a GitHub build provenance attestation (`gh attestation verify <file> --repo
+  onyx-dot-app/onyx`). Pull requests from forks get no installer artifacts.
+- Run the workflow by hand on `main` with a version (for example `0.2.0`) to publish a signed
+  and notarized universal DMG, its update archive and `latest.json`. They go to a GitHub
   pre-release tagged `desktop-v2-v<version>`, which is never marked as the latest release, so
-  v1's downloads and auto-update are not affected. Releases are macOS only for now.
+  v1's downloads and auto-update are not affected. Releases are macOS only for now. The job
+  gets the signing secrets only after the JavaScript build, and only in its signing step.
 
 ## Windows and Linux
 

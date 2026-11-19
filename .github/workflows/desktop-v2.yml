@@ -80,11 +80,11 @@ jobs:
 
       - name: Run Clippy
         working-directory: ./desktop-v2/src-tauri
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --locked -- -D warnings
 
       - name: Run Rust tests
         working-directory: ./desktop-v2/src-tauri
-        run: cargo test
+        run: cargo test --locked
 
       - name: Type-check the local windows
         working-directory: ./desktop-v2
@@ -93,9 +93,11 @@ jobs:
       # Unsigned: reviewers open it with right-click > Open.
       - name: Build universal DMG
         working-directory: ./desktop-v2
-        run: bun run tauri build --target universal-apple-darwin --bundles dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
+        run: bun run tauri build --target universal-apple-darwin --bundles dmg --config '{"bundle":{"createUpdaterArtifacts":false}}' -- --locked
 
+      # Fork pull requests get no installer artifact.
       - name: Upload DMG
+        if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: onyx-desktop-v2-macos-universal-${{ github.run_id }}
@@ -127,6 +129,10 @@ jobs:
               desktop-v2/src-tauri/target/release/bundle/deb/*.deb
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     defaults:
       run:
         shell: bash
@@ -194,17 +200,17 @@ jobs:
 
       - name: Run Clippy
         working-directory: ./desktop-v2/src-tauri
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --locked -- -D warnings
 
       - name: Run Rust tests
         working-directory: ./desktop-v2/src-tauri
-        run: cargo test
+        run: cargo test --locked
 
       - name: Type-check the local windows
         working-directory: ./desktop-v2
         run: bun run typecheck
 
-      # Unsigned. Windows SmartScreen warns on first launch: More info > Run anyway.
+      # Unsigned: for reviewers only.
       # APPIMAGE_EXTRACT_AND_RUN: the runner has no FUSE for linuxdeploy.
       # NO_STRIP: linuxdeploy's strip cannot read Ubuntu 24.04's libraries.
       - name: Build installers
@@ -213,9 +219,17 @@ jobs:
           BUNDLES: ${{ matrix.bundles }}
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
-        run: bun run tauri build --bundles "${BUNDLES}"
+        run: bun run tauri build --bundles "${BUNDLES}" -- --locked
+
+      # Fork pull requests get no installer artifact or attestation.
+      - name: Attest build provenance
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # ratchet:actions/attest-build-provenance@v4.2.2
+        with:
+          subject-path: ${{ matrix.bundle-paths }}
 
       - name: Upload installers
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: onyx-desktop-v2-${{ matrix.artifact }}-${{ github.run_id }}
@@ -229,7 +243,8 @@ jobs:
   # "linux-x86_64" entries in latest.json are still to add.
   release:
     name: Release (signed universal DMG)
-    if: github.event_name == 'workflow_dispatch'
+    # Main only: this job gets the Apple and updater signing keys.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: macos-latest
     timeout-minutes: 90
     environment: release
@@ -250,28 +265,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
-        with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-2
-
-      # The Apple secrets are v1's. The updater key pair is v2's own: the public
-      # half is plugins.updater.pubkey in tauri.conf.json.
-      - name: Get AWS Secrets
-        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
-        with:
-          secret-ids: |
-            APPLE_ID, deploy/apple-id
-            APPLE_PASSWORD, deploy/apple-password
-            APPLE_CERTIFICATE, deploy/apple-certificate
-            APPLE_CERTIFICATE_PASSWORD, deploy/apple-certificate-password
-            KEYCHAIN_PASSWORD, deploy/keychain-password
-            APPLE_TEAM_ID, deploy/apple-team-id
-            TAURI_SIGNING_PRIVATE_KEY, deploy/desktop-v2-updater-private-key
-            TAURI_SIGNING_PRIVATE_KEY_PASSWORD, deploy/desktop-v2-updater-private-key-password
-          parse-json-secrets: true
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning]
@@ -302,25 +295,62 @@ jobs:
           jq --arg v "${VERSION}" '.version = $v' package.json > package.json.tmp
           mv package.json.tmp package.json
 
-      - name: Import Apple Developer Certificate
+      # Third-party JavaScript runs here, before the job has any credential.
+      - name: Build the local windows
+        working-directory: ./desktop-v2
+        run: bun run vite:build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+
+      # The signing secrets exist only in this step's shell. The Apple secrets
+      # are v1's. The updater key pair is v2's own: the public half is
+      # plugins.updater.pubkey in tauri.conf.json. With the APPLE_* variables
+      # set, the Tauri CLI signs and notarizes the app. With
+      # TAURI_SIGNING_PRIVATE_KEY it signs the update archive. Update archives
+      # are built only here, so local and PR builds need no key. A null
+      # beforeBuildCommand stops Vite from running again with the secrets set.
+      - name: Build, sign and notarize
+        working-directory: ./desktop-v2
         run: |
-          echo "${APPLE_CERTIFICATE}" | base64 --decode > certificate.p12
+          set -euo pipefail
+          fetch() {
+            aws secretsmanager get-secret-value --secret-id "$1" --query SecretString --output text
+          }
+          mask() {
+            while IFS= read -r line; do
+              if [ -n "${line}" ]; then echo "::add-mask::${line}"; fi
+            done <<< "$1"
+          }
+          APPLE_ID=$(fetch deploy/apple-id); mask "${APPLE_ID}"
+          APPLE_PASSWORD=$(fetch deploy/apple-password); mask "${APPLE_PASSWORD}"
+          APPLE_TEAM_ID=$(fetch deploy/apple-team-id); mask "${APPLE_TEAM_ID}"
+          APPLE_CERTIFICATE=$(fetch deploy/apple-certificate); mask "${APPLE_CERTIFICATE}"
+          APPLE_CERTIFICATE_PASSWORD=$(fetch deploy/apple-certificate-password); mask "${APPLE_CERTIFICATE_PASSWORD}"
+          KEYCHAIN_PASSWORD=$(fetch deploy/keychain-password); mask "${KEYCHAIN_PASSWORD}"
+          TAURI_SIGNING_PRIVATE_KEY=$(fetch deploy/desktop-v2-updater-private-key); mask "${TAURI_SIGNING_PRIVATE_KEY}"
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$(fetch deploy/desktop-v2-updater-private-key-password); mask "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD}"
+
+          CERT="${RUNNER_TEMP}/certificate.p12"
+          echo "${APPLE_CERTIFICATE}" | base64 --decode > "${CERT}"
           security create-keychain -p "${KEYCHAIN_PASSWORD}" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "${KEYCHAIN_PASSWORD}" build.keychain
           security set-keychain-settings -t 3600 -u build.keychain
-          security import certificate.p12 -k build.keychain -P "${APPLE_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign
+          security import "${CERT}" -k build.keychain -P "${APPLE_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${KEYCHAIN_PASSWORD}" build.keychain
-          rm certificate.p12
-          CERT_ID=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application" | head -n 1 | awk -F'"' '{print $2}')
-          echo "APPLE_SIGNING_IDENTITY=${CERT_ID}" >> "${GITHUB_ENV}"
+          rm "${CERT}"
+          APPLE_SIGNING_IDENTITY=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application" | head -n 1 | awk -F'"' '{print $2}')
 
-      # With the APPLE_* variables set, the Tauri CLI signs and notarizes the
-      # app; with TAURI_SIGNING_PRIVATE_KEY it signs the update archive. Update
-      # archives are built only here, so local and PR builds need no key.
-      - name: Build, sign and notarize
-        working-directory: ./desktop-v2
-        run: bun run tauri build --target universal-apple-darwin --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          export APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID APPLE_SIGNING_IDENTITY \
+            APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD KEYCHAIN_PASSWORD \
+            TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+          bun run tauri build --target universal-apple-darwin \
+            --config '{"build":{"beforeBuildCommand":null},"bundle":{"createUpdaterArtifacts":true}}' \
+            -- --locked
 
       - name: Collect release files
         working-directory: ./desktop-v2/src-tauri/target/universal-apple-darwin/release/bundle
