@@ -31,10 +31,11 @@ Exec contract (Codex `exec_command` / `write_stdin`):
 
 import abc
 import posixpath
-from collections.abc import Generator, Iterator, Sequence
+from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from typing import IO
 from uuid import UUID
 
+from onyx.microvm.models import FileListing
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     ExecEvent,
@@ -49,6 +50,12 @@ SESSION_WORKSPACE_ROOT = "/home/onyx/workspaces"
 # example large tool results). No session save keeps them; they go when the
 # sandbox stops.
 ONYX_VM_FILES_ROOT = "/tmp/onyx"  # noqa: S108 - a path in the sandbox VM.
+# Large tool results, in one directory for each chat session
+# (tools/tool_implementations/sandbox/spill.py). The purge rule: a session's
+# purge deletes its directory whenever the VM runs, also for a session that
+# never used the sandbox otherwise, and a write that lands after the purge
+# deletes the directory again and raises HarnessSandboxError.
+TOOL_RESULTS_ROOT = f"{ONYX_VM_FILES_ROOT}/tool-results"
 
 # Most exec session records per sandbox; the least recently used goes
 # first. The guest daemon caps the running commands.
@@ -70,6 +77,10 @@ INTERRUPT_CHAR = "\x03"
 
 def session_workspace(session_id: UUID) -> str:
     return f"{SESSION_WORKSPACE_ROOT}/{session_id}"
+
+
+def session_tool_results(session_id: UUID) -> str:
+    return f"{TOOL_RESULTS_ROOT}/{session_id}"
 
 
 def collect_exec_result(events: Iterator[ExecEvent]) -> ExecCommandResult:
@@ -188,11 +199,12 @@ class HarnessSandbox(abc.ABC):
     # Files: only what exec_command cannot do well. publish_files needs exact
     # bytes (exec output is text), and apply_patch needs exact writes of any
     # content (no shell quoting) and typed path facts. Paths are relative to
-    # the session directory, or absolute inside it; read_file also takes,
-    # and write_onyx_file only takes, an absolute path under
-    # ONYX_VM_FILES_ROOT (onyx_vm_path). Write data is
-    # bytes, or a seekable binary file (for example a file store temp file)
-    # that is streamed whole, from its start, in chunks.
+    # the session directory, or absolute inside it; read_file, write_file,
+    # delete_file and list_files also take an absolute path under
+    # ONYX_VM_FILES_ROOT (onyx_vm_path), which starts the sandbox but sets up
+    # no session. Write data is bytes, a seekable binary file (for example a
+    # file store temp file) that is streamed whole, from its start, in
+    # chunks, or the bytes in parts, which are sent without joining them.
 
     @abc.abstractmethod
     def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
@@ -208,20 +220,32 @@ class HarnessSandbox(abc.ABC):
         self,
         ref: HarnessSandboxRef,
         path: str,
-        data: bytes | IO[bytes],
+        data: bytes | IO[bytes] | list[bytes],
         *,
         mode: int = 0o644,
+        timeout_seconds: float | None = None,
     ) -> None:
         """Atomic replace (a link is replaced, not followed); creates parent
-        directories. `mode`: permission bits."""
+        directories. `mode`: permission bits. The transfer ends by
+        `timeout_seconds`, if set. A write under TOOL_RESULTS_ROOT follows
+        its purge rule."""
 
     @abc.abstractmethod
-    def write_onyx_file(
-        self, ref: HarnessSandboxRef, path: str, data: bytes | IO[bytes]
+    def delete_listed_files(
+        self,
+        ref: HarnessSandboxRef,
+        directory: str,
+        select: Callable[[FileListing], Iterable[str]],
+        *,
+        max_entries: int,
     ) -> None:
-        """Atomic replace of an absolute path under ONYX_VM_FILES_ROOT, mode
-        0644; creates parent directories. Starts the sandbox if needed but
-        sets up no session. Raises SandboxPathError for another path."""
+        """List the entries below a directory, at any depth, with their size
+        and modification time, then delete the files that `select` picks from
+        the listing, on one lookup of the VM. A selected path that is not in
+        the listing is ignored. The listing has at most
+        `max_entries` (the guest daemon allows 100,000), and `truncated` when
+        more exist. Paths under ONYX_VM_FILES_ROOT are absolute, others
+        session-relative. A missing directory deletes nothing."""
 
     @abc.abstractmethod
     def stat_files(

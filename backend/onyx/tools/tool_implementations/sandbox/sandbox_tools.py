@@ -187,6 +187,10 @@ class SandboxTool(Tool):
         self._turn = turn
 
     @property
+    def turn(self) -> SandboxTurn:
+        return self._turn
+
+    @property
     def name(self) -> str:
         return self.NAME
 

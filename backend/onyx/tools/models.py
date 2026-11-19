@@ -15,7 +15,10 @@ from onyx.file_store.models import (
 )
 from onyx.integrations.models import ActionSettings, ApprovalMode
 from onyx.tools.constants import FILE_READER_MAX_CHARS
-from onyx.tools.tool_implementations.sandbox.models import PublishedFile
+from onyx.tools.tool_implementations.sandbox.models import (
+    PublishedFile,
+    SpilledOutput,
+)
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
 
@@ -304,6 +307,13 @@ class CustomToolCallSummary(BaseModel):
     # The server's structured content, which code mode programs receive in
     # place of `tool_result`. Live only: not saved or streamed.
     structured_result: dict[str, JsonValue] | None = Field(default=None, exclude=True)
+    # Set, with no `tool_result`, when the output went to the sandbox VM.
+    spilled: Annotated[SpilledOutput | None, OMITTED_WHEN_NONE] = None
+
+    @property
+    def copies_output(self) -> bool:
+        """Whether `tool_result` holds the tool's output, not file references."""
+        return not isinstance(self.tool_result, CustomToolUserFileSnapshot)
 
     @model_validator(mode="after")
     def restore_file_references(self) -> Self:

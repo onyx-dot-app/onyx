@@ -75,6 +75,8 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, ToolContext, ToolPreference
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import with_code_mode
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
+from onyx.tools.tool_implementations.sandbox.spill import spill_large_result
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
@@ -234,6 +236,16 @@ class ChatAgent(Agent, RestorableFeature):
             ]
         if question_tool is not None and not is_subagent:
             self.application_tools = [*self.application_tools, question_tool]
+        # Restored agents and subagents receive the configured tools, so the
+        # sandbox tools give each of them the chat's sandbox turn.
+        sandbox_turn = next(
+            (
+                tool.turn
+                for tool in self.configured_tools
+                if isinstance(tool, SandboxTool)
+            ),
+            None,
+        )
         super().__init__(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.application_tools],
@@ -250,6 +262,14 @@ class ChatAgent(Agent, RestorableFeature):
                 flow=LLMFlow.CHAT_RESPONSE, user_identity=user_identity
             ),
             after_tool_call=self._finalize_tool,
+            # In a chat with a sandbox, large results go to a file in the VM.
+            prepare_tool_result=partial(
+                spill_large_result,
+                sandbox_turn,
+                code_mode=self.code_cells is not None,
+            )
+            if sandbox_turn is not None
+            else None,
             on_finish=None if self.code_cells is None else self._finished_cells,
             on_suspend=None if self.code_cells is None else self._suspended_cells,
             on_drained=on_drained,

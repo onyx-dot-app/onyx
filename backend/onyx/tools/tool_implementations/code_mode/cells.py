@@ -51,7 +51,6 @@ from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
 from onyx.tools.models import (
     ChatFile,
     CustomToolCallSummary,
-    CustomToolUserFileSnapshot,
     FileReadResult,
     LlmPythonExecutionResult,
     ToolCallException,
@@ -229,9 +228,7 @@ def _bounded(text: str, max_chars: int) -> str:
 def _bounded_details(
     details: CodeModeCallDetails | None, max_chars: int
 ) -> CodeModeCallDetails | None:
-    if isinstance(details, CustomToolCallSummary) and not isinstance(
-        details.tool_result, CustomToolUserFileSnapshot
-    ):
+    if isinstance(details, CustomToolCallSummary) and details.copies_output:
         value = details.tool_result
         text = value if isinstance(value, str) else json.dumps(value, default=str)
         if len(text) <= max_chars:
@@ -456,8 +453,7 @@ def _closing_amendment(
             ),
             is_error=result.is_error,
             # The full value that the content bounds: the recorded result and
-            # the closing record's output uncut, so a consumer of the full value
-            # can tell what the closing record's own cut left out.
+            # the closing record's output uncut.
             full_value=None
             if closing_content.full_value is None
             else f"{result.content}\n\n{closing_content.full_value}",

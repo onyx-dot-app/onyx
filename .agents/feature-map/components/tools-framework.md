@@ -313,9 +313,10 @@ are plain `AgentTool` objects with no `Tool` row, and
    `run_python` result JSON ([[code-execution#run-python-result-json]]). A
    tool whose `content` cuts its value sets `full_value` too: a code mode
    program receives it
-   (`tools/tool_implementations/code_mode/stubs.py:program_value`). Only
-   `ToolResult`, what a tool returns, has the field; the recorded
-   `ToolResultMessage` shares the other fields
+   (`tools/tool_implementations/code_mode/stubs.py:program_value`), and chat's
+   sandbox spill always writes it to a file ([[code-execution]]). Set it only
+   when the cut leaves something out. Only `ToolResult`, what a tool returns,
+   has the field; the recorded `ToolResultMessage` shares the other fields
    (`llm/models.py:ToolResultFields`), so nothing saves it. Code that takes
    any result or message checks `ToolResultFields`.
 5. `run-errors-become-results` **`Tool._run` must not let errors stop the
@@ -390,10 +391,10 @@ are plain `AgentTool` objects with no `Tool` row, and
    the finalized result into the run record that chat saves, and publishes
    `ToolEndEvent`. Before `Run.record_tool_results` records and streams a
    result, `Agent.prepare_tool_result` can replace it, one result at a time in
-   completion order. After a cancel between `Run.record_tool_results` and
-   `finish_tool`, the saved result is the recorded result, before
-   `after_tool_call`, and no `ToolEndEvent` is sent. A tool whose calls must
-   not overlap
+   completion order; chat's sandbox spill uses it ([[code-execution]]). After a
+   cancel between `Run.record_tool_results` and `finish_tool`, the saved
+   result is the recorded result, before `after_tool_call`, and no
+   `ToolEndEvent` is sent. A tool whose calls must not overlap
    returns `ToolExecutionMode.SEQUENTIAL` from `execution_mode`, as
    `MemoryTool` does. This orders only calls with the same name, or with the
    same `sequence_group` (the sandbox file tools share one): each starts

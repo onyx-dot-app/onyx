@@ -287,7 +287,11 @@ counts what is sent, not the stored token counts.
    `agents/compaction.py:ContextLimitError` when the rest does not fit. That
    error is a `ValueError`, so `llm/exceptions.py:litellm_exception_to_safe_error`
    reports it as `UNKNOWN_ERROR`, not `CONTEXT_TOO_LONG`. A new large fixed
-   element makes this error more frequent.
+   element makes this error more frequent. In a chat with a sandbox, large
+   tool results go to a file in the VM before they reach the history
+   ([[code-execution]], `tools/tool_implementations/sandbox/spill.py`). This
+   makes the error less likely but does not prevent it: the limits count
+   characters, not tokens, and some tools are exempt from them.
 6. `forgotten-files-need-metadata` **A forgotten-files notice needs file
    metadata.** `chat/process_message.py:prepare_chat_turn` clears the metadata
    map when the persona has no file reader tool. Then a file that compaction or

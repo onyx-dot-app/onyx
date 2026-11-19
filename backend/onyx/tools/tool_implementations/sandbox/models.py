@@ -113,6 +113,14 @@ class ExecCommandOutput(BaseModel):
     )
 
 
+class SpilledOutput(BaseModel):
+    """What the user's card shows of a result whose full value went to a
+    file in the sandbox VM (spill.py): its head and tail, with a plain note."""
+
+    head: str
+    tail: str
+
+
 class SandboxExecResult(ExecCommandOutput):
     """Saved details of an exec_command or write_stdin call."""
 

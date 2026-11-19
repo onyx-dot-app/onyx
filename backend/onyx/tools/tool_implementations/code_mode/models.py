@@ -25,8 +25,10 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchResult,
     PublishedFiles,
     SandboxExecResult,
+    SpilledOutput,
 )
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
+from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
 
 # Durable details of the tools that programs can call.
 CodeModeCallDetails = Annotated[
@@ -254,6 +256,9 @@ class CodeModeExecutionResult(CellWindow):
     closing: CellClosing | None = None
     # Set on observation 0 of the first program after the store dropped commits.
     lost_store_writes: LostStoreWrites | None = None
+    # Set, with no `stdout` or `result`, when the observation's output went to
+    # the sandbox VM (sandbox/spill.py).
+    spilled: Annotated[SpilledOutput | None, OMITTED_WHEN_NONE] = None
 
     def windows(self) -> list[CellWindow]:
         """The observation's window, then its closing record's."""

@@ -246,6 +246,7 @@ Its result is what the live `tool_update` event, the saved history and the model
 The amendments of the finish and suspend hooks go through it too, with `amended=True`.
 A batch that completes after the run closed reaches neither the hook nor the record.
 It runs under the run's result lock: while it works, the run's other results, and Stop handling on the execution thread, wait for it.
+Chat uses it to save large results to a file in the sandbox VM (`tools/tool_implementations/sandbox/spill.py`).
 Transformations of a tool's own meaning belong inside the tool, before it returns a valid result.
 A tool that calls other tools for the model, such as a code mode program, gets `ToolInvocation.nested_calls`, a `NestedCallGate`.
 `NestedCallGate.decide` applies `before_tool_call`, then the approval gate below, to each of those calls.

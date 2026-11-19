@@ -92,6 +92,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchResult,
     PublishedFiles,
     SandboxExecResult,
+    SpilledOutput,
     WriteStdinArguments,
 )
 from onyx.tools.tool_implementations.sandbox.patch import display_patch
@@ -115,6 +116,8 @@ HIDDEN_TOOLS = frozenset(
     }
 )
 
+# The card's note between the head and the tail of a spilled result.
+SPILLED_OUTPUT_NOTE = "Large output: the full result was saved to the sandbox."
 # Tools whose code argument streams to the browser while the model writes it.
 CODE_ARGUMENT_TOOLS = frozenset({PythonTool.NAME, CODE_MODE_TOOL_NAME})
 # Tools whose calls observe a code mode cell; each call renders as one code mode card.
@@ -129,6 +132,12 @@ _OPTIONAL_STRING = TypeAdapter(str | None)
 _INT = TypeAdapter(int)
 _STRINGS = TypeAdapter(list[str])
 logger = setup_logger()
+
+
+def _spilled_card_text(spilled: SpilledOutput) -> str:
+    """What the user's card shows of a spilled result: the head, a plain
+    note, and the tail; never the model's instructions."""
+    return f"{spilled.head}\n\n[{SPILLED_OUTPUT_NOTE}]\n\n{spilled.tail}"
 
 
 class ResponseLayout:
@@ -831,11 +840,12 @@ class ToolRenderer:
                 if isinstance(details.tool_result, CustomToolUserFileSnapshot)
                 else None
             )
-            data: JsonValue = (
-                None
-                if isinstance(details.tool_result, CustomToolUserFileSnapshot)
-                else details.tool_result
-            )
+            spilled = details.spilled
+            data: JsonValue = None
+            if spilled is not None:
+                data = _spilled_card_text(spilled)
+            elif not isinstance(details.tool_result, CustomToolUserFileSnapshot):
+                data = details.tool_result
             error = details.error
             objects.append(
                 packets.CustomToolDelta(
@@ -1183,12 +1193,17 @@ class CodeModeRenderer(ToolRenderer):
         )
         # Live output stops at the output limit; the saved output keeps the start
         # and the end. The final delta makes live output match replay.
-        replace = bool(self._stdout) and self._stdout != execution.stdout
+        stdout = (
+            execution.stdout
+            if execution.spilled is None
+            else _spilled_card_text(execution.spilled)
+        )
+        replace = bool(self._stdout) and self._stdout != stdout
         output.append(
             packets.Packet(
                 placement=self.placement,
                 obj=packets.CodeModeDelta(
-                    stdout=execution.stdout if replace or not self._stdout else "",
+                    stdout=stdout if replace or not self._stdout else "",
                     replace_stdout=replace,
                     result=execution.result,
                     error=execution.error,
