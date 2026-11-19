@@ -307,7 +307,9 @@ export default function useChatSessionController({
         // drop the rows its saved scroll position is on.
         const merged = mergeLatestChatPage(chatSession, {
           messageTree: localMessages,
-          hasOlderMessages: localSession.hasOlderMessages,
+          // An older page that failed to load is retried on reopen.
+          hasOlderMessages:
+            localSession.hasOlderMessages || localSession.olderMessagesFailed,
         });
         savedMessages = merged.messageTree;
         hasOlderMessages = merged.hasOlderMessages;
@@ -359,6 +361,7 @@ export default function useChatSessionController({
           .getState()
           .updateSessionData(chatSession.chat_session_id, {
             hasOlderMessages,
+            olderMessagesFailed: false,
             approvalsVersion: chatSession.approvals_version,
           });
         chatSessionIdRef.current = chatSession.chat_session_id;

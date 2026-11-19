@@ -356,18 +356,17 @@ export function useChatScroll({
       setRevealed(true);
       const position = memoryRef.current.position;
       // Hold the saved position itself: rows mounted for the opening have not
-      // rendered yet, so the row now at the top can be off.
+      // rendered yet, so the row now at the top can be off. A saved row that
+      // is not loaded opened at the end, so that opening follows the end.
       modeRef.current =
-        position?.kind === "row"
+        position?.kind === "row" && findById(container, position.rowId)
           ? {
               kind: "free",
-              held: findById(container, position.rowId)
-                ? {
-                    rowId: position.rowId,
-                    rowIndexFromEnd: position.rowIndexFromEnd,
-                    rowOffset: position.rowOffset,
-                  }
-                : captureTopRow(container),
+              held: {
+                rowId: position.rowId,
+                rowIndexFromEnd: position.rowIndexFromEnd,
+                rowOffset: position.rowOffset,
+              },
             }
           : {
               kind: "following",
