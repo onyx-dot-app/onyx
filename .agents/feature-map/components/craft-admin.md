@@ -30,8 +30,8 @@ off, set the sign-in and the organization connection, and set a policy per
 action: Allow, Ask or Blocked. A switch decides whether users may save Always
 allow over Ask. When the agent later tries a Blocked action, the call fails
 with a policy error. When it tries an Ask action, the user gets an approval
-card in the session. The Plugins page (`/admin/plugins`) lists the plugins
-that hold integrations and changes their install setting. On Onyx Cloud, the
+card in the session. The same list sets the install setting of each
+integration. On Onyx Cloud, the
 admin cannot see or edit the sign-in of an Onyx-managed built-in app, and
 cannot add a second one or delete it. The admin can change its name,
 description, switch, Always allow setting and action policies.
@@ -63,7 +63,7 @@ Neighbours own the rest:
   of workspace, personal and task choices, the action catalogs, and OAuth.
 - [[mcp-and-custom-tools]]: the MCP server admin routes. They write the same
   policy tables ([[#two-gates-one-policy-table]]).
-- [[plugins]]: the admin Integrations and Plugins pages, which edit apps, MCP
+- [[plugins]]: the admin Integrations page, which edits apps, MCP
   servers and OpenAPI tools as integrations.
 - [[chat-preferences]]: the workspace `Settings` store, which holds the Craft
   default and the organization instructions. The admin writes them through
