@@ -32,6 +32,13 @@ const MAX_QUERY_CHARS = 500;
 const MAX_TITLE_CHARS = 300;
 const MAX_URL_CHARS = 2048;
 const MAX_SNIPPET_CHARS = 300;
+// A stalled search fails to the model's fallback instead of hanging the call.
+const SEARCH_TIMEOUT_MS = 30_000;
+
+/** The first `max` characters, by code point, so a cut never splits a pair. */
+function clip(text: string, max: number): string {
+  return Array.from(text).slice(0, max).join("");
+}
 
 interface SearchResult {
   title: string;
@@ -62,13 +69,13 @@ function asResults(body: unknown): SearchResult[] {
     if (typeof url !== "string" || url.length === 0) continue;
     if (url.length > MAX_URL_CHARS) continue;
     out.push({
-      title: (typeof title === "string" && title ? title : url).slice(
-        0,
+      title: clip(
+        typeof title === "string" && title ? title : url,
         MAX_TITLE_CHARS
       ),
       url,
       snippet:
-        typeof snippet === "string" ? snippet.slice(0, MAX_SNIPPET_CHARS) : "",
+        typeof snippet === "string" ? clip(snippet, MAX_SNIPPET_CHARS) : "",
     });
     if (out.length >= MAX_RESULTS) break;
   }
@@ -109,22 +116,31 @@ export const WebSearch: Plugin = async () => {
             return "Web search is not available in this session.";
           }
 
-          const response = await fetch(
-            `${base.replace(/\/+$/, "")}/web-search/search-lite`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-                "X-Onyx-Authorization": `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                queries: args.queries,
-                max_results: MAX_RESULTS_PER_QUERY,
-              }),
-              signal: context.abort,
-            }
-          );
+          const timeout = AbortSignal.timeout(SEARCH_TIMEOUT_MS);
+          let response: Response;
+          try {
+            response = await fetch(
+              `${base.replace(/\/+$/, "")}/web-search/search-lite`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                  "X-Onyx-Authorization": `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  queries: args.queries,
+                  max_results: MAX_RESULTS_PER_QUERY,
+                }),
+                signal: AbortSignal.any([context.abort, timeout]),
+              }
+            );
+          } catch (error) {
+            // The caller's cancellation still propagates; only the deadline
+            // becomes a failure the model can work around.
+            if (!timeout.aborted) throw error;
+            return "Web search timed out. Try fewer or shorter queries, or webfetch a known URL instead.";
+          }
           if (!response.ok) {
             // Tell the model plainly; it can fall back to webfetch.
             return `Web search failed (HTTP ${response.status}). Web search may not be configured; try webfetch on a known URL instead.`;
@@ -136,7 +152,7 @@ export const WebSearch: Plugin = async () => {
             metadata: {
               onyxSearch: {
                 queries: args.queries.map((query) =>
-                  query.slice(0, MAX_QUERY_CHARS)
+                  clip(query, MAX_QUERY_CHARS)
                 ),
                 results,
               },
