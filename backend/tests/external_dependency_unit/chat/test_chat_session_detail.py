@@ -206,19 +206,17 @@ def _publish(
 def test_the_latest_page_lists_the_chats_newest_file_of_each_path(
     db_session: Session, owner: User
 ) -> None:
-    """The list holds the newest publish of each path in the chat, oldest
-    first, with the path and title from its chat_artifact row. It holds the
-    files of every branch and of the chat's subagents. It leaves out another
-    chat's files, files that are not published files, a published file
-    without a row, and files whose object is missing: a path whose newest copy
-    is missing lists its older copy."""
+    """The list holds the newest publish of each path among the chat's files,
+    its subagents' files included, oldest first, with the path and title from
+    its chat_artifact row. It leaves out another chat's files, files that are
+    not published files, a published file without a row, and files whose
+    object is missing: a path whose newest copy is missing lists its older
+    copy."""
     chat = _new_chat(db_session, owner)
     other_chat = _new_chat(db_session, owner)
     question = _add(
         db_session, get_or_create_root_message(chat.id, db_session), MessageType.USER
     )
-    _add(db_session, question, MessageType.ASSISTANT)
-    # The user regenerates the answer: the second answer is the branch's.
     _add(db_session, question, MessageType.ASSISTANT)
 
     report = f"{session_workspace(chat.id)}/drafts/report.md"

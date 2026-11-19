@@ -216,7 +216,7 @@
   any route, every listed file counts as seen; a file published later shows
   Craft's new-file marker until it is opened. Several files can be open at once; tabs switch
   with a click or the arrow keys, reorder by drag or Alt+arrow among the
-  shown tabs, and closing
+  file tabs, and closing
   the active tab returns to the tab used before it, else to Files. Files and
   Sources cannot close or move, and a file tab cannot move before them. File
   tabs of one shown name show their paths, and an older publish of a path
