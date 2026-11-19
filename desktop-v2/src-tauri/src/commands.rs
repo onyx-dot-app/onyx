@@ -2,10 +2,10 @@
 //! grants only the commands its page uses; the remote main window cannot call any of them.
 
 use serde::Serialize;
-use tauri::ipc::Channel;
+use tauri::ipc::{Channel, InvokeBody, Request};
 use tauri::{AppHandle, Manager, State};
 
-use crate::api::{normalize_server_url, AuthMethods, SearchHit};
+use crate::api::{self, normalize_server_url, Agent, AttachedFile, AuthMethods, SearchHit};
 use crate::ask::{self, AskEvent};
 use crate::login_item;
 use crate::main_window;
@@ -270,10 +270,193 @@ pub async fn change_server(app: AppHandle, state: State<'_, AppState>) -> Result
     Ok(())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LauncherAgents {
+    agents: Vec<Agent>,
+    /// The saved agent, if the user can still use it; `None` is the default agent.
+    selected: Option<i64>,
+    /// "Always Start with an Agent": `agents` has no default agent, and a new
+    /// chat needs one of them.
+    default_agent_disabled: bool,
+}
+
+/// The saved agent if the list has it; otherwise the default agent, or the
+/// first agent when the default one is off.
+fn selected_agent(agents: &[Agent], saved: Option<i64>, default_disabled: bool) -> Option<i64> {
+    saved
+        .filter(|id| agents.iter().any(|a| a.id == *id))
+        .or_else(|| {
+            default_disabled
+                .then(|| agents.first().map(|a| a.id))
+                .flatten()
+        })
+}
+
+/// An error means the list could not be read now; the launcher keeps what it had.
+#[tauri::command]
+pub async fn list_agents(state: State<'_, AppState>) -> Result<LauncherAgents, String> {
+    let epoch = state.epoch();
+    let (server, token) = state.session()?;
+    // Without the settings the launcher cannot tell whether the default agent is on.
+    let default_disabled = state
+        .api
+        .server_settings(&server, &token)
+        .await
+        .ok_or_else(|| "Could not read the server settings.".to_string())?
+        .default_agent_disabled;
+    let agents = state
+        .api
+        .list_agents(&server, &token, default_disabled)
+        .await?;
+    if state.epoch() != epoch {
+        return Err("Signed out.".into());
+    }
+    let saved = state.config.get().launcher_agents.get(&server).copied();
+    Ok(LauncherAgents {
+        selected: selected_agent(&agents, saved, default_disabled),
+        agents,
+        default_agent_disabled: default_disabled,
+    })
+}
+
+/// The largest file the launcher can attach, in bytes: the server's limit,
+/// within the app's own.
+#[tauri::command]
+pub async fn get_upload_limit(state: State<'_, AppState>) -> Result<u64, String> {
+    let (server, token) = state.session()?;
+    let settings = state.api.server_settings(&server, &token).await;
+    Ok(api::upload_limit(settings.as_ref()))
+}
+
+/// Saves the launcher's agent for the current server (`None`: the default agent).
+#[tauri::command]
+pub fn set_launcher_agent(agent_id: Option<i64>, state: State<'_, AppState>) -> Result<(), String> {
+    let server = state.server()?;
+    state.config.update(|c| match agent_id {
+        Some(id) if id != ask::DEFAULT_AGENT_ID => {
+            c.launcher_agents.insert(server, id);
+        }
+        _ => {
+            c.launcher_agents.remove(&server);
+        }
+    })
+}
+
+/// A request header the page set with `encodeURIComponent`.
+fn encoded_header(request: &Request<'_>, name: &str) -> Option<String> {
+    decode_component(request.headers().get(name)?.to_str().ok()?)
+}
+
+/// Reverses `encodeURIComponent`, which never leaves a raw `+`, `&` or `=`.
+fn decode_component(raw: &str) -> Option<String> {
+    url::form_urlencoded::parse(raw.as_bytes())
+        .next()
+        .map(|(decoded, _)| decoded.into_owned())
+}
+
+/// Uploads one file for the next question and waits until the server has
+/// processed it. The body is the file's bytes; `Onyx-File-Name` and
+/// `Onyx-File-Type` name it, and `Onyx-Upload-Id` is the id `cancel_upload` takes.
+#[tauri::command]
+pub async fn upload_file(
+    request: Request<'_>,
+    state: State<'_, AppState>,
+) -> Result<AttachedFile, String> {
+    let epoch = state.epoch();
+    let (server, token) = state.session()?;
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err("The file could not be read.".into());
+    };
+    let name = encoded_header(&request, "onyx-file-name")
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| "file".into());
+    let mime = encoded_header(&request, "onyx-file-type").unwrap_or_default();
+    let upload_id = encoded_header(&request, "onyx-upload-id")
+        .and_then(|id| id.parse::<u64>().ok())
+        .ok_or_else(|| "The upload has no id.".to_string())?;
+    let entry = state.begin_upload(upload_id);
+    if bytes.is_empty() {
+        return Err(format!("{name} is empty."));
+    }
+    if bytes.len() as u64 > api::MAX_UPLOAD_BYTES {
+        return Err(too_large(&name, api::MAX_UPLOAD_BYTES));
+    }
+    let limit = api::upload_limit(state.api.server_settings(&server, &token).await.as_ref());
+    if bytes.len() as u64 > limit {
+        return Err(too_large(&name, limit));
+    }
+    let current = || state.epoch() == epoch && !entry.cancelled();
+    if !current() {
+        return Err("The upload was cancelled.".into());
+    }
+    let row = state
+        .api
+        .upload_file(&server, &token, &name, &mime, bytes, entry.cancel_flag())
+        .await
+        .map_err(|e| {
+            if current() {
+                e
+            } else {
+                "The upload was cancelled.".into()
+            }
+        })?;
+    let user_file_id = row.id.clone();
+    let result = state
+        .api
+        .wait_for_file(&server, &token, row, &current)
+        .await;
+    // Removed, or from a session that has ended.
+    let stale = !current();
+    if stale || result.is_err() {
+        // A removed or failed file must not stay in the user's files; the
+        // launcher gets no id to delete it with.
+        if let Err(e) = state
+            .api
+            .delete_user_file(&server, &token, &user_file_id)
+            .await
+        {
+            log::warn!("could not delete an unused attachment: {e}");
+        }
+    }
+    if stale {
+        return Err("The upload was cancelled.".into());
+    }
+    result
+}
+
+fn too_large(name: &str, limit: u64) -> String {
+    format!(
+        "{name} is larger than {} MB, the largest file you can attach.",
+        limit / (1024 * 1024)
+    )
+}
+
+/// Stops an upload in flight; `upload_file` deletes the file if the server has it.
+#[tauri::command]
+pub fn cancel_upload(upload_id: u64, state: State<'_, AppState>) {
+    state.cancel_upload(upload_id);
+}
+
+/// Deletes an uploaded file that was not sent (a removed attachment).
+#[tauri::command]
+pub async fn delete_user_file(
+    user_file_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let (server, token) = state.session()?;
+    state
+        .api
+        .delete_user_file(&server, &token, &user_file_id)
+        .await
+}
+
 #[tauri::command]
 pub async fn ask(
     question: String,
     chat_session_id: Option<String>,
+    agent_id: Option<i64>,
+    files: Vec<AttachedFile>,
     on_event: Channel<AskEvent>,
     app: AppHandle,
     state: State<'_, AppState>,
@@ -287,8 +470,12 @@ pub async fn ask(
         &state.api,
         &server,
         &token,
-        &question,
-        chat_session_id.as_deref(),
+        &ask::Question {
+            text: &question,
+            follow_up_of: chat_session_id.as_deref(),
+            agent_id,
+            files: &files,
+        },
         &on_event,
         &current,
     )
@@ -322,13 +509,14 @@ pub async fn ask(
 #[tauri::command]
 pub async fn search(
     query: String,
+    sources: Vec<String>,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<SearchHit>, String> {
     launcher_enabled(&app, &state)?;
     let epoch = state.epoch();
     let (server, token) = state.session()?;
-    let hits = state.api.search(&server, &token, &query).await?;
+    let hits = state.api.search(&server, &token, &query, &sources).await?;
     // Results for a session that has since ended are dropped.
     if state.epoch() != epoch {
         return Err("Signed out.".into());
@@ -416,4 +604,39 @@ pub fn get_offline_status(app: AppHandle) -> Option<crate::offline::OfflineStatu
 #[tauri::command]
 pub fn retry_connection(app: AppHandle) {
     crate::offline::retry_now(&app);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_component, selected_agent};
+    use crate::api::Agent;
+
+    fn agent(id: i64) -> Agent {
+        Agent {
+            id,
+            name: format!("Agent {id}"),
+            description: String::new(),
+        }
+    }
+
+    #[test]
+    fn selects_the_saved_agent_or_a_usable_default() {
+        let agents = [agent(0), agent(7)];
+        assert_eq!(selected_agent(&agents, Some(7), false), Some(7));
+        assert_eq!(selected_agent(&agents, Some(9), false), None);
+        assert_eq!(selected_agent(&agents, None, false), None);
+        let without_default = [agent(7), agent(8)];
+        assert_eq!(selected_agent(&without_default, None, true), Some(7));
+        assert_eq!(selected_agent(&without_default, Some(8), true), Some(8));
+        assert_eq!(selected_agent(&[], None, true), None);
+    }
+
+    #[test]
+    fn decodes_file_name_headers() {
+        assert_eq!(
+            decode_component("Q3%20report%20%26%20notes%3Dfinal%2Bv2%20%C3%BC.pdf").as_deref(),
+            Some("Q3 report & notes=final+v2 ü.pdf")
+        );
+        assert_eq!(decode_component(""), None);
+    }
 }

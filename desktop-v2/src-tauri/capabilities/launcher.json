@@ -14,6 +14,13 @@
     "allow-open-external",
     "allow-hide-launcher",
     "allow-discard-answer",
+    "allow-get-prefs",
+    "allow-list-agents",
+    "allow-set-launcher-agent",
+    "allow-upload-file",
+    "allow-get-upload-limit",
+    "allow-cancel-upload",
+    "allow-delete-user-file",
     "allow-toggle-aonyx"
   ]
 }

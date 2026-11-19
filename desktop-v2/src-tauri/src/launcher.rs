@@ -70,6 +70,8 @@ mod platform {
                     .focused(false)
                     .on_navigation(move |url| local_navigation_allowed(&nav_app, url))
                     .on_new_window(new_window)
+                    // Dropped files reach the page as HTML drops (attachments).
+                    .disable_drag_drop_handler()
             })
             .build()
             .map_err(|e| e.to_string())?;
@@ -237,6 +239,7 @@ mod platform {
             .visible(false)
             .on_navigation(move |url| local_navigation_allowed(&nav_app, url))
             .on_new_window(local_new_window(app))
+            .disable_drag_drop_handler()
             .build()
             .map_err(|e| e.to_string())?;
         let handle = window.clone();

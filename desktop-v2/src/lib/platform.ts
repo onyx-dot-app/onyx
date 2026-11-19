@@ -11,7 +11,9 @@ export function hasPrimaryModifier(event: ModifierState): boolean {
 }
 
 // The label of the primary modifier with `key`: "⌘N" on macOS, "Ctrl+N" elsewhere.
-export function primaryShortcut(key: "N" | "Enter"): string {
-  if (IS_MAC) return key === "Enter" ? "⌘↵" : `⌘${key}`;
-  return `Ctrl+${key}`;
+// "Shift+" in `key` shows as ⇧ on macOS.
+export function primaryShortcut(key: string): string {
+  if (!IS_MAC) return `Ctrl+${key}`;
+  if (key === "Enter") return "⌘↵";
+  return `⌘${key.replace("Shift+", "⇧")}`;
 }

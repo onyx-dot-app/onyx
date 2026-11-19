@@ -60,9 +60,16 @@ and release; v1's release does not build it. Its launcher panel (global
 shortcut) calls the chat endpoints from Rust with the bearer token:
 `POST /chat/create-chat-session`, then `POST /chat/send-chat-message`
 (`origin "unknown"`), and it reads the streamed packets (text, citations,
-`stop`, `tool_approval_request`). Search mode calls
-`POST /search/send-search-message`. A change to those request or packet
-shapes must keep the launcher working. IT can preset the server and lock
+`stop`, `tool_approval_request`). It lists agents with `GET /persona` and
+creates a new chat with the chosen `persona_id`. It attaches files through
+`POST /user/projects/file/upload`, polls `POST /user/projects/file/statuses`
+until they are processed, and sends them as `file_descriptors`. A removed
+attachment is deleted with `DELETE /user/projects/file/{id}`. It reads
+`user_file_max_upload_size_mb` and `disable_default_assistant` from
+`GET /settings`. Search mode
+calls `POST /search/send-search-message`, with `filters.source_type` for a
+source filter. A change to those request or packet shapes must keep the
+launcher working. IT can preset the server and lock
 some settings with managed policy (MDM profile, Windows registry policy, or a
 Linux policy file). The v2 README lists the keys. When the server cannot be
 reached, v2 shows a bundled offline window that polls `GET /api/version` and

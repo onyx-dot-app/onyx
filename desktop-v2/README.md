@@ -40,8 +40,26 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   still streaming. **Ask** streams an answer through `POST /api/chat/send-chat-message`, shows
   what it is doing (searching, reading sources) until text arrives, and shows the answer as
   markdown. A question after an answer is a follow-up in the same chat. **Search** calls
-  `POST /api/search/send-search-message` (EE). If Onyx is hidden (`Cmd+H`), the launcher still
-  opens over the current app and Onyx stays hidden.
+  `POST /api/search/send-search-message` (EE). When results come from more than one source,
+  source chips above them filter the search (`filters.source_type`). If Onyx is hidden
+  (`Cmd+H`), the launcher still opens over the current app and Onyx stays hidden.
+- Launcher agents: type `@` at the start of the input, or press `Cmd+K`, to pick an agent from
+  `GET /api/persona`. As in the web app, built-in agents other than the default one are not
+  offered, and the default one is not offered when "Always Start with an Agent" is on. The
+  agent shows as a chip; `Backspace` in an empty input removes the last file chip, then the
+  agent chip. New chats start with that
+  agent, and the choice is saved per server in `config.json`. A follow-up keeps its chat's
+  agent; a question for another agent starts a new chat. A server without the agent list uses
+  the default agent.
+- Launcher attachments: paste or drop files (up to 10) into the launcher. They upload through
+  `POST /api/user/projects/file/upload`, as in the web chat, two at a time, and the launcher
+  waits until the server has processed them before it sends them with the question. A file
+  larger than the server's limit (`GET /api/settings`) or the app's 250 MB limit is rejected
+  before it is read. Rejection reasons show on the file's chip. Removing a chip, or `Cmd+N`,
+  stops its upload and deletes the file from the user's files (`DELETE
+  /api/user/projects/file/{id}`); files sent with a question stay. A file that could not be
+  deleted comes back as a failed chip, so removing it again tries again. If a question fails
+  before it is sent (for example, the chat could not be created), its files come back.
 - A native notification when an Ask answer finishes while the launcher is hidden
   (`src-tauri/src/notify.rs`). The notification does not show the question or the answer,
   because lock screens and notification history keep it. Only the launcher's current answer
@@ -281,6 +299,9 @@ On macOS. For Windows and Linux, see [Windows and Linux](#windows-and-linux).
 | `Cmd+M`, `Cmd+H`, `Cmd+W`, `Cmd+Q` | Minimize, hide, close window, quit |
 | Launcher: `Enter`, `Tab`, `Cmd+Enter`, `Esc` | Ask or search, switch mode, open in window, close |
 | Launcher: `Cmd+N`, `↑` in an empty input | New chat, recent questions |
+| Launcher: `@` at the start, `Cmd+K` | Pick an agent (`↑`/`↓`, `Enter`) |
+| Launcher: `Cmd+C` (no text selected), `Cmd+Shift+C` | Copy the answer, or the focused source's link |
+| Launcher: `Cmd+1`–`9`, `Cmd+Shift+1`–`9` | Open source `[n]` (or search result n), copy its link |
 
 ## Security boundary
 
@@ -440,7 +461,9 @@ JSON action such as `{"op":"key","key":"n","mods":["cmd"]}` to a temporary file 
 `$ONYX_DESKTOP_QA_DIR` and rename it to `<name>.json` when complete; the answer
 appears, complete, in `<name>.out.json`. Other ops:
 `windows`, `focus`, `bounds`, `eval`, `type`, `click`, `dblclick`, `drag`, `menu`,
-`toggle_launcher`, `shortcut`, `state`. The harness only acts in debug builds started with
+`toggle_launcher`, `shortcut`, `state`, and `pasteboard`: `{"op":"pasteboard","image":"<png>"}`
+(or `"file"` or `"text"`) puts content on the clipboard for a `Cmd+V` test, and
+`{"op":"pasteboard"}` reads its text back after a copy. The harness only acts in debug builds started with
 `ONYX_DESKTOP_QA_DIR` set to a private directory (owned by you, mode 0700; created that way if
 missing), because it can drive signed-in windows. It cannot press global shortcuts or move the window by drag (both
 need the physical mouse or keyboard).
