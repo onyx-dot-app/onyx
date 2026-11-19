@@ -101,7 +101,7 @@ test("shows the overview and turns the integration off", async () => {
   expect(view.getByText("Organization library, available")).toBeInTheDocument();
 
   await u.click(
-    view.getByRole("switch", { name: detailCopy.overview.enabled.title })
+    screen.getByRole("switch", { name: detailCopy.overview.enabled.title })
   );
   await waitFor(() =>
     expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toMatchObject({
@@ -120,8 +120,11 @@ test("deletes the integration after a confirmation", async () => {
   open();
   const view = await inPanel();
   await view.findByText("Manage issues");
+  await u.click(screen.getByRole("button", { name: detailCopy.overview.menu }));
   await u.click(
-    view.getByRole("button", { name: detailCopy.overview.delete.label })
+    await screen.findByRole("menuitem", {
+      name: detailCopy.overview.delete.label,
+    })
   );
   const dialog = await screen.findByRole("dialog");
   await u.click(
@@ -150,17 +153,27 @@ test("disables the controls when the admin cannot manage it", async () => {
     await view.findByText(detailCopy.overview.readOnly)
   ).toBeInTheDocument();
   expect(
-    view.queryByRole("button", { name: detailCopy.overview.delete.label })
+    screen.queryByRole("button", { name: detailCopy.overview.menu })
   ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("switch", { name: detailCopy.overview.enabled.title })
+  ).toHaveAttribute("aria-disabled", "true");
 });
 
 test("hides Delete for an app that Onyx provides", async () => {
   mockFetch({ [URL_DETAIL]: makeDetail({ can_delete: false }) });
+  const u = user();
   open();
   const view = await inPanel();
   await view.findByText("Manage issues");
+  await u.click(screen.getByRole("button", { name: detailCopy.overview.menu }));
   expect(
-    view.queryByRole("button", { name: detailCopy.overview.delete.label })
+    await screen.findByRole("menuitem", {
+      name: detailCopy.overview.details.edit,
+    })
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("menuitem", { name: detailCopy.overview.delete.label })
   ).not.toBeInTheDocument();
 });
 
@@ -754,18 +767,28 @@ test("renames the integration and changes its description", async () => {
   const u = user();
   open();
   const view = await inPanel();
-  const name = await view.findByRole("textbox", {
+  await view.findByText("Manage issues");
+  await u.click(screen.getByRole("button", { name: detailCopy.overview.menu }));
+  await u.click(
+    await screen.findByRole("menuitem", {
+      name: detailCopy.overview.details.edit,
+    })
+  );
+  const dialog = await screen.findByRole("dialog");
+  const name = within(dialog).getByRole("textbox", {
     name: detailCopy.overview.details.name,
   });
   await u.clear(name);
   await u.type(name, "Linear EU");
-  const description = view.getByRole("textbox", {
+  const description = within(dialog).getByRole("textbox", {
     name: detailCopy.overview.details.description,
   });
   await u.clear(description);
   await u.type(description, "EU issues");
   await u.click(
-    view.getByRole("button", { name: detailCopy.overview.details.save })
+    within(dialog).getByRole("button", {
+      name: detailCopy.overview.details.save,
+    })
   );
   await waitFor(() =>
     expect(requestBody(fetchMock, "PATCH", URL_DETAIL)).toMatchObject({

@@ -10610,18 +10610,13 @@
           "needsSetupDefault": "Schließen Sie die Anmeldeeinstellungen auf dem Tab „Konfiguration“ ab.",
           "plugins": {
             "title": "Plugins",
-            "description": "Personen erhalten diese Integration über diese Plugins.",
-            "organization": "{policy, select, REQUIRED {Organisationsbibliothek, erforderlich} DEFAULT {Organisationsbibliothek, standardmäßig aktiv} AVAILABLE {Organisationsbibliothek, verfügbar} NOT_AVAILABLE {Organisationsbibliothek, nicht verfügbar} other {Organisationsbibliothek}}",
-            "personal": "Meine Uploads von {owner}",
-            "manage": "Plugins verwalten"
+            "organization": "{policy, select, REQUIRED {Organisationsbibliothek, erforderlich} DEFAULT {Organisationsbibliothek, standardmäßig aktiv} AVAILABLE {Organisationsbibliothek, verfügbar} NOT_AVAILABLE {Organisationsbibliothek, nicht verfügbar} other {Organisationsbibliothek}}"
           },
           "enabled": {
             "title": "Aktiviert",
             "description": "Wenn dies aus ist, kann kein Agent und kein Nutzer die Integration verwenden."
           },
           "delete": {
-            "title": "Integration löschen",
-            "description": "Entfernt die Integration aus jedem Plugin und löscht ihre Verbindungen und Aktionseinstellungen.",
             "label": "Löschen",
             "confirmTitle": "{name} löschen?",
             "confirmDescription": "Onyx entfernt die Integration aus jedem Plugin und löscht ihre Verbindungen und Aktionseinstellungen. Dies kann nicht rückgängig gemacht werden.",
@@ -10635,8 +10630,14 @@
             "nameRequired": "Geben Sie der Integration einen Namen.",
             "description": "Beschreibung",
             "save": "Speichern",
-            "saved": "Name und Beschreibung gespeichert."
-          }
+            "saved": "Name und Beschreibung gespeichert.",
+            "edit": "Details bearbeiten",
+            "title": "Details bearbeiten",
+            "cancel": "Abbrechen",
+            "saveFailed": "Name und Beschreibung konnten nicht gespeichert werden."
+          },
+          "description": "Beschreibung",
+          "menu": "Weitere Aktionen"
         },
         "configuration": {
           "readOnly": "Sie können diese Integration sehen, aber nicht ändern.",

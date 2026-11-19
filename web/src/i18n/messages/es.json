@@ -10610,18 +10610,13 @@
           "needsSetupDefault": "Completa la configuración de inicio de sesión en la pestaña Configuración.",
           "plugins": {
             "title": "Complementos",
-            "description": "Las personas obtienen esta integración mediante estos complementos.",
-            "organization": "{policy, select, REQUIRED {Biblioteca de la organización, obligatorio} DEFAULT {Biblioteca de la organización, activado de forma predeterminada} AVAILABLE {Biblioteca de la organización, disponible} NOT_AVAILABLE {Biblioteca de la organización, no disponible} other {Biblioteca de la organización}}",
-            "personal": "Mis subidas de {owner}",
-            "manage": "Administrar complementos"
+            "organization": "{policy, select, REQUIRED {Biblioteca de la organización, obligatorio} DEFAULT {Biblioteca de la organización, activado de forma predeterminada} AVAILABLE {Biblioteca de la organización, disponible} NOT_AVAILABLE {Biblioteca de la organización, no disponible} other {Biblioteca de la organización}}"
           },
           "enabled": {
             "title": "Activada",
             "description": "Si está desactivada, ningún agente ni usuario puede usar la integración."
           },
           "delete": {
-            "title": "Eliminar integración",
-            "description": "Quita la integración de cada complemento y elimina sus conexiones y la configuración de sus acciones.",
             "label": "Eliminar",
             "confirmTitle": "¿Eliminar {name}?",
             "confirmDescription": "Onyx quita la integración de cada complemento y elimina sus conexiones y la configuración de sus acciones. Esta acción no se puede deshacer.",
@@ -10635,8 +10630,14 @@
             "nameRequired": "Asigna un nombre a la integración.",
             "description": "Descripción",
             "save": "Guardar",
-            "saved": "Se guardaron el nombre y la descripción."
-          }
+            "saved": "Se guardaron el nombre y la descripción.",
+            "edit": "Editar detalles",
+            "title": "Editar detalles",
+            "cancel": "Cancelar",
+            "saveFailed": "No se pudieron guardar el nombre y la descripción."
+          },
+          "description": "Descripción",
+          "menu": "Más acciones"
         },
         "configuration": {
           "readOnly": "Puedes ver esta integración, pero no puedes cambiarla.",

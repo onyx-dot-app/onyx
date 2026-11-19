@@ -10610,18 +10610,13 @@
           "needsSetupDefault": "Finish the sign-in settings on the Configuration tab.",
           "plugins": {
             "title": "Plugins",
-            "description": "People get this integration through these plugins.",
-            "organization": "{policy, select, REQUIRED {Organization library, required} DEFAULT {Organization library, on by default} AVAILABLE {Organization library, available} NOT_AVAILABLE {Organization library, not available} other {Organization library}}",
-            "personal": "My uploads of {owner}",
-            "manage": "Manage plugins"
+            "organization": "{policy, select, REQUIRED {Organization library, required} DEFAULT {Organization library, on by default} AVAILABLE {Organization library, available} NOT_AVAILABLE {Organization library, not available} other {Organization library}}"
           },
           "enabled": {
             "title": "Enabled",
             "description": "When this is off, no agent or user can use the integration."
           },
           "delete": {
-            "title": "Delete Integration",
-            "description": "Remove the integration from each plugin, and delete its connections and action settings.",
             "label": "Delete",
             "confirmTitle": "Delete {name}?",
             "confirmDescription": "Onyx removes the integration from each plugin and deletes its connections and action settings. You cannot undo this.",
@@ -10635,8 +10630,14 @@
             "nameRequired": "Give the integration a name.",
             "description": "Description",
             "save": "Save",
-            "saved": "Saved the name and description."
-          }
+            "saved": "Saved the name and description.",
+            "edit": "Edit details",
+            "title": "Edit Details",
+            "cancel": "Cancel",
+            "saveFailed": "Could not save the name and description."
+          },
+          "description": "Description",
+          "menu": "More actions"
         },
         "configuration": {
           "readOnly": "You can see this integration. You cannot change it.",

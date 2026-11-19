@@ -10610,18 +10610,13 @@
           "needsSetupDefault": "구성 탭에서 로그인 설정을 완료하세요.",
           "plugins": {
             "title": "플러그인",
-            "description": "사용자는 이 플러그인을 통해 이 연동을 사용합니다.",
-            "organization": "{policy, select, REQUIRED {조직 라이브러리, 필수} DEFAULT {조직 라이브러리, 기본적으로 켜짐} AVAILABLE {조직 라이브러리, 사용 가능} NOT_AVAILABLE {조직 라이브러리, 사용할 수 없음} other {조직 라이브러리}}",
-            "personal": "{owner}의 내 업로드",
-            "manage": "플러그인 관리"
+            "organization": "{policy, select, REQUIRED {조직 라이브러리, 필수} DEFAULT {조직 라이브러리, 기본적으로 켜짐} AVAILABLE {조직 라이브러리, 사용 가능} NOT_AVAILABLE {조직 라이브러리, 사용할 수 없음} other {조직 라이브러리}}"
           },
           "enabled": {
             "title": "사용",
             "description": "이 설정이 꺼져 있으면 어떤 에이전트나 사용자도 이 연동을 사용할 수 없습니다."
           },
           "delete": {
-            "title": "연동 삭제",
-            "description": "각 플러그인에서 연동을 제거하고 연결 및 액션 설정을 삭제합니다.",
             "label": "삭제",
             "confirmTitle": "{name}을(를) 삭제할까요?",
             "confirmDescription": "Onyx가 각 플러그인에서 연동을 제거하고 연결 및 액션 설정을 삭제합니다. 이 작업은 되돌릴 수 없습니다.",
@@ -10635,8 +10630,14 @@
             "nameRequired": "통합의 이름을 입력하세요.",
             "description": "설명",
             "save": "저장",
-            "saved": "이름과 설명을 저장했습니다."
-          }
+            "saved": "이름과 설명을 저장했습니다.",
+            "edit": "세부 정보 편집",
+            "title": "세부 정보 편집",
+            "cancel": "취소",
+            "saveFailed": "이름과 설명을 저장할 수 없습니다."
+          },
+          "description": "설명",
+          "menu": "추가 작업"
         },
         "configuration": {
           "readOnly": "이 연동을 볼 수는 있지만 변경할 수는 없습니다.",

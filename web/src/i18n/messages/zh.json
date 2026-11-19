@@ -10610,18 +10610,13 @@
           "needsSetupDefault": "请在“配置”选项卡中完成登录设置。",
           "plugins": {
             "title": "插件",
-            "description": "用户通过这些插件使用此集成。",
-            "organization": "{policy, select, REQUIRED {组织库，必需} DEFAULT {组织库，默认开启} AVAILABLE {组织库，可用} NOT_AVAILABLE {组织库，不可用} other {组织库}}",
-            "personal": "{owner} 的“我的上传”",
-            "manage": "管理插件"
+            "organization": "{policy, select, REQUIRED {组织库，必需} DEFAULT {组织库，默认开启} AVAILABLE {组织库，可用} NOT_AVAILABLE {组织库，不可用} other {组织库}}"
           },
           "enabled": {
             "title": "已启用",
             "description": "关闭后，任何智能体或用户都无法使用此集成。"
           },
           "delete": {
-            "title": "删除集成",
-            "description": "从每个插件中移除此集成，并删除其连接和操作设置。",
             "label": "删除",
             "confirmTitle": "删除 {name}？",
             "confirmDescription": "Onyx 会从每个插件中移除此集成，并删除其连接和操作设置。此操作无法撤销。",
@@ -10635,8 +10630,14 @@
             "nameRequired": "请为集成命名。",
             "description": "描述",
             "save": "保存",
-            "saved": "已保存名称和描述。"
-          }
+            "saved": "已保存名称和描述。",
+            "edit": "编辑详细信息",
+            "title": "编辑详细信息",
+            "cancel": "取消",
+            "saveFailed": "无法保存名称和描述。"
+          },
+          "description": "描述",
+          "menu": "更多操作"
         },
         "configuration": {
           "readOnly": "您可以查看此集成，但无法更改。",

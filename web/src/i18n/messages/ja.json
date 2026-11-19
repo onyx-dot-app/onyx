@@ -10610,18 +10610,13 @@
           "needsSetupDefault": "「設定」タブでログイン設定を完了してください。",
           "plugins": {
             "title": "プラグイン",
-            "description": "ユーザーはこれらのプラグインを通じてこの連携を利用します。",
-            "organization": "{policy, select, REQUIRED {組織ライブラリ、必須} DEFAULT {組織ライブラリ、デフォルトでオン} AVAILABLE {組織ライブラリ、利用可能} NOT_AVAILABLE {組織ライブラリ、利用不可} other {組織ライブラリ}}",
-            "personal": "{owner} のマイアップロード",
-            "manage": "プラグインを管理"
+            "organization": "{policy, select, REQUIRED {組織ライブラリ、必須} DEFAULT {組織ライブラリ、デフォルトでオン} AVAILABLE {組織ライブラリ、利用可能} NOT_AVAILABLE {組織ライブラリ、利用不可} other {組織ライブラリ}}"
           },
           "enabled": {
             "title": "有効",
             "description": "オフにすると、エージェントもユーザーもこの連携を使用できません。"
           },
           "delete": {
-            "title": "連携を削除",
-            "description": "各プラグインから連携を削除し、その接続とアクション設定を削除します。",
             "label": "削除",
             "confirmTitle": "{name} を削除しますか？",
             "confirmDescription": "Onyx は各プラグインから連携を削除し、その接続とアクション設定を削除します。この操作は元に戻せません。",
@@ -10635,8 +10630,14 @@
             "nameRequired": "連携に名前を付けてください。",
             "description": "説明",
             "save": "保存",
-            "saved": "名前と説明を保存しました。"
-          }
+            "saved": "名前と説明を保存しました。",
+            "edit": "詳細を編集",
+            "title": "詳細を編集",
+            "cancel": "キャンセル",
+            "saveFailed": "名前と説明を保存できませんでした。"
+          },
+          "description": "説明",
+          "menu": "その他の操作"
         },
         "configuration": {
           "readOnly": "この連携は表示できますが、変更はできません。",

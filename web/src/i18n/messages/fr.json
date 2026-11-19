@@ -10610,18 +10610,13 @@
           "needsSetupDefault": "Terminez les paramètres de connexion dans l’onglet Configuration.",
           "plugins": {
             "title": "Extensions",
-            "description": "Les utilisateurs obtiennent cette intégration grâce à ces extensions.",
-            "organization": "{policy, select, REQUIRED {Bibliothèque de l’organisation, obligatoire} DEFAULT {Bibliothèque de l’organisation, activée par défaut} AVAILABLE {Bibliothèque de l’organisation, disponible} NOT_AVAILABLE {Bibliothèque de l’organisation, non disponible} other {Bibliothèque de l’organisation}}",
-            "personal": "Mes importations de {owner}",
-            "manage": "Gérer les extensions"
+            "organization": "{policy, select, REQUIRED {Bibliothèque de l’organisation, obligatoire} DEFAULT {Bibliothèque de l’organisation, activée par défaut} AVAILABLE {Bibliothèque de l’organisation, disponible} NOT_AVAILABLE {Bibliothèque de l’organisation, non disponible} other {Bibliothèque de l’organisation}}"
           },
           "enabled": {
             "title": "Activée",
             "description": "Si ce paramètre est désactivé, aucun agent ni utilisateur ne peut utiliser l’intégration."
           },
           "delete": {
-            "title": "Supprimer l’intégration",
-            "description": "Retire l’intégration de chaque extension et supprime ses connexions et les paramètres de ses actions.",
             "label": "Supprimer",
             "confirmTitle": "Supprimer {name} ?",
             "confirmDescription": "Onyx retire l’intégration de chaque extension et supprime ses connexions et les paramètres de ses actions. Cette opération est irréversible.",
@@ -10635,8 +10630,14 @@
             "nameRequired": "Donnez un nom à l'intégration.",
             "description": "Description",
             "save": "Enregistrer",
-            "saved": "Nom et description enregistrés."
-          }
+            "saved": "Nom et description enregistrés.",
+            "edit": "Modifier les détails",
+            "title": "Modifier les détails",
+            "cancel": "Annuler",
+            "saveFailed": "Impossible d’enregistrer le nom et la description."
+          },
+          "description": "Description",
+          "menu": "Plus d’actions"
         },
         "configuration": {
           "readOnly": "Vous pouvez voir cette intégration, mais pas la modifier.",

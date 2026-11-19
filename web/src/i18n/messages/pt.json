@@ -10610,18 +10610,13 @@
           "needsSetupDefault": "Conclua as configurações de login na aba Configuração.",
           "plugins": {
             "title": "Plugins",
-            "description": "As pessoas recebem esta integração por meio destes plugins.",
-            "organization": "{policy, select, REQUIRED {Biblioteca da organização, obrigatório} DEFAULT {Biblioteca da organização, ativado por padrão} AVAILABLE {Biblioteca da organização, disponível} NOT_AVAILABLE {Biblioteca da organização, não disponível} other {Biblioteca da organização}}",
-            "personal": "Meus uploads de {owner}",
-            "manage": "Gerenciar plugins"
+            "organization": "{policy, select, REQUIRED {Biblioteca da organização, obrigatório} DEFAULT {Biblioteca da organização, ativado por padrão} AVAILABLE {Biblioteca da organização, disponível} NOT_AVAILABLE {Biblioteca da organização, não disponível} other {Biblioteca da organização}}"
           },
           "enabled": {
             "title": "Ativada",
             "description": "Quando desativada, nenhum agente ou usuário pode usar a integração."
           },
           "delete": {
-            "title": "Excluir integração",
-            "description": "Remove a integração de cada plugin e exclui suas conexões e as configurações das ações.",
             "label": "Excluir",
             "confirmTitle": "Excluir {name}?",
             "confirmDescription": "O Onyx remove a integração de cada plugin e exclui suas conexões e as configurações das ações. Não é possível desfazer.",
@@ -10635,8 +10630,14 @@
             "nameRequired": "Dê um nome à integração.",
             "description": "Descrição",
             "save": "Salvar",
-            "saved": "Nome e descrição salvos."
-          }
+            "saved": "Nome e descrição salvos.",
+            "edit": "Editar detalhes",
+            "title": "Editar detalhes",
+            "cancel": "Cancelar",
+            "saveFailed": "Não foi possível salvar o nome e a descrição."
+          },
+          "description": "Descrição",
+          "menu": "Mais ações"
         },
         "configuration": {
           "readOnly": "Você pode ver esta integração, mas não pode alterá-la.",
