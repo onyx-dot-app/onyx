@@ -162,7 +162,12 @@ const ChatScrollContainer = React.memo(
         autoScrollRef.current = autoScroll;
         pauseFollowingRef.current = pauseFollowing;
         sessionIdRef.current = sessionId;
-      }, [onScrollButtonVisibilityChange, autoScroll, sessionId]);
+      }, [
+        onScrollButtonVisibilityChange,
+        autoScroll,
+        sessionId,
+        pauseFollowing,
+      ]);
 
       // Remember where this chat is scrolled, once per frame. Only after the
       // chat was scrolled into place: before that, the position is not the
@@ -518,13 +523,16 @@ const ChatScrollContainer = React.memo(
         const isLoadingExistingContent =
           isNewSession || scrolledForSessionRef.current === null;
 
-        // A new anchor while the user reads elsewhere, or with auto-scroll off
-        // (a refresh brought in a turn from another tab): keep their
+        // A new anchor while the user reads elsewhere, with auto-scroll off,
+        // or during a pause (a refresh brought in a turn from another tab;
+        // the typewriter's drain): keep their
         // position. A send anchors through DynamicBottomSpacer, and a
         // following view still moves.
         if (
           !isLoadingExistingContent &&
-          (!isAtBottomRef.current || !autoScrollRef.current)
+          (!isAtBottomRef.current ||
+            !autoScrollRef.current ||
+            pauseFollowingRef.current)
         ) {
           prevAnchorSelectorRef.current = anchorSelector ?? null;
           return;
