@@ -67,12 +67,13 @@ def get_suggestions(
     record = load_user_record(user.id) if poll else record_seen(user.id, now)
     pool = load_pool() or QuestionPool()
     external_group_ids = get_user_external_group_ids(db_session, user)
+    censored_sources = get_censoring_enabled_sources()
     visible = get_visible_document_ids(
         db_session,
         user,
         external_group_ids,
         list({q.document_id for q in [*pool.questions, *record.questions]}),
-        get_censoring_enabled_sources(),
+        censored_sources,
     )
     shared = usable_questions(pool.questions, record, visible, now)
     private = usable_questions(record.questions, record, visible, now)
@@ -93,7 +94,9 @@ def get_suggestions(
         seconds=SQ_PREPARING_S
     ):
         state = SuggestionsState.PREPARING
-    elif not shown and not has_visible_documents(db_session, user, external_group_ids):
+    elif not shown and not has_visible_documents(
+        db_session, user, external_group_ids, censored_sources
+    ):
         state = SuggestionsState.NO_DOCUMENTS
     else:
         state = SuggestionsState.READY

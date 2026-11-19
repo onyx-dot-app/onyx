@@ -262,14 +262,22 @@ def _has_enough_shared(
     if user is None or not user.is_active:
         return True
     unused = [q for q in pool.questions if q.id not in record.used]
-    visible = get_visible_document_ids(
+    visible = _visible_document_ids(db_session, user, unused)
+    return count_usable_questions(unused, visible, now) > SQ_SHARED_REFRESH_AT
+
+
+def _visible_document_ids(
+    db_session: Session, user: User, questions: list[PoolQuestion]
+) -> set[str]:
+    """The documents of these questions the person may open now, by the rules
+    the chat page uses, so a run counts questions the way the page does."""
+    return get_visible_document_ids(
         db_session,
         user,
         get_user_external_group_ids(db_session, user),
-        [q.document_id for q in unused],
+        [q.document_id for q in questions],
         get_censoring_enabled_sources(),
     )
-    return count_usable_questions(unused, visible, now) > SQ_SHARED_REFRESH_AT
 
 
 def _run_topup(tenant_id: str, user_id: UUID, attempt: dict[str, bool]) -> None:
@@ -284,8 +292,8 @@ def _run_topup(tenant_id: str, user_id: UUID, attempt: dict[str, bool]) -> None:
         if user is None or not user.is_active:
             return
         unused = [q for q in record.questions if q.id not in record.used]
-        live = get_live_document_ids(db_session, [q.document_id for q in unused])
-        if count_usable_questions(unused, live, started) > SQ_PRIVATE_REFILL_AT:
+        visible = _visible_document_ids(db_session, user, unused)
+        if count_usable_questions(unused, visible, started) > SQ_PRIVATE_REFILL_AT:
             task_logger.info("Suggested questions: %s has enough questions", user_id)
             return
         # The person's own documents only: pool runs fill the shared shelf.

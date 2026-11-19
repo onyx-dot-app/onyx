@@ -195,16 +195,23 @@ def get_visible_document_ids(
 
 
 def has_visible_documents(
-    db_session: Session, user: User, external_group_ids: list[str]
+    db_session: Session,
+    user: User,
+    external_group_ids: list[str],
+    censored_sources: set[DocumentSource],
 ) -> bool:
-    """Whether this person can open any indexed document or finished upload."""
-    connector_stmt = apply_document_access_filter(
-        db_session,
-        _indexed_documents(set()),
-        user_email=user.email,
-        external_group_ids=external_group_ids,
-        user_id=user.id,
-        prior_emails=user.prior_emails,
+    """Whether this person can open any indexed document or finished upload,
+    by the same rules as get_visible_document_ids."""
+    connector_stmt = _skip_read_time_access(
+        apply_document_access_filter(
+            db_session,
+            _indexed_documents(set()),
+            user_email=user.email,
+            external_group_ids=external_group_ids,
+            user_id=user.id,
+            prior_emails=user.prior_emails,
+        ),
+        censored_sources,
     ).limit(1)
     if db_session.execute(connector_stmt).first() is not None:
         return True
