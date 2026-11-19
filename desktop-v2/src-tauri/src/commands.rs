@@ -163,14 +163,23 @@ pub fn get_prefs(app: AppHandle, state: State<'_, AppState>) -> Prefs {
         hotkey,
         launch_at_login: login_item::is_enabled(&app).unwrap_or(false),
         server_url,
-        notify_answers: state.config.get().notify_answers(),
+        notify_answers: crate::notify::enabled(&state),
         signed_in,
     }
 }
 
 #[tauri::command]
 pub fn set_notify_answers(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
+    if state.policy().disable_notifications {
+        return Err(MANAGED.into());
+    }
     state.config.update(|c| c.notify_answers = Some(enabled))
+}
+
+/// The launcher started a new chat; its old answer must not notify.
+#[tauri::command]
+pub fn discard_answer(app: AppHandle) {
+    crate::aonyx::answer_discarded(&app);
 }
 
 #[tauri::command]
@@ -285,15 +294,12 @@ pub async fn ask(
     )
     .await;
     crate::aonyx::answer_finished(&app, answer, result.is_ok());
-    // An answer cut short by a sign-out does not notify.
-    if current() {
-        let outcome = match &result {
-            Ok(a) if a.awaiting_approval => crate::notify::Outcome::NeedsApproval,
-            Ok(_) => crate::notify::Outcome::Answered,
-            Err(_) => crate::notify::Outcome::Failed,
-        };
-        crate::notify::answer_finished(&app, answer, &question, outcome);
-    }
+    let outcome = match &result {
+        Ok(a) if a.awaiting_approval => crate::notify::Outcome::NeedsApproval,
+        Ok(_) => crate::notify::Outcome::Answered,
+        Err(_) => crate::notify::Outcome::Failed,
+    };
+    crate::notify::answer_finished(&app, crate::notify::Answer { id: answer, epoch }, outcome);
     let event = match &result {
         Ok(_) => AskEvent::Done,
         Err(message) => AskEvent::Error {

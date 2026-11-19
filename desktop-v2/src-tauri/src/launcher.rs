@@ -329,18 +329,26 @@ pub fn toggle(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle) + Send +
     });
 }
 
-/// Shows the launcher with what it last showed; does nothing if it is showing.
-pub fn show(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle) + Send + 'static) {
+/// Shows the launcher with what it last showed if `wanted` still holds on the
+/// main thread. Does nothing if the launcher is showing.
+pub fn show(
+    app: &AppHandle,
+    wanted: impl FnOnce(&AppHandle) -> bool + Send + 'static,
+    when_signed_out: impl FnOnce(&AppHandle) + Send + 'static,
+) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        if !platform::is_visible(&handle) {
+        if !platform::is_visible(&handle) && wanted(&handle) {
             show_now(&handle, when_signed_out);
         }
     });
 }
 
 fn show_now(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle)) {
-    if app.state::<crate::state::AppState>().session().is_err() {
+    let state = app.state::<crate::state::AppState>();
+    if state.policy().disable_launcher {
+        log::info!("not showing the launcher: managed policy turns it off");
+    } else if state.session().is_err() {
         when_signed_out(app);
     } else if let Err(e) = platform::ensure(app, WebviewUrl::App("launcher.html".into()))
         .and_then(|()| platform::show(app))

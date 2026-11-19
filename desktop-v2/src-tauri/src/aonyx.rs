@@ -51,7 +51,7 @@ pub fn set_mood(app: &AppHandle, mood: Mood) {
     }
 }
 
-/// The latest launcher answer; only it sets the pet's mood.
+/// The launcher's current answer; only it sets the pet's mood or notifies.
 static ANSWER: AtomicU64 = AtomicU64::new(0);
 
 /// An answer started: the pet thinks. Returns its id for `answer_finished`.
@@ -61,9 +61,15 @@ pub fn answer_started(app: &AppHandle) -> u64 {
     id
 }
 
-/// Whether no newer answer has replaced answer `id`.
+/// Whether no newer answer or new chat has replaced answer `id`.
 pub fn is_latest_answer(id: u64) -> bool {
     ANSWER.load(Ordering::SeqCst) == id
+}
+
+/// The launcher started a new chat, so its answer, finished or not, is gone.
+pub fn answer_discarded(app: &AppHandle) {
+    ANSWER.fetch_add(1, Ordering::SeqCst);
+    set_mood(app, Mood::Idle);
 }
 
 /// An answer ended. An older answer that a newer one replaced changes nothing.

@@ -313,10 +313,11 @@ function Preferences() {
             <InputSwitch
               id="notify-answers"
               checked={prefs?.notifyAnswers ?? true}
-              disabled={!prefs}
+              disabled={!prefs || prefs.notificationsDisabled}
               onCheckedChange={(enabled) => void onNotifyAnswers(enabled)}
             />
           </Section>
+          {prefs?.notificationsDisabled ? <ManagedNote /> : null}
         </PrefSection>
         <PrefSection title="Account">
           <Text font="main-ui-body" color="text-04">

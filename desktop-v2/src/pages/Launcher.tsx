@@ -13,6 +13,7 @@ import { mount } from "@/lib/mount";
 import { hasPrimaryModifier, primaryShortcut } from "@/lib/platform";
 import {
   ask,
+  discardAnswer,
   errorMessage,
   hideLauncher,
   openChatInMain,
@@ -105,6 +106,7 @@ function Launcher() {
   }
 
   function newChat() {
+    void discardAnswer();
     askId.current += 1;
     searchId.current += 1;
     setTurns([]);

@@ -43,7 +43,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_notification::init())
+        .plugin(notify::plugin())
         // Remember the main window's size and position; small windows stay centred.
         .plugin(
             tauri_plugin_window_state::Builder::default()
@@ -112,6 +112,7 @@ fn main() {
             commands::set_hotkey,
             commands::set_launch_at_login,
             commands::set_notify_answers,
+            commands::discard_answer,
             commands::change_server,
             commands::sign_out,
             commands::ask,

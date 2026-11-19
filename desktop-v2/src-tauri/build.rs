@@ -10,6 +10,7 @@ const COMMANDS: &[&str] = &[
     "set_hotkey",
     "set_launch_at_login",
     "set_notify_answers",
+    "discard_answer",
     "change_server",
     "sign_out",
     "ask",

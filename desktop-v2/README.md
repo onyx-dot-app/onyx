@@ -43,8 +43,18 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   `POST /api/search/send-search-message` (EE). If Onyx is hidden (`Cmd+H`), the launcher still
   opens over the current app and Onyx stays hidden.
 - A native notification when an Ask answer finishes while the launcher is hidden
-  (`src-tauri/src/notify.rs`). Only the latest answer notifies. A click on it shows the
-  launcher with the answer. Turn it off in Preferences.
+  (`src-tauri/src/notify.rs`). The notification does not show the question or the answer,
+  because lock screens and notification history keep it. Only the launcher's current answer
+  notifies: a new question or a new chat (`Cmd+N`) stops the old answer's notification. A click
+  on the notification shows the launcher with the answer. A click does nothing if the launcher
+  no longer holds that answer, if you signed out, or if `DisableLauncher` is set. Turn
+  notifications off in Preferences, or with the managed `DisableNotifications` bool.
+  Click support differs by OS:
+  - macOS: a click works while the notification is on screen and from Notification Center.
+    In `bun run tauri dev`, macOS shows the notification as Terminal's.
+  - Windows: a click works only while the toast is on screen, not from the Action Center.
+  - Linux: a click works only if the notification server supports the `default` action
+    (GNOME and KDE do). Otherwise the notification shows, and a click does nothing.
 - SSO in the system browser, where you are often signed in already. The browser runs the
   server's normal OAuth flow with Onyx's mobile SSO parameters and PKCE, and the server ends it
   with `onyx://auth/callback?code=..`. The app swaps the one-time code for a session token
@@ -279,6 +289,9 @@ On macOS. For Windows and Linux, see [Windows and Linux](#windows-and-linux).
   manifest). Each window has its own capability in `src-tauri/capabilities/` (file name =
   window label) that grants only the commands its page uses. The remote main window gets no
   app command.
+- The notification plugin is registered without its JavaScript (`notify::plugin`), so no
+  webview, the remote main window included, gets the plugin's `window.Notification` script.
+  Only Rust shows notifications, and no window has a notification permission.
 - The main window gets just two built-in window permissions, on the configured server's origin
   only: start dragging and title-bar zoom (for its drag regions).
 - Local windows have a strict CSP (`script-src 'self'`, `connect-src` limited to IPC). The

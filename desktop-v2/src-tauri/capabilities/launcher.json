@@ -11,6 +11,7 @@
     "allow-open-chat-in-main",
     "allow-open-external",
     "allow-hide-launcher",
+    "allow-discard-answer",
     "allow-toggle-aonyx"
   ]
 }

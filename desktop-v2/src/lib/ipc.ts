@@ -120,6 +120,9 @@ export const openExternal = (url: string): Promise<void> =>
 
 export const hideLauncher = (): Promise<void> => invoke("hide_launcher");
 
+// Tells Rust the launcher dropped its answer, so that answer does not notify.
+export const discardAnswer = (): Promise<void> => invoke("discard_answer");
+
 // Why the server could not be reached (reachability.rs).
 export type Unreachable =
   | { kind: "noNetwork" }
