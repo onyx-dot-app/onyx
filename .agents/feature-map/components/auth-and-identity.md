@@ -100,8 +100,9 @@ only, a token whose value is missing or unreadable gets
 `SESSION_UNRECOGNIZED`, and the response also expires the cookie, so the
 browser stops sending it (`build_session_rejection_error`). When anonymous
 access is on, the anonymous fallback expires that cookie the same way
-(`clear_unrecognized_session_cookie`). The web client (`web/src/lib/auth/hooks.ts:useSessionWatcher`) turns that 403 into the
-session-ended message.
+(`clear_unrecognized_session_cookie`). The web client
+(`web/src/lib/auth/hooks.ts:useSessionWatcher`) turns the `SESSION_*` 403
+into the session-ended message.
 
 **SSO.** `SSOProvider` rows hold the OIDC, Google and SAML settings. Login
 routes load the row on each request (`server/oidc_multi.py`,

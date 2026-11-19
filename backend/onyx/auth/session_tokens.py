@@ -21,7 +21,6 @@ another tab just set; the window is one round trip and the user logs in again.
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from functools import cache
 
 from fastapi import Response
 from fastapi_users.authentication import CookieTransport
@@ -48,26 +47,6 @@ cookie_transport = CookieTransport(
     cookie_secure=WEB_DOMAIN.startswith("https"),
     cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
 )
-
-
-@cache
-def _clear_session_cookie_header() -> str:
-    """
-    The logout Set-Cookie value. A missing (NOT_FOUND) or unreadable (MALFORMED)
-    token can never be accepted, so its rejection also expires the cookie and
-    the browser stops presenting it. Expired and terminated cookies stay for the
-    grace window so other tabs can still name the reason.
-    """
-    response = Response()
-    response.delete_cookie(
-        cookie_transport.cookie_name,
-        path=cookie_transport.cookie_path,
-        domain=cookie_transport.cookie_domain,
-        secure=cookie_transport.cookie_secure,
-        httponly=cookie_transport.cookie_httponly,
-        samesite=cookie_transport.cookie_samesite,
-    )
-    return response.headers["set-cookie"]
 
 
 class SessionTokenValue(BaseModel):
@@ -228,6 +207,26 @@ def get_session_rejection() -> SessionRejection | None:
     return _SESSION_REJECTION.get()
 
 
+def _session_cookie_clear_header() -> str | None:
+    """
+    The `/auth/logout` Set-Cookie value when this request's recorded rejection
+    is unrecognized, else None. A missing (NOT_FOUND) or unreadable (MALFORMED)
+    token can never be accepted, so the browser should stop presenting it.
+    Expired and terminated cookies stay for the grace window so other tabs can
+    still name the reason.
+    """
+    rejection = _SESSION_REJECTION.get()
+    if (
+        rejection is None
+        or _REASON_TO_ERROR_CODE[rejection.reason] != OnyxErrorCode.SESSION_UNRECOGNIZED
+    ):
+        return None
+    # The synchronous body of the transport's async get_logout_response, so
+    # sync endpoints can use it.
+    logout_response = cookie_transport._set_logout_cookie(Response())
+    return logout_response.headers["set-cookie"]
+
+
 def build_session_rejection_error() -> OnyxError | None:
     """
     Turns the request's recorded rejection (if any) into a reasoned
@@ -258,13 +257,13 @@ def build_session_rejection_error() -> OnyxError | None:
             "the grace window, or Redis dropped the key (restart/eviction/flush)."
         )
 
-    error_code = _REASON_TO_ERROR_CODE[rejection.reason]
+    clear_cookie_header = _session_cookie_clear_header()
     return OnyxError(
-        error_code,
+        _REASON_TO_ERROR_CODE[rejection.reason],
         _REASON_TO_DETAIL[rejection.reason],
         headers=(
-            {"set-cookie": _clear_session_cookie_header()}
-            if error_code == OnyxErrorCode.SESSION_UNRECOGNIZED
+            {"set-cookie": clear_cookie_header}
+            if clear_cookie_header is not None
             else None
         ),
     )
@@ -275,10 +274,6 @@ def clear_unrecognized_session_cookie(response: Response) -> None:
     Expires the session cookie when this request presented an unrecognized
     token, for paths that fall back to the anonymous user instead of raising.
     """
-    rejection = _SESSION_REJECTION.get()
-    if (
-        rejection is not None
-        and _REASON_TO_ERROR_CODE[rejection.reason]
-        == OnyxErrorCode.SESSION_UNRECOGNIZED
-    ):
-        response.headers.append("set-cookie", _clear_session_cookie_header())
+    clear_cookie_header = _session_cookie_clear_header()
+    if clear_cookie_header is not None:
+        response.headers.append("set-cookie", clear_cookie_header)

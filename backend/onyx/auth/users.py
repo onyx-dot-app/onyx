@@ -2636,11 +2636,16 @@ async def current_chat_accessible_user(
     response: Response,
     user: User | None = Depends(optional_user),
 ) -> AsyncGenerator[User, None]:
+    """
+    Endpoints that return their own ``Response`` (streaming) do not carry the
+    unrecognized-cookie clear; ``/me`` on the next page load clears it.
+    """
     tenant_id = get_current_tenant_id()
-    allow_anonymous_access = anonymous_user_enabled(tenant_id=tenant_id)
-    if user is None and allow_anonymous_access:
+    if user is None:
         clear_unrecognized_session_cookie(response)
-    user = await double_check_user(user, allow_anonymous_access=allow_anonymous_access)
+    user = await double_check_user(
+        user, allow_anonymous_access=anonymous_user_enabled(tenant_id=tenant_id)
+    )
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
     try:
         yield user
