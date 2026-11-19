@@ -7,8 +7,6 @@ import pytest
 
 import onyx.connectors.onedrive.connector as onedrive_connector
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.models import Document, HierarchyNode
 from onyx.connectors.onedrive.connector import (
@@ -169,9 +167,7 @@ def _assert_group_access(
 ) -> None:
     access = document.external_access
     assert access is not None
-    assert access.external_user_group_ids == {
-        build_ext_group_name_for_onyx(group_id, DocumentSource.ONEDRIVE)
-    }
+    assert access.external_user_group_ids == {group_id}
     assert access.is_public is False
     owner_email = owner_email.lower()
     assert owner_email in access.external_user_emails

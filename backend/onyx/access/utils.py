@@ -38,6 +38,7 @@ def build_ext_group_name_for_onyx(ext_group_name: str, source: DocumentSource) -
 # once every source has joined.
 SOURCES_YIELDING_BARE_GROUP_IDS: frozenset[DocumentSource] = frozenset(
     {
+        DocumentSource.AZURE_DATALAKE,
         DocumentSource.BOX,
         DocumentSource.CANVAS,
         DocumentSource.CONFLUENCE,
@@ -46,6 +47,7 @@ SOURCES_YIELDING_BARE_GROUP_IDS: frozenset[DocumentSource] = frozenset(
         DocumentSource.GOOGLE_DRIVE,
         DocumentSource.JIRA,
         DocumentSource.LINEAR,
+        DocumentSource.ONEDRIVE,
         DocumentSource.SHAREPOINT,
         DocumentSource.TEAMS,
         DocumentSource.YOUTRACK,
