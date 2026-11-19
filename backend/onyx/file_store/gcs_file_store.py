@@ -39,6 +39,7 @@ from onyx.file_store.file_store import (
     PresignableFileStore,
     PresignedUrlsNotSupportedError,
     content_byte_size,
+    object_has_file_record,
     presign_expiry,
 )
 from onyx.file_store.models import (
@@ -250,23 +251,8 @@ class GCSBackedFileStore(PresignableFileStore):
                 )
                 db_session.commit()
         except Exception:
-            # Clean up the uploaded blob unless a committed record still
-            # references this exact object — on a failed overwrite the record
-            # survives the rollback, so deleting the blob it points at would
-            # turn the failed save into data loss. A record pointing at a
-            # different bucket/key does not reference this upload, so the
-            # blob is safe (and necessary) to remove.
             try:
-                with get_session_with_current_tenant() as cleanup_session:
-                    existing_record = get_filerecord_by_file_id_optional(
-                        file_id=file_id, db_session=cleanup_session
-                    )
-                record_references_upload = (
-                    existing_record is not None
-                    and existing_record.bucket_name == self._bucket_name
-                    and existing_record.object_key == object_key
-                )
-                if not record_references_upload:
+                if not object_has_file_record(self._bucket_name, object_key):
                     blob.delete()
             except Exception:
                 logger.warning(

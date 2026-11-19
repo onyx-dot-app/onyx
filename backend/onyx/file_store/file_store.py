@@ -50,6 +50,7 @@ from onyx.db.file_record import (
     get_filerecord_by_file_id_for_update,
     get_filerecord_by_file_id_optional,
     get_filerecord_by_prefix,
+    get_object_keys_with_records,
     rename_filerecord,
     upsert_filerecord,
 )
@@ -91,6 +92,15 @@ def content_byte_size(file_content: object) -> int | None:
     if isinstance(file_content, str):
         return len(file_content.encode("utf-8"))
     return None
+
+
+def object_has_file_record(bucket_name: str, object_key: str) -> bool:
+    """Whether a committed file record points at the object. A save whose
+    record write fails deletes its upload only when none does, because an
+    earlier save of the same file ID, a renamed record or another ID that
+    sanitizes to the same key can still read that object."""
+    with get_session_with_current_tenant() as db_session:
+        return bool(get_object_keys_with_records(bucket_name, [object_key], db_session))
 
 
 _T = TypeVar("_T")
@@ -925,20 +935,35 @@ class S3BackedFileStore(PresignableFileStore):
         )
         self._put_legacy_object(bucket_name, s3_key, file_content, file_type, kwargs)
 
-        with get_session_with_current_tenant_if_none(db_session) as db_session:
-            # Save metadata to database
-            upsert_filerecord(
-                file_id=file_id,
-                display_name=display_name or file_id,
-                file_origin=file_origin,
-                file_type=file_type,
-                bucket_name=bucket_name,
-                object_key=s3_key,
-                db_session=db_session,
-                file_metadata=file_metadata,
-                file_size=content_byte_size(file_content),
-            )
-            db_session.commit()
+        try:
+            with get_session_with_current_tenant_if_none(db_session) as db_session:
+                upsert_filerecord(
+                    file_id=file_id,
+                    display_name=display_name or file_id,
+                    file_origin=file_origin,
+                    file_type=file_type,
+                    bucket_name=bucket_name,
+                    object_key=s3_key,
+                    db_session=db_session,
+                    file_metadata=file_metadata,
+                    file_size=content_byte_size(file_content),
+                )
+                db_session.commit()
+        except Exception:
+            try:
+                if not object_has_file_record(bucket_name, s3_key):
+                    self._delete_legacy_object(bucket_name, s3_key)
+                    s3_client.delete_object(Bucket=bucket_name, Key=s3_key)
+            except Exception:
+                logger.warning(
+                    "Failed to clean up orphaned S3 object %s/%s "
+                    "after DB persistence failure for file %s",
+                    bucket_name,
+                    s3_key,
+                    file_id,
+                    exc_info=True,
+                )
+            raise
 
         return file_id
 
