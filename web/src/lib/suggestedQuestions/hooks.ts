@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef, useState } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useSettings } from "@/lib/settings/hooks";
@@ -12,44 +11,74 @@ const POLL_INTERVAL_MS = 30_000;
 /** Stop checking after this long; the server's SQ_PREPARING_S matches it. */
 const POLL_FOR_MS = 120_000;
 
+// Module state lives as long as the page, so every caller shares it: the
+// questions stay put while the page is open and change on reload.
+const pageSeed = Math.floor(Math.random() * 2 ** 31);
+// When each agent's chat open reached the server, which also starts its
+// polling window.
+const openedAt = new Map<number, number>();
+
+async function fetchSuggestions(
+  url: string,
+  agentId: number
+): Promise<PersonSuggestions> {
+  const opened = openedAt.has(agentId);
+  const suggestions = await errorHandlingFetcher<PersonSuggestions>(
+    `${url}&poll=${opened}`
+  );
+  // Only a request that succeeded counts as the chat open, so a failed one is
+  // retried as an open, which may still ask for a run.
+  if (!opened) {
+    openedAt.set(agentId, Date.now());
+  }
+  return suggestions;
+}
+
 /**
- * The person's suggested questions, on the Playground only. The first fetch
- * for an agent counts as a chat open: the server records the visit and may
- * ask for a run. Every later fetch (the checks while "preparing") sends
- * `poll=true` and only reads. The seed is made once per page load, so the
- * questions stay put while the page is open and change on reload.
+ * How long to wait before checking again; 0 stops checking. Checks run every
+ * POLL_INTERVAL_MS while the server is preparing questions, for POLL_FOR_MS
+ * after the chat open.
+ */
+export function nextPollDelay(
+  latest: PersonSuggestions | undefined,
+  openedAtMs: number | undefined,
+  nowMs: number
+): number {
+  const stillPreparing =
+    latest?.state === "preparing" &&
+    openedAtMs !== undefined &&
+    nowMs - openedAtMs < POLL_FOR_MS;
+  return stillPreparing ? POLL_INTERVAL_MS : 0;
+}
+
+/**
+ * The person's suggested questions, on the Playground only. The first
+ * successful fetch for an agent counts as a chat open: the server records
+ * the visit and may ask for a run. Every later fetch (the checks while
+ * "preparing") sends `poll=true` and only reads. Callers for the same agent
+ * share one request.
  */
 export function useSuggestedQuestions(agentId: number | null) {
   const { is_playground } = useSettings();
-  const [seed] = useState(() => Math.floor(Math.random() * 2 ** 31));
-  // When each agent's first fetch ran, which also starts its polling window.
-  const openedAt = useRef<Map<number, number>>(new Map());
 
-  const key =
+  const key: [string, number] | null =
     is_playground && agentId !== null
-      ? SWR_KEYS.suggestedQuestions(agentId, seed)
+      ? [SWR_KEYS.suggestedQuestions(agentId, pageSeed), agentId]
       : null;
 
-  function fetchSuggestions(url: string): Promise<PersonSuggestions> {
-    const opened = agentId !== null && openedAt.current.has(agentId);
-    if (agentId !== null && !opened) {
-      openedAt.current.set(agentId, Date.now());
+  const { data, isLoading, mutate } = useSWR<PersonSuggestions>(
+    key,
+    ([url, id]: [string, number]) => fetchSuggestions(url, id),
+    {
+      revalidateOnFocus: false,
+      refreshInterval: (latest) =>
+        nextPollDelay(
+          latest,
+          agentId === null ? undefined : openedAt.get(agentId),
+          Date.now()
+        ),
     }
-    return errorHandlingFetcher<PersonSuggestions>(`${url}&poll=${opened}`);
-  }
+  );
 
-  const { data, mutate } = useSWR<PersonSuggestions>(key, fetchSuggestions, {
-    revalidateOnFocus: false,
-    refreshInterval: (latest) => {
-      const opened =
-        agentId === null ? undefined : openedAt.current.get(agentId);
-      const stillPreparing =
-        latest?.state === "preparing" &&
-        opened !== undefined &&
-        Date.now() - opened < POLL_FOR_MS;
-      return stillPreparing ? POLL_INTERVAL_MS : 0;
-    },
-  });
-
-  return { suggestions: data, mutate };
+  return { suggestions: data, isLoading, mutate };
 }
