@@ -60,6 +60,7 @@ from onyx.server.query_and_chat.streaming_models import (
     PublishFilesStart,
     PythonToolStart,
     ToolCallArgumentDelta,
+    WriteStdinStart,
 )
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 from onyx.tools.tool_implementations.sandbox.models import FileToolName
@@ -641,6 +642,11 @@ def test_a_file_path_shows_once_whole(
             ApplyPatchStart(patch="", tool_name="edit"),
         ),
         ("exec_command", {"cmd": ["ls"]}, ExecCommandStart(cmd="")),
+        (
+            "write_stdin",
+            {"session_id": ["x"]},
+            WriteStdinStart(session_id="", chars=""),
+        ),
         ("publish_files", {"files": "a.md"}, PublishFilesStart()),
     ],
 )

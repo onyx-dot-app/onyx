@@ -61,7 +61,8 @@ const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069\u200E\u200F\u061C]/g;
  * untrusted text in an element with a `dir` attribute, which isolates it so it
  * cannot reorder the text around it: `dir="ltr"` for code and paths,
  * `dir="auto"` for labels. Patches and errors are isolated but keep their
- * exact characters.
+ * exact characters. A label that is the only text of its own flex item has
+ * no neighbors to reorder, so it needs only the strip.
  */
 export function stripBidiControls(text: string): string {
   return text.replace(BIDI_CONTROLS, "");
