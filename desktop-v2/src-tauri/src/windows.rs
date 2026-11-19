@@ -182,7 +182,7 @@ fn open_failed(app: &AppHandle, title: &str, error: &str) {
 pub fn notify(app: &AppHandle, title: &str, text: &str) {
     let dialog = rfd::MessageDialog::new()
         .set_title(title)
-        .set_description(text)
+        .set_description(crate::dialog::text(text))
         .set_buttons(rfd::MessageButtons::Ok);
     crate::dialog::show(app, dialog, |_, _| {});
 }
