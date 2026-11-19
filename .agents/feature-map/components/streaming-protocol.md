@@ -137,6 +137,8 @@ v1 packet in `_meta.onyx.packet`, and `section_end` closes it, `failed` when an
 error or a result reported failure. `stop` closes the calls still open
 before its `_onyx/stop` notification: `failed` when the user stopped (with
 `cancelled`) or a deadline cut them off (`timed_out`), otherwise `completed`.
+A stream that ends on an error closes them as `failed` before its
+`_onyx/error` notification.
 `message_start` and every packet outside a call go out as `_onyx/<type>`
 notifications, so no v1 data is lost. v1 stays the default.
 

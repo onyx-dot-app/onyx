@@ -15,7 +15,8 @@ ACP-shaped update instead of a v1 packet, the shape Craft already sends (see
   ``_onyx/<type>`` extension notification with the v1 object as ``params``.
   ``message_start`` is one too, for its documents and timing, before its text.
   ``stop`` closes the calls still open before its notification: ``failed``
-  when the user stopped (with ``cancelled``) or a deadline cut them off.
+  when the user stopped (with ``cancelled``) or a deadline cut them off. A
+  terminal stream error closes them as ``failed`` too.
 
 Every update carries ``_meta.onyx.version = 2``. v1 stays the default and is
 unchanged; this only re-shapes what the chat pipeline already yields.
@@ -36,6 +37,7 @@ _TOOL_STARTS: dict[str, tuple[str, str]] = {
     "custom_tool_start": ("other", "Running tool"),
     "file_reader_start": ("read", "Reading file"),
     "postgres_tool_start": ("search", "Querying knowledge base"),
+    "publish_files_start": ("other", "Publishing files"),
     "memory_tool_start": ("edit", "Updating memory"),
     "memory_tool_no_access": ("edit", "Memory"),
     "deep_research_plan_start": ("think", "Generating plan"),
@@ -76,7 +78,12 @@ def _reports_failure(packet_type: str, packet: dict[str, Any]) -> bool:
         return True
     if packet_type == "code_mode_delta":
         return packet.get("status") == "failed" or bool(packet.get("error"))
-    if packet_type in ("exec_end", "apply_patch_end"):
+    if packet_type in (
+        "exec_end",
+        "apply_patch_end",
+        "publish_files_end",
+        "custom_tool_delta",
+    ):
         return bool(packet.get("error"))
     return False
 
@@ -93,7 +100,12 @@ class ChatAcpTranslator:
         packet = obj.get("obj")
         placement = obj.get("placement")
         if not isinstance(packet, dict) or not isinstance(placement, dict):
-            # Not a packet: a session id, a message id, a stream error.
+            # Not a packet: a session id, a message id, a stream error. A
+            # stream error ends the stream, so the calls still open failed.
+            if "error" in obj:
+                yield from self._close_open(failed=True)
+                yield self._notice(obj, "error")
+                return
             yield self._notice(obj)
             return
 
@@ -116,15 +128,9 @@ class ChatAcpTranslator:
             stop_reason = packet.get("stop_reason")
             cancelled = stop_reason == "user_cancelled"
             # A user stop or a deadline interrupted the calls still open.
-            interrupted = cancelled or stop_reason == "timed_out"
-            for open_id in list(self._open):
-                failed = self._open.pop(open_id)
-                yield {
-                    "sessionUpdate": "tool_call_update",
-                    "toolCallId": open_id,
-                    "status": "failed" if interrupted or failed else "completed",
-                    "_meta": _onyx_meta(**({"cancelled": True} if cancelled else {})),
-                }
+            yield from self._close_open(
+                failed=cancelled or stop_reason == "timed_out", cancelled=cancelled
+            )
             yield self._notice(obj, packet_type)
             return
 
@@ -168,6 +174,20 @@ class ChatAcpTranslator:
 
         # A packet outside any tool call (stop, a top-level error, citations).
         yield self._notice(obj, packet_type)
+
+    def _close_open(
+        self, failed: bool, cancelled: bool = False
+    ) -> Iterator[dict[str, Any]]:
+        """Closes every open call: ``failed`` when ``failed`` is set or an
+        error arrived for the call, otherwise ``completed``."""
+        for open_id in list(self._open):
+            had_error = self._open.pop(open_id)
+            yield {
+                "sessionUpdate": "tool_call_update",
+                "toolCallId": open_id,
+                "status": "failed" if failed or had_error else "completed",
+                "_meta": _onyx_meta(**({"cancelled": True} if cancelled else {})),
+            }
 
     def _text(
         self, packet_type: str, packet: dict[str, Any], placement: dict[str, Any]
