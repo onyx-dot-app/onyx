@@ -46,7 +46,7 @@
   (`sections/oauth-provider/ConnectAiTools.tsx`) has a Download button, which
   gets a zip from
   `GET /plugins/onyx-plugin/export`, which any member can call. The zip is the plugin folder
-  without the marketplace file. The Claude files are edited: the deployment's
+  without the marketplace file and the `*.test.ts` files. The Claude files are edited: the deployment's
   MCP URL is fixed in `.mcp.json`, with no token header and no URL option,
   because claude.ai chat takes no install options. The user
   uploads it in Claude and signs in through OAuth. The section also shows
@@ -218,7 +218,7 @@ process. `/.well-known/oauth-authorization-server` goes to the API server
     not, and a build without the context still succeeds: the stage is empty,
     `PLUGIN_DIR` in `backend/onyx/server/features/onyx_plugin/export.py` is
     `None`, the route answers `NOT_FOUND`, and the
-    `onyx_plugin_export_enabled` setting hides the Claude row. The export finds
+    `onyx_plugin_export_enabled` setting hides the Download row. The export finds
     the `onyx_url` and `onyx_api_token` manifest options and the `onyx` server
     in `.mcp.json` by name, and sets the `ONYX_URL` variable that
     `extensions/agent-plugin/scripts/hook.ts` reads. A rename in the plugin

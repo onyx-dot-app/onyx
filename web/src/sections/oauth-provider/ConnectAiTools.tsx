@@ -34,7 +34,6 @@ export default function ConnectAiTools() {
     }
   }
 
-  // Set only when MCP clients can sign in through the Onyx OAuth provider.
   if (!mcpUrl) return null;
 
   return (

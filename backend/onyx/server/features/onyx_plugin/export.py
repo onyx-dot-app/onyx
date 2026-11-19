@@ -88,9 +88,8 @@ def build_plugin_bundle(plugin_dir: Path, settings: OAuthProviderSettings) -> by
     with zipfile.ZipFile(buffer, "w") as bundle:
         for path in sorted(plugin_dir.rglob("*")):
             name = path.relative_to(plugin_dir).as_posix()
-            if not path.is_file() or name == MARKETPLACE_PATH:
-                continue
-            if name.endswith(TEST_SUFFIX):
+            skipped = name == MARKETPLACE_PATH or name.endswith(TEST_SUFFIX)
+            if not path.is_file() or skipped:
                 continue
             # from_file keeps the launcher's executable bit.
             info = zipfile.ZipInfo.from_file(path, name)

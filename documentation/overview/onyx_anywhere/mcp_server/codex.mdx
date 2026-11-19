@@ -16,8 +16,9 @@ codex plugin marketplace add onyx-dot-app/onyx --sparse extensions/agent-plugin 
 codex plugin add onyx@onyx
 ```
 
-`codex mcp add` opens Onyx. Sign in and select **Allow access**. Open `/hooks`, trust the plugin's hooks,
-and start a new session. The hooks need `bun` or Node 23.6 or later. Set options as environment variables:
+`codex mcp add` opens Onyx. Sign in and select **Allow access**. If Codex does not open Onyx,
+run `codex mcp login onyx`. Open `/hooks`, trust the plugin's hooks, and start a new session.
+The hooks need `bun` or Node 23.6 or later. Set options as environment variables:
 
 | Variable | Effect |
 | --- | --- |
@@ -32,8 +33,7 @@ If you do not use the Onyx plugin, run only the first command:
 codex mcp add onyx --url https://onyx.example.com/mcp/
 ```
 
-Sign in and select **Allow access**. If Codex does not open Onyx, run `codex mcp login onyx`. In Codex,
-enter `/mcp` to check that Onyx is connected,
+Sign in and select **Allow access**. In Codex, enter `/mcp` to check that Onyx is connected,
 then send the [test prompt](/overview/onyx_anywhere/mcp_server#test-the-connection). The Codex CLI, desktop app,
 and IDE extension share this configuration.
 
