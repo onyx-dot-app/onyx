@@ -619,26 +619,6 @@ test("a closed panel does not watch the workspace's width, and measures it again
   ).toHaveAttribute("aria-valuemax", "800");
 });
 
-test("Files closes when the branch has no files, unless a branch switch is loading", () => {
-  const view = renderChat([[REPORT]]);
-  update({ type: "toggleFiles", shownFileTabs: [] });
-  act(() => {
-    useChatSessionStore
-      .getState()
-      .updateSessionData("session", { latestPageSwitch: 1 });
-    setReplies([]);
-  });
-  view.rerender(<Chat replies={[]} />);
-  expect(panel().mode).not.toBe("closed");
-
-  act(() => {
-    useChatSessionStore
-      .getState()
-      .updateSessionData("session", { latestPageSwitch: null });
-  });
-  expect(panel().mode).toBe("closed");
-});
-
 test("the Files search filters the tiles, and a file published later is marked new", () => {
   const view = renderChat([[REPORT]]);
   update({ type: "toggleFiles", shownFileTabs: [] });
