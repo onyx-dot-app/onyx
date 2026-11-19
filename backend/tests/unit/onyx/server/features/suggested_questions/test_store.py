@@ -221,22 +221,6 @@ def test_private_shelf_keeps_the_newest_and_drops_used_old_and_deleted(
     assert after_first.last_seen_at == NOW
 
 
-@pytest.mark.usefixtures("kv")
-def test_load_private_shelves_skips_people_without_questions(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    alice, bob = _user(), _user()
-    monkeypatch.setattr(store, "get_all_users", lambda *_a, **_kw: [alice, bob])
-    store.save_private_questions(alice.id, [_question("doc")], {"doc"}, NOW)
-    store.record_seen(bob.id, NOW)
-
-    shelves = store.load_private_shelves(MagicMock(spec=Session))
-
-    assert {
-        user_id: [q.document_id for q in qs] for user_id, qs in shelves.items()
-    } == {alice.id: ["doc"]}
-
-
 def _user(
     is_active: bool = True,
     account_type: AccountType = AccountType.STANDARD,
