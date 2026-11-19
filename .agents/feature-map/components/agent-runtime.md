@@ -156,6 +156,10 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   display adds nothing. `ToolRenderer.complete` renders that part after the
   section end too. Live, the closing record follows the answer; replay places
   it before the answer's `message_start`. Both orders give the same groups.
+  An input request or its end for a call without a card in this stream, such
+  as a request of a background program after a restore, gets a card that
+  starts as ended. A continued program's requests keep the message and step
+  of the call that started it (`agents/tool_execution.py:_NestedCallGate`).
 - `backend/onyx/agents/runtime.py:_compact_context` fits each request before the
   model call: it applies the saved checkpoint and summarizes through
   `agents/compaction.py:compact_history` above the trigger. If the summary

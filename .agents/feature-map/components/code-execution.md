@@ -440,8 +440,8 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     costs its driver thread, and also a worker while its program waits on a
     tool and its dump does not fit in `MAX_SUSPENDED_BYTES`. A server process runs at most
     `MAX_RUNNING_CELLS` (64) cells whose program has not ended
-    (`tools/tool_implementations/code_mode/cells.py:_RunningCells`); a new cell over this limit gets `BUSY_MESSAGE`
-    and does not start. A new program that finds no free worker for
+    (`tools/tool_implementations/code_mode/cells.py:_RunningCells`); a new cell over this limit, or
+    while a continuing program waits for a slot, gets `BUSY_MESSAGE` and does not start. A new program that finds no free worker for
     `CHECKOUT_TIMEOUT_SECONDS` gets `BUSY_MESSAGE`; a resumed program waits for
     a worker up to its lifetime. A program that waits (an `await` on
     unfinished tool calls or sleeps, or a synchronous `time.sleep`) keeps its
@@ -554,9 +554,8 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     still runs out of memory loses the worker, so the program stops with
     `tools/tool_implementations/code_mode/sandbox.py:PARK_MEMORY_MESSAGE`. When the run
     suspends, a parked cell whose observation waits is saved with the Monty
-    version that dumped it; other cells close. The cell keeps only the request
-    ID of each waiting call (`SavedCodeCell.requests`); the run's
-    `NestedInputWait` holds the requests.
+    version that dumped it; other cells close. The cell keeps the request of
+    each waiting call (`SavedCodeCell.requests`).
     After the answers, the observation's continuation builds the cell, takes a
     running-cell slot, waiting for one, and loads the dump on a new worker.
     A dump from another Monty version stops the program with

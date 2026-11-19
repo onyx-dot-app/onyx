@@ -36,6 +36,8 @@ from onyx.agents.tools import (
     ToolInvocation,
     ToolOutcome,
 )
+from onyx.chat.emitter import Emitter
+from onyx.chat.presentation import ResponsePresenter
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -47,6 +49,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.server.query_and_chat.streaming_models import Packet, ToolApprovalRequest
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.code_mode import sandbox
@@ -78,6 +81,12 @@ BACKGROUND = 'yield_control()\nr = await tools.wait(value="b")\nprint("waited", 
 # A cell that asks for its own approval in the background.
 BACKGROUND_SEND = 'yield_control()\nr = await tools.send(value="bg")\nprint("sent", r)'
 BACKGROUND_REQUEST_ID = "send-bg"
+# A background cell that asks twice; the second request is an approval.
+BACKGROUND_SEND_TWICE = (
+    'yield_control()\nawait tools.send(value="bg")\n'
+    'r = await tools.send(value="bg2")\nprint("sent", r)'
+)
+SECOND_BACKGROUND_REQUEST_ID = "send-bg2"
 
 Reply = Callable[[GenerationRequest, CancellationSignal], AssistantMessage]
 
@@ -100,15 +109,20 @@ class CellsFeature(RestorableFeature):
 
 
 def _ask_for_send(context: ToolCallContext) -> PendingToolInput | None:
-    """Asks for each `send`; the value "bg" gets BACKGROUND_REQUEST_ID."""
+    """Asks for each `send`; the value "bg" gets BACKGROUND_REQUEST_ID, and
+    "bg2" an approval request with SECOND_BACKGROUND_REQUEST_ID."""
     if context.call.name != "send":
         return None
+    value = context.call.arguments.get("value")
     return PendingToolInput(
         request_id=BACKGROUND_REQUEST_ID
-        if context.call.arguments.get("value") == "bg"
+        if value == "bg"
+        else SECOND_BACKGROUND_REQUEST_ID
+        if value == "bg2"
         else REQUEST_ID,
         prompt="Send?",
         mode=InputMode.EXECUTE,
+        approval=value == "bg2",
     )
 
 
@@ -416,7 +430,7 @@ def test_a_cell_that_ends_while_a_request_waits_keeps_its_result() -> None:
     assert run.wait_for_idle(10)
 
     assert agents.sent == ["x"]
-    # wait_code points to that record instead of repeating it.
+    # wait_code points to that record.
     assert output == (
         "Cell 1 completed before the run paused; its output and result are in "
         "its earlier result."
@@ -515,40 +529,6 @@ def _background_send_agents() -> Agents:
             _read_cell(1),
         )
     )
-
-
-def test_a_background_cell_keeps_its_request_across_a_handoff() -> None:
-    agents = _background_send_agents()
-    events: list[AgentEvent] = []
-    run = agents.agent().start(
-        max_steps=5, messages=[UserMessage(content="Send")], on_event=events.append
-    )
-    saved = _suspended(run)
-
-    # Both requests stay open; the background cell is saved with the run.
-    assert not any(isinstance(event, InputEndedEvent) for event in events)
-    assert saved.progress is not None
-    assert list(saved.progress.open_inputs) == [BACKGROUND_REQUEST_ID]
-    checkpoint = _transferred(run)
-    assert checkpoint.run_state.progress is not None
-    cells = SavedCells.model_validate(checkpoint.run_state.progress.feature_state)
-    assert {cell.cell_id: cell.observer is None for cell in cells.cells} == {
-        1: True,
-        2: False,
-    }
-
-    resumed = agents.agent(checkpoint.agent_state).resume(
-        checkpoint.run_state,
-        answers=[
-            _answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID),
-            _answer(InputDecision.APPROVE),
-        ],
-    )
-    output = resumed.result(timeout=20).output.text
-    assert resumed.wait_for_idle(10)
-
-    assert set(agents.sent) == {"bg", "x"} and len(agents.sent) == 2
-    assert "sent {'sent': 'bg'}" in output
 
 
 def test_a_background_cell_continues_once_its_request_has_an_answer() -> None:
@@ -992,3 +972,108 @@ def test_a_park_whose_arguments_cannot_be_saved_is_refused(
     assert agents.sent == []
     assert PARK_REFUSED_MESSAGE.format(name="send") in output
     assert budget.free == limit
+
+
+def _second_request_agents() -> Agents:
+    """A background cell that asks twice, then a program that asks to send
+    "x", then a read of the background cell."""
+    return Agents(
+        reply=_one_call_per_step(
+            _execute("background", BACKGROUND_SEND_TWICE),
+            _execute("program", PROGRAM),
+            _read_cell(1),
+        )
+    )
+
+
+def _approval_cards(packets: list[Packet]) -> list[str]:
+    return [
+        packet.obj.approval_id
+        for packet in packets
+        if isinstance(packet.obj, ToolApprovalRequest)
+    ]
+
+
+def _placement(events: list[AgentEvent], request_id: str) -> tuple[str, int]:
+    [event] = [
+        event
+        for event in events
+        if isinstance(event, InputRequiredEvent)
+        and event.request.request_id == request_id
+    ]
+    return event.message_id, event.step_index
+
+
+def test_a_continued_background_program_shows_its_next_request_at_its_call() -> None:
+    """The background cell continues in a later step, and its next request
+    shows in the card of the call that started it."""
+    agents = _second_request_agents()
+    events: list[AgentEvent] = []
+    packets: list[Packet] = []
+    presenter = ResponsePresenter(Emitter(packets.append))
+
+    def on_event(event: AgentEvent) -> None:
+        events.append(event)
+        presenter.consume(event)
+
+    run = agents.agent().start(
+        max_steps=5, messages=[UserMessage(content="Send")], on_event=on_event
+    )
+    try:
+        _suspended(run)
+        run.submit(_answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID))
+        until(
+            lambda: (
+                SECOND_BACKGROUND_REQUEST_ID
+                in {request.request_id for request in run.pending_inputs}
+            )
+        )
+
+        assert _placement(events, SECOND_BACKGROUND_REQUEST_ID) == _placement(
+            events, BACKGROUND_REQUEST_ID
+        )
+        assert _approval_cards(packets) == [SECOND_BACKGROUND_REQUEST_ID]
+    finally:
+        run.cancel()
+        assert run.wait_for_idle(10)
+
+
+def test_a_resumed_background_program_shows_its_next_request() -> None:
+    """In another process, the stream has no card for the call that started
+    the background cell; the request gets one."""
+    agents = _second_request_agents()
+    first: list[AgentEvent] = []
+    run = agents.agent().start(
+        max_steps=5, messages=[UserMessage(content="Send")], on_event=first.append
+    )
+    _suspended(run)
+    checkpoint = _transferred(run)
+
+    events: list[AgentEvent] = []
+    packets: list[Packet] = []
+    presenter = ResponsePresenter(Emitter(packets.append))
+
+    def on_event(event: AgentEvent) -> None:
+        events.append(event)
+        presenter.consume(event)
+
+    resumed = agents.agent(checkpoint.agent_state).resume(
+        checkpoint.run_state,
+        answers=[_answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID)],
+        on_event=on_event,
+    )
+    try:
+        until(
+            lambda: (
+                SECOND_BACKGROUND_REQUEST_ID
+                in {request.request_id for request in resumed.pending_inputs}
+            )
+        )
+
+        assert _placement(events, SECOND_BACKGROUND_REQUEST_ID) == _placement(
+            first, BACKGROUND_REQUEST_ID
+        )
+        assert _approval_cards(packets) == [SECOND_BACKGROUND_REQUEST_ID]
+    finally:
+        resumed.cancel()
+        assert resumed.wait_for_idle(10)

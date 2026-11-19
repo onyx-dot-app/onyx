@@ -380,7 +380,10 @@ class RunProgress(BaseModel):
     )
     # Requests that tools opened for the calls they make for the model, by
     # request ID, while no NestedInputWait holds them; see NestedCallGate.
-    open_inputs: dict[str, NestedInputRequest] = Field(default_factory=dict)
+    # Left out of saved checkpoints when empty.
+    open_inputs: dict[str, NestedInputRequest] = Field(
+        default_factory=dict, exclude_if=lambda value: not value
+    )
     human_tool_answers: dict[str, HumanToolAnswer] = Field(default_factory=dict)
     child_run_ids: list[str] = Field(default_factory=list)
     observed_child_run_ids: list[str] = Field(default_factory=list)

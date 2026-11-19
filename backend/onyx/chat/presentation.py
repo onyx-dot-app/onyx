@@ -483,39 +483,38 @@ class ResponsePresenter:
                     tool_placement,
                     self.tool_ids.get(call.name),
                 )
-        elif isinstance(
-            event,
-            (
-                ToolStartEvent,
-                ToolUpdateEvent,
-                ToolEndEvent,
-                InputRequiredEvent,
-                InputEndedEvent,
-            ),
-        ):
+        elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
             tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
             if tool is None:
                 return
             output = tool.consume(event)
-        elif isinstance(event, ToolResultAmendedEvent):
+        elif isinstance(
+            event, (InputRequiredEvent, InputEndedEvent, ToolResultAmendedEvent)
+        ):
             if event.tool_call.name in HIDDEN_TOOLS:
                 return
             key = (event.run_id, event.message_id, event.tool_call.id)
             tool = self.tools.get(key)
             if tool is None:
-                # A call recorded before a restore has no card in this stream;
-                # the amended result renders in a new card, which later
-                # amendments reuse.
+                # A call recorded before a restore has no card in this stream.
+                # An amended result or an input request of a program that
+                # still runs renders in a new card, which later events of the
+                # call reuse.
                 renderer = self.renderers.get(event.run_id)
+                amended = event if isinstance(event, ToolResultAmendedEvent) else None
                 tool = self.tools[key] = tool_renderer(
                     event.tool_call,
                     renderer.tool_placement(event.tool_call.id)
                     if renderer is not None
                     else self.layout.next_section(parent.placement if parent else None),
                     self.tool_ids.get(event.tool_call.name),
-                    event.display_name,
+                    amended.display_name if amended is not None else None,
+                    ended=amended is None,
                 )
-            output = tool.amend(event.result)
+            if isinstance(event, ToolResultAmendedEvent):
+                output = tool.amend(event.result)
+            else:
+                output = tool.consume(event)
         elif isinstance(event, AgentEndEvent):
             # The response owner reports classified failures separately.
             for key in tuple(self.tools):

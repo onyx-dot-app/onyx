@@ -547,7 +547,7 @@ A request takes answers once the run saves it, a direct call's request or one in
 A `standing` approval also approves later calls of the same action; the application that answers applies it to those calls.
 Approval executes the exact pending call. A result answer completes the question without repeating its tool code.
 The run publishes `input_ended` with the call and its answer when it applies the answer.
-Repeated identical answers do not repeat actions; conflicting answers fail.
+Repeated identical answers do not repeat actions; conflicting answers fail. An answer that changes only `standing` replaces the recorded one.
 
 `run.wait_until_settled(timeout=...)` waits for suspension or terminal output.
 `run.result()` remains terminal-only, so use the settled wait when the run can request input.

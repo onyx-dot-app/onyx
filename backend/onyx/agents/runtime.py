@@ -150,6 +150,10 @@ class RunReleased(RuntimeError):
     """Local execution ended at a saved checkpoint; use its run ID to resume."""
 
 
+class InputNotWaiting(ValueError):
+    """The run no longer waits for the request that an answer names."""
+
+
 class AgentBusy(RuntimeError):
     """The agent cannot start a run now; a later attempt can."""
 
@@ -685,11 +689,11 @@ class Run:
             if progress is None:
                 raise ValueError("Run has no input state")
             existing = progress.human_tool_answers.get(answer.request_id)
-            if existing is not None and existing != answer:
-                raise ValueError("Conflicting answer for request")
             if self._state.status.is_terminal:
                 if existing is None:
-                    raise ValueError("Run is not accepting input")
+                    raise InputNotWaiting("Run is not accepting input")
+                if _conflicts(existing, answer):
+                    raise ValueError("Conflicting answer for request")
                 return
             if _record_answer(progress, answer, progress.input_requests):
                 self._state.revision += 1
@@ -2324,18 +2328,29 @@ def _record_answer(
     requests: Sequence[PendingToolInput],
 ) -> bool:
     """Record an answer to one of `requests`; False when it repeats the
-    recorded answer. Raises ValueError for a conflicting or unmatched answer."""
+    recorded answer. An answer that changes only `standing`, such as an
+    approval that the user later approves for the chat, replaces the recorded
+    one. Raises ValueError for a conflicting or unmatched answer."""
     existing = progress.human_tool_answers.get(answer.request_id)
     if existing is not None:
-        if existing != answer:
+        if _conflicts(existing, answer):
             raise ValueError("Conflicting answer for request")
-        return False
+        if existing == answer:
+            return False
+        progress.human_tool_answers[answer.request_id] = answer.model_copy(deep=True)
+        return True
     request = next(
         (item for item in requests if item.request_id == answer.request_id), None
     )
     if request is None:
-        raise ValueError("Unknown input request")
+        raise InputNotWaiting("Unknown input request")
     if (request.mode == InputMode.RESULT) != (answer.decision == InputDecision.RESULT):
         raise ValueError("Answer does not match the request mode")
     progress.human_tool_answers[answer.request_id] = answer.model_copy(deep=True)
     return True
+
+
+def _conflicts(recorded: HumanToolAnswer, answer: HumanToolAnswer) -> bool:
+    """Whether `answer` differs from the recorded answer in more than
+    `standing`."""
+    return recorded.model_copy(update={"standing": answer.standing}) != answer

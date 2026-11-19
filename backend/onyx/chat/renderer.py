@@ -513,7 +513,11 @@ class ToolRenderer:
         placement: Placement,
         tool_id: int | None = None,
         display_name: str | None = None,
+        *,
+        ended: bool = False,
     ) -> None:
+        """`ended` is a call that ended before this stream: its card shows
+        only what arrives for it later, such as input requests."""
         self.call = call
         self.placement = placement
         self.tool_id = tool_id
@@ -525,8 +529,8 @@ class ToolRenderer:
         self.has_child_output = False
         self._has_python_output = False
         self._files: set[str] = set()
-        self._started = False
-        self._finished = False
+        self._started = ended
+        self._finished = ended
 
     def consume(
         self,
@@ -1072,8 +1076,10 @@ class CodeModeRenderer(ToolRenderer):
         placement: Placement,
         tool_id: int | None = None,
         display_name: str | None = None,
+        *,
+        ended: bool = False,
     ) -> None:
-        super().__init__(call, placement, tool_id, display_name)
+        super().__init__(call, placement, tool_id, display_name, ended=ended)
         self._children: dict[int, ToolRenderer] = {}
         self._stdout = ""
 
@@ -1245,6 +1251,8 @@ def tool_renderer(
     placement: Placement,
     tool_id: int | None = None,
     display_name: str | None = None,
+    *,
+    ended: bool = False,
 ) -> ToolRenderer:
     """The renderer of a tool call: a code mode card, a question card, or the
     generic tool display."""
@@ -1255,4 +1263,4 @@ def tool_renderer(
         if call.name in QUESTION_TOOL_NAMES
         else ToolRenderer
     )
-    return renderer(call, placement, tool_id, display_name)
+    return renderer(call, placement, tool_id, display_name, ended=ended)

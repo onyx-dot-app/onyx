@@ -351,7 +351,9 @@ class ToolBatch:
                         NestedInputAnswer(request=request, answer=answer)
                     )
         for answered in by_call.values():
-            call = answered[0].request.tool_call
+            # Later requests show at the place of the call, as the first did.
+            opened = answered[0].request
+            call = opened.tool_call
             tool = self.tools.get(call.name)
             if tool is None or tool.continue_open_input is None:
                 continue
@@ -364,7 +366,9 @@ class ToolBatch:
                 update=lambda _progress: None,
                 messages=[_tool_view(message) for message in self.context_messages],
                 recorded_results=self._recorded_before(),
-                nested_calls=_NestedCallGate(self, call),
+                nested_calls=_NestedCallGate(
+                    self, call, opened.message_id, opened.step_index
+                ),
                 run_work=self.run.work,
             )
             try:
@@ -521,7 +525,7 @@ class ToolBatch:
             agents=self.run.coordination.for_tool(call.id, self.message_id, active)
             if self.run.coordination
             else None,
-            nested_calls=_NestedCallGate(self, call)
+            nested_calls=_NestedCallGate(self, call, self.message_id, self.step.index)
             if self.run.before_tool_call is not None or self.run.approval_required
             else None,
             run_work=self.run.work,
@@ -571,11 +575,16 @@ class ToolBatch:
 
 
 class _NestedCallGate(NestedCallGate):
-    """Decides the calls that one direct call of a step makes for the model."""
+    """Decides the calls that one direct call makes for the model. Its
+    requests show at `message_id` and `step_index`, the place of the call."""
 
-    def __init__(self, batch: ToolBatch, call: ToolCall) -> None:
+    def __init__(
+        self, batch: ToolBatch, call: ToolCall, message_id: str, step_index: int
+    ) -> None:
         self._batch = batch
         self._call = call
+        self._message_id = message_id
+        self._step_index = step_index
 
     def decide(self, call: ToolCall) -> ToolResult | NestedInputRequest | None:
         batch = self._batch
@@ -587,8 +596,8 @@ class _NestedCallGate(NestedCallGate):
         if not isinstance(decision, PendingToolInput):
             return decision
         request = NestedInputRequest(
-            message_id=batch.message_id,
-            step_index=batch.step.index,
+            message_id=self._message_id,
+            step_index=self._step_index,
             tool_call=self._call,
             nested_call=call,
             request=decision,

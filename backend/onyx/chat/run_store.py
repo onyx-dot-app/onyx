@@ -39,7 +39,14 @@ from onyx.agents.models import (
     StepRecord,
     cancellation_failure,
 )
-from onyx.agents.runtime import Agent, AgentBusy, Run, RunNotTransferable
+from onyx.agents.runtime import (
+    Agent,
+    AgentBusy,
+    InputNotWaiting,
+    Run,
+    RunNotTransferable,
+    RunReleased,
+)
 from onyx.agents.tools import HumanToolAnswer, InputMode, PendingToolInput
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
@@ -1460,6 +1467,11 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 continue
             try:
                 run.submit(answer)
+            except (InputNotWaiting, RunReleased):
+                # The request ended, or the run parked, after the read.
+                logger.debug(
+                    "Run %s no longer waits for request %s", run.id, request.request_id
+                )
             except Exception:
                 logger.exception("Run %s did not take a saved answer", run.id)
 

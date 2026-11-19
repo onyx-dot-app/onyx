@@ -355,12 +355,17 @@ def _call_result(
 
 
 class _RunningCells:
-    """The process-wide budget of running cells (MAX_RUNNING_CELLS)."""
+    """The process-wide budget of running cells (MAX_RUNNING_CELLS).
+
+    Programs that continue wait for a slot; new cells do not, and take none
+    while a program waits, so new cells cannot starve continuing programs.
+    """
 
     def __init__(self, limit: int) -> None:
         self._freed = threading.Condition()
         self._limit = limit
         self._running = 0
+        self._waiting = 0
 
     def acquire(
         self, tenant_id: str, *, wait: CancellationSignal | None = None
@@ -368,14 +373,20 @@ class _RunningCells:
         """Take a slot if one is free; with `wait`, wait for one until `wait`
         is cancelled."""
         with self._freed:
-            while self._running >= self._limit:
-                if wait is None:
+            if wait is None:
+                if self._running >= self._limit or self._waiting:
                     metrics.CELL_BUSY_REJECTIONS.labels(tenant_id=tenant_id).inc()
                     return False
-                if wait.cancelled:
-                    return False
-                # Cancellation sets no event, so the wait rechecks it.
-                self._freed.wait(CHECKOUT_POLL_SECONDS)
+            else:
+                self._waiting += 1
+                try:
+                    while self._running >= self._limit:
+                        if wait.cancelled:
+                            return False
+                        # Cancellation sets no event, so the wait rechecks it.
+                        self._freed.wait(CHECKOUT_POLL_SECONDS)
+                finally:
+                    self._waiting -= 1
             self._running += 1
             metrics.CELLS_RUNNING.set(self._running)
             return True
@@ -1884,7 +1895,6 @@ class CodeCells:
                     raise _rejected(
                         f"Cell {cell_id} already has an active wait_code call."
                     )
-                del self._saved[cell_id]
                 cell = CodeCell(
                     cell_id=cell_id,
                     program=programs(saved.code, saved.limits),
@@ -1895,6 +1905,7 @@ class CodeCells:
                     saved=saved,
                 )
                 self._cells[cell_id] = cell
+                del self._saved[cell_id]
         if cell is None or cell.closed:
             observations = [
                 details
@@ -1949,7 +1960,6 @@ class CodeCells:
                 None,
             )
             if saved is not None:
-                del self._saved[saved.cell_id]
                 cell: CodeCell | None = CodeCell(
                     cell_id=saved.cell_id,
                     program=programs(saved.code, saved.limits),
@@ -1960,6 +1970,7 @@ class CodeCells:
                     saved=saved,
                 )
                 self._cells[saved.cell_id] = cell
+                del self._saved[saved.cell_id]
             else:
                 cell = next(
                     (
@@ -1992,7 +2003,6 @@ class CodeCells:
                     request.request.request_id in answered
                     for request in saved.requests.values()
                 ):
-                    del self._saved[saved.cell_id]
                     self._cells[saved.cell_id] = CodeCell(
                         cell_id=saved.cell_id,
                         program=programs(saved.code, saved.limits),
@@ -2002,6 +2012,7 @@ class CodeCells:
                         context=context,
                         saved=saved,
                     )
+                    del self._saved[saved.cell_id]
             cells = list(self._cells.values())
         return [
             request_id
