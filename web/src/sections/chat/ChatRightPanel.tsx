@@ -19,10 +19,7 @@ import {
   useChatSessionStore,
   useCurrentRightPanelState,
 } from "@/app/app/stores/useChatSessionStore";
-import {
-  useCurrentOpenPublishedFiles,
-  useCurrentPublishedFiles,
-} from "@/lib/chat/hooks";
+import { useCurrentPublishedFiles } from "@/lib/chat/hooks";
 import {
   filesSharingALabel,
   publishedFileLabel,
@@ -66,8 +63,6 @@ interface ChatRightPanelProps {
   dispatch: (action: ChatRightPanelAction) => void;
   // The newest publish of each path, newest first
   files: PublishedFile[];
-  // The files of the open file tabs, also older copies of a path
-  openFiles: PublishedFile[];
   // The Sources tab's content; `hasSources` says whether it has any
   sources: ReactNode;
   hasSources: boolean;
@@ -87,13 +82,12 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   state,
   dispatch,
   files,
-  openFiles,
   sources,
   hasSources,
 }: ChatRightPanelProps) {
   const t = useTranslations("chat.rightPanel");
   const fileByTab = new Map(
-    openFiles.map((file) => [rightPanelFileTab(file.file_id), file])
+    state.fileTabs.map((file) => [rightPanelFileTab(file.file_id), file])
   );
   const shown =
     state.activeId === RIGHT_PANEL_SOURCES_TAB || fileByTab.has(state.activeId)
@@ -126,45 +120,41 @@ export const ChatRightPanel = memo(function ChatRightPanel({
       : []),
   ];
   // Tabs of one shown name show their path; an older publish of a path says so
-  const sharingALabel = filesSharingALabel(openFiles);
-  const newestIds = new Set(files.map((file) => file.file_id));
+  const sharingALabel = filesSharingALabel(state.fileTabs);
+  const newestByPath = new Map(files.map((file) => [file.path, file.file_id]));
   const tabs: PanelTabItem[] = [
     ...fixedTabs,
-    ...state.fileTabs.flatMap((tabId): PanelTabItem[] => {
-      const file = fileByTab.get(tabId);
-      if (!file) return [];
+    ...state.fileTabs.map((file): PanelTabItem => {
+      const tabId = rightPanelFileTab(file.file_id);
       const name = sharingALabel.has(file.file_id)
         ? publishedFilePath(file)
         : publishedFileLabel(file);
-      if (newestIds.has(file.file_id))
-        return [
-          {
-            id: tabId,
-            label: name,
-            icon: getFileIcon(file.name),
-            closable: true,
-            movable: true,
-          },
-        ];
-      return [
-        {
+      const newest = newestByPath.get(file.path);
+      if (newest === undefined || newest === file.file_id)
+        return {
           id: tabId,
-          label: t.markup("fileTab.earlierVersion", {
-            name,
-            isolate: (chunks) => chunks,
-          }),
-          // The name shows in its own direction, apart from the sentence
-          content: richNodes(
-            t.rich("fileTab.earlierVersion", {
-              name,
-              isolate: (chunks) => <bdi>{chunks}</bdi>,
-            })
-          ),
+          label: name,
           icon: getFileIcon(file.name),
           closable: true,
           movable: true,
-        },
-      ];
+        };
+      return {
+        id: tabId,
+        label: t.markup("fileTab.earlierVersion", {
+          name,
+          isolate: (chunks) => chunks,
+        }),
+        // The name shows in its own direction, apart from the sentence
+        content: richNodes(
+          t.rich("fileTab.earlierVersion", {
+            name,
+            isolate: (chunks) => <bdi>{chunks}</bdi>,
+          })
+        ),
+        icon: getFileIcon(file.name),
+        closable: true,
+        movable: true,
+      };
     }),
   ];
   const retainedTabs = new Set(
@@ -258,8 +248,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     [dispatch]
   );
   const openFile = useCallback(
-    (file: PublishedFile) =>
-      dispatch({ type: "openFile", fileId: file.file_id }),
+    (file: PublishedFile) => dispatch({ type: "openFile", file }),
     [dispatch]
   );
   const close = useCallback(() => dispatch({ type: "closePanel" }), [dispatch]);
@@ -269,11 +258,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
       return;
     }
     returnFocusRef.current = shownFile.file_id;
-    dispatch({
-      type: "closeTab",
-      tabId: shown,
-      shownFileTabs: [...fileByTab.keys()],
-    });
+    dispatch({ type: "closeTab", tabId: shown });
   };
 
   const query = state.search.trim().toLocaleLowerCase();
@@ -322,11 +307,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
               onClose={(tabId) => {
                 // The tab strip moves focus to the next tab itself
                 insideChangeRef.current = true;
-                dispatch({
-                  type: "closeTab",
-                  tabId,
-                  shownFileTabs: [...fileByTab.keys()],
-                });
+                dispatch({ type: "closeTab", tabId });
               }}
               onReorder={(tabId, index) => {
                 // Only file tabs move, among themselves
@@ -377,7 +358,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                 {sources}
               </div>
             )}
-            {openFiles
+            {state.fileTabs
               .filter((file) =>
                 retainedTabs.has(rightPanelFileTab(file.file_id))
               )
@@ -465,7 +446,6 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
   const state = useCurrentRightPanelState();
   const dispatch = useChatSessionStore.getState().updateCurrentRightPanel;
   const files = useCurrentPublishedFiles();
-  const openFiles = useCurrentOpenPublishedFiles();
   return (
     <ChatRightPanel
       {...props}
@@ -473,7 +453,6 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
       state={state}
       dispatch={dispatch}
       files={files}
-      openFiles={openFiles}
     />
   );
 }
@@ -482,5 +461,5 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
 export function openPublishedFileInChat(file: PublishedFile): void {
   useChatSessionStore
     .getState()
-    .updateCurrentRightPanel({ type: "openFile", fileId: file.file_id });
+    .updateCurrentRightPanel({ type: "openFile", file });
 }

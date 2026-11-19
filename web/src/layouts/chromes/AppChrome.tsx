@@ -72,11 +72,7 @@ import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { useIncognito } from "@/providers/IncognitoProvider";
-import {
-  currentOpenPublishedFiles,
-  useCurrentPublishedFiles,
-} from "@/lib/chat/hooks";
-import { rightPanelFileTab } from "@/lib/chat/rightPanel";
+import { useCurrentPublishedFiles } from "@/lib/chat/hooks";
 import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
 import {
   useChatSessionStore,
@@ -101,14 +97,7 @@ function ChatPublishedFilesButton() {
     <PublishedFilesButton
       pressed={visible}
       // Reopening restores the panel's last Files tab
-      onClick={() =>
-        updateCurrentRightPanel({
-          type: "toggleFiles",
-          shownFileTabs: currentOpenPublishedFiles(
-            useChatSessionStore.getState()
-          ).map((file) => rightPanelFileTab(file.file_id)),
-        })
-      }
+      onClick={() => updateCurrentRightPanel({ type: "toggleFiles" })}
     />
   );
 }

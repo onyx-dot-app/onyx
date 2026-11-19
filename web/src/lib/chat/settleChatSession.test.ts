@@ -1258,7 +1258,6 @@ describe("with stubbed server checks", () => {
       display_path: "notes.md",
       size: 3,
       mime_type: "text/markdown",
-      message_id: 42,
     };
     jest.mocked(fetchSettledChatSession).mockResolvedValue({
       ...savedSession([], null),
@@ -1267,7 +1266,7 @@ describe("with stubbed server checks", () => {
     await settle();
     expect(
       useChatSessionStore.getState().sessions.get("session")
-        ?.branchPublishedFiles?.files
+        ?.loadedPublishedFiles.listed
     ).toEqual([subagentFile]);
   });
 });

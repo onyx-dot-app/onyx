@@ -63,8 +63,7 @@ import {
   useCurrentMessageTree,
 } from "@/app/app/stores/useChatSessionStore";
 import {
-  branchPublishedFiles,
-  openFilesOfTabs,
+  chatPublishedFiles,
   type LoadedPublishedFiles,
 } from "@/lib/chat/publishedFiles";
 import {
@@ -893,69 +892,28 @@ export function useSendChatMessageFromURL({
 }
 
 const NO_PUBLISHED_FILES: PublishedFile[] = [];
-// The files of each message tree, keyed by the load's list they came from
+// The files of each message tree, keyed by the loads they came from
 const publishedFileLists = new WeakMap<
   MessageTreeState,
-  {
-    loaded: LoadedPublishedFiles | null;
-    all: PublishedFile[];
-    latest: PublishedFile[];
-  }
+  { loaded: LoadedPublishedFiles; files: PublishedFile[] }
 >();
 
-function sessionPublishedFiles(
-  loaded: LoadedPublishedFiles | null,
-  messageTree: MessageTreeState
-): { all: PublishedFile[]; latest: PublishedFile[] } {
-  const cached = publishedFileLists.get(messageTree);
-  if (cached && cached.loaded === loaded) return cached;
-  const lists = {
-    loaded,
-    ...branchPublishedFiles(
-      loaded,
-      messageTree,
-      getLatestMessageChain(messageTree)
-    ),
-  };
-  publishedFileLists.set(messageTree, lists);
-  return lists;
-}
-
 /**
- * The files the model published on the open chat's selected branch: the
- * newest publish of each path, newest first. The array stays the same while
- * the files do, so a packet that publishes nothing re-renders nothing.
+ * The files the model published in the open chat: the newest publish of each
+ * path, newest first. The array stays the same while the files do, so a
+ * packet that publishes nothing re-renders nothing.
  */
 export function useCurrentPublishedFiles(): PublishedFile[] {
   return useChatSessionStore(
     useShallow((state) => {
       const session = state.sessions.get(state.currentSessionId ?? "");
       if (!session) return NO_PUBLISHED_FILES;
-      return sessionPublishedFiles(
-        session.branchPublishedFiles,
-        session.messageTree
-      ).latest;
+      const { loadedPublishedFiles: loaded, messageTree } = session;
+      const cached = publishedFileLists.get(messageTree);
+      if (cached && cached.loaded === loaded) return cached.files;
+      const files = chatPublishedFiles(loaded, messageTree);
+      publishedFileLists.set(messageTree, { loaded, files });
+      return files;
     })
   );
-}
-
-/**
- * The files open in the right panel's tabs, in tab order, by the file ID
- * that was opened: also an older publish of a path, which the list does not
- * show. A tab whose file is no longer on the branch is left out.
- */
-export function currentOpenPublishedFiles(
-  state: ReturnType<typeof useChatSessionStore.getState>
-): PublishedFile[] {
-  const session = state.sessions.get(state.currentSessionId ?? "");
-  if (!session) return NO_PUBLISHED_FILES;
-  const { all } = sessionPublishedFiles(
-    session.branchPublishedFiles,
-    session.messageTree
-  );
-  return openFilesOfTabs(session.rightPanel.fileTabs, all);
-}
-
-export function useCurrentOpenPublishedFiles(): PublishedFile[] {
-  return useChatSessionStore(useShallow(currentOpenPublishedFiles));
 }
