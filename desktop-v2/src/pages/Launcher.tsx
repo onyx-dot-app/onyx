@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+  type KeyboardEvent,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -7,19 +14,28 @@ import {
   type CompactMarkdownProps,
   InputTypeIn,
   LineItemButton,
+  Tag,
   Text,
 } from "@opal/components";
+import { SvgBubbleText, SvgImage, SvgPaperclip } from "@opal/icons";
 import { Section } from "@opal/layouts";
 import { mount } from "@/lib/mount";
 import { hasPrimaryModifier, primaryShortcut } from "@/lib/platform";
 import {
   ask,
+  DEFAULT_AGENT_ID,
   discardAnswer,
   errorMessage,
+  getPrefs,
   hideLauncher,
+  listAgents,
   openChatInMain,
   openExternal,
   search,
+  setLauncherAgent,
+  uploadFile,
+  type Agent,
+  type AttachedFile,
   type Citation,
   type SearchHit,
 } from "@/lib/ipc";
@@ -29,6 +45,8 @@ type Mode = "ask" | "search";
 // One question and its answer. Follow-ups add turns to the same chat.
 interface Turn {
   question: string;
+  // Names of the files sent with the question.
+  files: string[];
   text: string;
   // What the answer is doing while no text streams (searching, reading).
   status: string | null;
@@ -39,9 +57,22 @@ interface Turn {
   approval: { tool: string | null } | null;
 }
 
+// A file for the next question: uploading while `file` and `error` are null.
+interface Attachment {
+  key: number;
+  name: string;
+  isImage: boolean;
+  file: AttachedFile | null;
+  error: string | null;
+}
+
 // Cleared on sign-out and server change (launcher.rs `reset`).
 const HISTORY_KEY = "onyx.launcher.history";
 const HISTORY_SIZE = 20;
+const MAX_ATTACHMENTS = 10;
+// The page reads a file into memory before it uploads; the server has its own limit.
+const MAX_FILE_BYTES = 512 * 1024 * 1024;
+const AGENT_REFRESH_MS = 60_000;
 
 function loadHistory(): string[] {
   try {
@@ -61,6 +92,67 @@ function remember(question: string) {
   } catch {
     // Not saved; the question still runs.
   }
+}
+
+const EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "text/plain": "txt",
+  "application/pdf": "pdf",
+};
+
+// The server finds a file's kind from its extension; a pasted screenshot can
+// arrive without a name.
+function attachmentName(file: File): string {
+  if (file.name.includes(".")) return file.name;
+  const extension = EXTENSIONS[file.type];
+  const base = file.name || (file.type.startsWith("image/") ? "pasted-image" : "pasted-file");
+  return extension ? `${base}.${extension}` : base;
+}
+
+// Copies from a key press. execCommand runs inside the key event, which
+// every web view allows; the async clipboard API is the fallback.
+function copyText(text: string): boolean {
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+  area.remove();
+  active?.focus();
+  if (!copied && navigator.clipboard) {
+    void navigator.clipboard.writeText(text).catch(() => undefined);
+    return true;
+  }
+  return copied;
+}
+
+function agentMatches(agents: Agent[], filter: string): Agent[] {
+  const needle = filter.trim().toLowerCase();
+  const matching = agents.filter((a) => a.name.toLowerCase().includes(needle));
+  // Names that start with the filter come first.
+  return [
+    ...matching.filter((a) => a.name.toLowerCase().startsWith(needle)),
+    ...matching.filter((a) => !a.name.toLowerCase().startsWith(needle)),
+  ];
+}
+
+function sourceLabel(source: string): string {
+  return source
+    .split("_")
+    .map((word) => (word ? word[0]!.toUpperCase() + word.slice(1) : word))
+    .join(" ");
 }
 
 function Launcher() {
@@ -88,13 +180,64 @@ function Launcher() {
   // Position in the question history while ↑/↓ browse it; null otherwise.
   const historyAt = useRef<number | null>(null);
 
+  // Agents. null is the server's default agent.
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agentId, setAgentId] = useState<number | null>(null);
+  // The agent of the chat on screen; a different agent starts a new chat.
+  const [chatAgentId, setChatAgentId] = useState<number | null>(null);
+  const agentsLoadedAt = useRef<number | null>(null);
+  const [pickerIndex, setPickerIndex] = useState(0);
+  const [pickerDismissed, setPickerDismissed] = useState(false);
+  // The draft that ⌘K set aside to show the picker; null when "@" opened it.
+  const pickerDraft = useRef<string | null>(null);
+
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const attachmentKey = useRef(0);
+  const [dragging, setDragging] = useState(false);
+
+  // Search source filter; the sources come from the last unfiltered results.
+  const [lastSearch, setLastSearch] = useState("");
+  const [sources, setSources] = useState<string[]>([]);
+  const [sourceFilter, setSourceFilter] = useState<string | null>(null);
+
+  // A short confirmation ("Copied the answer") in the hint row.
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<number | undefined>(undefined);
+  const serverUrl = useRef<string | null>(null);
+
+  function flash(text: string) {
+    setNotice(text);
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 2500);
+  }
+
+  // Failures keep the list the launcher has; servers without the list have no agents.
+  async function refreshAgents(force = false) {
+    const loadedAt = agentsLoadedAt.current;
+    if (!force && loadedAt !== null && Date.now() - loadedAt < AGENT_REFRESH_MS) return;
+    try {
+      const result = await listAgents();
+      setAgents(result.agents);
+      if (loadedAt === null) setAgentId(result.selected);
+      else setAgentId((id) => (result.agents.some((a) => a.id === id) ? id : null));
+      agentsLoadedAt.current = Date.now();
+    } catch {
+      // The default agent still answers.
+    }
+  }
+
   useEffect(() => {
     // Back from hiding: typing replaces the last query, ↓ reaches the answer.
     function focus() {
       inputRef.current?.focus();
       inputRef.current?.select();
+      void refreshAgents();
     }
     focus();
+    void getPrefs().then(
+      (prefs) => (serverUrl.current = prefs.serverUrl),
+      () => undefined
+    );
     window.addEventListener("focus", focus);
     return () => window.removeEventListener("focus", focus);
   }, []);
@@ -124,6 +267,9 @@ function Launcher() {
     setHits(null);
     setSearching(false);
     setSearchError(null);
+    setSources([]);
+    setSourceFilter(null);
+    setAttachments([]);
     inputRef.current?.focus();
   }
 
@@ -134,13 +280,19 @@ function Launcher() {
     });
   }
 
-  async function runAsk(question: string) {
+  async function runAsk(question: string, files: AttachedFile[]) {
     const id = ++askId.current;
     const last = turns.at(-1);
-    // A follow-up continues the chat once its last answer is complete.
-    const followUp = chatSessionId !== null && last !== undefined && !last.streaming && !last.error;
+    // A follow-up continues the chat once its last answer is complete, with the same agent.
+    const followUp =
+      chatSessionId !== null &&
+      last !== undefined &&
+      !last.streaming &&
+      !last.error &&
+      chatAgentId === agentId;
     const turn: Turn = {
       question,
+      files: files.map((f) => f.name),
       text: "",
       status: null,
       citations: [],
@@ -149,53 +301,63 @@ function Launcher() {
       approval: null,
     };
     setTurns((prev) => (followUp ? [...prev, turn] : [turn]));
-    if (!followUp) setChatSessionId(null);
+    if (!followUp) {
+      setChatSessionId(null);
+      setChatAgentId(agentId);
+    }
     try {
-      await ask(question, followUp ? chatSessionId : null, (event) => {
-        if (id !== askId.current) return;
-        if (event.kind === "session") {
-          setChatSessionId(event.chatSessionId);
-          return;
-        }
-        updateLast((t) => {
-          switch (event.kind) {
-            case "delta":
-              // Answer text replaces the progress line; a later tool step sets it again.
-              return { ...t, text: t.text + event.text, status: event.text ? null : t.status };
-            case "status":
-              return { ...t, status: event.text };
-            case "restart":
-              // The earlier text was narration ("Retrying with a simpler query.").
-              return {
-                ...t,
-                status: event.text ? null : t.text.trim() || t.status,
-                text: event.text,
-              };
-            case "citations":
-              return { ...t, citations: event.docs };
-            case "needsApproval":
-              return { ...t, approval: { tool: event.tool } };
-            case "done":
-              return { ...t, streaming: false, status: null };
-            case "error":
-              return { ...t, streaming: false, status: null, error: event.message };
+      await ask(
+        question,
+        { chatSessionId: followUp ? chatSessionId : null, agentId, files },
+        (event) => {
+          if (id !== askId.current) return;
+          if (event.kind === "session") {
+            setChatSessionId(event.chatSessionId);
+            return;
           }
-        });
-      });
+          updateLast((t) => {
+            switch (event.kind) {
+              case "delta":
+                // Answer text replaces the progress line; a later tool step sets it again.
+                return { ...t, text: t.text + event.text, status: event.text ? null : t.status };
+              case "status":
+                return { ...t, status: event.text };
+              case "restart":
+                // The earlier text was narration ("Retrying with a simpler query.").
+                return {
+                  ...t,
+                  status: event.text ? null : t.text.trim() || t.status,
+                  text: event.text,
+                };
+              case "citations":
+                return { ...t, citations: event.docs };
+              case "needsApproval":
+                return { ...t, approval: { tool: event.tool } };
+              case "done":
+                return { ...t, streaming: false, status: null };
+              case "error":
+                return { ...t, streaming: false, status: null, error: event.message };
+            }
+          });
+        }
+      );
     } catch (e) {
       if (id !== askId.current) return;
       updateLast((t) => ({ ...t, streaming: false, status: null, error: errorMessage(e) }));
     }
   }
 
-  async function runSearch(text: string) {
+  async function runSearch(text: string, filter: string | null) {
     const id = ++searchId.current;
     setSearching(true);
     setSearchError(null);
+    setLastSearch(text);
+    setSourceFilter(filter);
     try {
-      const results = await search(text);
+      const results = await search(text, filter ? [filter] : []);
       if (id !== searchId.current) return;
       setHits(results);
+      if (!filter) setSources([...new Set(results.map((h) => h.sourceType).filter(Boolean))]);
     } catch (e) {
       if (id !== searchId.current) return;
       setSearchError(errorMessage(e));
@@ -205,13 +367,183 @@ function Launcher() {
     }
   }
 
-  // Answer links, citation buttons, and search result rows (role="button").
-  function results(): HTMLElement[] {
-    return Array.from(
-      resultsRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not(:disabled), [role="button"]:not([aria-disabled="true"])'
-      ) ?? []
-    );
+  function toggleSource(source: string) {
+    if (!lastSearch) return;
+    void runSearch(lastSearch, sourceFilter === source ? null : source);
+  }
+
+  // ── Agents ──
+
+  const agent = agentId === null ? null : (agents.find((a) => a.id === agentId) ?? null);
+  const pickerMatches =
+    mode === "ask" && query.startsWith("@") && !pickerDismissed && agents.length > 0
+      ? agentMatches(agents, query.slice(1)).slice(0, 50)
+      : [];
+  const pickerOpen = pickerMatches.length > 0;
+  const highlighted = pickerMatches[Math.min(pickerIndex, pickerMatches.length - 1)];
+
+  function chooseAgent(next: Agent | null) {
+    const id = next === null || next.id === DEFAULT_AGENT_ID ? null : next.id;
+    setAgentId(id);
+    // Remembering is optional; the choice still applies now.
+    void setLauncherAgent(id).catch(() => undefined);
+  }
+
+  // ⌘K's set-aside draft comes back; a typed "@…" is kept as text when cancelled.
+  function closePicker(cancelled: boolean) {
+    const draft = pickerDraft.current;
+    pickerDraft.current = null;
+    if (draft !== null) setQuery(draft);
+    else if (cancelled) setPickerDismissed(true);
+    else setQuery("");
+    setPickerIndex(0);
+    inputRef.current?.focus();
+  }
+
+  function pickAgent(next: Agent) {
+    chooseAgent(next);
+    closePicker(false);
+  }
+
+  function openPicker() {
+    if (mode !== "ask") setMode("ask");
+    if (agents.length === 0) {
+      flash("This server has no other agents to choose.");
+      return;
+    }
+    if (!query.startsWith("@")) pickerDraft.current = query;
+    // The list may be up to a minute old; an agent added meanwhile shows up.
+    void refreshAgents(true);
+    setQuery("@");
+    setPickerDismissed(false);
+    setPickerIndex(0);
+    inputRef.current?.focus();
+  }
+
+  // ── Attachments ──
+
+  const uploading = attachments.some((a) => a.file === null && a.error === null);
+  const failed = attachments.some((a) => a.error !== null);
+
+  function addFiles(files: File[]) {
+    if (files.length === 0) return;
+    setMode("ask");
+    const room = MAX_ATTACHMENTS - attachments.length;
+    if (room <= 0) {
+      flash(`You can attach up to ${MAX_ATTACHMENTS} files.`);
+      return;
+    }
+    if (files.length > room) flash(`You can attach up to ${MAX_ATTACHMENTS} files.`);
+    for (const file of files.slice(0, room)) {
+      const key = ++attachmentKey.current;
+      const name = attachmentName(file);
+      const tooLarge = file.size > MAX_FILE_BYTES;
+      const empty = file.size === 0;
+      const error = tooLarge
+        ? `${name} is larger than ${MAX_FILE_BYTES / (1024 * 1024)} MB.`
+        : empty
+          ? `${name} is empty or is a folder.`
+          : null;
+      const isImage = file.type.startsWith("image/");
+      setAttachments((prev) => [...prev, { key, name, isImage, file: null, error }]);
+      if (error) continue;
+      const settle = (change: Partial<Attachment>) =>
+        setAttachments((prev) => prev.map((a) => (a.key === key ? { ...a, ...change } : a)));
+      uploadFile(file, name).then(
+        (uploaded) => settle({ file: uploaded }),
+        (e: unknown) => settle({ error: errorMessage(e) })
+      );
+    }
+  }
+
+  function removeAttachment(key: number) {
+    setAttachments((prev) => prev.filter((a) => a.key !== key));
+  }
+
+  function onPaste(event: ClipboardEvent<HTMLDivElement>) {
+    const files = Array.from(event.clipboardData.files);
+    if (files.length === 0) return;
+    event.preventDefault();
+    addFiles(files);
+  }
+
+  function hasFiles(event: DragEvent<HTMLDivElement>): boolean {
+    return Array.from(event.dataTransfer.types).includes("Files");
+  }
+
+  function onDragOver(event: DragEvent<HTMLDivElement>) {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setDragging(true);
+  }
+
+  function onDrop(event: DragEvent<HTMLDivElement>) {
+    setDragging(false);
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    addFiles(Array.from(event.dataTransfer.files));
+    inputRef.current?.focus();
+  }
+
+  // ── Result actions ──
+
+  const lastTurn = turns.at(-1);
+  const answer = lastTurn && !lastTurn.streaming && lastTurn.text ? lastTurn.text : null;
+
+  // The source for ⌘<n>: the answer's citation [n], or the nth search result.
+  function sourceLink(n: number): string | null {
+    if (mode === "ask") {
+      return lastTurn?.citations.find((c) => c.number === n)?.link ?? null;
+    }
+    return hits?.[n - 1]?.link ?? null;
+  }
+
+  // Search results and citations can link to a server path.
+  function absoluteLink(link: string): string {
+    if (!serverUrl.current) return link;
+    try {
+      return new URL(link, serverUrl.current).toString();
+    } catch {
+      return link;
+    }
+  }
+
+  function hasTextSelection(): boolean {
+    const input = inputRef.current;
+    if (input && document.activeElement === input && input.selectionStart !== input.selectionEnd) {
+      return true;
+    }
+    return (window.getSelection()?.toString() ?? "") !== "";
+  }
+
+  // ⌘C copies the focused source's link, or the answer, when no text is
+  // selected; ⌘⇧C always copies the answer.
+  function onCopyKey(event: KeyboardEvent<HTMLDivElement>): boolean {
+    if (!event.shiftKey) {
+      if (hasTextSelection()) return false;
+      const link = (document.activeElement as HTMLElement | null)?.dataset.link;
+      if (link) {
+        if (copyText(absoluteLink(link))) flash("Copied the link");
+        return true;
+      }
+    }
+    if (mode !== "ask" || !answer) return false;
+    if (copyText(answer)) flash("Copied the answer");
+    return true;
+  }
+
+  function onSourceKey(event: KeyboardEvent<HTMLDivElement>): boolean {
+    const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
+    if (!digit) return false;
+    const link = sourceLink(Number(digit));
+    if (!link) return true;
+    if (event.shiftKey) {
+      if (copyText(absoluteLink(link))) flash("Copied the link");
+    } else {
+      void openExternal(link);
+    }
+    return true;
   }
 
   // An IME composition (Japanese, Chinese, Korean) uses Enter and Esc itself.
@@ -220,24 +552,43 @@ function Launcher() {
     return event.nativeEvent.isComposing || event.keyCode === 229;
   }
 
-  // Esc and ⌘↵ work wherever focus is inside the launcher. They are handled
-  // while the event goes down to the focused control, so a focused result row
-  // never also acts on them (its Enter opens the link).
+  // Esc and ⌘ shortcuts work wherever focus is inside the launcher. They are
+  // handled while the event goes down to the focused control, so a focused
+  // result row never also acts on them (its Enter opens the link).
   function onPanelKeyDownCapture(event: KeyboardEvent<HTMLDivElement>) {
     if (composing(event)) return;
+    const key = event.key.toLowerCase();
+    let handled = true;
     if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      void hideLauncher();
-    } else if (event.key === "Enter" && hasPrimaryModifier(event)) {
-      event.preventDefault();
-      event.stopPropagation();
+      if (pickerOpen) closePicker(true);
+      else void hideLauncher();
+    } else if (!hasPrimaryModifier(event)) {
+      handled = false;
+    } else if (event.key === "Enter") {
       void openChatInMain(chatSessionId);
-    } else if (event.key.toLowerCase() === "n" && hasPrimaryModifier(event)) {
+    } else if (key === "n" && !event.shiftKey) {
+      newChat();
+    } else if (key === "k") {
+      if (pickerOpen) closePicker(true);
+      else openPicker();
+    } else if (key === "c") {
+      handled = onCopyKey(event);
+    } else {
+      handled = onSourceKey(event);
+    }
+    if (handled) {
       event.preventDefault();
       event.stopPropagation();
-      newChat();
     }
+  }
+
+  // Answer links, citation buttons, source filters and search result rows (role="button").
+  function results(): HTMLElement[] {
+    return Array.from(
+      resultsRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not(:disabled), [role="button"]:not([aria-disabled="true"])'
+      ) ?? []
+    );
   }
 
   function onPanelKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -278,35 +629,91 @@ function Launcher() {
     return false;
   }
 
+  // ↑/↓ move through the agent list, Enter or Tab picks.
+  function pickerKey(event: KeyboardEvent<HTMLInputElement>): boolean {
+    if (!pickerOpen) return false;
+    const count = pickerMatches.length;
+    const at = Math.min(pickerIndex, count - 1);
+    if (event.key === "ArrowDown") setPickerIndex((at + 1) % count);
+    else if (event.key === "ArrowUp") setPickerIndex((at - 1 + count) % count);
+    else if ((event.key === "Enter" || event.key === "Tab") && highlighted) pickAgent(highlighted);
+    else return false;
+    return true;
+  }
+
+  function submitAsk(text: string) {
+    // The server takes no new message while an answer waits for approval:
+    // keep the draft; ⌘↵ approves in the window, ⌘N starts a new chat.
+    if (awaitingApproval) return;
+    if (uploading) {
+      flash("Wait until the files finish uploading.");
+      return;
+    }
+    if (failed) {
+      flash("Remove the files that could not be attached.");
+      return;
+    }
+    const files = attachments.flatMap((a) => (a.file ? [a.file] : []));
+    remember(text);
+    historyAt.current = null;
+    // The question and its files move into the thread, like a chat input.
+    setQuery("");
+    setAttachments([]);
+    void runAsk(text, files);
+  }
+
   function onInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (composing(event)) return;
-    if (browseHistory(event)) {
+    if (pickerKey(event) || browseHistory(event)) {
       event.preventDefault();
       event.stopPropagation();
+    } else if (event.key === "Backspace" && query === "" && mode === "ask" && agentId !== null) {
+      // Backspace in an empty input removes the agent chip.
+      event.preventDefault();
+      chooseAgent(null);
     } else if (event.key === "Tab") {
       event.preventDefault();
       setMode((m) => (m === "ask" ? "search" : "ask"));
     } else if (event.key === "Enter" && !hasPrimaryModifier(event) && query.trim() !== "") {
       event.preventDefault();
-      // The server takes no new message while an answer waits for approval:
-      // keep the draft; ⌘↵ approves in the window, ⌘N starts a new chat.
-      if (mode === "ask" && awaitingApproval) return;
       const text = query.trim();
-      remember(text);
-      historyAt.current = null;
-      if (mode === "ask") {
-        // The question moves into the thread, like a chat input.
-        setQuery("");
-        void runAsk(text);
-      } else void runSearch(text);
+      if (mode === "ask") submitAsk(text);
+      else {
+        remember(text);
+        historyAt.current = null;
+        void runSearch(text, null);
+      }
     }
   }
 
+  const followsUp = turns.length > 0 && chatAgentId === agentId;
+  const placeholder =
+    mode === "search"
+      ? "Search your company's knowledge…"
+      : awaitingApproval
+        ? `Approve with ${primaryShortcut("Enter")} in the Onyx window, or ${primaryShortcut("N")} for a new chat`
+        : followsUp
+          ? "Ask a follow-up…"
+          : agent
+            ? `Ask ${agent.name}…`
+            : "Ask Onyx anything…";
+
+  const showChips = mode === "ask" && (agent !== null || attachments.length > 0);
+  const attachmentErrors = attachments.flatMap((a) => (a.error ? [a.error] : []));
+
   return (
     <div
-      className="h-full overflow-hidden rounded-16 border border-border-02 bg-background-neutral-00"
+      className={`h-full overflow-hidden rounded-16 border bg-background-neutral-00 ${
+        dragging ? "border-border-05" : "border-border-02"
+      }`}
       onKeyDownCapture={onPanelKeyDownCapture}
       onKeyDown={onPanelKeyDown}
+      onPaste={onPaste}
+      onDragOver={onDragOver}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={onDrop}
     >
       <Section gap={0} justifyContent="start" alignItems="stretch">
         <div className="drag-region" data-tauri-drag-region>
@@ -351,32 +758,129 @@ function Launcher() {
             spellCheck={false}
             onChange={(e) => {
               historyAt.current = null;
-              setQuery(e.target.value);
+              const next = e.target.value;
+              setPickerIndex(0);
+              if (!next.startsWith("@")) {
+                setPickerDismissed(false);
+                // Deleting ⌘K's "@" closes the picker and brings the draft back.
+                if (pickerDraft.current !== null) {
+                  closePicker(true);
+                  return;
+                }
+              } else if (!query.startsWith("@") && mode === "ask") {
+                void refreshAgents(true);
+              }
+              setQuery(next);
             }}
             onKeyDown={onInputKeyDown}
-            placeholder={
-              mode === "search"
-                ? "Search your company's knowledge…"
-                : awaitingApproval
-                  ? `Approve with ${primaryShortcut("Enter")} in the Onyx window, or ${primaryShortcut("N")} for a new chat`
-                  : turns.length > 0
-                  ? "Ask a follow-up…"
-                  : "Ask Onyx anything…"
-            }
+            placeholder={placeholder}
           />
+          {showChips ? (
+            <div className="flex flex-wrap items-center gap-1 pt-2">
+              {agent ? (
+                <Tag
+                  icon={SvgBubbleText}
+                  title={agent.name}
+                  truncate
+                  tooltip="The agent for new chats. Backspace in an empty input removes it."
+                  onRemove={() => {
+                    chooseAgent(null);
+                    inputRef.current?.focus();
+                  }}
+                  removeInTabOrder={false}
+                />
+              ) : null}
+              {attachments.map((a) => (
+                <Tag
+                  key={a.key}
+                  icon={a.isImage ? SvgImage : SvgPaperclip}
+                  title={a.file === null && a.error === null ? `${a.name} (uploading…)` : a.name}
+                  truncate
+                  error={a.error !== null}
+                  tooltip={a.error ?? undefined}
+                  onRemove={() => {
+                    removeAttachment(a.key);
+                    inputRef.current?.focus();
+                  }}
+                  removeInTabOrder={false}
+                />
+              ))}
+            </div>
+          ) : null}
+          {mode === "ask" && attachmentErrors.length > 0 ? (
+            <div className="pt-1">
+              <Text font="secondary-body" color="text-04">
+                {attachmentErrors.join(" ")}
+              </Text>
+            </div>
+          ) : null}
         </div>
         <div
           ref={resultsRef}
           className="selectable flex-1 overflow-y-auto border-t border-border-01 p-4"
         >
-          {mode === "ask" ? <ChatView turns={turns} /> : null}
-          {mode === "search" ? (
-            <SearchView hits={hits} searching={searching} error={searchError} />
-          ) : null}
+          {pickerOpen ? (
+            <AgentPicker
+              agents={pickerMatches}
+              highlighted={highlighted?.id ?? null}
+              selected={agentId}
+              onPick={pickAgent}
+            />
+          ) : mode === "ask" ? (
+            <ChatView turns={turns} />
+          ) : (
+            <SearchView
+              hits={hits}
+              searching={searching}
+              error={searchError}
+              sources={sources}
+              sourceFilter={sourceFilter}
+              onToggleSource={toggleSource}
+            />
+          )}
+        </div>
+        <div className="border-t border-border-01 px-4 py-2">
+          <Text font="secondary-body" color="text-02">
+            {notice ??
+              hint({
+                mode,
+                pickerOpen,
+                hasAnswer: answer !== null,
+                hasCitations: (lastTurn?.citations.length ?? 0) > 0,
+                hasHits: (hits?.length ?? 0) > 0,
+                hasAgents: agents.length > 0,
+              })}
+          </Text>
         </div>
       </Section>
     </div>
   );
+}
+
+interface HintState {
+  mode: Mode;
+  pickerOpen: boolean;
+  hasAnswer: boolean;
+  hasCitations: boolean;
+  hasHits: boolean;
+  hasAgents: boolean;
+}
+
+function hint(state: HintState): string {
+  if (state.pickerOpen) return "↑↓ choose · Enter picks the agent · Esc cancels";
+  if (state.mode === "search") {
+    return state.hasHits
+      ? `${primaryShortcut("1–9")} opens a result · ${primaryShortcut("Shift+1–9")} copies its link · ${primaryShortcut("C")} copies the selected result's link`
+      : "Enter searches";
+  }
+  if (state.hasAnswer) {
+    const parts = [`${primaryShortcut("C")} copies the answer`];
+    if (state.hasCitations) parts.push(`${primaryShortcut("1–9")} opens source [n]`, `${primaryShortcut("Shift+1–9")} copies its link`);
+    return parts.join(" · ");
+  }
+  return state.hasAgents
+    ? `@ or ${primaryShortcut("K")} picks an agent · Paste or drop files to attach them`
+    : "Paste or drop files to attach them";
 }
 
 // A local window cannot follow links itself; they open through the app, which
@@ -388,6 +892,7 @@ const ANSWER_COMPONENTS: CompactMarkdownProps["components"] = {
     href && OPENABLE_LINK.test(href) ? (
       <a
         href={href}
+        data-link={href}
         className="text-link hover:text-link-hover underline underline-offset-2"
         onClick={(event) => {
           event.preventDefault();
@@ -400,6 +905,34 @@ const ANSWER_COMPONENTS: CompactMarkdownProps["components"] = {
       <>{children}</>
     ),
 };
+
+interface AgentPickerProps {
+  agents: Agent[];
+  highlighted: number | null;
+  selected: number | null;
+  onPick: (agent: Agent) => void;
+}
+
+function AgentPicker({ agents, highlighted, selected, onPick }: AgentPickerProps) {
+  return (
+    <Section gap={1} alignItems="stretch" justifyContent="start" height="fit">
+      {agents.map((a) => (
+        <LineItemButton
+          key={a.id}
+          presentational
+          state={a.id === highlighted ? "selected" : "empty"}
+          title={a.name}
+          description={a.description || undefined}
+          descriptionMaxLines={1}
+          suffix={a.id === (selected ?? DEFAULT_AGENT_ID) ? "Current" : undefined}
+          // The input keeps focus, so typing still filters the list.
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => onPick(a)}
+        />
+      ))}
+    </Section>
+  );
+}
 
 interface ChatViewProps {
   turns: Turn[];
@@ -428,6 +961,11 @@ function TurnView({ turn }: { turn: Turn }) {
       <Text font="main-ui-action" color="text-05">
         {turn.question}
       </Text>
+      {turn.files.length > 0 ? (
+        <Text font="secondary-body" color="text-03">
+          {`Attached: ${turn.files.join(", ")}`}
+        </Text>
+      ) : null}
       {turn.streaming && !turn.text ? (
         <StatusLine text={turn.status ?? "Thinking…"} />
       ) : null}
@@ -455,6 +993,7 @@ function TurnView({ turn }: { turn: Turn }) {
               size="sm"
               prominence="secondary"
               disabled={!citation.link}
+              data-link={citation.link ?? undefined}
               onClick={() => citation.link && void openExternal(citation.link)}
             >
               {`[${citation.number}] ${citation.title}`}
@@ -482,48 +1021,78 @@ interface SearchViewProps {
   hits: SearchHit[] | null;
   searching: boolean;
   error: string | null;
+  sources: string[];
+  sourceFilter: string | null;
+  onToggleSource: (source: string) => void;
 }
 
-function SearchView({ hits, searching, error }: SearchViewProps) {
+function SearchView({
+  hits,
+  searching,
+  error,
+  sources,
+  sourceFilter,
+  onToggleSource,
+}: SearchViewProps) {
+  // Filters show once results come from more than one source, and stay while one is on.
+  const filters =
+    sources.length > 1 || sourceFilter !== null ? (
+      <div className="flex flex-wrap gap-1 pb-3">
+        {sources.map((source) => (
+          <Tag
+            key={source}
+            title={sourceLabel(source)}
+            aria-pressed={sourceFilter === source}
+            onClick={() => onToggleSource(source)}
+          />
+        ))}
+      </div>
+    ) : null;
+  let body;
   if (error) {
-    return (
+    body = (
       <Text font="main-ui-body" color="text-04">
         {error}
       </Text>
     );
-  }
-  if (searching) {
-    return (
+  } else if (searching) {
+    body = (
       <Text font="main-ui-muted" color="text-02">
         Searching…
       </Text>
     );
-  }
-  if (hits === null) {
-    return (
+  } else if (hits === null) {
+    body = (
       <Text font="main-ui-muted" color="text-02">
         Press Enter to search connected sources.
       </Text>
     );
-  }
-  if (hits.length === 0) {
-    return (
+  } else if (hits.length === 0) {
+    body = (
       <Text font="main-ui-muted" color="text-02">
         No documents matched.
       </Text>
     );
+  } else {
+    body = (
+      <Section gap={1} alignItems="stretch" justifyContent="start" height="fit">
+        {hits.map((hit) => (
+          <LineItemButton
+            key={hit.documentId}
+            title={hit.title}
+            description={`${sourceLabel(hit.sourceType)} · ${hit.blurb}`}
+            data-link={hit.link ?? undefined}
+            onClick={() => hit.link && void openExternal(hit.link)}
+          />
+        ))}
+      </Section>
+    );
   }
   return (
-    <Section gap={1} alignItems="stretch" justifyContent="start" height="fit">
-      {hits.map((hit) => (
-        <LineItemButton
-          key={hit.documentId}
-          title={hit.title}
-          description={`${hit.sourceType} · ${hit.blurb}`}
-          onClick={() => hit.link && void openExternal(hit.link)}
-        />
-      ))}
-    </Section>
+    <>
+      {filters}
+      {body}
+    </>
   );
 }
 

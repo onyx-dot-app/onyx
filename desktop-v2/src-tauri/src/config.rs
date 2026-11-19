@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -22,6 +23,9 @@ pub struct Config {
     pub aonyx_position: Option<[f64; 2]>,
     /// Notify when a launcher answer finishes while the launcher is hidden.
     pub notify_answers: Option<bool>,
+    /// The launcher's last agent, by server origin. No entry: the default agent.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub launcher_agents: BTreeMap<String, i64>,
 }
 
 impl Config {

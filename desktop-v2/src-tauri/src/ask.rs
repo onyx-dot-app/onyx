@@ -9,7 +9,10 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::ipc::Channel;
 
-use crate::api::Api;
+use crate::api::{Api, AttachedFile};
+
+/// The server's built-in default agent.
+pub const DEFAULT_AGENT_ID: i64 = 0;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -253,20 +256,32 @@ fn drain_records(
     Ok(())
 }
 
+pub struct Question<'a> {
+    pub text: &'a str,
+    /// The chat to continue with a follow-up; `None` starts a new chat.
+    pub follow_up_of: Option<&'a str>,
+    /// The agent of a new chat (`None`: the default agent). A follow-up keeps
+    /// its chat's agent.
+    pub agent_id: Option<i64>,
+    pub files: &'a [AttachedFile],
+}
+
 pub async fn run(
     api: &Api,
     server: &str,
     token: &str,
-    question: &str,
-    // The chat to continue with a follow-up; `None` starts a new chat.
-    follow_up_of: Option<&str>,
+    question: &Question<'_>,
     channel: &Channel<AskEvent>,
     // False once the session that started this answer has ended.
     is_current: &(dyn Fn() -> bool + Sync),
 ) -> Result<Answered, String> {
+    let follow_up_of = question.follow_up_of;
     let session_id = match follow_up_of {
         Some(id) => id.to_string(),
-        None => api.create_chat_session(server, token).await?,
+        None => {
+            let agent = question.agent_id.unwrap_or(DEFAULT_AGENT_ID);
+            api.create_chat_session(server, token, agent).await?
+        }
     };
     // A sign-out while the chat was being created must not send the question.
     if !is_current() {
@@ -277,7 +292,14 @@ pub async fn run(
     });
 
     let response = api
-        .send_message(server, token, &session_id, question, follow_up_of.is_some())
+        .send_message(
+            server,
+            token,
+            &session_id,
+            question.text,
+            follow_up_of.is_some(),
+            question.files,
+        )
         .await?;
     let mut stream = response.bytes_stream();
     let mut buffer: Vec<u8> = Vec::new();

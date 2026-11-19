@@ -98,19 +98,66 @@ export const changeServer = (): Promise<void> => invoke("change_server");
 
 export const signOut = (): Promise<void> => invoke("sign_out");
 
-/** `chatSessionId` continues that chat with a follow-up; null starts a new one. */
+// The server's built-in default agent.
+export const DEFAULT_AGENT_ID = 0;
+
+export interface Agent {
+  id: number;
+  name: string;
+  description: string;
+}
+
+export interface LauncherAgents {
+  agents: Agent[];
+  // The saved agent for this server; null is the default agent.
+  selected: number | null;
+}
+
+export const listAgents = (): Promise<LauncherAgents> => invoke("list_agents");
+
+export const setLauncherAgent = (agentId: number | null): Promise<void> =>
+  invoke("set_launcher_agent", { agentId });
+
+// A file uploaded and processed by the server, ready to send with a question.
+export interface AttachedFile {
+  userFileId: string;
+  fileId: string;
+  name: string;
+  chatFileType: string;
+}
+
+/** Uploads the file and resolves once the server has processed it. */
+export async function uploadFile(file: File, name: string): Promise<AttachedFile> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return invoke("upload_file", bytes, {
+    headers: {
+      "Onyx-File-Name": encodeURIComponent(name),
+      "Onyx-File-Type": encodeURIComponent(file.type),
+    },
+  });
+}
+
+export interface AskOptions {
+  // Continues that chat with a follow-up; null starts a new one.
+  chatSessionId: string | null;
+  // The agent of a new chat; null is the default agent.
+  agentId: number | null;
+  files: AttachedFile[];
+}
+
 export function ask(
   question: string,
-  chatSessionId: string | null,
+  options: AskOptions,
   onEvent: (event: AskEvent) => void
 ): Promise<void> {
   const channel = new Channel<AskEvent>();
   channel.onmessage = onEvent;
-  return invoke("ask", { question, chatSessionId, onEvent: channel });
+  return invoke("ask", { question, ...options, onEvent: channel });
 }
 
-export const search = (query: string): Promise<SearchHit[]> =>
-  invoke("search", { query });
+/** `sources` limits the search to these source types; empty searches all. */
+export const search = (query: string, sources: string[] = []): Promise<SearchHit[]> =>
+  invoke("search", { query, sources });
 
 export const openChatInMain = (chatSessionId: string | null): Promise<void> =>
   invoke("open_chat_in_main", { chatSessionId });

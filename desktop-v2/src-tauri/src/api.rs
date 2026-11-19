@@ -39,6 +39,160 @@ pub struct SearchHit {
     pub source_type: String,
 }
 
+/// An agent (persona) the user can chat with.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Agent {
+    pub id: i64,
+    pub name: String,
+    pub description: String,
+}
+
+#[derive(Deserialize)]
+struct AgentRow {
+    id: i64,
+    name: String,
+    #[serde(default)]
+    description: Option<String>,
+}
+
+/// The agents in a `GET /api/persona` answer. Rows the app cannot read are
+/// skipped, so one odd agent does not hide the others.
+fn parse_agents(body: &str) -> Result<Vec<Agent>, String> {
+    let rows: Vec<serde_json::Value> =
+        serde_json::from_str(body).map_err(|e| format!("Unexpected agent list: {e}"))?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| serde_json::from_value::<AgentRow>(row).ok())
+        .filter(|row| !row.name.trim().is_empty())
+        .map(|row| Agent {
+            id: row.id,
+            name: row.name,
+            description: row.description.unwrap_or_default(),
+        })
+        .collect())
+}
+
+/// A file uploaded for the next question.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachedFile {
+    /// The user file row.
+    pub user_file_id: String,
+    /// The stored file the chat reads.
+    pub file_id: String,
+    pub name: String,
+    /// `image`, `document`, `plain_text` or `tabular`.
+    pub chat_file_type: String,
+}
+
+impl AttachedFile {
+    /// The `file_descriptors` entry of `send-chat-message`.
+    fn descriptor(&self) -> serde_json::Value {
+        json!({
+            "id": self.file_id,
+            "type": self.chat_file_type,
+            "name": self.name,
+            "user_file_id": self.user_file_id,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UserFileRow {
+    pub id: String,
+    file_id: String,
+    name: String,
+    pub status: String,
+    chat_file_type: String,
+}
+
+impl UserFileRow {
+    pub fn attached(self) -> AttachedFile {
+        AttachedFile {
+            user_file_id: self.id,
+            file_id: self.file_id,
+            name: self.name,
+            chat_file_type: self.chat_file_type,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum FileState {
+    Ready,
+    Processing,
+    Failed,
+}
+
+/// The web chat sends a file once its processing is complete. A status this
+/// app does not know yet counts as processing, within the caller's time limit.
+pub fn file_state(status: &str) -> FileState {
+    match status {
+        "COMPLETED" | "SKIPPED" => FileState::Ready,
+        "FAILED" | "CANCELED" | "DELETING" => FileState::Failed,
+        _ => FileState::Processing,
+    }
+}
+
+#[derive(Deserialize)]
+struct RejectedRow {
+    file_name: String,
+    reason: String,
+}
+
+#[derive(Deserialize)]
+struct UploadResponse {
+    #[serde(default)]
+    user_files: Vec<UserFileRow>,
+    #[serde(default)]
+    rejected_files: Vec<RejectedRow>,
+}
+
+/// The one file of an upload answer, or why the server did not take it.
+fn upload_outcome(body: &str, name: &str) -> Result<UserFileRow, String> {
+    let parsed: UploadResponse =
+        serde_json::from_str(body).map_err(|e| format!("Unexpected upload response: {e}"))?;
+    if let Some(rejected) = parsed.rejected_files.into_iter().next() {
+        return Err(format!(
+            "Could not attach {}: {}.",
+            rejected.file_name,
+            rejected.reason.trim_end_matches('.')
+        ));
+    }
+    parsed
+        .user_files
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("The server did not accept {name}."))
+}
+
+#[derive(Deserialize)]
+struct UploadLimitResponse {
+    user_file_max_upload_size_mb: Option<u64>,
+}
+
+/// `multipart/form-data` with one `files` part, as a browser sends it.
+fn multipart_body(boundary: &str, name: &str, mime: &str, bytes: &[u8]) -> Vec<u8> {
+    // Browsers percent-encode these in a part's file name.
+    let safe_name = name
+        .replace('"', "%22")
+        .replace('\r', "%0D")
+        .replace('\n', "%0A");
+    let safe_mime = if mime.is_empty() || mime.contains(['\r', '\n']) {
+        "application/octet-stream"
+    } else {
+        mime
+    };
+    let mut body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"files\"; filename=\"{safe_name}\"\r\nContent-Type: {safe_mime}\r\n\r\n"
+    )
+    .into_bytes();
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    body
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthMethods {
@@ -464,12 +618,177 @@ impl Api {
         }
     }
 
-    pub async fn create_chat_session(&self, server: &str, token: &str) -> Result<String, String> {
+    /// The agents the user can chat with (`GET /api/persona`). A server
+    /// without the list answers with none.
+    pub async fn list_agents(&self, server: &str, token: &str) -> Result<Vec<Agent>, String> {
+        let response = self
+            .http
+            .get(format!("{server}/api/persona"))
+            .bearer_auth(token)
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if matches!(
+            response.status(),
+            StatusCode::NOT_FOUND | StatusCode::METHOD_NOT_ALLOWED
+        ) {
+            return Ok(Vec::new());
+        }
+        if !response.status().is_success() {
+            return Err(error_detail(response).await);
+        }
+        let body = response.text().await.map_err(|e| e.to_string())?;
+        parse_agents(&body)
+    }
+
+    /// The server's upload size limit for chat files, if it says.
+    pub async fn upload_limit_bytes(&self, server: &str, token: &str) -> Option<u64> {
+        let response = self
+            .http
+            .get(format!("{server}/api/settings"))
+            .bearer_auth(token)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await
+            .ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        let parsed = response.json::<UploadLimitResponse>().await.ok()?;
+        parsed
+            .user_file_max_upload_size_mb
+            .filter(|mb| *mb > 0)
+            .map(|mb| mb * 1024 * 1024)
+    }
+
+    /// Uploads one chat file (`POST /api/user/projects/file/upload`, as the
+    /// web chat does). The file can still be processing when this returns.
+    pub async fn upload_file(
+        &self,
+        server: &str,
+        token: &str,
+        name: &str,
+        mime: &str,
+        bytes: &[u8],
+    ) -> Result<UserFileRow, String> {
+        use rand::distributions::{Alphanumeric, DistString};
+        let boundary = format!(
+            "----OnyxDesktop{}",
+            Alphanumeric.sample_string(&mut rand::thread_rng(), 24)
+        );
+        let response = self
+            .http
+            .post(format!("{server}/api/user/projects/file/upload"))
+            .bearer_auth(token)
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .body(multipart_body(&boundary, name, mime, bytes))
+            .timeout(Duration::from_secs(300))
+            .send()
+            .await
+            .map_err(|e| format!("Could not upload {name}: {e}"))?;
+        if response.status() == StatusCode::PAYLOAD_TOO_LARGE {
+            return Err(format!("{name} is too large for this server."));
+        }
+        if !response.status().is_success() {
+            return Err(error_detail(response).await);
+        }
+        let body = response.text().await.map_err(|e| e.to_string())?;
+        upload_outcome(&body, name)
+    }
+
+    /// The current rows of the user's files (`POST /api/user/projects/file/statuses`).
+    pub async fn file_statuses(
+        &self,
+        server: &str,
+        token: &str,
+        ids: &[String],
+    ) -> Result<Vec<UserFileRow>, String> {
+        let response = self
+            .http
+            .post(format!("{server}/api/user/projects/file/statuses"))
+            .bearer_auth(token)
+            .json(&json!({ "file_ids": ids }))
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if !response.status().is_success() {
+            return Err(error_detail(response).await);
+        }
+        response
+            .json::<Vec<UserFileRow>>()
+            .await
+            .map_err(|e| format!("Unexpected file status response: {e}"))
+    }
+
+    /// Waits until the server has processed an uploaded file, as the web chat
+    /// does before it sends one.
+    pub async fn wait_for_file(
+        &self,
+        server: &str,
+        token: &str,
+        mut row: UserFileRow,
+        is_current: &(dyn Fn() -> bool + Sync),
+    ) -> Result<AttachedFile, String> {
+        const POLL: Duration = Duration::from_secs(1);
+        const LIMIT: Duration = Duration::from_secs(300);
+        let started = std::time::Instant::now();
+        let mut failed_polls = 0;
+        loop {
+            match file_state(&row.status) {
+                FileState::Ready => return Ok(row.attached()),
+                FileState::Failed => {
+                    return Err(format!("The server could not process {}.", row.name))
+                }
+                FileState::Processing => {}
+            }
+            if started.elapsed() > LIMIT {
+                return Err(format!(
+                    "{} is still processing. Try attaching it again later.",
+                    row.name
+                ));
+            }
+            tokio::time::sleep(POLL).await;
+            if !is_current() {
+                return Err("Signed out.".into());
+            }
+            match self
+                .file_statuses(server, token, std::slice::from_ref(&row.id))
+                .await
+            {
+                Ok(rows) => {
+                    failed_polls = 0;
+                    row = rows
+                        .into_iter()
+                        .find(|r| r.id == row.id)
+                        .ok_or_else(|| format!("{} was removed from your files.", row.name))?;
+                }
+                // A short network problem does not fail the file.
+                Err(e) => {
+                    failed_polls += 1;
+                    if failed_polls >= 5 {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+    }
+
+    pub async fn create_chat_session(
+        &self,
+        server: &str,
+        token: &str,
+        persona_id: i64,
+    ) -> Result<String, String> {
         let response = self
             .http
             .post(format!("{server}/api/chat/create-chat-session"))
             .bearer_auth(token)
-            .json(&json!({ "persona_id": 0, "description": null }))
+            .json(&json!({ "persona_id": persona_id, "description": null }))
             .timeout(Duration::from_secs(30))
             .send()
             .await
@@ -492,7 +811,10 @@ impl Api {
         message: &str,
         // A follow-up goes after the chat's latest message (-1); a new chat starts at the root.
         follow_up: bool,
+        files: &[AttachedFile],
     ) -> Result<Response, String> {
+        let file_descriptors: Vec<serde_json::Value> =
+            files.iter().map(AttachedFile::descriptor).collect();
         // Bounds the wait for the response headers only; the streamed answer
         // that follows has its own idle timeout in `ask::run`.
         let request = self
@@ -503,7 +825,7 @@ impl Api {
                 "message": message,
                 "chat_session_id": chat_session_id,
                 "parent_message_id": if follow_up { json!(-1) } else { json!(null) },
-                "file_descriptors": [],
+                "file_descriptors": file_descriptors,
                 "deep_research": false,
                 "origin": "unknown",
             }))
@@ -523,13 +845,21 @@ impl Api {
         server: &str,
         token: &str,
         query: &str,
+        // Source types (`google_drive`, `slack`); empty searches every source.
+        sources: &[String],
     ) -> Result<Vec<SearchHit>, String> {
+        let filters = if sources.is_empty() {
+            json!(null)
+        } else {
+            json!({ "source_type": sources })
+        };
         let response = self
             .http
             .post(format!("{server}/api/search/send-search-message"))
             .bearer_auth(token)
             .json(&json!({
                 "search_query": query,
+                "filters": filters,
                 "num_hits": 15,
                 "include_content": false,
                 "stream": false,
@@ -574,8 +904,9 @@ mod tests {
     use std::sync::Arc;
 
     use super::{
-        normalize_managed_server_url, normalize_server_url, redirect_allowed, sso_options, Api,
-        AuthTypeResponse,
+        file_state, multipart_body, normalize_managed_server_url, normalize_server_url,
+        parse_agents, redirect_allowed, sso_options, upload_outcome, Agent, Api, AttachedFile,
+        AuthTypeResponse, FileState,
     };
     use crate::reachability::Unreachable;
     use url::Url;
@@ -659,6 +990,89 @@ mod tests {
         assert!(!redirect_allowed(&start, &url("https://onyx.corp:8443/")));
         let long = vec![url("https://onyx.corp/"); 11];
         assert!(!redirect_allowed(&long, &url("https://onyx.corp/")));
+
+    #[test]
+    fn reads_agents_and_skips_rows_it_cannot_use() {
+        let body = r#"[
+            {"id": 0, "name": "Assistant", "description": "Default", "tools": [], "is_listed": true},
+            {"id": 7, "name": "Sales", "description": null},
+            {"id": "bad", "name": "Broken"},
+            {"id": 9, "name": "  "},
+            {"id": 12, "name": "No description"}
+        ]"#;
+        assert_eq!(
+            parse_agents(body).unwrap(),
+            vec![
+                Agent {
+                    id: 0,
+                    name: "Assistant".into(),
+                    description: "Default".into()
+                },
+                Agent {
+                    id: 7,
+                    name: "Sales".into(),
+                    description: String::new()
+                },
+                Agent {
+                    id: 12,
+                    name: "No description".into(),
+                    description: String::new()
+                },
+            ]
+        );
+        assert!(parse_agents(r#"{"detail": "x"}"#).is_err());
+    }
+
+    #[test]
+    fn reads_upload_answers() {
+        let ok = r#"{"user_files": [{"id": "u1", "file_id": "f1", "name": "a.png",
+            "status": "PROCESSING", "chat_file_type": "image", "project_id": null}],
+            "rejected_files": []}"#;
+        let row = upload_outcome(ok, "a.png").unwrap();
+        assert_eq!(file_state(&row.status), FileState::Processing);
+        let attached = row.attached();
+        assert_eq!(
+            attached,
+            AttachedFile {
+                user_file_id: "u1".into(),
+                file_id: "f1".into(),
+                name: "a.png".into(),
+                chat_file_type: "image".into(),
+            }
+        );
+        assert_eq!(
+            attached.descriptor(),
+            serde_json::json!({"id": "f1", "type": "image", "name": "a.png", "user_file_id": "u1"})
+        );
+
+        let rejected = r#"{"user_files": [], "rejected_files": [
+            {"file_name": "big.pdf", "reason": "Exceeds 100 MB file size limit"}]}"#;
+        assert_eq!(
+            upload_outcome(rejected, "big.pdf").unwrap_err(),
+            "Could not attach big.pdf: Exceeds 100 MB file size limit."
+        );
+        assert!(upload_outcome(r#"{"user_files": []}"#, "x").is_err());
+        assert!(upload_outcome("not json", "x").is_err());
+    }
+
+    #[test]
+    fn file_states_follow_the_web_chat() {
+        assert_eq!(file_state("COMPLETED"), FileState::Ready);
+        assert_eq!(file_state("SKIPPED"), FileState::Ready);
+        assert_eq!(file_state("INDEXING"), FileState::Processing);
+        assert_eq!(file_state("SOMETHING_NEW"), FileState::Processing);
+        assert_eq!(file_state("FAILED"), FileState::Failed);
+        assert_eq!(file_state("CANCELED"), FileState::Failed);
+    }
+
+    #[test]
+    fn multipart_names_cannot_break_the_part_headers() {
+        let body = multipart_body("B", "a\"b\r\n.txt", "text/plain\r\nX: y", b"hi");
+        let text = String::from_utf8(body).unwrap();
+        assert_eq!(
+            text,
+            "--B\r\nContent-Disposition: form-data; name=\"files\"; filename=\"a%22b%0D%0A.txt\"\r\nContent-Type: application/octet-stream\r\n\r\nhi\r\n--B--\r\n"
+        );
     }
 
     fn options(json: &str) -> Vec<(String, bool, Option<String>)> {
