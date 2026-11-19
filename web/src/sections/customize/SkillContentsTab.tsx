@@ -2,17 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  Button,
-  Card,
-  CompactMarkdown,
-  InputTextArea,
-  LineItemButton,
-  MessageCard,
-  Text,
-} from "@opal/components";
+import { Button, MessageCard, Text } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import { SvgEdit, SvgFileText, SvgPlus, SvgTrash } from "@opal/icons";
+import { SvgEdit } from "@opal/icons";
 import {
   composeSkillMarkdown,
   parseSkillMarkdown,
@@ -26,19 +18,10 @@ import {
 import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
 import { useSkillLimitCopy } from "@/lib/skills/hooks";
 import type { SkillBundleFile, SkillEditableDetail } from "@/lib/skills/types";
-import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
-import InstructionsDisplayModeToggle, {
-  type InstructionsDisplayMode,
-} from "@/sections/skills/InstructionsDisplayModeToggle";
-
-const SKILL_MD = "SKILL.md";
-
-interface ListedFile {
-  path: string;
-  size: number | null;
-  /** Added in this edit, not saved yet. */
-  added: boolean;
-}
+import { type InstructionsDisplayMode } from "@/sections/skills/InstructionsDisplayModeToggle";
+import SkillBundleEditor, {
+  type BundleFile,
+} from "@/sections/customize/SkillBundleEditor";
 
 interface SkillContentsTabProps {
   name: string;
@@ -98,7 +81,6 @@ export default function SkillContentsTab({
   const t = useTranslations("customize.skillPage.contents");
   const skillCopy = useTranslations("skills");
   const { describeError } = useSkillLimitCopy();
-  const [selected, setSelected] = useState(SKILL_MD);
   // Unset: the source while editing, the rendered text otherwise.
   const [chosenMode, setMode] = useState<InstructionsDisplayMode | null>(null);
   const mode = chosenMode ?? (editing ? "raw" : "rendered");
@@ -139,7 +121,7 @@ export default function SkillContentsTab({
   }, [dirty, onDirtyChange]);
 
   // An added file with the path of a saved one replaces it.
-  const byPath = new Map<string, ListedFile>();
+  const byPath = new Map<string, BundleFile>();
   for (const file of [
     ...(files ?? []).map((file) => ({
       path: file.path,
@@ -156,10 +138,6 @@ export default function SkillContentsTab({
   const listed = [...byPath.values()].sort((a, b) =>
     a.path.localeCompare(b.path)
   );
-  const shown =
-    selected === SKILL_MD || listed.some((file) => file.path === selected)
-      ? selected
-      : SKILL_MD;
   const preview = editing
     ? (() => {
         const parsed = parseSkillMarkdown(text);
@@ -215,8 +193,8 @@ export default function SkillContentsTab({
     );
   }
 
-  function remove(file: ListedFile): void {
-    setRemoved((current) => new Set([...current, file.path]));
+  function remove(path: string): void {
+    setRemoved((current) => new Set([...current, path]));
   }
 
   async function save(): Promise<void> {
@@ -298,8 +276,6 @@ export default function SkillContentsTab({
     }
   }
 
-  const selectedFile = listed.find((file) => file.path === shown);
-
   return (
     <Section gap={2} alignItems="stretch" height="auto">
       <Section
@@ -361,109 +337,20 @@ export default function SkillContentsTab({
         />
       )}
 
-      <Card border="solid" rounding={4} padding={0}>
-        <Section flexDirection="row" alignItems="stretch" height="auto" gap={0}>
-          <Section
-            justifyContent="between"
-            alignItems="stretch"
-            width="auto"
-            height="auto"
-            gap={1}
-            padding={1}
-            className="shrink-0 basis-56 border-e border-border-01 max-sm:basis-40"
-          >
-            <Section gap={0.25} alignItems="stretch" height="auto">
-              {[{ path: SKILL_MD, size: null, added: false }, ...listed].map(
-                (file) => (
-                  <LineItemButton
-                    key={file.path}
-                    icon={SvgFileText}
-                    title={file.path}
-                    titleMaxLines={1}
-                    state={file.path === shown ? "selected" : "empty"}
-                    selectVariant="select-heavy"
-                    onClick={() => setSelected(file.path)}
-                  />
-                )
-              )}
-            </Section>
-            {editing && (
-              <SkillFilesPicker
-                compact
-                buttonIcon={SvgPlus}
-                buttonLabel={t("addFile")}
-                disabled={saving}
-                onChange={add}
-                onPreparingChange={setPreparing}
-                onError={(message) => toast.error(message)}
-              />
-            )}
-          </Section>
-
-          <Section
-            gap={2}
-            alignItems="stretch"
-            justifyContent="start"
-            height="auto"
-            padding={2}
-            className="min-h-[32rem] min-w-0 flex-1"
-          >
-            <Section
-              flexDirection="row"
-              justifyContent="between"
-              alignItems="center"
-              height="auto"
-              gap={1}
-            >
-              <Text font="secondary-mono" color="text-03" maxLines={1}>
-                {`/${shown}`}
-              </Text>
-              {shown === SKILL_MD ? (
-                <InstructionsDisplayModeToggle
-                  value={mode}
-                  onChange={setMode}
-                />
-              ) : (
-                editing &&
-                selectedFile && (
-                  <Button
-                    prominence="tertiary"
-                    icon={SvgTrash}
-                    disabled={saving}
-                    aria-label={t("removeFile", { name: shown })}
-                    tooltip={t("removeFile", { name: shown })}
-                    onClick={() => remove(selectedFile)}
-                  />
-                )
-              )}
-            </Section>
-            {shown !== SKILL_MD ? (
-              <Text font="secondary-body" color="text-03">
-                {selectedFile?.added ? t("addedFile") : t("noPreview")}
-              </Text>
-            ) : editing && mode === "raw" ? (
-              <InputTextArea
-                aria-label={t("editorLabel")}
-                mono
-                rows={18}
-                value={text}
-                onChange={(event) => setDraft(event.target.value)}
-                variant={saving ? "disabled" : "internal"}
-              />
-            ) : mode === "raw" ? (
-              <InputTextArea
-                aria-label={t("editorLabel")}
-                mono
-                rows={18}
-                value={original}
-                variant="readOnly"
-              />
-            ) : (
-              <CompactMarkdown>{preview}</CompactMarkdown>
-            )}
-          </Section>
-        </Section>
-      </Card>
+      <SkillBundleEditor
+        files={listed}
+        editing={editing}
+        text={editing ? text : original}
+        onTextChange={setDraft}
+        preview={preview}
+        mode={mode}
+        onModeChange={setMode}
+        busy={saving}
+        onAdd={add}
+        onRemove={remove}
+        onPreparingChange={setPreparing}
+        addedFileNote={t("addedFile")}
+      />
     </Section>
   );
 }

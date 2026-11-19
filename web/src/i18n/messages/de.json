@@ -16440,33 +16440,8 @@
         "label": "Löschen",
         "pendingLabel": "Wird gelöscht..."
       },
-      "details": {
-        "description": "Legen Sie fest, wann und wie der Agent diesen Skill verwendet.",
-        "descriptionField": {
-          "description": "Beschreiben Sie, wann dieser Skill verwendet werden soll.",
-          "placeholder": "Wobei hilft dieser Skill?",
-          "title": "Beschreibung"
-        },
-        "name": {
-          "createDescription": "Verwenden Sie Kleinbuchstaben, Zahlen und einzelne Bindestriche.",
-          "placeholder": "Benennen Sie Ihren Skill",
-          "title": "Name"
-        },
-        "title": "Details"
-      },
       "files": {
-        "busyLabel": "Wird hochgeladen...",
-        "description": "Fügen Sie Referenzen, Skripte, Assets oder andere Dateien hinzu, die dieser Skill verwendet. Onyx entpackt eine ZIP-Datei. Eine SKILL.md füllt die Felder oben aus.",
-        "input": {
-          "ariaLabel": "Unterstützende Dateien hinzufügen"
-        },
-        "pendingUpload": {
-          "emptyMessage": "Dateien aus diesem Upload erscheinen, nachdem Sie den Skill erstellt haben."
-        },
-        "title": "Unterstützende Dateien"
-      },
-      "filesTooltip": {
-        "updating": "Skill-Dateien werden aktualisiert..."
+        "addedOnCreate": "„Erstellen“ fügt diese Datei dem Skill hinzu."
       },
       "header": {
         "createDescription": "Erstellen Sie einen persönlichen Skill",
@@ -16477,12 +16452,6 @@
           "pendingLabel": "Wird erstellt..."
         },
         "cancel": "Abbrechen"
-      },
-      "instructions": {
-        "description": "Beschreiben Sie das Verhalten und den Ablauf, die dieser Skill dem Agenten hinzufügt.",
-        "emptyFallback": "Noch keine Anweisungen.",
-        "placeholder": "Schreiben Sie die Skill-Anweisungen.",
-        "title": "Anweisungen"
       },
       "loadError": {
         "description": "Dieser Skill existiert möglicherweise nicht, ist integriert oder kann mit Ihrem Konto nicht bearbeitet werden."
@@ -16495,7 +16464,6 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "Fügen Sie vor dem Speichern eine Beschreibung hinzu.",
         "missingInstructions": "Fügen Sie vor dem Speichern Anweisungen hinzu.",
         "missingName": "Fügen Sie vor dem Speichern einen Namen hinzu.",
         "noChanges": "Es wurden keine Änderungen vorgenommen.",

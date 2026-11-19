@@ -16440,33 +16440,8 @@
         "label": "削除",
         "pendingLabel": "削除中..."
       },
-      "details": {
-        "description": "エージェントがこのスキルをいつ、どのように使うかを定義します。",
-        "descriptionField": {
-          "description": "このスキルをいつ使用すべきかを説明します。",
-          "placeholder": "このスキルは何に役立ちますか？",
-          "title": "説明"
-        },
-        "name": {
-          "createDescription": "小文字、数字、単一のハイフンを使用してください。",
-          "placeholder": "スキルに名前を付ける",
-          "title": "名前"
-        },
-        "title": "詳細"
-      },
       "files": {
-        "busyLabel": "アップロード中...",
-        "description": "このスキルで使用する参照、スクリプト、アセット、その他のファイルを追加します。OnyxはZIPを展開します。SKILL.mdは上のフィールドに入力します。",
-        "input": {
-          "ariaLabel": "サポートファイルを追加"
-        },
-        "pendingUpload": {
-          "emptyMessage": "このアップロードのファイルは、スキルの作成後に表示されます。"
-        },
-        "title": "サポートファイル"
-      },
-      "filesTooltip": {
-        "updating": "スキルファイルを更新中..."
+        "addedOnCreate": "「作成」でこのファイルがスキルに追加されます。"
       },
       "header": {
         "createDescription": "個人スキルを作成",
@@ -16477,12 +16452,6 @@
           "pendingLabel": "作成中..."
         },
         "cancel": "キャンセル"
-      },
-      "instructions": {
-        "description": "このスキルがエージェントに追加する動作とワークフローを記述します。",
-        "emptyFallback": "まだ指示がありません。",
-        "placeholder": "スキルの指示を書いてください。",
-        "title": "指示"
       },
       "loadError": {
         "description": "このスキルは存在しないか、組み込みであるか、またはお使いのアカウントでは編集できない可能性があります。"
@@ -16495,7 +16464,6 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "保存する前に説明を追加してください。",
         "missingInstructions": "保存する前に指示を追加してください。",
         "missingName": "保存する前に名前を追加してください。",
         "noChanges": "変更はありません。",

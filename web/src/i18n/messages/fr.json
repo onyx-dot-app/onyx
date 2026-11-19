@@ -16440,33 +16440,8 @@
         "label": "Supprimer",
         "pendingLabel": "Suppression..."
       },
-      "details": {
-        "description": "Définissez quand et comment l’agent doit utiliser cette compétence.",
-        "descriptionField": {
-          "description": "Décrivez quand cette compétence doit être utilisée.",
-          "placeholder": "À quoi sert cette compétence ?",
-          "title": "Description"
-        },
-        "name": {
-          "createDescription": "Utilisez des lettres minuscules, des chiffres et des traits d'union simples.",
-          "placeholder": "Nommez votre compétence",
-          "title": "Nom"
-        },
-        "title": "Détails"
-      },
       "files": {
-        "busyLabel": "Téléversement...",
-        "description": "Ajoutez des références, des scripts, des ressources ou d’autres fichiers que cette compétence utilise. Onyx décompresse un ZIP. Un fichier SKILL.md remplit les champs ci-dessus.",
-        "input": {
-          "ariaLabel": "Ajouter des fichiers annexes"
-        },
-        "pendingUpload": {
-          "emptyMessage": "Les fichiers de ce téléversement apparaîtront après la création de la compétence."
-        },
-        "title": "Fichiers annexes"
-      },
-      "filesTooltip": {
-        "updating": "Mise à jour des fichiers de la compétence..."
+        "addedOnCreate": "Créer ajoute ce fichier à la compétence."
       },
       "header": {
         "createDescription": "Créez une compétence personnelle",
@@ -16477,12 +16452,6 @@
           "pendingLabel": "Création..."
         },
         "cancel": "Annuler"
-      },
-      "instructions": {
-        "description": "Décrivez le comportement et le flux de travail que cette compétence ajoute à l’agent.",
-        "emptyFallback": "Pas encore d'instructions.",
-        "placeholder": "Rédigez les instructions de la compétence.",
-        "title": "Instructions"
       },
       "loadError": {
         "description": "Cette compétence n'existe peut-être pas, est peut-être intégrée ou n'est peut-être pas modifiable avec votre compte."
@@ -16495,7 +16464,6 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "Ajoutez une description avant d'enregistrer.",
         "missingInstructions": "Ajoutez des instructions avant d'enregistrer.",
         "missingName": "Ajoutez un nom avant d'enregistrer.",
         "noChanges": "Aucune modification n'a été apportée.",

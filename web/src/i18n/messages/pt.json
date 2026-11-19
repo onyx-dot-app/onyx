@@ -16440,33 +16440,8 @@
         "label": "Excluir",
         "pendingLabel": "Excluindo..."
       },
-      "details": {
-        "description": "Defina quando e como o agente deve usar esta habilidade.",
-        "descriptionField": {
-          "description": "Descreva quando esta habilidade deve ser usada.",
-          "placeholder": "Com o que esta habilidade ajuda?",
-          "title": "Descrição"
-        },
-        "name": {
-          "createDescription": "Use letras minúsculas, números e hifens simples.",
-          "placeholder": "Dê um nome à sua habilidade",
-          "title": "Nome"
-        },
-        "title": "Detalhes"
-      },
       "files": {
-        "busyLabel": "Enviando...",
-        "description": "Adicione referências, scripts, recursos ou outros arquivos que esta habilidade usa. O Onyx descompacta um ZIP. Um SKILL.md preenche os campos acima.",
-        "input": {
-          "ariaLabel": "Adicionar arquivos de apoio"
-        },
-        "pendingUpload": {
-          "emptyMessage": "Os arquivos deste envio aparecerão depois que você criar a habilidade."
-        },
-        "title": "Arquivos de apoio"
-      },
-      "filesTooltip": {
-        "updating": "Atualizando os arquivos da habilidade..."
+        "addedOnCreate": "Criar adiciona este arquivo à habilidade."
       },
       "header": {
         "createDescription": "Crie uma habilidade pessoal",
@@ -16477,12 +16452,6 @@
           "pendingLabel": "Criando..."
         },
         "cancel": "Cancelar"
-      },
-      "instructions": {
-        "description": "Escreva o comportamento e o fluxo de trabalho que esta habilidade adiciona ao agente.",
-        "emptyFallback": "Ainda não há instruções.",
-        "placeholder": "Escreva as instruções da habilidade.",
-        "title": "Instruções"
       },
       "loadError": {
         "description": "Esta habilidade pode não existir, ser integrada ou não ser editável pela sua conta."
@@ -16495,7 +16464,6 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "Adicione uma descrição antes de salvar.",
         "missingInstructions": "Adicione instruções antes de salvar.",
         "missingName": "Adicione um nome antes de salvar.",
         "noChanges": "Nenhuma alteração foi feita.",

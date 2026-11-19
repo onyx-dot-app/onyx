@@ -16440,33 +16440,8 @@
         "label": "Eliminar",
         "pendingLabel": "Eliminando..."
       },
-      "details": {
-        "description": "Define cuándo y cómo debe usar el agente esta habilidad.",
-        "descriptionField": {
-          "description": "Describe cuándo se debe usar esta habilidad.",
-          "placeholder": "¿En qué ayuda esta habilidad?",
-          "title": "Descripción"
-        },
-        "name": {
-          "createDescription": "Usa letras minúsculas, números y guiones simples.",
-          "placeholder": "Nombra tu habilidad",
-          "title": "Nombre"
-        },
-        "title": "Detalles"
-      },
       "files": {
-        "busyLabel": "Subiendo...",
-        "description": "Agrega referencias, scripts, recursos u otros archivos que usa esta habilidad. Onyx descomprime un ZIP. Un SKILL.md rellena los campos de arriba.",
-        "input": {
-          "ariaLabel": "Agregar archivos de apoyo"
-        },
-        "pendingUpload": {
-          "emptyMessage": "Los archivos de esta carga aparecerán después de crear la habilidad."
-        },
-        "title": "Archivos de apoyo"
-      },
-      "filesTooltip": {
-        "updating": "Actualizando los archivos de la habilidad..."
+        "addedOnCreate": "Crear agrega este archivo a la habilidad."
       },
       "header": {
         "createDescription": "Crea una habilidad personal",
@@ -16477,12 +16452,6 @@
           "pendingLabel": "Creando..."
         },
         "cancel": "Cancelar"
-      },
-      "instructions": {
-        "description": "Escribe el comportamiento y el flujo de trabajo que esta habilidad añade al agente.",
-        "emptyFallback": "Aún no hay instrucciones.",
-        "placeholder": "Escribe las instrucciones de la habilidad.",
-        "title": "Instrucciones"
       },
       "loadError": {
         "description": "Es posible que esta habilidad no exista, sea integrada o no pueda editarse con tu cuenta."
@@ -16495,7 +16464,6 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "Agrega una descripción antes de guardar.",
         "missingInstructions": "Agrega instrucciones antes de guardar.",
         "missingName": "Agrega un nombre antes de guardar.",
         "noChanges": "No se han realizado cambios.",

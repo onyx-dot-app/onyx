@@ -16440,33 +16440,8 @@
         "label": "Delete",
         "pendingLabel": "Deleting..."
       },
-      "details": {
-        "description": "Define when and how the agent should use this skill.",
-        "descriptionField": {
-          "description": "Describe when this skill should be used.",
-          "placeholder": "What does this skill help with?",
-          "title": "Description"
-        },
-        "name": {
-          "createDescription": "Use lowercase letters, numbers, and single hyphens.",
-          "placeholder": "Name your skill",
-          "title": "Name"
-        },
-        "title": "Details"
-      },
       "files": {
-        "busyLabel": "Uploading...",
-        "description": "Add references, scripts, assets or other files that this skill uses. Onyx unpacks a ZIP. A SKILL.md fills in the fields above.",
-        "input": {
-          "ariaLabel": "Add supporting files"
-        },
-        "pendingUpload": {
-          "emptyMessage": "Files from this upload will appear after you create the skill."
-        },
-        "title": "Supporting files"
-      },
-      "filesTooltip": {
-        "updating": "Updating skill files..."
+        "addedOnCreate": "Create adds this file to the skill."
       },
       "header": {
         "createDescription": "Build a personal skill",
@@ -16477,12 +16452,6 @@
           "pendingLabel": "Creating..."
         },
         "cancel": "Cancel"
-      },
-      "instructions": {
-        "description": "Write the behavior and workflow this skill adds to the agent.",
-        "emptyFallback": "No instructions yet.",
-        "placeholder": "Write the skill instructions.",
-        "title": "Instructions"
       },
       "loadError": {
         "description": "This skill may not exist, may be built-in, or may not be editable by your account."
@@ -16495,7 +16464,6 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "Add a description before saving.",
         "missingInstructions": "Add instructions before saving.",
         "missingName": "Add a name before saving.",
         "noChanges": "No changes have been made.",

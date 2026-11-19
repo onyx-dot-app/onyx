@@ -16440,33 +16440,8 @@
         "label": "删除",
         "pendingLabel": "正在删除..."
       },
-      "details": {
-        "description": "定义代理何时以及如何使用此技能。",
-        "descriptionField": {
-          "description": "描述何时应使用此技能。",
-          "placeholder": "此技能有什么用途？",
-          "title": "描述"
-        },
-        "name": {
-          "createDescription": "使用小写字母、数字和单个连字符。",
-          "placeholder": "为您的技能命名",
-          "title": "名称"
-        },
-        "title": "详情"
-      },
       "files": {
-        "busyLabel": "正在上传...",
-        "description": "添加此技能使用的参考资料、脚本、资源或其他文件。Onyx 会解压 ZIP 文件。SKILL.md 会填写上方的字段。",
-        "input": {
-          "ariaLabel": "添加支持文件"
-        },
-        "pendingUpload": {
-          "emptyMessage": "此上传的文件将在您创建技能后显示。"
-        },
-        "title": "支持文件"
-      },
-      "filesTooltip": {
-        "updating": "正在更新技能文件..."
+        "addedOnCreate": "“创建”会将此文件添加到技能中。"
       },
       "header": {
         "createDescription": "构建个人技能",
@@ -16477,12 +16452,6 @@
           "pendingLabel": "正在创建..."
         },
         "cancel": "取消"
-      },
-      "instructions": {
-        "description": "编写此技能为代理添加的行为和工作流程。",
-        "emptyFallback": "暂无说明。",
-        "placeholder": "编写技能说明。",
-        "title": "说明"
       },
       "loadError": {
         "description": "此技能可能不存在、是内置技能，或您的账户无法编辑。"
@@ -16495,7 +16464,6 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "保存前请添加描述。",
         "missingInstructions": "保存前请添加说明。",
         "missingName": "保存前请添加名称。",
         "noChanges": "尚未进行任何更改。",

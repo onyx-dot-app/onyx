@@ -16440,33 +16440,8 @@
         "label": "삭제",
         "pendingLabel": "삭제 중..."
       },
-      "details": {
-        "description": "에이전트가 이 스킬을 언제, 어떻게 사용할지 정의하세요.",
-        "descriptionField": {
-          "description": "이 스킬을 언제 사용해야 하는지 설명하세요.",
-          "placeholder": "이 스킬은 어떤 도움을 주나요?",
-          "title": "설명"
-        },
-        "name": {
-          "createDescription": "소문자, 숫자, 단일 하이픈을 사용하세요.",
-          "placeholder": "스킬 이름 지정",
-          "title": "이름"
-        },
-        "title": "세부 정보"
-      },
       "files": {
-        "busyLabel": "업로드 중...",
-        "description": "이 스킬이 사용하는 참조, 스크립트, 에셋 또는 기타 파일을 추가하세요. Onyx는 ZIP의 압축을 풉니다. SKILL.md는 위 필드를 채웁니다.",
-        "input": {
-          "ariaLabel": "지원 파일 추가"
-        },
-        "pendingUpload": {
-          "emptyMessage": "이 업로드의 파일은 스킬을 생성한 후에 표시됩니다."
-        },
-        "title": "지원 파일"
-      },
-      "filesTooltip": {
-        "updating": "스킬 파일 업데이트 중..."
+        "addedOnCreate": "만들기를 누르면 이 파일이 스킬에 추가됩니다."
       },
       "header": {
         "createDescription": "개인 스킬 만들기",
@@ -16477,12 +16452,6 @@
           "pendingLabel": "만드는 중..."
         },
         "cancel": "취소"
-      },
-      "instructions": {
-        "description": "이 스킬이 에이전트에 추가하는 동작과 워크플로를 작성하세요.",
-        "emptyFallback": "아직 지침이 없습니다.",
-        "placeholder": "스킬 지침을 작성하세요.",
-        "title": "지침"
       },
       "loadError": {
         "description": "이 스킬이 존재하지 않거나, 기본 제공 스킬이거나, 내 계정으로 편집할 수 없는 스킬일 수 있습니다."
@@ -16495,7 +16464,6 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "저장하기 전에 설명을 추가하세요.",
         "missingInstructions": "저장하기 전에 지침을 추가하세요.",
         "missingName": "저장하기 전에 이름을 추가하세요.",
         "noChanges": "변경된 사항이 없습니다.",
