@@ -302,6 +302,9 @@ build their own clients.
     Converse, Ollama and Ollama Chat cannot (`PROVIDERS_WITHOUT_NONE_TOOL_CHOICE`),
     and Qwen and GLM deployments can reject it. Those requests send `AUTO`. The
     agent runtime denies any call that comes back ([[core-chat-loop#stopping-tools]]).
+    Decoding follows the choice that was sent (`llm/model_response.py:_provider_may_call`):
+    after `AUTO`, a call written as text is recovered so the runtime can deny it;
+    after `NONE`, call-like text stays part of the answer.
     Only the providers that receive `AUTO` reuse the whole cached prefix on a
     final step. Claude through Anthropic, Vertex, OpenRouter or a proxy receives
     `NONE`, and its prompt cache counts a changed tool choice as a change to the

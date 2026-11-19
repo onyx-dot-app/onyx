@@ -43,7 +43,7 @@ from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
 from onyx.integrations.models import CallCredentials
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -377,6 +377,64 @@ def test_after_step_runs_on_the_denied_step(monkeypatch: pytest.MonkeyPatch) -> 
         max_steps=1,
     )
     assert observed == [(0, [NO_TOOL_CAN_RUN_RESULT]), (1, [])]
+
+
+_XML_CALL = (
+    '<function_calls><invoke name="echo"><parameter name="value">hi</parameter>'
+    "</invoke></function_calls>"
+)
+
+
+@pytest.mark.parametrize(
+    ("provider", "model_name", "sent_choice"),
+    [
+        ("openai", "qwen3.7-plus", ToolChoiceOptions.AUTO),
+        ("openai", "z-ai/glm-5.3", ToolChoiceOptions.AUTO),
+        ("ollama_chat", "llama3.2", ToolChoiceOptions.AUTO),
+        ("bedrock", "us.amazon.nova-pro-v1:0", ToolChoiceOptions.AUTO),
+        ("openai", "gpt-5", ToolChoiceOptions.NONE),
+    ],
+)
+def test_last_step_text_tool_call_follows_the_sent_tool_choice(
+    monkeypatch: pytest.MonkeyPatch,
+    provider: str,
+    model_name: str,
+    sent_choice: ToolChoiceOptions,
+) -> None:
+    """Under AUTO a text tool call is denied and the extra step answers; under
+    NONE the provider forbade calls, so the text is the answer."""
+    monkeypatch.setattr(
+        ScriptedLLM,
+        "config",
+        property(
+            lambda self: LLMConfig(
+                model_provider=provider,
+                model_name=model_name,
+                max_input_tokens=self.max_input_tokens,
+                temperature=0,
+            )
+        ),
+    )
+
+    def never_run(*_args: object, **_kwargs: object) -> ToolResult:
+        raise AssertionError("A call on the last step ran")
+
+    monkeypatch.setattr(EchoTool, "_run", never_run)
+    llm = ScriptedLLM([Delta(content=_XML_CALL), Delta(content="Answer")])
+    agent = chat_agent(llm, [EchoTool()])
+    result = run_agent(agent, messages=[UserMessage(content="Hello")], max_steps=1)
+
+    assert llm.requests[0]["tool_choice"] == sent_choice
+    if sent_choice == ToolChoiceOptions.NONE:
+        assert len(llm.requests) == 1
+        assert result.output.text == _XML_CALL
+        return
+    assert len(llm.requests) == 2
+    denied = agent.state.messages[2]
+    assert isinstance(denied, ToolResultMessage)
+    assert denied.is_error and denied.text == NO_TOOL_CAN_RUN_RESULT
+    assert result.stop_reason == RunStatus.COMPLETE
+    assert result.output.text == "Answer"
 
 
 class _PythonTool(EchoTool):
