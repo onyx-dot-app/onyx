@@ -2219,7 +2219,7 @@ class LitellmLLM(LLM):
                 # A completed response survives its deadline, but explicit Stop wins.
                 if signal.cancelled:
                     raise AgentCancelled()
-                return to_assistant_message(response, request)
+                return to_assistant_message(response, request, tool_choice)
             except (Exception, AgentCancelled) as error:
                 span.set_error(
                     {
@@ -2279,6 +2279,7 @@ class LitellmLLM(LLM):
                         )
                     ),
                     request,
+                    tool_choice,
                 )
                 for event in events:
                     signal.check()
