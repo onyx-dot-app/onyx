@@ -506,6 +506,7 @@ def _sandbox_packets(parts: Sequence[object]) -> list[packets.PacketObj]:
     """The sandbox tools' packets of streamed parts or replayed packets, and
     their section ends."""
     sandbox_types = (
+        packets.FileToolProgress,
         packets.ExecCommandStart,
         packets.WriteStdinStart,
         packets.ExecOutputDelta,
@@ -590,6 +591,10 @@ def test_a_chat_turn_streams_saves_and_replays_its_sandbox_calls(
         packets.ExecOutputDelta(text="hi there\n"),
         end,
         packets.SectionEnd(),
+        # The streamed arguments report their progress live only.
+        packets.FileToolProgress(
+            tool_name=ApplyPatchTool.NAME, paths=["a.txt"], lines=4
+        ),
         *patched,
     ]
     # A reload sends the saved output with the end, without deltas.
@@ -1689,7 +1694,16 @@ def test_edit_and_write_calls_render_patch_cards_live_and_on_replay(
         packets.ApplyPatchEnd(error=not_found),
         packets.SectionEnd(),
     ]
-    assert _sandbox_packets(parts) == expected
+    # The streamed arguments report their progress live only, before each start.
+    progress = [
+        packets.FileToolProgress(tool_name=name, paths=["a.py"], lines=1)
+        for name in (WriteTool.NAME, EditTool.NAME, WriteTool.NAME, EditTool.NAME)
+    ]
+    assert _sandbox_packets(parts) == [
+        packet
+        for index, obj in enumerate(expected)
+        for packet in ([progress[index // 3], obj] if index % 3 == 0 else [obj])
+    ]
     [replayed] = chat.replayed(db_session)
     assert _sandbox_packets(replayed) == expected
 

@@ -73,6 +73,7 @@ export enum PacketType {
   WRITE_STDIN_START = "write_stdin_start",
   EXEC_OUTPUT_DELTA = "exec_output_delta",
   EXEC_END = "exec_end",
+  FILE_TOOL_PROGRESS = "file_tool_progress",
   APPLY_PATCH_START = "apply_patch_start",
   APPLY_PATCH_END = "apply_patch_end",
   PUBLISH_FILES_START = "publish_files_start",
@@ -104,16 +105,6 @@ export const isCodeInterpreterToolType = (toolType: string): boolean =>
 
 // tool_type of the argument deltas that stream a code mode program
 export const CODE_MODE_TOOL_TYPE = "execute_code";
-
-const FILE_TOOL_NAMES: readonly string[] = [
-  "apply_patch",
-  "edit",
-  "write",
-] satisfies FileToolName[];
-
-// File tools stream progress, not their arguments, before their start packet
-export const isFileToolType = (toolType: string): toolType is FileToolName =>
-  FILE_TOOL_NAMES.includes(toolType);
 
 // Basic Message Packets
 export interface UserMessage extends BaseObj {
@@ -227,16 +218,6 @@ export interface ToolCallArgumentDelta extends BaseObj {
   tool_type: string;
   tool_id: string;
   argument_deltas: Record<string, unknown>;
-  // Set for file tools, which stream progress instead of their arguments
-  file_progress?: FileToolProgress | null;
-}
-
-// What a file tool call's streamed arguments hold so far
-export interface FileToolProgress {
-  // The files the arguments name, in order
-  paths: string[];
-  // The lines of the file text or patch
-  lines: number;
 }
 
 export interface FetchToolStart extends BaseObj {
@@ -462,7 +443,19 @@ export interface ExecEnd extends BaseObj {
 }
 
 // The names of the backend's file tools (sandbox_tools.py)
-export type FileToolName = "apply_patch" | "edit" | "write";
+export const FILE_TOOL_NAMES = ["apply_patch", "edit", "write"] as const;
+export type FileToolName = (typeof FILE_TOOL_NAMES)[number];
+
+// What a file tool call's arguments hold while the model streams them; the
+// call's start packet follows
+export interface FileToolProgress extends BaseObj {
+  type: "file_tool_progress";
+  tool_name: FileToolName;
+  // The files the arguments name so far, in order
+  paths: string[];
+  // The lines of the file text or patch so far
+  lines: number;
+}
 
 export interface ApplyPatchStart extends BaseObj {
   type: "apply_patch_start";
@@ -627,7 +620,7 @@ export type ExecToolObj =
   | SectionEnd
   | PacketError;
 export type ApplyPatchToolObj =
-  | ToolCallArgumentDelta
+  | FileToolProgress
   | ApplyPatchStart
   | ApplyPatchEnd
   | SectionEnd

@@ -3,11 +3,10 @@ import {
   ApplyPatchStart,
   CustomToolStart,
   FileToolName,
-  isFileToolType,
+  FileToolProgress,
   Packet,
   PacketType,
   SearchToolPacket,
-  ToolCallArgumentDelta,
 } from "@/app/app/services/streamingModels";
 import { constructCurrentSearchState } from "@/lib/timeline/chat/renderers/search/searchStateUtils";
 import { isGroupEndPacket } from "@/lib/timeline/chat/packetHelpers";
@@ -93,13 +92,10 @@ export function getToolName(packets: Packet[], t: TimelineTranslate): string {
       return t(
         FILE_TOOL_TITLES[(firstPacket.obj as ApplyPatchStart).tool_name]
       );
-    case PacketType.TOOL_CALL_ARGUMENT_DELTA: {
-      // A file tool's streamed progress precedes its start packet.
-      const toolType = (firstPacket.obj as ToolCallArgumentDelta).tool_type;
-      return isFileToolType(toolType)
-        ? t(FILE_TOOL_TITLES[toolType])
-        : t("toolNames.tool");
-    }
+    case PacketType.FILE_TOOL_PROGRESS:
+      return t(
+        FILE_TOOL_TITLES[(firstPacket.obj as FileToolProgress).tool_name]
+      );
     case PacketType.PUBLISH_FILES_START:
       return t("toolNames.publishFiles");
     case PacketType.FETCH_TOOL_START:

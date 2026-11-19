@@ -1007,6 +1007,29 @@ describe("packetProcessor", () => {
       ]);
       expect(result.finalAnswerComing).toBe(false);
     });
+
+    test("a file tool whose progress streamed before the message resets it when it starts", () => {
+      const state = createInitialState(1);
+      const packets = [
+        createPacket(
+          PacketType.FILE_TOOL_PROGRESS,
+          { turn_index: 0 },
+          { tool_name: "write", paths: ["a.md"], lines: 2 }
+        ),
+        createMessageStartPacket({ turn_index: 1 }),
+      ];
+      expect(processPackets(state, packets).finalAnswerComing).toBe(true);
+
+      const result = processPackets(state, [
+        ...packets,
+        createPacket(
+          PacketType.APPLY_PATCH_START,
+          { turn_index: 0 },
+          { patch: "", tool_name: "write" }
+        ),
+      ]);
+      expect(result.finalAnswerComing).toBe(false);
+    });
   });
 
   describe("image generation counting", () => {

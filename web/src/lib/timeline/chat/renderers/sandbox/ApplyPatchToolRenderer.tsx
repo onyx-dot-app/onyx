@@ -2,6 +2,7 @@ import { type ComponentProps, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { Text, type TextColor } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { STEP_ICONS } from "@/lib/timeline/icons";
 import {
   ApplyPatchEnd,
@@ -11,6 +12,7 @@ import {
   PacketType,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/app/app/message/messageComponents/types";
+import type { TimelineTranslate } from "@/app/app/message/messageComponents/toolDisplayHelpers";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import {
   SandboxCallContent,
@@ -67,6 +69,83 @@ function renderPatchLines(text: string) {
   );
 }
 
+// Unicode isolates keep a path's own direction from reordering the sentence.
+const isolate = (path: string) => `\u2068${path}\u2069`;
+
+function progressStatus(
+  progress: FileToolProgress,
+  t: TimelineTranslate
+): string {
+  const [path] = progress.paths;
+  switch (progress.tool_name) {
+    case "apply_patch":
+      return t("sandbox.patch.progress.patching.status", {
+        count: progress.paths.length,
+      });
+    case "write":
+      return path === undefined
+        ? t("sandbox.patch.progress.starting.status", { tool: "write" })
+        : t("sandbox.patch.progress.writing.status", {
+            path: isolate(path),
+            lines: progress.lines,
+          });
+    case "edit":
+      return path === undefined
+        ? t("sandbox.patch.progress.starting.status", { tool: "edit" })
+        : t("sandbox.patch.progress.editing.status", {
+            path: isolate(path),
+            lines: progress.lines,
+          });
+  }
+}
+
+interface FileRow {
+  path: string;
+  // Set once the call changed the file
+  change: ApplyPatchFileChange["change"] | null;
+  movePath: string | null;
+}
+
+/** The files of a call: named while it streams, then marked as changed. */
+function FileList({ files }: { files: FileRow[] }) {
+  return (
+    <Section gap={1} alignItems="start" height="fit">
+      {files.map((file, index) => (
+        <Section
+          key={index}
+          flexDirection="row"
+          justifyContent="start"
+          alignItems="start"
+          gap={2}
+          height="fit"
+        >
+          {file.change !== null && (
+            <Text
+              font="secondary-mono"
+              color={CHANGE_MARKERS[file.change].color}
+            >
+              {CHANGE_MARKERS[file.change].marker}
+            </Text>
+          )}
+          <Text font="secondary-mono" color="text-04" wordWrap="break-all">
+            {richNodes(
+              <>
+                <bdi>{file.path}</bdi>
+                {file.movePath !== null && (
+                  <>
+                    {" → "}
+                    <bdi>{file.movePath}</bdi>
+                  </>
+                )}
+              </>
+            )}
+          </Text>
+        </Section>
+      ))}
+    </Section>
+  );
+}
+
 type ApplyPatchToolRendererProps = ComponentProps<
   MessageRenderer<ApplyPatchToolPacket, {}>
 >;
@@ -80,29 +159,24 @@ export function ApplyPatchToolRenderer({
   children,
 }: ApplyPatchToolRendererProps) {
   const t = useTranslations("chat.messages.timeline");
-  const { started, patch, end, progress, progressTool } = useMemo(() => {
+  const { started, patch, end, progress } = useMemo(() => {
     let started = false;
     let patch = "";
     let end: ApplyPatchEnd | null = null;
     let progress: FileToolProgress | null = null;
-    let progressTool = "";
     for (const { obj } of packets) {
       if (obj.type === PacketType.APPLY_PATCH_START) {
         started = true;
         patch = obj.patch;
       } else if (obj.type === PacketType.APPLY_PATCH_END) {
         end = obj;
-      } else if (
-        obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
-        obj.file_progress
-      ) {
-        progress = obj.file_progress;
-        progressTool = obj.tool_type;
+      } else if (obj.type === PacketType.FILE_TOOL_PROGRESS) {
+        progress = obj;
       }
     }
-    return { started, patch, end, progress, progressTool };
+    return { started, patch, end, progress };
   }, [packets]);
-  const { error, stopped } = useSandboxCallStatus(
+  const { isComplete, error, stopped } = useSandboxCallStatus(
     packets,
     end,
     stopPacketSeen,
@@ -122,24 +196,9 @@ export function ApplyPatchToolRenderer({
   }, [patch]);
 
   // While the model writes the arguments, their progress names the step; the
-  // start packet replaces it with the card that replay shows.
-  const liveProgress = started ? null : progress;
-  const progressPath = liveProgress?.paths[0];
-  const progressStatus =
-    liveProgress === null
-      ? null
-      : progressTool === "apply_patch"
-        ? t("sandbox.patch.progress.patching.status", {
-            count: liveProgress.paths.length,
-          })
-        : progressPath === undefined
-          ? t("sandbox.patch.progress.starting.status", { tool: progressTool })
-          : t(
-              progressTool === "write"
-                ? "sandbox.patch.progress.writing.status"
-                : "sandbox.patch.progress.editing.status",
-              { path: progressPath, lines: liveProgress.lines }
-            );
+  // start packet replaces it with the card that replay shows. A call that
+  // ends without a start shows only how it ended.
+  const liveProgress = started || isComplete ? null : progress;
 
   const status = stopped
     ? t("sandbox.stopped.status")
@@ -147,50 +206,30 @@ export function ApplyPatchToolRenderer({
       ? t("sandbox.patch.failed.status")
       : end !== null
         ? t("sandbox.patch.edited.status", { count: end.files.length })
-        : (progressStatus ?? t("header.editingFiles.label"));
+        : liveProgress !== null
+          ? progressStatus(liveProgress, t)
+          : t("header.editingFiles.label");
 
   const content = (
     <SandboxCallContent renderType={renderType}>
-      {liveProgress !== null && progressTool === "apply_patch" && (
-        <Section gap={1} alignItems="start" height="fit">
-          {liveProgress.paths.map((path, index) => (
-            <Text
-              key={index}
-              font="secondary-mono"
-              color="text-04"
-              wordWrap="break-all"
-            >
-              {path}
-            </Text>
-          ))}
-        </Section>
+      {liveProgress?.tool_name === "apply_patch" && (
+        <FileList
+          files={liveProgress.paths.map((path) => ({
+            path,
+            change: null,
+            movePath: null,
+          }))}
+        />
       )}
 
       {end !== null && end.files.length > 0 && (
-        <Section gap={1} alignItems="start" height="fit">
-          {end.files.map((file) => (
-            <Section
-              key={file.path}
-              flexDirection="row"
-              justifyContent="start"
-              alignItems="start"
-              gap={2}
-              height="fit"
-            >
-              <Text
-                font="secondary-mono"
-                color={CHANGE_MARKERS[file.change].color}
-              >
-                {CHANGE_MARKERS[file.change].marker}
-              </Text>
-              <Text font="secondary-mono" color="text-04" wordWrap="break-all">
-                {file.move_path
-                  ? `${file.path} → ${file.move_path}`
-                  : file.path}
-              </Text>
-            </Section>
-          ))}
-        </Section>
+        <FileList
+          files={end.files.map((file) => ({
+            path: file.path,
+            change: file.change,
+            movePath: file.move_path,
+          }))}
+        />
       )}
 
       {error !== null && <SandboxCallError error={error} />}

@@ -8,7 +8,6 @@ import {
   SearchToolPacket,
   StopReason,
   CustomToolStart,
-  isFileToolType,
 } from "@/app/app/services/streamingModels";
 import {
   formatSearchHeader,
@@ -57,13 +56,9 @@ function stepHeaderText(
     case PacketType.EXEC_COMMAND_START:
     case PacketType.WRITE_STDIN_START:
       return t("header.runningCommand.label");
+    case PacketType.FILE_TOOL_PROGRESS:
     case PacketType.APPLY_PATCH_START:
       return t("header.editingFiles.label");
-    case PacketType.TOOL_CALL_ARGUMENT_DELTA:
-      // A file tool's streamed progress precedes its start packet.
-      return isFileToolType(firstPacket.obj.tool_type)
-        ? t("header.editingFiles.label")
-        : null;
     case PacketType.PUBLISH_FILES_START:
       return t("header.publishingFiles.label");
     case PacketType.CUSTOM_TOOL_START: {
