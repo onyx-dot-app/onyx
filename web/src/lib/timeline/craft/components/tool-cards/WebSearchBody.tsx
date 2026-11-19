@@ -64,8 +64,9 @@ function domainFromUrl(url: string): string {
 }
 
 /**
- * WebSearchBody - The websearch tool's query and the results it read, in the
- * shared retrieval layout. Output that parses into no results shows as a
+ * WebSearchBody - The websearch tool's queries and the results it read, in the
+ * shared retrieval layout: from `_meta.onyx.search` when the backend sends
+ * them, otherwise parsed from the text output. Output that parses into no results shows as a
  * `CommandBody`: the query, then the raw output.
  */
 export default function WebSearchBody({ toolCall }: ToolCardBodyProps) {
@@ -75,6 +76,31 @@ export default function WebSearchBody({ toolCall }: ToolCardBodyProps) {
   );
   const isComplete =
     toolCall.status !== "pending" && toolCall.status !== "in_progress";
+
+  // Onyx's web_search sends its queries and results in `_meta.onyx`: no text
+  // to parse. Older rows and opencode's own websearch fall through to parsing.
+  const search = toolCall.onyxSearch;
+  if (search) {
+    return (
+      <RetrievalBody
+        queries={search.queries}
+        // `/search-lite` does not dedupe across queries; a page shows once.
+        results={search.results
+          .filter(
+            (result, index, all) =>
+              all.findIndex((other) => other.url === result.url) === index
+          )
+          .map((result) => ({
+            id: result.url,
+            title: result.title,
+            sourceType: ValidSources.Web,
+            sourceUrl: result.url,
+            description: result.snippet || undefined,
+          }))}
+        isComplete={isComplete}
+      />
+    );
+  }
 
   // Output that parses into results reads like chat's web search; output
   // that does not (plain text) shows under the query, like glob and grep.

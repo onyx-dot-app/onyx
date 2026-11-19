@@ -221,6 +221,8 @@ const NAME_MAP: Record<string, ToolName> = {
   todo_write: "todowrite",
   webfetch: "webfetch",
   websearch: "websearch",
+  // Onyx's web search plugin (opencode-plugins/web-search.ts).
+  web_search: "websearch",
   // opencode 1.15.x additions:
   lsp: "lsp",
   apply_patch: "apply_patch",
@@ -439,9 +441,14 @@ function buildDescription(
   if (toolName === "webfetch" && ri?.url && typeof ri.url === "string") {
     return ri.url as string;
   }
-  // Websearch: show query
+  // Websearch: show query (Onyx's web_search takes a list of queries)
   if (toolName === "websearch" && ri?.query && typeof ri.query === "string") {
     return ri.query as string;
+  }
+  if (toolName === "websearch" && Array.isArray(ri?.queries)) {
+    return ri.queries
+      .filter((query): query is string => typeof query === "string")
+      .join(", ");
   }
   return "";
 }

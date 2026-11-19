@@ -1,3 +1,4 @@
+import type { OnyxSearch } from "@/lib/timeline/acp";
 /**
  * Display Types
  *
@@ -76,6 +77,8 @@ export interface ToolCallState {
   command: string; // "ls outputs/" or task prompt for task kind
   status: ToolCallStatus;
   rawOutput: string; // Full output for expanded view
+  /** A web search's structured queries and results, from `_meta.onyx`. */
+  onyxSearch?: OnyxSearch;
   /** For task tool calls: the subagent type (e.g., "explore", "plan") */
   subagentType?: string;
   /** For task tool calls: the subagent's final output once completed */
