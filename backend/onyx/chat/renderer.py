@@ -1,6 +1,5 @@
 """Translate shared messages and tool results into chat browser packets."""
 
-import dataclasses
 from collections.abc import Mapping
 from time import monotonic
 from typing import Literal, TypeGuard
@@ -128,8 +127,6 @@ SPILLED_OUTPUT_NOTE = "Large output: the full result was saved to the sandbox."
 CODE_ARGUMENT_TOOLS = frozenset({PythonTool.NAME, CODE_MODE_TOOL_NAME})
 # Tools whose calls observe a code mode cell; each call renders as one code mode card.
 CODE_MODE_TOOL_NAMES = frozenset({CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME})
-# Tools whose calls end with exec_end.
-EXEC_TOOL_NAMES = frozenset({ExecCommandTool.NAME, WriteStdinTool.NAME})
 # The file tools (FileToolName) and the argument that holds the text of each;
 # edit and write also name their file in FILE_PATH_ARGUMENT. Their calls render
 # as a patch card and end with apply_patch_end.
@@ -139,11 +136,17 @@ FILE_TOOL_TEXT_ARGUMENTS: dict[FileToolName, str] = {
     WriteTool.NAME: "content",
 }
 FILE_PATH_ARGUMENT = "file_path"
-# Tools whose calls end with their own end packet. Each call of these tools
-# sends its own start packet too, so the end never lands on a generic card.
-OWN_END_TOOL_NAMES = EXEC_TOOL_NAMES | {
-    *FILE_TOOL_TEXT_ARGUMENTS,
-    PublishFilesTool.NAME,
+# Tools whose calls end with their own end packet, and its type; a failed call
+# ends with that packet's error. Each call of these tools sends its own start
+# packet too, so the end never lands on a generic card.
+OWN_END_PACKETS: dict[
+    str,
+    type[packets.ExecEnd] | type[packets.ApplyPatchEnd] | type[packets.PublishFilesEnd],
+] = {
+    ExecCommandTool.NAME: packets.ExecEnd,
+    WriteStdinTool.NAME: packets.ExecEnd,
+    **dict.fromkeys(FILE_TOOL_TEXT_ARGUMENTS, packets.ApplyPatchEnd),
+    PublishFilesTool.NAME: packets.PublishFilesEnd,
 }
 # The shortest time between two reports of a call's streamed arguments.
 # Between reports the renderer only collects fragments, so it parses the
@@ -206,22 +209,80 @@ def file_tool_progress(
     )
 
 
-@dataclasses.dataclass  # noqa: TID251 - Mutable state of a call while its arguments stream.
 class _ArgumentStream:
-    """A tool call whose arguments the browser sees while the model writes them."""
+    """A tool call whose arguments the browser sees while the model writes them.
 
-    id: str
-    name: str
-    # How the arguments show: as code or as a file tool's progress.
-    report: Literal["code"] | FileToolName
-    # The arguments text of the last report, and what it parsed to.
-    reported: str = ""
-    arguments: dict[str, JsonValue] = dataclasses.field(default_factory=dict)
-    # The fragments that arrived after the last report.
-    held: list[str] = dataclasses.field(default_factory=list)
-    reported_at: float = float("-inf")
-    # The last progress a file tool call sent.
-    progress: packets.FileToolProgress | None = None
+    It holds the fragments between reports and reports at most once per
+    ARGUMENT_REPORT_INTERVAL_SECONDS. A report is what changed since the last
+    one: the appended text of each string argument, or a file tool's progress.
+    """
+
+    def __init__(
+        self,
+        call_id: str,
+        name: str,
+        report: Literal["code"] | FileToolName,
+    ) -> None:
+        self.id = call_id
+        self.name = name
+        # How the arguments show: as code or as a file tool's progress.
+        self.report = report
+        # The arguments text of the last report, and what it parsed to.
+        self.reported = ""
+        self.arguments: dict[str, JsonValue] = {}
+        # The fragments that arrived after the last report.
+        self.held: list[str] = []
+        self.reported_at = float("-inf")
+        # The last progress a file tool call sent.
+        self.progress: packets.FileToolProgress | None = None
+        # Set when the arguments cannot be the start of a JSON object.
+        self.stopped = False
+
+    def add(self, fragment: str) -> dict[str, str] | packets.FileToolProgress | None:
+        """Hold a fragment; report the held fragments once the interval passed."""
+        if self.stopped:
+            return None
+        self.held.append(fragment)
+        now = monotonic()
+        if now - self.reported_at < ARGUMENT_REPORT_INTERVAL_SECONDS:
+            return None
+        self.reported_at = now
+        return self.flush()
+
+    def flush(self) -> dict[str, str] | packets.FileToolProgress | None:
+        """Report the arguments streamed so far."""
+        if self.stopped:
+            return None
+        self.reported += "".join(self.held)
+        self.held.clear()
+        try:
+            arguments = parse_partial_object(self.reported)
+        except ValueError:
+            logger.debug("Tool arguments cannot be parsed incrementally", exc_info=True)
+            self.stopped = True
+            return None
+        return self._update(arguments, complete=False)
+
+    def end(self, call: ToolCall) -> dict[str, str] | packets.FileToolProgress | None:
+        """Report the call's final arguments. An invalid call's final arguments
+        are empty, so it reports what streamed."""
+        if call.argument_error is not None:
+            return self.flush()
+        if self.stopped:
+            return None
+        return self._update(call.arguments, complete=True)
+
+    def _update(
+        self, arguments: dict[str, JsonValue], complete: bool
+    ) -> dict[str, str] | packets.FileToolProgress | None:
+        previous, self.arguments = self.arguments, arguments
+        if is_file_tool(self.report):
+            progress = file_tool_progress(self.report, arguments, complete)
+            if progress == self.progress:
+                return None
+            self.progress = progress
+            return progress
+        return appended_text(previous, arguments) or None
 
 
 class ResponseLayout:
@@ -388,17 +449,16 @@ class MessageRenderer:
             self._raw_thinking += event.text
             return result + self._append(event.text, thinking=True)
         if isinstance(event, ToolCallStartEvent):
-            name = event.tool_name
             report: Literal["code"] | FileToolName | None = (
                 "code"
-                if name in CODE_ARGUMENT_TOOLS
-                else name
-                if is_file_tool(name)
+                if event.tool_name in CODE_ARGUMENT_TOOLS
+                else event.tool_name
+                if is_file_tool(event.tool_name)
                 else None
             )
             if report is not None:
                 self._argument_streams[event.content_index] = _ArgumentStream(
-                    id=event.tool_call_id, name=name, report=report
+                    event.tool_call_id, event.tool_name, report
                 )
             if event.tool_name in HIDDEN_TOOLS:
                 return result
@@ -410,63 +470,34 @@ class MessageRenderer:
         if stream is None:
             return []
         if isinstance(event, ToolCallEndEvent):
-            # An invalid call's final arguments are empty; it shows what streamed.
-            result = (
-                self._report_fragments(event.content_index)
-                if event.tool_call.argument_error is not None
-                else self._report_arguments(stream, event.tool_call.arguments, True)
-            )
-            self._argument_streams.pop(event.content_index, None)
-            return result
-        stream.held.append(event.arguments_delta)
-        now = monotonic()
-        if now - stream.reported_at < ARGUMENT_REPORT_INTERVAL_SECONDS:
-            return []
-        stream.reported_at = now
-        return self._report_fragments(event.content_index)
+            del self._argument_streams[event.content_index]
+            return self._report(stream, stream.end(event.tool_call))
+        return self._report(stream, stream.add(event.arguments_delta))
 
-    def _report_fragments(self, content_index: int) -> list[packets.Packet]:
-        """Report the arguments streamed so far; a stream that cannot be the
-        start of a JSON object stops."""
-        stream = self._argument_streams[content_index]
-        stream.reported += "".join(stream.held)
-        stream.held.clear()
-        try:
-            arguments = parse_partial_object(stream.reported)
-        except ValueError:
-            logger.debug("Tool arguments cannot be parsed incrementally", exc_info=True)
-            del self._argument_streams[content_index]
-            return []
-        return self._report_arguments(stream, arguments, False)
-
-    def _report_arguments(
-        self, stream: _ArgumentStream, arguments: dict[str, JsonValue], complete: bool
+    def _report(
+        self,
+        stream: _ArgumentStream,
+        report: dict[str, str] | packets.FileToolProgress | None,
     ) -> list[packets.Packet]:
-        """The packets that show a call's arguments as its stream reports them."""
-        previous = stream.arguments
-        stream.arguments = arguments
+        """The packets that show a report of a call's streamed arguments."""
         obj: packets.PacketObj
-        if stream.report == "code":
-            deltas = appended_text(previous, arguments)
-            if not deltas:
-                return []
-            obj = packets.ToolCallArgumentDelta(
-                tool_type=stream.name, argument_deltas=deltas
-            )
+        if report is None:
+            return []
+        if isinstance(report, packets.FileToolProgress):
+            obj = report
         else:
-            progress = file_tool_progress(stream.report, arguments, complete)
-            if progress == stream.progress:
-                return []
-            obj = stream.progress = progress
+            obj = packets.ToolCallArgumentDelta(
+                tool_type=stream.name, argument_deltas=report
+            )
         return [packets.Packet(placement=self.tool_placement(stream.id), obj=obj)]
 
     def _report_held(self) -> list[packets.Packet]:
         """Report the fragments that each open stream holds."""
         return [
             packet
-            for content_index, stream in list(self._argument_streams.items())
+            for stream in list(self._argument_streams.values())
             if stream.held
-            for packet in self._report_fragments(content_index)
+            for packet in self._report(stream, stream.flush())
         ]
 
     def _flush_arguments(self) -> list[packets.Packet]:
@@ -725,7 +756,7 @@ class ToolRenderer:
             )
             # A tool with its own end packet keeps its own card, which then
             # shows empty arguments; the end packet carries the error.
-            objects = self._start_objects({}) if name in OWN_END_TOOL_NAMES else []
+            objects = self._start_objects({}) if name in OWN_END_PACKETS else []
         if not objects:
             objects = [
                 packets.CustomToolStart(
@@ -800,7 +831,14 @@ class ToolRenderer:
             patch = _STRING.validate_python(
                 args.get(FILE_TOOL_TEXT_ARGUMENTS[name], "")
             )
-            if name != ApplyPatchTool.NAME:
+            path = (
+                ""
+                if name == ApplyPatchTool.NAME
+                else _STRING.validate_python(args.get(FILE_PATH_ARGUMENT, ""))
+            )
+            # A call without a file path, such as one with wrong-typed
+            # arguments, has no file header.
+            if path:
                 # An edit with an empty old_string creates the file; write's
                 # end packet tells an added file from an updated one.
                 old = (
@@ -808,11 +846,7 @@ class ToolRenderer:
                     if name == EditTool.NAME
                     else ""
                 )
-                patch = display_patch(
-                    _STRING.validate_python(args.get(FILE_PATH_ARGUMENT, "")),
-                    old or None,
-                    patch,
-                )
+                patch = display_patch(path, old or None, patch)
             objects = [packets.ApplyPatchStart(patch=patch, tool_name=name)]
         elif name == PublishFilesTool.NAME:
             objects = [
@@ -1078,34 +1112,18 @@ class ToolRenderer:
 
     def _result_packets(self, result: ToolResultFields | None) -> list[packets.Packet]:
         """The packets of a final result of the call, before its section end."""
+        end = OWN_END_PACKETS.get(self.call.name)
         if (
-            result is not None
+            end is not None
+            and result is not None
             and result.is_error
             and not isinstance(result.details, (SandboxExecResult, ApplyPatchResult))
         ):
             # A failed sandbox call has no process result, file changes or
             # published files.
-            if self.call.name in EXEC_TOOL_NAMES:
-                return [
-                    packets.Packet(
-                        placement=self.placement,
-                        obj=packets.ExecEnd(error=result.text),
-                    )
-                ]
-            if is_file_tool(self.call.name):
-                return [
-                    packets.Packet(
-                        placement=self.placement,
-                        obj=packets.ApplyPatchEnd(error=result.text),
-                    )
-                ]
-            if self.call.name == PublishFilesTool.NAME:
-                return [
-                    packets.Packet(
-                        placement=self.placement,
-                        obj=packets.PublishFilesEnd(error=result.text),
-                    )
-                ]
+            return [
+                packets.Packet(placement=self.placement, obj=end(error=result.text))
+            ]
         if result is not None:
             return self._detail_packets(
                 result.details, "" if result.is_error else result.text

@@ -2,10 +2,13 @@
 
 from typing import Any
 
+import pytest
+
 from onyx.server.query_and_chat.acp_stream import ChatAcpTranslator
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     ApplyPatchStart,
+    CodeModeStart,
     FileToolProgress,
     Packet,
     PacketObj,
@@ -44,7 +47,16 @@ def test_file_tool_progress_opens_the_call_that_its_start_continues() -> None:
     assert (ended["toolCallId"], ended["status"]) == (call_id, "completed")
 
 
-def test_streamed_python_code_opens_a_call_that_its_start_renames() -> None:
+@pytest.mark.parametrize(
+    "tool_type,start,title",
+    [
+        ("run_python", PythonToolStart(code="print(1)"), "Running Python"),
+        ("execute_code", CodeModeStart(code="print(1)"), "Running code"),
+    ],
+)
+def test_streamed_code_opens_a_call_that_its_start_renames(
+    tool_type: str, start: PacketObj, title: str
+) -> None:
     translator = ChatAcpTranslator()
 
     def translate(obj: PacketObj) -> list[dict[str, Any]]:
@@ -52,17 +64,15 @@ def test_streamed_python_code_opens_a_call_that_its_start_renames() -> None:
         return list(translator.translate(packet.model_dump(mode="json")))
 
     [opened] = translate(
-        ToolCallArgumentDelta(
-            tool_type="run_python", argument_deltas={"code": "print(1)"}
-        )
+        ToolCallArgumentDelta(tool_type=tool_type, argument_deltas={"code": "print(1)"})
     )
     assert (opened["sessionUpdate"], opened["kind"], opened["title"]) == (
         "tool_call",
         "execute",
         "Writing code",
     )
-    [started] = translate(PythonToolStart(code="print(1)"))
+    [started] = translate(start)
     assert (started["sessionUpdate"], started["title"]) == (
         "tool_call_update",
-        "Running Python",
+        title,
     )

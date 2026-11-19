@@ -25,6 +25,8 @@ unchanged; this only re-shapes what the chat pipeline already yields.
 from collections.abc import Iterator
 from typing import Any
 
+from onyx.chat.renderer import CODE_ARGUMENT_TOOLS
+
 ONYX_CHAT_WIRE_VERSION = 2
 
 # A tool's start packet: its ACP kind and title.
@@ -140,7 +142,7 @@ class ChatAcpTranslator:
             kind, title = (
                 _PYTHON_ARGUMENTS
                 if packet_type == "tool_call_argument_delta"
-                and packet.get("tool_type") == "run_python"
+                and packet.get("tool_type") in CODE_ARGUMENT_TOOLS
                 else opening
             )
             self._open[call_id] = False
