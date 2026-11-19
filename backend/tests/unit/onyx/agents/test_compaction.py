@@ -157,7 +157,7 @@ class ContextModel(LLM):
 def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
     evidence = "Retrieved evidence from search. " * 20
     revised_evidence = evidence + "New information. " * 10
-    system = "Use the evidence to answer."
+    system = "Use the evidence to answer." * 40
     tokenizer = tiktoken.get_encoding("cl100k_base")
     sdk_encoder = Mock(wraps=tokenizer)
     provider_inputs: list[str] = []
@@ -245,11 +245,35 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
         assert sdk_inputs.count(request.tools[0].model_dump_json()) == 2
 
 
+@pytest.mark.parametrize("text", ["small request", "短い質問🙂"])
+def test_small_requests_skip_encoding_with_full_output_allowance(
+    monkeypatch: pytest.MonkeyPatch, text: str
+) -> None:
+    output = TokenBudget(max_output_tokens=200, context_tokens=1200, safety_tokens=64)
+    monkeypatch.setattr("onyx.agents.runtime.resolve_token_budget", lambda _: output)
+    run = Run(
+        RunState(run_id="run", agent_id="agent", status=RunStatus.RUNNING),
+        CancellationSignal(),
+    )
+    with patch(
+        "onyx.agents.compaction._encoder", side_effect=AssertionError("encoded")
+    ):
+        request = _compact_context(
+            run,
+            ContextModel(),
+            [UserMessage(content=text)],
+            PreparedStep(),
+            GenerationContext(),
+        )
+    assert request.options.max_tokens == 200
+    assert request.messages[0].text == text
+
+
 def test_long_requests_reuse_counts_and_release_removed_history() -> None:
     class LargeContextModel(ContextModel):
         @property
         def config(self) -> LLMConfig:
-            return super().config.model_copy(update={"max_input_tokens": 128000})
+            return super().config.model_copy(update={"max_input_tokens": 64000})
 
     source: list[Message] = [UserMessage(content="Compare these sources.")]
     for index in range(350):
