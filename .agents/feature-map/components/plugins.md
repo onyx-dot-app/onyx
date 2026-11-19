@@ -130,7 +130,11 @@ through `POST /admin/mcp/probe` to suggest the sign-in, and opens
 read only member endpoints: the user's skills
 (`GET /skills`, as the Skills page) and `GET /integrations`.
 `lib/plugins/directory.ts:memberPluginEntries` makes one plugin of each custom
-skill (a custom skill's id is its plugin id), and
+skill (a custom skill's id is its plugin id). `GET /skills` also lists
+uploaded plugins: each row has `kind` (`skill` or `plugin`) and
+`available_count` of `needed_count` integrations. `GET /skills/{id}` adds
+`plugin`: the skills, the plugin.json fields and the needs with their state
+for the user ([[skills#plugin-upload]]). The web does not read them yet. And
 `lib/plugins/directory.ts:pluginSwitch` gives its switch
 (`PUT /skills/{id}/enabled`). Each integration row carries `access`; its
 `installation_policy` is the user's own setting (group settings and shares

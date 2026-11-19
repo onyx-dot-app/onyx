@@ -34,6 +34,11 @@
   GitHub connection in Craft; without it the import is anonymous. The owner
   shares with users or groups as viewer or editor, publishes to the
   organization, or transfers ownership.
+- **Plugin upload.** A user uploads a Claude Code or Codex plugin zip
+  ([[#plugin-upload]]). `POST /skills/plugins/inspect` shows the skills, the
+  MCP servers the plugin needs with their state for the user, the parts Onyx
+  does not use, and the save target. `POST /skills/plugins` saves it. The
+  web for this stage is not built yet.
 - **Admins** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), required (on,
   and the user cannot turn it off), or not available (hidden). With no own
@@ -228,8 +233,9 @@ skill mutation (server/features/skill/api.py)   compute affected users BEFORE th
          _assemble_skills                one fit loop: whole plugins within 900 MB and
                                          10,000 files; built-ins from disk, custom from
                                          the FileStore bundle of that version, in a
-                                         folder named by its frontmatter; resolves
-                                         ${CLAUDE_SKILL_DIR}
+                                         folder named by its frontmatter (each
+                                         skills/<name>/ of a plugin version in its own
+                                         folder); resolves ${CLAUDE_SKILL_DIR}
          build_connectable_apps_list     guidance for unconnected apps
        compute_skill_runtime_hash        skip a sandbox whose hash matches
        push_to_sandboxes(SKILLS_MOUNT_PATH)   parallel batches of 10 sandboxes, or
@@ -243,7 +249,9 @@ session start: sandbox_lifecycle.py:build_managed_content_payload
 
 **One data model.** A custom skill is a plugin (`db/plugin.py`,
 [[#plugin-tables]]) whose version holds one skill at the bundle root; the
-skill id is the plugin id. `db/skill.py` passes the `Plugin` row for a custom
+skill id is the plugin id. An uploaded plugin's version holds its skills in
+`skills/<name>/`, one `plugin_skill` row each, or no skill
+([[#plugin-upload]]). `db/skill.py` passes the `Plugin` row for a custom
 skill and the `Skill` row for a built-in (`StoredSkill`). Every read and write
 of a custom skill uses the plugin rows: access, names, validity, bundles and
 content. Built-in skills have no plugin. Old custom `skill` rows and the
@@ -430,9 +438,11 @@ the app from the same rule
 3. `shared-read-predicates` **Every new read path must use the shared
    predicates.** Reads use `db/skill.py:fetch_skill` and `list_skills`
    (`_visible_custom_skill_select`). Edits use `db/skill.py:fetch_editable_skill`
-   (`_editable_by_user`). A query on `Plugin` without them skips sharing. Both
-   list only a plugin whose version is a skill
-   (`db/plugin_access.py:holds_one_root_skill`). Both read
+   (`_editable_by_user`). A query on `Plugin` without them skips sharing. The
+   reads list every plugin; `SkillResponse.kind` is `plugin` when the version
+   the user runs is not a skill (`db/plugin_access.py:holds_one_root_skill`).
+   An edit of the files finds only a skill; the access routes (share,
+   publish, review, versions, delete, bulk) pass `any_plugin=True`. Both read
    the plugin tables through `db/plugin_access.py`: visibility and the install
    setting come only from `db/plugin_access.py:_user_plugin_pairs` (through
    `visible_plugin_ids`, `load_user_plugin_states` and
@@ -687,7 +697,9 @@ the app from the same rule
     ([[#bundle-change-adds-version]]); the skill responses read
     `db/plugin_access.py:load_plugin_access`. The list and
     runtime names and descriptions come from the frontmatter of the version
-    the user runs. An old custom skill row with no plugin is ignored. Migration
+    the user runs. Migration `2d7510746863` adds `plugin_version.manifest`
+    and `plugin_version.needs` (nullable JSONB, NULL for a skill version).
+    An old custom skill row with no plugin is ignored. Migration
     `65f8d8cd1bf3` drops `ck_private_skill_has_owner`: old rows go stale, and
     the check would refuse a user delete. A user delete is refused
     while the user's "My uploads" holds a plugin
@@ -787,7 +799,12 @@ the app from the same rule
     mentions are records.** Change which skills chat gets only in
     `db/skill.py:list_chat_skills`; the turn, the tools and the `@` picker all
     read it, and the web client does not decide which skills chat gets (the
-    composer only limits a message to 20 picks). A skill
+    composer only limits a message to 20 picks). It gives one skill for each
+    `plugin_skill` row of each version the sandbox loads; a SKILL.md read is
+    keyed by version id and folder (`db/plugin.py:SkillKey`). When a loaded
+    plugin needs an integration that is not on for the user, the catalog
+    names it in one line
+    (`tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`). A skill
     mention is accepted only once, when its message is accepted
     (`skills/chat.py:accept_picked_skills`), and stored as a record (type,
     name, version id) and a `<skill>` message with the cut SKILL.md and its
@@ -799,7 +816,29 @@ the app from the same rule
     (`db/chat.py:load_message_branch`). A content-free incognito row keeps the
     record and no skill message
     ([[chat-persistence#incognito-decision-per-field]]).
-25. `write-skill-limit` **A user's own write never moves that user past 500
+25. `plugin-upload` **An uploaded plugin never gives access to an
+    integration.** `skills/plugin_bundle.py:read_plugin_bundle` reads the zip
+    with the skill upload limits: `.claude-plugin/plugin.json`,
+    `.codex-plugin/plugin.json` or `plugin.json`, at the root or in one
+    folder; skills in `skills/<name>/SKILL.md`; MCP servers in `.mcp.json` or
+    `mcpServers`. It refuses a plugin with no skill and no MCP server. A zip
+    with only a SKILL.md stays a skill upload. A need stores the normalized
+    URL (`utils/url.py:normalize_mcp_server_url`) and no integration id.
+    `integrations/plugin_needs.py:need_views` matches it at read time against
+    the integrations of `list_member_integrations`, so a private integration
+    the user cannot see is `not_added`. One match gives that integration's
+    member state; two give `more_than_one`. The save
+    (`server/features/skill/api.py:save_plugin_upload`) adds a version to a
+    plugin with the same name that the user owns or edits, in "My uploads" or
+    the Organization library and not a skill
+    (`db/plugin.py:find_upload_target`); `save_as_new` makes a new plugin
+    with the next free name. A new version keeps shares, publishing and user
+    choices. Turning a plugin on (`PUT /skills/{id}/enabled`, and a new
+    upload) turns on each needed integration in `turn_on` with a connected
+    status, through `integrations/access.py:set_integration_enabled__no_commit`.
+    The on/off switch and the name order stay per plugin: a plugin that
+    loses any skill name does not load.
+26. `write-skill-limit` **A user's own write never moves that user past 500
     MB or 5,000 files of skills.** Limits are `skills/limits.py` constants. A
     user's total is the recorded size (`plugin_version.unpacked_size_bytes`,
     `file_count`) of the version the user runs, for each plugin on for the user
@@ -817,7 +856,7 @@ the app from the same rule
     and group membership are never checked: the run-time rule and the admin
     banner handle a user they put past the limit. A user already over is not
     refused.
-26. `runtime-skill-limit` **A sandbox gets every plugin that fits in 900 MB
+27. `runtime-skill-limit` **A sandbox gets every plugin that fits in 900 MB
     and 10,000 files.** `skills/push.py:build_user_skills_payload` applies it,
     so session start (`build_managed_content_payload`) and the push both do.
     `list_runtime_skills_for_user` returns the skills in keep order: built-in,
@@ -953,6 +992,11 @@ the app from the same rule
   the re-sync, and
   `backend/tests/external_dependency_unit/db/test_plugin_constraints.py` the
   database rules of the plugin tables.
+- `backend/tests/unit/onyx/skills/test_plugin_bundle.py` covers the plugin
+  zip reader and `backend/tests/unit/onyx/utils/test_mcp_server_url.py` the
+  URL rule. `backend/tests/external_dependency_unit/craft/test_plugin_upload.py`
+  covers the save target, multi-skill run time and chat, need states, turn
+  on and the chat line.
 - `backend/tests/integration/tests/skills/` covers the API, bulk actions,
   import sharing and plugin version writes
   (`backend/tests/integration/tests/skills/test_skill_plugin_versions.py`),
