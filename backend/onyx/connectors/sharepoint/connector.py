@@ -362,7 +362,6 @@ def _convert_driveitem_to_document_with_permissions(
             permission_cache=permission_cache,
             drive_item=driveitem,
             list_id=drive.list_id,
-            add_prefix=True,
             treat_sharing_link_as_public=treat_sharing_link_as_public,
         )
     else:
@@ -512,7 +511,6 @@ def _convert_sitepage_to_document(
             site_url=site_url,
             permission_cache=permission_cache,
             site_page=site_page,
-            add_prefix=True,
             treat_sharing_link_as_public=treat_sharing_link_as_public,
         )
     else:
