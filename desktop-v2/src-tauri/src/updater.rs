@@ -47,10 +47,19 @@ pub fn register_menu_item(item: MenuItem<Wry>) {
         .push(item);
 }
 
+/// Queued on the main thread without waiting: `set_text` from another thread
+/// waits for the main thread, and callers can hold the policy refresh lock.
 fn set_menu_label(label: &str) {
-    for item in MENU_ITEMS.lock().unwrap_or_else(|p| p.into_inner()).iter() {
-        let _ = item.set_text(label);
-    }
+    let items = MENU_ITEMS.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    let Some(app) = items.first().map(|item| item.app_handle().clone()) else {
+        return;
+    };
+    let label = label.to_string();
+    let _ = app.run_on_main_thread(move || {
+        for item in &items {
+            let _ = item.set_text(&label);
+        }
+    });
 }
 
 fn ready_version() -> Option<String> {
