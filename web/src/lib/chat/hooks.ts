@@ -58,6 +58,7 @@ import {
 } from "@/app/app/services/messageTree";
 import { getUnresolvedMultiModelTurn } from "@/app/app/message/multiModel";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { useOptionalChatScroll } from "@/lib/chatScroll/components";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
@@ -202,9 +203,12 @@ export function useNudgedCard(requestId: string) {
   );
   const ref = useRef<HTMLDivElement>(null);
   const [shaking, setShaking] = useState(false);
+  const markScrollInput = useOptionalChatScroll()?.markScrollInput;
   useEffect(() => {
     if (nudge === null) return;
     useToolRequestUi.getState().clearNudge(nudge);
+    // The chat's scroll view keeps this requested move.
+    markScrollInput?.();
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
@@ -215,7 +219,7 @@ export function useNudgedCard(requestId: string) {
     // Restart a shake that is still running.
     setShaking(false);
     requestAnimationFrame(() => setShaking(true));
-  }, [nudge]);
+  }, [nudge, markScrollInput]);
   return {
     ref,
     shaking,

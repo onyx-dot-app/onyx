@@ -33,7 +33,10 @@ import {
   useDocumentSidebarVisible,
 } from "@/app/app/stores/useChatSessionStore";
 import ChatUI from "@/sections/chat/ChatUI";
-import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
+import ChatScrollContainer, {
+  type ChatScrollContainerHandle,
+} from "@/sections/chat/ChatScrollContainer";
+import { messageRowId } from "@/lib/chat/rowIds";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@opal/utils";
@@ -203,9 +206,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // Resolved assistant to use throughout the component
   const resolvedAgent = activeAgent ?? undefined;
 
-  // Auto-scroll preference from user settings (matches ChatPage pattern)
-  const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
-  const isStreaming = currentChatState === "streaming";
+  // The auto-scroll setting decides whether a streaming reply is followed.
+  // With nothing running, a view at the end keeps to it (matches AppPage).
+  const autoScrollEnabled =
+    user?.preferences?.auto_scroll !== false || currentChatState === "input";
 
   // Query controller for search/chat classification (EE feature)
   const { submit: submitQuery, state } = useQueryController();
@@ -217,7 +221,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // Anchor for scroll positioning (matches ChatPage pattern)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
   const anchorNodeId = anchorMessage?.nodeId;
-  const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
+  const anchorId = anchorMessage ? messageRowId(anchorMessage) : undefined;
+  const lastMessage = messageHistory.at(-1);
+  const turnKey = lastMessage ? messageRowId(lastMessage) : undefined;
+  const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
 
   useSendMessageToParent();
 
@@ -290,18 +297,30 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   }, []);
 
   // Chat controller for submitting messages
-  const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
-    useChatController({
-      llmManager,
-      toolConfiguration,
-      availableAgents: availableAgents || [],
-      activeAgent,
-      existingChatSessionId,
-      selectedDocuments: [],
-      searchParams: searchParams!,
-      resetInputBar,
-      restoreInputBar,
-    });
+  const {
+    onSubmit: submitMessage,
+    stopGenerating,
+    handleMessageSpecificFileUpload,
+  } = useChatController({
+    llmManager,
+    toolConfiguration,
+    availableAgents: availableAgents || [],
+    activeAgent,
+    existingChatSessionId,
+    selectedDocuments: [],
+    searchParams: searchParams!,
+    resetInputBar,
+    restoreInputBar,
+  });
+
+  // Every send starts a turn: the scroll view animates its anchor to the top.
+  const onSubmit = useCallback(
+    (...args: Parameters<typeof submitMessage>) => {
+      scrollContainerRef.current?.startTurn();
+      return submitMessage(...args);
+    },
+    [submitMessage]
+  );
 
   // Chat session controller for loading sessions
   const { queue } = useChatSessionController({
@@ -496,10 +515,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 {/* Fake header - pushes content below absolute settings button (non-side-panel only) */}
                 {!isSidePanel && <Spacer rem={2} />}
                 <ChatScrollContainer
+                  ref={scrollContainerRef}
                   sessionId="nrf-session"
-                  anchorSelector={anchorSelector}
+                  // One fixed session id: there is no chat to return to.
+                  rememberPosition={false}
+                  anchorId={anchorId}
+                  turnKey={turnKey}
                   autoScroll={autoScrollEnabled}
-                  isStreaming={isStreaming}
                   hideScrollbar={isSidePanel}
                 >
                   <ChatUI

@@ -1,12 +1,6 @@
 "use client";
 
-import React, {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Message } from "@/app/app/types";
 import type { ComposedMessage } from "@/lib/chat/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
@@ -21,7 +15,6 @@ import { MultiModelResponse } from "@/app/app/message/types";
 import { getMultiModelResponses } from "@/app/app/message/multiModel";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
-import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
@@ -30,9 +23,9 @@ import {
   useLoadingError,
   useUncaughtError,
 } from "@/app/app/stores/useChatSessionStore";
-import WindowedRow from "@/sections/chat/WindowedRow";
+import { WindowedRow } from "@/lib/chatScroll/components";
 import OlderMessagesLoader from "@/sections/chat/OlderMessagesLoader";
-import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
+import { messageRowId } from "@/lib/chat/rowIds";
 import ToolApprovalsRegion from "@/sections/chat/ToolApprovalsRegion";
 import ToolQuestionsRegion from "@/sections/chat/ToolQuestionsRegion";
 import { cn } from "@opal/utils";
@@ -75,10 +68,8 @@ export interface ChatUIProps {
 
   onResubmit: () => void;
 
-  /**
-   * Node ID of the message to use as scroll anchor.
-   * Used by DynamicBottomSpacer to position the push-up effect.
-   */
+  /** Node ID of the latest user message, the scroll anchor. Its row stays
+   *  mounted. */
   anchorNodeId?: number;
 
   /** Currently selected models for multi-model comparison. */
@@ -116,50 +107,7 @@ const ChatUI = React.memo(
     // Stable fallbacks to avoid changing prop identities on each render
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
-    const rowHeightCache = useRef(new Map<string, number>()).current;
     const hasOlderMessages = useHasOlderMessages();
-    const scrollContainerRef = useOptionalScrollContainer()?.scrollContainerRef;
-
-    // A page of older messages goes in above the first row. Keep the view
-    // still: scroll by the distance the former first row moved. Native scroll
-    // anchoring cannot be relied on: Safari has none, and Chrome skips it at
-    // the very top, where a page most often arrives.
-    const lastScrollTopRef = useRef(0);
-    useEffect(() => {
-      const root = scrollContainerRef?.current;
-      if (!root) return;
-      const onScroll = () => {
-        lastScrollTopRef.current = root.scrollTop;
-      };
-      onScroll();
-      root.addEventListener("scroll", onScroll, { passive: true });
-      return () => root.removeEventListener("scroll", onScroll);
-    }, [scrollContainerRef]);
-
-    const firstRowRef = useRef<{ nodeId: number; top: number } | null>(null);
-    const firstNodeId = messages[0]?.nodeId;
-    useLayoutEffect(() => {
-      const root = scrollContainerRef?.current;
-      if (!root || firstNodeId === undefined) return;
-
-      const previous = firstRowRef.current;
-      if (previous && previous.nodeId !== firstNodeId) {
-        const previousRow = document.getElementById(
-          `message-${previous.nodeId}`
-        );
-        if (previousRow) {
-          // A no-op where the browser's anchoring already moved it.
-          const target =
-            lastScrollTopRef.current + previousRow.offsetTop - previous.top;
-          if (Math.abs(root.scrollTop - target) > 1) root.scrollTop = target;
-        }
-      }
-
-      const firstRow = document.getElementById(`message-${firstNodeId}`);
-      firstRowRef.current = firstRow
-        ? { nodeId: firstNodeId, top: firstRow.offsetTop }
-        : null;
-    }, [scrollContainerRef, firstNodeId]);
 
     // Reading-width cap on messages, from the page's chat column width.
     const msgWidth = CHAT_COLUMN_WIDTH;
@@ -243,7 +191,7 @@ const ChatUI = React.memo(
           {hasOlderMessages && <OlderMessagesLoader className={msgWidth} />}
 
           {messages.map((message, i) => {
-            const messageReactComponentKey = `message-${message.nodeId}`;
+            const messageReactComponentKey = messageRowId(message);
             const rowsFromEnd = messages.length - i;
             const pinned =
               rowsFromEnd <= PINNED_ROWS ||
@@ -266,7 +214,6 @@ const ChatUI = React.memo(
                   className="flex flex-col gap-12 w-full"
                   pinned={pinned}
                   initiallyMounted={initiallyMounted}
-                  heightCache={rowHeightCache}
                 >
                   <div className={cn("w-full self-center", msgWidth)}>
                     <HumanMessage
@@ -318,7 +265,6 @@ const ChatUI = React.memo(
                   className={cn("w-full self-center", msgWidth)}
                   pinned={pinned}
                   initiallyMounted={initiallyMounted}
-                  heightCache={rowHeightCache}
                 >
                   <AgentResultsDivider />
                 </WindowedRow>
@@ -353,7 +299,6 @@ const ChatUI = React.memo(
                   className={cn("w-full self-center", msgWidth)}
                   pinned={pinned}
                   initiallyMounted={initiallyMounted}
-                  heightCache={rowHeightCache}
                 >
                   {(message.type !== "error" || message.packets.length > 0) && (
                     <AgentMessage
@@ -433,8 +378,6 @@ const ChatUI = React.memo(
             </div>
           )}
         </div>
-        {/* Dynamic spacer for "fresh chat" effect - pushes content up when new message is sent */}
-        <DynamicBottomSpacer anchorNodeId={anchorNodeId} />
       </>
     );
   }

@@ -721,21 +721,43 @@ up its own branding.
     production caller.** Grouping happens in `processPackets`
     ([[#packet-list-append-only]]).
 
-15. `scroll-follow-intent` **Content growth must not cancel following.**
-    `sections/chat/ChatScrollContainer.tsx` keeps following intent across the
-    typewriter drain and spacer smooth-scroll pauses. When either pause ends,
-    catch up if auto-scroll is enabled and the user has not scrolled away.
-    During the opening-follow window, content observers can also catch up with
-    auto-scroll disabled. Scrolling up ends that window. Content observers
-    update visual state without treating layout growth as a user scroll. When
-    the content shrinks, an upward scroll up to the shrinkage is layout, not
-    the user, so only movement beyond it stops following.
-    Every scroll baseline records the position and the content height
-    together. `components/chat/DynamicBottomSpacer.tsx` adds space only for a
-    turn sent from the page, which passes through `loading`. A run the page
-    resumes starts at `streaming` and gets no space. The scroll element is
-    keyed by session, so a chat switch remounts the spacer. Its unmount clears
-    its state and the shared spacer height.
+15. `scroll-follow-intent` **One controller owns the scroll position.**
+    `lib/chatScroll/hooks.ts:useChatScroll` is the only code that writes
+    `scrollTop` in the chat and Craft transcripts. `ChatScrollView`
+    (`lib/chatScroll/components.tsx`) wraps it; `sections/chat/ChatScrollContainer.tsx`
+    and Craft's `ChatPanel` only pass options. A scroll position that the
+    controller did not write is the user's only while a pointer is held, or
+    within 600ms of scroll input (wheel, touch, scroll keys, focus moving
+    into the view, `markScrollInput` before a requested `scrollIntoView`);
+    each such step extends the window, so a fling stays the user's. Any other
+    change is layout drift, and the controller restores the mode's position.
+    Find-in-page sends no input, so its jump counts as drift. Only user
+    scrolls, `startTurn` (called on each send) and `scrollToBottom` change
+    the mode. Content growth never does.
+    - Following: at the end with auto-scroll on, it keeps to the end. The
+      consumers turn auto-scroll on whenever nothing is running, so the
+      setting only decides whether a streaming reply is followed; idle growth
+      (an action row, a card growing in) is layout settling, and a view at
+      the end keeps to it. The typewriter drain turns auto-scroll off; when
+      it turns back on, the view catches up.
+    - Turn anchoring: after `startTurn`, the next `turnKey` change sizes a
+      space below the content and animates the anchor (the latest user
+      message) to 16px below the top, whatever the auto-scroll setting. The
+      space is fitted to live layout for the whole turn. A resumed run or a
+      branch switch changes `turnKey` without `startTurn` and gets no space.
+    - Position memory (`lib/chatScroll/memory.ts`): each view keeps its
+      position, its row heights and whether its turn has space, in memory
+      for the page's lifetime. A view that opens again stays hidden until it
+      is placed: the saved row at its offset, or the end. Older pages load
+      only after the user's scroll input (`scrolledByUser`), so a restore
+      fetches nothing. Opening never waits on the network: a saved row
+      whose page left the store opens at the end, so a chat switch is
+      instant even on a slow network.
+    - Rows: `lib/chat/rowIds.ts:messageRowId` keeps the id a row was first
+      shown with, so a refetch that turns temporary node ids into database ids
+      neither remounts rows nor reads as a new turn. Rows are windowed by
+      `WindowedRow`; the controller, not the row, keeps the view still when a
+      row above changes height.
 
 ---
 
