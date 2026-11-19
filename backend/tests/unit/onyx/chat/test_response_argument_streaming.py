@@ -625,14 +625,30 @@ def test_a_file_path_shows_once_whole(
             {"file_path": 3, "old_string": "a", "new_string": "b"},
             ApplyPatchStart(patch="", tool_name="edit"),
         ),
+        (
+            "write",
+            {"content": "+x\n-y"},
+            ApplyPatchStart(patch="", tool_name="write"),
+        ),
+        (
+            "write",
+            {"file_path": "", "content": "+x\n-y"},
+            ApplyPatchStart(patch="", tool_name="write"),
+        ),
+        (
+            "edit",
+            {"old_string": "a", "new_string": "+b"},
+            ApplyPatchStart(patch="", tool_name="edit"),
+        ),
         ("exec_command", {"cmd": ["ls"]}, ExecCommandStart(cmd="")),
         ("publish_files", {"files": "a.md"}, PublishFilesStart()),
     ],
 )
-def test_a_call_with_wrong_typed_arguments_keeps_its_own_card(
+def test_a_call_with_unusable_arguments_keeps_its_own_card(
     name: str, arguments: dict[str, JsonValue], start: PacketObj
 ) -> None:
-    """A tool with its own end packet starts its own card with empty values."""
+    """A tool with its own end packet starts its own card with empty values
+    when its arguments are missing or wrong-typed."""
     call = ToolCall(id="c", name=name, arguments=arguments)
     assert [
         packet.obj for packet in tool_renderer(call, Placement(turn_index=0)).start()

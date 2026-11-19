@@ -357,9 +357,9 @@ class FileToolProgress(BaseObj):
     """What a file tool call's arguments hold while the model streams them;
     the call's start packet follows.
 
-    `lines` counts the lines of the file text or patch so far. The card shows
-    it for `write` and `edit`; an `apply_patch` card shows only the count of
-    files in `paths`.
+    `lines` counts the lines of the file text or patch so far. A `write` or
+    `edit` card shows it; an `apply_patch` card shows the count and list of
+    files in `paths`, not `lines`.
     """
 
     type: Literal["file_tool_progress"] = StreamingType.FILE_TOOL_PROGRESS.value
