@@ -343,6 +343,14 @@ class CustomToolDelta(BaseObj):
     error: CustomToolErrorInfo | None = None
 
 
+# What a file tool call's streamed arguments hold so far.
+class FileToolProgress(BaseModel):
+    # The files the arguments name, in order.
+    paths: list[str] = []
+    # The lines of the file text or patch.
+    lines: int = 0
+
+
 class ToolCallArgumentDelta(BaseObj):
     type: Literal["tool_call_argument_delta"] = (
         StreamingType.TOOL_CALL_ARGUMENT_DELTA.value
@@ -350,6 +358,8 @@ class ToolCallArgumentDelta(BaseObj):
 
     tool_type: str
     argument_deltas: dict[str, Any]
+    # Set for file tools, which report progress instead of their arguments.
+    file_progress: FileToolProgress | None = None
 
 
 ################################################

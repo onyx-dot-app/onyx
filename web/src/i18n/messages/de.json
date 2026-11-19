@@ -12744,7 +12744,21 @@
             "failed": {
               "status": "Bearbeitung fehlgeschlagen"
             },
-            "title": "Patch"
+            "title": "Patch",
+            "progress": {
+              "writing": {
+                "status": "Schreibe {path}… {lines, plural, one {# Zeile} other {# Zeilen}}"
+              },
+              "editing": {
+                "status": "Bearbeite {path}… {lines, plural, one {# Zeile} other {# Zeilen}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {Patche Dateien…} one {Patche # Datei…} other {Patche # Dateien…}}"
+              },
+              "starting": {
+                "status": "{tool, select, write {Schreibe eine Datei…} other {Bearbeite eine Datei…}}"
+              }
+            }
           },
           "stopped": {
             "status": "Gestoppt"

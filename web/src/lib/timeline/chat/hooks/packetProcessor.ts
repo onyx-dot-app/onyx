@@ -12,6 +12,7 @@ import {
   PublishedFile,
   ToolCallArgumentDelta,
   isCodeInterpreterToolType,
+  isFileToolType,
 } from "@/app/app/services/streamingModels";
 import { CitationMap } from "@/app/app/types";
 import { OnyxDocument } from "@/lib/search/types";
@@ -206,9 +207,8 @@ function hasContentPackets(packets: Packet[]): boolean {
     if (isCodeModePacket(packet)) return true;
     const type = packet.obj.type as PacketType;
     if (type === PacketType.TOOL_CALL_ARGUMENT_DELTA) {
-      return isCodeInterpreterToolType(
-        (packet.obj as ToolCallArgumentDelta).tool_type
-      );
+      const toolType = (packet.obj as ToolCallArgumentDelta).tool_type;
+      return isCodeInterpreterToolType(toolType) || isFileToolType(toolType);
     }
     return CONTENT_PACKET_TYPES_SET.has(type);
   });

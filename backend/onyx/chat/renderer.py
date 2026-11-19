@@ -15,6 +15,7 @@ from onyx.agents.events import (
 )
 from onyx.agents.tools import HumanToolAnswer, InputDecision
 from onyx.chat.citation_processor import DynamicCitationProcessor
+from onyx.chat.file_tool_progress import FileArgumentStream
 from onyx.chat.models import (
     CitationMode,
     MessageRendering,
@@ -40,6 +41,7 @@ from onyx.llm.models import (
     ThinkingDeltaEvent,
     ToolCall,
     ToolCallDeltaEvent,
+    ToolCallEndEvent,
     ToolCallStartEvent,
     ToolResultFields,
 )
@@ -185,6 +187,8 @@ class MessageRenderer:
         self.tool_placements: dict[str, Placement] = {}
         self._last_tool_placement: Placement | None = None
         self._argument_streams: dict[int, ToolCall] = {}
+        # Call ID and stream of each file tool call whose arguments stream.
+        self._file_streams: dict[int, tuple[str, FileArgumentStream]] = {}
         self.citation_processor = (
             DynamicCitationProcessor(citation_mode=settings.citation_mode)
             if settings.citation_mode is not None
@@ -306,12 +310,43 @@ class MessageRenderer:
                     raw_arguments="",
                     arguments_complete=False,
                 )
+            elif event.tool_name in PATCH_TOOL_NAMES:
+                self._file_streams[event.content_index] = (
+                    event.tool_call_id,
+                    FileArgumentStream(event.tool_name),
+                )
             if event.tool_name in HIDDEN_TOOLS:
                 return []
             result = self._close_answer()
             result.extend(self._close_reasoning())
             self.tool_placement(event.tool_call_id)
             return result
+        if event.content_index in self._file_streams:
+            call_id, stream = self._file_streams[event.content_index]
+            if isinstance(event, ToolCallEndEvent):
+                del self._file_streams[event.content_index]
+                progress = stream.end(event.tool_call.arguments)
+            else:
+                try:
+                    progress = stream.add(event.arguments_delta)
+                except ValueError:
+                    logger.debug(
+                        "Tool arguments cannot be parsed incrementally", exc_info=True
+                    )
+                    del self._file_streams[event.content_index]
+                    return []
+            if progress is None:
+                return []
+            return [
+                packets.Packet(
+                    placement=self.tool_placement(call_id),
+                    obj=packets.ToolCallArgumentDelta(
+                        tool_type=stream.tool_name,
+                        argument_deltas={},
+                        file_progress=progress,
+                    ),
+                )
+            ]
         call = self._argument_streams.get(event.content_index)
         if call is None:
             return []

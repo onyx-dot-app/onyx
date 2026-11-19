@@ -2,6 +2,7 @@ import { act, render, screen } from "@tests/setup/test-utils";
 import { Message } from "@/app/app/types";
 import { upsertMessages } from "@/app/app/services/messageTree";
 import {
+  FileToolName,
   ObjTypes,
   Packet,
   PacketType,
@@ -332,6 +333,92 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
     expect(
       screen.getByText("Failed to find expected lines in old.py")
     ).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+function fileProgress(
+  tool_type: FileToolName,
+  paths: string[],
+  lines: number
+): ObjTypes {
+  return {
+    type: PacketType.TOOL_CALL_ARGUMENT_DELTA,
+    tool_type,
+    tool_id: "",
+    argument_deltas: {},
+    file_progress: { paths, lines },
+  };
+}
+
+test("a write shows its progress while it streams, then the replayed card", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const streaming = [
+    call(fileProgress("write", [], 0)),
+    call(fileProgress("write", ["report.md"], 120)),
+  ];
+  const finished = [
+    call({
+      type: PacketType.APPLY_PATCH_START,
+      patch:
+        "*** Begin Patch\n*** Add File: report.md\n+# Report\n*** End Patch",
+      tool_name: "write",
+    }),
+    call({
+      type: PacketType.APPLY_PATCH_END,
+      files: [{ path: "report.md", change: "add", move_path: null }],
+      error: null,
+    }),
+    call(sectionEnd),
+    ...answer(1),
+  ];
+  // The run header measures the live thinking time; the step card must match.
+  const stepCard = (text: string | null) =>
+    text?.slice(text.indexOf("Edited 1 file"));
+  const replay = render(renderMessage(finished));
+  let replayCard: string | undefined;
+  try {
+    await expandTimeline();
+    replayCard = stepCard(replay.container.textContent);
+  } finally {
+    replay.unmount();
+  }
+
+  const view = render(renderMessage(streaming));
+  try {
+    expect(
+      (await screen.findAllByText("Writing report.md… 120 lines")).length
+    ).toBeGreaterThan(0);
+
+    view.rerender(renderMessage([...streaming, ...finished]));
+    await expandTimeline();
+    expect(screen.getByText("Edited 1 file")).toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent("Writing report.md");
+    expect(stepCard(view.container.textContent)).toBe(replayCard);
+  } finally {
+    view.unmount();
+  }
+});
+
+test("streamed progress names an edit's file and a patch's files", async () => {
+  const edit = at({ turn_index: 0, tab_index: 0 });
+  const patch = at({ turn_index: 0, tab_index: 1 });
+  const view = render(
+    renderMessage([
+      edit(fileProgress("edit", ["src/app.py"], 3)),
+      patch(fileProgress("apply_patch", [], 1)),
+      patch(fileProgress("apply_patch", ["docs/new.md", "src/app.py"], 9)),
+    ])
+  );
+  try {
+    await screen.findAllByText(
+      /Patching 2 files…|Editing src\/app\.py… 3 lines/
+    );
+    await openRun();
+    expect(view.container).toHaveTextContent("Editing src/app.py… 3 lines");
+    expect(view.container).toHaveTextContent("Patching 2 files…");
+    expect(screen.getByText("docs/new.md")).toBeInTheDocument();
   } finally {
     view.unmount();
   }

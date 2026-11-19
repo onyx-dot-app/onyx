@@ -12744,7 +12744,21 @@
             "failed": {
               "status": "編集に失敗しました"
             },
-            "title": "パッチ"
+            "title": "パッチ",
+            "progress": {
+              "writing": {
+                "status": "{path} を書き込み中… {lines, plural, one {# 行} other {# 行}}"
+              },
+              "editing": {
+                "status": "{path} を編集中… {lines, plural, one {# 行} other {# 行}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {ファイルにパッチを適用中…} one {# 個のファイルにパッチを適用中…} other {# 個のファイルにパッチを適用中…}}"
+              },
+              "starting": {
+                "status": "{tool, select, write {ファイルを書き込み中…} other {ファイルを編集中…}}"
+              }
+            }
           },
           "stopped": {
             "status": "停止しました"

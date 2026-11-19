@@ -105,6 +105,16 @@ export const isCodeInterpreterToolType = (toolType: string): boolean =>
 // tool_type of the argument deltas that stream a code mode program
 export const CODE_MODE_TOOL_TYPE = "execute_code";
 
+const FILE_TOOL_NAMES: readonly string[] = [
+  "apply_patch",
+  "edit",
+  "write",
+] satisfies FileToolName[];
+
+// File tools stream progress, not their arguments, before their start packet
+export const isFileToolType = (toolType: string): toolType is FileToolName =>
+  FILE_TOOL_NAMES.includes(toolType);
+
 // Basic Message Packets
 export interface UserMessage extends BaseObj {
   type: "user_message";
@@ -217,6 +227,16 @@ export interface ToolCallArgumentDelta extends BaseObj {
   tool_type: string;
   tool_id: string;
   argument_deltas: Record<string, unknown>;
+  // Set for file tools, which stream progress instead of their arguments
+  file_progress?: FileToolProgress | null;
+}
+
+// What a file tool call's streamed arguments hold so far
+export interface FileToolProgress {
+  // The files the arguments name, in order
+  paths: string[];
+  // The lines of the file text or patch
+  lines: number;
 }
 
 export interface FetchToolStart extends BaseObj {
@@ -607,6 +627,7 @@ export type ExecToolObj =
   | SectionEnd
   | PacketError;
 export type ApplyPatchToolObj =
+  | ToolCallArgumentDelta
   | ApplyPatchStart
   | ApplyPatchEnd
   | SectionEnd
