@@ -102,6 +102,10 @@ own queries, the user's original message and the keyword queries each get a lane
 weight (`tools/tool_implementations/search/constants.py`). Keyword lanes use a
 low `hybrid_alpha`. A `hybrid_alpha` of exactly 0 skips embedding and runs pure
 keyword retrieval in `context/search/retrieval/search_runner.py:search_chunks`.
+When the index rejects a lane for exceeding its clause limit
+(`document_index/opensearch/client.py:is_clause_limit_error`), fusion drops that
+lane and its weight. Other errors still fail the call, and a call whose every lane
+exceeds the limit returns a tool error.
 
 **Filters live in the index query.** For index lanes, source, document set,
 time, ACL, cc-pair access and project or agent scope compile into one

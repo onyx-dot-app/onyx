@@ -88,6 +88,7 @@ from onyx.db.models import SearchSettings, User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.opensearch.client import is_clause_limit_error
 from onyx.error_handling.exceptions import OnyxError
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
@@ -129,6 +130,7 @@ from onyx.tools.models import (
     ChatMinimalTextMessage,
     CodeModeExposure,
     CodeModeResultSpec,
+    ToolCallException,
     ToolContext,
 )
 from onyx.tools.tool_implementations.search.constants import (
@@ -674,6 +676,37 @@ class SearchTool(Tool):
             embedding_model=embedding_model,
             prefetched_federated_retrieval_infos=federated_retrieval_infos,
         )
+
+    def _run_search_for_query_unless_too_large(
+        self,
+        query: str,
+        hybrid_alpha: float | None,
+        num_hits: int,
+        acl_filters: UserAccessFilters,
+        embedding_model: EmbeddingModel,
+        federated_retrieval_infos: list[FederatedRetrievalInfo],
+        effective_filters: BaseFilters | None,
+    ) -> list[InferenceChunk] | None:
+        """Returns None when the index rejects the query for exceeding its
+        clause limit, so the other queries of the call can still answer."""
+        try:
+            return self._run_search_for_query(
+                query,
+                hybrid_alpha,
+                num_hits,
+                acl_filters,
+                embedding_model,
+                federated_retrieval_infos,
+                effective_filters,
+            )
+        except Exception as e:
+            if not is_clause_limit_error(e):
+                raise
+            logger.warning(
+                "Internal search - a %d-character query exceeded the index clause limit",
+                len(query),
+            )
+            return None
 
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
@@ -1224,7 +1257,7 @@ class SearchTool(Tool):
         for query, weight in deduplicated_semantic_queries:
             search_functions.append(
                 (
-                    self._run_search_for_query,
+                    self._run_search_for_query_unless_too_large,
                     (
                         query,
                         None,
@@ -1242,7 +1275,7 @@ class SearchTool(Tool):
         for query, weight in deduplicated_keyword_queries:
             search_functions.append(
                 (
-                    self._run_search_for_query,
+                    self._run_search_for_query_unless_too_large,
                     (
                         query,
                         KEYWORD_QUERY_HYBRID_ALPHA,
@@ -1301,15 +1334,28 @@ class SearchTool(Tool):
             search_weights.append(ORIGINAL_QUERY_WEIGHT)
 
         # Run all searches in parallel (index queries + Slack)
-        all_search_results = run_functions_tuples_in_parallel(search_functions)
-        if not all_search_results:
-            all_search_results = []
+        search_results: list[list[InferenceChunk] | None] = (
+            run_functions_tuples_in_parallel(search_functions)
+        )
+        successful_results = [
+            (results, weight)
+            for results, weight in zip(search_results, search_weights, strict=True)
+            if results is not None
+        ]
+        if search_results and not successful_results:
+            raise ToolCallException(
+                message="Every internal search query exceeded the index clause limit",
+                llm_facing_message=(
+                    "Every search query was too long for the search index. "
+                    "Search again with shorter, focused queries."
+                ),
+            )
 
         # Merge results using weighted Reciprocal Rank Fusion
         # This intelligently combines rankings from different queries
         top_chunks = weighted_reciprocal_rank_fusion(
-            ranked_results=all_search_results,
-            weights=search_weights,
+            ranked_results=[results for results, _ in successful_results],
+            weights=[weight for _, weight in successful_results],
             id_extractor=lambda chunk: f"{chunk.document_id}_{chunk.chunk_id}",
         )
 
