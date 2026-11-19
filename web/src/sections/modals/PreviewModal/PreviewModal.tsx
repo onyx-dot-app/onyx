@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { MinimalOnyxDocument } from "@/lib/search/types";
 import { Modal } from "@opal/components";
 import { Button, Text } from "@opal/components";
+import { stripBidiControls } from "@opal/utils";
 
 import FloatingFooter from "@/sections/modals/PreviewModal/FloatingFooter";
 import mime from "mime";
@@ -223,7 +224,7 @@ export default function PreviewModal({
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <Modal.Header
-          title={fileName || t("header.fallbackTitle")}
+          title={stripBidiControls(fileName) || t("header.fallbackTitle")}
           description={variant.headerDescription(ctx)}
           onClose={onClose}
         />
