@@ -5,6 +5,7 @@
 //!   when the app runs elevated, and does not quote the path.
 //! - Linux: an XDG autostart entry with a quoted `Exec=`.
 
+#[cfg(not(any(windows, target_os = "linux")))]
 use tauri::AppHandle;
 
 #[cfg(target_os = "macos")]
