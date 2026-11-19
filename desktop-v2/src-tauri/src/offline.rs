@@ -283,8 +283,8 @@ async fn monitor(app: AppHandle, id: u64) {
     }
 }
 
-/// The server answers, and the stored session is valid, rejected (sign-in
-/// follows) or absent. A failed session check keeps the offline window and
+/// The API and the web UI answer, and the stored session is valid, rejected
+/// (sign-in follows) or absent. A failed check keeps the offline window and
 /// its backoff.
 async fn check(state: &AppState, server: &str) -> Result<(), Unreachable> {
     state.api.health(server).await?;
@@ -325,9 +325,9 @@ fn path_of(url: &Url) -> String {
 }
 
 /// Called for each main-window navigation to the server. While the page has
-/// not finished loading, the server is checked; if it then fails two checks,
-/// the offline window shows. A finished page stays, unless the server
-/// returns 5xx errors.
+/// not finished loading, the server (API and web UI) is checked; if it then
+/// fails two checks, the offline window shows. A finished page stays, unless
+/// the server returns 5xx errors (a proxy error page also finishes loading).
 pub fn watch_load(app: &AppHandle, url: &Url) {
     let load = app.state::<Offline>().loads().navigated();
     let epoch = app.state::<AppState>().epoch();

@@ -53,8 +53,8 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
 - The app renews the session on launch and every 12 hours, so regular use never signs you out.
 - Offline window (`src-tauri/src/offline.rs`, `src/pages/Offline.tsx`). If the server cannot
   be reached at launch, or a main-window page does not load and the server then fails two
-  health checks (`GET /api/version`, every 5 seconds for up to a minute while the page has
-  not finished loading), the main window hides and a small window shows "Can't
+  health checks (`GET /api/version` for the API and `GET /` for the web UI, every 5 seconds
+  for up to a minute while the page has not finished loading), the main window hides and a small window shows "Can't
   reach <host>" with the reason: no network, DNS, TLS certificate, timeout, connection refused
   or a 5xx error. It checks again after 2, 4, 8, 15, 30, then every 60 seconds, at once when
   the network comes back, and on **Retry**. When the server answers, the main window loads the

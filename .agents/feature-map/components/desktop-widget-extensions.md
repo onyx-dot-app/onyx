@@ -65,9 +65,10 @@ shortcut) calls the chat endpoints from Rust with the bearer token:
 shapes must keep the launcher working. IT can preset the server and lock
 some settings with managed policy (MDM profile, Windows registry policy, or a
 Linux policy file). The v2 README lists the keys. When the server cannot be
-reached, v2 shows a bundled offline window that polls `GET /api/version`
-without a session, then checks the session with `GET /api/me`, and loads the
-web UI again when both answer, so `/api/version` must stay public. Sign-out
+reached, v2 shows a bundled offline window that polls `GET /api/version` and
+the web UI root `GET /` without a session (a 5xx from either counts as down),
+then checks the session with `GET /api/me`, and loads the web UI again when
+all answer, so `/api/version` must stay public. Sign-out
 retries `POST /api/auth/mobile/logout` in the background while the server
 cannot be reached.
 

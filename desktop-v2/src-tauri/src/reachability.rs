@@ -207,6 +207,23 @@ mod tests {
     }
 
     #[test]
+    fn only_5xx_statuses_are_unreachable() {
+        use reqwest::StatusCode;
+        for status in [
+            StatusCode::OK,
+            StatusCode::TEMPORARY_REDIRECT,
+            StatusCode::UNAUTHORIZED,
+            StatusCode::NOT_FOUND,
+        ] {
+            assert_eq!(Unreachable::from_status(status), None, "{status}");
+        }
+        assert_eq!(
+            Unreachable::from_status(StatusCode::BAD_GATEWAY),
+            Some(Unreachable::ServerError { status: 502 })
+        );
+    }
+
+    #[test]
     fn messages_name_the_host() {
         assert_eq!(
             Unreachable::Refused.message("http://localhost:3000"),
