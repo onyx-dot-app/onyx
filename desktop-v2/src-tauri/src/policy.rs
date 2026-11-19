@@ -349,17 +349,26 @@ pub fn sync_hotkey(app: &AppHandle) {
 static REFRESHING: Mutex<()> = Mutex::new(());
 
 /// Reads the policy again and applies what changed. Runs on any thread.
-/// The server and its lock keep their startup values for this run, so the
-/// session never moves to another server under the open windows.
+/// The server keeps its startup value for this run, so the session never
+/// moves to another server under the open windows.
 pub fn refresh(app: &AppHandle) {
     let _serial = REFRESHING.lock().unwrap_or_else(|p| p.into_inner());
     let state = app.state::<AppState>();
     let old = state.policy();
     let mut new = read(app);
     new.server_url = old.server_url.clone();
-    // The server keeps its startup value, but a lock can still turn on
-    // (for example when the policy becomes unreadable); it never turns off.
+    // A lock can turn on (for example when the policy becomes unreadable)
+    // but never off. When it turns on, it locks the server in use now.
+    if new.lock_server_url && !old.lock_server_url {
+        new.server_url = old.server(state.config.get().server_url);
+    }
     new.lock_server_url = old.lock_server_url || new.lock_server_url;
+    // A policy that cannot be read keeps the restrictions it had.
+    if new.invalid {
+        new.disable_auto_update |= old.disable_auto_update;
+        new.disable_launcher |= old.disable_launcher;
+        new.disable_notifications |= old.disable_notifications;
+    }
     if new != old {
         state.set_policy(new.clone());
         if new.disable_auto_update {
