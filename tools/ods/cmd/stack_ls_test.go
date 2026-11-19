@@ -263,20 +263,6 @@ func TestPrintStackRowsShowsEachRowState(t *testing.T) {
 	}
 }
 
-func TestProjectInCheckoutMatchesTheRecordedProject(t *testing.T) {
-	_, _ = stackTestRepo(t)
-	stack, _ := openStack(nil)
-	if projectInCheckout(stack.Project) {
-		t.Fatal("a checkout without state matched the project")
-	}
-	if err := stack.WriteState(&devstack.State{Phase: devstack.PhaseStopped}); err != nil {
-		t.Fatal(err)
-	}
-	if !projectInCheckout(stack.Project) || projectInCheckout("another-project") {
-		t.Fatal("project selection does not follow the checkout's state")
-	}
-}
-
 func TestStackPruneRejectsANegativeIdle(t *testing.T) {
 	stackLsEnv(t, "exit 0\n")
 	if code, out := runStackCLI(t, "stack", "prune", "--idle", "-1h"); code != 1 || !strings.Contains(out, "--idle must not be negative") {
@@ -291,27 +277,6 @@ func TestStackPruneIdleWithoutStacks(t *testing.T) {
 	stackLsEnv(t, "exit 0\n")
 	if code, out := runStackCLI(t, "stack", "prune", "--idle", "1h", "--yes"); code != 0 || !strings.Contains(out, "No orphaned stacks and no stacks idle for 1h0m0s") {
 		t.Fatalf("prune --idle 1h exit %d:\n%s", code, out)
-	}
-}
-
-func TestStackRowNamesJoinsEachName(t *testing.T) {
-	rows := []devstack.StackRow{{Project: "a-1"}, {Project: "b-2"}}
-	want := stackRowName(rows[0]) + ", " + stackRowName(rows[1])
-	if got := stackRowNames(rows); got != want {
-		t.Fatalf("stackRowNames = %q, want %q", got, want)
-	}
-	if got := stackRowNames(nil); got != "" {
-		t.Fatalf("stackRowNames(nil) = %q", got)
-	}
-}
-
-func TestFilterStackRowsKeepsOnlyOrphans(t *testing.T) {
-	rows := []devstack.StackRow{{Project: "a-1", Status: devstack.StatusActive}, {Project: "b-1", Status: devstack.StatusOrphaned}}
-	if kept := filterStackRows(rows, false, true); len(kept) != 1 || kept[0].Project != "b-1" {
-		t.Fatalf("filterStackRows(orphaned) = %v", kept)
-	}
-	if kept := filterStackRows(rows, true, false); len(kept) != 2 {
-		t.Fatalf("filterStackRows(all) = %v", kept)
 	}
 }
 

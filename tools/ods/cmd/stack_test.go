@@ -371,3 +371,17 @@ func TestModelServerImageEnv(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectInCheckoutMatchesTheRecordedProject(t *testing.T) {
+	_, _ = stackTestRepo(t)
+	stack, _ := openStack(nil)
+	if projectInCheckout(stack.Project) {
+		t.Fatal("a checkout without state matched the project")
+	}
+	if err := stack.WriteState(&devstack.State{Phase: devstack.PhaseStopped}); err != nil {
+		t.Fatal(err)
+	}
+	if !projectInCheckout(stack.Project) || projectInCheckout("another-project") {
+		t.Fatal("project selection does not follow the checkout's state")
+	}
+}
