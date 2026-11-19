@@ -4,7 +4,7 @@ import { Text } from "@opal/components";
 import { useTranslations } from "next-intl";
 import ToolCardSurface, {
   ToolCardSection,
-} from "@/lib/timeline/craft/components/tool-cards/ToolCardSurface";
+} from "@/lib/timeline/components/bodies/ToolCardSurface";
 import type { ToolCardBodyProps } from "@/lib/timeline/craft/components/tool-cards/interfaces";
 
 /**

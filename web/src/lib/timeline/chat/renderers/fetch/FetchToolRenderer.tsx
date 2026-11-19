@@ -8,7 +8,10 @@ import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { OnyxDocument } from "@/lib/search/types";
 import { openExternalLink } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { SearchChipList, SourceInfo } from "../search/SearchChipList";
+import {
+  SearchChipList,
+  SourceInfo,
+} from "@/lib/timeline/components/bodies/SearchChipList";
 import { getMetadataTags } from "../search/searchStateUtils";
 import {
   constructCurrentFetchState,

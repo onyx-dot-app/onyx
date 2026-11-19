@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Text, Button } from "@opal/components";
 import { SvgColumn, SvgMenu } from "@opal/icons";
-import ToolCardSurface from "@/lib/timeline/craft/components/tool-cards/ToolCardSurface";
+import ToolCardSurface from "@/lib/timeline/components/bodies/ToolCardSurface";
 import type { ToolCardBodyProps } from "@/lib/timeline/craft/components/tool-cards/interfaces";
 
 type DiffLineType = "added" | "removed" | "unchanged" | "header";

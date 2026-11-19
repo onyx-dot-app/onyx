@@ -21,7 +21,7 @@ import { getSourceDisplayName } from "@/lib/connectors/utils";
 import {
   SearchChipList,
   SourceInfo,
-} from "@/lib/timeline/chat/renderers/search/SearchChipList";
+} from "@/lib/timeline/components/bodies/SearchChipList";
 import {
   INITIAL_RESULTS_TO_SHOW,
   RESULTS_PER_EXPANSION,
