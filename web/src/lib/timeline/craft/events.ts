@@ -73,24 +73,27 @@ function oneOf<T extends string>(
   return allowed.find((option) => option === value);
 }
 
+/** `Array.isArray` narrows `unknown` to `any[]`; this keeps the items `unknown`. */
+function asArray(value: unknown): unknown[] | undefined {
+  return Array.isArray(value) ? value : undefined;
+}
+
 /** A web search's queries and results; anything malformed is dropped. */
 function decodeSearch(raw: unknown): OnyxSearch | undefined {
   if (!isRecord(raw)) return undefined;
-  const queries = Array.isArray(raw.queries)
-    ? raw.queries.filter((query): query is string => typeof query === "string")
-    : [];
+  const queries = (asArray(raw.queries) ?? []).filter(
+    (query): query is string => typeof query === "string"
+  );
   const results: OnyxSearchResult[] = [];
-  if (Array.isArray(raw.results)) {
-    for (const item of raw.results) {
-      if (!isRecord(item)) continue;
-      const url = asString(item.url);
-      if (!url) continue;
-      results.push({
-        url,
-        title: asString(item.title) || url,
-        snippet: asString(item.snippet) ?? "",
-      });
-    }
+  for (const item of asArray(raw.results) ?? []) {
+    if (!isRecord(item)) continue;
+    const url = asString(item.url);
+    if (!url) continue;
+    results.push({
+      url,
+      title: asString(item.title) || url,
+      snippet: asString(item.snippet) ?? "",
+    });
   }
   return { queries, results };
 }
@@ -126,9 +129,10 @@ function decodeContentBlock(raw: unknown): AcpContentBlock | undefined {
 }
 
 function decodeToolContent(raw: unknown): AcpToolCallContent[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
+  const items = asArray(raw);
+  if (!items) return undefined;
   const content: AcpToolCallContent[] = [];
-  for (const item of raw) {
+  for (const item of items) {
     if (!isRecord(item)) continue;
     if (item.type === "diff") {
       const path = asString(item.path);
@@ -153,9 +157,10 @@ function decodeToolContent(raw: unknown): AcpToolCallContent[] | undefined {
 }
 
 function decodeLocations(raw: unknown): AcpToolCallLocation[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
+  const items = asArray(raw);
+  if (!items) return undefined;
   const locations: AcpToolCallLocation[] = [];
-  for (const item of raw) {
+  for (const item of items) {
     if (!isRecord(item)) continue;
     const path = asString(item.path);
     if (path === undefined) continue;
@@ -167,9 +172,10 @@ function decodeLocations(raw: unknown): AcpToolCallLocation[] | undefined {
 
 /** TodoWrite's todos become ACP plan entries. */
 function todosToPlan(raw: unknown): AcpPlanEntry[] | undefined {
-  if (!isRecord(raw) || !Array.isArray(raw.todos)) return undefined;
+  const todos = isRecord(raw) ? asArray(raw.todos) : undefined;
+  if (!todos) return undefined;
   const entries: AcpPlanEntry[] = [];
-  for (const todo of raw.todos) {
+  for (const todo of todos) {
     if (!isRecord(todo)) continue;
     const content = asString(todo.content);
     const status = oneOf(todo.status, PLAN_STATUSES);
@@ -187,9 +193,10 @@ function todosToPlan(raw: unknown): AcpPlanEntry[] | undefined {
 }
 
 function decodePlanEntries(raw: unknown): AcpPlanEntry[] {
-  if (!Array.isArray(raw)) return [];
+  const items = asArray(raw);
+  if (!items) return [];
   const entries: AcpPlanEntry[] = [];
-  for (const item of raw) {
+  for (const item of items) {
     if (!isRecord(item)) continue;
     const content = asString(item.content);
     const status = oneOf(item.status, PLAN_STATUSES);
