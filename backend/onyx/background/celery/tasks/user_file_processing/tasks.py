@@ -82,7 +82,6 @@ from onyx.indexing.indexing_pipeline import run_indexing_pipeline
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.features.suggested_questions.scheduling import (
-    drop_orphaned_questions,
     request_refresh_for_new_documents,
 )
 from onyx.utils.variable_functionality import global_version
@@ -943,7 +942,6 @@ def delete_user_file_impl(
             if user_file is not None:
                 delete_user_file__no_commit(db_session, user_file)
                 db_session.commit()
-        drop_orphaned_questions(tenant_id)
         task_logger.info(f"delete_user_file_impl - Completed id={user_file_id}")
     except Exception as e:
         task_logger.exception(

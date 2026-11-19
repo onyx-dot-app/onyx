@@ -4,6 +4,7 @@ and check again, under the lock, that the run is still worth its model calls.
 """
 
 import time
+from collections import defaultdict
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -16,10 +17,7 @@ from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
-from onyx.db.suggested_questions import (
-    count_candidate_documents,
-    count_new_documents_since,
-)
+from onyx.db.suggested_questions import count_candidate_documents
 from onyx.db.users import fetch_user_by_id
 from onyx.secondary_llm_flows.suggested_questions import (
     build_triage_clients,
@@ -31,6 +29,7 @@ from onyx.server.features.suggested_questions.config import (
     SQ_LOCK_BUSY_RETRY_S,
     SQ_POOL_BUSY_RETRY_S,
     SQ_POOL_LOCK_HELD_S,
+    SQ_PRIVATE_REFILL_AT,
     SQ_RUN_BUDGET_S,
     SQ_RUN_RETRIES,
     SQ_RUN_RETRY_DELAY_S,
@@ -67,13 +66,12 @@ from onyx.server.features.suggested_questions.store import (
     record_topup,
     role_for,
     save_pool,
+    save_private_questions,
 )
 from onyx.server.features.suggested_questions.verification import run_search_test
 from onyx.server.settings.store import load_settings
 
 task_logger = get_task_logger(__name__)
-
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 class RunOutOfTime(Exception):
@@ -195,17 +193,10 @@ def _run_pool(tenant_id: str, reason: str) -> None:
     stored = load_pool(refresh_cache=True)
     pool = stored or QuestionPool()
     # Documents whose question expired may get a new one.
-    covered = fresh_document_ids(pool, started)
+    covered = fresh_document_ids(pool.questions, started)
     with get_session_with_current_tenant() as db_session:
-        live = get_live_document_ids(db_session, list(pool.document_ids))
         decision = worth_running(
-            stored,
-            started,
-            new_documents=count_new_documents_since(
-                db_session, pool.last_run_at() or _EPOCH
-            ),
-            candidate_documents=count_candidate_documents(db_session, covered),
-            usable_questions=count_usable_questions(pool, live, started),
+            stored, started, count_candidate_documents(db_session, covered)
         )
         if not decision.run:
             task_logger.info(
@@ -215,42 +206,59 @@ def _run_pool(tenant_id: str, reason: str) -> None:
             )
             return
         people = get_recently_active_users(db_session, started)
-        candidates = choose_documents(db_session, people, covered)
+        # Each person's private shelf skips the documents already on it.
+        private_covered = {
+            person.id: fresh_document_ids(
+                load_user_record(person.id, refresh_cache=True).questions, started
+            )
+            for person in people
+        }
+        candidates = choose_documents(db_session, people, covered, private_covered)
         docs_now = count_candidate_documents(db_session, set())
     roles = sorted({role for person in people if (role := role_for(person))})
     added = _write_and_test(tenant_id, candidates, roles, None, clock)
     _save(
         pool.record_run(started, docs_now, timedelta(hours=SQ_RUN_WINDOW_HOURS)),
         added,
+        candidates,
         started,
         clock,
     )
+    private_documents = {c.document_id for c in candidates if c.owner_ids}
+    private_added = sum(q.document_id in private_documents for q in added)
     task_logger.info(
-        "Suggested questions: pool run (%s, %s) added %d questions",
+        "Suggested questions: pool run (%s, %s) added %d shared and %d private questions",
         reason,
         decision.reason,
-        len(added),
+        len(added) - private_added,
+        private_added,
     )
 
 
 def _run_topup(tenant_id: str, user_id: UUID, attempt: dict[str, bool]) -> None:
     started = datetime.now(UTC)
     clock = _RunClock()
+    record = load_user_record(user_id, refresh_cache=True)
     # Checked again under the lock, unless this retry's attempt already counts.
-    if not attempt["recorded"] and not topup_allowed(
-        load_user_record(user_id, refresh_cache=True), started
-    ):
+    if not attempt["recorded"] and not topup_allowed(record, started):
         return
-    pool = load_pool(refresh_cache=True) or QuestionPool()
     with get_session_with_current_tenant() as db_session:
         user = fetch_user_by_id(db_session, user_id)
         if user is None or not user.is_active:
             return
+        unused = [q for q in record.questions if q.id not in record.used]
+        live = get_live_document_ids(db_session, [q.document_id for q in unused])
+        if count_usable_questions(unused, live, started) > SQ_PRIVATE_REFILL_AT:
+            task_logger.info("Suggested questions: %s has enough questions", user_id)
+            return
+        # The person's own documents only: pool runs fill the shared shelf.
         candidates = choose_documents(
-            db_session, [user], fresh_document_ids(pool, started), prefer_private=True
+            db_session,
+            [user],
+            set(),
+            {user.id: fresh_document_ids(record.questions, started)},
+            include_shared=False,
         )
-    # TODO(ENG-4487): also stop when the person already has enough questions,
-    # once the per-person pick (the API PR of this stack) can count them.
     if not candidates:
         task_logger.info("Suggested questions: nothing new for %s", user_id)
         return
@@ -259,7 +267,7 @@ def _run_topup(tenant_id: str, user_id: UUID, attempt: dict[str, bool]) -> None:
         attempt["recorded"] = True
     role = role_for(user)
     added = _write_and_test(tenant_id, candidates, [role] if role else [], user, clock)
-    _save(pool, added, started, clock)
+    _save(None, added, candidates, started, clock)
     task_logger.info(
         "Suggested questions: top-up for %s added %d questions", user_id, len(added)
     )
@@ -290,17 +298,46 @@ def _write_and_test(
 
 
 def _save(
-    pool: QuestionPool, added: list[PoolQuestion], now: datetime, clock: "_RunClock"
+    pool: QuestionPool | None,
+    added: list[PoolQuestion],
+    candidates: list[CandidateDocument],
+    now: datetime,
+    clock: "_RunClock",
 ) -> None:
-    """Merge the new questions into the pool, dropping those whose document is
-    gone and those too old to show, and store it. Refuses to save when the
-    pool lock may have expired, so a late run cannot overwrite a newer pool."""
-    kept = [q for q in pool.questions if q.document_id in fresh_document_ids(pool, now)]
-    ids = list({q.document_id for q in [*kept, *added]})
+    """Put each new question on its shelf: the shared shelf in the pool, or the
+    private shelf of each person whose bucket chose its document. Questions
+    whose document is gone and those too old to show leave the shelves. A
+    top-up passes no pool. Refuses to save when the pool lock may have expired,
+    so a late run cannot overwrite newer shelves. The pool, which records the
+    run, is saved last: if a private shelf fails to save, the run is not yet
+    recorded, so its retry is not refused by the gap after this run."""
+    owners = {c.document_id: c.owner_ids for c in candidates}
+    shared_added = [q for q in added if not owners.get(q.document_id)]
+    private_added: dict[UUID, list[PoolQuestion]] = defaultdict(list)
+    for question in added:
+        for owner_id in owners.get(question.document_id, []):
+            private_added[owner_id].append(question)
+    kept = [q for q in pool.questions if q.is_fresh(now)] if pool else []
+    shelves = [
+        load_user_record(owner_id, refresh_cache=True).questions
+        for owner_id in private_added
+    ]
+    ids = {q.document_id for q in [*kept, *added]} | {
+        q.document_id for shelf in shelves for q in shelf
+    }
     with get_session_with_current_tenant() as db_session:
-        live = get_live_document_ids(db_session, ids)
-    clock.check_lock()
-    save_pool(pool.model_copy(update={"questions": merge_questions(kept, added, live)}))
+        live = get_live_document_ids(db_session, list(ids))
+    # Checked before each write: a write can wait for a person's record lock.
+    for owner_id, questions in private_added.items():
+        clock.check_lock()
+        save_private_questions(owner_id, questions, live, now)
+    if pool is not None:
+        clock.check_lock()
+        save_pool(
+            pool.model_copy(
+                update={"questions": merge_questions(kept, shared_added, live)}
+            )
+        )
 
 
 class _RunClock:

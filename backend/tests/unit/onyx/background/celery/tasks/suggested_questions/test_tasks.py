@@ -47,6 +47,9 @@ def run(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         "candidates": [
             CandidateDocument(document_id="new", kind=QuestionKind.DOCUMENT)
         ],
+        "found": [_question("new")],
+        "records": {},
+        "private_saved": {},
     }
     set_ = monkeypatch.setattr
     set_(tasks, "is_enabled", lambda: True)
@@ -61,7 +64,6 @@ def run(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     set_(tasks, "save_pool", lambda pool: state.update(saved=pool))
     set_(tasks, "get_session_with_current_tenant", MagicMock())
     set_(tasks, "get_live_document_ids", lambda _s, ids: set(ids))
-    set_(tasks, "count_new_documents_since", lambda _s, _since: 0)
     set_(tasks, "count_candidate_documents", lambda _s, _ids: 30)
     set_(tasks, "worth_running", lambda *_a, **_kw: state["decision"])
     set_(tasks, "get_recently_active_users", lambda _s, _now: [])
@@ -83,10 +85,21 @@ def run(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     ) -> list[PoolQuestion]:
         state["search_user"] = user
         state["search_timeout"] = timeout_s
-        return [_question("new")]
+        return list(state["found"])
 
     set_(tasks, "run_search_test", search)
-    set_(tasks, "load_user_record", lambda *_a, **_kw: UserRecord())
+    set_(
+        tasks,
+        "load_user_record",
+        lambda user_id, **_kw: state["records"].get(user_id, UserRecord()),
+    )
+    set_(
+        tasks,
+        "save_private_questions",
+        lambda user_id, added, _live, _now: state["private_saved"].update(
+            {user_id: [q.document_id for q in added]}
+        ),
+    )
     set_(tasks, "topup_allowed", lambda *_a: True)
     set_(tasks, "record_topup", lambda u, *_a: state["topups"].append(u))
     return state
@@ -245,9 +258,15 @@ def test_a_retry_leaves_the_queued_flag_alone(run: dict[str, Any]) -> None:
 
 
 @pytest.fixture
-def person(monkeypatch: pytest.MonkeyPatch) -> User:
+def person(run: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> User:
+    """Alice, whose private bucket chose the document the run writes about."""
     user = User(id=uuid4(), email="alice@co.com", is_active=True)
     monkeypatch.setattr(tasks, "fetch_user_by_id", lambda _s, _id: user)
+    run["candidates"] = [
+        CandidateDocument(
+            document_id="new", kind=QuestionKind.DOCUMENT, owner_ids=[user.id]
+        )
+    ]
     return user
 
 
@@ -263,8 +282,9 @@ def test_topup_searches_as_the_person_and_records_the_topup(
 
     assert run["search_user"] is person
     assert run["topups"] == [person.id]
-    assert {q.document_id for q in run["saved"].questions} == {"old", "new"}
-    assert run["saved"].runs == []  # top-ups do not count as pool runs
+    # A top-up fills the person's private shelf; the shared shelf is untouched.
+    assert run["private_saved"] == {person.id: ["new"]}
+    assert run["saved"] is None
 
 
 @pytest.mark.usefixtures("run")
@@ -284,21 +304,37 @@ def test_topup_retries_soon_when_the_pool_is_busy(
     assert retry.call_args.kwargs["countdown"] == tasks.SQ_LOCK_BUSY_RETRY_S
 
 
-@pytest.mark.parametrize("cause", ["limits used", "nothing new"])
+@pytest.mark.parametrize("cause", ["limits used", "nothing new", "has enough"])
 def test_topup_stops_before_any_model_call(
     run: dict[str, Any], person: User, monkeypatch: pytest.MonkeyPatch, cause: str
 ) -> None:
     if cause == "limits used":
         monkeypatch.setattr(tasks, "topup_allowed", lambda *_a: False)
-    else:
+    elif cause == "nothing new":
         run["candidates"] = []
+    else:
+        unused = tasks.SQ_PRIVATE_REFILL_AT + 1
+        run["records"][person.id] = UserRecord(
+            questions=[_question(f"mine-{n}") for n in range(unused)]
+        )
 
     _topup(person)
 
     run["triage"].assert_not_called()
     run["write"].assert_not_called()
     assert run["topups"] == []
-    assert run["saved"] is None
+    assert run["private_saved"] == {}
+
+
+def test_used_questions_do_not_count_toward_enough(
+    run: dict[str, Any], person: User
+) -> None:
+    questions = [_question(f"mine-{n}") for n in range(tasks.SQ_PRIVATE_REFILL_AT + 1)]
+    run["records"][person.id] = UserRecord(questions=questions, used=[questions[0].id])
+
+    _topup(person)
+
+    assert run["private_saved"] == {person.id: ["new"]}
 
 
 def test_a_failed_flag_release_does_not_stop_the_run(
@@ -345,8 +381,8 @@ def test_expired_questions_free_their_documents(
     monkeypatch.setattr(
         tasks,
         "choose_documents",
-        lambda _s, _people, exclude, **_kw: (
-            excluded.append(set(exclude)) or run["candidates"]
+        lambda _s, _people, shared_exclude, _private, **_kw: (
+            excluded.append(set(shared_exclude)) or run["candidates"]
         ),
     )
 
@@ -354,6 +390,76 @@ def test_expired_questions_free_their_documents(
 
     assert excluded == [{"fresh"}]
     assert {q.document_id for q in run["saved"].questions} == {"fresh", "new"}
+
+
+def test_a_pool_run_puts_each_question_on_its_shelf(run: dict[str, Any]) -> None:
+    alice, bob = uuid4(), uuid4()
+    run["candidates"] = [
+        CandidateDocument(document_id="handbook", kind=QuestionKind.DOCUMENT),
+        CandidateDocument(
+            document_id="team-plan",
+            kind=QuestionKind.DOCUMENT,
+            owner_ids=[alice, bob],
+        ),
+        CandidateDocument(
+            document_id="alice-notes", kind=QuestionKind.USER_FILE, owner_ids=[alice]
+        ),
+    ]
+    run["found"] = [_question(d) for d in ("handbook", "team-plan", "alice-notes")]
+
+    _pool_task()
+
+    assert {q.document_id for q in run["saved"].questions} == {"old", "handbook"}
+    assert run["private_saved"] == {
+        alice: ["team-plan", "alice-notes"],
+        bob: ["team-plan"],
+    }
+
+
+def test_a_failed_private_save_leaves_the_run_unrecorded(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    alice = uuid4()
+    run["candidates"] = [
+        CandidateDocument(
+            document_id="new", kind=QuestionKind.DOCUMENT, owner_ids=[alice]
+        )
+    ]
+
+    def lock_timed_out(*_args: Any) -> None:
+        raise CacheLockAcquisitionError("person's record is busy")
+
+    monkeypatch.setattr(tasks, "save_private_questions", lock_timed_out)
+    retry = MagicMock(side_effect=Retry())
+    monkeypatch.setattr(tasks.generate_suggested_questions_pool, "retry", retry)
+
+    with pytest.raises(Retry):
+        _pool_task()
+
+    # The pool, with this run's record, is not saved, so the retry may run.
+    assert run["saved"] is None
+
+
+def test_each_persons_shelf_is_excluded_for_them(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    alice = User(id=uuid4(), email="alice@co.com", is_active=True)
+    monkeypatch.setattr(tasks, "get_recently_active_users", lambda _s, _now: [alice])
+    run["records"][alice.id] = UserRecord(
+        questions=[_question("on-her-shelf"), _old_question("expired")]
+    )
+    excluded: list[Any] = []
+    monkeypatch.setattr(
+        tasks,
+        "choose_documents",
+        lambda _s, _people, _shared, private, **_kw: (
+            excluded.append(private) or run["candidates"]
+        ),
+    )
+
+    _pool_task()
+
+    assert excluded == [{alice.id: {"on-her-shelf"}}]
 
 
 def test_passages_keep_the_candidates_order(run: dict[str, Any]) -> None:
@@ -387,6 +493,33 @@ def test_no_save_when_the_pool_lock_may_have_expired(
     assert run["saved"] is None
 
 
+def test_the_lease_is_checked_before_each_private_write(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    alice, bob = uuid4(), uuid4()
+    run["candidates"] = [
+        CandidateDocument(document_id=d, kind=QuestionKind.DOCUMENT, owner_ids=[o])
+        for d, o in (("a", alice), ("b", bob))
+    ]
+    run["found"] = [_question("a"), _question("b")]
+    written: list[Any] = []
+
+    def write_that_uses_up_the_lease(user_id: Any, *_args: Any) -> None:
+        written.append(user_id)
+        monkeypatch.setattr(tasks, "SQ_POOL_LOCK_HELD_S", 0.0)
+        monkeypatch.setattr(tasks, "SQ_SAVE_MARGIN_S", 0.0)
+
+    monkeypatch.setattr(tasks, "save_private_questions", write_that_uses_up_the_lease)
+    retry = MagicMock(side_effect=Retry())
+    monkeypatch.setattr(tasks.generate_suggested_questions_pool, "retry", retry)
+
+    with pytest.raises(Retry):
+        _pool_task()
+
+    assert written == [alice]
+    assert run["saved"] is None
+
+
 def test_a_retry_finishes_its_recorded_topup(
     run: dict[str, Any], person: User, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -397,7 +530,7 @@ def test_a_retry_finishes_its_recorded_topup(
     topup_task.run(tenant_id="tenant", user_id=str(person.id), recorded=True)
 
     assert run["topups"] == []  # not counted twice
-    assert run["saved"] is not None
+    assert run["private_saved"] == {person.id: ["new"]}
 
 
 def test_a_failed_topup_retries_as_recorded(

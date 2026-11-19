@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta
 from enum import StrEnum
+from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
+from onyx.server.features.suggested_questions.config import SQ_QUESTION_MAX_AGE_DAYS
 
 
 class QuestionKind(StrEnum):
@@ -23,14 +25,10 @@ class UseCase(StrEnum):
 
 
 class RefreshReason(StrEnum):
-    """Why a pool run was requested. Sets its priority and delay."""
+    """Why a pool run was requested, for the logs."""
 
-    # The company has no questions yet and its first documents arrived.
+    # The company never had a pool run and its first documents arrived.
     FIRST_RUN = "first_run"
-    # Fewer usable questions than SQ_POOL_SHORT, or documents were deleted.
-    POOL_SHORT = "pool_short"
-    # New documents were indexed.
-    GROWTH = "growth"
 
 
 class RunDecision(BaseModel):
@@ -45,6 +43,9 @@ class CandidateDocument(BaseModel):
 
     document_id: str
     kind: QuestionKind
+    # The people whose private bucket chose it. Empty for a shared document.
+    # A run puts the document's question on each of their private shelves.
+    owner_ids: list[UUID] = Field(default_factory=list)
 
 
 class TriagedChunk(BaseModel):
@@ -113,9 +114,15 @@ class PoolQuestion(BaseModel):
     best_for: UseCase | None
     created_at: datetime
 
+    def is_fresh(self, now: datetime) -> bool:
+        """Young enough to show. A document whose question expired may get a
+        new one."""
+        return now - self.created_at < timedelta(days=SQ_QUESTION_MAX_AGE_DAYS)
+
 
 class QuestionPool(BaseModel):
-    """One per company, in the KV store."""
+    """One per company, in the KV store. Its questions are the shared shelf:
+    questions about documents everyone in the company can see."""
 
     version: int = 1
     # Start times of recent pool runs, oldest first, for the rate limits.
@@ -157,6 +164,8 @@ class UserRecord(BaseModel):
     last_seen_at: datetime | None = None
     # Start times of recent top-up runs for this person, oldest first.
     topups: list[datetime] = Field(default_factory=list)
+    # The private shelf: questions about documents granted to this person.
+    questions: list[PoolQuestion] = Field(default_factory=list)
 
     def record_topup(self, started_at: datetime, window: timedelta) -> "UserRecord":
         """Return a copy with the top-up recorded and top-ups older than the

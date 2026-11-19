@@ -97,15 +97,25 @@ def _people(state: dict[str, Any], *emails: str) -> list[User]:
 def test_shared_first_then_each_persons_private_documents(
     documents: dict[str, Any],
 ) -> None:
-    people = _people(documents, "alice@co.com", "bob@co.com")
+    alice, bob = _people(documents, "alice@co.com", "bob@co.com")
 
-    candidates = selection.choose_documents(MagicMock(spec=Session), people, set())
+    candidates = selection.choose_documents(
+        MagicMock(spec=Session), [alice, bob], set(), {}
+    )
 
     assert candidates == [
         CandidateDocument(document_id="shared", kind=QuestionKind.DOCUMENT),
-        CandidateDocument(document_id="alice-doc", kind=QuestionKind.DOCUMENT),
-        CandidateDocument(document_id="alice-upload", kind=QuestionKind.USER_FILE),
-        CandidateDocument(document_id="bob-doc", kind=QuestionKind.DOCUMENT),
+        CandidateDocument(
+            document_id="alice-doc", kind=QuestionKind.DOCUMENT, owner_ids=[alice.id]
+        ),
+        CandidateDocument(
+            document_id="alice-upload",
+            kind=QuestionKind.USER_FILE,
+            owner_ids=[alice.id],
+        ),
+        CandidateDocument(
+            document_id="bob-doc", kind=QuestionKind.DOCUMENT, owner_ids=[bob.id]
+        ),
     ]
 
 
@@ -115,37 +125,58 @@ def test_uploads_are_skipped_when_connector_documents_fill_the_bucket(
     monkeypatch.setattr(selection, "SQ_PRIVATE_DOCS_PER_USER", 1)
     alice = _people(documents, "alice@co.com")
 
-    candidates = selection.choose_documents(MagicMock(spec=Session), alice, set())
+    candidates = selection.choose_documents(MagicMock(spec=Session), alice, set(), {})
 
     assert [c.document_id for c in candidates] == ["shared", "alice-doc"]
 
 
-def test_topup_prefers_the_persons_private_documents(
+def test_a_topup_uses_only_the_persons_own_documents(
     documents: dict[str, Any],
 ) -> None:
     alice = _people(documents, "alice@co.com")
 
     candidates = selection.choose_documents(
-        MagicMock(spec=Session), alice, set(), prefer_private=True
+        MagicMock(spec=Session), alice, set(), {}, include_shared=False
     )
 
-    assert [c.document_id for c in candidates] == [
-        "alice-doc",
-        "alice-upload",
-        "shared",
-    ]
+    assert [c.document_id for c in candidates] == ["alice-doc", "alice-upload"]
 
 
-def test_documents_already_in_the_pool_are_skipped(
+def test_each_shelf_skips_only_its_own_documents(
     documents: dict[str, Any],
 ) -> None:
     alice = _people(documents, "alice@co.com")
 
     candidates = selection.choose_documents(
-        MagicMock(spec=Session), alice, {"shared", "alice-upload"}
+        MagicMock(spec=Session),
+        alice,
+        shared_exclude_ids={"shared"},
+        private_exclude_ids={alice[0].id: {"alice-upload"}},
     )
 
     assert [c.document_id for c in candidates] == ["alice-doc"]
+
+
+def test_a_group_document_is_one_candidate_for_each_person_without_it(
+    documents: dict[str, Any],
+) -> None:
+    documents["private"] = {"alice@co.com": ["team-doc"], "bob@co.com": ["team-doc"]}
+    documents["uploads"] = {}
+    alice, bob = _people(documents, "alice@co.com", "bob@co.com")
+    session = MagicMock(spec=Session)
+
+    both = selection.choose_documents(session, [alice, bob], set(), {})
+    # Bob already has a question about it on his shelf.
+    only_alice = selection.choose_documents(
+        session, [alice, bob], set(), {bob.id: {"team-doc"}}
+    )
+
+    assert [(c.document_id, c.owner_ids) for c in both if c.owner_ids] == [
+        ("team-doc", [alice.id, bob.id])
+    ]
+    assert [(c.document_id, c.owner_ids) for c in only_alice if c.owner_ids] == [
+        ("team-doc", [alice.id])
+    ]
 
 
 def test_fetch_chunks_reads_the_start_of_each_document_without_acl(
