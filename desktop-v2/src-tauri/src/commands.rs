@@ -397,15 +397,19 @@ pub async fn upload_file(
         .api
         .wait_for_file(&server, &token, row, &current)
         .await;
-    if entry.cancelled() {
-        // The user removed the file: it must not stay in their files.
+    let cancelled = entry.cancelled();
+    if cancelled || result.is_err() {
+        // A removed or failed file must not stay in the user's files; the
+        // launcher gets no id to delete it with.
         if let Err(e) = state
             .api
             .delete_user_file(&server, &token, &user_file_id)
             .await
         {
-            log::warn!("could not delete a removed attachment: {e}");
+            log::warn!("could not delete an unused attachment: {e}");
         }
+    }
+    if cancelled {
         return Err("The upload was cancelled.".into());
     }
     result

@@ -79,6 +79,8 @@ const MAX_FILE_BYTES = 250 * 1024 * 1024;
 // Uploads that read files into memory at one time; the others wait.
 const PARALLEL_UPLOADS = 2;
 const AGENT_REFRESH_MS = 60_000;
+// How long a question waits for the first agent list before it goes as is.
+const AGENT_WAIT_MS = 3_000;
 
 function loadHistory(): string[] {
   try {
@@ -212,6 +214,10 @@ function Launcher() {
   // The agent of the chat on screen; a different agent starts a new chat.
   const [chatAgentId, setChatAgentId] = useState<number | null>(null);
   const agentsLoadedAt = useRef<number | null>(null);
+  // The first agent list is loading; a question waits for the saved agent.
+  const [agentsPending, setAgentsPending] = useState(false);
+  const [askQueued, setAskQueued] = useState(false);
+  const [agentWaitOver, setAgentWaitOver] = useState(false);
   const [pickerIndex, setPickerIndex] = useState(0);
   const [pickerDismissed, setPickerDismissed] = useState(false);
   // The draft that ⌘K set aside to show the picker; null when "@" opened it.
@@ -251,6 +257,7 @@ function Launcher() {
       return "unchanged";
     }
     const request = ++agentsRequest.current;
+    if (loadedAt === null) setAgentsPending(true);
     try {
       const result = await listAgents();
       if (request !== agentsRequest.current) return "unchanged";
@@ -265,6 +272,8 @@ function Launcher() {
     } catch {
       // The default agent still answers.
       return request === agentsRequest.current ? "failed" : "unchanged";
+    } finally {
+      if (request === agentsRequest.current) setAgentsPending(false);
     }
   }
 
@@ -305,6 +314,7 @@ function Launcher() {
     void discardAnswer();
     askId.current += 1;
     searchId.current += 1;
+    setAskQueued(false);
     setTurns([]);
     setChatSessionId(null);
     setQuery("");
@@ -774,6 +784,15 @@ function Launcher() {
     // The server takes no new message while an answer waits for approval:
     // keep the draft; ⌘↵ approves in the window, ⌘N starts a new chat.
     if (awaitingApproval) return;
+    // Without the saved agent, this question and the next would go to different chats.
+    if (agentsPending && !agentWaitOver) {
+      setAskQueued(true);
+      return;
+    }
+    if (agentId === null && defaultDisabled) {
+      flash(`Choose an agent first: type @ or press ${primaryShortcut("K")}.`);
+      return;
+    }
     if (uploading) {
       flash("Wait until the files finish uploading.");
       return;
@@ -792,6 +811,19 @@ function Launcher() {
     setAttachments([]);
     void runAsk(text, files);
   }
+
+  // A queued question goes once the first agent list settles, or after AGENT_WAIT_MS.
+  useEffect(() => {
+    if (!askQueued) return;
+    if (agentsPending && !agentWaitOver) {
+      const timer = window.setTimeout(() => setAgentWaitOver(true), AGENT_WAIT_MS);
+      return () => window.clearTimeout(timer);
+    }
+    setAskQueued(false);
+    const text = query.trim();
+    if (mode === "ask" && text !== "") submitAsk(text);
+    setAgentWaitOver(false);
+  }, [askQueued, agentsPending, agentWaitOver]);
 
   function onInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (composing(event)) return;
