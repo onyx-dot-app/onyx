@@ -72,6 +72,46 @@ import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { useIncognito } from "@/providers/IncognitoProvider";
+import {
+  currentOpenPublishedFiles,
+  useCurrentPublishedFiles,
+} from "@/lib/chat/hooks";
+import { rightPanelFileTab } from "@/lib/chat/rightPanel";
+import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
+import {
+  useChatSessionStore,
+  useFilesShown,
+} from "@/app/app/stores/useChatSessionStore";
+import { PublishedFilesButton } from "@/sections/chat/PublishedFileViews";
+
+// ---------------------------------------------------------------------------
+// ChatPublishedFilesButton
+// ---------------------------------------------------------------------------
+
+// Its own component, so a change to the published files or to the panel
+// re-renders the button and not the header
+function ChatPublishedFilesButton() {
+  const hasPublishedFiles = useCurrentPublishedFiles().length > 0;
+  const visible = useFilesShown();
+  const updateCurrentRightPanel = useChatSessionStore(
+    (state) => state.updateCurrentRightPanel
+  );
+  if (!hasPublishedFiles) return null;
+  return (
+    <PublishedFilesButton
+      pressed={visible}
+      // Reopening restores the panel's last Files tab
+      onClick={() =>
+        updateCurrentRightPanel({
+          type: "toggleFiles",
+          shownFileTabs: currentOpenPublishedFiles(
+            useChatSessionStore.getState()
+          ).map((file) => rightPanelFileTab(file.file_id)),
+        })
+      }
+    />
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Header
@@ -547,6 +587,7 @@ function Header() {
                   currentChatSession.id === appPosition.chat() &&
                   !incognitoEnabled && (
                     <FrostedDiv className="flex shrink flex-row items-center">
+                      <ChatPublishedFilesButton />
                       <Button
                         icon={SvgShare}
                         prominence="tertiary"
@@ -646,6 +687,12 @@ export interface AppChromeProps {
 
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const workspaceElements = useMemo(
+    () => ({ workspace: workspaceRef, page: pageRef }),
+    []
+  );
 
   const appPosition = useAppPosition();
   useAppDocumentTitle();
@@ -702,8 +749,12 @@ export default function AppChrome({ children }: AppChromeProps) {
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
       >
-        <div className="flex flex-row flex-1 min-h-0">
+        <div
+          ref={workspaceRef}
+          className="relative flex flex-row flex-1 min-h-0"
+        >
           <div
+            ref={pageRef}
             className={cn(
               "@container relative isolate flex-1 flex flex-col min-h-0",
               showBackground && "bg-cover bg-center bg-fixed"
@@ -762,7 +813,10 @@ export default function AppChrome({ children }: AppChromeProps) {
             </RootLayout.MainContent>
             <Footer />
           </div>
-          {rightPanel}
+          {/* The slot's panel measures the workspace and covers the page */}
+          <AppWorkspaceElementsContext.Provider value={workspaceElements}>
+            {rightPanel}
+          </AppWorkspaceElementsContext.Provider>
         </div>
       </RootLayout.App>
     </RootLayoutRightPanelSlotContext.Provider>

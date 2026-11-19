@@ -15,6 +15,13 @@ from onyx.server.gateway.models import GatewayModelDescriptor
 
 FileSet: TypeAlias = dict[str, bytes]
 
+# Parent of each chat session's working directory in the sandbox.
+SESSION_WORKSPACE_ROOT = "/home/onyx/workspaces"
+
+
+def session_workspace(session_id: UUID) -> str:
+    return f"{SESSION_WORKSPACE_ROOT}/{session_id}"
+
 
 class SandboxResourceKind(str, Enum):
     POD = "pod"

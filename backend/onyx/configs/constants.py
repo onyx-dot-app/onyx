@@ -481,6 +481,11 @@ class FileStoreType(str, Enum):
 # chat output file (CHAT_OUTPUT_FILE_ORIGINS). user_can_access_chat_file gives
 # the file to the session's readers.
 CHAT_SESSION_ID_FILE_METADATA_KEY = "chat_session_id"
+# Keys in FileRecord.file_metadata of a published file (FileOrigin.CHAT_ARTIFACT),
+# which publish_files writes: the absolute, normalized VM path, which is the
+# file's identity, and the title that the model gave, when it gave one.
+PUBLISHED_FILE_PATH_METADATA_KEY = "published_path"
+PUBLISHED_FILE_TITLE_METADATA_KEY = "published_title"
 
 
 class FileOrigin(str, Enum):

@@ -139,7 +139,6 @@ from onyx.server.features.build.sandbox.harness_base import (
     onyx_vm_path,
     session_relative_path,
     session_tool_results,
-    session_workspace,
 )
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
@@ -151,6 +150,7 @@ from onyx.server.features.build.sandbox.models import (
     SandboxPathFault,
     SandboxPathInfo,
     SandboxProvisionContentionError,
+    session_workspace,
 )
 from onyx.utils.logger import setup_logger
 

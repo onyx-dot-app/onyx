@@ -17,7 +17,7 @@ from onyx.tools.tool_implementations.question.models import (
 from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchFileChange,
     FileToolName,
-    PublishedFile,
+    PublishedFileView,
     PublishFileArgument,
 )
 
@@ -579,7 +579,7 @@ class PublishFilesStart(BaseObj):
 class PublishFilesEnd(BaseObj):
     type: Literal["publish_files_end"] = StreamingType.PUBLISH_FILES_END.value
     # In the order of the start's files; each downloads from /chat/file/{file_id}.
-    files: list[PublishedFile] = []
+    files: list[PublishedFileView] = []
     # Set when the call failed; it published no file then.
     error: str | None = None
 

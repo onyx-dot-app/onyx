@@ -20,13 +20,14 @@ import {
   saveOutputInventorySnapshot,
   clearOutputInventorySnapshot,
 } from "@/app/craft/services/outputInventorySnapshots";
-import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome";
+import { WorkspaceHome } from "@/sections/output-panel/WorkspaceHome";
 import {
   OutputTile,
   OutputFolderTile,
   OutputAppTile,
   OutputUnavailableTile,
 } from "@/app/craft/components/output-panel/OutputTile";
+import { OutputTileGrid } from "@/sections/output-panel/OutputTile";
 import type { OutputCard } from "@/app/craft/types/streamingTypes";
 
 interface OutputsTabProps {
@@ -361,7 +362,7 @@ function OutputsBrowser({
       ) : (
         <div className="flex w-full flex-col gap-3">
           {folders.length > 0 && (
-            <div className="grid grid-cols-2 gap-2 @[24rem]:grid-cols-3">
+            <OutputTileGrid>
               {folders.map((name) => (
                 <OutputFolderTile
                   key={name}
@@ -376,10 +377,10 @@ function OutputsBrowser({
                   onOpen={() => setFolder(folder ? `${folder}/${name}` : name)}
                 />
               ))}
-            </div>
+            </OutputTileGrid>
           )}
           {sessionId && (visibleFiles.length > 0 || apps.length > 0) && (
-            <div className="grid grid-cols-2 gap-2 @[24rem]:grid-cols-3">
+            <OutputTileGrid>
               {apps.map((app) =>
                 app.deleted ? (
                   <OutputUnavailableTile key={app.id} card={app} />
@@ -419,7 +420,7 @@ function OutputsBrowser({
                   />
                 );
               })}
-            </div>
+            </OutputTileGrid>
           )}
         </div>
       )}

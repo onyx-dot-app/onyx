@@ -305,14 +305,15 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         directory; a regular file of at most
                                         PUBLISH_FILES_MAX_BYTES, 100 MiB), then
                                         file_store/utils.save_chat_output_file with
-                                        FileOrigin.CHAT_ARTIFACT and the SandboxTurn's chat
+                                        FileOrigin.CHAT_ARTIFACT, the VM path and title
+                                        (stamped in file_metadata) and the SandboxTurn's chat
                                         session (the root chat's: subagents share the turn;
                                         file ID chat-artifact-<session>-<hex>).
                                         A failure, or a Stop during or after the copies,
                                         deletes the files that the call saved: all or none.
                                         Saves PublishedFiles (file ID, name, title, absolute
                                         path, size, MIME type); each publish is a new file,
-                                        and files of one name are versions of one file.
+                                        and the path is the file's identity.
                                         save_chat_turn adds the files to the response's
                                         ChatMessage.files ([[chat-persistence]])
   Agent.prepare_tool_result (ChatAgent) sandbox/spill.py:spill_large_result, in a chat whose

@@ -1,6 +1,6 @@
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import NoReturn, Tuple
+from typing import NamedTuple, NoReturn, Tuple
 from uuid import UUID
 
 from pydantic import TypeAdapter
@@ -9,6 +9,9 @@ from sqlalchemy import (
     Row,
     any_,
     bindparam,
+    case,
+    cast,
+    column,
     delete,
     desc,
     func,
@@ -16,11 +19,20 @@ from sqlalchemy import (
     nullsfirst,
     or_,
     select,
+    true,
+    union_all,
     update,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import MultipleResultsFound
-from sqlalchemy.orm import Session, aliased, joinedload, load_only, selectinload
+from sqlalchemy.orm import (
+    InstrumentedAttribute,
+    Session,
+    aliased,
+    joinedload,
+    load_only,
+    selectinload,
+)
 from sqlalchemy.sql.expression import ColumnElement
 from sqlalchemy.sql.selectable import CTE, Select
 
@@ -43,7 +55,13 @@ from onyx.chat.models import (
     read_message_rendering,
 )
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
+from onyx.configs.constants import (
+    ANONYMOUS_USER_UUID,
+    PUBLISHED_FILE_PATH_METADATA_KEY,
+    PUBLISHED_FILE_TITLE_METADATA_KEY,
+    FileOrigin,
+    MessageType,
+)
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
 from onyx.db.document_set import require_document_set_access
@@ -70,13 +88,17 @@ from onyx.file_store.constants import (
     AGENT_CHECKPOINT_FILE_PREFIX,
     CHAT_ARTIFACT_FILE_PREFIX,
 )
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import (
+    FILE_SIZE_MISSING_SENTINEL,
+    get_default_file_store,
+)
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import GenerationRequestParams, TextContent, ThinkingContent
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
     ChatMessageDetail,
+    ChatPublishedFile,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.tools.models import IntegrationEntry, ToolOptions
@@ -826,27 +848,16 @@ def get_chat_messages_by_session(
     return list(result)
 
 
-def get_chat_message_page_ids(
-    chat_session_id: UUID,
-    db_session: Session,
-    limit: int,
-    before_message_id: int | None = None,
-    waiting_reply_ids: Collection[int] = (),
-) -> tuple[set[int], bool]:
-    """One page of a session's current branch, for paged loading.
+class CurrentBranch(NamedTuple):
+    """A session's current branch: the chain of `latest_child_message_id` from
+    the root, oldest first, with the links that a page of it needs."""
 
-    The page holds the last `limit` messages of the current branch (the chain
-    of `latest_child_message_id` from the root), or of the part of it before
-    `before_message_id`. It also holds every child of those messages, so a
-    branch switcher and multi-model replies have their siblings, including the
-    siblings of the first message of the next, newer page.
+    message_ids: list[int]
+    parent_by_id: dict[int, int | None]
+    children_by_parent: dict[int, list[int]]
 
-    The latest page also reaches back to the question of each of
-    `waiting_reply_ids` that is on the branch, or a reply to it.
 
-    Returns the message ids and whether the branch has older messages. A
-    `before_message_id` that is not on the current branch gives an empty page.
-    """
+def get_current_branch(chat_session_id: UUID, db_session: Session) -> CurrentBranch:
     rows = db_session.execute(
         select(
             ChatMessage.id,
@@ -874,7 +885,30 @@ def get_chat_message_page_ids(
     while next_id is not None and next_id in latest_child_by_id:
         branch.append(next_id)
         next_id = latest_child_by_id[next_id]
+    return CurrentBranch(branch, parent_by_id, children_by_parent)
 
+
+def get_chat_message_page_ids(
+    current_branch: CurrentBranch,
+    limit: int,
+    before_message_id: int | None = None,
+    waiting_reply_ids: Collection[int] = (),
+) -> tuple[set[int], bool]:
+    """One page of a session's current branch, for paged loading.
+
+    The page holds the last `limit` messages of the current branch, or of the
+    part of it before `before_message_id`. It also holds every child of those
+    messages, so a branch switcher and multi-model replies have their
+    siblings, including the siblings of the first message of the next, newer
+    page.
+
+    The latest page also reaches back to the question of each of
+    `waiting_reply_ids` that is on the branch, or a reply to it.
+
+    Returns the message ids and whether the branch has older messages. A
+    `before_message_id` that is not on the current branch gives an empty page.
+    """
+    branch = current_branch.message_ids
     if before_message_id is not None:
         # The branch changed since the client loaded this message.
         if before_message_id not in branch:
@@ -889,15 +923,136 @@ def get_chat_message_page_ids(
             + [
                 positions[message_id]
                 for reply_id in waiting_reply_ids
-                for message_id in (parent_by_id.get(reply_id), reply_id)
+                for message_id in (
+                    current_branch.parent_by_id.get(reply_id),
+                    reply_id,
+                )
                 if message_id in positions
             ]
         )
     page = branch[start:]
     page_ids = set(page)
     for message_id in page:
-        page_ids.update(children_by_parent.get(message_id, []))
+        page_ids.update(current_branch.children_by_parent.get(message_id, []))
     return page_ids, start > 0
+
+
+def get_published_files_on_branch(
+    branch_message_ids: Sequence[int], db_session: Session
+) -> list[ChatPublishedFile]:
+    """The files that the model published on a branch, oldest first: the
+    `CHAT_ARTIFACT` files in the `ChatMessage.files` of the branch's answers
+    and of the subagent responses whose run's turn root is on the branch,
+    in publish order (the file record's creation, then its ID), each file
+    once. The path and title are those that `publish_files` stamped in the
+    file record. Files without a path and files whose object is missing are
+    left out."""
+    # One array parameter keeps the query the same size however long the branch is.
+    branch = bindparam(
+        "branch", list(branch_message_ids), type_=postgresql.ARRAY(Integer)
+    )
+    # Sessions that the branch's answers spawned, recursively. A later turn
+    # can continue one of them, so its runs are only candidates here.
+    spawned = (
+        select(ChatSession.id)
+        .where(ChatSession.spawned_by_message_id == any_(branch))
+        .cte("spawned_sessions", recursive=True)
+    )
+    # UNION stops traversal if corrupt ancestry repeats a row.
+    spawned = spawned.union(
+        select(ChatSession.id)
+        .join(ChatMessage, ChatMessage.id == ChatSession.spawned_by_message_id)
+        .join(spawned, ChatMessage.chat_session_id == spawned.c.id)
+    )
+    # A subagent response is tied to its run's turn root, which must be on
+    # the branch: a run that a regenerated turn started does not count.
+    subagent_roots = ownership_roots(
+        ChatMessage.chat_session_id.in_(select(spawned.c.id))
+        & (ChatMessage.message_type == MessageType.ASSISTANT)
+        # Only responses with files: a JSON null or empty list has none.
+        & (
+            case(
+                (
+                    func.jsonb_typeof(ChatMessage.files) == "array",
+                    func.jsonb_array_length(ChatMessage.files),
+                ),
+                else_=0,
+            )
+            > 0
+        )
+    ).subquery("subagent_roots")
+    answers = union_all(
+        select(
+            ChatMessage.id.label("message_id"),
+            ChatMessage.id.label("anchor_id"),
+            ChatMessage.files,
+        ).where(
+            ChatMessage.id == any_(branch),
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        ),
+        select(ChatMessage.id, subagent_roots.c.root_id, ChatMessage.files)
+        .join(subagent_roots, subagent_roots.c.response_id == ChatMessage.id)
+        .where(subagent_roots.c.root_id == any_(branch)),
+    ).subquery("answers")
+    file_entry = (
+        # Some rows hold a JSON null instead of a list.
+        func.jsonb_array_elements(
+            case(
+                (func.jsonb_typeof(answers.c.files) == "array", answers.c.files),
+                else_=cast(literal("[]"), postgresql.JSONB),
+            )
+        )
+        .table_valued(column("value", postgresql.JSONB))
+        .render_derived(name="file_entry")
+        .lateral()
+    )
+    path = FileRecord.file_metadata[PUBLISHED_FILE_PATH_METADATA_KEY].astext
+    rows = db_session.execute(
+        select(
+            answers.c.anchor_id,
+            FileRecord.file_id,
+            FileRecord.display_name,
+            FileRecord.file_type,
+            FileRecord.file_size,
+            path,
+            FileRecord.file_metadata[PUBLISHED_FILE_TITLE_METADATA_KEY].astext,
+        )
+        .select_from(answers)
+        .join(file_entry, true())
+        .join(FileRecord, FileRecord.file_id == file_entry.c.value["id"].astext)
+        .where(
+            FileRecord.file_origin == FileOrigin.CHAT_ARTIFACT,
+            path.is_not(None),
+            FileRecord.file_size.is_distinct_from(FILE_SIZE_MISSING_SENTINEL),
+        )
+        # A foreground subagent's file is on its response and on the answer
+        # that waited for it: list each file once, on its earliest anchor.
+        .distinct(FileRecord.created_at, FileRecord.file_id)
+        # Publish order: the newest publish of a path comes last, also when a
+        # background run publishes after a later turn.
+        .order_by(FileRecord.created_at, FileRecord.file_id, answers.c.anchor_id)
+    ).all()
+    return [
+        ChatPublishedFile(
+            file_id=file_id,
+            name=display_name or file_id,
+            title=title,
+            path=path,
+            # A file without a recorded size shows as 0.
+            size=file_size or 0,
+            mime_type=file_type,
+            message_id=anchor_id,
+        )
+        for (
+            anchor_id,
+            file_id,
+            display_name,
+            file_type,
+            file_size,
+            path,
+            title,
+        ) in rows
+    ]
 
 
 def get_or_create_root_message(
@@ -2040,47 +2195,65 @@ def response_invocation_chain(
     return rows
 
 
-def ownership_root_id(db_session: Session, response_id: int) -> int | None:
-    """The newest turn root that the response's run depends on.
+def ownership_roots(response_ids: ColumnElement[bool]) -> Select:
+    """The newest turn root that each response's run depends on, as rows of
+    `response_id` and `root_id`, for the responses that `response_ids` (a
+    condition on `ChatMessage`) selects.
 
     A child run depends on the turn whose tool call started it and on the turns
     of its previous runs. Another turn can continue an agent, so a previous run
     can belong to a later turn than the invocation. All of these roots are on
-    one branch, so the newest is the latest. None when the response is missing.
+    one branch, so the newest is the latest. A response that is itself a turn
+    root is its own root.
     """
     question = aliased(ChatMessage)
-    nodes = (
-        select(
-            ChatMessage.id.label("message_id"),
-            ChatSession.spawned_by_message_id,
-            ToolCall.parent_chat_message_id.label("invoker_id"),
-            question.parent_message_id.label("previous_id"),
+
+    def nodes(origin_id: ColumnElement[int] | InstrumentedAttribute[int]) -> Select:
+        return (
+            select(
+                origin_id.label("response_id"),
+                ChatMessage.id.label("message_id"),
+                ChatSession.spawned_by_message_id,
+                ToolCall.parent_chat_message_id.label("invoker_id"),
+                question.parent_message_id.label("previous_id"),
+            )
+            .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+            .outerjoin(question, question.id == ChatMessage.parent_message_id)
+            .outerjoin(ToolCall, ToolCall.id == question.invoking_tool_call_id)
         )
-        .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
-        .outerjoin(question, question.id == ChatMessage.parent_message_id)
-        .outerjoin(ToolCall, ToolCall.id == question.invoking_tool_call_id)
-    )
-    walk = nodes.where(ChatMessage.id == response_id).cte(
-        "ownership_root_walk", recursive=True
+
+    walk = (
+        nodes(ChatMessage.id)
+        .where(response_ids)
+        .cte("ownership_root_walk", recursive=True)
     )
     # Each step goes to an older response, so the walk ends.
     walk = walk.union(
-        nodes.join(
+        nodes(walk.c.response_id)
+        .join(
             walk,
             or_(
                 ChatMessage.id == walk.c.invoker_id,
                 ChatMessage.id == walk.c.previous_id,
             ),
-        ).where(
+        )
+        .where(
             walk.c.spawned_by_message_id.is_not(None),
             ChatMessage.id < walk.c.message_id,
         )
     )
-    return db_session.scalar(
-        select(func.max(walk.c.message_id)).where(
-            walk.c.spawned_by_message_id.is_(None)
-        )
+    return (
+        select(walk.c.response_id, func.max(walk.c.message_id).label("root_id"))
+        .where(walk.c.spawned_by_message_id.is_(None))
+        .group_by(walk.c.response_id)
     )
+
+
+def ownership_root_id(db_session: Session, response_id: int) -> int | None:
+    """The newest turn root that the response's run depends on (see
+    `ownership_roots`). None when the response is missing."""
+    roots = ownership_roots(ChatMessage.id == response_id).subquery()
+    return db_session.scalar(select(roots.c.root_id))
 
 
 def root_response_id(db_session: Session, response: ChatMessage) -> int:

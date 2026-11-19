@@ -12,21 +12,17 @@ import { ValidSources } from "@/lib/connectors/types/source";
 import { cn, richNodes } from "@opal/utils";
 
 interface DocumentMetadataBlockProps {
-  modal?: boolean;
   document: OnyxDocument;
 }
 
-function DocumentMetadataBlock({
-  modal,
-  document,
-}: DocumentMetadataBlockProps) {
+function DocumentMetadataBlock({ document }: DocumentMetadataBlockProps) {
   const MAX_METADATA_ITEMS = 3;
   const metadataEntries = Object.entries(document.metadata);
 
   return (
     <div className="flex items-center overflow-hidden">
       {document.updated_at && (
-        <DocumentUpdatedAtBadge updatedAt={document.updated_at} modal={modal} />
+        <DocumentUpdatedAtBadge updatedAt={document.updated_at} />
       )}
 
       {metadataEntries.length > 0 && (
@@ -53,14 +49,12 @@ function DocumentMetadataBlock({
 
 export interface ChatDocumentDisplayProps {
   document: OnyxDocument;
-  modal?: boolean;
   isSelected: boolean;
   setPresentingDocument: Dispatch<SetStateAction<MinimalOnyxDocument | null>>;
 }
 
 export default function ChatDocumentDisplay({
   document,
-  modal,
   isSelected,
   setPresentingDocument,
 }: ChatDocumentDisplayProps) {
@@ -105,9 +99,7 @@ export default function ChatDocumentDisplay({
         </Text>
       </div>
 
-      {hasMetadata && (
-        <DocumentMetadataBlock modal={modal} document={document} />
-      )}
+      {hasMetadata && <DocumentMetadataBlock document={document} />}
 
       <Text
         as="p"

@@ -105,7 +105,7 @@ Usage:
 - Make and check files anywhere in the VM. Publish only finished deliverables, not drafts, scripts or intermediate files.
 - Each path must be a regular file of at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB, in the working directory or under {ONYX_VM_FILES_ROOT}. Copy a file from elsewhere into the working directory first.
 - One call publishes at most {PUBLISH_FILES_MAX_FILES} files. If one file fails, the call publishes none.
-- Publishing a file with the same name again adds a new version; earlier cards do not change.
+- Publishing the same path again replaces that file in the chat's file list; earlier cards do not change.
 - Do not paste the contents of a published file into your reply.
 - Do not tell the user that a file is available unless this tool succeeded.
 """

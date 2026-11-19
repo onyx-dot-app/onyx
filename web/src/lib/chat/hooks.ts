@@ -63,6 +63,10 @@ import {
   useCurrentMessageTree,
 } from "@/app/app/stores/useChatSessionStore";
 import {
+  branchPublishedFiles,
+  openFilesOfTabs,
+} from "@/lib/chat/publishedFiles";
+import {
   awaitsDecision,
   type AwaitingUser,
   readToolApprovals,
@@ -75,8 +79,12 @@ import {
   useToolRequestUi,
   type WaitingToolRequest,
 } from "@/lib/chat/toolApprovals";
-import type { Packet } from "@/app/app/services/streamingModels";
-import { APPROVAL_PENDING_ERROR_CODE, type ChatStream } from "@/app/app/types";
+import type { Packet, PublishedFile } from "@/app/app/services/streamingModels";
+import {
+  APPROVAL_PENDING_ERROR_CODE,
+  type ChatPublishedFile,
+  type ChatStream,
+} from "@/app/app/types";
 
 const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
 const SERVER_WORK_POLL_MS = 2000;
@@ -885,4 +893,72 @@ export function useSendChatMessageFromURL({
       deepResearch,
     });
   }, [pendingMessage, onSubmit, currentMessageFiles, deepResearch]);
+}
+
+const NO_PUBLISHED_FILES: PublishedFile[] = [];
+// The files of each message tree, keyed by the load's list they came from
+const publishedFileLists = new WeakMap<
+  MessageTreeState,
+  {
+    branchFiles: ChatPublishedFile[];
+    all: PublishedFile[];
+    latest: PublishedFile[];
+  }
+>();
+
+function sessionPublishedFiles(
+  branchFiles: ChatPublishedFile[],
+  messageTree: MessageTreeState
+): { all: PublishedFile[]; latest: PublishedFile[] } {
+  const cached = publishedFileLists.get(messageTree);
+  if (cached?.branchFiles === branchFiles) return cached;
+  const lists = {
+    branchFiles,
+    ...branchPublishedFiles(
+      branchFiles,
+      messageTree,
+      getLatestMessageChain(messageTree)
+    ),
+  };
+  publishedFileLists.set(messageTree, lists);
+  return lists;
+}
+
+/**
+ * The files the model published on the open chat's selected branch: the
+ * newest publish of each path, newest first. The array stays the same while
+ * the files do, so a packet that publishes nothing re-renders nothing.
+ */
+export function useCurrentPublishedFiles(): PublishedFile[] {
+  return useChatSessionStore(
+    useShallow((state) => {
+      const session = state.sessions.get(state.currentSessionId ?? "");
+      if (!session) return NO_PUBLISHED_FILES;
+      return sessionPublishedFiles(
+        session.branchPublishedFiles,
+        session.messageTree
+      ).latest;
+    })
+  );
+}
+
+/**
+ * The files open in the right panel's tabs, in tab order, by the file ID
+ * that was opened: also an older publish of a path, which the list does not
+ * show. A tab whose file is no longer on the branch is left out.
+ */
+export function currentOpenPublishedFiles(
+  state: ReturnType<typeof useChatSessionStore.getState>
+): PublishedFile[] {
+  const session = state.sessions.get(state.currentSessionId ?? "");
+  if (!session) return NO_PUBLISHED_FILES;
+  const { all } = sessionPublishedFiles(
+    session.branchPublishedFiles,
+    session.messageTree
+  );
+  return openFilesOfTabs(session.rightPanel.fileTabs, all);
+}
+
+export function useCurrentOpenPublishedFiles(): PublishedFile[] {
+  return useChatSessionStore(useShallow(currentOpenPublishedFiles));
 }

@@ -1,6 +1,6 @@
 import { mutate } from "swr";
 import type { BackendChatSession, ChatStream } from "@/app/app/types";
-import { chatPageUrl } from "@/lib/chat/pagedSession";
+import { CHAT_PAGE_TIMEOUT_MS, chatPageUrl } from "@/lib/chat/pagedSession";
 import type { ChatSessionStatus } from "@/lib/chat/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -49,7 +49,7 @@ export async function readChatSessionStatus(
 ): Promise<ChatSessionStatus> {
   const response = await fetch(SWR_KEYS.chatSessionStatus(sessionId), {
     cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(CHAT_PAGE_TIMEOUT_MS),
   });
   if (!response.ok) {
     throw new Error(`Session readiness check failed: ${response.status}`);
@@ -70,7 +70,7 @@ export async function fetchSettledChatSession(
 ): Promise<BackendChatSession> {
   const response = await fetch(chatPageUrl(sessionId, beforeMessageId), {
     cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(CHAT_PAGE_TIMEOUT_MS),
   });
   if (!response.ok)
     throw new Error(`Session refresh failed: ${response.status}`);

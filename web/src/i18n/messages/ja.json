@@ -11668,9 +11668,6 @@
       "sessionNotFound": {
         "description": "このチャットセッションは存在しないか、削除されています。",
         "title": "チャットが見つかりません"
-      },
-      "sourcesModal": {
-        "title": "ソース"
       }
     },
     "appChrome": {
@@ -13288,12 +13285,49 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "更新版 · {details}"
-        },
         "preview": {
           "ariaLabel": "{name} をプレビュー"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "{name} のプレビュー"
+        }
+      },
+      "openButton": {
+        "label": "ファイル",
+        "tooltip": "公開されたファイルを表示"
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "ファイル",
+        "description": "このチャットでモデルが公開したファイル",
+        "tile": {
+          "ariaLabel": "{name} を開く"
+        },
+        "search": {
+          "placeholder": "ファイルを検索",
+          "empty": "検索に一致するファイルはありません"
+        }
+      },
+      "fileTab": {
+        "earlierVersion": "<isolate>{name}</isolate>（以前のバージョン）"
+      },
+      "sourcesTab": {
+        "label": "ソース"
+      },
+      "closeButton": {
+        "label": "パネルを閉じる"
+      },
+      "expandButton": {
+        "label": "パネルを拡大"
+      },
+      "restoreButton": {
+        "label": "パネルを元に戻す"
+      },
+      "resizeHandle": {
+        "label": "パネルのサイズを変更"
       }
     }
   },
@@ -14914,18 +14948,6 @@
       "browser": {
         "label": "アプリ"
       },
-      "list": {
-        "label": "出力タブ"
-      },
-      "close": {
-        "label": "{name}を閉じる"
-      },
-      "reordered": {
-        "label": "タブを{count}個中{position}番目に移動しました"
-      },
-      "open": {
-        "label": "タブを開く"
-      },
       "outputs": {
         "label": "出力"
       }
@@ -15051,8 +15073,7 @@
       "scope": {
         "turn": "ターン {turn, number} の出力",
         "all": "すべての出力"
-      },
-      "unseen": "新規または更新済み"
+      }
     },
     "turnOutputs": {
       "showAll": "{count}件の出力をすべて表示",
@@ -15121,6 +15142,28 @@
       "description": "このセッションでは {names} を使用できません。スキルは {maxSize} かつ {maxFiles, number} ファイル以内に収める必要があります。不要なスキルをオフにして空きを作ってください。",
       "manage": "スキルを管理",
       "dismiss": "閉じる"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "出力タブ"
+      },
+      "close": {
+        "label": "{name}を閉じる"
+      },
+      "reordered": {
+        "label": "タブを{count}個中{position}番目に移動しました"
+      },
+      "open": {
+        "label": "タブを開く"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "ダウンロード"
+      },
+      "unseen": "新規または更新済み"
     }
   },
   "knowledge": {

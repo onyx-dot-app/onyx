@@ -20,7 +20,7 @@ import {
 } from "@opal/icons";
 import DocumentPreviewControls from "@/app/craft/components/output-panel/DocumentPreviewControls";
 import PreviewSidebar from "@/app/craft/components/output-panel/PreviewSidebar";
-import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome";
+import { WorkspaceHome } from "@/sections/output-panel/WorkspaceHome";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 

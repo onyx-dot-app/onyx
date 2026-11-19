@@ -291,12 +291,15 @@ as the model wrote them, and `description`. It ends with
 `files`, one `PublishedFile` per entry in the same order, or `error` and no
 files when the call published none (it publishes all or none). A
 `PublishedFile` has `file_id` (download it from `/chat/file/{file_id}`),
-`name` (the file name, which the download keeps, and the version key: files
-of one `name` are versions of one file, and each publish gives a new
-`file_id`), `title` (null when the model gave none), `path` (absolute and
-normalized in the VM, for display only), `size` in bytes and `mime_type`. Live and replay send the same two packets. The chat's
-published files are the `publish_files_end` packets of its responses: the
-packet is the only record that a client lists them from. A sandbox call that
+`name` (the file name, which the download keeps), `title` (null when the
+model gave none), `path` (absolute and normalized in the VM, and the file's
+identity: a later publish of a `path` is the newer copy of that file, and each
+publish gives a new `file_id`), `display_path` (the path to show: relative
+to the chat's working directory, or the whole path outside it; derived from
+`path`), `size` in bytes and `mime_type`. Live and replay send the same two packets. The
+`publish_files_end` packets of a response list its published files. The
+session load's `published_files` lists those of the whole current branch,
+also of messages outside a paged load's page ([[chat-persistence]]). A sandbox call that
 a Stop ended has no end packet; the client shows it as stopped. So does any
 nested call that its program left unfinished (state `unfinished`,
 `CodeModeRenderer._complete_child`). An `exec_end` with `completion`

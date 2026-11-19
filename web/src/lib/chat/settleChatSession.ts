@@ -276,10 +276,7 @@ export function refreshChatSession(
         const messageTree = new Map(latest.messageTree);
         for (const [nodeId, copy] of copies)
           if (asksUser(copy.packets)) messageTree.set(nodeId, copy);
-        store.updateSessionData(sessionId, {
-          messageTree,
-          approvalsVersion: saved.approvals_version,
-        });
+        store.applyLoadedSession(sessionId, saved, { messageTree });
         if (saved.current_stream)
           followChatStream(sessionId, saved.current_stream, errorMessage);
         return;
@@ -292,11 +289,10 @@ export function refreshChatSession(
         stream
       );
       const busy = Boolean(saved.is_processing || saved.current_stream);
-      store.updateSessionData(sessionId, {
+      store.applyLoadedSession(sessionId, saved, {
         messageTree,
         hasOlderMessages: merged.hasOlderMessages,
         selectedNodeIdForDocDisplay: merged.selectedNodeIdForDocDisplay,
-        approvalsVersion: saved.approvals_version,
         chatState: busy ? "streaming" : "input",
         sendAcknowledged: stream ? Promise.resolve(stream) : undefined,
         readerFinished: undefined,
@@ -459,9 +455,8 @@ export async function settleChatSession({
         const latestType = getLatestMessageChain(merged.messageTree).at(
           -1
         )?.type;
-        store.updateSessionData(sessionId, {
+        store.applyLoadedSession(sessionId, settled, {
           ...merged,
-          approvalsVersion: settled.approvals_version,
           uncaughtError:
             latestType === "assistant" || latestType === "error"
               ? null

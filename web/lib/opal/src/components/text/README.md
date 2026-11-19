@@ -195,6 +195,6 @@ Rules of thumb:
 - Prefer a plain string; use `markdown()` when the formatting is static (bold, code, plain
   links); use `richNodes()` only when a real component must sit mid-sentence.
 - Keep the content inline (spans, links, buttons) — never layout JSX.
-- `RichNodes` is accepted **only** by `Text` children. Props typed `string | RichStr`
+- `RichNodes` is accepted **only** by `Text` and `TextButton` children. Props typed `string | RichStr`
   (`title`, `description`, `tooltip`, …) must stay plain-string-derivable for truncation and
   aria labels, so do not widen them.

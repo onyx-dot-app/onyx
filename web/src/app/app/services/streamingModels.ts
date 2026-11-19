@@ -492,12 +492,15 @@ export interface PublishFilesStart extends BaseObj {
 // /api/chat/file/{file_id}
 export interface PublishedFile {
   file_id: string;
-  // The file name, which the download keeps. Files of one name are versions
-  // of one file.
+  // The file name, which the download keeps
   name: string;
   title: string | null;
-  // Absolute in the sandbox; for display only
+  // Absolute and normalized in the sandbox; the file's identity. A later
+  // publish of a path is the newer copy of that file.
   path: string;
+  // The path to show: relative to the chat's working directory, or the whole
+  // path outside it
+  display_path: string;
   size: number;
   mime_type: string;
 }
