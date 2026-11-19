@@ -1,6 +1,5 @@
 """Every storage writer stores a connector's bare external group ids in the form
-group sync stores, `<source>_<id>` lowercased, for the sources on
-`SOURCES_YIELDING_BARE_GROUP_IDS`."""
+group sync stores, `<source>_<id>` lowercased."""
 
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -17,11 +16,9 @@ from ee.onyx.db.external_perm import (
     fetch_external_groups_for_user,
     upsert_external_groups,
 )
+from ee.onyx.external_permissions.sync_params import get_source_perm_sync_config
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import (
-    SOURCES_YIELDING_BARE_GROUP_IDS,
-    build_ext_group_name_for_onyx,
-)
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document as ConnectorDocument
 from onyx.connectors.models import HierarchyNode as ConnectorHierarchyNode
@@ -49,8 +46,6 @@ from tests.external_dependency_unit.indexing_helpers import (
 )
 
 BARE_SOURCE = DocumentSource.BOX
-# Stays off the list until the last PR of the move removes the list.
-UNLISTED_SOURCE = DocumentSource.MOCK_CONNECTOR
 
 # Ids a connector can yield: mixed case, the prefix text itself, and the
 # separators other sources use.
@@ -205,11 +200,6 @@ def synced(
     yield from _seed(db_session, BARE_SOURCE, AccessType.SYNC)
 
 
-def test_bare_source_is_on_the_list() -> None:
-    assert BARE_SOURCE in SOURCES_YIELDING_BARE_GROUP_IDS
-    assert UNLISTED_SOURCE not in SOURCES_YIELDING_BARE_GROUP_IDS
-
-
 WriterCase = Callable[[Seed, ExternalAccess], list[str] | None]
 
 
@@ -311,13 +301,18 @@ def test_indexing_after_a_doc_sync_stub_keeps_one_form(synced: Seed) -> None:
     assert stub_groups == synced.doc(doc_id).external_user_group_ids
 
 
-LISTED_SOURCES: list[DocumentSource] = sorted(
-    SOURCES_YIELDING_BARE_GROUP_IDS, key=lambda source: source.value
+PERM_SYNC_SOURCES: list[DocumentSource] = sorted(
+    (
+        source
+        for source in DocumentSource
+        if get_source_perm_sync_config(source) is not None
+    ),
+    key=lambda source: source.value,
 )
 
 
 @pytest.mark.parametrize(
-    "source", LISTED_SOURCES, ids=[source.value for source in LISTED_SOURCES]
+    "source", PERM_SYNC_SOURCES, ids=[source.value for source in PERM_SYNC_SOURCES]
 )
 def test_every_writer_stores_the_id_group_sync_gives_a_member(
     db_session: Session,
@@ -343,26 +338,6 @@ def test_every_writer_stores_the_id_group_sync_gives_a_member(
         for name, writer in WRITERS.items():
             stored = writer(seed, _access({"Eng-Team"}))
             assert set(stored or []) == member_groups, name
-
-
-@pytest.fixture
-def unlisted(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-) -> Generator[Seed, None, None]:
-    yield from _seed(db_session, UNLISTED_SOURCE, AccessType.SYNC)
-
-
-def test_unlisted_source_is_stored_as_given(unlisted: Seed) -> None:
-    """Connectors not yet moved still prefix their own ids on these paths."""
-    given = {"mock_connector_eng-team"}
-    doc_id = unlisted.new_doc_id()
-    unlisted.index_doc(doc_id, _access(given))
-    raw_id = unlisted.new_node_raw_id()
-    unlisted.upsert_node(raw_id, _access(given))
-
-    assert unlisted.doc(doc_id).external_user_group_ids == list(given)
-    assert unlisted.node(raw_id).external_user_group_ids == list(given)
 
 
 @pytest.fixture

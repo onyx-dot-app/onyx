@@ -196,13 +196,14 @@ runs.
    prefix, so "Engineering" in Confluence and in Jira stay apart, and it
    lowercases. An ID built by hand differs only in case or prefix. The match
    then fails closed: the user loses access, and the sync looks healthy. The
-   doc sync and group sync writes apply it for you. For the sources in
-   `onyx/access/utils.py:SOURCES_YIELDING_BARE_GROUP_IDS`, the connector yields
-   bare IDs on every path, and the indexing write
-   (`onyx/db/document.py:upsert_documents`) and the hierarchy node writes apply
-   it too (`onyx/access/utils.py:build_ext_group_names_for_storage`). For the
-   other sources, those writes store IDs as given, so the connector namespaces
-   them itself on the indexing path and on every hierarchy node. A change to the
+   Connectors yield bare IDs on every path, and storage always applies it: the
+   doc sync and group sync writes, the indexing write
+   (`onyx/db/document.py:upsert_documents`) and the hierarchy node writes
+   (`onyx/access/utils.py:build_ext_group_names_for_storage`). A connector or
+   access builder that applies it too stores the prefix twice. Only code that
+   reads stored IDs builds the namespaced form:
+   `backend/tests/unit/onyx/access/test_group_id_prefix_fence.py` lists that
+   code. A change to the
    namespacing needs a full doc sync and group sync, not a reindex, because the
    Postgres rows hold the old IDs.
 3. `never-widen-first` **Never clear or widen access before the new value is
