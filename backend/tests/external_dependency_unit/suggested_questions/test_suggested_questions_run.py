@@ -23,7 +23,7 @@ from celery.exceptions import Retry
 from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_documents
-from onyx.background.celery.tasks.suggested_questions import scheduling, tasks
+from onyx.background.celery.tasks.suggested_questions import tasks
 from onyx.configs.constants import KV_SUGGESTED_QUESTIONS_POOL_KEY
 from onyx.db.document import (
     get_cc_pair_ids_for_documents,
@@ -45,7 +45,7 @@ from onyx.llm.decisions.models import (
     PredicateAnswer,
     ScoreAnswer,
 )
-from onyx.server.features.suggested_questions import verification
+from onyx.server.features.suggested_questions import scheduling, verification
 from onyx.server.features.suggested_questions.models import RefreshReason
 from onyx.server.features.suggested_questions.store import load_pool, pool_lock
 from onyx.tracing.flows import LLMFlow

@@ -178,6 +178,22 @@ def test_fetch_chunks_reads_the_start_of_each_document_without_acl(
     assert captured["filters"].tenant_id == "tenant"
 
 
+def test_fetch_chunks_tells_an_empty_index_read_from_all_junk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    index = MagicMock()
+    monkeypatch.setattr(selection, "get_current_search_settings", lambda _s: None)
+    monkeypatch.setattr(selection, "get_default_document_index", lambda *_a: index)
+    candidates = [CandidateDocument(document_id="a", kind=QuestionKind.DOCUMENT)]
+
+    index.leading_chunks_retrieval.return_value = []
+    with pytest.raises(selection.NothingSearchableYet):
+        selection.fetch_chunks(MagicMock(spec=Session), candidates, "tenant")
+
+    index.leading_chunks_retrieval.return_value = [_chunk("a", content="too short")]
+    assert selection.fetch_chunks(MagicMock(spec=Session), candidates, "tenant") == []
+
+
 def test_keep_useful_chunks_caps_per_document_and_prefers_early_chunks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

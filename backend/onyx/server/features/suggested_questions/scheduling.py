@@ -120,6 +120,25 @@ def request_pool_refresh(tenant_id: str, reason: RefreshReason) -> None:
         logger.exception("Suggested questions: could not request a pool run")
 
 
+def request_refresh_for_new_documents(tenant_id: str) -> None:
+    """For the indexing hooks: new documents reached the index. A company that
+    never had a pool run gets its first run now; otherwise it is new material,
+    and the run itself decides whether there is enough of it."""
+    try:
+        if not is_enabled():
+            return
+        pool = load_pool()
+        reason = (
+            RefreshReason.FIRST_RUN
+            if pool is None or pool.last_run_at() is None
+            else RefreshReason.GROWTH
+        )
+    except Exception:
+        logger.exception("Suggested questions: could not read the pool")
+        return
+    request_pool_refresh(tenant_id, reason)
+
+
 def request_user_topup(
     tenant_id: str, user_id: UUID, record: UserRecord, now: datetime
 ) -> None:

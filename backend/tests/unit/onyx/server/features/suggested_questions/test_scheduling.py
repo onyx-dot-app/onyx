@@ -8,9 +8,9 @@ from uuid import uuid4
 
 import pytest
 
-from onyx.background.celery.tasks.suggested_questions import scheduling
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.configs.constants import DocumentSource, OnyxCeleryPriority
+from onyx.server.features.suggested_questions import scheduling
 from onyx.server.features.suggested_questions.models import (
     PoolQuestion,
     QuestionKind,
@@ -414,3 +414,33 @@ def test_a_failed_settings_read_sends_nothing(monkeypatch: pytest.MonkeyPatch) -
     scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
 
     client.send_task.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "pool, reason",
+    [
+        (None, RefreshReason.FIRST_RUN),
+        (QuestionPool(), RefreshReason.FIRST_RUN),
+        (_pool(3, [30]), RefreshReason.GROWTH),
+    ],
+)
+def test_new_documents_ask_for_a_first_run_or_new_material(
+    monkeypatch: pytest.MonkeyPatch, pool: QuestionPool | None, reason: RefreshReason
+) -> None:
+    requested: list[RefreshReason] = []
+    monkeypatch.setattr(scheduling, "is_enabled", lambda: True)
+    monkeypatch.setattr(scheduling, "load_pool", lambda: pool)
+    monkeypatch.setattr(
+        scheduling, "request_pool_refresh", lambda _t, r: requested.append(r)
+    )
+
+    scheduling.request_refresh_for_new_documents("tenant")
+
+    assert requested == [reason]
+
+
+def test_new_documents_never_raise(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(scheduling, "is_enabled", lambda: True)
+    monkeypatch.setattr(scheduling, "load_pool", MagicMock(side_effect=RuntimeError))
+
+    scheduling.request_refresh_for_new_documents("tenant")

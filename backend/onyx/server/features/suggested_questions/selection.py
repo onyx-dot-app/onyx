@@ -35,6 +35,10 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
+class NothingSearchableYet(Exception):
+    """The chosen documents have no chunks in the search index yet."""
+
+
 def choose_documents(
     db_session: Session,
     people: list[User],
@@ -107,7 +111,8 @@ def fetch_chunks(
 ) -> list[InferenceChunk]:
     """The first chunks of each chosen document, with obvious junk dropped and
     at most SQ_CHUNKS_PER_DOC per document. Each document gets its own range,
-    so a long document cannot take the share of a short one. One index call."""
+    so a long document cannot take the share of a short one. One index call.
+    Raises NothingSearchableYet when the index returns no chunks at all."""
     if not candidates:
         return []
     document_index = get_default_document_index(
@@ -122,6 +127,10 @@ def fetch_chunks(
         ),
         max_chunk_index=SQ_FETCH_CHUNKS_PER_DOC - 1,
     )
+    if not chunks:
+        # Chunks become searchable at the index's next refresh, about a
+        # second after indexing. A run started sooner reads nothing.
+        raise NothingSearchableYet(f"No chunks for {len(candidates)} documents")
     kept = keep_useful_chunks(chunks)
     logger.info(
         "Suggested questions: read %d chunks of %d documents, kept %d after the junk rules",
