@@ -5,7 +5,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.plugin import get_stored_version_content, get_visible_versions_skill_md
+from onyx.db.plugin import (
+    SkillKey,
+    get_stored_version_content,
+    get_visible_versions_skill_md,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
@@ -85,25 +89,28 @@ def read_version_contents(
 
 
 def read_versions_skill_md(
-    version_ids: Collection[UUID],
+    skills: Collection[SkillKey],
     user_id: UUID,
     db_session: Session,
-) -> dict[UUID, str]:
-    """The whole SKILL.md, frontmatter included, of each version whose skill
-    the user can see now, from one query. A version that stores no SKILL.md
-    text opens its bundle. A version that is gone, hidden from the user or
-    unreadable is left out."""
-    if not version_ids:
+) -> dict[SkillKey, str]:
+    """The whole SKILL.md, frontmatter included, of each skill (version id and
+    folder) the user can see now, from one query. A version that stores no
+    SKILL.md text opens its bundle. A skill that is gone, hidden from the user
+    or unreadable is left out."""
+    if not skills:
         return {}
-    skill_md: dict[UUID, str] = {}
-    for version_id, stored in get_visible_versions_skill_md(
-        version_ids, user_id, db_session
+    skill_md: dict[SkillKey, str] = {}
+    for key, stored in get_visible_versions_skill_md(
+        skills, user_id, db_session
     ).items():
         if stored.skill_md is not None:
-            skill_md[version_id] = stored.skill_md
+            skill_md[key] = stored.skill_md
+            continue
+        version_id, path = key
+        if path:
             continue
         try:
-            skill_md[version_id], _ = read_stored_bundle(
+            skill_md[key], _ = read_stored_bundle(
                 read_skill_bundle_blob(stored.bundle_file_id, str(version_id))
             )
         except OnyxError:

@@ -22,7 +22,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Select, and_, delete, func, select
+from sqlalchemy import Select, and_, delete, func, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -48,6 +48,8 @@ from onyx.db.models import (
 )
 from onyx.db.plugin_access import (
     affected_user_ids_for_plugins,
+    holds_one_root_skill,
+    plugin_editable_by_user,
     visible_plugin_ids,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
@@ -63,6 +65,8 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.store import load_settings
 from onyx.skills.models import (
     PluginFileEntry,
+    PluginManifest,
+    PluginNeed,
     PluginVersionContent,
 )
 
@@ -72,6 +76,8 @@ ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
 _PLUGIN_NAME_INDEX = "uq_plugin_marketplace_name"
 
 NameClashAction = Literal["raise", "rename"]
+# A skill of a plugin version: the version id and the skill's folder.
+SkillKey = tuple[UUID, str]
 _RENAME_ATTEMPTS = 3
 
 
@@ -115,6 +121,16 @@ def get_or_create_user_uploads__no_commit(user_id: UUID, db_session: Session) ->
             Marketplace.owner_user_id == user_id,
         )
     ).one()
+
+
+def get_user_uploads_id(user_id: UUID, db_session: Session) -> UUID | None:
+    """The user's "My uploads" id; None before the user's first upload."""
+    return db_session.scalar(
+        select(Marketplace.id).where(
+            Marketplace.kind == MarketplaceKind.USER_UPLOADS,
+            Marketplace.owner_user_id == user_id,
+        )
+    )
 
 
 def get_or_create_organization_library__no_commit(db_session: Session) -> UUID:
@@ -226,6 +242,16 @@ def _add_version_rows(
         ),
         unpacked_size_bytes=content.unpacked_size_bytes,
         file_count=content.file_count,
+        manifest=(
+            content.manifest.model_dump(mode="json")
+            if content.manifest is not None
+            else None
+        ),
+        needs=(
+            [need.model_dump(mode="json") for need in content.needs]
+            if content.needs is not None
+            else None
+        ),
         created_by_user_id=created_by.id if created_by is not None else None,
         created_by_email=created_by.email if created_by is not None else None,
     )
@@ -280,6 +306,17 @@ def check_base_version(plugin: Plugin, base_version_id: UUID | None) -> None:
         )
 
 
+def next_version_number(plugin_id: UUID, db_session: Session) -> int:
+    return (
+        db_session.scalar(
+            select(func.max(PluginVersion.version_number)).where(
+                PluginVersion.plugin_id == plugin_id
+            )
+        )
+        or 0
+    ) + 1
+
+
 def add_plugin_version__no_commit(
     *,
     plugin: Plugin,
@@ -322,27 +359,30 @@ def add_plugin_version__no_commit(
     if skip_if_unchanged and _manifest_matches(current, content, previous_manifest):
         return None
 
-    next_number = (
-        db_session.scalar(
-            select(func.max(PluginVersion.version_number)).where(
-                PluginVersion.plugin_id == plugin.id
-            )
-        )
-        or 0
-    ) + 1
     version = _add_version_rows(
         version_id=uuid4(),
         plugin_id=plugin.id,
-        version_number=next_number,
+        version_number=next_version_number(plugin.id, db_session),
         content=content,
         created_by=created_by,
         db_session=db_session,
     )
     plugin.current_version_id = version.id
-    if is_skill_version(skill.path for skill in content.skills):
-        plugin.description = content.skills[0].description
+    description = version_description(content)
+    if description is not None:
+        plugin.description = description
     db_session.flush()
     return version
+
+
+def version_description(content: PluginVersionContent) -> str | None:
+    """The plugin description a version gives: its skill's for a skill, the
+    plugin.json description for an uploaded plugin, else None."""
+    if is_skill_version(skill.path for skill in content.skills):
+        return content.skills[0].description
+    if content.manifest is not None:
+        return content.manifest.description or ""
+    return None
 
 
 def list_plugin_versions(
@@ -441,28 +481,80 @@ class StoredSkillMd(BaseModel):
 
 
 def get_visible_versions_skill_md(
-    version_ids: Collection[UUID], user_id: UUID, db_session: Session
-) -> dict[UUID, StoredSkillMd]:
-    """The SKILL.md of each version whose plugin the user can see now, in one
-    query. A version that is gone or hidden from the user is left out."""
+    skills: Collection[SkillKey], user_id: UUID, db_session: Session
+) -> dict[SkillKey, StoredSkillMd]:
+    """The SKILL.md of each skill, by version id and folder, whose plugin the
+    user can see now, in one query. A skill that is gone or hidden from the
+    user is left out."""
     rows = db_session.execute(
-        select(PluginVersion.id, PluginVersion.bundle_file_id, PluginSkill.skill_md)
-        .outerjoin(
-            PluginSkill,
-            and_(
-                PluginSkill.plugin_version_id == PluginVersion.id,
-                PluginSkill.path == "",
-            ),
+        select(
+            PluginVersion.id,
+            PluginSkill.path,
+            PluginVersion.bundle_file_id,
+            PluginSkill.skill_md,
         )
+        .join(PluginSkill, PluginSkill.plugin_version_id == PluginVersion.id)
         .where(
-            PluginVersion.id.in_(version_ids),
+            tuple_(PluginVersion.id, PluginSkill.path).in_(list(skills)),
             PluginVersion.plugin_id.in_(visible_plugin_ids(user_id)),
         )
     )
     return {
-        version_id: StoredSkillMd(bundle_file_id=bundle_file_id, skill_md=skill_md)
-        for version_id, bundle_file_id, skill_md in rows
+        (version_id, path): StoredSkillMd(
+            bundle_file_id=bundle_file_id, skill_md=skill_md
+        )
+        for version_id, path, bundle_file_id, skill_md in rows
     }
+
+
+def get_versions_needs(
+    version_ids: Iterable[UUID], db_session: Session
+) -> dict[UUID, list[PluginNeed]]:
+    """The needs of each version that stores some."""
+    ids = sorted(set(version_ids))
+    if not ids:
+        return {}
+    return {
+        version_id: [PluginNeed.model_validate(need) for need in needs or ()]
+        for version_id, needs in db_session.execute(
+            select(PluginVersion.id, PluginVersion.needs).where(
+                PluginVersion.id.in_(ids), PluginVersion.needs.is_not(None)
+            )
+        ).tuples()
+    }
+
+
+def get_version_manifest(
+    version_id: UUID, db_session: Session
+) -> PluginManifest | None:
+    manifest = db_session.scalar(
+        select(PluginVersion.manifest).where(PluginVersion.id == version_id)
+    )
+    return PluginManifest.model_validate(manifest) if manifest is not None else None
+
+
+class VersionSkill(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    path: str
+    name: str
+    description: str
+
+
+def list_version_skills(version_id: UUID, db_session: Session) -> list[VersionSkill]:
+    """The skills of one version, by path."""
+    return [
+        VersionSkill(path=path, name=name, description=description)
+        for path, name, description in db_session.execute(
+            select(
+                PluginSkill.path,
+                PluginSkill.frontmatter["name"].astext,
+                PluginSkill.frontmatter["description"].astext,
+            )
+            .where(PluginSkill.plugin_version_id == version_id)
+            .order_by(PluginSkill.path)
+        ).tuples()
+    ]
 
 
 def get_plugin_current_version_id(plugin_id: UUID, db_session: Session) -> UUID | None:
@@ -484,25 +576,25 @@ def get_current_version_bundle_file_id(
 # --- Skill plugins and their access ----------------------------------------
 
 
-def create_skill_plugin__no_commit(
+def create_plugin__no_commit(
     plugin_id: UUID,
+    name: str,
     content: PluginVersionContent,
     author: User,
     db_session: Session,
 ) -> Plugin:
-    """Add the plugin of a new custom skill with ``content`` as version 1 and
-    its plugin_skill rows, private in the author's "My uploads". A used name
-    takes the next free name. A plugin that takes the same name at the same
-    time gets SKILL_NAME_CONFLICT."""
+    """Add a plugin with ``content`` as version 1 and its plugin_skill rows,
+    private in the author's "My uploads". A used name takes the next free
+    name. A plugin that takes the same name at the same time gets
+    SKILL_NAME_CONFLICT."""
     marketplace_id = get_or_create_user_uploads__no_commit(author.id, db_session)
-    skill = content.skills[0]
     version_id = uuid4()
     try:
         with db_session.begin_nested():
             plugin = Plugin(
                 id=plugin_id,
-                name=free_plugin_name(marketplace_id, skill.name, db_session),
-                description=skill.description,
+                name=free_plugin_name(marketplace_id, name, db_session),
+                description=version_description(content) or "",
                 marketplace_id=marketplace_id,
                 author_user_id=author.id,
                 current_version_id=version_id,
@@ -522,10 +614,34 @@ def create_skill_plugin__no_commit(
             raise
         raise OnyxError(
             OnyxErrorCode.SKILL_NAME_CONFLICT,
-            f"Another skill named '{skill.name}' was saved at the same time. "
-            "Try again.",
+            f"Another skill named '{name}' was saved at the same time. Try again.",
         ) from exc
     return plugin
+
+
+def find_upload_target(name: str, user_id: UUID, db_session: Session) -> Plugin | None:
+    """The plugin that an upload named ``name`` adds a version to: a plugin
+    with that name in the user's "My uploads" or the Organization library,
+    that the user owns or edits, and whose current version is not a skill.
+    "My uploads" comes first. The caller locks it."""
+    return db_session.scalars(
+        select(Plugin)
+        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
+        .where(
+            Plugin.name == name,
+            or_(
+                and_(
+                    Marketplace.kind == MarketplaceKind.USER_UPLOADS,
+                    Marketplace.owner_user_id == user_id,
+                ),
+                Marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY,
+            ),
+            plugin_editable_by_user(Plugin, user_id),
+            ~holds_one_root_skill(Plugin.current_version_id.expression),
+        )
+        .order_by((Marketplace.kind != MarketplaceKind.USER_UPLOADS).asc(), Plugin.id)
+        .limit(1)
+    ).one_or_none()
 
 
 def _move_plugin__no_commit(

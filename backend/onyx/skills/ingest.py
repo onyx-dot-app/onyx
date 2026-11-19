@@ -19,7 +19,13 @@ from onyx.skills.bundle import (
     open_bundle_zip,
 )
 from onyx.skills.metadata import frontmatter_for_jsonb, parse_skill_document
-from onyx.skills.models import PluginSkillContent, PluginVersionContent
+from onyx.skills.models import (
+    PluginManifest,
+    PluginNeed,
+    PluginSkillContent,
+    PluginVersionContent,
+)
+from onyx.skills.plugin_bundle import PluginBundle
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -99,40 +105,78 @@ def ingest_skill_bundle(
             OnyxErrorCode.INVALID_INPUT,
             f"skill name '{name}' is reserved",
         )
-    sha = compute_bundle_sha256(normalized.content)
-
-    bundle_file_id = save_skill_bundle_bytes(
+    content = store_version_content(
         normalized.content,
         display_name=f"{name}.zip",
+        skills=[
+            PluginSkillContent(
+                path="",
+                skill_md=raw_skill_md.decode("utf-8"),
+                frontmatter=frontmatter_for_jsonb(document),
+            )
+        ],
         file_store=file_store,
     )
+    return IngestedBundle(
+        canonical_name=name,
+        bundle_file_id=content.bundle_file_id,
+        bundle_sha256=compute_bundle_sha256(normalized.content),
+        description=description,
+        content=content,
+    )
+
+
+def store_version_content(
+    normalized_bundle: bytes,
+    *,
+    display_name: str,
+    skills: list[PluginSkillContent],
+    file_store: FileStore,
+    manifest: PluginManifest | None = None,
+    needs: list[PluginNeed] | None = None,
+) -> PluginVersionContent:
+    """Store a normalized bundle and return what a new version made from it
+    stores. The blob is deleted when the content cannot be built."""
+    bundle_file_id = save_skill_bundle_bytes(
+        normalized_bundle, display_name=display_name, file_store=file_store
+    )
     try:
-        manifest = compute_bundle_manifest(normalized.content)
-        content = PluginVersionContent(
+        file_manifest = compute_bundle_manifest(normalized_bundle)
+        return PluginVersionContent(
             bundle_file_id=bundle_file_id,
-            bundle_sha256=sha,
+            bundle_sha256=compute_bundle_sha256(normalized_bundle),
             is_valid=True,
-            file_manifest=manifest,
-            unpacked_size_bytes=sum(entry.size for entry in manifest),
-            file_count=len(manifest),
-            skills=[
-                PluginSkillContent(
-                    path="",
-                    skill_md=raw_skill_md.decode("utf-8"),
-                    frontmatter=frontmatter_for_jsonb(document),
-                )
-            ],
+            file_manifest=file_manifest,
+            unpacked_size_bytes=sum(entry.size for entry in file_manifest),
+            file_count=len(file_manifest),
+            skills=skills,
+            manifest=manifest,
+            needs=needs,
         )
     except Exception:
         delete_bundle_blob(file_store, bundle_file_id)
         raise
-    return IngestedBundle(
-        canonical_name=name,
-        bundle_file_id=bundle_file_id,
-        bundle_sha256=sha,
-        description=description,
-        content=content,
+
+
+@contextmanager
+def stored_plugin_bundle(
+    bundle: PluginBundle, file_store: FileStore
+) -> Iterator[PluginVersionContent]:
+    """Store a read plugin zip. The blob is deleted when the caller's block
+    fails."""
+    content = store_version_content(
+        bundle.content,
+        display_name=f"{bundle.manifest.name}.zip",
+        skills=[skill.content for skill in bundle.skills],
+        file_store=file_store,
+        manifest=bundle.manifest,
+        needs=bundle.needs,
     )
+    try:
+        yield content
+    except Exception:
+        delete_bundle_blob(file_store, content.bundle_file_id)
+        raise
 
 
 @contextmanager

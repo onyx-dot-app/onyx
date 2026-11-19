@@ -16,10 +16,13 @@ from onyx.db.models import Plugin, Skill
 from onyx.db.plugin_access import PluginAccess
 from onyx.db.skill import SkillSharingChange
 from onyx.db.utils import UNSET
+from onyx.integrations.plugin_needs import NeedCounts, PluginNeedView
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.models import (
     GITHUB_SKILL_MAX_COUNT,
+    PluginManifest,
+    PluginUnusedPart,
     SkillBundleFile,
     UserPastWriteLimit,
 )
@@ -48,11 +51,36 @@ class SkillGroupSummary(BaseModel):
     installation_policy: PluginInstallationPolicy | None
 
 
+class PluginSkillSummary(BaseModel):
+    # The skill's folder in the bundle, such as "skills/review".
+    path: str
+    name: str
+    description: str
+
+
+class PluginDetail(BaseModel):
+    """The version of a plugin that the user runs: its plugin.json fields,
+    its skills and its needs, with each need's state for the user."""
+
+    manifest: PluginManifest | None
+    skills: list[PluginSkillSummary]
+    needs: list[PluginNeedView]
+
+
 class SkillResponse(BaseModel):
     source: Literal["builtin", "custom"]
     id: UUID
     name: str
     description: str
+    # "plugin" when the version the user runs is not one skill at the bundle
+    # root.
+    kind: Literal["skill", "plugin"] = "skill"
+    # Supported needs of the version the user runs that are on for the
+    # user, and all supported needs: "3 of 4 integrations available".
+    available_count: int = 0
+    needed_count: int = 0
+    # Only on the routes that read one plugin.
+    plugin: PluginDetail | None = None
 
     is_available: bool | None = None
     unavailable_reason: str | None = None
@@ -129,6 +157,8 @@ class SkillResponse(BaseModel):
         include_share_details: bool = False,
         group_summaries: list[SkillGroupSummary] | None = None,
         current_version_id: UUID | None = None,
+        counts: NeedCounts | None = None,
+        plugin_detail: PluginDetail | None = None,
     ) -> "SkillResponse":
         """Every field comes from the skill's plugin."""
         user_shares = [
@@ -151,6 +181,10 @@ class SkillResponse(BaseModel):
             id=plugin.id,
             name=access.name or plugin.name,
             description=access.description,
+            kind="skill" if access.is_skill else "plugin",
+            available_count=counts.available_count if counts is not None else 0,
+            needed_count=counts.needed_count if counts is not None else 0,
+            plugin=plugin_detail,
             is_valid=access.is_valid,
             installation_policy=access.installation_policy,
             default_installation_policy=access.marketplace_default_policy,
@@ -275,6 +309,49 @@ class SkillReviewRequestResponse(BaseModel):
     # The skill's author: only the author or a manager publishes.
     author_email: str | None
     version_created_at: datetime.datetime
+
+
+class PluginUploadSkill(BaseModel):
+    path: str
+    name: str
+    description: str
+    warnings: list[str]
+
+
+class PluginUploadTarget(BaseModel):
+    """Where a save puts the upload: a new version of a plugin the uploader
+    owns or edits ("updates <plugin> to v<n>"), or a new plugin in the
+    uploader's "My uploads"."""
+
+    kind: Literal["new_version", "new_plugin"]
+    # The plugin a new version goes to; None for a new plugin.
+    plugin_id: UUID | None
+    # The plugin's name; for a new plugin, the next free name.
+    plugin_name: str
+    version_number: int
+
+
+class PluginUploadPreview(BaseModel):
+    name: str
+    # The version in plugin.json, as written.
+    version: str | None
+    description: str | None
+    manifest: PluginManifest
+    skills: list[PluginUploadSkill]
+    # Each need with its state for the uploader.
+    needs: list[PluginNeedView]
+    unused_parts: list[PluginUnusedPart]
+    warnings: list[str]
+    target: PluginUploadTarget
+
+
+class PluginUploadResponse(BaseModel):
+    target: PluginUploadTarget
+    # The plugin as the uploader sees it after the save, with its detail.
+    plugin: SkillResponse
+    # A new plugin was turned on for the uploader. False for a new version,
+    # and when a skill name of the plugin is taken.
+    enabled: bool
 
 
 class SkillBundleInspectResponse(BaseModel):

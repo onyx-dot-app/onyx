@@ -15,6 +15,7 @@ from onyx.db.models import Plugin, Skill, User
 from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
 )
+from onyx.db.plugin import get_version_manifest, list_version_skills
 from onyx.db.plugin_access import (
     PluginAccess,
     load_plugin_access,
@@ -29,7 +30,14 @@ from onyx.db.skill import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.plugin_needs import (
+    PluginNeedView,
+    need_counts,
+    needs_of_versions,
+)
 from onyx.server.features.skill.models import (
+    PluginDetail,
+    PluginSkillSummary,
     SkillGroupSummary,
     SkillPreviewResponse,
     SkillResponse,
@@ -139,9 +147,14 @@ def skill_response_for_user(
     include_share_details: bool = False,
     plugin_access: dict[UUID, PluginAccess] | None = None,
     shown_version_id: UUID | None = None,
+    needs: dict[UUID, list[PluginNeedView]] | None = None,
+    include_plugin_detail: bool = False,
 ) -> SkillResponse:
     """``shown_version_id`` is the version whose files the response shows, and
-    so the edit base; by default the plugin's current version."""
+    so the edit base; by default the plugin's current version. ``needs`` are
+    the need views by version (``needs_of_versions``); read when not given.
+    ``include_plugin_detail`` adds the skills, needs and plugin.json fields
+    of the version the user runs."""
     if state is None:
         state = skill_user_states(user, [skill.id], db_session)[skill.id]
     if isinstance(skill, Skill):
@@ -170,6 +183,10 @@ def skill_response_for_user(
     user_permission = user_permission_for_skill(
         access, user, user_group_ids, skill.id in managed_scope_ids
     )
+    runs = access.version_user_runs
+    if needs is None:
+        needs = needs_of_versions(user, [runs], db_session)
+    version_needs = needs.get(runs, [])
     return SkillResponse.from_custom(
         skill,
         access,
@@ -191,6 +208,23 @@ def skill_response_for_user(
             managed_user_group_ids,
         ),
         current_version_id=shown_version_id,
+        counts=need_counts(version_needs),
+        plugin_detail=(
+            PluginDetail(
+                manifest=get_version_manifest(runs, db_session),
+                skills=[
+                    PluginSkillSummary(
+                        path=skill_row.path,
+                        name=skill_row.name,
+                        description=skill_row.description,
+                    )
+                    for skill_row in list_version_skills(runs, db_session)
+                ],
+                needs=version_needs,
+            )
+            if include_plugin_detail
+            else None
+        ),
     )
 
 
@@ -208,6 +242,11 @@ def skills_list_response_for_user(
     )
     states = skill_user_states(user, (skill.id for skill in rows), db_session)
     plugin_access = load_plugin_access(custom_ids, user.id, db_session)
+    needs = needs_of_versions(
+        user,
+        (access.version_user_runs for access in plugin_access.values()),
+        db_session,
+    )
     for skill in rows:
         if isinstance(skill, Skill):
             if skill.built_in_skill_id not in BUILT_IN_SKILLS:
@@ -230,6 +269,7 @@ def skills_list_response_for_user(
             managed_user_group_ids=managed_user_group_ids,
             managed_scope_ids=managed_scope_ids,
             plugin_access=plugin_access,
+            needs=needs,
         )
         (customs if isinstance(skill, Plugin) else builtins).append(response)
 
@@ -262,6 +302,11 @@ def skill_preview_response(
         )
 
     access = _access_of(skill, load_plugin_access([skill.id], user.id, db_session))
+    if not access.is_skill:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This is a plugin, not one skill. Open the plugin to read its skills.",
+        )
     contents = read_version_contents(access.version_user_runs, db_session)
     return SkillPreviewResponse.from_custom(
         skill,

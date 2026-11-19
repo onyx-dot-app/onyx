@@ -13,8 +13,10 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
+    SKILL_BUNDLE_LAYOUT,
     SKILL_MD_NAME,
     STORED_ZIP_MAX_BYTES,
+    BundleLayout,
     NormalizedSkillBundle,
     normalize_stored_bundle,
     open_bundle_zip,
@@ -40,9 +42,10 @@ def read_stored_bundle_bytes(bundle_file_id: str, file_store: FileStore) -> byte
 def load_stored_custom_skill_bundle(
     bundle_file_id: str,
     file_store: FileStore,
+    layout: BundleLayout = SKILL_BUNDLE_LAYOUT,
 ) -> NormalizedSkillBundle:
     bundle_bytes = read_stored_bundle_bytes(bundle_file_id, file_store)
-    return normalize_stored_bundle(bundle_bytes)
+    return normalize_stored_bundle(bundle_bytes, layout)
 
 
 def _is_missing_file_error(exc: Exception) -> bool:

@@ -3,7 +3,14 @@ import socket
 import unicodedata
 from collections.abc import Iterator
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.parse import (
+    parse_qs,
+    urlencode,
+    urlparse,
+    urlsplit,
+    urlunparse,
+    urlunsplit,
+)
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -611,6 +618,36 @@ def normalize_url(url: str) -> str:
     )
 
     return normalized
+
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def normalize_mcp_server_url(url: str) -> str | None:
+    """The key that matches two MCP server URLs, as Claude Code matches them:
+    the scheme and host in lowercase, with no default port and no trailing
+    slash. Path, query, user info and other ports stay. None for a URL that
+    is not http or https, has no host, or holds a ``${...}`` variable."""
+    if "${" in url:
+        return None
+    parts = urlsplit(url.strip())
+    scheme = parts.scheme.lower()
+    if scheme not in _DEFAULT_PORTS or not parts.hostname:
+        return None
+    try:
+        port = parts.port
+    except ValueError:
+        return None
+    host = parts.hostname
+    if ":" in host:
+        host = f"[{host}]"
+    if port is not None and port != _DEFAULT_PORTS[scheme]:
+        host = f"{host}:{port}"
+    userinfo, at, _ = parts.netloc.rpartition("@")
+    netloc = f"{userinfo}{at}{host}"
+    return urlunsplit(
+        (scheme, netloc, parts.path.removesuffix("/"), parts.query, parts.fragment)
+    )
 
 
 def add_url_params(url: str, params: dict) -> str:
