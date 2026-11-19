@@ -210,7 +210,9 @@ model writes it, with the tool name as `tool_type`. Native model reasoning strea
 as reasoning packets.
 
 Each call's streamed arguments report at most once per
-`chat/renderer.py:ARGUMENT_REPORT_INTERVAL_SECONDS`. The first fragment
+`chat/renderer.py:ARGUMENT_REPORT_INTERVAL_SECONDS`
+(`chat/renderer.py:_ArgumentStream` holds the fragments and decides when to
+report). The first fragment
 reports. A later fragment that arrives within the interval is held. There is
 no timer: held fragments report with the next fragment that arrives after the
 interval, at the next content block boundary, or at the call's end. A block
@@ -264,10 +266,12 @@ follows the observation's packets and section end in a new tab. The sandbox
 tools ([[code-execution]]) start with `exec_command_start`, `write_stdin_start`
 or `apply_patch_start`, stream the command output in `exec_output_delta`, and
 end with `exec_end` or `apply_patch_end`. A tool with its own end packet
-(`chat/renderer.py:OWN_END_TOOL_NAMES`: the sandbox tools and `publish_files`)
-always sends its own start packet. When its arguments are not valid, for
-example cut off or of a wrong type, the start packet has empty values, so the
-end packet never lands on a generic card (`ToolRenderer.start`). An `edit` or `write` call also
+(`chat/renderer.py:OWN_END_PACKETS`: the sandbox tools and `publish_files`,
+each with its end packet type) always sends its own start packet. When its arguments are not valid, for
+example cut off or of a wrong type, the start packet has empty values (a file
+tool's patch is empty, with no file header), so the end packet never lands on a
+generic card (`ToolRenderer.start`). A failed call ends with that end packet's
+`error`. An `edit` or `write` call also
 renders as a patch card: `chat/renderer.py` builds `apply_patch_start.patch`
 from its arguments (`patch.display_patch`: an update of the old lines to the
 new ones, or an added file), live and on replay, and its `apply_patch_end`

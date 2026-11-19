@@ -63,7 +63,6 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 from onyx.tools.tool_implementations.sandbox.models import FileToolName
-from onyx.tools.tool_implementations.sandbox.patch import display_patch
 
 
 class Clock:
@@ -186,10 +185,10 @@ class Live:
     ],
 )
 @pytest.mark.parametrize("size", [1, 3, 1000])
-@pytest.mark.usefixtures("clock")
 def test_decoded_strings_survive_arbitrary_fragment_boundaries(
-    text: str, size: int
+    text: str, size: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    use_clock(monkeypatch, ARGUMENT_REPORT_INTERVAL_SECONDS)
     raw = json.dumps(
         {"code": text, "count": 3, "enabled": True, "items": [1, {"x": "y"}]}
     )
@@ -408,14 +407,15 @@ PATCH_TEXT = "\n".join(
 )
 @pytest.mark.parametrize("ensure_ascii", [True, False])
 @pytest.mark.parametrize("size", [1, 3, 1000])
-@pytest.mark.usefixtures("clock")
 def test_file_progress_survives_arbitrary_fragment_boundaries(
     name: str,
     arguments: dict[str, str],
     expected: FileToolProgress,
     ensure_ascii: bool,
     size: int,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    use_clock(monkeypatch, ARGUMENT_REPORT_INTERVAL_SECONDS)
     raw = json.dumps(arguments, ensure_ascii=ensure_ascii)
     live = Live()
     for offset in range(0, len(raw), size):
@@ -618,7 +618,12 @@ def test_a_file_path_shows_once_whole(
         (
             "write",
             {"file_path": None, "content": "x"},
-            ApplyPatchStart(patch=display_patch("", None, ""), tool_name="write"),
+            ApplyPatchStart(patch="", tool_name="write"),
+        ),
+        (
+            "edit",
+            {"file_path": 3, "old_string": "a", "new_string": "b"},
+            ApplyPatchStart(patch="", tool_name="edit"),
         ),
         ("exec_command", {"cmd": ["ls"]}, ExecCommandStart(cmd="")),
         ("publish_files", {"files": "a.md"}, PublishFilesStart()),
