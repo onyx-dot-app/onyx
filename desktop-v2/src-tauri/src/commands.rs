@@ -4,10 +4,10 @@
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
-use tauri_plugin_autostart::ManagerExt;
 
 use crate::api::{normalize_server_url, AuthMethods, SearchHit};
 use crate::ask::{self, AskEvent};
+use crate::login_item;
 use crate::main_window;
 use crate::policy;
 use crate::shortcut;
@@ -37,9 +37,27 @@ pub struct Prefs {
     launcher_disabled: bool,
     launch_at_login_managed: bool,
     auto_update_disabled: bool,
+    notifications_disabled: bool,
+    /// The managed policy exists but is not valid.
+    policy_invalid: bool,
 }
 
 const MANAGED: &str = "This setting is managed by your organization.";
+const POLICY_INVALID: &str =
+    "Your organization's Onyx policy is invalid, so this setting is locked. Contact your IT team.";
+
+fn server_locked(state: &AppState) -> Result<(), String> {
+    let policy = state.policy();
+    if !policy.lock_server_url {
+        return Ok(());
+    }
+    Err(if policy.invalid {
+        POLICY_INVALID
+    } else {
+        MANAGED
+    }
+    .into())
+}
 
 #[tauri::command]
 pub async fn check_server(url: String, state: State<'_, AppState>) -> Result<ServerInfo, String> {
@@ -53,9 +71,7 @@ pub async fn check_server(url: String, state: State<'_, AppState>) -> Result<Ser
 
 #[tauri::command]
 pub fn save_server(url: String, app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    if state.policy().lock_server_url {
-        return Err(MANAGED.into());
-    }
+    server_locked(&state)?;
     let server = normalize_server_url(&url)?;
     state.config.update(|c| c.server_url = Some(server))?;
     windows::open_login(&app)?;
@@ -132,8 +148,10 @@ pub fn get_prefs(app: AppHandle, state: State<'_, AppState>) -> Prefs {
         launcher_disabled: policy.disable_launcher,
         launch_at_login_managed: policy.launch_at_login.is_some(),
         auto_update_disabled: policy.disable_auto_update,
+        notifications_disabled: policy.disable_notifications,
+        policy_invalid: policy.invalid,
         hotkey,
-        launch_at_login: app.autolaunch().is_enabled().unwrap_or(false),
+        launch_at_login: login_item::is_enabled(&app).unwrap_or(false),
         server_url,
         signed_in,
     }
@@ -148,11 +166,11 @@ pub fn set_hotkey(
     if state.policy().hotkey_managed() {
         return Err(MANAGED.into());
     }
-    let old = state.config.get().hotkey();
-    shortcut::rebind(&app, &old, &hotkey)?;
+    let previous = shortcut::applied();
+    shortcut::apply(&app, Some(&hotkey))?;
     // A shortcut that cannot be saved is not kept: it would revert on restart.
     if let Err(e) = state.config.update(|c| c.hotkey = Some(hotkey.clone())) {
-        let _ = shortcut::rebind(&app, &hotkey, &old);
+        let _ = shortcut::apply(&app, previous.as_deref());
         return Err(e);
     }
     Ok(())
@@ -167,13 +185,7 @@ pub fn set_launch_at_login(
     if state.policy().launch_at_login.is_some() {
         return Err(MANAGED.into());
     }
-    let autolaunch = app.autolaunch();
-    let result = if enabled {
-        autolaunch.enable()
-    } else {
-        autolaunch.disable()
-    };
-    result.map_err(|e| {
+    login_item::set(&app, enabled).map_err(|e| {
         log::warn!("could not change launch at login: {e}");
         "Could not change this setting. Try again.".to_string()
     })
@@ -209,9 +221,7 @@ pub async fn sign_out(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn change_server(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    if state.policy().lock_server_url {
-        return Err(MANAGED.into());
-    }
+    server_locked(&state)?;
     end_session(&app).await?;
     // The session has ended either way; if the server cannot be cleared, the
     // user still gets a window (sign-in for the same server) and the error.

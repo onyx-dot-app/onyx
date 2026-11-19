@@ -20,6 +20,9 @@ export interface Prefs {
   launcherDisabled: boolean;
   launchAtLoginManaged: boolean;
   autoUpdateDisabled: boolean;
+  notificationsDisabled: boolean;
+  // A managed policy exists but is not valid.
+  policyInvalid: boolean;
 }
 
 export interface SearchHit {

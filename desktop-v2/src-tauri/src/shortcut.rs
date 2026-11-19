@@ -1,3 +1,5 @@
+use std::sync::Mutex;
+
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
@@ -49,8 +51,34 @@ fn is_wayland() -> bool {
         || std::env::var_os("WAYLAND_DISPLAY").is_some()
 }
 
+/// The launcher shortcut that is registered now. It can differ from the one
+/// that config and policy want when that one was not available.
+static APPLIED: Mutex<Option<String>> = Mutex::new(None);
+
+pub fn applied() -> Option<String> {
+    APPLIED.lock().unwrap_or_else(|p| p.into_inner()).clone()
+}
+
+/// Registers `wanted` (or no shortcut) in place of the registered one. If
+/// `wanted` fails, the registered one stays, and a later call tries again.
+/// Main thread only: it holds `APPLIED` while the plugin works.
+pub fn apply(app: &AppHandle, wanted: Option<&str>) -> Result<(), String> {
+    let mut applied = APPLIED.lock().unwrap_or_else(|p| p.into_inner());
+    if applied.as_deref() == wanted {
+        return Ok(());
+    }
+    let result = replace(app, applied.as_deref(), wanted);
+    let now = [wanted, applied.as_deref()]
+        .into_iter()
+        .flatten()
+        .find(|a| is_registered(app, a))
+        .map(str::to_string);
+    *applied = now;
+    result
+}
+
 /// Swaps the launcher shortcut. Restores the old one if the new one fails.
-pub fn rebind(app: &AppHandle, old: &str, new: &str) -> Result<(), String> {
+fn rebind(app: &AppHandle, old: &str, new: &str) -> Result<(), String> {
     if old == new {
         return Ok(());
     }
@@ -63,7 +91,7 @@ pub fn rebind(app: &AppHandle, old: &str, new: &str) -> Result<(), String> {
 }
 
 /// Swaps one launcher shortcut (or none) for another (or none).
-pub fn replace(app: &AppHandle, old: Option<&str>, new: Option<&str>) -> Result<(), String> {
+fn replace(app: &AppHandle, old: Option<&str>, new: Option<&str>) -> Result<(), String> {
     match (old, new) {
         (Some(old), Some(new)) => rebind(app, old, new),
         (Some(old), None) => {

@@ -61,16 +61,39 @@ fn ready_version() -> Option<String> {
         .map(|r| r.update.version.clone())
 }
 
+fn updates_disabled(app: &AppHandle) -> bool {
+    app.state::<crate::state::AppState>()
+        .policy()
+        .disable_auto_update
+}
+
+/// Drops a downloaded update, for when policy turns updates off.
+pub fn discard_ready() {
+    if INSTALLING.load(std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    if READY
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take()
+        .is_some()
+    {
+        set_menu_label("Check for Updates…");
+    }
+}
+
+const MANAGED_TITLE: &str = "Updates are managed by your organization";
+const MANAGED_DETAIL: &str = "Ask your IT team for the latest version of Onyx.";
+
 /// Longest time for the feed request or the download.
 const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 
 /// Checks the feed and downloads a newer version if there is one.
 pub async fn check_and_download(app: &AppHandle) -> Result<Outcome, String> {
-    if app
-        .state::<crate::state::AppState>()
-        .policy()
-        .disable_auto_update
-    {
+    let handle = app.clone();
+    let _ = tauri::async_runtime::spawn_blocking(move || crate::policy::refresh(&handle)).await;
+    if updates_disabled(app) {
+        discard_ready();
         return Ok(Outcome::Disabled);
     }
     if let Some(version) = ready_version() {
@@ -104,6 +127,11 @@ pub async fn check_and_download(app: &AppHandle) -> Result<Outcome, String> {
             .await
             .map_err(|e| e.to_string())?;
         let version = update.version.clone();
+        // Policy can turn updates off during the download.
+        if updates_disabled(app) {
+            set_menu_label("Check for Updates…");
+            return Ok(Outcome::Disabled);
+        }
         *READY.lock().unwrap_or_else(|p| p.into_inner()) = Some(ReadyUpdate { update, bytes });
         set_menu_label(&format!("Restart to Update ({version})"));
         Ok(Outcome::Ready(version))
@@ -120,6 +148,9 @@ pub async fn check_and_download(app: &AppHandle) -> Result<Outcome, String> {
 /// A failed install keeps the download, so "Restart to Update" retries the
 /// install instead of downloading again.
 pub fn install_and_restart(app: &AppHandle) -> Result<(), String> {
+    if updates_disabled(app) {
+        return Err(MANAGED_DETAIL.into());
+    }
     {
         let ready = READY.lock().unwrap_or_else(|p| p.into_inner());
         let Some(ready) = ready.as_ref() else {
@@ -159,6 +190,11 @@ fn start_install(app: &AppHandle) {
     tauri::async_runtime::spawn_blocking(move || {
         if let Err(e) = install_and_restart(&app) {
             INSTALLING.store(false, Ordering::SeqCst);
+            if updates_disabled(&app) {
+                discard_ready();
+                show_message(&app, MANAGED_TITLE, MANAGED_DETAIL);
+                return;
+            }
             log::warn!("update install failed: {e}");
             show_message(&app, "Could not install the update", &e);
         }
@@ -170,6 +206,12 @@ pub fn on_menu(app: &AppHandle) {
     // Checked first: the install holds the downloaded update, and waiting for
     // it here would block the main thread.
     if INSTALLING.load(std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    crate::policy::refresh(app);
+    if updates_disabled(app) {
+        discard_ready();
+        show_message(app, MANAGED_TITLE, MANAGED_DETAIL);
         return;
     }
     if ready_version().is_some() {
@@ -186,11 +228,7 @@ pub fn on_menu(app: &AppHandle) {
             ),
             Ok(Outcome::Ready(version)) => offer_restart(&app, &version),
             Ok(Outcome::Busy) => {}
-            Ok(Outcome::Disabled) => show_message(
-                &app,
-                "Updates are managed by your organization",
-                "Ask your IT team for the latest version of Onyx.",
-            ),
+            Ok(Outcome::Disabled) => show_message(&app, MANAGED_TITLE, MANAGED_DETAIL),
             Err(e) => {
                 log::warn!("update check failed: {e}");
                 show_message(

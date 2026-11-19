@@ -16,7 +16,6 @@ tauri-plugin-opener = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
 tauri-plugin-updater = "2"
-tauri-plugin-autostart = "2"
 sha2 = "0.10"
 base64 = "0.22"
 rand = "0.8"
@@ -39,6 +38,7 @@ log = "0.4"
 libc = "0.2" # QA harness: checks its directory's owner (geteuid)
 
 [target.'cfg(target_os = "macos")'.dependencies]
+tauri-plugin-autostart = "2"
 tauri-nspanel = "2.1.1"
 block2 = "0.6"
 objc2 = "0.6"

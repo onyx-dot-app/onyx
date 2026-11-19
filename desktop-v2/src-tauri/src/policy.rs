@@ -5,13 +5,15 @@
 //! - Windows: `HKLM\SOFTWARE\Policies\Onyx\Desktop`, then the same key in HKCU.
 //! - Linux: `/etc/onyx-desktop/policy.json`.
 
+use std::cell::Cell;
 use std::str::FromStr;
+use std::sync::Mutex;
+use std::time::Duration;
 
 use tauri::{AppHandle, Manager};
-use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::Shortcut;
 
-use crate::api::normalize_server_url;
+use crate::api::normalize_managed_server_url;
 use crate::state::AppState;
 
 const SERVER_URL: &str = "ServerURL";
@@ -20,6 +22,10 @@ const DISABLE_AUTO_UPDATE: &str = "DisableAutoUpdate";
 const LAUNCHER_SHORTCUT: &str = "LauncherShortcut";
 const DISABLE_LAUNCHER: &str = "DisableLauncher";
 const LAUNCH_AT_LOGIN: &str = "LaunchAtLogin";
+const DISABLE_NOTIFICATIONS: &str = "DisableNotifications";
+
+/// How often the app reads the policy again while it runs.
+const REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 /// A value as the platform store holds it.
 #[derive(Debug, Clone, PartialEq)]
@@ -27,20 +33,36 @@ pub enum RawValue {
     Str(String),
     Bool(bool),
     Int(i64),
+    /// A type the policy does not use (a float, a list); always invalid.
+    Other(String),
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Policy {
     pub server_url: Option<String>,
-    /// Only set together with `server_url`.
+    /// Without `server_url`, the saved server stays and cannot change.
     pub lock_server_url: bool,
     pub disable_auto_update: bool,
     pub launcher_shortcut: Option<String>,
     pub disable_launcher: bool,
     pub launch_at_login: Option<bool>,
+    pub disable_notifications: bool,
+    /// A policy exists but holds a value that is not valid.
+    pub invalid: bool,
 }
 
 impl Policy {
+    /// A policy source that exists but cannot be read: the server and
+    /// updates stay locked, so a broken policy is never more permissive.
+    pub fn unreadable() -> Self {
+        Self {
+            lock_server_url: true,
+            disable_auto_update: true,
+            invalid: true,
+            ..Self::default()
+        }
+    }
+
     /// The server to use: a locked managed server, else the saved one, else
     /// the managed one (so a managed device skips onboarding).
     pub fn server(&self, saved: Option<String>) -> Option<String> {
@@ -65,101 +87,134 @@ impl Policy {
     }
 }
 
-fn as_bool(key: &str, value: RawValue) -> Option<bool> {
-    let parsed = match &value {
+fn as_bool(value: &RawValue) -> Option<bool> {
+    match value {
         RawValue::Bool(b) => Some(*b),
         RawValue::Int(0) => Some(false),
         RawValue::Int(1) => Some(true),
         RawValue::Str(s) => match s.trim().to_ascii_lowercase().as_str() {
-            "true" | "1" => Some(true),
-            "false" | "0" => Some(false),
+            "true" | "1" | "yes" => Some(true),
+            "false" | "0" | "no" => Some(false),
             _ => None,
         },
-        RawValue::Int(_) => None,
-    };
-    if parsed.is_none() {
-        log::warn!("managed setting {key} is not a boolean; ignored: {value:?}");
-    }
-    parsed
-}
-
-fn as_string(key: &str, value: RawValue) -> Option<String> {
-    match value {
-        RawValue::Str(s) => Some(s),
-        other => {
-            log::warn!("managed setting {key} is not a string; ignored: {other:?}");
-            None
-        }
+        RawValue::Int(_) | RawValue::Other(_) => None,
     }
 }
 
-/// Builds the policy from a key lookup. Invalid values are logged and ignored.
+/// Builds the policy from a key lookup. An invalid value is logged and marks
+/// the policy invalid. A lock or `Disable*` key with an invalid value takes
+/// its restrictive value; any other invalid key is ignored.
 pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
-    let flag = |key: &str| lookup(key).and_then(|v| as_bool(key, v));
-    let server_url = lookup(SERVER_URL)
-        .and_then(|v| as_string(SERVER_URL, v))
-        .and_then(|raw| match normalize_server_url(&raw) {
-            Ok(url) => Some(url),
-            Err(e) => {
-                log::warn!("managed setting {SERVER_URL} is invalid; ignored: {e}");
+    let invalid = Cell::new(false);
+    let reject = |key: &str, value: &RawValue, why: &str| {
+        log::error!("managed setting {key} is not valid ({why}): {value:?}");
+        invalid.set(true);
+    };
+    let flag = |key: &str| -> Option<bool> {
+        let value = lookup(key)?;
+        let parsed = as_bool(&value);
+        if parsed.is_none() {
+            reject(key, &value, "not a boolean; ignored");
+        }
+        parsed
+    };
+    let restrictive = |key: &str| -> bool {
+        match lookup(key) {
+            None => false,
+            Some(value) => as_bool(&value).unwrap_or_else(|| {
+                reject(key, &value, "not a boolean; treated as true");
+                true
+            }),
+        }
+    };
+    let string = |key: &str| -> Option<String> {
+        match lookup(key)? {
+            RawValue::Str(s) => Some(s),
+            other => {
+                reject(key, &other, "not a string; ignored");
                 None
             }
-        });
-    let mut lock_server_url = flag(LOCK_SERVER_URL).unwrap_or(false);
+        }
+    };
+    let server_url = string(SERVER_URL).and_then(|raw| match normalize_managed_server_url(&raw) {
+        Ok(url) => Some(url),
+        Err(e) => {
+            reject(SERVER_URL, &RawValue::Str(raw), &e);
+            None
+        }
+    });
+    let lock_server_url = restrictive(LOCK_SERVER_URL);
     if lock_server_url && server_url.is_none() {
-        log::warn!("managed setting {LOCK_SERVER_URL} needs a valid {SERVER_URL}; ignored");
-        lock_server_url = false;
+        log::error!(
+            "managed setting {LOCK_SERVER_URL} needs a valid {SERVER_URL}; the saved server stays and cannot change"
+        );
+        invalid.set(true);
     }
-    let launcher_shortcut = lookup(LAUNCHER_SHORTCUT)
-        .and_then(|v| as_string(LAUNCHER_SHORTCUT, v))
-        .filter(|raw| {
-            let valid = Shortcut::from_str(raw).is_ok();
-            if !valid {
-                log::warn!("managed setting {LAUNCHER_SHORTCUT} is invalid; ignored: {raw}");
-            }
-            valid
-        });
-    Policy {
+    let launcher_shortcut = string(LAUNCHER_SHORTCUT).filter(|raw| {
+        let valid = Shortcut::from_str(raw).is_ok();
+        if !valid {
+            reject(
+                LAUNCHER_SHORTCUT,
+                &RawValue::Str(raw.clone()),
+                "not a shortcut; ignored",
+            );
+        }
+        valid
+    });
+    let policy = Policy {
         server_url,
         lock_server_url,
-        disable_auto_update: flag(DISABLE_AUTO_UPDATE).unwrap_or(false),
+        disable_auto_update: restrictive(DISABLE_AUTO_UPDATE),
         launcher_shortcut,
-        disable_launcher: flag(DISABLE_LAUNCHER).unwrap_or(false),
+        disable_launcher: restrictive(DISABLE_LAUNCHER),
         launch_at_login: flag(LAUNCH_AT_LOGIN),
+        disable_notifications: restrictive(DISABLE_NOTIFICATIONS),
+        invalid: false,
+    };
+    Policy {
+        invalid: invalid.get(),
+        ..policy
     }
 }
 
 /// Parses the Linux policy file: one JSON object with the same keys.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn parse_json(raw: &str) -> Policy {
+    // Many Windows tools and editors write a byte order mark.
+    let raw = raw.strip_prefix('\u{feff}').unwrap_or(raw);
     let map = match serde_json::from_str::<serde_json::Value>(raw) {
         Ok(serde_json::Value::Object(map)) => map,
         Ok(_) => {
-            log::warn!("managed policy file is not a JSON object; ignored");
-            return Policy::default();
+            log::error!("managed policy file is not a JSON object");
+            return Policy::unreadable();
         }
         Err(e) => {
-            log::warn!("managed policy file is not valid JSON; ignored: {e}");
-            return Policy::default();
+            log::error!("managed policy file is not valid JSON: {e}");
+            return Policy::unreadable();
         }
     };
-    parse(|key| match map.get(key)? {
-        serde_json::Value::String(s) => Some(RawValue::Str(s.clone())),
-        serde_json::Value::Bool(b) => Some(RawValue::Bool(*b)),
-        serde_json::Value::Number(n) => n.as_i64().map(RawValue::Int),
-        other => {
-            log::warn!("managed setting {key} has an unsupported type; ignored: {other}");
-            None
-        }
+    parse(|key| {
+        Some(match map.get(key)? {
+            serde_json::Value::String(s) => RawValue::Str(s.clone()),
+            serde_json::Value::Bool(b) => RawValue::Bool(*b),
+            serde_json::Value::Number(n) => match n.as_i64() {
+                Some(i) => RawValue::Int(i),
+                None => RawValue::Other(n.to_string()),
+            },
+            other => RawValue::Other(other.to_string()),
+        })
     })
 }
 
 #[cfg(target_os = "macos")]
 fn read_macos(domain: &str, forced_only: bool) -> Policy {
     use objc2_core_foundation::{
-        CFBoolean, CFNumber, CFPreferencesAppValueIsForced, CFPreferencesCopyAppValue, CFString,
+        CFBoolean, CFNumber, CFPreferencesAppSynchronize, CFPreferencesAppValueIsForced,
+        CFPreferencesCopyAppValue, CFString,
     };
     let app_id = CFString::from_str(domain);
+    // CFPreferences caches values; this reads a changed profile.
+    CFPreferencesAppSynchronize(&app_id);
     parse(|key| {
         let cf_key = CFString::from_str(key);
         // Only a configuration profile forces a value; the user's own
@@ -168,16 +223,18 @@ fn read_macos(domain: &str, forced_only: bool) -> Policy {
             return None;
         }
         let value = CFPreferencesCopyAppValue(&cf_key, &app_id)?;
-        if let Some(s) = value.downcast_ref::<CFString>() {
-            Some(RawValue::Str(s.to_string()))
+        Some(if let Some(s) = value.downcast_ref::<CFString>() {
+            RawValue::Str(s.to_string())
         } else if let Some(b) = value.downcast_ref::<CFBoolean>() {
-            Some(RawValue::Bool(b.as_bool()))
+            RawValue::Bool(b.as_bool())
         } else if let Some(n) = value.downcast_ref::<CFNumber>() {
-            n.as_i64().map(RawValue::Int)
+            match n.as_i64() {
+                Some(i) if !n.is_float_type() => RawValue::Int(i),
+                _ => RawValue::Other(format!("number {:?}", n.as_f64())),
+            }
         } else {
-            log::warn!("managed setting {key} has an unsupported type; ignored");
-            None
-        }
+            RawValue::Other("unsupported type".into())
+        })
     })
 }
 
@@ -193,11 +250,14 @@ fn read_windows() -> Policy {
         .collect();
     parse(|name| {
         keys.iter().find_map(|key| {
-            if let Ok(v) = key.get_value::<u32, _>(name) {
-                Some(RawValue::Int(i64::from(v)))
+            let raw = key.get_raw_value(name).ok()?;
+            Some(if let Ok(v) = key.get_value::<u32, _>(name) {
+                RawValue::Int(i64::from(v))
+            } else if let Ok(v) = key.get_value::<String, _>(name) {
+                RawValue::Str(v)
             } else {
-                key.get_value::<String, _>(name).ok().map(RawValue::Str)
-            }
+                RawValue::Other(format!("{:?}", raw.vtype))
+            })
         })
     })
 }
@@ -220,8 +280,8 @@ pub fn read(app: &AppHandle) -> Policy {
             Ok(raw) => parse_json(&raw),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Policy::default(),
             Err(e) => {
-                log::warn!("could not read the managed policy file: {e}");
-                Policy::default()
+                log::error!("could not read the managed policy file: {e}");
+                Policy::unreadable()
             }
         }
     }
@@ -232,47 +292,65 @@ pub fn read(app: &AppHandle) -> Policy {
     }
 }
 
-/// Sets the login item to match a managed `LaunchAtLogin`.
+/// Sets the login item to match a managed `LaunchAtLogin`. Best effort: the
+/// user can turn the item off outside the app until this runs again.
 pub fn apply_launch_at_login(app: &AppHandle, policy: &Policy) {
     let Some(wanted) = policy.launch_at_login else {
         return;
     };
-    let autolaunch = app.autolaunch();
-    if autolaunch.is_enabled().ok() == Some(wanted) {
+    if crate::login_item::is_enabled(app).ok() == Some(wanted) {
         return;
     }
-    let result = if wanted {
-        autolaunch.enable()
-    } else {
-        autolaunch.disable()
-    };
-    if let Err(e) = result {
+    if let Err(e) = crate::login_item::set(app, wanted) {
         log::warn!("could not apply managed {LAUNCH_AT_LOGIN}: {e}");
     }
 }
 
-/// Reads the policy again (when Preferences opens) and applies what changed.
+/// Registers the launcher shortcut that config and policy want. A shortcut
+/// that was not available is tried again on the next call. Main thread only.
+pub fn sync_hotkey(app: &AppHandle) {
+    let wanted = app.state::<AppState>().hotkey();
+    if let Err(e) = crate::shortcut::apply(app, wanted.as_deref()) {
+        log::warn!("{e}");
+    }
+}
+
+static REFRESHING: Mutex<()> = Mutex::new(());
+
+/// Reads the policy again and applies what changed. Runs on any thread.
 /// The server and its lock keep their startup values for this run, so the
 /// session never moves to another server under the open windows.
 pub fn refresh(app: &AppHandle) {
+    let _serial = REFRESHING.lock().unwrap_or_else(|p| p.into_inner());
     let state = app.state::<AppState>();
     let old = state.policy();
     let mut new = read(app);
     new.server_url = old.server_url.clone();
     new.lock_server_url = old.lock_server_url;
-    if new == old {
-        return;
-    }
-    let saved = state.config.get().hotkey();
-    let (old_hotkey, new_hotkey) = (old.hotkey(saved.clone()), new.hotkey(saved));
-    state.set_policy(new.clone());
-    if old_hotkey != new_hotkey {
-        if let Err(e) = crate::shortcut::replace(app, old_hotkey.as_deref(), new_hotkey.as_deref())
-        {
-            log::warn!("{e}");
+    if new != old {
+        state.set_policy(new.clone());
+        if new.disable_auto_update {
+            crate::updater::discard_ready();
+        }
+        if new.launch_at_login != old.launch_at_login {
+            apply_launch_at_login(app, &new);
         }
     }
-    apply_launch_at_login(app, &new);
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || sync_hotkey(&handle));
+}
+
+/// Reads the policy again every few minutes, so a change applies while the
+/// app runs.
+pub fn spawn_refresh(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(REFRESH_INTERVAL).await;
+            let handle = app.clone();
+            let _ = tauri::async_runtime::spawn_blocking(move || refresh(&handle)).await;
+        }
+    });
 }
 
 #[cfg(test)]
@@ -315,6 +393,7 @@ mod tests {
             (LAUNCHER_SHORTCUT, s("CommandOrControl+Alt+O")),
             (DISABLE_LAUNCHER, s("false")),
             (LAUNCH_AT_LOGIN, RawValue::Int(0)),
+            (DISABLE_NOTIFICATIONS, s("Yes")),
         ]);
         assert_eq!(
             p,
@@ -325,6 +404,8 @@ mod tests {
                 launcher_shortcut: Some("CommandOrControl+Alt+O".into()),
                 disable_launcher: false,
                 launch_at_login: Some(false),
+                disable_notifications: true,
+                invalid: false,
             }
         );
     }
@@ -355,6 +436,17 @@ mod tests {
     }
 
     #[test]
+    fn a_managed_server_may_use_http() {
+        let p = policy(&[
+            (SERVER_URL, s("http://onyx.corp.internal")),
+            (LOCK_SERVER_URL, RawValue::Bool(true)),
+        ]);
+        assert_eq!(p.server_url.as_deref(), Some("http://onyx.corp.internal"));
+        assert!(p.lock_server_url);
+        assert!(!p.invalid);
+    }
+
+    #[test]
     fn managed_shortcut_wins_and_disable_turns_the_launcher_off() {
         let p = policy(&[(LAUNCHER_SHORTCUT, s("Alt+Space"))]);
         assert_eq!(p.hotkey("Control+K".into()).as_deref(), Some("Alt+Space"));
@@ -368,31 +460,43 @@ mod tests {
     }
 
     #[test]
-    fn invalid_values_are_ignored() {
+    fn invalid_values_fail_closed() {
         let p = policy(&[
             (SERVER_URL, s("ftp://onyx.example.com")),
-            (LOCK_SERVER_URL, RawValue::Bool(true)),
+            (LOCK_SERVER_URL, RawValue::Int(2)),
             (DISABLE_AUTO_UPDATE, s("maybe")),
             (LAUNCHER_SHORTCUT, s("Nope+Nope")),
             (DISABLE_LAUNCHER, RawValue::Int(7)),
             (LAUNCH_AT_LOGIN, s("yes please")),
+            (DISABLE_NOTIFICATIONS, RawValue::Other("1.0".into())),
         ]);
-        assert_eq!(p, Policy::default());
-        // Plain http is only for a server on this computer.
         assert_eq!(
-            policy(&[(SERVER_URL, s("http://onyx.example.com"))]).server_url,
-            None
+            p,
+            Policy {
+                server_url: None,
+                lock_server_url: true,
+                disable_auto_update: true,
+                launcher_shortcut: None,
+                disable_launcher: true,
+                launch_at_login: None,
+                disable_notifications: true,
+                invalid: true,
+            }
         );
-        assert_eq!(
-            policy(&[(SERVER_URL, RawValue::Bool(true))]).server_url,
-            None
-        );
+        let wrong_type = policy(&[(SERVER_URL, RawValue::Bool(true))]);
+        assert_eq!(wrong_type.server_url, None);
+        assert!(wrong_type.invalid);
     }
 
     #[test]
-    fn lock_without_a_server_is_ignored() {
+    fn lock_without_a_server_keeps_the_saved_one() {
         let p = policy(&[(LOCK_SERVER_URL, RawValue::Bool(true))]);
-        assert!(!p.lock_server_url);
+        assert!(p.lock_server_url);
+        assert!(p.invalid);
+        assert_eq!(
+            p.server(Some("https://mine.example".into())).as_deref(),
+            Some("https://mine.example")
+        );
     }
 
     #[test]
@@ -405,8 +509,28 @@ mod tests {
         assert!(p.lock_server_url);
         assert_eq!(p.launch_at_login, Some(true));
         assert!(p.disable_launcher);
-        assert_eq!(parse_json("not json"), Policy::default());
-        assert_eq!(parse_json("[]"), Policy::default());
+        assert!(!p.invalid);
+    }
+
+    #[test]
+    fn a_byte_order_mark_is_allowed() {
+        let p = parse_json("\u{feff}{\"DisableAutoUpdate\": true}");
+        assert!(p.disable_auto_update);
+        assert!(!p.invalid);
+    }
+
+    #[test]
+    fn a_broken_policy_file_fails_closed() {
+        for raw in [
+            "not json",
+            "[]",
+            r#"{"ServerURL": "https://onyx.example.com", "LockServerURL": true,}"#,
+        ] {
+            assert_eq!(parse_json(raw), Policy::unreadable(), "{raw}");
+        }
+        let float = parse_json(r#"{"DisableAutoUpdate": 1.0}"#);
+        assert!(float.disable_auto_update);
+        assert!(float.invalid);
     }
 
     /// Reads real preferences through CFPreferences, from a scratch domain

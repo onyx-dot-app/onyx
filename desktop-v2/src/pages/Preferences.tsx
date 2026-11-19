@@ -227,6 +227,9 @@ function Preferences() {
   return (
     <WindowFrame title="Preferences" subtitle="Settings for this device">
       <Section gap={4} alignItems="stretch" height="fit">
+        {prefs?.policyInvalid ? (
+          <ErrorText message="Your organization's Onyx policy is invalid. Some settings are locked. Contact your IT team." />
+        ) : null}
         <PrefSection title="Server">
           <Text font="main-ui-body" color="text-04">
             {prefs?.serverUrl ?? "Not connected"}

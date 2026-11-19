@@ -7,6 +7,7 @@ mod commands;
 mod config;
 mod dialog;
 mod launcher;
+mod login_item;
 #[cfg(target_os = "macos")]
 mod macos_cookies;
 #[cfg(target_os = "macos")]
@@ -36,7 +37,6 @@ fn main() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         // Remember the main window's size and position; small windows stay centred.
@@ -48,6 +48,9 @@ fn main() {
     // Launcher as a non-activating NSPanel (see launcher.rs); macOS only.
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_nspanel::init());
+    // Launch at login on macOS (login_item.rs).
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_plugin_autostart::Builder::new().build());
     let app = builder
         .setup(|app| {
             let config_path = app.path().app_config_dir()?.join("config.json");
@@ -62,12 +65,11 @@ fn main() {
             app.on_menu_event(|app, event| menu::handle(app, event.id().as_ref()));
             menu::build_tray(handle)?;
 
-            if let Some(hotkey) = app.state::<AppState>().hotkey() {
-                if let Err(e) = shortcut::register(handle, &hotkey) {
-                    log::warn!("{e}");
-                }
+            policy::sync_hotkey(handle);
+            if app.state::<AppState>().hotkey().is_some() {
                 launcher::preload(handle);
             }
+            policy::spawn_refresh(handle);
 
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
