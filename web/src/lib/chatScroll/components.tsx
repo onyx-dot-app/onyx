@@ -27,6 +27,9 @@ interface ChatScrollContextValue {
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   /** Last measured height of each row, by id. Kept per view. */
   rowHeights: Map<string, number>;
+  /** The user gave scroll input since the view opened. Load content on
+   *  scroll (older pages) only after it, so a restore loads nothing extra. */
+  scrolledByUser: boolean;
   /**
    * Reports whether `target` is within `OVERSCAN_VIEWPORTS` viewport heights
    * of the scroll container, above or below. Returns a function that stops
@@ -129,6 +132,8 @@ export interface ChatScrollViewProps {
    *  composer). The space below a new turn leaves room for it. */
   footer?: React.ReactNode;
   onScrollButtonVisibilityChange?: (visible: boolean) => void;
+  /** Loads a saved row that is not in the view, while the view stays hidden. */
+  restoreRow?: (rowId: string) => Promise<void>;
   /** Classes of the scroll element. */
   className?: string;
   style?: React.CSSProperties;
@@ -156,6 +161,7 @@ export const ChatScrollView = React.forwardRef(function ChatScrollView(
     anchorId,
     footer,
     onScrollButtonVisibilityChange,
+    restoreRow,
     className,
     style,
     contentClassName,
@@ -170,6 +176,7 @@ export const ChatScrollView = React.forwardRef(function ChatScrollView(
     turnKey,
     anchorId,
     onScrollButtonVisibilityChange,
+    restoreRow,
   });
   const { scrollToBottom, startTurn } = scroll;
   useImperativeHandle(ref, () => ({ scrollToBottom, startTurn }), [
@@ -182,9 +189,15 @@ export const ChatScrollView = React.forwardRef(function ChatScrollView(
     () => ({
       scrollContainerRef: scroll.containerRef,
       rowHeights: scroll.rowHeights,
+      scrolledByUser: scroll.scrolledByUser,
       observeNearViewport,
     }),
-    [scroll.containerRef, scroll.rowHeights, observeNearViewport]
+    [
+      scroll.containerRef,
+      scroll.rowHeights,
+      scroll.scrolledByUser,
+      observeNearViewport,
+    ]
   );
 
   return (

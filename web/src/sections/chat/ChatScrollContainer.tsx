@@ -23,6 +23,9 @@ export interface ChatScrollContainerProps {
   /** Follow new content while at the end. */
   autoScroll?: boolean;
   onScrollButtonVisibilityChange?: (visible: boolean) => void;
+  /** Loads a saved row that is not loaded (an older page), while the chat
+   *  stays hidden. */
+  restoreRow?: (rowId: string) => Promise<void>;
   /** Hide the scrollbar (scroll still works, just invisible) */
   hideScrollbar?: boolean;
   /** Full-width mode: edge-to-edge scroll container instead of the centered
@@ -45,6 +48,7 @@ const ChatScrollContainer = React.memo(
       turnKey,
       autoScroll = true,
       onScrollButtonVisibilityChange,
+      restoreRow,
       hideScrollbar = false,
       fullWidth = false,
     }: ChatScrollContainerProps,
@@ -60,6 +64,7 @@ const ChatScrollContainer = React.memo(
           turnKey={turnKey}
           anchorId={anchorId}
           onScrollButtonVisibilityChange={onScrollButtonVisibilityChange}
+          restoreRow={restoreRow}
           data-testid="chat-scroll-container"
           className={cn(
             "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden",

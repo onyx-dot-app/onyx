@@ -16,3 +16,10 @@ export function messageRowId(message: Message): string {
   if (nodeId !== messageId) firstShownNodeIds.set(messageId, nodeId);
   return `message-${nodeId}`;
 }
+
+/** Database message id of a row, or null for a turn shown with temporary
+ *  node ids (it is never on an older page). */
+export function messageIdFromRowId(rowId: string): number | null {
+  const id = Number(rowId.replace(/^message-/, ""));
+  return Number.isInteger(id) && id > 0 ? id : null;
+}

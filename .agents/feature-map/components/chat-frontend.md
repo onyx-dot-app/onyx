@@ -743,7 +743,11 @@ up its own branding.
     - Position memory (`lib/chatScroll/memory.ts`): each view keeps its
       position, its row heights and whether its turn has space, in memory
       for the page's lifetime. A view that opens again stays hidden until it
-      is placed: the saved row at its offset, or the end.
+      is placed: the saved row at its offset, or the end. Older pages load
+      only after the user's scroll input (`scrolledByUser`), so a restore
+      fetches nothing. A saved row on a page the store no longer holds is
+      loaded first (`restoreRow` → `lib/chat/pagedSession.ts:loadChatMessagesUntil`),
+      while the view stays hidden.
     - Rows: `lib/chat/rowIds.ts:messageRowId` keeps the id a row was first
       shown with, so a refetch that turns temporary node ids into database ids
       neither remounts rows nor reads as a new turn. Rows are windowed by
