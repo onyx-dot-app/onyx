@@ -242,20 +242,14 @@ export interface BackendChatSession {
   incognito?: boolean;
   // Set on a paged load when the current branch has messages before the page.
   has_older_messages?: boolean;
-  // Every file published on the current branch, also outside a paged load's
-  // page, oldest first.
-  published_files?: ChatPublishedFile[];
+  // The files published in the chat, also by its subagents: the newest
+  // publish of each path, oldest first. Set on a latest-page load and on a
+  // shared chat's load.
+  published_files?: PublishedFile[] | null;
   // The owner's saved tools and search filters; null means the agent's tools.
   tool_options?: ChatToolOptions | null;
   // The status route's `approvals_version` for the requests this load shows.
   approvals_version?: string;
-}
-
-/** A file that the model published on the current branch. */
-export interface ChatPublishedFile extends PublishedFile {
-  // The branch answer the file is tied to: the answer that published it, or
-  // for a subagent's file, the turn root of the run that published it
-  message_id: number;
 }
 
 export function toChatSession(backend: BackendChatSession): ChatSession {

@@ -9,6 +9,7 @@ import {
   type ChatRightPanelAction,
   type ChatRightPanelState,
 } from "@/lib/chat/rightPanel";
+import type { PublishedFile } from "@/app/app/services/streamingModels";
 
 const FILE_A = rightPanelFileTab("a");
 const FILE_B = rightPanelFileTab("b");
@@ -18,25 +19,35 @@ function apply(...actions: ChatRightPanelAction[]): ChatRightPanelState {
   return actions.reduce(rightPanelReducer, INITIAL_RIGHT_PANEL);
 }
 
+function file(fileId: string): PublishedFile {
+  return {
+    file_id: fileId,
+    name: `${fileId}.md`,
+    title: null,
+    path: `/w/${fileId}.md`,
+    display_path: `${fileId}.md`,
+    size: 1,
+    mime_type: "text/markdown",
+  };
+}
+
 const openFile = (fileId: string): ChatRightPanelAction => ({
   type: "openFile",
-  fileId,
+  file: file(fileId),
 });
-// Without a branch switch, every open file tab shows
-const EVERY_FILE_TAB = [FILE_A, FILE_B, FILE_C];
-const toggleFiles = (
-  shownFileTabs: readonly string[] = EVERY_FILE_TAB
-): ChatRightPanelAction => ({ type: "toggleFiles", shownFileTabs });
-const closeTab = (
-  tabId: string,
-  shownFileTabs: readonly string[] = EVERY_FILE_TAB
-): ChatRightPanelAction => ({ type: "closeTab", tabId, shownFileTabs });
+const toggleFiles: ChatRightPanelAction = { type: "toggleFiles" };
+const closeTab = (tabId: string): ChatRightPanelAction => ({
+  type: "closeTab",
+  tabId,
+});
+const tabIds = (state: ChatRightPanelState): string[] =>
+  state.fileTabs.map((tab) => rightPanelFileTab(tab.file_id));
 
 describe("rightPanelReducer", () => {
   test("the panel shows one tab at a time; closing the panel hides it, keeping its tabs", () => {
     let state = apply({ type: "showTab", tabId: RIGHT_PANEL_SOURCES_TAB });
     expect(showsSources(state)).toBe(true);
-    state = rightPanelReducer(state, toggleFiles());
+    state = rightPanelReducer(state, toggleFiles);
     expect(showsFiles(state)).toBe(true);
     expect(showsSources(state)).toBe(false);
 
@@ -51,7 +62,19 @@ describe("rightPanelReducer", () => {
     state = rightPanelReducer(state, { type: "showTab", tabId: FILE_C });
     state = rightPanelReducer(state, closeTab(FILE_C));
     expect(state.activeId).toBe(FILE_A);
-    expect(state.fileTabs).not.toContain(FILE_C);
+    expect(tabIds(state)).toEqual([FILE_A, FILE_B]);
+  });
+
+  test("a file tab keeps the file that it opened with", () => {
+    // A file that the Files list does not hold, such as one without a path
+    const legacy = { ...file("legacy"), path: "", display_path: "" };
+    const state = apply({ type: "openFile", file: legacy });
+    expect(state.fileTabs).toEqual([legacy]);
+    expect(state.activeId).toBe(rightPanelFileTab("legacy"));
+    // Opening it again keeps one tab
+    expect(
+      rightPanelReducer(state, { type: "openFile", file: legacy }).fileTabs
+    ).toEqual([legacy]);
   });
 
   test("the Files list and Sources cannot close or move", () => {
@@ -68,16 +91,8 @@ describe("rightPanelReducer", () => {
     ).toBe(state);
   });
 
-  test("a file tab moves to the place of the tab it drops on, past hidden tabs", () => {
-    // After a branch switch, the tab of "hidden" stays but does not show
-    const hidden = rightPanelFileTab("hidden");
-    const state = apply(
-      openFile("a"),
-      openFile("hidden"),
-      openFile("b"),
-      openFile("c")
-    );
-    const shown = (tabs: string[]) => tabs.filter((tab) => tab !== hidden);
+  test("a file tab moves to the place of the tab it drops on", () => {
+    const state = apply(openFile("a"), openFile("b"), openFile("c"));
 
     // Forward: A takes B's place, after B
     const forward = rightPanelReducer(state, {
@@ -85,38 +100,14 @@ describe("rightPanelReducer", () => {
       tabId: FILE_A,
       overTabId: FILE_B,
     });
-    expect(shown(forward.fileTabs)).toEqual([FILE_B, FILE_A, FILE_C]);
+    expect(tabIds(forward)).toEqual([FILE_B, FILE_A, FILE_C]);
     // Back: C takes B's place, before B
     const back = rightPanelReducer(forward, {
       type: "reorderTab",
       tabId: FILE_C,
       overTabId: FILE_B,
     });
-    expect(shown(back.fileTabs)).toEqual([FILE_C, FILE_B, FILE_A]);
-  });
-
-  test("closing the active tab skips tabs hidden by a branch switch", () => {
-    // A branch switch hides B; C opens on the new branch
-    let state = apply(openFile("a"), openFile("b"), openFile("c"));
-    state = rightPanelReducer(state, closeTab(FILE_C, [FILE_A, FILE_C]));
-    expect(state.activeId).toBe(FILE_A);
-    // B stays open for a switch back
-    expect(state.fileTabs).toEqual([FILE_A, FILE_B]);
-
-    // Without a shown file tab, the Files list shows
-    state = rightPanelReducer(state, closeTab(FILE_A, []));
-    expect(state.activeId).toBe(RIGHT_PANEL_FILES_TAB);
-  });
-
-  test("the Files button skips tabs hidden by a branch switch", () => {
-    const state = apply(openFile("a"), openFile("b"), { type: "closePanel" });
-    // A branch switch hides B
-    expect(rightPanelReducer(state, toggleFiles([FILE_A])).activeId).toBe(
-      FILE_A
-    );
-    expect(rightPanelReducer(state, toggleFiles([])).activeId).toBe(
-      RIGHT_PANEL_FILES_TAB
-    );
+    expect(tabIds(back)).toEqual([FILE_C, FILE_B, FILE_A]);
   });
 
   test("the files listed when the panel first shows files are seen; later ones once opened", () => {
@@ -157,27 +148,25 @@ describe("rightPanelReducer", () => {
       type: "showTab",
       tabId: RIGHT_PANEL_SOURCES_TAB,
     });
-    state = rightPanelReducer(state, toggleFiles());
+    state = rightPanelReducer(state, toggleFiles);
     expect(state.activeId).toBe(RIGHT_PANEL_FILES_TAB);
   });
 
-  test("automatic hides close the panel only when their tab is active", () => {
-    const files = apply(toggleFiles());
+  test("hiding Sources closes the panel only when Sources is active", () => {
+    const files = apply(toggleFiles);
     expect(rightPanelReducer(files, { type: "hideSources" })).toBe(files);
-    expect(rightPanelReducer(files, { type: "hideFiles" }).mode).toBe("closed");
 
     const sources = apply({ type: "showTab", tabId: RIGHT_PANEL_SOURCES_TAB });
-    expect(rightPanelReducer(sources, { type: "hideFiles" })).toBe(sources);
     expect(rightPanelReducer(sources, { type: "hideSources" }).mode).toBe(
       "closed"
     );
   });
 
   test("full size ends when the panel closes", () => {
-    let state = apply(toggleFiles(), { type: "setMode", mode: "full" });
+    let state = apply(toggleFiles, { type: "setMode", mode: "full" });
     expect(state.mode).toBe("full");
     state = rightPanelReducer(state, { type: "closePanel" });
-    state = rightPanelReducer(state, toggleFiles());
+    state = rightPanelReducer(state, toggleFiles);
     expect(state.mode).toBe("medium");
   });
 });

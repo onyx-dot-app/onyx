@@ -30,7 +30,8 @@ import {
 } from "@/lib/chat/rightPanel";
 import type { ChatToolOptions } from "@/lib/tools/types";
 import {
-  loadedPublishedFiles,
+  addLoadedPublishedFiles,
+  NO_LOADED_PUBLISHED_FILES,
   type LoadedPublishedFiles,
 } from "@/lib/chat/publishedFiles";
 
@@ -68,12 +69,9 @@ interface ChatSessionData {
   isFetchingChatMessages: boolean;
   // Paged loading: the current branch has messages above the loaded ones.
   hasOlderMessages: boolean;
-  // The latest load's files published on the branch, loaded messages or
-  // not; null before a load
-  branchPublishedFiles: LoadedPublishedFiles | null;
-  // The branch switch whose latest page is loading, so the branch's
-  // published files are not known yet (lib/chat/pagedSession.ts)
-  latestPageSwitch: number | null;
+  // What the chat's loads gave of its published files
+  // (lib/chat/publishedFiles.ts)
+  loadedPublishedFiles: LoadedPublishedFiles;
   // The `approvals_version` of the load whose approval requests the chat shows.
   approvalsVersion?: string;
   isLoadingOlderMessages: boolean;
@@ -125,7 +123,7 @@ interface ChatSessionStore {
   ) => void;
   /**
    * Applies a load of the chat from the server: the load's approvals version
-   * and the branch's published files, with `updates` for the rest.
+   * and published files, with `updates` for the rest.
    */
   applyLoadedSession: (
     sessionId: string,
@@ -254,8 +252,7 @@ const createInitialSessionData = (
   // Session-specific state defaults
   isFetchingChatMessages: false,
   hasOlderMessages: false,
-  branchPublishedFiles: null,
-  latestPageSwitch: null,
+  loadedPublishedFiles: NO_LOADED_PUBLISHED_FILES,
   isLoadingOlderMessages: false,
   uncaughtError: null,
   loadingError: null,
@@ -330,7 +327,11 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
   ) => {
     get().updateSessionData(sessionId, {
       approvalsVersion: loaded.approvals_version,
-      branchPublishedFiles: loadedPublishedFiles(loaded),
+      loadedPublishedFiles: addLoadedPublishedFiles(
+        get().sessions.get(sessionId)?.loadedPublishedFiles ??
+          NO_LOADED_PUBLISHED_FILES,
+        loaded
+      ),
       ...updates,
     });
   },

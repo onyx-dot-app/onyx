@@ -15,6 +15,7 @@ import {
   DEFAULT_PANEL_PROPORTION,
   type OutputPanelMode,
 } from "@/lib/outputPanel/layout";
+import type { PublishedFile } from "@/app/app/services/streamingModels";
 
 export const RIGHT_PANEL_FILES_TAB = "files";
 export const RIGHT_PANEL_SOURCES_TAB = "sources";
@@ -31,21 +32,18 @@ function isFilesTab(tabId: string): boolean {
   return tabId !== RIGHT_PANEL_SOURCES_TAB;
 }
 
-/**
- * Whether a tab is the Files list or a shown file tab. A branch switch hides
- * the tabs of files off the branch; they stay open for a switch back.
- */
-function isShownFilesTab(
-  tabId: string,
-  shownFileTabs: readonly string[]
-): boolean {
-  return tabId === RIGHT_PANEL_FILES_TAB || shownFileTabs.includes(tabId);
-}
+// The shared tab rules take the Files list's ID and the open files
+type FilesPanelTab = string | PublishedFile;
+const idOf = (tab: FilesPanelTab): string =>
+  typeof tab === "string" ? tab : rightPanelFileTab(tab.file_id);
+const isFile = (tab: FilesPanelTab): tab is PublishedFile =>
+  typeof tab !== "string";
 
 export interface ChatRightPanelState {
   mode: OutputPanelMode;
-  // The open file tabs, in order
-  fileTabs: string[];
+  // The files of the open file tabs, in order: each the file that it opened
+  // with, also when the Files list does not hold it
+  fileTabs: PublishedFile[];
   // The active tab: the Files list, Sources or a file tab
   activeId: string;
   // The Files list and the open file tabs by most recent use. It picks the
@@ -76,46 +74,49 @@ export type ChatRightPanelAction =
   // Shows the panel on the Files list, Sources or an open file tab
   | { type: "showTab"; tabId: string }
   // The Files button: shows the panel's last shown Files tab, or closes the
-  // panel. `shownFileTabs` are the open file tabs of files on the branch.
-  | { type: "toggleFiles"; shownFileTabs: readonly string[] }
+  // panel
+  | { type: "toggleFiles" }
   // Opens a file in its own tab
-  | { type: "openFile"; fileId: string }
+  | { type: "openFile"; file: PublishedFile }
   // Hands the active state to the last shown Files tab, as `toggleFiles`
-  | { type: "closeTab"; tabId: string; shownFileTabs: readonly string[] }
-  // Moves a file tab to another file tab's place, as a drop on that tab
-  // does. Hidden tabs, of files off the branch, do not shift the move.
+  | { type: "closeTab"; tabId: string }
+  // Moves a file tab to another file tab's place, as a drop on that tab does
   | { type: "reorderTab"; tabId: string; overTabId: string }
   | { type: "closePanel" }
-  // Closes the panel when Sources, or a Files tab, is the active tab
+  // Closes the panel when Sources is the active tab
   | { type: "hideSources" }
-  | { type: "hideFiles" }
   | { type: "setMode"; mode: Exclude<OutputPanelMode, "closed"> }
   | { type: "setProportion"; proportion: number }
   | { type: "setSearch"; search: string }
   // The panel shows files for the first time: the listed ones count as seen
   | { type: "initializeSeen"; fileIds: string[] };
 
-// The shared tab rules take tabs of any kind; these tabs are their IDs
-const idOf = (id: string): string => id;
-
-function activate(state: ChatRightPanelState, id: string): ChatRightPanelState {
+function activate(
+  state: ChatRightPanelState,
+  target: FilesPanelTab
+): ChatRightPanelState {
   const mode = state.mode === "closed" ? "medium" : state.mode;
-  if (id === RIGHT_PANEL_SOURCES_TAB) return { ...state, mode, activeId: id };
-  const opened = openPanelTab(
+  if (target === RIGHT_PANEL_SOURCES_TAB)
+    return { ...state, mode, activeId: target };
+  const opened = openPanelTab<FilesPanelTab>(
     {
       tabs: [RIGHT_PANEL_FILES_TAB, ...state.fileTabs],
       history: state.history,
     },
-    id,
+    target,
     idOf
   );
   return {
     ...state,
     mode,
-    fileTabs: opened.tabs.slice(1),
-    activeId: id,
+    fileTabs: opened.tabs.filter(isFile),
+    activeId: idOf(target),
     history: opened.history,
   };
+}
+
+function isOpenFileTab(state: ChatRightPanelState, tabId: string): boolean {
+  return state.fileTabs.some((file) => idOf(file) === tabId);
 }
 
 function markSeen(
@@ -139,7 +140,7 @@ export function rightPanelReducer(
     case "showTab":
       return action.tabId === RIGHT_PANEL_FILES_TAB ||
         action.tabId === RIGHT_PANEL_SOURCES_TAB ||
-        state.fileTabs.includes(action.tabId)
+        isOpenFileTab(state, action.tabId)
         ? activate(state, action.tabId)
         : state;
     case "toggleFiles":
@@ -147,46 +148,39 @@ export function rightPanelReducer(
         return { ...state, mode: "closed" };
       // Reopening Files restores its last shown tab, the list or an open
       // file. The history leads with the active tab when it is a Files tab.
-      return activate(
-        state,
-        state.history.find((tabId) =>
-          isShownFilesTab(tabId, action.shownFileTabs)
-        ) ?? RIGHT_PANEL_FILES_TAB
-      );
+      return activate(state, state.history[0] ?? RIGHT_PANEL_FILES_TAB);
     case "openFile":
-      return activate(
-        markSeen(state, [action.fileId]),
-        rightPanelFileTab(action.fileId)
-      );
+      return activate(markSeen(state, [action.file.file_id]), action.file);
     case "closeTab": {
-      if (!state.fileTabs.includes(action.tabId)) return state;
+      if (!isOpenFileTab(state, action.tabId)) return state;
       // The Files list leads the tabs, so it is the last tab left
-      const closed = closePanelTab(
+      const closed = closePanelTab<FilesPanelTab>(
         {
           tabs: [RIGHT_PANEL_FILES_TAB, ...state.fileTabs],
           activeId: state.activeId,
           history: state.history,
         },
         action.tabId,
-        idOf,
-        (tabId) => isShownFilesTab(tabId, action.shownFileTabs)
+        idOf
       );
       return {
         ...state,
-        fileTabs: closed.tabs.slice(1),
+        fileTabs: closed.tabs.filter(isFile),
         activeId: closed.activeId ?? RIGHT_PANEL_FILES_TAB,
         history: closed.history,
       };
     }
     case "reorderTab":
-      return state.fileTabs.includes(action.tabId) &&
-        state.fileTabs.includes(action.overTabId)
+      return isOpenFileTab(state, action.tabId) &&
+        isOpenFileTab(state, action.overTabId)
         ? {
             ...state,
             fileTabs: movePanelTab(
               state.fileTabs,
               action.tabId,
-              state.fileTabs.indexOf(action.overTabId),
+              state.fileTabs.findIndex(
+                (file) => idOf(file) === action.overTabId
+              ),
               idOf
             ),
           }
@@ -195,10 +189,6 @@ export function rightPanelReducer(
       return open ? { ...state, mode: "closed" } : state;
     case "hideSources":
       return open && state.activeId === RIGHT_PANEL_SOURCES_TAB
-        ? { ...state, mode: "closed" }
-        : state;
-    case "hideFiles":
-      return open && isFilesTab(state.activeId)
         ? { ...state, mode: "closed" }
         : state;
     case "setMode":

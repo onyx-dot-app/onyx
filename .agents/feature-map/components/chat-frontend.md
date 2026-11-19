@@ -209,28 +209,20 @@
   button. As in Craft, a panel over the page covers only the page column,
   not the sidebar, and the page under it cannot be focused. Files and Sources
   lead the tab strip when they have content, or while they are active. A citation's Sources control opens the panel on Sources. The
-  Files tab shows Craft's output tiles for every answer on the selected
-  branch, also answers that are not loaded and their subagents: one tile per
-  path, the latest publish of it, newest first, with its title or else its
+  Files tab shows Craft's output tiles for the files published in the chat,
+  on every branch, also by answers that are not loaded and by subagents: one
+  tile per path, the latest publish of it, newest first, with its title or else its
   name, and a search in the URL bar. The first time the panel shows Files, by
   any route, every listed file counts as seen; a file published later shows
   Craft's new-file marker until it is opened. Several files can be open at once; tabs switch
   with a click or the arrow keys, reorder by drag or Alt+arrow among the
   shown tabs, and closing
-  the active tab returns to the tab used before it, else to Files. Closing
-  the active tab and reopening Files skip the tabs of files that a branch
-  switch hides; those tabs stay open for a switch back. Files and
+  the active tab returns to the tab used before it, else to Files. Files and
   Sources cannot close or move, and a file tab cannot move before them. File
   tabs of one shown name show their paths, and an older publish of a path
   says "earlier version". The five most recent file viewers stay
   mounted, so switching back does not load the file again. Closing the panel
   keeps its tabs, so reopening it, or coming back to the chat, restores them.
-  When the branch has no files, the panel closes until the user opens it
-  again; after a branch switch it waits for the new branch's latest page
-  (`latestPageSwitch`, set and cleared by
-  `lib/chat/pagedSession.ts:loadSelectedBranch` for the newest switch only)
-  before it decides. `views/AppPage.tsx` applies this rule, because it does
-  not mount the panel for an agent without search on a branch without files.
   A closed panel cannot be focused, and closing it returns focus to the
   control that opened it, or that last switched it from outside the panel,
   also when the panel covered the page.
@@ -413,19 +405,20 @@ focus out, and restores a full panel on Escape. [[craft-frontend]] lists the
 parts, and a change to them changes Craft's panel too. Its previews use
 `sections/modals/PreviewModal/ChatFilePreview.tsx`, the chat file previewer
 that `PreviewModal` also uses; Craft's previewers read sandbox paths, not
-chat files. The Files list merges the latest load's `published_files` (the
-session's `branchPublishedFiles`, which every load and settle sets, with the
-newest message ID that it covers: during a run, the run's question) with the packets of the loaded branch
-(`lib/chat/publishedFiles.ts:branchPublishedFiles`, which also gives each
-file's latest publish of its path). The load's list decides the files of
-every message up to that ID, also of unloaded messages and of subagents; it
-leaves out files on purpose, such as those without a path or whose object is
-missing. The packets add only the files of newer messages, such as live
-publishes, after the list. Without a list (before a load, or a shared chat
-whose load has none), the packets give all the files. A load entry of a
-loaded message off the branch is left out. Every
-branch switch loads the branch's latest page for its files; the page
-replaces the messages only when they are not loaded. A background
+chat files. Published files belong to the chat, not to a branch.
+`lib/chat/publishedFiles.ts:chatPublishedFiles` owns the Files list: the
+latest load's `published_files`, then the files that packets published after
+the loads, such as live publishes and an answer that resumes after an
+approval, each file ID once, with the newest publish of each path. The
+session's `loadedPublishedFiles` holds the list and the file IDs that the
+loads' packets replayed (`addLoadedPublishedFiles`; every load and settle
+applies it, and an older page adds its packets). A replayed file that the
+list leaves out stays out: an older copy, a file without a stamped path or
+one whose object is missing. Without a list, the packets give all the files.
+A shared chat has no live publishes, so its load's list alone gives its
+files. A file tab keeps the file that it opened with
+(`ChatRightPanelState.fileTabs`), so a card always opens its own file, also
+one that the list does not hold. A background
 subagent's files are not in the root stream; they appear at the next
 latest-page load, for example when the turn that its results start settles.
 Foreground subagent publishes stream nested in the root answer.
@@ -447,8 +440,8 @@ strip bidi controls. The timeline step shows the sandbox path from the start
 packet, stripped where it renders.
 
 The panel's state and its transitions are one pure module,
-`lib/chat/rightPanel.ts:rightPanelReducer`, which owns the tab IDs: the mode
-(closed, medium or full, as Craft's), the open file tabs (Files and Sources
+`lib/chat/rightPanel.ts:rightPanelReducer`, which owns the tabs: the mode
+(closed, medium or full, as Craft's), the open files (Files and Sources
 are fixed tabs, so only the active tab and the history name them), width,
 search and seen files. The Files list and the file tabs follow the shared
 tab rules (`lib/outputPanel/tabs.ts:openPanelTab`, `closePanelTab`), with
@@ -461,12 +454,9 @@ applies it with `useReducer`. The store keeps each chat's width in session
 storage (`lib/outputPanel/preferences.ts`, which Craft's preferences also
 use), and every load of a chat applies its approvals version and published
 files in one place (`app/app/stores/useChatSessionStore.ts:applyLoadedSession`). The panel shows one tab at a time. A move
-(`reorderTab`) names the tab that it drops on, so tabs hidden after a branch
-switch do not shift it. `closeTab` and `toggleFiles` take the shown file
-tabs (`shownFileTabs`) and pick only the Files list or one of them, so they
-skip hidden tabs, which stay open for a switch back. Automatic
-closes (`hideSources`, `hideFiles`) close the panel only when their tab is
-active. The panel lives in the app shell's right slot.
+(`reorderTab`) names the tab that it drops on. The automatic close
+(`hideSources`) closes the panel only when Sources is active. The panel lives
+in the app shell's right slot.
 `layouts/chromes/AppWorkspace.tsx` gives it the workspace row and the page
 column; the open panel measures the row, so a width change renders the panel
 and nothing else, and a covering panel makes the page column inert. A closed

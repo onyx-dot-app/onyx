@@ -43,26 +43,22 @@ export function openPanelTab<T>(
 }
 
 /**
- * Closes a tab. When it was active, the most recently used shown tab becomes
- * active, else its nearest shown neighbor, before it first. A panel that
- * hides some open tabs passes `isShown`; by default every tab shows.
+ * Closes a tab. When it was active, the most recently used tab becomes
+ * active, else its neighbor, before it first.
  */
 export function closePanelTab<T>(
   state: PanelTabsState<T>,
   id: string,
-  idOf: (tab: T) => string,
-  isShown: (id: string) => boolean = () => true
+  idOf: (tab: T) => string
 ): PanelTabsState<T> {
   const index = state.tabs.findIndex((tab) => idOf(tab) === id);
   if (index < 0) return state;
   const tabs = state.tabs.filter((tab) => idOf(tab) !== id);
   const history = panelTabHistory(tabs, null, state.history, idOf);
-  const neighbor = [...tabs.slice(0, index).reverse(), ...tabs.slice(index)]
-    .map(idOf)
-    .find(isShown);
+  const neighbor = tabs[Math.max(0, index - 1)];
   const activeId =
     state.activeId === id
-      ? (history.find(isShown) ?? neighbor ?? null)
+      ? (history[0] ?? (neighbor ? idOf(neighbor) : null))
       : state.activeId;
   return {
     tabs,

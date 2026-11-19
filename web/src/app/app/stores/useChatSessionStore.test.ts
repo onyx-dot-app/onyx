@@ -3,7 +3,17 @@
  */
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { rightPanelFileTab } from "@/lib/chat/rightPanel";
-import { loadSelectedBranch } from "@/lib/chat/pagedSession";
+import type { PublishedFile } from "@/app/app/services/streamingModels";
+
+const FILE_A: PublishedFile = {
+  file_id: "a",
+  name: "a.md",
+  title: null,
+  path: "/w/a.md",
+  display_path: "a.md",
+  size: 1,
+  mime_type: "text/markdown",
+};
 
 function panel(sessionId: string) {
   return useChatSessionStore.getState().sessions.get(sessionId)?.rightPanel;
@@ -24,7 +34,7 @@ describe("the right panel, per chat", () => {
   test("each chat keeps its own tabs, search and seen files", () => {
     const store = useChatSessionStore.getState();
     openChat("first");
-    store.updateCurrentRightPanel({ type: "openFile", fileId: "a" });
+    store.updateCurrentRightPanel({ type: "openFile", file: FILE_A });
     store.updateCurrentRightPanel({
       type: "initializeSeen",
       fileIds: ["a", "b"],
@@ -34,7 +44,7 @@ describe("the right panel, per chat", () => {
     openChat("second");
     expect(panel("second")?.mode).toBe("closed");
     expect(panel("second")?.seenInitialized).toBe(false);
-    store.updateCurrentRightPanel({ type: "toggleFiles", shownFileTabs: [] });
+    store.updateCurrentRightPanel({ type: "toggleFiles" });
 
     openChat("first");
     expect(panel("first")).toMatchObject({
@@ -45,37 +55,15 @@ describe("the right panel, per chat", () => {
     expect(panel("first")?.activeId).toBe(rightPanelFileTab("a"));
   });
 
-  test("switching chats, then branches, then reopening the panel restores its tabs", async () => {
+  test("switching chats, then reopening the panel restores its tabs", () => {
     const store = useChatSessionStore.getState();
     openChat("first");
-    store.updateCurrentRightPanel({ type: "openFile", fileId: "a" });
+    store.updateCurrentRightPanel({ type: "openFile", file: FILE_A });
     store.updateCurrentRightPanel({ type: "closePanel" });
     openChat("second");
     openChat("first");
 
-    jest
-      .spyOn(global, "fetch")
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({ messages: [], packets: [], published_files: [] }),
-          { status: 200 }
-        )
-      );
-    try {
-      await loadSelectedBranch(
-        "first",
-        Promise.resolve(new Response(null, { status: 200 })),
-        false
-      );
-    } finally {
-      jest.restoreAllMocks();
-    }
-
-    // File A is still on the branch
-    store.updateCurrentRightPanel({
-      type: "toggleFiles",
-      shownFileTabs: [rightPanelFileTab("a")],
-    });
+    store.updateCurrentRightPanel({ type: "toggleFiles" });
     expect(panel("first")?.activeId).toBe(rightPanelFileTab("a"));
     expect(panel("first")?.mode).toBe("medium");
   });

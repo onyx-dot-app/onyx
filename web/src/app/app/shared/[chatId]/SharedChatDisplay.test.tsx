@@ -98,7 +98,7 @@ function sharedChat(): BackendChatSession {
         },
       ],
     ],
-    published_files: [{ ...REPORT, message_id: 2 }],
+    published_files: [REPORT],
   };
 }
 

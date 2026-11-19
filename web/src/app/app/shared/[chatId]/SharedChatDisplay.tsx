@@ -24,15 +24,14 @@ import PreviewModal from "@/sections/modals/PreviewModal";
 import useOnMount from "@/hooks/useOnMount";
 import SharedAppInputBar from "@/sections/input/SharedAppInputBar";
 import {
-  branchPublishedFiles,
-  loadedPublishedFiles,
-  openFilesOfTabs,
+  addLoadedPublishedFiles,
+  chatPublishedFiles,
+  NO_LOADED_PUBLISHED_FILES,
 } from "@/lib/chat/publishedFiles";
 import { PublishedFilesButton } from "@/sections/chat/PublishedFileViews";
 import { ChatRightPanel } from "@/sections/chat/ChatRightPanel";
 import {
   INITIAL_RIGHT_PANEL,
-  rightPanelFileTab,
   rightPanelReducer,
   showsFiles,
 } from "@/lib/chat/rightPanel";
@@ -99,18 +98,14 @@ export default function SharedChatDisplay({
   const messages = getLatestMessageChain(messageTree);
 
   const firstMessage = messages[0];
-  const { all: allPublishedFiles, latest: publishedFiles } =
-    branchPublishedFiles(
-      loadedPublishedFiles(chatSession),
-      messageTree,
-      messages
-    );
-  const openPublishedFiles = openFilesOfTabs(
-    rightPanel.fileTabs,
-    allPublishedFiles
+  // A shared chat has no live publishes: its load's list, or without one
+  // its packets, gives the files
+  const publishedFiles = chatPublishedFiles(
+    addLoadedPublishedFiles(NO_LOADED_PUBLISHED_FILES, chatSession),
+    messageTree
   );
   const openPublishedFile = (file: PublishedFile) =>
-    dispatchRightPanel({ type: "openFile", fileId: file.file_id });
+    dispatchRightPanel({ type: "openFile", file });
 
   if (firstMessage === undefined) {
     return (
@@ -149,7 +144,6 @@ export default function SharedChatDisplay({
             state={rightPanel}
             dispatch={dispatchRightPanel}
             files={publishedFiles}
-            openFiles={openPublishedFiles}
             sources={null}
             hasSources={false}
           />
@@ -184,14 +178,7 @@ export default function SharedChatDisplay({
               {publishedFiles.length > 0 && (
                 <PublishedFilesButton
                   pressed={showsFiles(rightPanel)}
-                  onClick={() =>
-                    dispatchRightPanel({
-                      type: "toggleFiles",
-                      shownFileTabs: openPublishedFiles.map((file) =>
-                        rightPanelFileTab(file.file_id)
-                      ),
-                    })
-                  }
+                  onClick={() => dispatchRightPanel({ type: "toggleFiles" })}
                 />
               )}
             </Section>

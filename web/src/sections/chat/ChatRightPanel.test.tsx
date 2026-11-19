@@ -141,7 +141,7 @@ function update(action: ChatRightPanelAction) {
   act(() => useChatSessionStore.getState().updateCurrentRightPanel(action));
 }
 
-/** Saves replies that published `replies`, one answer each, as the branch. */
+/** Saves replies that published `replies`, one answer each, in a chain. */
 function setReplies(replies: PublishedFile[][]) {
   const messages = replies.map(
     (files, index): Message => ({
@@ -257,7 +257,7 @@ test("an older reply's card opens that publish, not the newest copy", async () =
 
 test("several files open, switch and close like Craft's tabs", async () => {
   renderChat([[REPORT, CHART]]);
-  update({ type: "toggleFiles", shownFileTabs: [] });
+  update({ type: "toggleFiles" });
   await act(async () => {
     screen.getByRole("button", { name: "Open Q3 report" }).click();
   });
@@ -360,7 +360,7 @@ test("tabs switch between Files, Sources and a file, and the Sources control ope
 test("a full panel makes the page inert and takes focus out of it, until Escape restores it", () => {
   setReplies([[REPORT]]);
   render(<Chat replies={[[REPORT]]} workspaceWidth={1200} />);
-  update({ type: "toggleFiles", shownFileTabs: [] });
+  update({ type: "toggleFiles" });
   const card = screen.getByRole("button", { name: "Preview report.md" });
   card.focus();
 
@@ -378,7 +378,7 @@ test("closing a panel that covers a narrow chat returns focus to the card that o
   render(<Chat replies={[[REPORT]]} workspaceWidth={600} />);
   // Opened before, the panel knows the width when it opens: it covers the
   // page in the same render
-  update({ type: "toggleFiles", shownFileTabs: [] });
+  update({ type: "toggleFiles" });
   update({ type: "closePanel" });
   const card = screen.getByRole("button", { name: "Preview report.md" });
   await act(async () => {
@@ -441,7 +441,7 @@ test("file tabs of one shown name show their paths, and an older publish says so
 test("the keyboard and a double click resize the panel and keep the width for the chat", () => {
   setReplies([[REPORT]]);
   render(<Chat replies={[[REPORT]]} workspaceWidth={1000} />);
-  update({ type: "toggleFiles", shownFileTabs: [] });
+  update({ type: "toggleFiles" });
   const handle = screen.getByRole("separator", { name: "Resize panel" });
   expect(handle).toHaveAttribute("aria-valuenow", "500");
 
@@ -597,7 +597,7 @@ test("a closed panel does not watch the workspace's width, and measures it again
   );
   setReplies([[REPORT]]);
   const view = render(<Chat replies={[[REPORT]]} workspaceWidth={1000} />);
-  update({ type: "toggleFiles", shownFileTabs: [] });
+  update({ type: "toggleFiles" });
   update({ type: "closePanel" });
   const before = mockPanelRenders.mock.calls.length;
 
@@ -621,7 +621,7 @@ test("a closed panel does not watch the workspace's width, and measures it again
   view.container
     .querySelector<HTMLElement>("[data-workspace-width]")!
     .setAttribute("data-workspace-width", "1200");
-  update({ type: "toggleFiles", shownFileTabs: [] });
+  update({ type: "toggleFiles" });
   expect(
     screen.getByRole("separator", { name: "Resize panel" })
   ).toHaveAttribute("aria-valuemax", "800");
@@ -629,7 +629,7 @@ test("a closed panel does not watch the workspace's width, and measures it again
 
 test("the Files search filters the tiles, and a file published later is marked new", () => {
   const view = renderChat([[REPORT]]);
-  update({ type: "toggleFiles", shownFileTabs: [] });
+  update({ type: "toggleFiles" });
   // A file listed when the panel first opened is not new.
   expect(screen.queryByRole("img", { name: "New or updated" })).toBeNull();
 
@@ -660,31 +660,30 @@ test("the Files search filters the tiles, and a file published later is marked n
   expect(screen.getByRole("button", { name: "Open Odd" })).toBeVisible();
 });
 
-test("closing the active tab skips a tab that a branch switch hides", async () => {
-  const notes = {
-    ...REPORT,
-    file_id: "file-3",
-    name: "notes.md",
-    title: "Notes",
-    path: "/home/onyx/notes.md",
-    display_path: "notes.md",
-  };
-  const view = renderChat([[REPORT, CHART, notes]]);
-  act(() => openPublishedFileInChat(REPORT));
-  act(() => openPublishedFileInChat(CHART));
-  act(() => openPublishedFileInChat(notes));
-
-  // The new branch has no Chart: its tab hides, but stays open
-  setReplies([[REPORT, notes]]);
-  view.rerender(<Chat replies={[[REPORT, notes]]} />);
-  expect(screen.queryByRole("tab", { name: "Chart" })).toBeNull();
+test("a card opens its own file, also one that the Files list does not hold", async () => {
+  // A file published before paths were stamped: the server's list leaves
+  // it out, so the Files list does not show it
+  const legacy = { ...REPORT, file_id: "file-legacy", title: "Legacy" };
+  renderChat([[legacy]]);
+  act(() =>
+    useChatSessionStore.getState().updateSessionData("session", {
+      loadedPublishedFiles: {
+        listed: [],
+        replayedFileIds: new Set([legacy.file_id]),
+      },
+    })
+  );
+  expect(screen.queryByRole("button", { name: "Open Legacy" })).toBeNull();
 
   await act(async () => {
-    screen.getByRole("button", { name: "Close Notes" }).click();
+    screen.getByRole("button", { name: "Preview report.md" }).click();
   });
-  expect(screen.getByRole("tab", { name: "Q3 report" })).toHaveAttribute(
+
+  expect(await preview("Legacy")).toBeVisible();
+  expect(fetchChatFile).toHaveBeenLastCalledWith("file-legacy");
+  expect(screen.getByRole("tab", { name: "Legacy" })).toHaveAttribute(
     "aria-selected",
     "true"
   );
-  expect(panel().fileTabs).toContain("file:file-2");
+  expect(screen.queryByRole("button", { name: "Open Legacy" })).toBeNull();
 });
