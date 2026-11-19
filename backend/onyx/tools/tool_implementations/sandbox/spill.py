@@ -10,12 +10,15 @@ the file's path:
   gets a preview.
 """
 
+import json
 import re
 import threading
 from concurrent.futures import Future
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import NamedTuple
+
+from pydantic_core import to_json
 
 from onyx.agents.models import ToolResultContext
 from onyx.llm.cancellation import current_cancellation
@@ -34,7 +37,7 @@ from onyx.tools.constants import (
     SKILLS_READ_TOOL_NAME,
     WAIT_CODE_TOOL_NAME,
 )
-from onyx.tools.models import CustomToolCallSummary
+from onyx.tools.models import CustomToolCallSummary, SearchResults
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.sandbox.models import (
     SandboxExecResult,
@@ -46,6 +49,9 @@ from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.utils import truncation_marker
+from onyx.tools.tool_implementations.web_search.utils import (
+    truncate_search_result_content,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_future
 
@@ -74,6 +80,8 @@ LIST_MAX_ENTRIES = 100_000
 # A spill holds up to SPILL_MAX_BYTES of encoded bytes in memory until its
 # write ends, up to this long after a Stop or a timed-out wait.
 SPILL_WRITE_TIMEOUT_SECONDS = 30.0
+# A page's title or URL in the list of spilled pages keeps at most this much.
+PAGE_LIST_FIELD_MAX_CHARS = 300
 # Characters that the write encodes at a time.
 _ENCODE_CHARS = 1 << 20
 # The modification time of a listed file that has none: it goes last.
@@ -247,6 +255,8 @@ def spill_large_result(
         return _spill_full_text(turn, context, full.output, code_mode=code_mode)
     if isinstance(full, str):
         return _spill_full_text(turn, context, full, code_mode=code_mode)
+    if isinstance(full, SearchResults):
+        return _spill_pages(turn, context, full, code_mode=code_mode)
     text = result.content
     if (
         context.calls[0].name in _OWN_LIMITS
@@ -339,5 +349,59 @@ def _spill_full_text(
             "content": f"{result.content}\n\n"
             + _envelope(saved, FULL_VALUE_NOTE, code_mode=code_mode),
             "details": details,
+        }
+    )
+
+
+def _spill_pages(
+    turn: SandboxTurn,
+    context: ToolResultContext,
+    pages: SearchResults,
+    *,
+    code_mode: bool,
+) -> ToolResult:
+    """A result whose content holds excerpts of `pages` (open_url): the file
+    holds the pages, one JSON object for each line, and the model keeps the
+    excerpts with a list of the pages that names each one's citation number,
+    so the model can cite a page that it reads from the file."""
+    result = context.result
+    try:
+        # One encoded copy: the call keeps far less than SPILL_MAX_BYTES.
+        saved = _save(
+            turn, context, [to_json(page) + b"\n" for page in pages.results], False
+        )
+    except Exception:
+        logger.exception("tool_result_spill_failed call=%s", context.calls[0].id)
+        return result.model_copy(
+            update={"content": f"{result.content}\n\n{SPILL_FAILED_NOTE}"}
+        )
+    listed = "".join(
+        f"{line}. [{page.document}] "
+        + json.dumps(
+            truncate_search_result_content(page.title, PAGE_LIST_FIELD_MAX_CHARS),
+            ensure_ascii=False,
+        )
+        + (
+            " "
+            + json.dumps(
+                truncate_search_result_content(page.url, PAGE_LIST_FIELD_MAX_CHARS),
+                ensure_ascii=False,
+            )
+            if page.url
+            else ""
+        )
+        + f": {len(page.content):,} characters\n"
+        for line, page in enumerate(pages.results, start=1)
+    )
+    return result.model_copy(
+        update={
+            "content": f"{result.content}\n\n"
+            + _envelope(
+                saved,
+                "The pages above are excerpts. The file holds each page whole, "
+                "one JSON object for each line; cite a page by its number:\n"
+                + listed.rstrip("\n"),
+                code_mode=code_mode,
+            )
         }
     )

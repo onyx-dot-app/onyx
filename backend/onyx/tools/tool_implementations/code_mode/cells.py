@@ -1827,6 +1827,7 @@ class CodeCell:
         inner_tool = function.tool
         inner_context = context.model_copy(
             update={
+                "program_call": True,
                 "next_citation_num": citation_start,
                 "citation_mapping": {
                     **context.citation_mapping,

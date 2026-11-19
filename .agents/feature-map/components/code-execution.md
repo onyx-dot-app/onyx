@@ -347,7 +347,9 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         The model and the saved row get the tool's content
                                         with a <persisted-output> note (path, size, how to
                                         read it, and that a missing file means a restart
-                                        or eviction), or a preview in that note. The card
+                                        or eviction), or a preview in that note. open_url's
+                                        pages go one JSON object to a line, and the note
+                                        lists each page's citation number. The card
                                         shows the head and tail with
                                         renderer.SPILLED_OUTPUT_NOTE
                                         (CustomToolCallSummary.spilled,
@@ -526,7 +528,9 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     the program keeps its worker too
     (`onyx_code_mode_suspensions_total{outcome="over_memory"}`). A dump that
     still runs out of memory ends the program with `DUMP_MEMORY_MESSAGE` and
-    counts a lost worker (`reason="out_of_memory"`). The compute
+    counts a lost worker (`reason="out_of_memory"`). A program that runs out
+    of its memory limit fails with its `MemoryError` and `PROGRAM_MEMORY_HINT`,
+    which tells it to keep less or to save large results to files. The compute
     limit carries across these segments. While a worker computes, the cell's
     cancellation kills it at once, and a timer kills it at the end of its
     lifetime when that falls within the segment; the pool replaces it. Waits

@@ -31,6 +31,7 @@ from onyx.tools.tool_implementations.code_mode.sandbox import (
     BUSY_MESSAGE,
     CRASH_MESSAGE,
     PRELUDE_STUBS,
+    PROGRAM_MEMORY_HINT,
     TOOLS_IMPORT_MESSAGE,
     YIELD_CONTROL_STUB,
     ExternalCallHandler,
@@ -315,11 +316,15 @@ def test_program_errors_that_mention_a_time_limit_are_failures(
     assert "time limit exceeded" in (result.error or "")
 
 
-def test_memory_limit() -> None:
+def test_a_program_out_of_memory_is_told_to_keep_less() -> None:
     result = run("data = 'x' * (256 * 1024 * 1024)\n")
     assert result.status == "failed"
     assert result.error is not None
     assert "MemoryError" in result.error
+    assert result.error.endswith(PROGRAM_MEMORY_HINT)
+    # Other errors get no such hint.
+    other = run("raise ValueError('bad')\n")
+    assert other.error is not None and PROGRAM_MEMORY_HINT not in other.error
 
 
 def test_tool_call_limit() -> None:

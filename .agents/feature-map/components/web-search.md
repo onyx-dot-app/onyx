@@ -114,8 +114,27 @@ disabled, `construct_tools` does not build `OpenURLTool`.
 **Snippets and citations.** The chat and research agents put snippets from
 earlier results (`tools/tool_implementations/web_search/utils.py:extract_url_snippet_map`)
 in `ToolContext.url_snippet_map`, and `open_url` truncates a crawled page around
-the snippet. `open_url` reuses the number that a URL already has in the chat
-session (history and the current turn), from `ToolContext.citation_mapping`.
+the snippet.
+`tools/tool_implementations/open_url/open_url_tool.py:_sections_to_search_results`
+makes both views of a call. The model's content holds `MAX_CHARS_PER_URL` of
+each crawled page around its snippet, and `MAX_CHARS_ACROSS_URLS` for the
+call. The full value (`ToolResult.full_value`) holds `OPEN_URL_MAX_CHARS`
+(2,000,000) characters of whole pages (`OpenedPage.text`). For a call from a
+code mode program (`ToolContext.program_call`), whose results stay in its
+memory, the bound is `OPEN_URL_PROGRAM_MAX_CHARS` (200,000). In both views,
+the page at the limit is cut with `TRUNCATED_CONTENT_SUFFIX`
+(`[...truncated]`). A page keeps its whole text in the full value when that
+text holds all that the model saw of the page: its excerpt as the call's
+budget cut it, without the truncation markers. Otherwise it keeps its
+excerpt, for example when the limit cuts the page before its snippet. Pages
+past the limit also keep their excerpts. So the full value
+holds all that the model sees. Pages that the model did not see, because the
+excerpts' budget ran out first, go into the full value whole.
+`open_url` sets the full value only when some page holds more than the model
+sees of it. A code mode program gets the full value, and a chat with a sandbox
+always spills it by page ([[code-execution]]). `open_url` reuses the number
+that a URL already has in the chat session (history and the current turn),
+from `ToolContext.citation_mapping`.
 `chat/agent.py:ChatAgent` seeds that map from every history message, so it
 holds every numbered document, not only the cited ones. New numbers start
 after the session's highest number. Repeated calls merge: `web_search` merges
@@ -241,5 +260,7 @@ change on tool behaviour, such as partial results or the indexed fallback.
 - Unit tests: `backend/tests/unit/onyx/tools/tool_implementations/websearch/`,
   `backend/tests/unit/onyx/tools/tool_implementations/open_url/`, and the
   coupling test in `backend/tests/unit/onyx/tools/`.
-- External dependency: `backend/tests/external_dependency_unit/tools/open_url/`.
+- External dependency: `backend/tests/external_dependency_unit/tools/open_url/`,
+  and the sandbox chat tests of `open_url` in
+  `backend/tests/external_dependency_unit/microvm/test_sandbox_tools.py`.
 - Integration: `backend/tests/integration/tests/web_search/`.

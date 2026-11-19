@@ -398,6 +398,9 @@ class ToolContext(BaseModel):
     # When False, don't pass memory context to search tools for query expansion
     # (but still pass it to the memory tool for persistence)
     inject_memories_in_prompt: bool = True
+    # A code mode program made the call: its full value stays in the program's
+    # memory, so a tool with a large full value keeps less.
+    program_call: bool = False
 
 
 class ToolCallInfo(BaseModel):
