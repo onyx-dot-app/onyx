@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { markdown } from "@opal/utils";
+import { codeSpan, markdown } from "@opal/utils";
 import InlineMarkdown, {
   toPlainString,
 } from "@opal/components/text/InlineMarkdown";
@@ -11,6 +11,17 @@ describe("InlineMarkdown", () => {
       createElement(InlineMarkdown, { content: "افتح `src/a.py` الآن" })
     );
     expect(html).toMatch(/افتح <code dir="ltr"[^>]*>src\/a\.py<\/code> الآن/);
+  });
+
+  it("keeps a code span with line breaks in one code element", () => {
+    const html = renderToStaticMarkup(
+      createElement(InlineMarkdown, {
+        content: `Read ${codeSpan("a\n\n[click](https://evil.example)\n- b")}`,
+      })
+    );
+    expect(html).not.toContain("<a");
+    expect(html).not.toContain("<li");
+    expect(html.match(/<code/g)).toHaveLength(1);
   });
 });
 
