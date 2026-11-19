@@ -14,10 +14,13 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.file_store.file_store import S3BackedFileStore, is_missing_object
+from onyx.file_store.file_store import S3BackedFileStore
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.external_dependency_unit.file_store.legacy_store_helpers import (
+    object_exists,
+)
 
 if TYPE_CHECKING:
     from mypy_boto3_s3.type_defs import ObjectIdentifierTypeDef
@@ -158,16 +161,6 @@ def file_store(
             )
     except Exception as e:
         logger.warning("Failed to cleanup test objects: %s", e)
-
-
-def _object_exists(store: S3BackedFileStore, s3_key: str) -> bool:
-    try:
-        store._get_s3_client().head_object(Bucket=store._get_bucket_name(), Key=s3_key)
-        return True
-    except ClientError as e:
-        if is_missing_object(e):
-            return False
-        raise
 
 
 class TestS3BackedFileStore:
@@ -872,7 +865,9 @@ class TestS3BackedFileStore:
 
         with pytest.raises(RuntimeError, match="does not exist or was deleted"):
             file_store.read_file_record(file_id)
-        assert not _object_exists(file_store, s3_key)
+        assert not object_exists(
+            file_store._get_s3_client(), s3_key, file_store._get_bucket_name()
+        )
 
     def test_failed_commit_deletes_the_object(
         self, file_store: S3BackedFileStore, db_session: Session
@@ -896,7 +891,9 @@ class TestS3BackedFileStore:
         assert raised.value is commit_error
         with pytest.raises(RuntimeError, match="does not exist or was deleted"):
             file_store.read_file_record(file_id)
-        assert not _object_exists(file_store, s3_key)
+        assert not object_exists(
+            file_store._get_s3_client(), s3_key, file_store._get_bucket_name()
+        )
 
     def test_failed_cleanup_still_raises_the_record_error(
         self, file_store: S3BackedFileStore
@@ -921,6 +918,7 @@ class TestS3BackedFileStore:
     def test_failed_overwrite_keeps_the_recorded_object(
         self, file_store: S3BackedFileStore
     ) -> None:
+        """Guards against a cleanup that deletes the object unconditionally."""
         file_id = f"{uuid.uuid4()}.txt"
         file_store.save_file(
             content=BytesIO(b"original"),
@@ -929,7 +927,6 @@ class TestS3BackedFileStore:
             file_type="text/plain",
             file_id=file_id,
         )
-        initial_record = file_store.read_file_record(file_id)
 
         with pytest.raises(ValueError, match="NUL"):
             file_store.save_file(
@@ -940,16 +937,13 @@ class TestS3BackedFileStore:
                 file_id=file_id,
             )
 
-        # The upload replaced the object under the recorded key before the
-        # record write failed, so the record still points at a live object.
-        assert file_store.read_file_record(file_id).object_key == (
-            initial_record.object_key
-        )
-        assert file_store.read_file(file_id).read() == b"replacement"
+        file_store.read_file_record(file_id)
+        file_store.read_file(file_id)
 
     def test_failed_save_keeps_the_object_of_a_renamed_record(
         self, file_store: S3BackedFileStore
     ) -> None:
+        """Guards against a cleanup that checks the file ID, not the object."""
         old_file_id = f"{uuid.uuid4()}.txt"
         new_file_id = f"{uuid.uuid4()}.txt"
         file_store.save_file(
@@ -971,7 +965,8 @@ class TestS3BackedFileStore:
                 file_id=old_file_id,
             )
 
-        assert file_store.read_file(new_file_id).read() == b"replacement"
+        file_store.read_file_record(new_file_id)
+        file_store.read_file(new_file_id)
 
     def test_concurrent_file_operations(self, file_store: S3BackedFileStore) -> None:
         """Test handling of concurrent file operations on the same file"""

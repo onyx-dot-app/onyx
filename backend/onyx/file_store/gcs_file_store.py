@@ -31,7 +31,6 @@ from onyx.db.file_record import (
     get_filerecord_by_file_id_optional,
     get_filerecord_by_prefix,
     rename_filerecord,
-    upsert_filerecord,
 )
 from onyx.db.models import FileRecord
 from onyx.file_store.file_store import (
@@ -39,8 +38,8 @@ from onyx.file_store.file_store import (
     PresignableFileStore,
     PresignedUrlsNotSupportedError,
     content_byte_size,
-    object_has_file_record,
     presign_expiry,
+    record_uploaded_object,
 )
 from onyx.file_store.models import (
     PendingPresignedUpload,
@@ -236,34 +235,18 @@ class GCSBackedFileStore(PresignableFileStore):
 
         blob.upload_from_string(file_content, content_type=file_type)
 
-        try:
-            with get_session_with_current_tenant_if_none(db_session) as db_session:
-                upsert_filerecord(
-                    file_id=file_id,
-                    display_name=display_name or file_id,
-                    file_origin=file_origin,
-                    file_type=file_type,
-                    bucket_name=self._bucket_name,
-                    object_key=object_key,
-                    db_session=db_session,
-                    file_metadata=file_metadata,
-                    file_size=content_byte_size(file_content),
-                )
-                db_session.commit()
-        except Exception:
-            try:
-                if not object_has_file_record(self._bucket_name, object_key):
-                    blob.delete()
-            except Exception:
-                logger.warning(
-                    "Failed to clean up orphaned GCS blob %s/%s "
-                    "after DB persistence failure for file %s",
-                    self._bucket_name,
-                    object_key,
-                    file_id,
-                    exc_info=True,
-                )
-            raise
+        record_uploaded_object(
+            file_id=file_id,
+            display_name=display_name,
+            file_origin=file_origin,
+            file_type=file_type,
+            file_metadata=file_metadata,
+            file_size=content_byte_size(file_content),
+            bucket_name=self._bucket_name,
+            object_key=object_key,
+            db_session=db_session,
+            delete_object=blob.delete,
+        )
 
         return file_id
 
