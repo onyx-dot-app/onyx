@@ -135,8 +135,7 @@ def _placement(packet: dict[str, Any]) -> tuple[int, int, int | None]:
 def test_research_reasoning_precedes_search(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
-    """A research child that thinks before it searches places the search one
-    sub-turn after the model reasoning, in the stream and in the saved tool call."""
+    """One model step emits separate reasoning and search sections."""
     # internal_search is only offered when a non-default connector exists.
     CCPairManager.create_from_scratch(
         source=DocumentSource.INGESTION_API,
@@ -206,7 +205,8 @@ def test_research_reasoning_precedes_search(
             )
         )
         assert search_call is not None
-        assert search_call.turn_number == reasoning_sub_turn + 1
+        # Both sections came from the first model step.
+        assert search_call.turn_number == 0
         steps = read_response_steps(child_response)
         assert steps[0].message.thinking == _REASONING
         assert steps[0].message.tool_calls[0].id == _SEARCH_CALL_ID
