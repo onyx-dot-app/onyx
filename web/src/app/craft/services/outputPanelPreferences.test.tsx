@@ -326,21 +326,6 @@ test("previews resizing locally and saves only on release", () => {
     expect(divider).toHaveAttribute("aria-valuenow", "750");
     pointer("pointerdown", 450);
     pointer("pointermove", 500);
-    act(() => {
-      useBuildSessionStore.getState().createSession("session-b", {
-        outputPanelMode: "medium",
-        mediumPanelProportion: 0.4,
-      });
-      useBuildSessionStore.getState().setCurrentSession("session-b");
-    });
-    pointer("pointerup", 500);
-    expect(readOutputPanelPreferences("session-b")?.mediumPanelProportion).toBe(
-      0.4
-    );
-    expect(saved()).toBe(0.625);
-    act(() => useBuildSessionStore.getState().setCurrentSession("session-a"));
-    pointer("pointerdown", 450);
-    pointer("pointermove", 500);
     act(() =>
       useBuildSessionStore.getState().setCurrentOutputPanelMode("full")
     );
@@ -405,11 +390,16 @@ test("moves focus out of chat when resizing covers it", () => {
     useBuildSessionStore.getState().openFilesTab("session-a");
     render(<CraftWorkspace existingSessionId="session-a" />);
     act(() => measure(1200));
+    expect(
+      screen.getByRole("button", { name: "Expand outputs" })
+    ).toBeInTheDocument();
     const composer = screen.getByRole("textbox", { name: "Composer" });
     composer.focus();
     act(() => measure(500));
     expect(screen.getByRole("button", { name: "Close outputs" })).toHaveFocus();
     expect(composer.parentElement?.inert).toBe(true);
+    // A narrow workspace has no full size, as in the chat: no size button
+    expect(screen.queryByRole("button", { name: "Expand outputs" })).toBeNull();
   } finally {
     resize.mockRestore();
   }

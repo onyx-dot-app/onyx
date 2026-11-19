@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useRef, type ReactNode, type Ref } from "react";
+import { useRef } from "react";
 import { useInView } from "motion/react";
 import { useTranslations } from "next-intl";
-import UnseenMarker from "@/app/craft/components/UnseenMarker";
-import { Button, SelectCard, Text } from "@opal/components";
+import { SelectCard, Text } from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import type { RichStr } from "@opal/types";
-import { Hoverable } from "@opal/core";
 import { cn } from "@opal/utils";
-import { SvgDownloadCloud, SvgFolder, SvgGlobe } from "@opal/icons";
+import { SvgFolder, SvgGlobe } from "@opal/icons";
+import {
+  OutputImageThumbnail,
+  OutputTileFrame,
+  OutputUnseenMarker,
+} from "@/sections/output-panel/OutputTile";
 import { MarkdownContent } from "@/app/craft/components/output-panel/MarkdownFilePreview";
 import { getFileIcon } from "@/lib/utils";
 import { useFilePreview } from "@/lib/build/hooks";
@@ -126,26 +129,6 @@ export function OutputTile({
   );
 }
 
-function OutputImageThumbnail({
-  src,
-  fallback,
-}: {
-  src: string;
-  fallback: ReactNode;
-}) {
-  const [failed, setFailed] = useState(false);
-  if (failed) return fallback;
-  return (
-    // Sandbox images are authenticated data URLs, not public Next.js assets.
-    <img
-      src={src}
-      alt=""
-      onError={() => setFailed(true)}
-      className="h-full w-full object-contain"
-    />
-  );
-}
-
 export function OutputFolderTile({
   name,
   onOpen,
@@ -244,87 +227,4 @@ export function OutputUnavailableTile({
       }
     />
   );
-}
-
-interface OutputTileFrameProps {
-  ref?: Ref<HTMLDivElement>;
-  label: string;
-  name: string | RichStr;
-  preview: ReactNode;
-  onOpen?: () => void;
-  onDownload?: () => void;
-  isUnseen?: boolean;
-}
-
-function OutputTileFrame({
-  ref,
-  label,
-  name,
-  preview,
-  onOpen,
-  onDownload,
-  isUnseen = false,
-}: OutputTileFrameProps) {
-  const t = useTranslations("craft.filesTab");
-  return (
-    <div className="relative">
-      <Hoverable.Root group="output-tile">
-        <SelectCard
-          ref={ref}
-          role={onOpen ? "button" : "group"}
-          disabled={!onOpen}
-          aria-label={label}
-          state="filled"
-          border="none"
-          padding={2}
-          rounding={3}
-          onClick={onOpen}
-        >
-          <div className="relative flex min-w-0 flex-col gap-1.5">
-            <div
-              className="flex aspect-[3/2] min-h-0 items-center justify-center overflow-hidden rounded-md bg-background-neutral-03"
-              aria-hidden={onOpen ? true : undefined}
-            >
-              {preview}
-            </div>
-            {isUnseen && (
-              <OutputUnseenMarker className="absolute end-2 top-2" />
-            )}
-            <div className="min-w-0 pe-7">
-              <Text
-                font="secondary-body"
-                color="text-04"
-                maxLines={1}
-                as="p"
-                wordWrap="wrap-anywhere"
-              >
-                {name}
-              </Text>
-            </div>
-          </div>
-        </SelectCard>
-        {onDownload && (
-          <div className="absolute end-2 bottom-1">
-            <Hoverable.Item group="output-tile" variant="appear-on-hover">
-              <Button
-                icon={SvgDownloadCloud}
-                prominence="tertiary"
-                size="xs"
-                aria-label={t("download.label")}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDownload();
-                }}
-              />
-            </Hoverable.Item>
-          </div>
-        )}
-      </Hoverable.Root>
-    </div>
-  );
-}
-
-function OutputUnseenMarker({ className }: { className: string }) {
-  const t = useTranslations("craft.outputsTab");
-  return <UnseenMarker label={t("unseen")} className={className} />;
 }

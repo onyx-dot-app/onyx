@@ -168,6 +168,8 @@ export interface MockPublishedFile {
   name: string;
   title: string | null;
   path: string;
+  // The path the backend shows, relative to the chat's working directory
+  displayPath: string;
   size: number;
   mimeType: string;
 }
@@ -196,6 +198,7 @@ export function publishFilesPackets(
           name: file.name,
           title: file.title,
           path: file.path,
+          display_path: file.displayPath,
           size: file.size,
           mime_type: file.mimeType,
         })),

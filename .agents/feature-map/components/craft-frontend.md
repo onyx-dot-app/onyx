@@ -143,6 +143,33 @@ open panel marks the active file's card as viewed.
 keyed by path, inventory revision and an explicit reload counter.
 `web/src/app/craft/components/OutputPanel.tsx` keeps a few recent file viewers
 mounted but hidden and `inert`, so switching tabs does not fetch them again.
+The panel's frame, tab strip, URL bar, home and tiles are presentational
+parts in `web/src/sections/output-panel/`, which the chat's right panel also
+uses ([[chat-frontend]]): `OutputPanelLayout`, `PanelTabStrip`
+(`web/src/app/craft/components/output-panel/ResourceTabStrip.tsx` wraps it
+with Craft's tab kinds and "+" menu), `PanelUrlBar`
+(`web/src/app/craft/components/output-panel/UrlBar.tsx` adds Craft's
+reload, upload, download, export and share actions), `WorkspaceHome`, and
+`OutputTileFrame`, `OutputTileGrid` and `OutputImageThumbnail`
+(`web/src/sections/output-panel/OutputTile.tsx`; Craft's tile variants stay in
+`web/src/app/craft/components/output-panel/OutputTile.tsx`). Both panels
+also share the resize and full screen code:
+`web/src/sections/output-panel/PanelResize.tsx`
+(`useOutputPanelWorkspace` measures the workspace, runs the edge drag, arrow
+keys and double-click reset, makes the covered page inert after it moves
+focus out, and restores a full panel on Escape in the capture phase, so that
+Escape leaves full screen before it stops a run; also `PanelResizeHandle`
+and `PanelSizeButton`, which neither panel shows on a narrow workspace).
+The chat's panel measures only while open; Craft keeps measuring while
+closed (`measureWhileClosed`), because its layout waits for the width.
+The width rules are in `web/src/lib/outputPanel/layout.ts`
+(the panel modes, the minimum chat and panel widths, and when the panel
+covers the page). `web/src/app/craft/components/CraftWorkspace.tsx` uses
+them. A change to any of these parts changes both panels. The tab rules
+(open, close by recent use, reorder, and the five most recent file viewers
+that stay mounted) are in `web/src/lib/outputPanel/tabs.ts`, and session storage of panel preferences
+is in `web/src/lib/outputPanel/preferences.ts`; Craft and the chat share
+both.
 
 **Transcript timeline.** `BuildMessageList` splits a turn's reducer entries
 into rail blocks (consecutive tool calls and thinking) and inline items

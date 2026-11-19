@@ -11668,9 +11668,6 @@
       "sessionNotFound": {
         "description": "Diese Chat-Sitzung existiert nicht oder wurde gelöscht.",
         "title": "Chat nicht gefunden"
-      },
-      "sourcesModal": {
-        "title": "Quellen"
       }
     },
     "appChrome": {
@@ -13288,12 +13285,49 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "Aktualisierte Version · {details}"
-        },
         "preview": {
           "ariaLabel": "Vorschau von {name}"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "Vorschau von {name}"
+        }
+      },
+      "openButton": {
+        "label": "Dateien",
+        "tooltip": "Veröffentlichte Dateien anzeigen"
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "Dateien",
+        "description": "Dateien, die das Modell in diesem Chat veröffentlicht hat",
+        "tile": {
+          "ariaLabel": "{name} öffnen"
+        },
+        "search": {
+          "placeholder": "Dateien durchsuchen",
+          "empty": "Keine Dateien entsprechen der Suche"
+        }
+      },
+      "fileTab": {
+        "earlierVersion": "<isolate>{name}</isolate> (frühere Version)"
+      },
+      "sourcesTab": {
+        "label": "Quellen"
+      },
+      "closeButton": {
+        "label": "Bereich schließen"
+      },
+      "expandButton": {
+        "label": "Bereich erweitern"
+      },
+      "restoreButton": {
+        "label": "Bereich wiederherstellen"
+      },
+      "resizeHandle": {
+        "label": "Bereichsgröße ändern"
       }
     }
   },
@@ -14914,18 +14948,6 @@
       "browser": {
         "label": "Apps"
       },
-      "list": {
-        "label": "Ausgabe-Tabs"
-      },
-      "close": {
-        "label": "{name} schließen"
-      },
-      "reordered": {
-        "label": "Tab auf Position {position} von {count} verschoben"
-      },
-      "open": {
-        "label": "Tab öffnen"
-      },
       "outputs": {
         "label": "Ergebnisse"
       }
@@ -15051,8 +15073,7 @@
       "scope": {
         "turn": "Ausgaben aus Runde {turn, number}",
         "all": "Alle Ausgaben"
-      },
-      "unseen": "Neu oder aktualisiert"
+      }
     },
     "turnOutputs": {
       "showAll": "Alle {count} Ergebnisse anzeigen",
@@ -15121,6 +15142,28 @@
       "description": "Diese Sitzung kann {names} nicht verwenden. Ihre Skills müssen in {maxSize} und {maxFiles, number} Dateien passen. Deaktivieren Sie Skills, die Sie nicht brauchen, um Platz zu schaffen.",
       "manage": "Skills verwalten",
       "dismiss": "Schließen"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "Ausgabe-Tabs"
+      },
+      "close": {
+        "label": "{name} schließen"
+      },
+      "reordered": {
+        "label": "Tab auf Position {position} von {count} verschoben"
+      },
+      "open": {
+        "label": "Tab öffnen"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "Herunterladen"
+      },
+      "unseen": "Neu oder aktualisiert"
     }
   },
   "knowledge": {

@@ -307,6 +307,7 @@ const ChatScrollContainer = React.memo(
         if (!container) return;
 
         let rafId: number | null = null;
+        let width = container.clientWidth;
 
         const onContentChange = () => {
           if (rafId) return;
@@ -315,6 +316,10 @@ const ChatScrollContainer = React.memo(
 
             // Capture whether we were at bottom BEFORE content changed
             const wasAtBottom = isAtBottomRef.current;
+            // A width change, such as a side panel opening or resizing,
+            // reflows the messages: a reader at the bottom stays there
+            const resized = container.clientWidth !== width;
+            width = container.clientWidth;
 
             // Auto-scroll: follow content if we were at bottom.
             // Skip instant auto-scroll during DynamicBottomSpacer's smooth
@@ -323,6 +328,7 @@ const ChatScrollContainer = React.memo(
             // scroll would cut it short.
             const following =
               autoScrollRef.current ||
+              resized ||
               performance.now() < followOpeningUntilRef.current;
             if (
               following &&

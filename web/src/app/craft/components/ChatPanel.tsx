@@ -69,6 +69,7 @@ import { Button, MessageCard } from "@opal/components";
 import { useBuildContext } from "@/app/craft/contexts/BuildContext";
 import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
+import { OUTPUT_PANEL_HEADER_CONTROL_WIDTH } from "@/lib/outputPanel/layout";
 import {
   motion,
   AnimatePresence,
@@ -108,7 +109,7 @@ function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
  */
 function ChatPanelContent({
   existingSessionId,
-  headerControlWidth = 76,
+  headerControlWidth = OUTPUT_PANEL_HEADER_CONTROL_WIDTH,
   animateLayout = true,
 }: BuildChatPanelProps) {
   const t = useTranslations("craft.chatPanel");

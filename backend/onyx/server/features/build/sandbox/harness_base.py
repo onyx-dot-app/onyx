@@ -43,10 +43,8 @@ from onyx.server.features.build.sandbox.models import (
     ExecEvent,
     HarnessSandboxRef,
     SandboxPathInfo,
+    session_workspace,
 )
-
-# Parent of each chat session's working directory in the sandbox.
-SESSION_WORKSPACE_ROOT = "/home/onyx/workspaces"
 
 # Parent of the files that Onyx writes outside every session directory (for
 # example large tool results). No session save keeps them; they go when the
@@ -75,10 +73,6 @@ EXEC_DEFAULT_ENV: dict[str, str] = {
 }
 
 INTERRUPT_CHAR = "\x03"
-
-
-def session_workspace(session_id: UUID) -> str:
-    return f"{SESSION_WORKSPACE_ROOT}/{session_id}"
 
 
 def session_tool_results(session_id: UUID) -> str:

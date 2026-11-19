@@ -11668,9 +11668,6 @@
       "sessionNotFound": {
         "description": "Esta sessão de chat não existe ou foi excluída.",
         "title": "Chat não encontrado"
-      },
-      "sourcesModal": {
-        "title": "Fontes"
       }
     },
     "appChrome": {
@@ -13288,12 +13285,49 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "Versão atualizada · {details}"
-        },
         "preview": {
           "ariaLabel": "Visualizar {name}"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "Pré-visualização de {name}"
+        }
+      },
+      "openButton": {
+        "label": "Arquivos",
+        "tooltip": "Mostrar arquivos publicados"
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "Arquivos",
+        "description": "Arquivos que o modelo publicou neste chat",
+        "tile": {
+          "ariaLabel": "Abrir {name}"
+        },
+        "search": {
+          "placeholder": "Pesquisar arquivos",
+          "empty": "Nenhum arquivo corresponde à pesquisa"
+        }
+      },
+      "fileTab": {
+        "earlierVersion": "<isolate>{name}</isolate> (versão anterior)"
+      },
+      "sourcesTab": {
+        "label": "Fontes"
+      },
+      "closeButton": {
+        "label": "Fechar painel"
+      },
+      "expandButton": {
+        "label": "Expandir painel"
+      },
+      "restoreButton": {
+        "label": "Restaurar painel"
+      },
+      "resizeHandle": {
+        "label": "Redimensionar painel"
       }
     }
   },
@@ -14914,18 +14948,6 @@
       "browser": {
         "label": "Apps"
       },
-      "list": {
-        "label": "Abas de resultados"
-      },
-      "close": {
-        "label": "Fechar {name}"
-      },
-      "reordered": {
-        "label": "Aba movida para a posição {position} de {count}"
-      },
-      "open": {
-        "label": "Abrir uma aba"
-      },
       "outputs": {
         "label": "Resultados"
       }
@@ -15051,8 +15073,7 @@
       "scope": {
         "turn": "Resultados do turno {turn, number}",
         "all": "Todos os resultados"
-      },
-      "unseen": "Novo ou atualizado"
+      }
     },
     "turnOutputs": {
       "showAll": "Ver todos os {count} resultados",
@@ -15121,6 +15142,28 @@
       "description": "Esta sessão não pode usar {names}. Seus skills precisam caber em {maxSize} e {maxFiles, number} arquivos. Desative os skills de que você não precisa para liberar espaço.",
       "manage": "Gerenciar skills",
       "dismiss": "Dispensar"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "Abas de resultados"
+      },
+      "close": {
+        "label": "Fechar {name}"
+      },
+      "reordered": {
+        "label": "Aba movida para a posição {position} de {count}"
+      },
+      "open": {
+        "label": "Abrir uma aba"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "Baixar"
+      },
+      "unseen": "Novo ou atualizado"
     }
   },
   "knowledge": {

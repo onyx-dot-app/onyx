@@ -65,13 +65,13 @@ from onyx.server.features.build.sandbox.harness_base import (
     collect_exec_result,
     session_relative_path,
     session_tool_results,
-    session_workspace,
 )
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     ExecEvent,
     ExecOutputDelta,
     HarnessSandboxRef,
+    session_workspace,
 )
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,

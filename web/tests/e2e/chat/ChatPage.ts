@@ -33,6 +33,9 @@ export class ChatPage {
   readonly scrollToBottomButton: Locator;
   readonly usageLimitBanner: Locator;
   readonly errorBanners: Locator;
+  /** The header button that opens the chat's published files panel. */
+  readonly publishedFilesButton: Locator;
+  readonly publishedFilesPanel: Locator;
 
   // Model picker: the "Add Model" button, then one pill per selected model
   readonly modelSelector: Locator;
@@ -63,6 +66,13 @@ export class ChatPage {
     });
     this.usageLimitBanner = page.getByText(/you've reached the usage budget/i);
     this.errorBanners = page.getByTestId("chat-error-banner");
+    this.publishedFilesButton = page.getByRole("button", {
+      name: "Files",
+      exact: true,
+    });
+    this.publishedFilesPanel = page.getByRole("complementary", {
+      name: "Files",
+    });
     this.modelSelector = page.getByTestId("model-selector");
     this.modelPills = this.modelSelector.locator(
       "button:not([aria-label='Add Model'])"
@@ -124,18 +134,74 @@ export class ChatPage {
     await expect(download).toHaveAttribute("download", fileName);
   }
 
-  /** Opens a published file's preview and checks that it shows the text. */
+  /** A published file's preview in the Files panel, by its title or name. */
+  publishedFilePreview(title: string): Locator {
+    return this.publishedFilesPanel.getByRole("region", {
+      name: `Preview of ${title}`,
+    });
+  }
+
+  /** A tab of the right panel's tab strip, by its label. */
+  rightPanelTab(label: string): Locator {
+    return this.page.getByRole("tab", { name: label, exact: true });
+  }
+
+  /**
+   * Opens a reply card's file in the right panel, in its own tab, and checks
+   * that the preview shows the text. Escape closes the file's tab, back on
+   * the Files list, then closes the panel.
+   */
   async expectPublishedFilePreview(
     title: string,
     text: string,
     index = 0
   ): Promise<void> {
     await this.publishedFileCard(title, index).click();
-    const preview = this.page.getByRole("dialog");
+    const preview = this.publishedFilePreview(title);
     await expect(preview).toContainText(text);
+    await expect(this.rightPanelTab(title)).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
     await expect(preview.getByRole("link", { name: "Download" })).toBeVisible();
+    await expect(this.page.getByRole("dialog")).toHaveCount(0);
     await this.page.keyboard.press("Escape");
     await expect(preview).toBeHidden();
+    await expect(this.publishedFilesPanelCards().first()).toBeVisible();
+    await this.page.keyboard.press("Escape");
+    await expect(this.publishedFilesPanel).toBeHidden();
+  }
+
+  /** The tiles of the right panel's Files list, from the top. */
+  publishedFilesPanelCards(): Locator {
+    return this.publishedFilesPanel.getByRole("button", { name: /^Open / });
+  }
+
+  /** Checks a tile of the Files list: the name it shows. */
+  async expectPublishedFilesPanelFile(
+    index: number,
+    { text }: { text: string }
+  ): Promise<void> {
+    await expect(this.publishedFilesPanelCards().nth(index)).toContainText(
+      text
+    );
+  }
+
+  /**
+   * Opens a Files tile's preview in its own tab, checks its text, and closes
+   * the file with Escape, back on the tile.
+   */
+  async expectPublishedFilesPanelPreview(
+    index: number,
+    title: string,
+    text: string
+  ): Promise<void> {
+    await this.publishedFilesPanelCards().nth(index).click();
+    const preview = this.publishedFilePreview(title);
+    await expect(preview).toContainText(text);
+    await this.page.keyboard.press("Escape");
+    await expect(preview).toBeHidden();
+    await expect(this.publishedFilesPanelCards().nth(index)).toBeFocused();
   }
 
   answerText(text: string, index = 0): Locator {

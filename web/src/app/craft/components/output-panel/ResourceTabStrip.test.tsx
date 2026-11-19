@@ -38,6 +38,17 @@ test("arrow navigation selects and focuses a tab while Alt reorders it", () => {
   expect(callbacks.onReorder).toHaveBeenCalledWith("file:outputs/notes.md", 2);
 });
 
+test("Alt+arrow past the strip's end moves nothing and announces nothing", () => {
+  const callbacks = props();
+  render(<ResourceTabStrip {...callbacks} />);
+  fireEvent.keyDown(screen.getByRole("tab", { name: "All Files" }), {
+    key: "ArrowLeft",
+    altKey: true,
+  });
+  expect(callbacks.onReorder).not.toHaveBeenCalled();
+  expect(screen.queryByText(/^Tab moved to position/)).toBeNull();
+});
+
 test("closing the last tab focuses the plus action", async () => {
   const user = setupUser();
   const callbacks = props();

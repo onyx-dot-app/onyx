@@ -7,6 +7,8 @@ import type { ChatHistoryPage } from "@/lib/chat/types";
 
 /** Messages of the current branch that one page of a chat holds. */
 export const CHAT_PAGE_SIZE = 20;
+// A page load that takes longer fails, so a stalled request ends
+export const CHAT_PAGE_TIMEOUT_MS = 10_000;
 
 /**
  * Keep loaded history when the latest page attaches to the selected branch.
@@ -154,36 +156,58 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
   }
 }
 
+interface LatestPageReload {
+  // Also replace the chat's message tree with the page
+  replacesMessages: boolean;
+  // The branch switch that loads the page; a newer switch discards it
+  switchId?: number;
+}
+
 /**
- * Replaces the chat's message tree with the last page of its current branch,
- * for example after a switch to a branch whose messages are not loaded. Does
- * nothing if the latest message changed while the page loaded.
+ * Loads the last page of the chat's current branch and takes its published
+ * files. With `replacesMessages`, it also replaces the chat's message tree
+ * with the page, for example after a switch to a branch whose messages are
+ * not loaded. Does nothing if the latest message changed while the page
+ * loaded.
  */
-export async function reloadLatestChatPage(sessionId: string): Promise<void> {
+export async function reloadLatestChatPage(
+  sessionId: string,
+  { replacesMessages, switchId }: LatestPageReload = { replacesMessages: true }
+): Promise<void> {
   const tailAtStart = latestMessageNodeId(sessionId);
   try {
-    const response = await fetch(chatPageUrl(sessionId));
+    const response = await fetch(chatPageUrl(sessionId), {
+      signal: AbortSignal.timeout(CHAT_PAGE_TIMEOUT_MS),
+    });
     if (!response.ok) {
       throw new Error(`Failed to reload the chat: ${response.status}`);
     }
     const page: BackendChatSession = await response.json();
     const store = useChatSessionStore.getState();
+    const session = store.sessions.get(sessionId);
     // The latest message changed meanwhile (for example, a message was
     // sent): keep the chat. An older page merged above does not count.
     if (
-      !store.sessions.has(sessionId) ||
-      latestMessageNodeId(sessionId) !== tailAtStart
+      !session ||
+      latestMessageNodeId(sessionId) !== tailAtStart ||
+      (switchId !== undefined && session.latestPageSwitch !== switchId)
     ) {
       return;
     }
 
+    if (!replacesMessages) {
+      // Only the files: the shown approvals come from the load that shows them
+      store.updateSessionData(sessionId, {
+        branchPublishedFiles: page.published_files ?? [],
+      });
+      return;
+    }
     store.updateSessionMessageTree(
       sessionId,
       processRawChatHistory(page.messages, page.packets)
     );
-    store.updateSessionData(sessionId, {
+    store.applyLoadedSession(sessionId, page, {
       hasOlderMessages: page.has_older_messages ?? false,
-      approvalsVersion: page.approvals_version,
     });
   } catch (error) {
     console.error("Failed to reload the chat", { sessionId, error });
@@ -196,4 +220,47 @@ function latestMessageNodeId(sessionId: string): number | undefined {
     .getState()
     .sessions.get(sessionId)?.messageTree;
   return tree ? getLatestMessageChain(tree).at(-1)?.nodeId : undefined;
+}
+
+// Counts branch switches, so only the newest one applies and ends its page.
+let branchSwitchCount = 0;
+
+/**
+ * Follows a branch switch: waits for the server to save the selected branch,
+ * then loads its latest page. The page gives the branch's published files,
+ * with those of background subagents, which no loaded message holds. When the
+ * branch's messages are not loaded (`reloadsPage`), the page also replaces
+ * them. Until then the session's `latestPageSwitch` names this switch, so the
+ * chat knows the branch's published files are not known yet; a newer switch
+ * discards this one's page. Returns whether the server saved the branch.
+ */
+export async function loadSelectedBranch(
+  sessionId: string,
+  saved: Promise<Response>,
+  reloadsPage: boolean
+): Promise<boolean> {
+  const switchId = ++branchSwitchCount;
+  useChatSessionStore
+    .getState()
+    .updateSessionData(sessionId, { latestPageSwitch: switchId });
+  try {
+    const response = await saved;
+    if (!response.ok) {
+      console.error("Failed to save the selected branch", {
+        sessionId,
+        status: response.status,
+      });
+      return false;
+    }
+    await reloadLatestChatPage(sessionId, {
+      replacesMessages: reloadsPage,
+      switchId,
+    });
+    return true;
+  } finally {
+    const store = useChatSessionStore.getState();
+    if (store.sessions.get(sessionId)?.latestPageSwitch === switchId) {
+      store.updateSessionData(sessionId, { latestPageSwitch: null });
+    }
+  }
 }

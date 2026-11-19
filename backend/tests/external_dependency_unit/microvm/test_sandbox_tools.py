@@ -18,7 +18,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import Request
 from pydantic import BaseModel, ConfigDict, JsonValue
-from sqlalchemy import select, update
+from sqlalchemy import Text, cast, select, update
 from sqlalchemy.orm import Session
 
 from onyx.access.access import user_can_access_chat_file
@@ -44,6 +44,8 @@ from onyx.chat.stop_signal_checker import request_stop
 from onyx.configs.constants import (
     CHAT_SESSION_ID_FILE_METADATA_KEY,
     DEFAULT_PERSONA_ID,
+    PUBLISHED_FILE_PATH_METADATA_KEY,
+    PUBLISHED_FILE_TITLE_METADATA_KEY,
     DocumentSource,
     FileOrigin,
     MessageType,
@@ -132,13 +134,13 @@ from onyx.server.features.build.sandbox.harness_base import (
     ONYX_VM_FILES_ROOT,
     TOOL_RESULTS_ROOT,
     ExecSessionNotFoundError,
-    session_workspace,
 )
 from onyx.server.features.build.sandbox.models import (
     ExecEvent,
     ExecOutputDelta,
     HarnessSandboxRef,
     SandboxPathInfo,
+    session_workspace,
 )
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.chat_backend import (
@@ -2333,10 +2335,30 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
         record = store.read_file_record(file.file_id)
         assert record.file_origin == FileOrigin.CHAT_ARTIFACT
         assert record.display_name == file.name
+        # The chat's file list reads the path and title from the record.
         assert record.file_metadata == {
-            CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat.chat_session_id)
+            CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat.chat_session_id),
+            PUBLISHED_FILE_PATH_METADATA_KEY: file.path,
+            **(
+                {PUBLISHED_FILE_TITLE_METADATA_KEY: file.title}
+                if file.title is not None
+                else {}
+            ),
         }
         assert store.read_file(file.file_id).read() == data
+    # Packets carry the path to show; the saved details do not store it.
+    assert [file.display_path for file in published] == [
+        "out/report.csv",
+        chart,
+        "out/report.csv",
+    ]
+    saved_results = db_session.scalars(
+        select(cast(ToolCallRecord.result, Text)).where(
+            ToolCallRecord.chat_session_id == chat.chat_session_id
+        )
+    ).all()
+    assert any(published[0].file_id in saved for saved in saved_results)
+    assert not any("display_path" in saved for saved in saved_results)
     assert _answer_file_ids(db_session, chat.chat_session_id) == [
         file.file_id for file in published
     ]
@@ -2429,6 +2451,113 @@ def test_a_publish_that_fails_on_one_file_publishes_none(
     assert result.text.endswith(error)
     # The file that the call copied first is deleted again.
     assert _published_records(db_session, tools.ref.session_id) == []
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_a_paged_chat_load_lists_every_file_published_on_the_branch(
+    db_session: Session, sandbox: FirecrackerHarnessSandbox, chat: SandboxChat
+) -> None:
+    """A first answer publishes a report and a chart. A later answer's code
+    mode program publishes the report's path again. A load of only the latest
+    message lists all three, oldest first, each with its path and title."""
+    ref = chat.ref(db_session)
+    sandbox.write_file(ref, "report.md", b"# Draft\n")
+    sandbox.write_file(ref, "chart.svg", b"<svg/>")
+    chat.send(
+        ChatLLM(
+            [
+                tool_step(
+                    PublishFilesTool.NAME,
+                    "publish",
+                    {
+                        "files": [
+                            {"path": "report.md", "title": "Report"},
+                            {"path": "chart.svg"},
+                        ]
+                    },
+                ),
+                Delta(content="Done."),
+            ]
+        )
+    )
+    sandbox.write_file(ref, "report.md", b"# Final report\n")
+    parts = chat.send(
+        ChatLLM(
+            [
+                code_step(
+                    "code",
+                    "print(await tools.publish_files(files=[{'path': 'report.md'}]))\n",
+                ),
+                Delta(content="Done."),
+            ]
+        ),
+        code_mode=True,
+    )
+    [live_end] = [
+        obj
+        for obj in _sandbox_packets(parts)
+        if isinstance(obj, packets.PublishFilesEnd)
+    ]
+    # The path to show is relative to the chat's working directory.
+    assert [file.display_path for file in live_end.files] == ["report.md"]
+
+    db_session.expire_all()
+    first_answer, last_answer = db_session.scalars(
+        select(ChatMessage)
+        .where(
+            ChatMessage.chat_session_id == chat.chat_session_id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+        .order_by(ChatMessage.id)
+    ).all()
+    detail = get_chat_session(
+        session_id=chat.chat_session_id, limit=1, user=chat.user, db_session=db_session
+    )
+
+    assert first_answer.id not in {message.message_id for message in detail.messages}
+    workspace = session_workspace(chat.chat_session_id)
+    assert [
+        (file.name, file.title, file.path, file.size, file.mime_type, file.message_id)
+        for file in detail.published_files
+    ] == [
+        (
+            "report.md",
+            "Report",
+            f"{workspace}/report.md",
+            8,
+            "text/markdown",
+            first_answer.id,
+        ),
+        (
+            "chart.svg",
+            None,
+            f"{workspace}/chart.svg",
+            6,
+            "image/svg+xml",
+            first_answer.id,
+        ),
+        (
+            "report.md",
+            None,
+            f"{workspace}/report.md",
+            15,
+            "text/markdown",
+            last_answer.id,
+        ),
+    ]
+    assert [file.display_path for file in detail.published_files] == [
+        "report.md",
+        "chart.svg",
+        "report.md",
+    ]
+    assert [file.file_id for file in detail.published_files] == [
+        descriptor["id"]
+        for answer in (first_answer, last_answer)
+        for descriptor in answer.files or []
+    ]
+    delete_chat_session_by_id(
+        chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
+    )
 
 
 @pytest.mark.usefixtures("node", "initialize_file_store")

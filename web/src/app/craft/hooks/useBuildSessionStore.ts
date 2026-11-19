@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  closePanelTab,
+  movePanelTab,
+  openPanelTab,
+  panelTabHistory,
+} from "@/lib/outputPanel/tabs";
 import type { TextPartUpdate } from "@/app/craft/utils/packetTypes";
 
 import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
@@ -37,13 +43,13 @@ import {
   TodoListState,
   type ContextUsage,
   type PanelTab,
-  type OutputPanelMode,
   normalizePanelPath,
   panelTabId,
   type SubagentState,
   type SubagentStatus,
   type SubagentTurn,
 } from "@/app/craft/types/displayTypes";
+import type { OutputPanelMode } from "@/lib/outputPanel/layout";
 
 import { MAX_QUEUED_MESSAGES } from "@/app/app/types";
 
@@ -1121,17 +1127,6 @@ function compareOutputInventory(
   return { files, added, changed };
 }
 
-function panelTabHistory(
-  tabs: PanelTab[],
-  active: string | null,
-  history: readonly string[] = []
-): string[] {
-  const openIds = new Set(tabs.map(panelTabId));
-  return [...new Set(active ? [active, ...history] : history)].filter((id) =>
-    openIds.has(id)
-  );
-}
-
 function selectOutputTarget(
   session: Pick<BuildSessionData, "panelTabs" | "panelTabHistory">,
   target: PanelTab
@@ -1139,14 +1134,15 @@ function selectOutputTarget(
   BuildSessionData,
   "panelTabs" | "activePanelTabId" | "panelTabHistory"
 > {
-  const id = panelTabId(target);
-  const panelTabs = session.panelTabs.some((tab) => panelTabId(tab) === id)
-    ? session.panelTabs
-    : [...session.panelTabs, target];
+  const opened = openPanelTab(
+    { tabs: session.panelTabs, history: session.panelTabHistory ?? [] },
+    target,
+    panelTabId
+  );
   return {
-    activePanelTabId: id,
-    panelTabs,
-    panelTabHistory: panelTabHistory(panelTabs, id, session.panelTabHistory),
+    activePanelTabId: opened.activeId,
+    panelTabs: opened.tabs,
+    panelTabHistory: opened.history,
   };
 }
 
@@ -1517,7 +1513,8 @@ const createInitialSessionData = (
     panelTabHistory: panelTabHistory(
       panelTabs,
       activePanelTabId,
-      initialData.panelTabHistory
+      initialData.panelTabHistory ?? [],
+      panelTabId
     ),
   };
 };
@@ -3152,10 +3149,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       ? state.sessions.get(sessionId)?.panelTabs
       : state.noSessionPanelTabs;
     if (!tabs) return;
-    const tab = tabs.find((item) => panelTabId(item) === tabId);
-    if (!tab) return;
-    const panelTabs = tabs.filter((item) => panelTabId(item) !== tabId);
-    panelTabs.splice(Math.max(0, Math.min(panelTabs.length, index)), 0, tab);
+    if (!tabs.some((item) => panelTabId(item) === tabId)) return;
+    const panelTabs = movePanelTab(tabs, tabId, index, panelTabId);
     if (sessionId)
       state.updateSessionData(sessionId, {
         panelTabs,
@@ -3169,35 +3164,33 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     const session = sessionId ? state.sessions.get(sessionId) : undefined;
     if (sessionId && !session) return;
     const tabs = session?.panelTabs ?? state.noSessionPanelTabs;
-    const index = tabs.findIndex((tab) => panelTabId(tab) === tabId);
-    if (index < 0) return;
-    const panelTabs = tabs.filter((tab) => panelTabId(tab) !== tabId);
-    const active = session
-      ? session.activePanelTabId
-      : state.noSessionActivePanelTabId;
-    const history = panelTabHistory(
-      panelTabs,
-      null,
-      session?.panelTabHistory ?? state.noSessionPanelTabHistory
+    if (!tabs.some((tab) => panelTabId(tab) === tabId)) return;
+    const closed = closePanelTab(
+      {
+        tabs,
+        activeId: session
+          ? session.activePanelTabId
+          : state.noSessionActivePanelTabId,
+        history:
+          (session
+            ? session.panelTabHistory
+            : state.noSessionPanelTabHistory) ?? [],
+      },
+      tabId,
+      panelTabId
     );
-    const neighbor = panelTabs[Math.max(0, index - 1)];
-    const activePanelTabId =
-      active === tabId
-        ? (history[0] ?? (neighbor ? panelTabId(neighbor) : null))
-        : active;
-    const nextHistory = panelTabHistory(panelTabs, activePanelTabId, history);
     if (sessionId)
       state.updateSessionData(sessionId, {
-        panelTabs,
-        activePanelTabId,
-        panelTabHistory: nextHistory,
+        panelTabs: closed.tabs,
+        activePanelTabId: closed.activeId,
+        panelTabHistory: closed.history,
         outputSelectionLocked: true,
       });
     else
       set({
-        noSessionPanelTabs: panelTabs,
-        noSessionActivePanelTabId: activePanelTabId,
-        noSessionPanelTabHistory: nextHistory,
+        noSessionPanelTabs: closed.tabs,
+        noSessionActivePanelTabId: closed.activeId,
+        noSessionPanelTabHistory: closed.history,
       });
   },
 
@@ -3212,7 +3205,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           noSessionPanelTabHistory: panelTabHistory(
             state.noSessionPanelTabs,
             tabId,
-            state.noSessionPanelTabHistory
+            state.noSessionPanelTabHistory,
+            panelTabId
           ),
         }));
       return;

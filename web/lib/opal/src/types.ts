@@ -249,7 +249,8 @@ export interface RichStr {
 }
 
 /**
- * A branded wrapper marking React nodes as deliberate `Text` children.
+ * A branded wrapper marking React nodes as deliberate `Text` or `TextButton`
+ * children.
  *
  * Created via the `richNodes()` function. `Text` renders the inner nodes
  * verbatim; the brand exists so arbitrary JSX is still rejected at the type
@@ -259,8 +260,9 @@ export interface RichStr {
  * translated sentences embed inline components mid-sentence.
  *
  * Unlike `RichStr`, a `RichNodes` value cannot be reduced to a plain string,
- * so it is only accepted by `Text` children — never by `string | RichStr`
- * props, which must stay derivable for tooltips and aria labels.
+ * so it is only accepted by `Text` and `TextButton` children — never by
+ * `string | RichStr` props, which must stay derivable for tooltips and aria
+ * labels.
  */
 export interface RichNodes {
   readonly __brand: "RichNodes";

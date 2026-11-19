@@ -166,7 +166,11 @@ preview.
    that forgets the stamp creates an open file, and nothing fails. Save
    through `file_store/utils.py:save_chat_output_file`, which stamps the file
    and accepts only these origins. A new kind of chat output that every
-   reader of the chat may download needs its origin in the set.
+   reader of the chat may download needs its origin in the set. A
+   `CHAT_ARTIFACT` file must also get its VM path, and its title when the
+   model gave one, under `PUBLISHED_FILE_PATH_METADATA_KEY` and
+   `PUBLISHED_FILE_TITLE_METADATA_KEY` (`configs/constants.py`); the chat's
+   file list reads them, and leaves out a file without the path.
 3. `say-which-id` **Say which id you mean.** A new route or tool that accepts
    "a file id" must state whether it is a blob id or a `UserFile.id`. Pass a
    `UserFile.id` to `FileStore.read_file` and you get "not found" for a file

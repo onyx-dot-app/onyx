@@ -11668,9 +11668,6 @@
       "sessionNotFound": {
         "description": "This chat session doesn't exist or has been deleted.",
         "title": "Chat not found"
-      },
-      "sourcesModal": {
-        "title": "Sources"
       }
     },
     "appChrome": {
@@ -13288,12 +13285,49 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "Updated version · {details}"
-        },
         "preview": {
           "ariaLabel": "Preview {name}"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "Preview of {name}"
+        }
+      },
+      "openButton": {
+        "label": "Files",
+        "tooltip": "Show published files"
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "Files",
+        "description": "Files the model published in this chat",
+        "tile": {
+          "ariaLabel": "Open {name}"
+        },
+        "search": {
+          "placeholder": "Search files",
+          "empty": "No files match the search"
+        }
+      },
+      "fileTab": {
+        "earlierVersion": "<isolate>{name}</isolate> (earlier version)"
+      },
+      "sourcesTab": {
+        "label": "Sources"
+      },
+      "closeButton": {
+        "label": "Close panel"
+      },
+      "expandButton": {
+        "label": "Expand panel"
+      },
+      "restoreButton": {
+        "label": "Restore panel"
+      },
+      "resizeHandle": {
+        "label": "Resize panel"
       }
     }
   },
@@ -14914,18 +14948,6 @@
       "browser": {
         "label": "Apps"
       },
-      "list": {
-        "label": "Output tabs"
-      },
-      "close": {
-        "label": "Close {name}"
-      },
-      "reordered": {
-        "label": "Tab moved to position {position} of {count}"
-      },
-      "open": {
-        "label": "Open a tab"
-      },
       "outputs": {
         "label": "Outputs"
       }
@@ -15051,8 +15073,7 @@
       "scope": {
         "turn": "Turn {turn, number} outputs",
         "all": "All outputs"
-      },
-      "unseen": "New or updated"
+      }
     },
     "turnOutputs": {
       "showAll": "View all {count} outputs",
@@ -15121,6 +15142,28 @@
       "description": "This session cannot use {names}. Your skills must fit in {maxSize} and {maxFiles, number} files. Turn off skills you do not need to make room.",
       "manage": "Manage skills",
       "dismiss": "Dismiss"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "Output tabs"
+      },
+      "close": {
+        "label": "Close {name}"
+      },
+      "reordered": {
+        "label": "Tab moved to position {position} of {count}"
+      },
+      "open": {
+        "label": "Open a tab"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "Download"
+      },
+      "unseen": "New or updated"
     }
   },
   "knowledge": {

@@ -283,3 +283,59 @@ test.each([
     }
   }
 );
+
+test.each([
+  { case: "the chat narrows", width: 600, follows: true },
+  { case: "only the content grows", width: 800, follows: false },
+])(
+  "when an idle chat at the bottom reflows and $case, following is $follows",
+  async ({ width, follows }) => {
+    const frames: FrameRequestCallback[] = [];
+    const requestFrame = jest
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        frames.push(callback);
+        return frames.length;
+      });
+    let containerWidth = 800;
+    const clientWidth = jest
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockImplementation(() => containerWidth);
+    const view = render(
+      <ChatScrollContainer autoScroll={false}>{null}</ChatScrollContainer>
+    );
+    const container = screen.getByTestId("chat-scroll-container");
+    const end = container.firstElementChild?.lastElementChild;
+    if (!(end instanceof HTMLElement))
+      throw new Error("Missing content end marker");
+    let contentHeight = 1000;
+    Object.defineProperties(container, {
+      clientHeight: { get: () => 400 },
+      scrollHeight: { get: () => contentHeight },
+    });
+    Object.defineProperty(end, "offsetTop", { get: () => contentHeight });
+    const scrollTo = jest.fn();
+    container.scrollTo = scrollTo;
+    try {
+      // A side panel opens: the messages wrap into more lines
+      await act(async () => {
+        containerWidth = width;
+        contentHeight += 300;
+        end.before(document.createElement("div"));
+        await Promise.resolve();
+      });
+      act(() => frames.splice(0).forEach((callback) => callback(0)));
+
+      if (follows)
+        expect(scrollTo).toHaveBeenCalledWith({
+          top: 900,
+          behavior: "instant",
+        });
+      else expect(scrollTo).not.toHaveBeenCalled();
+    } finally {
+      view.unmount();
+      requestFrame.mockRestore();
+      clientWidth.mockRestore();
+    }
+  }
+);

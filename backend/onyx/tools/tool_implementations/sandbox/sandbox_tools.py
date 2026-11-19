@@ -45,13 +45,13 @@ from onyx.server.features.build.sandbox.harness_base import (
     HarnessSandboxError,
     SandboxPathError,
     session_relative_path,
-    session_workspace,
 )
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     ExecEvent,
     HarnessSandboxRef,
     SandboxPathInfo,
+    session_workspace,
 )
 from onyx.tools.interface import (
     Tool,
@@ -67,6 +67,7 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.sandbox.models import (
     PUBLISH_FILES_MAX_BYTES,
+    PUBLISH_FILES_MAX_TITLE_CHARS,
     ApplyPatchArguments,
     ApplyPatchFileChange,
     ApplyPatchResult,
@@ -100,6 +101,7 @@ from onyx.tools.tool_implementations.sandbox.patch import (
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.utils import cut_middle, output_chars
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_string
 
 logger = setup_logger()
 
@@ -746,6 +748,14 @@ class PublishFilesTool(_FileTool):
                     )
                     name = posixpath.basename(path)
                     mime_type = chat_output_file_type(name)
+                    # The file record's JSON metadata cannot hold NUL, and a
+                    # blank title is no title
+                    title = (
+                        sanitize_string(requested.title or "")
+                        .strip()[:PUBLISH_FILES_MAX_TITLE_CHARS]
+                        .rstrip()
+                        or None
+                    )
                     published.append(
                         PublishedFile(
                             file_id=save_chat_output_file(
@@ -754,9 +764,11 @@ class PublishFilesTool(_FileTool):
                                 file_type=mime_type,
                                 file_origin=FileOrigin.CHAT_ARTIFACT,
                                 chat_session_id=ref.session_id,
+                                published_path=path,
+                                published_title=title,
                             ),
                             name=name,
-                            title=requested.title,
+                            title=title,
                             path=path,
                             size=len(data),
                             mime_type=mime_type,
