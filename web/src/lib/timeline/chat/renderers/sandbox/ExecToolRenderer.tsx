@@ -92,7 +92,7 @@ export function ExecToolRenderer({
             phase,
             sessionId: start.session_id,
           })
-        : // A call with wrong-typed arguments has no session ID
+        : // Interrupted or wrong-typed arguments have no session ID
           t("sandbox.stdin.noSession.status", {
             kind: start.chars ? "send" : "check",
             phase,
