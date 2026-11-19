@@ -1,4 +1,5 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
+import { CommandBody } from "@/lib/timeline/components/bodies/CommandBody";
 import { useTranslations } from "next-intl";
 import {
   PacketType,
@@ -13,35 +14,8 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/types";
-import { CodeBlock } from "@/app/app/message/CodeBlock";
-import hljs from "highlight.js/lib/core";
-import python from "highlight.js/lib/languages/python";
-import { SvgTerminal } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import { ShadowDiv } from "@opal/components";
-
-// Register Python language for highlighting
-hljs.registerLanguage("python", python);
-
-// Component to render syntax-highlighted Python code
-function HighlightedPythonCode({ code }: { code: string }) {
-  const highlightedHtml = useMemo(() => {
-    try {
-      return hljs.highlight(code, { language: "python" }).value;
-    } catch {
-      return code
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    }
-  }, [code]);
-
-  return (
-    <span
-      dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-      className="hljs"
-    />
-  );
-}
 
 // Helper function to construct current Python execution state
 function constructCurrentPythonState(packets: PythonToolPacket[]) {
@@ -113,7 +87,6 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
     isStreaming,
     isExecuting,
     isComplete,
-    hasError,
   } = constructCurrentPythonState(packets);
 
   useEffect(() => {
@@ -122,25 +95,12 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
     }
   }, [isComplete, onComplete]);
 
-  const status = useMemo(() => {
-    if (isStreaming) {
-      return t("python.writingCode.status");
-    }
-    if (isExecuting) {
-      return t("python.executing.status");
-    }
-    if (hasError) {
-      return t("python.failed.status");
-    }
-    if (isComplete) {
-      return t("python.completed.status");
-    }
-    return t("python.default.status");
-  }, [isStreaming, isComplete, isExecuting, hasError, t]);
+  const status = t("python.running.status");
+  const doneStatus = t("python.ran.status");
 
   // Shared content for all states - used by both FULL and compact modes
   const content = (
-    <div className="flex flex-col mb-1 space-y-2">
+    <div className="flex flex-col space-y-2">
       {/* Loading indicator when streaming or executing */}
       {(isStreaming || isExecuting) && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -163,51 +123,22 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
         </div>
       )}
 
-      {/* Code block */}
-      {code && (
-        <div className="prose max-w-full">
-          <CodeBlock className="language-python" codeText={code.trim()}>
-            <HighlightedPythonCode code={code.trim()} />
-          </CodeBlock>
-        </div>
-      )}
-
-      {/* Output */}
-      {stdout && (
-        <div className="rounded-md bg-background-neutral-02 p-3">
-          <div className="text-xs font-semibold mb-1 text-text-03">
-            {t("python.output.label")}
-          </div>
-          <pre className="text-sm whitespace-pre-wrap font-mono text-text-01 overflow-x-auto">
-            {stdout}
-          </pre>
-        </div>
-      )}
-
-      {/* Error */}
-      {stderr && (
-        <div className="rounded-md bg-status-error-01 p-3 border border-status-error-02">
-          <div className="text-xs font-semibold mb-1 text-status-error-05">
-            {t("python.error.label")}
-          </div>
-          <pre className="text-sm whitespace-pre-wrap font-mono text-status-error-05 overflow-x-auto">
-            {stderr}
-          </pre>
-        </div>
-      )}
+      <CommandBody
+        command={code.trim()}
+        language="python"
+        output={
+          isComplete && !stdout && !stderr ? t("python.noOutput.text") : stdout
+        }
+        error={stderr}
+        // A finished run already carries its no-output text; before then,
+        // empty means the code is still being written.
+        emptyLabel=""
+      />
 
       {/* File count */}
       {fileIds.length > 0 && (
         <div className="text-sm text-text-03">
           {t("python.generatedFiles.label", { count: fileIds.length })}
-        </div>
-      )}
-
-      {/* No output fallback - only when complete with no output */}
-      {isComplete && !stdout && !stderr && (
-        <div className="py-2 text-center text-text-04">
-          <SvgTerminal className="w-4 h-4 mx-auto mb-1 opacity-50" />
-          <p className="text-xs">{t("python.noOutput.text")}</p>
         </div>
       )}
     </div>
@@ -217,8 +148,9 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   if (renderType === RenderType.FULL) {
     return children([
       {
-        icon: SvgTerminal,
+        icon: STEP_ICONS.execute,
         status,
+        doneStatus,
         content,
         supportsCollapsible: true,
         alwaysCollapsible: true,
@@ -229,8 +161,9 @@ export const PythonToolRenderer: MessageRenderer<PythonToolPacket, {}> = ({
   // Compact mode: wrap content in FadeDiv
   return children([
     {
-      icon: SvgTerminal,
+      icon: STEP_ICONS.execute,
       status,
+      doneStatus,
       supportsCollapsible: true,
       alwaysCollapsible: true,
       content: (

@@ -1,15 +1,12 @@
 "use client";
 
-import React from "react";
 import { useTranslations } from "next-intl";
-import { SvgFold, SvgExpand, SvgAddLines, SvgMaximize2 } from "@opal/icons";
-import { Button, Text } from "@opal/components";
+import { SvgAddLines, SvgMaximize2 } from "@opal/icons";
+import { Button, Presence, Text } from "@opal/components";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Tooltip } from "@opal/components";
 import { ContentAction, Section } from "@opal/layouts";
 import { formatDurationSeconds } from "@opal/time";
-import { noProp } from "@/lib/utils";
-import { clickOnKeyDown } from "@opal/utils";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { useCreateModal } from "@opal/components";
 
@@ -24,7 +21,7 @@ interface MemoryTagWithTooltipProps {
   memoryIndex: number | null;
 }
 
-function MemoryTagWithTooltip({
+export function MemoryTagWithTooltip({
   memoryText,
   memoryOperation,
   memoryId,
@@ -103,10 +100,8 @@ function MemoryTagWithTooltip({
 // =============================================================================
 
 export interface CompletedHeaderProps {
-  totalSteps: number;
-  collapsible: boolean;
+  /** The run is open: the duration shows instead of the image count. */
   isExpanded: boolean;
-  onToggle: () => void;
   processingDurationSeconds?: number;
   generatedImageCount?: number;
   isMemoryOnly?: boolean;
@@ -116,12 +111,9 @@ export interface CompletedHeaderProps {
   memoryIndex?: number | null;
 }
 
-/** Header when completed - handles both collapsed and expanded states */
-export const CompletedHeader = React.memo(function CompletedHeader({
-  totalSteps,
-  collapsible,
+/** The finished run's title: how long it took, or what it produced. */
+export function CompletedHeader({
   isExpanded,
-  onToggle,
   processingDurationSeconds = 0,
   generatedImageCount = 0,
   isMemoryOnly = false,
@@ -134,28 +126,20 @@ export const CompletedHeader = React.memo(function CompletedHeader({
 
   if (isMemoryOnly) {
     return (
-      <div className="flex w-full justify-between">
-        <div className="flex items-center px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-          <MemoryTagWithTooltip
-            memoryText={memoryText}
-            memoryOperation={memoryOperation}
-            memoryId={memoryId}
-            memoryIndex={memoryIndex}
-          />
-        </div>
-        {collapsible && totalSteps > 0 && isExpanded && (
-          <Button
-            prominence="tertiary"
-            size="md"
-            onClick={noProp(onToggle)}
-            rightIcon={isExpanded ? SvgFold : SvgExpand}
-            aria-label={t("expandButton.ariaLabel")}
-            aria-expanded={isExpanded}
-          >
-            {t("stepsButton.label", { count: totalSteps })}
-          </Button>
-        )}
-      </div>
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        gap={0}
+        height="fit"
+        className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
+      >
+        <MemoryTagWithTooltip
+          memoryText={memoryText}
+          memoryOperation={memoryOperation}
+          memoryId={memoryId}
+          memoryIndex={memoryIndex}
+        />
+      </Section>
     );
   }
 
@@ -170,52 +154,25 @@ export const CompletedHeader = React.memo(function CompletedHeader({
       ? t("generatedImages.label", { count: generatedImageCount })
       : null;
 
-  const summary = (
-    <div className="flex items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-      <Text as="p" font="main-ui-action" color="text-03">
-        {isExpanded ? durationText : (imageText ?? durationText)}
-      </Text>
-      {memoryOperation && !isExpanded && (
-        <MemoryTagWithTooltip
-          memoryText={memoryText}
-          memoryOperation={memoryOperation}
-          memoryId={memoryId}
-          memoryIndex={memoryIndex}
-        />
-      )}
-    </div>
-  );
+  const shownText = isExpanded ? durationText : (imageText ?? durationText);
 
-  const className = "flex items-center justify-between w-full";
-
-  // Without a toggle target the row must not announce itself as a button.
-  if (!collapsible || totalSteps === 0) {
-    return <div className={className}>{summary}</div>;
-  }
-
+  // The summary swaps through Presence.Swap whenever its text changes
+  // (opening the card shows the duration in place of the image count). A
+  // saved memory's tag sits on the card's right side (see RunCard), so it
+  // never swaps the summary.
   return (
-    // The row holds its own expand button, so it stays a div with button
-    // semantics rather than a <button> wrapping a <button>.
-    <div
-      role="button"
-      tabIndex={0}
-      aria-label={t("toggleRow.ariaLabel")}
-      onKeyDown={clickOnKeyDown(onToggle)}
-      onClick={onToggle}
-      className={className}
-    >
-      {summary}
-
-      <Button
-        prominence="tertiary"
-        size="md"
-        onClick={noProp(onToggle)}
-        rightIcon={isExpanded ? SvgFold : SvgExpand}
-        aria-label={t("expandButton.ariaLabel")}
-        aria-expanded={isExpanded}
+    <Presence.Swap swapKey={shownText}>
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        gap={0}
+        height="fit"
+        className="flex-1 min-w-0 mx-(--timeline-header-text-padding-x) my-(--timeline-header-text-padding-y)"
       >
-        {t("stepsButton.label", { count: totalSteps })}
-      </Button>
-    </div>
+        <Text as="p" font="main-ui-action" color="text-03">
+          {shownText}
+        </Text>
+      </Section>
+    </Presence.Swap>
   );
-});
+}

@@ -47,11 +47,22 @@ func TestRunGenerateCompose_writeThenCheckIsClean(t *testing.T) {
 
 	var stale bool
 	var err error
-	composeCapture(t, &os.Stdout, func() {
+	stdout := composeCapture(t, &os.Stdout, func() {
 		stale, err = runGenerateCompose(true)
 	})
 	if err != nil || stale {
-		t.Fatalf("write:expected no error and not stale, got %v, %v", stale, err)
+		t.Fatalf("write: expected no error and not stale, got %v, %v", stale, err)
+	}
+	wantLines := []string{
+		"regenerated docker-compose.yml",
+		"regenerated docker-compose.prod.yml",
+		"regenerated docker-compose.prod-no-letsencrypt.yml",
+	}
+	for _, rel := range deployfilessync.RelPaths {
+		wantLines = append(wantLines, "synced embedded copy of "+rel)
+	}
+	if lines := strings.Split(strings.TrimSuffix(stdout, "\n"), "\n"); !slices.Equal(lines, wantLines) {
+		t.Fatalf("write: expected %q, got %q", wantLines, lines)
 	}
 	for _, variant := range composegen.Variants {
 		if got := composeReadFile(t, filepath.Join(dir, variant.Filename)); got != generated[variant.Filename] {
@@ -117,32 +128,6 @@ func TestRunGenerateCompose_checkReportsStaleFilesWithoutWriting(t *testing.T) {
 	embeddedCopy := filepath.Join(deployfilessync.DestDir(root), "docker_compose", "env.template")
 	if got := composeReadFile(t, embeddedCopy); got != "docker_compose/env.template\n" {
 		t.Fatalf("check mode must not sync embedded copies, got %q", got)
-	}
-}
-
-func TestRunGenerateCompose_writeReportsWhatChanged(t *testing.T) {
-	composeGenerateRepo(t)
-
-	var stale bool
-	var err error
-	stdout := composeCapture(t, &os.Stdout, func() {
-		stale, err = runGenerateCompose(true)
-	})
-
-	if err != nil || stale {
-		t.Fatalf("expected no error and not stale, got %v, %v", stale, err)
-	}
-	lines := strings.Split(strings.TrimSuffix(stdout, "\n"), "\n")
-	want := []string{
-		"regenerated docker-compose.yml",
-		"regenerated docker-compose.prod.yml",
-		"regenerated docker-compose.prod-no-letsencrypt.yml",
-	}
-	for _, rel := range deployfilessync.RelPaths {
-		want = append(want, "synced embedded copy of "+rel)
-	}
-	if !slices.Equal(lines, want) {
-		t.Fatalf("expected %q, got %q", want, lines)
 	}
 }
 

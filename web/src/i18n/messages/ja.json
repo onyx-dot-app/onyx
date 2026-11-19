@@ -12267,9 +12267,6 @@
         "emptyState": {
           "text": "生成された画像はありません"
         },
-        "failedStatus": {
-          "text": "画像の生成に失敗しました"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {# 枚の画像を生成しました} other {# 枚の画像を生成しました}}"
         },
@@ -12415,21 +12412,18 @@
             "status": "プランを生成中"
           }
         },
-        "doneStep": {
-          "header": "完了"
-        },
         "expandButton": {
           "ariaLabel": "タイムラインを展開"
         },
         "fetch": {
           "reading": {
             "status": "読み取り中"
+          },
+          "read": {
+            "status": "読み込みました"
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "{total, number} 文字中 {start, number}–{end, number} 文字目"
-          },
           "read": {
             "status": "{fileName} を読み取りました ({total, number} 文字中 {start, number}–{end, number} 文字目)"
           },
@@ -12506,9 +12500,14 @@
           "reading": {
             "status": "読み取り中"
           },
+          "read": {
+            "label": "読み込みました"
+          },
           "header": {
             "default": "社内ドキュメントを検索中",
+            "doneDefault": "社内ドキュメントを検索しました",
             "sources": "{sources}を検索中",
+            "doneSources": "{sources}を検索しました",
             "sourcesOverflow": "{sources} 他{count}件",
             "withTimeWindow": "{header}({timeWindow})"
           },
@@ -12530,6 +12529,9 @@
           },
           "updating": {
             "status": "メモリを更新中"
+          },
+          "updated": {
+            "status": "メモリを更新しました"
           },
           "viewMemoriesButton": {
             "tooltip": "メモリを表示"
@@ -12595,20 +12597,8 @@
           }
         },
         "python": {
-          "completed": {
-            "status": "Python の実行が完了しました"
-          },
-          "default": {
-            "status": "Python の実行"
-          },
           "error": {
             "label": "エラー:"
-          },
-          "executing": {
-            "status": "Python コードを実行中..."
-          },
-          "failed": {
-            "status": "Python の実行に失敗しました"
           },
           "generatedFiles": {
             "label": "{count, plural, one {# 件のファイルを生成しました} other {# 件のファイルを生成しました}}"
@@ -12619,6 +12609,12 @@
           "output": {
             "label": "出力:"
           },
+          "running": {
+            "status": "Python を実行中"
+          },
+          "ran": {
+            "status": "Python を実行しました"
+          },
           "runningCode": {
             "label": "コードを実行中..."
           },
@@ -12627,11 +12623,11 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "全文"
-          },
           "thinking": {
             "status": "思考中"
+          },
+          "thought": {
+            "status": "思考しました"
           }
         },
         "researchAgent": {
@@ -12652,9 +12648,6 @@
         },
         "stepsButton": {
           "label": "{count, plural, one {# ステップ} other {# ステップ}}"
-        },
-        "stoppedStep": {
-          "header": "停止しました"
         },
         "thoughtDuration": {
           "label": "{duration} 思考しました"
@@ -12688,6 +12681,9 @@
         "webSearch": {
           "searching": {
             "status": "ウェブを検索中"
+          },
+          "searched": {
+            "status": "ウェブを検索しました"
           }
         },
         "sandbox": {
@@ -14886,9 +14882,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# 件の呼び出し} other {# 件の呼び出し}}"
-        },
         "working": {
           "label": "作業中"
         }

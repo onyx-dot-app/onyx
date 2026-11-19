@@ -25,10 +25,12 @@ export const getMetadataTags = (metadata?: {
   return tags.length > 0 ? tags : undefined;
 };
 
-export const INITIAL_QUERIES_TO_SHOW = 3;
-export const QUERIES_PER_EXPANSION = 5;
-export const INITIAL_RESULTS_TO_SHOW = 3;
-export const RESULTS_PER_EXPANSION = 10;
+export {
+  INITIAL_QUERIES_TO_SHOW,
+  QUERIES_PER_EXPANSION,
+  INITIAL_RESULTS_TO_SHOW,
+  RESULTS_PER_EXPANSION,
+} from "@/lib/timeline/components/bodies/RetrievalBody";
 
 // Applied time window; null == no time filter, either bound may be open-ended.
 export interface TimeFilter {
@@ -90,11 +92,17 @@ export const formatSearchHeader = (
   sourceFilters: string[],
   timeFilter: TimeFilter | null,
   t: TimelineTranslate,
-  locale: string
+  locale: string,
+  /** The finished form: "Searched …" instead of "Searching …". */
+  done = false
 ): string => {
   let header: string;
   if (sourceFilters.length === 0) {
-    header = t("internalSearch.header.default");
+    header = t(
+      done
+        ? "internalSearch.header.doneDefault"
+        : "internalSearch.header.default"
+    );
   } else {
     const names = sourceFilters.map((source) =>
       isValidSource(source)
@@ -110,7 +118,12 @@ export const formatSearchHeader = (
             count: overflow,
           })
         : shown;
-    header = t("internalSearch.header.sources", { sources });
+    header = t(
+      done
+        ? "internalSearch.header.doneSources"
+        : "internalSearch.header.sources",
+      { sources }
+    );
   }
   const timeWindow = formatTimeWindow(timeFilter, t, locale);
   return timeWindow

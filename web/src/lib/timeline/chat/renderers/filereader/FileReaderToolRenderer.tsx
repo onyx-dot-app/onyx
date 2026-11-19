@@ -1,8 +1,9 @@
 import { Section } from "@opal/layouts";
+import { FileBody } from "@/lib/timeline/components/bodies/FileBody";
 import { useEffect } from "react";
+import { codeSpan, markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
-import { Card, Text } from "@opal/components";
-import { SvgFileText } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import {
   PacketType,
   FileReaderToolPacket,
@@ -59,6 +60,8 @@ export const FileReaderToolRenderer: MessageRenderer<
   {}
 > = ({ packets, onComplete, stopPacketSeen, renderType, children }) => {
   const t = useTranslations("chat.messages.timeline");
+  // The file preview shares Craft's read-step labels.
+  const tRead = useTranslations("craft.toolCards.read");
   const state = constructFileReaderState(packets);
 
   useEffect(() => {
@@ -73,17 +76,25 @@ export const FileReaderToolRenderer: MessageRenderer<
     total: state.totalChars,
   };
 
-  const statusText = state.fileName
-    ? t("fileReader.read.status", { fileName: state.fileName, ...charRange })
-    : t("fileReader.reading.status");
+  const statusText = t("fileReader.reading.status");
+  // The file name reads as code.
+  const doneStatusText = state.fileName
+    ? markdown(
+        t("fileReader.read.status", {
+          fileName: codeSpan(state.fileName),
+          ...charRange,
+        })
+      )
+    : statusText;
 
   const isCompact = renderType === RenderType.COMPACT;
 
   if (isCompact) {
     return children([
       {
-        icon: SvgFileText,
+        icon: STEP_ICONS.read,
         status: statusText,
+        doneStatus: doneStatusText,
         supportsCollapsible: true,
         timelineLayout: "timeline",
         content: <></>,
@@ -95,46 +106,32 @@ export const FileReaderToolRenderer: MessageRenderer<
 
   return children([
     {
-      icon: SvgFileText,
+      icon: STEP_ICONS.read,
       status: statusText,
+      doneStatus: doneStatusText,
       supportsCollapsible: true,
       timelineLayout: "timeline",
       content: (
-        <Section gap={2} alignItems="start" height="fit">
+        <Section gap={1} alignItems="start" height="fit">
           {state.fileName ? (
             <>
-              <Section
-                flexDirection="row"
-                alignItems="center"
-                justifyContent="start"
-                gap={2}
-                height="fit"
-              >
-                <Text as="span" font="main-ui-action" color="text-02">
-                  {state.fileName}
-                </Text>
-                <Text as="span" font="main-ui-muted" color="text-04">
-                  {t("fileReader.charRange.label", charRange)}
-                </Text>
-              </Section>
+              {/* The panel's title row names the file; the step's title
+                  gives the character range. */}
               {hasPreview && (
-                <Card
-                  color="transparent"
-                  border="solid"
-                  padding={2}
-                  rounding={4}
-                >
-                  <Section alignItems="start" height="fit" gap={1}>
-                    <Text as="span" font="secondary-mono" color="text-04">
-                      {`${state.previewStart}${state.previewEnd ? "\u2026" : ""}`}
-                    </Text>
-                    {state.previewEnd && (
-                      <Text as="span" font="secondary-mono" color="text-04">
-                        {`\u2026${state.previewEnd}`}
-                      </Text>
-                    )}
-                  </Section>
-                </Card>
+                <FileBody
+                  content={
+                    state.previewEnd
+                      ? `${state.previewStart}\n\u2026\n${state.previewEnd}`
+                      : state.previewStart
+                  }
+                  path={state.fileName}
+                  emptyLabel={tRead("emptyFile.label")}
+                  moreLinesLabel={(count) =>
+                    tRead("moreLines.label", { count })
+                  }
+                  showAllLabel={tRead("showAll.button")}
+                  excerpt
+                />
               )}
             </>
           ) : (

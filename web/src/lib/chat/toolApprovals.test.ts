@@ -9,18 +9,14 @@ import type { Message } from "@/app/app/types";
 import {
   asksUser,
   decidedStatus,
-  orderRecordsByTurn,
   readToolApprovals,
   readToolQuestions,
   readWaitingToolRequests,
-  type ToolApproval,
   toolApprovalStatus,
   toolQuestionStatus,
-  type ToolRequestRecord,
   useToolRequestUi,
 } from "@/lib/chat/toolApprovals";
 import type { ApprovalStatus } from "@/lib/approvals/types";
-import type { GroupedPacket } from "@/lib/timeline/chat/hooks/packetProcessor";
 
 function request(approvalId: string, agentName: string | null = null): Packet {
   return {
@@ -347,68 +343,5 @@ describe("nudgeRequest", () => {
     jest.advanceTimersByTime(2000);
 
     expect(useToolRequestUi.getState().nudge).toBeNull();
-  });
-});
-
-describe("orderRecordsByTurn", () => {
-  function displayGroup(turnIndex: number): GroupedPacket {
-    return {
-      turn_index: turnIndex,
-      tab_index: 0,
-      packets: [],
-      nestedCalls: [],
-      streamPackets: [],
-      codeMode: null,
-    };
-  }
-  function approval(approvalId: string, turnIndex: number): ToolApproval {
-    const { obj } = request(approvalId);
-    if (obj.type !== PacketType.TOOL_APPROVAL_REQUEST)
-      throw new Error("not a request");
-    return { turnIndex, request: obj, status: "pending" };
-  }
-
-  it("places each card after the text of its own and earlier turns", () => {
-    const entries = orderRecordsByTurn(
-      [displayGroup(0), displayGroup(2), displayGroup(5)],
-      [approval("first", 2), approval("second", 2), approval("third", 3)]
-    );
-
-    expect(
-      entries.map((entry) =>
-        entry.kind === "display"
-          ? `text-${entry.turnIndex}`
-          : entry.record.request.approval_id
-      )
-    ).toEqual(["text-0", "text-2", "first", "second", "third", "text-5"]);
-  });
-
-  it("places cards before any text when the model wrote none yet", () => {
-    const entries = orderRecordsByTurn([displayGroup(4)], [approval("a", 1)]);
-
-    expect(entries.map((entry) => entry.kind)).toEqual(["record", "display"]);
-  });
-
-  it("orders approval and question records together", () => {
-    const { obj } = question("q");
-    if (obj.type !== PacketType.TOOL_QUESTION_REQUEST)
-      throw new Error("not a question");
-    const records: ToolRequestRecord[] = [
-      { kind: "approval", ...approval("a", 3) },
-      {
-        kind: "question",
-        turnIndex: 1,
-        request: obj,
-        status: { kind: "cancelled" },
-      },
-    ];
-
-    const entries = orderRecordsByTurn([displayGroup(2)], records);
-
-    expect(
-      entries.map((entry) =>
-        entry.kind === "display" ? `text-${entry.turnIndex}` : entry.record.kind
-      )
-    ).toEqual(["question", "text-2", "approval"]);
   });
 });

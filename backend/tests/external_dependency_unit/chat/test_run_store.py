@@ -391,7 +391,6 @@ def chat_agent(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
         chat_files=chat_files,
     )
 

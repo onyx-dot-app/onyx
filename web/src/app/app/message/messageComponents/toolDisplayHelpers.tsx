@@ -1,5 +1,4 @@
 import type { useTranslations } from "next-intl";
-import type { IconFunctionComponent } from "@opal/types";
 import {
   ApplyPatchStart,
   CustomToolStart,
@@ -11,24 +10,7 @@ import {
 import { constructCurrentSearchState } from "@/lib/timeline/chat/renderers/search/searchStateUtils";
 import { isGroupEndPacket } from "@/lib/timeline/chat/packetHelpers";
 import { isDisplayPacket, isToolPacket } from "@/app/app/services/packetUtils";
-import {
-  SvgListCheck,
-  SvgGlobe,
-  SvgSearchMenu,
-  SvgTerminal,
-  SvgLink,
-  SvgImage,
-  SvgUser,
-  SvgCircle,
-  SvgBookOpen,
-  SvgSlowTime,
-  SvgXCircle,
-  SvgCode,
-  SvgWrench,
-  SvgEdit,
-  SvgServer,
-  SvgFiles,
-} from "@opal/icons";
+import { SvgXCircle } from "@opal/icons";
 
 /**
  * Check if a packet group contains an ERROR packet (tool failed)
@@ -136,48 +118,5 @@ export function getToolName(packets: Packet[], t: TimelineTranslate): string {
       return t("toolNames.knowledgeBaseQuery");
     default:
       return t("toolNames.tool");
-  }
-}
-
-export function getToolIcon(packets: Packet[]): IconFunctionComponent {
-  const firstPacket = firstActivityPacket(packets);
-  if (!firstPacket) return SvgCircle;
-
-  switch (firstPacket.obj.type) {
-    case PacketType.SEARCH_TOOL_START: {
-      const searchState = constructCurrentSearchState(
-        packets as SearchToolPacket[]
-      );
-      return searchState.isInternetSearch ? SvgGlobe : SvgSearchMenu;
-    }
-    case PacketType.PYTHON_TOOL_START:
-    case PacketType.EXEC_COMMAND_START:
-    case PacketType.WRITE_STDIN_START:
-      return SvgTerminal;
-    case PacketType.APPLY_PATCH_START:
-      return SvgEdit;
-    case PacketType.PUBLISH_FILES_START:
-      return SvgFiles;
-    case PacketType.FETCH_TOOL_START:
-      return SvgLink;
-    case PacketType.CUSTOM_TOOL_START:
-      return SvgWrench;
-    case PacketType.IMAGE_GENERATION_TOOL_START:
-      return SvgImage;
-    case PacketType.DEEP_RESEARCH_PLAN_START:
-      return SvgListCheck;
-    case PacketType.RESEARCH_AGENT_START:
-      return SvgUser;
-    case PacketType.CODING_AGENT_START:
-      return SvgCode;
-    case PacketType.REASONING_START:
-      return SvgSlowTime;
-    case PacketType.MEMORY_TOOL_START:
-    case PacketType.MEMORY_TOOL_NO_ACCESS:
-      return SvgBookOpen;
-    case PacketType.POSTGRES_TOOL_START:
-      return SvgServer;
-    default:
-      return SvgCircle;
   }
 }

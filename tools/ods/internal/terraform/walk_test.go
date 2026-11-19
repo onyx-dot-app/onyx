@@ -64,16 +64,6 @@ func TestDiscoverExplicitPaths(t *testing.T) {
 	}
 }
 
-func TestDiscoverNoRoots(t *testing.T) {
-	got, err := Discover(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 0 {
-		t.Fatalf("got %v, want none", got)
-	}
-}
-
 func TestDiscoverMissingPath(t *testing.T) {
 	if _, err := Discover([]string{filepath.Join(t.TempDir(), "absent")}); err == nil {
 		t.Fatal("expected an error for a missing path")

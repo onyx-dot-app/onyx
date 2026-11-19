@@ -5,6 +5,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -127,8 +128,18 @@ func TestStackUsesGlobalIsolationAndRejectsRemovedFrontendFlag(t *testing.T) {
 			t.Fatal("invalid flag invoked tools")
 		}
 	}
+	restoreLogger(t)
 	for _, isolated := range []bool{false, true} {
-		rootIsolated = isolated
+		root := NewRootCommand()
+		root.SetOut(io.Discard)
+		if isolated {
+			root.SetArgs([]string{"--isolated"})
+		} else {
+			root.SetArgs([]string{})
+		}
+		if err := root.Execute(); err != nil {
+			t.Fatal(err)
+		}
 		stack, _ := openStack(nil)
 		want := devstack.Shared
 		if isolated {
@@ -137,9 +148,6 @@ func TestStackUsesGlobalIsolationAndRejectsRemovedFrontendFlag(t *testing.T) {
 		if stack.Mode != want {
 			t.Fatalf("isolation=%v selected %s", isolated, stack.Mode)
 		}
-	}
-	if NewRootCommand().PersistentFlags().Lookup("isolated") == nil {
-		t.Fatal("isolation is not a global target option")
 	}
 }
 

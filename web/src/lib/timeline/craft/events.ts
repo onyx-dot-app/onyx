@@ -20,6 +20,8 @@ import type {
   AcpToolCallStatus,
   AcpToolKind,
   OnyxMeta,
+  OnyxSearch,
+  OnyxSearchResult,
 } from "@/lib/timeline/acp";
 import type { TimelineEvent } from "@/lib/timeline/events";
 
@@ -71,14 +73,44 @@ function oneOf<T extends string>(
   return allowed.find((option) => option === value);
 }
 
+/** A web search's queries and results; anything malformed is dropped. */
+function decodeSearch(raw: unknown): OnyxSearch | undefined {
+  if (!isRecord(raw)) return undefined;
+  const queries = Array.isArray(raw.queries)
+    ? raw.queries.filter((query): query is string => typeof query === "string")
+    : [];
+  const results: OnyxSearchResult[] = [];
+  if (Array.isArray(raw.results)) {
+    for (const item of raw.results) {
+      if (!isRecord(item)) continue;
+      const url = asString(item.url);
+      if (!url) continue;
+      results.push({
+        url,
+        title: asString(item.title) || url,
+        snippet: asString(item.snippet) ?? "",
+      });
+    }
+  }
+  return { queries, results };
+}
+
 /**
- * Copies `_meta` and moves Craft's text-part fields into `_meta.onyx`, where
- * the reducer reads them.
+ * Copies `_meta`, keeps the `_meta.onyx` the backend sends (version,
+ * cancelled), and moves Craft's flat text-part fields into it, where the
+ * reducer reads them.
  */
 function decodeMeta(raw: unknown): AcpMeta | undefined {
   if (!isRecord(raw)) return undefined;
-  const { partId, snapshotText, ...rest } = raw;
+  const { partId, snapshotText, onyx: sent, ...rest } = raw;
   const onyx: OnyxMeta = {};
+  if (isRecord(sent)) {
+    if (typeof sent.version === "number") onyx.version = sent.version;
+    if (sent.cancelled === true) onyx.cancelled = true;
+    const search = decodeSearch(sent.search);
+    if (search) onyx.search = search;
+    if (typeof sent.exitCode === "number") onyx.exitCode = sent.exitCode;
+  }
   const part = asString(partId);
   const snapshot = asString(snapshotText);
   if (part !== undefined) onyx.partId = part;
@@ -231,18 +263,35 @@ function toolEvents(
   ];
 }
 
+/** The subagent session a packet came from, or `null` for the main agent. */
+export function craftChildSessionId(raw: unknown): string | null {
+  if (!isRecord(raw) || !isRecord(raw._meta)) return null;
+  const sessionId = asString(raw._meta.sessionId);
+  const parentSessionId = asString(raw._meta.parentSessionId);
+  return sessionId && parentSessionId ? sessionId : null;
+}
+
 /**
  * Returns the timeline events for one Craft packet, live or saved. Packets the
  * main timeline does not show (subagent events, approvals, artifacts, usage)
- * return no events.
+ * return no events. With `subagentSessionId`, it returns only that
+ * subagent's events, for the subagent's page.
  */
-export function craftPacketToEvents(raw: unknown): TimelineEvent[] {
+export function craftPacketToEvents(
+  raw: unknown,
+  options: { subagentSessionId?: string } = {}
+): TimelineEvent[] {
   if (!isRecord(raw)) return [];
   const meta = decodeMeta(raw._meta);
 
-  // A subagent's events belong on its own page. Null ids are absent, as in
-  // Craft's subagent routing.
-  if (meta?.sessionId != null && meta.parentSessionId != null) {
+  // A subagent's events belong on its own page: the main timeline leaves
+  // them out, and a subagent's timeline keeps only its own. Null ids are
+  // absent, as in Craft's subagent routing.
+  const childSessionId =
+    meta?.sessionId != null && meta.parentSessionId != null
+      ? meta.sessionId
+      : undefined;
+  if (childSessionId !== options.subagentSessionId) {
     return [];
   }
 

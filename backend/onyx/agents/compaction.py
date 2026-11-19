@@ -106,7 +106,17 @@ def message_tokens(
 
 
 def request_tokens(
-    request: GenerationRequest, cached_counts: dict[str, int] | None = None
+    request: GenerationRequest, token_counter: Callable[[str], int] = count_tokens
+) -> int:
+    return (
+        token_counter(request.system_prompt)
+        + sum(token_counter(tool.model_dump_json()) for tool in request.tools)
+        + sum(message_tokens(message, token_counter) for message in request.messages)
+    )
+
+
+def cached_request_tokens(
+    request: GenerationRequest, cached_counts: dict[str, int]
 ) -> int:
     """Count the request and retain only its text counts for the next request."""
     current_counts: dict[str, int] = {}
@@ -117,14 +127,9 @@ def request_tokens(
             current_counts[text] = tokens
         return tokens
 
-    total = (
-        count(request.system_prompt)
-        + sum(count(tool.model_dump_json()) for tool in request.tools)
-        + sum(message_tokens(message, count) for message in request.messages)
-    )
-    if cached_counts is not None:
-        cached_counts.clear()
-        cached_counts.update(current_counts)
+    total = request_tokens(request, count)
+    cached_counts.clear()
+    cached_counts.update(current_counts)
     return total
 
 
