@@ -1,6 +1,9 @@
 """Add the integration tables and copy each MCP server, external app and
-OpenAPI custom tool into them. Each integration stands alone. A plugin holds
-it through plugin__integration, and the copy makes one such plugin for each.
+OpenAPI custom tool into them. Each integration stands alone and owns its
+access: its owner, its install setting, its shares and the on/off choice of
+each user. The copy also makes one plugin for each integration, which holds
+it through plugin__integration. Code that is not yet moved to the integration
+tables reads that plugin and its links.
 
 The old tables stay the tables of each kind: each integration points at its
 mcp_server, external_app or OpenAPI tool row, as gated_app does. The old tables
@@ -59,6 +62,30 @@ _LOCK_NOT_AVAILABLE = "55P03"
 LOCK_TIMEOUT = "60s"
 # Created-at of a row whose source has no timestamp (tool rows have none).
 FALLBACK_CREATED_AT = "2026-11-13 00:00:00+00"
+_INSTALLATION_POLICIES = ("REQUIRED", "DEFAULT", "AVAILABLE", "NOT_AVAILABLE")
+_SHARE_PERMISSIONS = ("EDITOR", "VIEWER")
+
+
+def _installation_policy_type() -> sa.Enum:
+    return sa.Enum(*_INSTALLATION_POLICIES, native_enum=False)
+
+
+def _created_at() -> sa.Column:
+    return sa.Column(
+        "created_at",
+        sa.DateTime(timezone=True),
+        server_default=sa.text("now()"),
+        nullable=False,
+    )
+
+
+def _action_settings() -> sa.Column:
+    return sa.Column(
+        "action_settings",
+        postgresql.JSONB(),
+        server_default=sa.text("'{}'::jsonb"),
+        nullable=False,
+    )
 
 
 def _timestamps() -> list[sa.Column]:
@@ -125,6 +152,16 @@ def _alter_old_tables() -> None:
         ),
     )
 
+    op.add_column(
+        "assistant__user_specific_config",
+        sa.Column(
+            "disabled_integration_ids",
+            postgresql.ARRAY(sa.Integer()),
+            server_default="{}",
+            nullable=False,
+        ),
+    )
+
     # No default: the column is added with no rewrite of chat_session.
     op.add_column(
         "chat_session", sa.Column("tool_options", postgresql.JSONB(), nullable=True)
@@ -158,13 +195,21 @@ def _create_tables() -> None:
         sa.Column("kind", sa.String(), nullable=False),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
-        # The person who set up the integration: a record, not a right. NULL
-        # when not known. The person who signs in is on integration_connection.
+        # The owner always has access. NULL when not known or deleted. The
+        # person who signs in is on integration_connection.
         sa.Column(
-            "created_by_user_id",
+            "owner_user_id",
             postgresql.UUID(as_uuid=True),
             sa.ForeignKey("user.id", ondelete="SET NULL"),
             nullable=True,
+        ),
+        # The company install setting. NOT_AVAILABLE is private: only the
+        # owner and the shares have access.
+        sa.Column(
+            "installation_policy",
+            _installation_policy_type(),
+            server_default="NOT_AVAILABLE",
+            nullable=False,
         ),
         sa.Column(
             "enabled", sa.Boolean(), server_default=sa.text("true"), nullable=False
@@ -226,9 +271,7 @@ def _create_tables() -> None:
             name="ck_integration_auth_method",
         ),
     )
-    op.create_index(
-        "ix_integration_created_by_user_id", "integration", ["created_by_user_id"]
-    )
+    op.create_index("ix_integration_owner_user_id", "integration", ["owner_user_id"])
 
     op.create_table(
         "integration_action",
@@ -362,11 +405,18 @@ def _create_tables() -> None:
         ),
         # '': the default for each action with no row of its own.
         sa.Column("action", sa.String(), server_default="", nullable=False),
-        # NULL: the admin value. Set: the saved choice of one user.
+        # Set: the saved choice of one user.
         sa.Column(
             "user_id",
             postgresql.UUID(as_uuid=True),
             sa.ForeignKey("user.id", ondelete="CASCADE"),
+            nullable=True,
+        ),
+        # Set: the value for one group. Both NULL: the admin value.
+        sa.Column(
+            "user_group_id",
+            sa.Integer(),
+            sa.ForeignKey("user_group.id", ondelete="CASCADE"),
             nullable=True,
         ),
         sa.Column("policy", sa.String(), nullable=False),
@@ -375,6 +425,12 @@ def _create_tables() -> None:
         sa.CheckConstraint(
             "policy IN ('allow', 'auto', 'ask', 'blocked')",
             name="ck_integration_action_policy_policy",
+        ),
+        # Each unique index covers one scope. A row with a user and a group
+        # would be in two, and a writer of one scope cannot see the other.
+        sa.CheckConstraint(
+            "num_nonnulls(user_id, user_group_id) <= 1",
+            name="ck_integration_action_policy_single_scope",
         ),
     )
     op.create_index(
@@ -387,7 +443,7 @@ def _create_tables() -> None:
         "integration_action_policy",
         ["integration_id", "action"],
         unique=True,
-        postgresql_where=sa.text("user_id IS NULL"),
+        postgresql_where=sa.text("user_id IS NULL AND user_group_id IS NULL"),
     )
     op.create_index(
         "uq_integration_action_policy_user",
@@ -395,6 +451,14 @@ def _create_tables() -> None:
         ["user_id", "integration_id", "action"],
         unique=True,
         postgresql_where=sa.text("user_id IS NOT NULL"),
+    )
+    # The group leads, as the user does above, so a group delete finds its rows.
+    op.create_index(
+        "uq_integration_action_policy_user_group",
+        "integration_action_policy",
+        ["user_group_id", "integration_id", "action"],
+        unique=True,
+        postgresql_where=sa.text("user_group_id IS NOT NULL"),
     )
 
     # action_settings: {"default": <value>, "actions": {<action>: <value>}},
@@ -468,6 +532,131 @@ def _create_tables() -> None:
     op.create_index(
         "ix_plugin__integration_integration_id",
         "plugin__integration",
+        ["integration_id"],
+    )
+
+    # The access tables of an integration have the shape of the plugin ones.
+    op.create_table(
+        "integration__user",
+        sa.Column(
+            "integration_id",
+            sa.Integer(),
+            sa.ForeignKey("integration.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "user_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("user.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "permission",
+            sa.Enum(*_SHARE_PERMISSIONS, native_enum=False),
+            server_default="VIEWER",
+            nullable=False,
+        ),
+        _created_at(),
+    )
+    op.create_index("ix_integration__user_user_id", "integration__user", ["user_id"])
+
+    op.create_table(
+        "integration__user_group",
+        sa.Column(
+            "integration_id",
+            sa.Integer(),
+            sa.ForeignKey("integration.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "user_group_id",
+            sa.Integer(),
+            sa.ForeignKey("user_group.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        # NULL: the row holds only a group install setting and grants nothing.
+        sa.Column(
+            "permission",
+            sa.Enum(*_SHARE_PERMISSIONS, native_enum=False),
+            nullable=True,
+        ),
+        sa.Column("installation_policy", _installation_policy_type(), nullable=True),
+        _created_at(),
+    )
+    op.create_index(
+        "ix_integration__user_group_user_group_id",
+        "integration__user_group",
+        ["user_group_id"],
+    )
+
+    op.create_table(
+        "user_integration_preference",
+        sa.Column(
+            "user_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("user.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "integration_id",
+            sa.Integer(),
+            sa.ForeignKey("integration.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "enabled", sa.Boolean(), server_default=sa.text("true"), nullable=False
+        ),
+        sa.Column("enabled_at", sa.DateTime(timezone=True), nullable=True),
+    )
+    op.create_index(
+        "ix_user_integration_preference_integration_id",
+        "user_integration_preference",
+        ["integration_id"],
+    )
+
+    # The links of an agent and of a task to an integration. action_settings
+    # has the shape of the plugin links above.
+    op.create_table(
+        "persona__integration",
+        sa.Column(
+            "persona_id",
+            sa.Integer(),
+            sa.ForeignKey("persona.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "integration_id",
+            sa.Integer(),
+            sa.ForeignKey("integration.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        _action_settings(),
+    )
+    op.create_index(
+        "ix_persona__integration_integration_id",
+        "persona__integration",
+        ["integration_id"],
+    )
+
+    op.create_table(
+        "scheduled_task__integration",
+        sa.Column(
+            "scheduled_task_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("scheduled_task.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column(
+            "integration_id",
+            sa.Integer(),
+            sa.ForeignKey("integration.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        _action_settings(),
+    )
+    op.create_index(
+        "ix_scheduled_task__integration_integration_id",
+        "scheduled_task__integration",
         ["integration_id"],
     )
 
@@ -816,16 +1005,25 @@ _INSERT_VERSIONS = """
     LEFT JOIN "user" u ON u.id = src.author_user_id
 """
 
+# An integration of the organization is Available unless its source gives
+# another setting. Each other integration is private.
 _INSERT_INTEGRATIONS = """
     INSERT INTO integration (
-        id, kind, name, description, created_by_user_id, enabled, auth_mode,
-        auth_method, header_template, users_can_save_always_allow,
-        mcp_server_id, external_app_id, tool_id, created_at, updated_at
+        id, kind, name, description, owner_user_id, installation_policy,
+        enabled, auth_mode, auth_method, header_template,
+        users_can_save_always_allow, mcp_server_id, external_app_id, tool_id,
+        created_at, updated_at
     )
     SELECT
-        id, kind, name, description, creator_user_id, enabled, auth_mode,
-        auth_method, header_template, users_can_save_always_allow,
-        mcp_server_id, external_app_id, tool_id, created_at, updated_at
+        id, kind, name, description, creator_user_id,
+        CASE placement
+            WHEN 'organization_library'
+                THEN coalesce(installation_policy, 'AVAILABLE')
+            ELSE 'NOT_AVAILABLE'
+        END,
+        enabled, auth_mode, auth_method, header_template,
+        users_can_save_always_allow, mcp_server_id, external_app_id, tool_id,
+        created_at, updated_at
     FROM integration_source
 """
 
@@ -1061,15 +1259,17 @@ _CREATE_TOOL_INTEGRATIONS = """
 # A private MCP server keeps its people. Basic makes the server public (it is
 # in the Organization library), and phase 3 counts no default group, so a
 # share with Admin becomes a share with each member of Admin.
+# A statement with {table} runs two times (_for_plugin_and_integration): for
+# the plugin that the copy made, and for the integration.
 _INSERT_MCP_USER_SHARES = """
-    INSERT INTO plugin__user (plugin_id, user_id, permission, created_at)
-    SELECT src.plugin_id, su.user_id, 'VIEWER', src.created_at
+    INSERT INTO {table} ({key}, user_id, permission, created_at)
+    SELECT {source_key}, su.user_id, 'VIEWER', src.created_at
     FROM integration_source src
     JOIN mcp_server__user su ON su.mcp_server_id = src.mcp_server_id
     WHERE src.placement = 'user_uploads'
        OR src.installation_policy = 'NOT_AVAILABLE'
     UNION
-    SELECT src.plugin_id, uug.user_id, 'VIEWER', src.created_at
+    SELECT {source_key}, uug.user_id, 'VIEWER', src.created_at
     FROM integration_source src
     JOIN mcp_server__user_group sg ON sg.mcp_server_id = src.mcp_server_id
     JOIN user_group ug ON ug.id = sg.user_group_id AND ug.is_default
@@ -1081,14 +1281,84 @@ _INSERT_MCP_USER_SHARES = """
 """
 
 _INSERT_MCP_GROUP_SHARES = """
-    INSERT INTO plugin__user_group
-        (plugin_id, user_group_id, permission, installation_policy, created_at)
-    SELECT src.plugin_id, sg.user_group_id, 'VIEWER', NULL, src.created_at
+    INSERT INTO {table}
+        ({key}, user_group_id, permission, installation_policy, created_at)
+    SELECT {source_key}, sg.user_group_id, 'VIEWER', NULL, src.created_at
     FROM integration_source src
     JOIN mcp_server__user_group sg ON sg.mcp_server_id = src.mcp_server_id
     JOIN user_group ug ON ug.id = sg.user_group_id AND NOT ug.is_default
     WHERE src.placement = 'user_uploads'
        OR src.installation_policy = 'NOT_AVAILABLE'
+"""
+
+# In the last release, each user of a custom agent used a private MCP server
+# through the agent. An integration gives its own access, so this one-time
+# copy gives those users a share. The users of an agent are the users that
+# the agent access rule gives it to: its owner and the members of its owner
+# group, and, while it is listed, its shares and (if public) each user. An
+# agent with only tools that the admin did not select gave no use of the
+# server.
+_PRIVATE_MCP_AGENTS = """
+    SELECT DISTINCT p.id AS persona_id, p.user_id, p.owner_group_id,
+        p.is_public, p.is_listed, i.id AS integration_id, i.created_at
+    FROM persona p
+    JOIN persona__tool pt ON pt.persona_id = p.id
+    JOIN tool t ON t.id = pt.tool_id AND t.enabled
+    JOIN integration i ON i.mcp_server_id = t.mcp_server_id
+    WHERE NOT p.deleted AND p.id <> 0
+      AND i.installation_policy = 'NOT_AVAILABLE'
+"""
+
+# The groups of an agent: its owner group and, while it is listed, its group
+# shares.
+_PRIVATE_MCP_AGENT_GROUPS = f"""
+    SELECT a.integration_id, a.created_at, a.owner_group_id AS user_group_id
+    FROM ({_PRIVATE_MCP_AGENTS}) a
+    WHERE a.owner_group_id IS NOT NULL
+    UNION
+    SELECT a.integration_id, a.created_at, pg.user_group_id
+    FROM ({_PRIVATE_MCP_AGENTS}) a
+    JOIN persona__user_group pg ON pg.persona_id = a.persona_id
+    WHERE a.is_listed
+"""
+
+# A default group becomes its members, as for the shares of the server.
+_INSERT_AGENT_USER_SHARES = f"""
+    INSERT INTO integration__user (integration_id, user_id, permission, created_at)
+    SELECT a.integration_id, a.user_id, 'VIEWER', a.created_at
+    FROM ({_PRIVATE_MCP_AGENTS}) a
+    WHERE a.user_id IS NOT NULL
+    UNION
+    SELECT a.integration_id, pu.user_id, 'VIEWER', a.created_at
+    FROM ({_PRIVATE_MCP_AGENTS}) a
+    JOIN persona__user pu ON pu.persona_id = a.persona_id
+    WHERE a.is_listed AND pu.user_id IS NOT NULL
+    UNION
+    SELECT g.integration_id, uug.user_id, 'VIEWER', g.created_at
+    FROM ({_PRIVATE_MCP_AGENT_GROUPS}) g
+    JOIN user_group ug ON ug.id = g.user_group_id AND ug.is_default
+    JOIN user__user_group uug ON uug.user_group_id = ug.id
+    WHERE uug.user_id IS NOT NULL
+    ON CONFLICT DO NOTHING
+"""
+
+_INSERT_AGENT_GROUP_SHARES = f"""
+    INSERT INTO integration__user_group
+        (integration_id, user_group_id, permission, installation_policy,
+         created_at)
+    SELECT g.integration_id, g.user_group_id, 'VIEWER', NULL, g.created_at
+    FROM ({_PRIVATE_MCP_AGENT_GROUPS}) g
+    JOIN user_group ug ON ug.id = g.user_group_id AND NOT ug.is_default
+    ON CONFLICT DO NOTHING
+"""
+
+# Each user could use a public agent, so its servers become Available. This
+# runs after the share statements: they read the private servers.
+_PUBLISH_PUBLIC_AGENT_INTEGRATIONS = f"""
+    UPDATE integration i
+    SET installation_policy = 'AVAILABLE'
+    FROM ({_PRIVATE_MCP_AGENTS}) a
+    WHERE a.integration_id = i.id AND a.is_public AND a.is_listed
 """
 
 _POLICY_VALUE = """
@@ -1165,32 +1435,32 @@ _INSERT_USER_POLICIES = f"""
 
 # The chat value wins; enabled_in_craft is not copied.
 _INSERT_PREFERENCES = """
-    INSERT INTO user_plugin_preference (user_id, plugin_id, enabled, enabled_at)
-    SELECT p.user_id, src.plugin_id, p.enabled_in_chat, NULL::timestamptz
+    INSERT INTO {table} (user_id, {key}, enabled, enabled_at)
+    SELECT p.user_id, {source_key}, p.enabled_in_chat, NULL::timestamptz
     FROM mcp_server_user_preference p
     JOIN integration_source src ON src.mcp_server_id = p.mcp_server_id
     UNION ALL
-    SELECT p.user_id, src.plugin_id, p.enabled_in_chat, NULL::timestamptz
+    SELECT p.user_id, {source_key}, p.enabled_in_chat, NULL::timestamptz
     FROM tool_user_preference p
     JOIN integration_source src ON src.tool_id = p.tool_id
 """
 
-# A plugin is off for the user on that agent when the user turned off each
-# tool that the agent has of it. disabled_tool_ids does not change.
-_SET_DISABLED_PLUGINS = """
+# An integration (and its plugin) is off for the user on that agent when the
+# user turned off each tool that the agent has of it. disabled_tool_ids does
+# not change.
+_SET_DISABLED = """
     UPDATE assistant__user_specific_config c
-    SET disabled_plugin_ids = off.plugin_ids
+    SET {column} = off.ids
     FROM (
-        SELECT assistant_id, user_id, array_agg(plugin_id ORDER BY plugin_id)
-            AS plugin_ids
+        SELECT assistant_id, user_id, array_agg({key} ORDER BY {key}) AS ids
         FROM (
-            SELECT cfg.assistant_id, cfg.user_id, ti.plugin_id
+            SELECT cfg.assistant_id, cfg.user_id, ti.{key}
             FROM assistant__user_specific_config cfg
             JOIN persona__tool pt ON pt.persona_id = cfg.assistant_id
             JOIN tool_integration ti ON ti.tool_id = pt.tool_id
-            GROUP BY cfg.assistant_id, cfg.user_id, ti.plugin_id
+            GROUP BY cfg.assistant_id, cfg.user_id, ti.{key}
             HAVING bool_and(pt.tool_id = ANY(cfg.disabled_tool_ids))
-        ) per_plugin
+        ) per_key
         GROUP BY assistant_id, user_id
     ) off
     WHERE c.assistant_id = off.assistant_id AND c.user_id = off.user_id
@@ -1216,11 +1486,13 @@ _BOT_PERSONAS = """
 # for a chat-only Always allow).
 # Each other tool, now or added later, is blocked by the default. An agent
 # with a custom tool gets empty settings, or allow for a bot agent.
-_INSERT_PERSONA_PLUGINS = f"""
-    INSERT INTO persona__plugin (persona_id, plugin_id, action_settings)
+# The copy makes one plugin for each integration, so an agent gets one row for
+# each integration, with the same settings in both link tables.
+_INSERT_PERSONA_LINKS = f"""
+    INSERT INTO {{table}} (persona_id, {{key}}, action_settings)
     SELECT
         pt.persona_id,
-        ti.plugin_id,
+        ti.{{key}},
         CASE
             WHEN ti.kind = 'mcp' THEN jsonb_build_object(
                 'default', 'blocked',
@@ -1231,8 +1503,8 @@ _INSERT_PERSONA_PLUGINS = f"""
                 )
             )
             WHEN bot.persona_id IS NOT NULL
-                THEN '{{"default": "allow"}}'::jsonb
-            ELSE '{{}}'::jsonb
+                THEN '{{{{"default": "allow"}}}}'::jsonb
+            ELSE '{{{{}}}}'::jsonb
         END
     FROM persona__tool pt
     JOIN tool_integration ti ON ti.tool_id = pt.tool_id
@@ -1240,17 +1512,16 @@ _INSERT_PERSONA_PLUGINS = f"""
     LEFT JOIN ({_BOT_PERSONAS}) bot ON bot.persona_id = pt.persona_id
     -- The default agent leaves out an OpenAPI tool that the admin turned off.
     WHERE NOT (pt.persona_id = 0 AND ti.kind = 'api' AND NOT t.enabled)
-    GROUP BY pt.persona_id, ti.plugin_id, ti.kind, bot.persona_id
+    GROUP BY pt.persona_id, ti.{{key}}, ti.kind, bot.persona_id
 """
 
 # A task keeps its pre-approvals. Each other action asks, as it does today
 # for a task with no saved choice.
-_INSERT_TASK_PLUGINS = f"""
-    INSERT INTO scheduled_task__plugin
-        (scheduled_task_id, plugin_id, action_settings)
+_INSERT_TASK_LINKS = f"""
+    INSERT INTO {{table}} (scheduled_task_id, {{key}}, action_settings)
     SELECT
         e.scheduled_task_id,
-        src.plugin_id,
+        {{source_key}},
         jsonb_build_object(
             'default', 'ask',
             'actions', coalesce(
@@ -1262,7 +1533,7 @@ _INSERT_TASK_PLUGINS = f"""
                     WHERE p.scheduled_task_id = e.scheduled_task_id
                       AND p.gated_app_id = e.gated_app_id
                 ),
-                '{{}}'::jsonb
+                '{{{{}}}}'::jsonb
             )
         )
     FROM scheduled_task_enabled_app e
@@ -1443,6 +1714,21 @@ def _seed_api_actions() -> None:
         )
 
 
+def _for_plugin_and_integration(
+    statement: str, plugin_table: str, integration_table: str
+) -> list[str]:
+    """The statement for the plugin that the copy made, then the same one for
+    the integration."""
+    return [
+        statement.format(
+            table=plugin_table, key="plugin_id", source_key="src.plugin_id"
+        ),
+        statement.format(
+            table=integration_table, key="integration_id", source_key="src.id"
+        ),
+    ]
+
+
 def _copy_integrations() -> None:
     for statement in (
         _CREATE_SOURCES,
@@ -1466,15 +1752,30 @@ def _copy_integrations() -> None:
         _SET_OPENAPI_OAUTH_CLIENTS,
         _INSERT_MCP_ACTIONS,
         _CREATE_TOOL_INTEGRATIONS,
-        _INSERT_MCP_USER_SHARES,
-        _INSERT_MCP_GROUP_SHARES,
+        *_for_plugin_and_integration(
+            _INSERT_MCP_USER_SHARES, "plugin__user", "integration__user"
+        ),
+        *_for_plugin_and_integration(
+            _INSERT_MCP_GROUP_SHARES, "plugin__user_group", "integration__user_group"
+        ),
+        _INSERT_AGENT_USER_SHARES,
+        _INSERT_AGENT_GROUP_SHARES,
+        _PUBLISH_PUBLIC_AGENT_INTEGRATIONS,
         _INSERT_UNSELECTED_MCP_TOOLS,
         _INSERT_ADMIN_POLICIES,
         _INSERT_OPENAPI_DEFAULT_POLICIES,
         _INSERT_USER_POLICIES,
-        _INSERT_PREFERENCES,
-        _INSERT_PERSONA_PLUGINS,
-        _INSERT_TASK_PLUGINS,
+        *_for_plugin_and_integration(
+            _INSERT_PREFERENCES,
+            "user_plugin_preference",
+            "user_integration_preference",
+        ),
+        *_for_plugin_and_integration(
+            _INSERT_PERSONA_LINKS, "persona__plugin", "persona__integration"
+        ),
+        *_for_plugin_and_integration(
+            _INSERT_TASK_LINKS, "scheduled_task__plugin", "scheduled_task__integration"
+        ),
         _INSERT_PLUGIN_INTEGRATIONS,
     ):
         op.execute(statement)
@@ -1564,7 +1865,10 @@ def upgrade() -> None:
         # theirs after them.
         _with_bounded_lock_wait(_alter_old_tables)
         for statement in (
-            _SET_DISABLED_PLUGINS,
+            _SET_DISABLED.format(column="disabled_plugin_ids", key="plugin_id"),
+            _SET_DISABLED.format(
+                column="disabled_integration_ids", key="integration_id"
+            ),
             "DROP TABLE tool_integration",
             "DROP TABLE integration_source",
         ):
@@ -1615,6 +1919,7 @@ def downgrade() -> None:
         "approval_request", "gated_app_id", existing_type=sa.Integer(), nullable=False
     )
     op.drop_column("assistant__user_specific_config", "disabled_plugin_ids")
+    op.drop_column("assistant__user_specific_config", "disabled_integration_ids")
     for table in reversed(RECORD_TABLES):
         op.drop_column(table, "integration_id")
     op.add_column(
@@ -1642,6 +1947,11 @@ def downgrade() -> None:
         """
     )
     for table in (
+        "scheduled_task__integration",
+        "persona__integration",
+        "user_integration_preference",
+        "integration__user_group",
+        "integration__user",
         "plugin__integration",
         "scheduled_task__plugin",
         "persona__plugin",

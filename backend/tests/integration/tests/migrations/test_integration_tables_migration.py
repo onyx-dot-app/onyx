@@ -1,6 +1,7 @@
 """Migration 730bce2814a0 copies each MCP server, external app and OpenAPI
-custom tool into the integration tables, with a plugin that holds each. The
-rows are seeded at the revision before it, then the chain upgrades."""
+custom tool into the integration tables, with its access, and makes a plugin
+that holds each. The rows are seeded at the revision before it, then the chain
+upgrades."""
 
 import hashlib
 import json
@@ -41,6 +42,8 @@ OLD_TABLES = (
     "tool",
     "tool_user_preference",
     "persona__tool",
+    "persona__user",
+    "persona__user_group",
     "workspace_action_policy",
     "external_app__skill",
     "user_action_policy",
@@ -97,16 +100,23 @@ class Seeded:
     other: UUID
     admin: UUID
     inactive: UUID
+    agent_user: UUID
+    unlisted_user: UUID
     group: int
+    agent_group: int
+    agent_owner_group: int
     default_group: int
     persona: int
     own_persona: int
     bot_persona: int
+    agent_personas: list[int]
     task: UUID
     mcp_public: int
     mcp_private: int
     mcp_user_key: int
     mcp_orphan: int
+    mcp_agent_public: int
+    mcp_agent_orphan: int
     app_slack: int
     app_custom: int
     app_org_key: int
@@ -135,7 +145,7 @@ def _insert(conn: Connection, sql: str, **params: Any) -> Any:
 def _seed(conn: Connection) -> Seeded:
     s = uuid4().hex[:8]
     users: dict[str, UUID] = {}
-    for key in ("owner", "other", "admin", "inactive"):
+    for key in ("owner", "other", "admin", "inactive", "agent_user", "unlisted_user"):
         users[key] = _insert(
             conn,
             'INSERT INTO "user" (id, email, hashed_password, is_active, '
@@ -154,6 +164,12 @@ def _seed(conn: Connection) -> Seeded:
         "VALUES (:name, true, false) RETURNING id",
         name=f"u1-group-{s}",
     )
+    agent_group = _insert(
+        conn,
+        "INSERT INTO user_group (name, is_up_to_date, is_up_for_deletion) "
+        "VALUES (:name, true, false) RETURNING id",
+        name=f"u1-agent-group-{s}",
+    )
     # Stands in for Admin: a default group other than Basic.
     default_group = _insert(
         conn,
@@ -169,14 +185,18 @@ def _seed(conn: Connection) -> Seeded:
         {"group": default_group, "user": users["admin"]},
     )
 
-    def persona(owner: UUID, name: str) -> int:
+    def persona(
+        owner: UUID, name: str, *, public: bool = False, listed: bool = True
+    ) -> int:
         return _insert(
             conn,
             "INSERT INTO persona (name, description, deleted, is_listed, "
             "is_public, builtin_persona, user_id) VALUES "
-            "(:name, '', false, true, false, false, :owner) RETURNING id",
+            "(:name, '', false, :listed, :public, false, :owner) RETURNING id",
             name=f"u1-{name}-{s}",
             owner=owner,
+            public=public,
+            listed=listed,
         )
 
     other_persona = persona(users["other"], "persona")
@@ -214,12 +234,19 @@ def _seed(conn: Connection) -> Seeded:
         "private": f"u1-private-{s}",
         "orphan": f"u1-orphan-{s}",
         "user_key": f"u1-per-user-mcp-{s}",
+        "agent_public": f"u1-agent-public-{s}",
+        "agent_orphan": f"u1-agent-orphan-{s}",
     }
     owner_email = f"u1-owner-{s}@example.com"
     mcp_public = mcp(names["shared"], owner_email, True, "OAUTH", "PER_USER")
     mcp_private = mcp(names["private"], owner_email, False, "API_TOKEN", "ADMIN")
     mcp_orphan = mcp(names["orphan"], f"gone-{s}@example.com", False, "NONE", "ADMIN")
     mcp_user_key = mcp(names["user_key"], owner_email, False, "API_TOKEN", "PER_USER")
+    # Private servers that only agents give to other people.
+    mcp_agent_public = mcp(names["agent_public"], owner_email, False, "NONE", "ADMIN")
+    mcp_agent_orphan = mcp(
+        names["agent_orphan"], f"gone-{s}@example.com", False, "NONE", "ADMIN"
+    )
     # Only the public server is available in Craft.
     conn.execute(
         text(
@@ -255,6 +282,8 @@ def _seed(conn: Connection) -> Seeded:
     tool_write = mcp_tool(mcp_public, "create_issue", False, True)
     tool_unselected = mcp_tool(mcp_private, "drop_table", False, False)
     tool_selected = mcp_tool(mcp_private, "query", True, True)
+    tool_agent_public = mcp_tool(mcp_agent_public, "search", True, True)
+    tool_agent_orphan = mcp_tool(mcp_agent_orphan, "lookup", True, True)
 
     def app(name: str, app_type: str, template: dict[str, str]) -> int:
         return _insert(
@@ -350,6 +379,8 @@ def _seed(conn: Connection) -> Seeded:
         ("mcp_private", "mcp_server_id", mcp_private),
         ("mcp_orphan", "mcp_server_id", mcp_orphan),
         ("mcp_user_key", "mcp_server_id", mcp_user_key),
+        ("mcp_agent_public", "mcp_server_id", mcp_agent_public),
+        ("mcp_agent_orphan", "mcp_server_id", mcp_agent_orphan),
         ("app_custom", "external_app_id", app_custom),
     ):
         gated[key] = _insert(
@@ -420,7 +451,64 @@ def _seed(conn: Connection) -> Seeded:
     # Turned off for the default agent; a custom agent still has it.
     custom_disabled = custom(f"u1-custom-disabled-{s}", None, None, enabled=False)
 
+    # The agents that give a private server to their users.
+    shared_persona = persona(users["other"], "shared-persona")
+    for user_key in ("agent_user",):
+        conn.execute(
+            text("INSERT INTO persona__user (persona_id, user_id) VALUES (:p, :u)"),
+            {"p": shared_persona, "u": users[user_key]},
+        )
+    for group_id in (agent_group, default_group):
+        conn.execute(
+            text(
+                "INSERT INTO persona__user_group (persona_id, user_group_id) "
+                "VALUES (:p, :g)"
+            ),
+            {"p": shared_persona, "g": group_id},
+        )
+    # An agent that is not listed gives the server only to its owner.
+    unlisted_persona = persona(users["other"], "unlisted-persona", listed=False)
+    conn.execute(
+        text("INSERT INTO persona__user (persona_id, user_id) VALUES (:p, :u)"),
+        {"p": unlisted_persona, "u": users["unlisted_user"]},
+    )
+    # The owner group of an agent has it also when the agent is not listed.
+    agent_owner_group = _insert(
+        conn,
+        "INSERT INTO user_group (name, is_up_to_date, is_up_for_deletion) "
+        "VALUES (:name, true, false) RETURNING id",
+        name=f"u1-agent-owner-group-{s}",
+    )
+    group_persona = _insert(
+        conn,
+        "INSERT INTO persona (name, description, deleted, is_listed, "
+        "is_public, builtin_persona, owner_group_id) VALUES "
+        "(:name, '', false, false, false, false, :group) RETURNING id",
+        name=f"u1-group-persona-{s}",
+        group=agent_owner_group,
+    )
+    # An agent with only a tool that the admin did not select gives nothing.
+    unselected_persona = persona(users["inactive"], "unselected-persona")
+    public_persona = persona(users["other"], "public-persona", public=True)
+    conn.execute(
+        text("INSERT INTO persona__user (persona_id, user_id) VALUES (:p, :u)"),
+        {"p": public_persona, "u": users["unlisted_user"]},
+    )
+    agent_personas = [
+        shared_persona,
+        unlisted_persona,
+        group_persona,
+        unselected_persona,
+        public_persona,
+    ]
+
     for persona_id, tool_id in (
+        (shared_persona, tool_selected),
+        (shared_persona, tool_agent_orphan),
+        (unlisted_persona, tool_selected),
+        (group_persona, tool_selected),
+        (unselected_persona, tool_unselected),
+        (public_persona, tool_agent_public),
         (other_persona, tool_read),
         (other_persona, custom_shared),
         (own_persona, custom_private),
@@ -652,16 +740,23 @@ def _seed(conn: Connection) -> Seeded:
         other=users["other"],
         admin=users["admin"],
         inactive=users["inactive"],
+        agent_user=users["agent_user"],
+        unlisted_user=users["unlisted_user"],
         group=group,
+        agent_group=agent_group,
+        agent_owner_group=agent_owner_group,
         default_group=default_group,
         persona=other_persona,
         own_persona=own_persona,
         bot_persona=bot_persona,
+        agent_personas=agent_personas,
         task=task,
         mcp_public=mcp_public,
         mcp_private=mcp_private,
         mcp_orphan=mcp_orphan,
         mcp_user_key=mcp_user_key,
+        mcp_agent_public=mcp_agent_public,
+        mcp_agent_orphan=mcp_agent_orphan,
         app_slack=app_slack,
         app_custom=app_custom,
         app_org_key=app_org_key,
@@ -745,6 +840,8 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
         seeded.mcp_private,
         seeded.mcp_orphan,
         seeded.mcp_user_key,
+        seeded.mcp_agent_public,
+        seeded.mcp_agent_orphan,
     ]
     conn.execute(
         text(
@@ -779,11 +876,17 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
     conn.execute(
         text("DELETE FROM oauth_config WHERE name LIKE 'u1-oauth-%'"),
     )
-    personas = [seeded.persona, seeded.own_persona, seeded.bot_persona]
-    conn.execute(
-        text("DELETE FROM persona__tool WHERE persona_id = ANY(:ids)"),
-        {"ids": personas},
-    )
+    personas = [
+        seeded.persona,
+        seeded.own_persona,
+        seeded.bot_persona,
+        *seeded.agent_personas,
+    ]
+    for table in ("persona__tool", "persona__user", "persona__user_group"):
+        conn.execute(
+            text(f"DELETE FROM {table} WHERE persona_id = ANY(:ids)"),
+            {"ids": personas},
+        )
     conn.execute(text("DELETE FROM persona WHERE id = ANY(:ids)"), {"ids": personas})
     conn.execute(
         text("DELETE FROM user__user_group WHERE user_group_id = :g"),
@@ -791,11 +894,27 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
     )
     conn.execute(
         text('DELETE FROM "user" WHERE id = ANY(:ids)'),
-        {"ids": [seeded.owner, seeded.other, seeded.admin, seeded.inactive]},
+        {
+            "ids": [
+                seeded.owner,
+                seeded.other,
+                seeded.admin,
+                seeded.inactive,
+                seeded.agent_user,
+                seeded.unlisted_user,
+            ]
+        },
     )
     conn.execute(
         text("DELETE FROM user_group WHERE id = ANY(:ids)"),
-        {"ids": [seeded.group, seeded.default_group]},
+        {
+            "ids": [
+                seeded.group,
+                seeded.agent_group,
+                seeded.agent_owner_group,
+                seeded.default_group,
+            ]
+        },
     )
 
 
@@ -837,6 +956,9 @@ class Copied:
     author_user_id: UUID | None
     published: bool
     installation_policy: str | None
+    # The access that the integration itself holds.
+    owner_user_id: UUID | None
+    integration_policy: str
     auth_mode: str
     auth_method: str | None
     header_template: dict[str, str] | None
@@ -854,7 +976,8 @@ def _copied(conn: Connection, where: str, **params: Any) -> Copied:
             "SELECT i.id, i.kind, i.name, p.id AS plugin_id, p.name AS plugin_name, "
             "p.marketplace_id, m.kind AS marketplace_kind, p.author_user_id, "
             "p.published_version_id IS NOT NULL AS published, "
-            "p.installation_policy, i.auth_mode, "
+            "p.installation_policy, i.owner_user_id, "
+            "i.installation_policy AS integration_policy, i.auth_mode, "
             "i.auth_method, i.header_template, i.credential_fields, "
             "i.users_can_save_always_allow "
             f"FROM integration i JOIN plugin p ON p.id = {FIRST_PLUGIN} "
@@ -930,6 +1053,36 @@ def _connections(conn: Connection, integration_id: int) -> dict[Any, Any]:
             {"id": integration_id},
         )
     }
+
+
+def _integration_shares(
+    conn: Connection, table: str, column: str, integration_id: int
+) -> set[Any]:
+    """The users or groups that an integration is shared with, as viewers."""
+    return set(
+        conn.execute(
+            text(
+                f"SELECT {column} FROM {table} "
+                "WHERE integration_id = :i AND permission = 'VIEWER'"
+            ),
+            {"i": integration_id},
+        ).scalars()
+    )
+
+
+def _link_differences(conn: Connection, table: str, owner: str) -> int:
+    """The links of ``table``__plugin and ``table``__integration that do not
+    match: a link with no twin, or with other settings."""
+    return conn.execute(
+        text(
+            f"SELECT count(*) FROM {table}__plugin p FULL JOIN ("
+            f"  SELECT {owner}, action_settings, "
+            "    md5('integration_plugin:' || integration_id::text)::uuid AS plugin_id"
+            f"  FROM {table}__integration"
+            f") i USING ({owner}, plugin_id) "
+            "WHERE p.action_settings IS DISTINCT FROM i.action_settings"
+        )
+    ).scalar_one()
 
 
 def _settings(conn: Connection, table: str, key: str, owner: Any, plugin: UUID) -> Any:
@@ -1340,13 +1493,84 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             *((skill_id, org_key.id) for skill_id in seeded.shared_skills),
             (slack.plugin_id, slack.id),
         }
-        # The integration records the person who set it up.
+        # The integration holds its own access. Its owner is the person who
+        # set it up. An integration of the organization is Available, or what
+        # its source gives. Each other integration is private.
+        assert private.owner_user_id == seeded.owner
+        assert public.owner_user_id == seeded.owner
+        assert orphan.owner_user_id is None and slack.owner_user_id is None
+        assert custom["private"].owner_user_id == seeded.owner
+        assert {
+            "public": public.integration_policy,
+            "slack": slack.integration_policy,
+            "app_custom": app_custom.integration_policy,
+            "private": private.integration_policy,
+            "orphan": orphan.integration_policy,
+            **{f"custom_{key}": c.integration_policy for key, c in custom.items()},
+        } == {
+            "public": "AVAILABLE",
+            "slack": "AVAILABLE",
+            "app_custom": "NOT_AVAILABLE",
+            "private": "NOT_AVAILABLE",
+            "orphan": "NOT_AVAILABLE",
+            "custom_private": "NOT_AVAILABLE",
+            "custom_shared": "AVAILABLE",
+            "custom_default": "DEFAULT",
+            # Only an agent of its owner has it.
+            "custom_oauth": "NOT_AVAILABLE",
+            "custom_disabled": "NOT_AVAILABLE",
+        }
+        # A private server keeps its people, as its plugin does. The agents
+        # that have one of its selected tools add their users: the owner of
+        # each agent, and the shares of an agent that is listed. A default
+        # group becomes its members.
+        assert _integration_shares(
+            conn, "integration__user", "user_id", private.id
+        ) == {
+            seeded.other,
+            seeded.admin,
+            seeded.owner,
+            seeded.agent_user,
+        }
+        assert _integration_shares(
+            conn, "integration__user_group", "user_group_id", private.id
+        ) == {seeded.group, seeded.agent_group, seeded.agent_owner_group}
+        # A server with no owner stays private and gets the users of its agent.
+        agent_orphan = _copied(conn, "i.id = :id", id=seeded.gated["mcp_agent_orphan"])
+        assert agent_orphan.integration_policy == "NOT_AVAILABLE"
+        assert _integration_shares(
+            conn, "integration__user", "user_id", agent_orphan.id
+        ) == {seeded.other, seeded.admin, seeded.agent_user}
+        assert _integration_shares(
+            conn, "integration__user_group", "user_group_id", agent_orphan.id
+        ) == {seeded.agent_group}
+        # Each user could use a public agent, so its server is Available.
+        agent_public = _copied(conn, "i.id = :id", id=seeded.gated["mcp_agent_public"])
+        assert agent_public.integration_policy == "AVAILABLE"
+        assert agent_public.marketplace_kind == "user_uploads"
+        assert _integration_shares(
+            conn, "integration__user", "user_id", agent_public.id
+        ) == {seeded.other, seeded.unlisted_user}
+        # No copied group row holds an install setting.
         assert (
             conn.execute(
-                text("SELECT created_by_user_id FROM integration WHERE id = :id"),
-                {"id": private.id},
+                text(
+                    "SELECT count(*) FROM integration__user_group "
+                    "WHERE installation_policy IS NOT NULL OR permission IS NULL"
+                )
             ).scalar_one()
-            == seeded.owner
+            == 0
+        )
+        # An integration that is not a private MCP server gets no share.
+        assert (
+            conn.execute(
+                text(
+                    "SELECT count(*) FROM integration__user WHERE integration_id "
+                    "= ANY(:ids)"
+                ),
+                {"ids": [public.id, slack.id, *(c.id for c in custom.values())]},
+            ).scalar_one()
+            == 0
         )
 
         # The old tool selection of a chat, as tool options.
@@ -1387,6 +1611,16 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             public.plugin_id: False,
             custom["default"].plugin_id: False,
         }
+        assert {
+            row.integration_id: (row.enabled, row.enabled_at)
+            for row in conn.execute(
+                text(
+                    "SELECT integration_id, enabled, enabled_at "
+                    "FROM user_integration_preference WHERE user_id = :u"
+                ),
+                {"u": seeded.other},
+            )
+        } == {public.id: (False, None), custom["default"].id: (False, None)}
         disabled = {
             row.assistant_id: row.disabled_plugin_ids
             for row in conn.execute(
@@ -1398,6 +1632,16 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             )
         }
         assert disabled == {seeded.persona: [public.plugin_id], seeded.own_persona: []}
+        assert {
+            row.assistant_id: row.disabled_integration_ids
+            for row in conn.execute(
+                text(
+                    "SELECT assistant_id, disabled_integration_ids "
+                    "FROM assistant__user_specific_config WHERE assistant_id = ANY(:p)"
+                ),
+                {"p": [seeded.persona, seeded.own_persona]},
+            )
+        } == {seeded.persona: [public.id], seeded.own_persona: []}
 
         # Agents keep the same actions and no other.
         assert _settings(
@@ -1467,6 +1711,28 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             == {}
         )
 
+        # Each agent and task link has a twin for the integration, with the
+        # same settings.
+        assert _link_differences(conn, "persona", "persona_id") == 0
+        assert _link_differences(conn, "scheduled_task", "scheduled_task_id") == 0
+        assert conn.execute(
+            text(
+                "SELECT action_settings FROM persona__integration "
+                "WHERE persona_id = :p AND integration_id = :i"
+            ),
+            {"p": seeded.bot_persona, "i": public.id},
+        ).scalar_one() == {"default": "blocked", "actions": {"create_issue": "allow"}}
+        assert conn.execute(
+            text(
+                "SELECT action_settings FROM scheduled_task__integration "
+                "WHERE scheduled_task_id = :t AND integration_id = :i"
+            ),
+            {"t": seeded.task, "i": slack.id},
+        ).scalar_one() == {
+            "default": "ask",
+            "actions": {"slack.messages.write": "allow"},
+        }
+
         # A task keeps its pre-approvals, and each other action asks.
         assert _settings(
             conn,
@@ -1527,28 +1793,38 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
         "plugin__user",
         "plugin__user_group",
         "user_plugin_preference",
+        "integration__user",
+        "integration__user_group",
+        "user_integration_preference",
+        "persona__integration",
+        "scheduled_task__integration",
     )
+    # The foreign keys that a delete of an integration, a user, a group, an
+    # agent or a task follows.
+    indexes = {
+        "ix_integration_connection_integration_id",
+        "ix_integration_action_policy_integration_id",
+        "ix_integration_owner_user_id",
+        "ix_integration__user_user_id",
+        "ix_integration__user_group_user_group_id",
+        "ix_user_integration_preference_integration_id",
+        "ix_persona__integration_integration_id",
+        "ix_scheduled_task__integration_integration_id",
+        "uq_integration_action_policy_user_group",
+    }
     with engine.connect() as conn:
-        # The foreign keys that a delete of an integration or a user follows.
-        assert set(
-            conn.execute(
-                text(
-                    "SELECT indexname FROM pg_indexes "
-                    "WHERE schemaname = current_schema() AND indexname = ANY(:names)"
-                ),
-                {
-                    "names": [
-                        "ix_integration_connection_integration_id",
-                        "ix_integration_action_policy_integration_id",
-                        "ix_integration_created_by_user_id",
-                    ]
-                },
-            ).scalars()
-        ) == {
-            "ix_integration_connection_integration_id",
-            "ix_integration_action_policy_integration_id",
-            "ix_integration_created_by_user_id",
-        }
+        assert (
+            set(
+                conn.execute(
+                    text(
+                        "SELECT indexname FROM pg_indexes WHERE "
+                        "schemaname = current_schema() AND indexname = ANY(:names)"
+                    ),
+                    {"names": sorted(indexes)},
+                ).scalars()
+            )
+            == indexes
+        )
     first = _fingerprint(engine, new_tables)
     old = _fingerprint(engine, OLD_TABLES)
     # An approval of an integration made after the upgrade has no gated_app.
@@ -1600,6 +1876,29 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
             conn.execute(text("SELECT to_regclass('integration')")).scalar_one() is None
         )
         assert _has_tool_selection(conn) is True
+        for table in (
+            "integration__user",
+            "integration__user_group",
+            "user_integration_preference",
+            "persona__integration",
+            "scheduled_task__integration",
+        ):
+            assert (
+                conn.execute(text(f"SELECT to_regclass('{table}')")).scalar_one()
+                is None
+            )
+        assert (
+            conn.execute(
+                text(
+                    "SELECT count(*) FROM information_schema.columns "
+                    "WHERE table_schema = current_schema() "
+                    "AND table_name = 'assistant__user_specific_config' "
+                    "AND column_name IN "
+                    "('disabled_integration_ids', 'disabled_plugin_ids')"
+                )
+            ).scalar_one()
+            == 0
+        )
         # The downgrade deletes it, then gated_app_id is required again.
         assert (
             conn.execute(
@@ -1726,3 +2025,39 @@ def test_each_integration_has_one_row_of_its_kind(
             ).scalar_one()
             == 0
         )
+
+
+def test_action_policy_row_has_one_scope(engine: Engine, seeded: Seeded) -> None:
+    """A policy row is the admin value, the value of one group or the choice
+    of one user. Each scope holds one row for each action."""
+    _migrate("upgrade", "head")
+    integration_id = seeded.gated["mcp_public"]
+    insert = text(
+        "INSERT INTO integration_action_policy "
+        "(integration_id, action, user_id, user_group_id, policy) "
+        "VALUES (:i, 'u1-scope', :u, :g, 'ask')"
+    )
+
+    def add(user: UUID | None, group: int | None) -> None:
+        with engine.begin() as conn:
+            conn.execute(insert, {"i": integration_id, "u": user, "g": group})
+
+    try:
+        add(None, None)
+        add(None, seeded.group)
+        add(None, seeded.agent_group)
+        add(seeded.other, None)
+        for user, group in (
+            (None, None),
+            (None, seeded.group),
+            (seeded.other, None),
+            # A row cannot be for a user and for a group.
+            (seeded.other, seeded.group),
+        ):
+            with pytest.raises(IntegrityError):
+                add(user, group)
+    finally:
+        with engine.begin() as conn:
+            conn.execute(
+                text("DELETE FROM integration_action_policy WHERE action = 'u1-scope'")
+            )

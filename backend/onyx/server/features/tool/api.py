@@ -239,8 +239,8 @@ def _alias_snapshot(
         passthrough_auth=integration.auth_method is IntegrationAuthMethod.ONYX_LOGIN,
         mcp_server_id=tool.mcp_server_id,
         user_id=(
-            str(integration.created_by_user_id)
-            if integration.created_by_user_id is not None
+            str(integration.owner_user_id)
+            if integration.owner_user_id is not None
             else None
         ),
         oauth_config_id=None,

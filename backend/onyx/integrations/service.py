@@ -775,7 +775,7 @@ def create_integration__no_commit(
     integration = insert_integration__no_commit(
         name=name,
         description=request.description,
-        created_by_user_id=user.id,
+        owner_user_id=user.id,
         auth_mode=request.auth_mode,
         auth_method=auth_method,
         credential_fields=(
@@ -1168,9 +1168,9 @@ def _creator_emails(
     integrations: Collection[Integration], db_session: Session
 ) -> dict[UUID, str]:
     creator_ids = {
-        integration.created_by_user_id
+        integration.owner_user_id
         for integration in integrations
-        if integration.created_by_user_id is not None
+        if integration.owner_user_id is not None
     }
     return {
         creator.id: creator.email
@@ -1209,8 +1209,8 @@ def _admin_views(
                 auth_method=integration.auth_method,
                 plugins=[_plugin_ref(row) for row in plugins],
                 created_by_email=(
-                    creator_emails.get(integration.created_by_user_id)
-                    if integration.created_by_user_id is not None
+                    creator_emails.get(integration.owner_user_id)
+                    if integration.owner_user_id is not None
                     else None
                 ),
                 action_count=action_counts[integration.id],
