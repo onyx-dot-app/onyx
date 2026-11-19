@@ -1,6 +1,6 @@
 /**
  * The logout route proxies to the backend and must expire the auth cookie
- * whether or not the backend logout succeeds.
+ * whether the backend logout succeeds, fails, or cannot be reached.
  */
 import { NextRequest } from "next/server";
 import { POST as logout } from "@/app/auth/logout/route";
@@ -60,6 +60,18 @@ describe("logout route", () => {
 
     expect(response.status).toBe(403);
     expect(await response.text()).toBe(body);
+    expectAuthCookieCleared(response);
+  });
+
+  it("clears the auth cookie when the backend cannot be reached", async () => {
+    jest
+      .spyOn(global, "fetch")
+      .mockRejectedValue(new TypeError("fetch failed"));
+    jest.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await logout(logoutRequest());
+
+    expect(response.status).toBe(204);
     expectAuthCookieCleared(response);
   });
 });

@@ -12,6 +12,15 @@ export class LoginPage {
     this.passwordInput = page.getByTestId("password");
   }
 
+  /** Opens the app root, which sends a signed-out visitor to this page. */
+  async gotoAppRoot(): Promise<void> {
+    await this.page.goto("/");
+  }
+
+  async reload(): Promise<void> {
+    await this.page.reload();
+  }
+
   async expectVisible(): Promise<void> {
     await expect(this.page).toHaveURL(/\/auth\/login/);
     await expect(this.emailInput).toBeVisible();

@@ -21,6 +21,7 @@ another tab just set; the window is one round trip and the user logs in again.
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from functools import cache
 
 from fastapi import Response
 from fastapi_users.authentication import CookieTransport
@@ -48,20 +49,25 @@ cookie_transport = CookieTransport(
     cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
 )
 
-# The logout Set-Cookie value. A missing (NOT_FOUND) or unreadable (MALFORMED)
-# token can never be accepted, so its rejection also expires the cookie and the
-# browser stops presenting it. Expired and terminated cookies stay for the grace
-# window so other tabs can still name the reason.
-_clear_cookie_response = Response()
-_clear_cookie_response.delete_cookie(
-    cookie_transport.cookie_name,
-    path=cookie_transport.cookie_path,
-    domain=cookie_transport.cookie_domain,
-    secure=cookie_transport.cookie_secure,
-    httponly=cookie_transport.cookie_httponly,
-    samesite=cookie_transport.cookie_samesite,
-)
-CLEAR_SESSION_COOKIE_HEADER = _clear_cookie_response.headers["set-cookie"]
+
+@cache
+def _clear_session_cookie_header() -> str:
+    """
+    The logout Set-Cookie value. A missing (NOT_FOUND) or unreadable (MALFORMED)
+    token can never be accepted, so its rejection also expires the cookie and
+    the browser stops presenting it. Expired and terminated cookies stay for the
+    grace window so other tabs can still name the reason.
+    """
+    response = Response()
+    response.delete_cookie(
+        cookie_transport.cookie_name,
+        path=cookie_transport.cookie_path,
+        domain=cookie_transport.cookie_domain,
+        secure=cookie_transport.cookie_secure,
+        httponly=cookie_transport.cookie_httponly,
+        samesite=cookie_transport.cookie_samesite,
+    )
+    return response.headers["set-cookie"]
 
 
 class SessionTokenValue(BaseModel):
@@ -257,7 +263,7 @@ def build_session_rejection_error() -> OnyxError | None:
         error_code,
         _REASON_TO_DETAIL[rejection.reason],
         headers=(
-            {"set-cookie": CLEAR_SESSION_COOKIE_HEADER}
+            {"set-cookie": _clear_session_cookie_header()}
             if error_code == OnyxErrorCode.SESSION_UNRECOGNIZED
             else None
         ),
@@ -275,4 +281,4 @@ def clear_unrecognized_session_cookie(response: Response) -> None:
         and _REASON_TO_ERROR_CODE[rejection.reason]
         == OnyxErrorCode.SESSION_UNRECOGNIZED
     ):
-        response.headers.append("set-cookie", CLEAR_SESSION_COOKIE_HEADER)
+        response.headers.append("set-cookie", _clear_session_cookie_header())

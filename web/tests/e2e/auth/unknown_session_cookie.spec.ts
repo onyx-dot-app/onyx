@@ -19,9 +19,10 @@ test.describe("Unknown session cookie", () => {
       },
     ]);
 
-    await page.goto("/");
+    const loginPage = new LoginPage(page);
+    await loginPage.gotoAppRoot();
 
-    await new LoginPage(page).expectVisible();
+    await loginPage.expectVisible();
     await expect
       .poll(async () =>
         (await context.cookies()).some(
@@ -31,7 +32,7 @@ test.describe("Unknown session cookie", () => {
       .toBe(false);
 
     // The login page stays put once the cookie is gone.
-    await page.reload();
-    await new LoginPage(page).expectVisible();
+    await loginPage.reload();
+    await loginPage.expectVisible();
   });
 });
