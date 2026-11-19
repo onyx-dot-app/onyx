@@ -381,13 +381,17 @@ export class ChatPage {
     await expect(this.inputBar.sendButton).toBeDisabled();
   }
 
-  /** Expands the timeline and checks one completed step of the tool that
+  /** Opens the run card and checks one completed step of the tool that
    * shows `output`. A JSON response renders as a `code` block; a text
    * response renders as an inline code span. */
   async expectCustomToolResult(name: string, output: string): Promise<void> {
-    await this.page
-      .getByRole("button", { name: "Expand timeline", exact: true })
-      .click();
+    // A run card folds by a button named for its step count.
+    const fold = this.scrollContainer
+      .getByRole("button", { name: /^\d+ steps?$/ })
+      .first();
+    if ((await fold.getAttribute("aria-expanded")) === "false") {
+      await fold.click();
+    }
     const status = this.scrollContainer.getByText(`${name} completed`, {
       exact: true,
     });
