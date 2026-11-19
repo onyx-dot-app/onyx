@@ -236,20 +236,6 @@ export async function getProjectTokenCount(projectId: number): Promise<number> {
   return data.total_tokens ?? 0;
 }
 
-export async function getMaxSelectedDocumentTokens(
-  personaId: number
-): Promise<number | null> {
-  const response = await fetch(
-    `/api/chat/max-selected-document-tokens?persona_id=${personaId}`
-  );
-  if (!response.ok) {
-    return null;
-  }
-  // Mirrors `MaxSelectedDocumentTokens` in chat_backend.py.
-  const json: { max_tokens: number } = await response.json();
-  return json?.max_tokens ?? null;
-}
-
 export async function moveChatSession(
   projectId: number,
   chatSessionId: string

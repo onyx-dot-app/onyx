@@ -104,6 +104,8 @@ export const SWR_KEYS = {
     `/api/chat/chat-session/${sessionId}/status`,
   pendingChatMessages: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/pending-messages`,
+  maxSelectedDocumentTokens: (personaId: number) =>
+    `/api/chat/max-selected-document-tokens?persona_id=${personaId}`,
   adminSsoProviders: "/api/admin/sso/provider",
   adminSsoProviderHandoff: (providerId: number) =>
     `/api/admin/sso/provider/${providerId}/handoff`,
