@@ -251,16 +251,15 @@ class _ArgumentStream:
         if self.stopped:
             return None
         self.held.append(fragment)
-        now = monotonic()
-        if now - self.reported_at < ARGUMENT_REPORT_INTERVAL_SECONDS:
+        if monotonic() - self.reported_at < ARGUMENT_REPORT_INTERVAL_SECONDS:
             return None
-        self.reported_at = now
         return self.flush()
 
     def flush(self) -> dict[str, str] | packets.FileToolProgress | None:
         """Report the arguments streamed so far."""
         if self.stopped:
             return None
+        self.reported_at = monotonic()
         self.reported += "".join(self.held)
         self.held.clear()
         try:

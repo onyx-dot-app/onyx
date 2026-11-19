@@ -370,6 +370,21 @@ def test_a_report_after_the_interval_holds_the_fragments_since_the_last(
     assert code_deltas(live.packets, "run_python") == ["a", "bc", "d"]
 
 
+def test_a_report_at_a_block_boundary_restarts_the_interval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = use_clock(monkeypatch, 0.0)
+    live = Live()
+    live.add('{"code": "a')
+    clock.now = ARGUMENT_REPORT_INTERVAL_SECONDS / 2
+    live.add("b")
+    # The next call's start reports the held "b".
+    clock.now = ARGUMENT_REPORT_INTERVAL_SECONDS
+    live.add('{"code": "x', index=1)
+    # "c" arrives within the interval of that report, so it waits.
+    clock.now = ARGUMENT_REPORT_INTERVAL_SECONDS * 1.5
+    live.add("c")
+    assert code_deltas(live.packets, "run_python") == ["a", "b", "x"]
 
 
 PATCH_TEXT = "\n".join(
