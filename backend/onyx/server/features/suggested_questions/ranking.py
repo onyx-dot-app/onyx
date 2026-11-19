@@ -6,7 +6,9 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from onyx.access.access import get_censoring_enabled_sources
 from onyx.access.hierarchy_access import get_user_external_group_ids
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.db.suggested_questions import get_visible_document_ids, has_visible_documents
 from onyx.server.features.suggested_questions.config import (
@@ -70,14 +72,19 @@ def get_suggestions(
         user,
         external_group_ids,
         list({q.document_id for q in [*pool.questions, *record.questions]}),
+        get_censoring_enabled_sources(),
     )
     shared = usable_questions(pool.questions, record, visible, now)
     private = usable_questions(record.questions, record, visible, now)
 
-    if not poll and _request_run(
-        db_session, tenant_id, user, record, shared, private, now
-    ):
-        record = record_requested(user.id, now)
+    if not poll and _request_run(tenant_id, user, record, shared, private, now):
+        try:
+            record = record_requested(user.id, now)
+        except Exception:
+            # The run is queued; only the "preparing" hint is lost.
+            logger.warning(
+                "Suggested questions: could not record the request", exc_info=True
+            )
 
     shown = pick_questions(private, shared, seed)
     if len(shown) >= SQ_SHOWN:
@@ -119,7 +126,9 @@ def pick_questions(
     page is open and changes on the next load."""
     # TODO(ENG-4481): rank by use-case fit once the company use case is stored.
     rng = random.Random(seed)  # noqa: S311 - a shuffle, not a secret
-    mine, everyone = list(private), list(shared)
+    # A fixed order first: shelf order can change between polls.
+    mine = sorted(private, key=lambda q: q.id)
+    everyone = sorted(shared, key=lambda q: q.id)
     rng.shuffle(mine)
     rng.shuffle(everyone)
     shown: list[ShownQuestion] = []
@@ -140,7 +149,6 @@ def pick_questions(
 
 
 def _request_run(
-    db_session: Session,
     tenant_id: str,
     user: User,
     record: UserRecord,
@@ -152,8 +160,9 @@ def _request_run(
     run, which also fills private shelves where it can. Otherwise, or when no
     pool run is allowed now, a top-up when their private shelf runs low. A
     top-up that would find nothing new is never queued. Never raises: the chat
-    page must not fail because of a run request. Returns whether a run is
-    queued for the person."""
+    page must not fail because of a run request, so its queries use their own
+    session: a failed one cannot break the page's session. Returns whether a
+    run is queued for the person."""
     try:
         if len(shared) <= SQ_SHARED_REFRESH_AT and request_pool_refresh(
             tenant_id, RefreshReason.PERSON_SHORT, requester_id=user.id
@@ -161,13 +170,14 @@ def _request_run(
             return True
         if len(private) > SQ_PRIVATE_REFILL_AT or not topup_allowed(record, now):
             return False
-        candidates = choose_documents(
-            db_session,
-            [user],
-            set(),
-            {user.id: fresh_document_ids(record.questions, now)},
-            include_shared=False,
-        )
+        with get_session_with_current_tenant() as db_session:
+            candidates = choose_documents(
+                db_session,
+                [user],
+                set(),
+                {user.id: fresh_document_ids(record.questions, now)},
+                include_shared=False,
+            )
         return bool(candidates) and request_user_topup(tenant_id, user.id, record, now)
     except Exception:
         logger.exception("Suggested questions: could not ask for a run")

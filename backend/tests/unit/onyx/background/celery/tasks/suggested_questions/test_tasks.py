@@ -64,6 +64,15 @@ def run(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     set_(tasks, "save_pool", lambda pool: state.update(saved=pool))
     set_(tasks, "get_session_with_current_tenant", MagicMock())
     set_(tasks, "get_live_document_ids", lambda _s, ids: set(ids))
+    # The person who asked for a run, and what they may open: everything.
+    set_(
+        tasks,
+        "fetch_user_by_id",
+        lambda _s, user_id: User(id=user_id, email="someone@co.com", is_active=True),
+    )
+    set_(tasks, "get_user_external_group_ids", lambda *_a: [])
+    set_(tasks, "get_censoring_enabled_sources", set)
+    set_(tasks, "get_visible_document_ids", lambda _s, _u, _g, ids, _c: set(ids))
     set_(tasks, "count_candidate_documents", lambda _s, _ids: 30)
     set_(tasks, "worth_running", lambda *_a, **_kw: state["decision"])
     set_(tasks, "get_recently_active_users", lambda _s, _now: [])
@@ -137,6 +146,35 @@ def test_a_run_for_a_person_who_is_no_longer_short_is_skipped(
     )
 
     _pool_task_for(str(alice))
+
+    run["triage"].assert_not_called()
+    assert run["saved"] is None
+
+
+def test_questions_the_requester_may_not_open_do_not_count(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run["pool"] = QuestionPool(
+        questions=[_question(f"s-{n}") for n in range(tasks.SQ_SHARED_REFRESH_AT + 1)]
+    )
+    # One question's document became private: the person is short again.
+    monkeypatch.setattr(
+        tasks,
+        "get_visible_document_ids",
+        lambda _s, _u, _g, ids, _c: set(ids) - {"s-0"},
+    )
+
+    _pool_task_for(str(uuid4()))
+
+    assert run["saved"] is not None
+
+
+def test_a_run_for_a_person_who_is_gone_is_skipped(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(tasks, "fetch_user_by_id", lambda *_a: None)
+
+    _pool_task_for(str(uuid4()))
 
     run["triage"].assert_not_called()
     assert run["saved"] is None

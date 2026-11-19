@@ -168,6 +168,16 @@ def censor_chunks_for_user(
     )(chunks=chunks, user=user)
 
 
+def get_censoring_enabled_sources() -> set[DocumentSource]:
+    """Sources whose access EE decides per user at read time (see
+    censor_chunks_for_user). Empty without EE."""
+    return fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.sync_params",
+        "get_all_censoring_enabled_sources",
+        set(),
+    )()
+
+
 def source_should_fetch_permissions_during_indexing(source: DocumentSource) -> bool:
     _source_should_fetch_permissions_during_indexing_func = cast(
         Callable[[DocumentSource], bool],

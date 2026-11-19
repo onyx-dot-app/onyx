@@ -108,11 +108,13 @@ def chat(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     set_(ranking, "record_seen", seen)
     set_(ranking, "record_requested", requested)
     set_(ranking, "get_user_external_group_ids", lambda *_a: [])
+    set_(ranking, "get_censoring_enabled_sources", set)
     set_(
         ranking,
         "get_visible_document_ids",
-        lambda _s, _u, _g, ids: set(ids),
+        lambda _s, _u, _g, ids, _censored: set(ids),
     )
+    set_(ranking, "get_session_with_current_tenant", MagicMock())
     set_(ranking, "has_visible_documents", lambda *_a: state["has_documents"])
 
     def pool_refresh(_t: str, reason: RefreshReason, requester_id: Any) -> bool:
@@ -221,3 +223,47 @@ def test_a_failed_run_request_does_not_fail_the_chat_page(
 
     assert chat["requested"] == []
     assert result.state == SuggestionsState.READY
+
+
+def test_the_pick_ignores_the_order_the_shelf_comes_in() -> None:
+    shared = [_question(f"shared-{n}") for n in range(6)]
+
+    def ids(order: list[PoolQuestion]) -> list[str]:
+        return [q.id for q in ranking.pick_questions([], order, seed=3)]
+
+    assert ids(shared) == ids(list(reversed(shared)))
+
+
+def test_a_failed_request_record_still_returns_the_questions(
+    chat: dict[str, Any], person: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chat["pool"] = QuestionPool(questions=[_question("handbook")])
+    monkeypatch.setattr(
+        ranking, "record_requested", MagicMock(side_effect=RuntimeError("kv down"))
+    )
+
+    result = _open(person)
+
+    assert chat["pool_requests"]  # the run was still asked for
+    assert [q.id for q in result.questions] == ["q-handbook"]
+
+
+def test_questions_the_person_may_not_open_are_not_shown(
+    chat: dict[str, Any], person: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chat["pool"] = QuestionPool(questions=[_question("open"), _question("censored")])
+    asked: list[Any] = []
+
+    def visible(_s: Any, _u: Any, _g: Any, ids: list[str], censored: Any) -> set[str]:
+        asked.append(censored)
+        return {i for i in ids if i != "censored"}
+
+    monkeypatch.setattr(ranking, "get_visible_document_ids", visible)
+    monkeypatch.setattr(
+        ranking, "get_censoring_enabled_sources", lambda: {DocumentSource.SALESFORCE}
+    )
+
+    result = _open(person)
+
+    assert [q.id for q in result.questions] == ["q-open"]
+    assert asked == [{DocumentSource.SALESFORCE}]
