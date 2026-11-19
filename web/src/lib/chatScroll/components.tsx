@@ -30,6 +30,9 @@ interface ChatScrollContextValue {
   /** The user gave scroll input since the view opened. Load content on
    *  scroll (older pages) only after it, so a restore loads nothing extra. */
   scrolledByUser: boolean;
+  /** Call before a requested move (`scrollIntoView`), so the view keeps it
+   *  instead of reading it as drift. */
+  markScrollInput: () => void;
   /**
    * Reports whether `target` is within `OVERSCAN_VIEWPORTS` viewport heights
    * of the scroll container, above or below. Returns a function that stops
@@ -190,12 +193,14 @@ export const ChatScrollView = React.forwardRef(function ChatScrollView(
       scrollContainerRef: scroll.containerRef,
       rowHeights: scroll.rowHeights,
       scrolledByUser: scroll.scrolledByUser,
+      markScrollInput: scroll.markScrollInput,
       observeNearViewport,
     }),
     [
       scroll.containerRef,
       scroll.rowHeights,
       scroll.scrolledByUser,
+      scroll.markScrollInput,
       observeNearViewport,
     ]
   );

@@ -57,9 +57,8 @@ import ScheduledRunBanner, {
   useScheduledRunContext,
 } from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
-import BuildMessageList, {
-  craftMessageRowId,
-} from "@/app/craft/components/BuildMessageList";
+import BuildMessageList from "@/app/craft/components/BuildMessageList";
+import { craftMessageRowId } from "@/app/craft/utils/rowIds";
 import {
   ChatScrollView,
   type ChatScrollViewHandle,
@@ -386,11 +385,20 @@ function ChatPanelContent({
   const autoScroll =
     user?.preferences?.auto_scroll !== false || !displayIsRunning;
   // A subagent's transcript keeps its own position.
-  const scrollViewKey = viewedSubagentSessionId ?? outputSessionId ?? undefined;
+  // The transcript on screen: a switch to or from a subagent fades the old
+  // one out first, and the scroll view must not open against its rows.
+  const viewedTranscript = viewedSubagentSessionId ?? "main";
+  const [shownTranscript, setShownTranscript] = useState(viewedTranscript);
+  const scrollViewKey =
+    shownTranscript === "main"
+      ? (outputSessionId ?? undefined)
+      : shownTranscript;
   // A new user message starts a turn and is its anchor.
-  const lastUserMessageId = isViewingSubagent
-    ? undefined
-    : session?.messages.filter((message) => message.type === "user").at(-1)?.id;
+  const lastUserMessageId =
+    shownTranscript === "main"
+      ? session?.messages.filter((message) => message.type === "user").at(-1)
+          ?.id
+      : undefined;
 
   const sendMessage = useCallback(
     async (
@@ -774,7 +782,11 @@ function ChatPanelContent({
                 )
               }
             >
-              <AnimatePresence mode="wait" initial={false}>
+              <AnimatePresence
+                mode="wait"
+                initial={false}
+                onExitComplete={() => setShownTranscript(viewedTranscript)}
+              >
                 <motion.div
                   key={viewedSubagentSessionId ?? "main"}
                   initial={reduceMotion ? false : { opacity: 0, y: 4 }}

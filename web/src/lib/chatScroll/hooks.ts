@@ -86,6 +86,8 @@ export interface ChatScrollController {
   scrollToBottom: () => void;
   /** Call on a send: the next turn animates its anchor to the top. */
   startTurn: () => void;
+  /** Call before a requested move (`scrollIntoView`): it is the user's. */
+  markScrollInput: () => void;
 }
 
 function maxScrollTop(container: HTMLElement): number {
@@ -279,8 +281,12 @@ export function useChatScroll({
 
   const updateButton = useCallback((container: HTMLElement) => {
     const spacer = spacerRef.current;
+    const content = contentRef.current;
+    // A footer inside the view (a sticky composer) covers the bottom.
+    const readableHeight =
+      container.clientHeight - (content ? trailingHeight(content) : 0);
     const contentBelow = spacer
-      ? offsetInView(spacer, container) - container.clientHeight
+      ? offsetInView(spacer, container) - readableHeight
       : 0;
     const visible = revealedRef.current && contentBelow > END_THRESHOLD_PX;
     if (visible !== buttonVisibleRef.current) {
@@ -308,11 +314,16 @@ export function useChatScroll({
     memoryRef.current.position = held ? { kind: "row", ...held } : null;
   }, []);
 
-  /** After a move ends: follow if at the end with auto-scroll on. */
+  /**
+   * After a move ends: follow if at the end with auto-scroll on. A user who
+   * scrolls to the end follows even while auto-scroll pauses (the
+   * typewriter's drain); following resumes when the pause ends.
+   */
   const settle = useCallback(
-    (container: HTMLElement) => {
+    (container: HTMLElement, byUser = false) => {
+      const atEnd = isAtEnd(container, END_THRESHOLD_PX);
       modeRef.current =
-        autoScrollRef.current && isAtEnd(container, END_THRESHOLD_PX)
+        atEnd && (autoScrollRef.current || byUser)
           ? { kind: "following", held: null, stickUntil: 0 }
           : { kind: "free", held: captureTopRow(container) };
       updateButton(container);
@@ -335,8 +346,11 @@ export function useChatScroll({
         performance.now() - userInputAtRef.current < USER_INPUT_WINDOW_MS;
       expectedTopRef.current = top;
       if (!byUser || !revealedRef.current) return false;
+      // A scroll the user drives (a touch fling, a smooth key scroll) can run
+      // past the input window; each step keeps it the user's.
+      userInputAtRef.current = performance.now();
       cancelTween();
-      settle(container);
+      settle(container, true);
       return true;
     },
     [cancelTween, settle]
@@ -479,6 +493,11 @@ export function useChatScroll({
     tween(container, () => maxScrollTop(container));
   }, [tween, write]);
 
+  const markScrollInput = useCallback(() => {
+    userInputAtRef.current = performance.now();
+    if (revealedRef.current) setScrolledByUser(true);
+  }, []);
+
   const startTurn = useCallback(() => {
     pendingTurnRef.current = revealedRef.current ? performance.now() : null;
   }, []);
@@ -505,6 +524,9 @@ export function useChatScroll({
     revealedRef.current = false;
     setRevealed(false);
     setScrolledByUser(false);
+    // A new view starts with its button hidden, and says so.
+    buttonVisibleRef.current = false;
+    onButtonRef.current?.(false);
     turnKeyRef.current = turnKey;
     pendingTurnRef.current = null;
     spaceHeightRef.current = -1;
@@ -536,6 +558,11 @@ export function useChatScroll({
       revealedRef.current &&
       performance.now() - pendingSince < TURN_PENDING_MS;
     if (!sent) {
+      // A send rolled back mid-animation: its anchor is gone.
+      if (modeRef.current.kind === "tween") {
+        cancelTween();
+        settle(container);
+      }
       reconcile();
       return;
     }
@@ -574,10 +601,19 @@ export function useChatScroll({
     resizeObserver.observe(container);
     resizeObserver.observe(content);
 
-    // A row that mounts at its cached height changes no size. While the view
-    // is opening, that is what it waits for.
+    // A row that mounts at its cached height changes no size, and rows can
+    // shift without the content's size changing. Check once per frame.
+    let frame: number | null = null;
     const mutationObserver = new MutationObserver(() => {
-      if (!revealedRef.current) reconcile();
+      if (!revealedRef.current) {
+        reconcile();
+        return;
+      }
+      if (frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        reconcile();
+      });
     });
     mutationObserver.observe(content, {
       childList: true,
@@ -589,6 +625,7 @@ export function useChatScroll({
     return () => {
       resizeObserver.disconnect();
       mutationObserver.disconnect();
+      if (frame !== null) cancelAnimationFrame(frame);
     };
   }, [reconcile]);
 
@@ -607,10 +644,7 @@ export function useChatScroll({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const markInput = () => {
-      userInputAtRef.current = performance.now();
-      if (revealedRef.current) setScrolledByUser(true);
-    };
+    const markInput = markScrollInput;
     const onKeyDown = (event: KeyboardEvent) => {
       // Keys typed into a field (a composer inside the view) do not scroll.
       const target = event.target;
@@ -628,6 +662,8 @@ export function useChatScroll({
       pointerHeldRef.current = false;
       markInput();
     };
+    // Focus moved into the view (Tab) scrolls the focused control into view.
+    container.addEventListener("focusin", markInput);
     container.addEventListener("wheel", markInput, { passive: true });
     container.addEventListener("touchmove", markInput, { passive: true });
     container.addEventListener("keydown", onKeyDown);
@@ -635,6 +671,7 @@ export function useChatScroll({
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointercancel", onPointerUp);
     return () => {
+      container.removeEventListener("focusin", markInput);
       container.removeEventListener("wheel", markInput);
       container.removeEventListener("touchmove", markInput);
       container.removeEventListener("keydown", onKeyDown);
@@ -642,7 +679,7 @@ export function useChatScroll({
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
     };
-  }, []);
+  }, [markScrollInput]);
 
   return {
     containerRef,
@@ -654,5 +691,6 @@ export function useChatScroll({
     onScroll,
     scrollToBottom,
     startTurn,
+    markScrollInput,
   };
 }

@@ -26,6 +26,7 @@ import HumanMessage from "@/app/app/message/HumanMessage";
 import CraftMessageAttachments from "@/app/craft/components/CraftMessageAttachments";
 import TurnOutputCards from "@/app/craft/components/TurnOutputCards";
 import { chatScrollRowProps } from "@/lib/chatScroll/components";
+import { craftMessageRowId } from "@/app/craft/utils/rowIds";
 import {
   BuildMessage,
   type OutputCard,
@@ -60,11 +61,6 @@ interface BuildMessageListProps {
   onOutputOpen?: (output: OutputCard) => void;
   onTurnOutputsOpen?: (turnIndex: number) => void;
   onFileOpen?: (path: string, fileName: string) => void;
-}
-
-/** DOM id of a message's row, the scroll view's anchor for a user message. */
-export function craftMessageRowId(messageId: string): string {
-  return `craft-message-${messageId}`;
 }
 
 /**

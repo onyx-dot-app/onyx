@@ -245,11 +245,7 @@ test.describe("Dynamic Bottom Spacer - Fresh Chat Effect", () => {
 
     // Now scroll up to verify previous messages are accessible
     const scrollContainer = getScrollContainer(page);
-    await scrollContainer.evaluate((el: HTMLElement) => {
-      // The chat treats a scroll as the user's only after scroll input.
-      el.dispatchEvent(new WheelEvent("wheel"));
-      el.scrollTo({ top: 0, behavior: "instant" });
-    });
+    await new ChatPage(page).scrollTo("top");
 
     // Wait for scroll to complete
     await expect
@@ -296,11 +292,7 @@ test.describe("Scroll position memory", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAsRandomUser(page);
-    await page.goto("/app");
-    await Promise.all([
-      page.getByText("Agents").first().waitFor(),
-      page.getByText("Projects").first().waitFor(),
-    ]);
+    await new ChatPage(page).goto();
   });
 
   /** Sends two turns, then leaves for a new chat with one turn. */
@@ -322,7 +314,10 @@ test.describe("Scroll position memory", () => {
   test("a sent turn reopens with its message at the top", async ({ page }) => {
     const chat = new ChatPage(page);
     await leaveChat(page, chat, async () => {});
-    await expect.poll(() => chat.latestHumanMessageOffset()).toBeLessThan(40);
+    // The anchor sits 16px below the viewport's top.
+    await expect
+      .poll(async () => Math.abs((await chat.latestHumanMessageOffset()) - 16))
+      .toBeLessThanOrEqual(8);
   });
 
   test("a chat left at its end reopens at its end", async ({ page }) => {

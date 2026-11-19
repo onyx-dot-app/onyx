@@ -726,9 +726,14 @@ up its own branding.
     `scrollTop` in the chat and Craft transcripts. `ChatScrollView`
     (`lib/chatScroll/components.tsx`) wraps it; `sections/chat/ChatScrollContainer.tsx`
     and Craft's `ChatPanel` only pass options. A scroll position that the
-    controller did not write, and that is not the browser clamping to shorter
-    content, is the user's. Only user scrolls, `startTurn` (called on each
-    send) and `scrollToBottom` change its mode. Content growth never does.
+    controller did not write is the user's only while a pointer is held, or
+    within 600ms of scroll input (wheel, touch, scroll keys, focus moving
+    into the view, `markScrollInput` before a requested `scrollIntoView`);
+    each such step extends the window, so a fling stays the user's. Any other
+    change is layout drift, and the controller restores the mode's position.
+    Find-in-page sends no input, so its jump counts as drift. Only user
+    scrolls, `startTurn` (called on each send) and `scrollToBottom` change
+    the mode. Content growth never does.
     - Following: at the end with auto-scroll on, it keeps to the end. The
       consumers turn auto-scroll on whenever nothing is running, so the
       setting only decides whether a streaming reply is followed; idle growth
