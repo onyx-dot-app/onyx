@@ -68,6 +68,21 @@ export interface ChatScrollContainerProps {
   /** Full-width mode: edge-to-edge scroll container instead of the centered
    *  reading layout (drops the reserved scrollbar gutter). */
   fullWidth?: boolean;
+
+  /** Rendered inside the scroll element, after the content (a sticky
+   *  composer). It is not content: "at the bottom" ignores it. */
+  footer?: React.ReactNode;
+
+  /** Fade content opacity at the top and bottom edges. */
+  fadeEdges?: boolean;
+
+  /** Replace the default classes of the outer wrapper, the scroll element
+   *  and the content wrapper, for a view outside the chat page. */
+  className?: string;
+  scrollClassName?: string;
+  contentClassName?: string;
+
+  "data-testid"?: string;
 }
 
 // A scroll this long after the user's last scroll input is still theirs
@@ -129,6 +144,12 @@ const ChatScrollContainer = React.memo(
         sessionId,
         hideScrollbar = false,
         fullWidth = false,
+        footer,
+        fadeEdges = true,
+        className,
+        scrollClassName,
+        contentClassName,
+        "data-testid": testId = "chat-scroll-container",
       }: ChatScrollContainerProps,
       ref: ForwardedRef<ChatScrollContainerHandle>
     ) => {
@@ -599,6 +620,8 @@ const ChatScrollContainer = React.memo(
 
         if (!shouldScroll) {
           prevAnchorSelectorRef.current = anchorSelector ?? null;
+          // No anchor (no messages yet): nothing to place, so show the view.
+          if (!anchorSelector) setIsScrollReady(true);
           return;
         }
 
@@ -727,36 +750,48 @@ const ChatScrollContainer = React.memo(
       const contentMask = buildContentMask();
 
       return (
-        <div className="flex flex-col flex-1 min-h-0 w-full relative overflow-hidden mb-1">
+        <div
+          className={
+            className ??
+            "flex flex-col flex-1 min-h-0 w-full relative overflow-hidden mb-1"
+          }
+        >
           <div
             key={sessionId}
             ref={scrollContainerRef}
-            data-testid="chat-scroll-container"
+            data-testid={testId}
             data-chat-scroll
-            className={cn(
-              "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden",
-              hideScrollbar ? "no-scrollbar" : "default-scrollbar",
-              // Full-width (always the case below md) drops the reserved
-              // gutters so content sits flush with the chat edge; centered
-              // mode keeps both-edges to avoid shift.
-              !fullWidth && "md:[scrollbar-gutter:stable_both-edges]"
-            )}
+            className={
+              scrollClassName ??
+              cn(
+                "flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden",
+                hideScrollbar ? "no-scrollbar" : "default-scrollbar",
+                // Full-width (always the case below md) drops the reserved
+                // gutters so content sits flush with the chat edge; centered
+                // mode keeps both-edges to avoid shift.
+                !fullWidth && "md:[scrollbar-gutter:stable_both-edges]"
+              )
+            }
             onScroll={() => {
               handleScroll();
               savePosition();
             }}
-            style={{
-              // Apply mask to fade content opacity at edges
-              maskImage: contentMask,
-              WebkitMaskImage: contentMask,
-            }}
+            style={
+              fadeEdges
+                ? {
+                    // Apply mask to fade content opacity at edges
+                    maskImage: contentMask,
+                    WebkitMaskImage: contentMask,
+                  }
+                : undefined
+            }
           >
             <div
               ref={contentWrapperRef}
-              className={cn(
-                "w-full flex-1 flex flex-col items-center",
-                CHAT_GUTTER
-              )}
+              className={
+                contentClassName ??
+                cn("w-full flex-1 flex flex-col items-center", CHAT_GUTTER)
+              }
               data-scroll-ready={isScrollReady}
               style={{
                 visibility: isScrollReady ? "visible" : "hidden",
@@ -775,6 +810,7 @@ const ChatScrollContainer = React.memo(
               {/* End marker to measure content end */}
               <div ref={endDivRef} />
             </div>
+            {footer}
           </div>
         </div>
       );
