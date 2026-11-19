@@ -162,8 +162,9 @@ After the decision, the card becomes a one-line record: **Approved**, **Approved
 **Disabled**, or **No longer waiting**. The record shows in the answer, at the tool call.
 It stays after the answer finishes and when the user opens the chat again.
 
-A request has no time limit. It waits until the user decides. When only approval requests remain,
-Onyx saves the answer and stops it. No API server holds the answer while it waits, so a closed tab, a reload,
+A request has no time limit. It waits until the user decides.
+When only approval requests remain and no other part of the answer runs, Onyx saves the answer and stops it.
+No API server holds the answer while it waits, so a closed tab, a reload,
 or an API server restart does not end the request. After the user decides every request of the answer,
 the answer continues on any API server, and the web app shows it in the same message.
 
@@ -185,8 +186,10 @@ The agent is told that the tool is no longer available, and the answer continues
 When `CODE_MODE_ENABLED` is `true`, the agent calls MCP tools from a Python program.
 A call to a tool with the **Ask** policy pauses the program. After the decision, the record shows on the program's card.
 Onyx saves the paused program with the answer. After the decision, the program continues from the call.
-The rules above apply in the same way. If the program holds too much data to pause, the call does not run,
-and the record shows **No longer waiting**. The agent is told to make the call from a program that keeps less data.
+Other programs of the answer keep running while the card waits, and Onyx keeps their results.
+If the user decides before they finish, the answer continues at once. The rules above apply in the same way.
+If the program holds too much data to pause, the call does not run, and the record shows **No longer waiting**.
+The agent is told to make the call from a program that keeps less data.
 
 A subagent that works in the background can also call a tool with the **Ask** policy. Its card names the subagent.
 The request waits on its own: it stays open after the answer that started the subagent finishes or stops,

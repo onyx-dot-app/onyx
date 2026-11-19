@@ -120,7 +120,9 @@ _STATUS_TEXT: dict[CodeModeStatus, str] = {
     "cancelled": "was cancelled",
 }
 # Statuses of a program that ended by itself.
-_ENDED: frozenset[CodeModeStatus] = frozenset({"completed", "failed", "timed_out"})
+ENDED_STATUSES: frozenset[CodeModeStatus] = frozenset(
+    {"completed", "failed", "timed_out"}
+)
 
 
 def calls_note(calls: Sequence[CodeModeCall]) -> str | None:
@@ -188,7 +190,7 @@ def observation_heading(details: CodeModeExecutionResult) -> str:
     count = details.tool_call_count
     calls = f"{count} tool call{'' if count == 1 else 's'}"
     status = details.status
-    timing = f"in {seconds}" if status in _ENDED else f"after {seconds}"
+    timing = f"in {seconds}" if status in ENDED_STATUSES else f"after {seconds}"
     so_far = " so far" if status == "running" else ""
     return (
         f"Execution {_STATUS_TEXT[status]} in cell {details.cell_id} {timing} "
@@ -205,12 +207,18 @@ def closing_heading(cell_id: int, closing: CellClosing) -> str:
             "this output are not known; they may have run."
         )
     event = "the run paused" if closing.reason == "suspended" else "the response ended"
-    if closing.status in _ENDED:
+    if closing.status in ENDED_STATUSES:
         return (
             f"Cell {cell_id} {_STATUS_TEXT[closing.status]} after this output, "
             f"before {event}."
         )
     return f"Cell {cell_id} stopped when {event}."
+
+
+def paused_end_heading(cell_id: int, status: CodeModeStatus) -> str:
+    """How a `wait_code` result starts when it returns the end of a cell that
+    ended by itself before the run paused."""
+    return f"Cell {cell_id} {_STATUS_TEXT[status]} before the run paused."
 
 
 def continues_note(cell_id: int) -> str:

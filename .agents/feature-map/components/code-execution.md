@@ -164,7 +164,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         sent to the observer or buffered until the next one
   WaitCodeTool._run -> CodeCells.wait   the cell's one observer: output and calls since the
                                         previous observation, the final result, or
-                                        terminate=true stops the cell
+                                        terminate=true stops the cell; for a cell that
+                                        ended before the run paused, the end that its
+                                        CellClosing (reason="suspended") holds
   each observation                      taken under the cell lock, formatted after it:
                                         prompt.py:format_content (model text, cut once in the
                                         middle to max_output_tokens, 10,000 by
@@ -181,6 +183,11 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
   chat/agent.py:_prepare_step (a run's first step) -> CodeCells.reopen
                                         empty cells for the next run of the same agent (a
                                         message or results to an idle child) after finish
+  agents/tool_execution.py:ToolBatch.execute
+                                        the tool phase suspends only after the run's work
+                                        drains (WorkTracker.on_idle): a running cell's
+                                        driver keeps the run resident; an answer or Stop
+                                        wakes the wait first
   chat/agent.py:_suspended_cells (Agent.on_suspend) -> CodeCells.suspend
                                         the same when the run suspends, with
                                         reason="suspended"; later calls can start cells. A
@@ -700,11 +707,18 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     `ToolResultAmendment` for each observation that Stop interrupted and for
     each cell whose last saved observation is `running`. The amendment adds a `CellClosing` (`reason="response_ended"`)
     with the calls, output, result and store commit after that observation;
-    its text is formatted like an observation (`format_content`). When the
-    run suspends (for example on `ChildRunWait`), `Agent.on_suspend`
-    (`chat/agent.py:_suspended_cells`) calls `CodeCells.suspend`, which does
-    the same with `reason="suspended"` before the run captures its state, so no
-    cell runs while nothing owns the run. For a
+    its text is formatted like an observation (`format_content`). The tool
+    phase suspends (for example on an approval or `ChildRunWait`) only after
+    the run's work drains, so a cell that runs ends by itself or at its
+    limits first; an answer that arrives before then continues the run without
+    a suspension (`agents/tool_execution.py:ToolBatch.execute`). Then
+    `Agent.on_suspend` (`chat/agent.py:_suspended_cells`) calls
+    `CodeCells.suspend`, which does the same with `reason="suspended"` before
+    the run captures its state, so no cell runs while nothing owns the run. A
+    cell that ended keeps its end in that closing record, and a later
+    `wait_code` of the cell returns it, in any process (`CodeCells.wait`, with
+    no `commit`: the closing record holds it). A cell that parked without an
+    observation is stopped; its request is not saved. For a
     restored run, `tools/tool_implementations/code_mode/cells.py:_interrupted_amendments` closes such observations
     with `reason="interrupted"` and status `cancelled`, since what the cell did
     after them is not known. The run applies the amendments before it saves

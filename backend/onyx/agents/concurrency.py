@@ -45,6 +45,11 @@ class WorkTracker:
             except Exception:
                 logger.exception("Agent idle callback failed")
 
+    @property
+    def idle(self) -> bool:
+        with self._lock:
+            return self._count == 0
+
     def on_idle(self, listener: Callable[[], None]) -> Callable[[], None]:
         """Notify once when current work drains; callers must stop admitting new work."""
         with self._lock:

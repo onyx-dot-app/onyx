@@ -292,7 +292,7 @@ def test_store_keeps_values_written_before_the_compaction_boundary() -> None:
     )
 
 
-def test_a_running_cell_stops_with_a_closing_record_when_the_run_suspends() -> None:
+def test_a_running_cell_ends_by_its_own_time_limit_before_the_run_suspends() -> None:
     release_child = threading.Event()
 
     def child_generate(
@@ -322,14 +322,16 @@ def test_a_running_cell_stops_with_a_closing_record_when_the_run_suspends() -> N
                 ToolCall(
                     id="loop",
                     name=CodeModeTool.NAME,
-                    arguments={"code": "yield_control()\nwhile True:\n    pass\n"},
+                    arguments={"code": "yield_control()\nawait asyncio.sleep(60)\n"},
                 ),
                 ToolCall(id="delegate", name="delegate", arguments={}),
             ]
         )
 
     cells = CodeCells()
-    tool = CodeModeTool([], cells=cells, limits=LIMITS)
+    tool = CodeModeTool(
+        [], cells=cells, limits=LIMITS.model_copy(update={"lifetime_seconds": 1})
+    )
     parent = Agent(
         FakeModelClient(generate),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
@@ -351,13 +353,13 @@ def test_a_running_cell_stops_with_a_closing_record_when_the_run_suspends() -> N
     try:
         assert run.wait_until_settled(timeout=10).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(5)
-        # The cell stopped instead of running while nothing owns the run.
-        assert cells._cells[1]._end is not None
+        # The run waited for the cell, which ended at its own time limit
+        # instead of being stopped to suspend.
         details = _saved_result(run.capture().run_state, "loop").details
         assert isinstance(details, CodeModeExecutionResult)
         assert details.closing is not None
         assert details.closing.reason == "suspended"
-        assert details.closing.status == "terminated"
+        assert details.closing.status == "timed_out"
     finally:
         release_child.set()
     assert run.result().output.text == "answer"

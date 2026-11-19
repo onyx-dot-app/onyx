@@ -85,9 +85,11 @@ from onyx.tools.tool_implementations.code_mode.models import (
     json_text,
 )
 from onyx.tools.tool_implementations.code_mode.prompt import (
+    ENDED_STATUSES,
     closing_heading,
     format_content,
     observation_heading,
+    paused_end_heading,
 )
 from onyx.tools.tool_implementations.code_mode.sandbox import (
     AWAITS_INPUT,
@@ -1732,7 +1734,8 @@ class CodeCells:
     messages and in this response. When the response ends, `finish` stops every
     open cell and returns the final records; no new cell starts until `reopen`
     at the start of the agent's next run. A cell whose observation waits for
-    the user's input is saved when the run suspends (`saved`, `restore`).
+    the user's input is saved when the run suspends (`saved`, `restore`); a
+    cell that ended before then keeps its end in its closing record (`suspend`).
     """
 
     def __init__(self) -> None:
@@ -1802,6 +1805,50 @@ class CodeCells:
     ) -> ToolOutcome:
         with self._lock:
             cell = self._cells.get(cell_id)
+        if cell is None or cell.closed:
+            observations = [
+                details
+                for _, details in code_mode_results(invocation.recorded_results)
+                if details.cell_id == cell_id
+            ]
+            closing = observations[-1].closing if observations else None
+            # The cell ended by itself before the run paused; its closing
+            # record holds its end, which no observation returned yet.
+            if (
+                closing is not None
+                and closing.reason == "suspended"
+                and closing.status in ENDED_STATUSES
+            ):
+                calls = {
+                    call.index: call
+                    for details in [*observations, closing]
+                    for call in details.calls
+                }
+                details = CodeModeExecutionResult(
+                    cell_id=cell_id,
+                    observation=observations[-1].observation + 1,
+                    status=closing.status,
+                    stdout=closing.stdout,
+                    calls=closing.calls,
+                    tool_call_count=closing.tool_call_count,
+                    result=closing.result,
+                    error=closing.error,
+                )
+                return ToolResult(
+                    content=format_content(
+                        details,
+                        heading=paused_end_heading(cell_id, closing.status),
+                        status=closing.status,
+                        cell_id=cell_id,
+                        cell_calls=[call for _, call in sorted(calls.items())],
+                        max_tokens=max_tokens,
+                        end=None,
+                        discarded=None,
+                        elided_chars=0,
+                    ),
+                    details=details,
+                    is_error=closing.status != "completed",
+                )
         if cell is None:
             if cell_id in _recorded_cell_ids(invocation.recorded_results):
                 raise _rejected(
@@ -1911,9 +1958,14 @@ class CodeCells:
     def suspend(
         self, results: Sequence[ToolResultMessage]
     ) -> list[ToolResultAmendment]:
-        """Stop every open cell when the run pauses, and return final records as
+        """Close the cells when the run pauses, and return final records as
         `finish` does. A cell whose observation waits for input stays, to save
-        with the run. Later calls can start new cells."""
+        with the run. Later calls can start new cells.
+
+        The run's tool phase pauses only after its running cells end, since a
+        cell's driver joins the run's work. A cell that ended by itself keeps
+        its end in its closing record, and `wait` returns that end. A cell
+        that still runs or that parked without an observation is stopped."""
         return self._close_all(results, "suspended")
 
     def _close_all(

@@ -221,7 +221,7 @@ A cancelled run (Stop or deadline) stays cancelled; the hook's error is only log
 A hook that fails otherwise or stops for cancellation is logged; the run keeps its outcome and recorded results.
 An amended result inside the compaction checkpoint drops the checkpoint, so the next request summarizes the new result.
 `on_suspend(results)` has the same contract; it runs when the run suspends, before the run captures its state.
-Chat code mode uses these hooks to stop open cells and save what they did, also for a call that Stop interrupted.
+Chat code mode uses these hooks to close its cells and save what they did, also for a call that Stop interrupted.
 `on_drained()` runs after each finish or suspension, once the run's work has drained:
 its tool threads, including calls that ignored a Stop, and the work of its foreground children.
 Background children do not hold it back.
@@ -526,6 +526,14 @@ A compaction checkpoint still describes summarized history; it does not replace 
 The runtime finishes in-flight tools and callbacks before releasing its workers.
 It can suspend during the tool phase with unanswered calls, or before the next step after its feature hooks finish.
 Snapshots taken during provider I/O or arbitrary callbacks support inspection only.
+
+The tool phase suspends only when the run is idle: no call of the step runs, and the work that tools joined
+through `ToolInvocation.run_work` has drained. A code cell's program and its tool calls join this work, so a
+running cell keeps the run from suspending. Its own time limit bounds the wait. The runtime does not stop work to suspend.
+An answer, a watched child's end, or Stop wakes the wait. An answer that arrives first is applied in the same execution,
+without a suspension. The runtime then calls `on_suspend` and saves the run. The feature keeps in that save the results that ended during the wait.
+Foreground children are separate runs: suspension does not stop them, and the application keeps a suspended
+parent resident while its children execute locally.
 
 `before_tool_call` or `ToolApprovals` can return `PendingToolInput(mode=InputMode.EXECUTE)` to gate an action.
 A question tool returns `PendingToolInput(mode=InputMode.RESULT)` to request its result from the caller.

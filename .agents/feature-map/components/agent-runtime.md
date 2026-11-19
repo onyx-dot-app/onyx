@@ -124,6 +124,15 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   next request builds its context from the amended result, and compacts only
   when that context is over budget. A hook that fails or stops for
   cancellation sets no results; the run still ends.
+  The tool phase suspends only when the run is idle
+  (`agents/tool_execution.py:ToolBatch.execute`): no call of the step runs and
+  the work that tools joined through `ToolInvocation.run_work` has drained
+  (`WorkTracker.on_idle`). A running code mode cell keeps the run resident
+  until it ends by itself or at its own limits; the runtime stops no work to
+  suspend. An answer (`Run.submit`), a watched child's end, or Stop wakes the
+  wait, so an answer that arrives first continues the run in the same
+  execution without a suspension. Foreground children are not part of that
+  work; suspension does not stop them.
   `Agent.on_suspend` runs before each suspension; `Run._suspend` applies its
   amendments before it captures state. A suspend hook that fails sets no
   results and the run still suspends. A suspend hook that stops for

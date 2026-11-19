@@ -271,7 +271,21 @@ class ToolBatch:
                     if not self.futures:
                         if len(self._completed_call_ids()) > len(completed_call_ids):
                             continue
-                        return False
+                        # Work that tools joined through `run_work`, such as a
+                        # running code cell, keeps the run from suspending. An
+                        # answer, a child's end or Stop wakes the wait first.
+                        unsubscribe = self.run.work.tracker.on_idle(
+                            self.run.notify_tool_activity
+                        )
+                        try:
+                            if self.run.work.tracker.idle:
+                                return False
+                            self.run.wait_for_tool_activity(
+                                lambda: self.run.work.tracker.idle
+                            )
+                        finally:
+                            unsubscribe()
+                        continue
                     self.run.wait_for_tool_activity(
                         lambda: any(future.done() for future in self.futures.values())
                     )

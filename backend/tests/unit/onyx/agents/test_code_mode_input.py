@@ -12,7 +12,12 @@ import pydantic_monty
 import pytest
 from pydantic import BaseModel, JsonValue
 
-from onyx.agents.events import AgentEvent, InputEndedEvent, InputRequiredEvent
+from onyx.agents.events import (
+    AgentEvent,
+    AgentSuspendedEvent,
+    InputEndedEvent,
+    InputRequiredEvent,
+)
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
@@ -55,7 +60,10 @@ from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     CodeModeTool,
     WaitCodeTool,
 )
-from onyx.tools.tool_implementations.code_mode.models import SavedCodeCell
+from onyx.tools.tool_implementations.code_mode.models import (
+    CodeModeExecutionResult,
+    SavedCodeCell,
+)
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 from tests.unit.onyx.tools.code_mode.fakes import LIMITS, FakeTool
@@ -64,6 +72,10 @@ from tests.unit.onyx.tools.code_mode.fakes import LIMITS, FakeTool
 PARKING_LIMITS = LIMITS.model_copy(update={"max_memory_bytes": 128 * 1024 * 1024})
 PROGRAM = 'print("before")\nr = await tools.send(value="x")\nprint("sent", r)'
 REQUEST_ID = "send-approval"
+# A cell that keeps running in the background until the test opens the gate.
+BACKGROUND = 'yield_control()\nr = await tools.wait(value="b")\nprint("waited", r)'
+
+Reply = Callable[[GenerationRequest, CancellationSignal], AssistantMessage]
 
 
 class SavedCells(BaseModel):
@@ -91,9 +103,7 @@ def _ask_for_send(context: ToolCallContext) -> PendingToolInput | None:
     )
 
 
-def _reply(
-    steps: tuple[ToolCall, ...], shown: threading.Event
-) -> Callable[[GenerationRequest, CancellationSignal], AssistantMessage]:
+def _reply(steps: tuple[ToolCall, ...], shown: threading.Event) -> Reply:
     """Makes `steps` one call per step, then answers with the last result.
     Steps after the first wait until a request shows."""
 
@@ -113,10 +123,15 @@ class Agents:
     """Builds the agent of one process; each gets fresh cells and tools."""
 
     def __init__(
-        self, *steps: ToolCall, parameters: dict[str, JsonValue] | None = None
+        self,
+        *steps: ToolCall,
+        parameters: dict[str, JsonValue] | None = None,
+        reply: Reply | None = None,
     ) -> None:
         self.steps = steps
+        self.reply = reply
         self.sent: list[JsonValue] = []
+        self.sent_once = threading.Event()
         self.parameters = parameters
         # Builds agents without the `send` tool, as after its server is removed.
         self.send_removed = False
@@ -126,6 +141,7 @@ class Agents:
 
     def send(self, invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
         self.sent.append(invocation.arguments["value"])
+        self.sent_once.set()
         return ToolResult(content=json.dumps({"sent": invocation.arguments["value"]}))
 
     def wait(self, invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
@@ -144,7 +160,7 @@ class Agents:
         ]
         execute = CodeModeTool(tools, cells=cells, limits=PARKING_LIMITS)
         return Agent(
-            FakeModelClient(_reply(self.steps, self.shown)),
+            FakeModelClient(self.reply or _reply(self.steps, self.shown)),
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             agent_id="agent",
             state=state,
@@ -285,6 +301,125 @@ def test_a_background_cell_shows_its_request_before_the_model_waits() -> None:
     assert run.wait_for_idle(10)
     assert agents.sent == ["x"]
     assert "sent {'sent': 'x'}" in output
+
+
+def _one_call_per_step(*steps: ToolCall) -> Reply:
+    """Makes `steps` one call per step, then answers with the last result."""
+
+    def reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        results = [m for m in request.messages if isinstance(m, ToolResultMessage)]
+        if len(results) < len(steps):
+            return AssistantMessage(content=[steps[len(results)]])
+        return AssistantMessage(content=[TextContent(text=results[-1].text)])
+
+    return reply
+
+
+def _read_cell(cell_id: int) -> ToolCall:
+    return ToolCall(
+        id="read",
+        name=WaitCodeTool.NAME,
+        arguments={"cell_id": cell_id, "yield_time_ms": 10_000},
+    )
+
+
+def _start_with_request(agents: Agents) -> tuple[Run, list[AgentEvent]]:
+    """Start the run; return once its request shows and while a cell runs, the
+    run does not settle."""
+    requested = threading.Event()
+    events: list[AgentEvent] = []
+
+    def on_event(event: AgentEvent) -> None:
+        events.append(event)
+        if isinstance(event, InputRequiredEvent):
+            requested.set()
+
+    run = agents.agent().start(
+        max_steps=5, messages=[UserMessage(content="Send")], on_event=on_event
+    )
+    assert requested.wait(10)
+    with pytest.raises(TimeoutError):
+        run.wait_until_settled(timeout=1)
+    return run, events
+
+
+def test_a_cell_that_ends_while_a_request_waits_keeps_its_result() -> None:
+    """The resident run; test_parked_program_handoff covers another process."""
+    agents = Agents(
+        reply=_one_call_per_step(
+            _execute("background", BACKGROUND),
+            _execute("program", PROGRAM),
+            _read_cell(1),
+        )
+    )
+    agents.gate = threading.Event()
+    try:
+        run, _events = _start_with_request(agents)
+        agents.gate.set()
+        _suspended(run)
+    finally:
+        agents.gate.set()
+
+    run.submit(_answer(InputDecision.APPROVE))
+    output = run.result(timeout=20).output.text
+    assert run.wait_for_idle(10)
+
+    assert agents.sent == ["x"]
+    # wait_code returns the end of the cell that ended before the run paused.
+    assert output.startswith("Cell 1 completed before the run paused."), output
+    assert "waited {'waited': 'b'}" in output
+
+
+def test_an_answer_while_a_cell_runs_continues_without_suspending() -> None:
+    agents = Agents(
+        reply=_one_call_per_step(
+            _execute("background", BACKGROUND),
+            _execute("program", PROGRAM),
+            _read_cell(1),
+        )
+    )
+    agents.gate = threading.Event()
+    try:
+        run, events = _start_with_request(agents)
+        run.submit(_answer(InputDecision.APPROVE))
+        # The approved call runs while the other cell still runs.
+        assert agents.sent_once.wait(10)
+        agents.gate.set()
+        output = run.result(timeout=20).output.text
+    finally:
+        agents.gate.set()
+    assert run.wait_for_idle(10)
+
+    assert not any(isinstance(event, AgentSuspendedEvent) for event in events)
+    assert agents.sent == ["x"]
+    assert "Execution completed in cell 1" in output
+    assert "waited {'waited': 'b'}" in output
+
+
+def test_stop_while_a_cell_runs_ends_the_run_and_its_cells() -> None:
+    agents = Agents(
+        reply=_one_call_per_step(
+            _execute("background", "yield_control()\nawait asyncio.sleep(60)"),
+            _execute("program", PROGRAM),
+        )
+    )
+    run, events = _start_with_request(agents)
+
+    run.cancel()
+    state = run.wait_until_settled(timeout=10)
+    assert run.wait_for_idle(10)
+
+    assert state.status == RunStatus.CANCELLED
+    assert not any(isinstance(event, AgentSuspendedEvent) for event in events)
+    assert agents.sent == []
+    result = state.steps[0].tools["background"].result
+    assert result is not None
+    assert isinstance(result.details, CodeModeExecutionResult)
+    closing = result.details.closing
+    assert closing is not None
+    assert (closing.reason, closing.status) == ("response_ended", "cancelled")
 
 
 def test_a_program_too_large_to_park_continues_without_the_call(
