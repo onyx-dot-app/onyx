@@ -341,7 +341,9 @@ pub fn show(
 ) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        if !platform::is_visible(&handle) && wanted(&handle) {
+        // `wanted` runs for a visible launcher too: it can route the page
+        // (a notification click switches to the answer).
+        if wanted(&handle) && !platform::is_visible(&handle) {
             show_now(&handle, when_signed_out);
         }
     });
