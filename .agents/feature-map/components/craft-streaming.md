@@ -215,6 +215,13 @@ turn. Tool starts, mode updates and terminal packets are not saved.
     caller then saves. Any other lookup error raises and fails the turn. A
     change that treats other errors as "missing" lets an outage silently drop
     the agent's context.
+14. `tool-meta-onyx` **Onyx's own tool-call data goes in `_meta.onyx`.**
+    `server/features/build/sandbox/event_schema.py:OnyxToolMeta` defines it: a
+    `version` (2; a row without it is version 1) and optional fields such as
+    `cancelled`, set beside `status: "failed"` because ACP has no cancelled
+    status. It sits beside the flat keys (`toolName`, the sub-agent ids), which
+    stay where they are. `_merge_field_meta` merges `onyx` key by key, so a
+    later merge keeps it. Saved rows keep the shape they were written with.
 
 ---
 

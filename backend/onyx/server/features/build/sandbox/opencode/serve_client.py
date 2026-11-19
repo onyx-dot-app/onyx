@@ -73,6 +73,7 @@ from onyx.server.features.build.sandbox.event_schema import (
     AgentMessageChunk,
     AgentThoughtChunk,
     Error,
+    OnyxToolMeta,
     PromptResponse,
     TextPartMetadata,
     ToolCallProgress,
@@ -879,7 +880,13 @@ def _merge_field_meta(event: SandboxEvent, extra: dict[str, Any]) -> None:
     events; merge rather than overwrite so both survive ``model_dump``."""
     existing = getattr(event, "field_meta", None)  # ods: ignore[getattr]
     merged: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
-    merged.update(extra)
+    for key, value in extra.items():
+        # ``onyx`` is a namespace: merge its keys so neither side's are lost.
+        current = merged.get(key)
+        if key == "onyx" and isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = {**current, **value}
+        else:
+            merged[key] = value
     setattr(event, "field_meta", merged)  # noqa: B010
 
 
@@ -916,8 +923,14 @@ def _emit_tool_events(
         # _meta is an ACP-reserved extensibility field. We use it to carry
         # the raw opencode tool name so the frontend can resolve a precise
         # title (otherwise tools with kind="other" — todowrite, task, lsp,
-        # skill, … — all fall through to "Running tool").
-        "_meta": {"toolName": tool},
+        # skill, … — all fall through to "Running tool"). ``onyx`` holds the
+        # Onyx data ACP has no field for (see ``OnyxToolMeta``).
+        "_meta": {
+            "toolName": tool,
+            "onyx": OnyxToolMeta(
+                cancelled=True if raw_status == "cancelled" else None
+            ).to_meta(),
+        },
     }
     if raw_input is not None:
         common["rawInput"] = raw_input

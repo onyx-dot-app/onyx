@@ -72,13 +72,18 @@ function oneOf<T extends string>(
 }
 
 /**
- * Copies `_meta` and moves Craft's text-part fields into `_meta.onyx`, where
- * the reducer reads them.
+ * Copies `_meta`, keeps the `_meta.onyx` the backend sends (version,
+ * cancelled), and moves Craft's flat text-part fields into it, where the
+ * reducer reads them.
  */
 function decodeMeta(raw: unknown): AcpMeta | undefined {
   if (!isRecord(raw)) return undefined;
-  const { partId, snapshotText, ...rest } = raw;
+  const { partId, snapshotText, onyx: sent, ...rest } = raw;
   const onyx: OnyxMeta = {};
+  if (isRecord(sent)) {
+    if (typeof sent.version === "number") onyx.version = sent.version;
+    if (sent.cancelled === true) onyx.cancelled = true;
+  }
   const part = asString(partId);
   const snapshot = asString(snapshotText);
   if (part !== undefined) onyx.partId = part;

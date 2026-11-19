@@ -9,6 +9,8 @@
 
 /** Onyx data that ACP has no field for. Carried in `_meta.onyx`. */
 export interface OnyxMeta {
+  /** The Onyx wire version the producer used. Missing means version 1. */
+  version?: number;
   /**
    * The tool call was stopped before it finished. ACP's tool status has no
    * cancelled state, so this is kept apart from `failed`.
