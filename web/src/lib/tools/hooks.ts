@@ -745,9 +745,9 @@ export interface ToolConfigurationHandle {
   ready: boolean;
 
   /**
-   * False while an existing chat's saved options, or the integrations a new
-   * chat starts with turned off, have not loaded. A send then would carry
-   * no allow-list and turn on what the user turned off.
+   * False while an existing chat's saved options, the integrations a new
+   * chat starts with turned off, or the agent's integrations have not
+   * loaded. A send then would carry a wrong allow-list.
    */
   optionsLoaded: boolean;
 
@@ -1193,7 +1193,11 @@ export function useToolConfiguration(
                 integrationIds ?? []
               ),
       ready,
-      optionsLoaded: isChat ? chatConfiguration !== null : preferences.loaded,
+      // The allow-list names the agent's integrations, so a send also waits
+      // for them: without them it would leave each integration out.
+      optionsLoaded:
+        (isChat ? chatConfiguration !== null : preferences.loaded) &&
+        (activeAgent === undefined || integrationIds !== null),
       filters: configuration.filters,
       setFilters,
       handOffTo,

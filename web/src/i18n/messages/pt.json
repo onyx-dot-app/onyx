@@ -10676,7 +10676,8 @@
         "saved": "{name} agora é {policy}.",
         "saveFailed": "Não foi possível salvar a configuração de instalação.",
         "title": "Configuração de Instalação",
-        "description": "Quem recebe esta integração. Não disponível a mantém privada: somente o proprietário e as pessoas com quem foi compartilhada a usam."
+        "description": "Quem recebe esta integração. Não disponível a mantém privada: só a usam o proprietário, as pessoas com quem ela é compartilhada e os grupos com configuração própria. Remova essas configurações de grupo para limitá-la ao proprietário e aos compartilhamentos.",
+        "notAvailable": "Privada. Só a usam o proprietário, as pessoas com quem ela é compartilhada e os grupos com configuração própria."
       },
       "ownedBy": "Proprietário: {owner}",
       "groupAccess": {
@@ -15160,7 +15161,8 @@
         "blocked": "Bloqueada"
       },
       "newTaskIntegrationsDescription": "Ative as integrações que esta tarefa pode usar. Cada ação usa a configuração da integração até você alterá-la.",
-      "emptyIntegrations": "Nenhuma integração disponível."
+      "emptyIntegrations": "Nenhuma integração disponível.",
+      "notRunnable": "O Craft não pode executar {name} agora, então a tarefa o ignora."
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, one {# skill não foi carregado} other {# skills não foram carregados}}",

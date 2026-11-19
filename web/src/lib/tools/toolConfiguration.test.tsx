@@ -1019,6 +1019,19 @@ describe("useToolConfiguration: integrations of the agent", () => {
     ]);
   });
 
+  test("a send waits until the agent's integrations load", () => {
+    mockChatId = null;
+    mockActiveAgent = AGENT;
+    mockIntegrationIds = null;
+    mockDisabledIntegrationIds = [];
+    const { result, rerender } = renderHook(() => useToolConfiguration(7));
+    expect(result.current.optionsLoaded).toBe(false);
+
+    mockIntegrationIds = [11];
+    rerender();
+    expect(result.current.optionsLoaded).toBe(true);
+  });
+
   test("a new chat holds a send until the saved integration switches load", () => {
     mockChatId = null;
     mockActiveAgent = AGENT;

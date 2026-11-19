@@ -30,7 +30,13 @@ export default function IntegrationInstallSetting({
   const { mutate } = useSWRConfig();
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_ACTIONS);
   const policyCopy = useInstallationPolicyCopy();
-  const policyOptions = usePolicyOptions();
+  // An integration that is Not available stays in use by its owner, its
+  // shares and the groups with their own setting.
+  const policyOptions = usePolicyOptions().map((option) =>
+    option.value === "NOT_AVAILABLE"
+      ? { ...option, description: t("notAvailable") }
+      : option
+  );
   const [saving, setSaving] = useState(false);
   const policy = integration.installation_policy;
 

@@ -26,6 +26,7 @@ import type { MemberIntegration } from "@/lib/integrations/types";
 import { useUser } from "@/providers/UserProvider";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { customizeTabHref } from "@/lib/customize/paths";
+import { isIntegrationOnInChat } from "@/lib/integrations/chat";
 
 export interface ChatIntegrationsPopoverProps {
   agentId: number;
@@ -105,8 +106,10 @@ export default function ChatIntegrationsPopover({
 
   function row(integration: MemberIntegration) {
     const required = integration.access.installation_policy === "REQUIRED";
-    const enabled =
-      required || toolConfiguration.isIntegrationEnabled(integration.id);
+    const enabled = isIntegrationOnInChat(
+      integration,
+      toolConfiguration.isIntegrationEnabled
+    );
     const action = connectAction(integration);
     return (
       <LineItemButton

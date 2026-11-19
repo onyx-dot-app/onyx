@@ -104,6 +104,24 @@ test("skips the integrations that are off in this chat", () => {
   ).toBeVisible();
 });
 
+test("keeps a Required integration that a stale switch turned off", () => {
+  mockIntegrations = [
+    {
+      ...reports,
+      access: { ...reports.access, installation_policy: "REQUIRED" },
+    },
+  ];
+  render(
+    <IntegrationConnectPrompt
+      agentId={8}
+      toolConfiguration={{ ready: true, isIntegrationEnabled: () => false }}
+    />
+  );
+  expect(
+    screen.getByRole("button", { name: "1 integration needs sign-in" })
+  ).toBeVisible();
+});
+
 test("shows nothing when every integration is connected", () => {
   mockIntegrations = [
     makeMemberIntegration({ status: { state: "connected", reason: null } }),

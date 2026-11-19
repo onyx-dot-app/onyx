@@ -270,3 +270,11 @@ it("reports a load failure without enabling the parent save", async () => {
   ).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Save task" })).toBeDisabled();
 });
+
+it("warns when Craft cannot run a linked integration", async () => {
+  mockData = [integrationView({ enabled: true, runnable: false })];
+  await renderLoaded(<Form taskId="task-1" />);
+  expect(
+    screen.getByText("Craft cannot run Linear now, so the task skips it.")
+  ).toBeVisible();
+});

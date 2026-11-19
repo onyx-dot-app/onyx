@@ -10676,7 +10676,8 @@
         "saved": "{name} ist jetzt {policy}.",
         "saveFailed": "Die Installationseinstellung konnte nicht gespeichert werden.",
         "title": "Installationseinstellung",
-        "description": "Wer diese Integration erhält. Mit „Nicht verfügbar“ bleibt sie privat: Nur der Eigentümer und die Personen, mit denen sie geteilt wurde, verwenden sie."
+        "description": "Wer diese Integration erhält. Nicht verfügbar hält sie privat: Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie. Entferne diese Gruppeneinstellungen, um sie auf den Eigentümer und die Freigaben zu beschränken.",
+        "notAvailable": "Privat. Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie."
       },
       "ownedBy": "Eigentümer: {owner}",
       "groupAccess": {
@@ -15160,7 +15161,8 @@
         "blocked": "Blockiert"
       },
       "newTaskIntegrationsDescription": "Aktivieren Sie die Integrationen, die diese Aufgabe verwenden kann. Jede Aktion verwendet ihre Integrationseinstellung, bis Sie sie ändern.",
-      "emptyIntegrations": "Keine Integrationen verfügbar."
+      "emptyIntegrations": "Keine Integrationen verfügbar.",
+      "notRunnable": "Craft kann {name} gerade nicht ausführen, daher überspringt die Aufgabe es."
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, one {# Skill wurde nicht geladen} other {# Skills wurden nicht geladen}}",

@@ -1825,11 +1825,15 @@ def test_action_policy_row_has_one_scope(engine: Engine, seeded: Seeded) -> None
             (None, None),
             (None, seeded.group),
             (seeded.other, None),
-            # A row cannot be for a user and for a group.
-            (seeded.other, seeded.group),
         ):
             with pytest.raises(IntegrityError):
                 add(user, group)
+        # A row cannot be for a user and for a group. A user with no row yet
+        # keeps the unique indexes out of it.
+        with pytest.raises(
+            IntegrityError, match="ck_integration_action_policy_single_scope"
+        ):
+            add(seeded.admin, seeded.agent_group)
     finally:
         with engine.begin() as conn:
             conn.execute(

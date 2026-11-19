@@ -61,10 +61,9 @@ export default function IntegrationGroupAccess({
   async function save(change: IntegrationGroupSettingChange) {
     setSaving(true);
     try {
-      const saved = await setIntegrationGroupSettings(integration.id, [change]);
-      await mutate(SWR_KEYS.adminIntegration(integration.id), saved, {
-        revalidate: false,
-      });
+      await setIntegrationGroupSettings(integration.id, [change]);
+      // Read the detail again: another control can save after this request.
+      await mutate(SWR_KEYS.adminIntegration(integration.id));
       setAdded((current) =>
         current.filter((row) => row.group_id !== change.group_id)
       );

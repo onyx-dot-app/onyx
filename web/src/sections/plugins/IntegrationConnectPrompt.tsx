@@ -13,6 +13,7 @@ import { useAgentChatIntegrations } from "@/lib/integrations/hooks";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import IntegrationConnectModal from "@/sections/plugins/IntegrationConnectModal";
 import { locationKey } from "@/app/app/services/submitLocation";
+import { isIntegrationOnInChat } from "@/lib/integrations/chat";
 
 interface IntegrationConnectPromptProps {
   agentId: number;
@@ -56,7 +57,7 @@ export default function IntegrationConnectPrompt({
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   const integrations = catalog.integrations.filter((integration) =>
-    toolConfiguration.isIntegrationEnabled(integration.id)
+    isIntegrationOnInChat(integration, toolConfiguration.isIntegrationEnabled)
   );
   const pending = integrations.filter(
     (integration) => connectAction(integration) !== null

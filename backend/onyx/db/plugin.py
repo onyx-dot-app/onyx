@@ -976,18 +976,21 @@ def check_access_change(
     is_global_manager = actor is not None and has_global_permission(
         actor, manage_permission
     )
+    subject, manager = (
+        ("integration", "action manager")
+        if manage_permission is Permission.MANAGE_ACTIONS
+        else ("skill", "skill manager")
+    )
     if actor is not None and not is_global_manager:
         if is_set(change.company_installation_policy):
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                "Only an organization-wide skill manager can change the install "
-                "setting.",
+                f"Only an organization-wide {manager} can change the install setting.",
             )
         if change.group_settings is not None:
             raise OnyxError(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                "Only an organization-wide skill manager can set a group install "
-                "setting.",
+                f"Only an organization-wide {manager} can set a group install setting.",
             )
         # With the admin Sharing setting off, only an organization-wide manager
         # adds a share or changes its level. Removing a share stays allowed.
@@ -1003,7 +1006,7 @@ def check_access_change(
             ).items()
         )
         if adds_share:
-            check_sharing_allowed()
+            check_sharing_allowed(subject)
     if change.group_grants is None and change.group_settings is None:
         return
     requested_group_ids = sorted(
@@ -1031,8 +1034,9 @@ def check_access_change(
                 )
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
-                "This skill is Not available to one of the groups. Ask a skill "
-                "manager to change that group's access before you share with it.",
+                f"This {subject} is Not available to one of the groups. Ask "
+                f"an organization-wide {manager} to change that group's access "
+                "before you share with it.",
             )
 
     # A change to group shares is a ``manage_permission`` action. The
@@ -1063,14 +1067,14 @@ def check_access_change(
     )
 
 
-def check_sharing_allowed() -> None:
+def check_sharing_allowed(subject: str = "skill") -> None:
     """With the admin Sharing setting off, refuse a new share by someone who is
-    not an organization-wide skill manager. The caller checks the actor."""
+    not an organization-wide manager. The caller checks the actor."""
     if not load_settings(raise_on_error=True).plugin_sharing:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Sharing with people and groups is turned off. Ask an admin to "
-            "share this skill.",
+            f"share this {subject}.",
         )
 
 

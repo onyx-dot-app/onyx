@@ -10676,7 +10676,8 @@
         "saved": "{name}이(가) 이제 {policy}입니다.",
         "saveFailed": "설치 설정을 저장할 수 없습니다.",
         "title": "설치 설정",
-        "description": "이 통합을 받는 사용자입니다. 사용할 수 없음으로 두면 비공개로 유지되어 소유자와 공유받은 사용자만 사용합니다."
+        "description": "이 통합을 받는 사람입니다. 사용할 수 없음으로 설정하면 비공개가 되어 소유자, 공유받은 사람, 자체 설정이 있는 그룹만 사용합니다. 소유자와 공유받은 사람으로 제한하려면 해당 그룹 설정을 제거하세요.",
+        "notAvailable": "비공개입니다. 소유자, 공유받은 사람, 자체 설정이 있는 그룹만 사용합니다."
       },
       "ownedBy": "소유자: {owner}",
       "groupAccess": {
@@ -15160,7 +15161,8 @@
         "blocked": "차단됨"
       },
       "newTaskIntegrationsDescription": "이 작업에서 사용할 수 있는 통합을 켜세요. 변경하기 전까지 각 작업은 통합 설정을 사용합니다.",
-      "emptyIntegrations": "사용할 수 있는 통합이 없습니다."
+      "emptyIntegrations": "사용할 수 있는 통합이 없습니다.",
+      "notRunnable": "Craft가 지금 {name}을(를) 실행할 수 없으므로 작업에서 건너뜁니다."
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, other {스킬 #개를 불러오지 못했습니다}}",

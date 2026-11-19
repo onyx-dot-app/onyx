@@ -10676,7 +10676,8 @@
         "saved": "{name} 现在为 {policy}。",
         "saveFailed": "无法保存安装设置。",
         "title": "安装设置",
-        "description": "谁会获得此集成。“不可用”会使其保持私有：只有其所有者和被共享的人可以使用。"
+        "description": "谁可以使用此集成。不可用会使其保持私有：只有所有者、共享对象以及拥有自身设置的群组可以使用。要将其限制为所有者和共享对象，请移除这些群组设置。",
+        "notAvailable": "私有。只有所有者、共享对象以及拥有自身设置的群组可以使用。"
       },
       "ownedBy": "所有者：{owner}",
       "groupAccess": {
@@ -15160,7 +15161,8 @@
         "blocked": "已阻止"
       },
       "newTaskIntegrationsDescription": "开启此任务可以使用的集成。在你更改之前，每个操作都使用其集成的设置。",
-      "emptyIntegrations": "没有可用的集成。"
+      "emptyIntegrations": "没有可用的集成。",
+      "notRunnable": "Craft 目前无法运行 {name}，因此任务会跳过它。"
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, other {# 个技能未加载}}",

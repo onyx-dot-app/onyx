@@ -30,6 +30,7 @@ from onyx.db.models import (
     DocumentSet,
     DocumentSet__UserGroup,
     Integration,
+    Integration__User,
     Integration__UserGroup,
     LLMProvider,
     LLMProvider__UserGroup,
@@ -383,38 +384,77 @@ def _group_shared_integration(
     return integration
 
 
+def _user_shares(db_session: Session, integration: Integration) -> set[UUID]:
+    return set(
+        db_session.scalars(
+            select(Integration__User.user_id).where(
+                Integration__User.integration_id == integration.id
+            )
+        )
+    )
+
+
 @pytest.mark.usefixtures("tenant_context")
-def test_group_shared_integration_becomes_available(db_session: Session) -> None:
-    """A private integration that is shared with a group becomes Available to
-    the organization, so the members keep it."""
+@pytest.mark.parametrize("has_owner", [True, False])
+@pytest.mark.parametrize(
+    "company",
+    [PluginInstallationPolicy.NOT_AVAILABLE, PluginInstallationPolicy.AVAILABLE],
+)
+def test_group_shared_integration_gives_its_members_a_share(
+    db_session: Session, has_owner: bool, company: PluginInstallationPolicy
+) -> None:
+    """The members of a removed group keep the integration through a user
+    share. The company setting does not change, so an integration that an
+    admin closed stays closed and none opens to the organization."""
     try:
         owner = _make_user(db_session, in_basic=True)
-        group = _make_group(db_session, [owner])
-        integration = _group_shared_integration(db_session, group, owner)
+        member = _make_user(db_session, in_basic=True)
+        group = _make_group(db_session, [member])
+        integration = _group_shared_integration(
+            db_session, group, owner if has_owner else None
+        )
+        integration.installation_policy = company
+        db_session.flush()
 
         remove_custom_user_groups__no_commit(db_session)
 
         db_session.refresh(integration)
-        assert integration.installation_policy == PluginInstallationPolicy.AVAILABLE
+        assert integration.installation_policy == company
+        assert _user_shares(db_session, integration) == {member.id}
     finally:
         db_session.rollback()
 
 
 @pytest.mark.usefixtures("tenant_context")
-def test_group_shared_integration_with_no_owner_stays_not_available(
-    db_session: Session,
-) -> None:
-    """An integration with no owner stays Not available when its groups go.
-    The downgrade does not open it to the whole organization."""
+def test_a_group_setting_gives_its_members_a_share(db_session: Session) -> None:
+    """A group row with no share but an Available setting gave its members
+    access, so they keep it. A Not available setting gives none."""
     try:
         member = _make_user(db_session, in_basic=True)
-        group = _make_group(db_session, [member])
-        integration = _group_shared_integration(db_session, group, None)
+        open_group = _make_group(db_session, [member])
+        closed_member = _make_user(db_session, in_basic=True)
+        closed_group = _make_group(db_session, [closed_member])
+        integration = _group_shared_integration(db_session, open_group, None)
+        db_session.query(Integration__UserGroup).filter_by(
+            integration_id=integration.id
+        ).update(
+            {
+                "permission": None,
+                "installation_policy": PluginInstallationPolicy.AVAILABLE,
+            }
+        )
+        db_session.add(
+            Integration__UserGroup(
+                integration_id=integration.id,
+                user_group_id=closed_group.id,
+                installation_policy=PluginInstallationPolicy.NOT_AVAILABLE,
+            )
+        )
+        db_session.flush()
 
         remove_custom_user_groups__no_commit(db_session)
 
-        db_session.refresh(integration)
-        assert integration.installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
+        assert _user_shares(db_session, integration) == {member.id}
     finally:
         db_session.rollback()
 

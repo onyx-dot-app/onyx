@@ -98,10 +98,13 @@ export function useAgentIntegrationIds(agentId: number | undefined) {
     errorHandlingFetcher,
     { onErrorRetry: skipRetryOnAuthError }
   );
+  // SWR keeps the last data after a failed read, so an error means unknown.
   const integrationIds = useMemo(
     () =>
-      data === undefined ? null : [...new Set(data)].sort((a, b) => a - b),
-    [data]
+      data === undefined || error !== undefined
+        ? null
+        : [...new Set(data)].sort((a, b) => a - b),
+    [data, error]
   );
   return { integrationIds, error, isLoading, mutate };
 }
@@ -176,28 +179,30 @@ export function useAgentIntegrationPreferences(enabled: boolean) {
       disabled: boolean
     ): Promise<void> => {
       const key = String(agentId);
-      const pending: PendingWrite = { body: null };
-      await mutate(
-        (current) => {
-          // Not loaded: a write would drop the saved choices.
-          if (current === undefined) return current;
-          const record = current?.[key];
-          const saved = record?.disabled_integration_ids ?? [];
-          const next = disabled
-            ? [...new Set([...saved, ...integrationIds])]
-            : saved.filter((id) => !integrationIds.includes(id));
-          pending.body = { disabled_integration_ids: next };
-          return {
-            ...current,
-            [key]: { ...record, disabled_integration_ids: next },
-          };
-        },
-        { revalidate: false }
-      );
-      const sent = pending.body;
-      if (sent === null)
-        throw new Error("The integration preferences have not loaded.");
-      const write = preferenceWrites.then(async () => {
+      // The whole read, change, write and recovery runs in the queue, so a
+      // failed write is read back before the next body is built.
+      const run = async (): Promise<void> => {
+        const pending: PendingWrite = { body: null };
+        await mutate(
+          (current) => {
+            // Not loaded: a write would drop the saved choices.
+            if (current === undefined) return current;
+            const record = current?.[key];
+            const saved = record?.disabled_integration_ids ?? [];
+            const next = disabled
+              ? [...new Set([...saved, ...integrationIds])]
+              : saved.filter((id) => !integrationIds.includes(id));
+            pending.body = { disabled_integration_ids: next };
+            return {
+              ...current,
+              [key]: { ...record, disabled_integration_ids: next },
+            };
+          },
+          { revalidate: false }
+        );
+        const sent = pending.body;
+        if (sent === null)
+          throw new Error("The integration preferences have not loaded.");
         const response = await fetch(
           `/api/user/assistant/${agentId}/preferences`,
           {
@@ -206,15 +211,14 @@ export function useAgentIntegrationPreferences(enabled: boolean) {
             body: JSON.stringify(sent),
           }
         );
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      });
+        if (!response.ok) {
+          await mutate();
+          throw new Error(`HTTP ${response.status}`);
+        }
+      };
+      const write = preferenceWrites.then(run);
       preferenceWrites = write.catch(() => undefined);
-      try {
-        await write;
-      } catch (writeError) {
-        void mutate();
-        throw writeError;
-      }
+      await write;
     },
     [mutate]
   );

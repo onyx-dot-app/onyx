@@ -116,3 +116,51 @@ test("a failed preferences read is not loaded and a switch fails", async () => {
     fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")
   ).toBe(false);
 });
+
+test("a failed refresh leaves the agent's integrations unknown", async () => {
+  let fail = false;
+  mockFetch({
+    "/api/integrations": [linear],
+    "/api/integrations/agents/8": () =>
+      fail ? new Response(null, { status: 500 }) : [1],
+  });
+  const { result } = renderHook(() => useAgentChatIntegrations(8), {
+    wrapper,
+  });
+  await waitFor(() => expect(result.current.integrationIds).toEqual([1]));
+
+  fail = true;
+  await act(() => result.current.refresh());
+  await waitFor(() => expect(result.current.integrationIds).toBeNull());
+});
+
+test("a failed write is read back before the next write is built", async () => {
+  const patches: unknown[] = [];
+  const fetchMock = mockFetch({
+    "/api/user/assistant/preferences": {
+      "8": { disabled_tool_ids: [], disabled_integration_ids: [5] },
+    },
+    "PATCH /api/user/assistant/8/preferences": (init?: RequestInit) => {
+      patches.push(JSON.parse(String(init?.body)));
+      return new Response(null, { status: patches.length === 1 ? 500 : 200 });
+    },
+  });
+  const { result } = renderHook(() => useAgentIntegrationPreferences(true), {
+    wrapper,
+  });
+  await waitFor(() => expect(result.current.loaded).toBe(true));
+
+  await act(async () => {
+    const first = result.current.setIntegrationsDisabled(8, [1], true);
+    const second = result.current.setIntegrationsDisabled(8, [2], true);
+    await expect(first).rejects.toThrow("HTTP 500");
+    await second;
+  });
+
+  // The second body starts from the saved list, not from the failed change.
+  expect(patches).toEqual([
+    { disabled_integration_ids: [5, 1] },
+    { disabled_integration_ids: [5, 2] },
+  ]);
+  expect(fetchMock).toHaveBeenCalled();
+});

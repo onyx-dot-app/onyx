@@ -134,6 +134,11 @@ export default function TaskIntegrationCard({
                   t("needsSignIn", { name: integration.name })}
               </Text>
             )}
+            {!integration.runnable && (
+              <Text font="secondary-body" color="status-warning-05">
+                {t("notRunnable", { name: integration.name })}
+              </Text>
+            )}
           </Section>
         </Section>
         <Section

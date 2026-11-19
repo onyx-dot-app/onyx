@@ -10676,7 +10676,8 @@
         "saved": "{name} est maintenant {policy}.",
         "saveFailed": "Impossible d'enregistrer le paramètre d'installation.",
         "title": "Paramètre d'Installation",
-        "description": "Qui reçoit cette intégration. Non disponible la garde privée : seuls son propriétaire et les personnes avec qui elle est partagée l'utilisent."
+        "description": "Qui reçoit cette intégration. Non disponible la garde privée : seuls son propriétaire, les personnes avec qui elle est partagée et les groupes qui ont leur propre paramètre l’utilisent. Supprimez ces paramètres de groupe pour la limiter au propriétaire et aux partages.",
+        "notAvailable": "Privée. Seuls le propriétaire, les personnes avec qui elle est partagée et les groupes qui ont leur propre paramètre l’utilisent."
       },
       "ownedBy": "Propriété de {owner}",
       "groupAccess": {
@@ -15160,7 +15161,8 @@
         "blocked": "Bloquée"
       },
       "newTaskIntegrationsDescription": "Activez les intégrations que cette tâche peut utiliser. Chaque action utilise le paramètre de son intégration jusqu'à ce que vous le modifiiez.",
-      "emptyIntegrations": "Aucune intégration disponible."
+      "emptyIntegrations": "Aucune intégration disponible.",
+      "notRunnable": "Craft ne peut pas exécuter {name} pour le moment : la tâche l’ignore."
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, one {# skill n’a pas été chargé} other {# skills n’ont pas été chargés}}",

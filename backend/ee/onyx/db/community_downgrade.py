@@ -3,7 +3,16 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, and_, delete, null, or_, select, update
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    and_,
+    delete,
+    null,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -24,7 +33,7 @@ from onyx.db.models import (
     DocumentSet__UserGroup,
     HierarchyNode,
     Hook,
-    Integration,
+    Integration__User,
     Integration__UserGroup,
     LLMProvider,
     LLMProvider__UserGroup,
@@ -249,35 +258,51 @@ def _make_group_shared_resources_public__no_commit(
             plugin_id,
             published_name,
         )
-    # A private integration shared with one of these groups becomes Available,
-    # so its members keep it. One with no owner stays closed: an admin closed
-    # it, or its owner was deleted.
+    # Each member of a group that has access to an integration (a share, or a
+    # group setting above NOT_AVAILABLE) gets a user share, so the members keep
+    # it. The integration keeps its company setting: one that an admin closed
+    # stays closed, and none opens to the whole organization.
     not_available = PluginInstallationPolicy.NOT_AVAILABLE
-    for integration_id, name in db_session.execute(
-        update(Integration)
+    granted = (
+        select(
+            Integration__UserGroup.integration_id,
+            User__UserGroup.user_id,
+        )
+        .join(
+            User__UserGroup,
+            User__UserGroup.user_group_id == Integration__UserGroup.user_group_id,
+        )
         .where(
-            Integration.installation_policy == not_available,
-            Integration.owner_user_id.is_not(None),
-            Integration.id.in_(
-                select(Integration__UserGroup.integration_id).where(
-                    Integration__UserGroup.user_group_id.in_(group_ids),
+            Integration__UserGroup.user_group_id.in_(group_ids),
+            User__UserGroup.user_id.is_not(None),
+            or_(
+                and_(
                     Integration__UserGroup.permission.is_not(None),
                     or_(
                         Integration__UserGroup.installation_policy.is_(None),
                         Integration__UserGroup.installation_policy != not_available,
                     ),
-                )
+                ),
+                and_(
+                    Integration__UserGroup.permission.is_(None),
+                    Integration__UserGroup.installation_policy.is_not(None),
+                    Integration__UserGroup.installation_policy != not_available,
+                ),
             ),
         )
-        .values(installation_policy=PluginInstallationPolicy.AVAILABLE)
-        .returning(Integration.id, Integration.name)
-    ):
-        logger.info(
-            "Community downgrade made integration %s ('%s') available to the "
-            "organization",
-            integration_id,
-            name,
-        )
+        .distinct()
+    )
+    shared = db_session.execute(
+        pg_insert(Integration__User)
+        .from_select(["integration_id", "user_id"], granted)
+        .on_conflict_do_nothing()
+        .returning(Integration__User.integration_id)
+    ).all()
+    logger.info(
+        "Community downgrade gave %d integration shares to the members of "
+        "removed groups",
+        len(shared),
+    )
 
 
 def _add_to_default_group__no_commit(

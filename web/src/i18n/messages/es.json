@@ -10676,7 +10676,8 @@
         "saved": "{name} ahora es {policy}.",
         "saveFailed": "No se pudo guardar la configuración de instalación.",
         "title": "Configuración de Instalación",
-        "description": "Quién recibe esta integración. No disponible la mantiene privada: solo la usan su propietario y las personas con quienes se compartió."
+        "description": "Quién recibe esta integración. No disponible la mantiene privada: solo la usan su propietario, las personas con quienes se comparte y los grupos con su propia configuración. Quita esas configuraciones de grupo para limitarla al propietario y a las personas con acceso compartido.",
+        "notAvailable": "Privada. Solo la usan el propietario, las personas con quienes se comparte y los grupos con su propia configuración."
       },
       "ownedBy": "Propiedad de {owner}",
       "groupAccess": {
@@ -15160,7 +15161,8 @@
         "blocked": "Bloqueada"
       },
       "newTaskIntegrationsDescription": "Activa las integraciones que puede usar esta tarea. Cada acción usa la configuración de su integración hasta que la cambies.",
-      "emptyIntegrations": "No hay integraciones disponibles."
+      "emptyIntegrations": "No hay integraciones disponibles.",
+      "notRunnable": "Craft no puede ejecutar {name} ahora, así que la tarea lo omite."
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, one {# skill no se cargó} other {# skills no se cargaron}}",

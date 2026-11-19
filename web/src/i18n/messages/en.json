@@ -10676,7 +10676,8 @@
         "saved": "{name} is now {policy}.",
         "saveFailed": "Could not save the install setting.",
         "title": "Install Setting",
-        "description": "Who gets this integration. Not available keeps it private: only its owner and the people it is shared with use it."
+        "description": "Who gets this integration. Not available keeps it private: only its owner, the people it is shared with and the groups with their own setting use it. Remove those group settings to limit it to the owner and the shares.",
+        "notAvailable": "Private. Only the owner, the people it is shared with and the groups with their own setting use it."
       },
       "ownedBy": "Owned by {owner}",
       "groupAccess": {
@@ -15160,7 +15161,8 @@
         "blocked": "Blocked"
       },
       "newTaskIntegrationsDescription": "Turn on the integrations this task can use. Each action uses its integration setting until you change it.",
-      "emptyIntegrations": "No integrations are available."
+      "emptyIntegrations": "No integrations are available.",
+      "notRunnable": "Craft cannot run {name} now, so the task skips it."
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, one {# skill did not load} other {# skills did not load}}",
