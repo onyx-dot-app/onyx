@@ -150,13 +150,15 @@ uses ([[chat-frontend]]): `OutputPanelLayout`, `PanelTabStrip`
 with Craft's tab kinds and "+" menu), `PanelUrlBar`
 (`web/src/app/craft/components/output-panel/UrlBar.tsx` adds Craft's
 reload, upload, download, export and share actions), `WorkspaceHome`, and
-`OutputTileFrame`, `OutputTileGrid` and `OutputImageThumbnail`
+`OutputTileFrame` and `OutputImageThumbnail`
 (`web/src/sections/output-panel/OutputTile.tsx`; Craft's tile variants stay in
-`web/src/app/craft/components/output-panel/OutputTile.tsx`). Both panels
+`web/src/app/craft/components/output-panel/OutputTile.tsx`), in an Opal
+`CardGrid` with `columns="two-to-three"`. Both panels
 also share the resize and full screen code:
 `web/src/sections/output-panel/PanelResize.tsx`
 (`useOutputPanelWorkspace` measures the workspace, runs the edge drag, arrow
-keys and double-click reset, makes the covered page inert after it moves
+keys and double-click reset, cancels a drag when the mode, the narrow rule
+or the session changes, makes the covered page inert after it moves
 focus out, and restores a full panel on Escape in the capture phase, so that
 Escape leaves full screen before it stops a run; also `PanelResizeHandle`
 and `PanelSizeButton`, which neither panel shows on a narrow workspace).

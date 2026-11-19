@@ -229,8 +229,11 @@
   again; after a branch switch it waits for the new branch's latest page
   (`latestPageSwitch`, set and cleared by
   `lib/chat/pagedSession.ts:loadSelectedBranch` for the newest switch only)
-  before it decides. A closed panel cannot be focused, and closing it returns
-  focus to the control that opened it, also when the panel covered the page.
+  before it decides. `views/AppPage.tsx` applies this rule, because it does
+  not mount the panel for an agent without search on a branch without files.
+  A closed panel cannot be focused, and closing it returns focus to the
+  control that opened it, or that last switched it from outside the panel,
+  also when the panel covered the page.
   Escape leaves full
   screen first, before a run's Escape stops the run; a narrow page has no
   full screen, so Escape skips that step. Then it closes the active file's
@@ -411,14 +414,16 @@ parts, and a change to them changes Craft's panel too. Its previews use
 `sections/modals/PreviewModal/ChatFilePreview.tsx`, the chat file previewer
 that `PreviewModal` also uses; Craft's previewers read sandbox paths, not
 chat files. The Files list merges the latest load's `published_files` (the
-session's `branchPublishedFiles`, which every load and settle sets) with the
-packets of the loaded branch
+session's `branchPublishedFiles`, which every load and settle sets, with the
+newest message ID of the load) with the packets of the loaded branch
 (`lib/chat/publishedFiles.ts:branchPublishedFiles`, which also gives each
-file's latest publish of its path). The load gives the files of unloaded
-messages and of subagents; the packets add the files that the load does not
-list. Those after the last listed file go after the load's list, such as
-live publishes; those before it go before it, such as files saved without a
-path. A load entry of a loaded message off the branch is left out. Every
+file's latest publish of its path). The load's list decides the files of
+every message up to that ID, also of unloaded messages and of subagents; it
+leaves out files on purpose, such as those without a path or whose object is
+missing. The packets add only the files of newer messages, such as live
+publishes, after the list. Without a list (before a load, or a shared chat
+whose load has none), the packets give all the files. A load entry of a
+loaded message off the branch is left out. Every
 branch switch loads the branch's latest page for its files; the page
 replaces the messages only when they are not loaded. A background
 subagent's files are not in the root stream; they appear at the next
