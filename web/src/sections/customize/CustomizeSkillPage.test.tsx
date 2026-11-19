@@ -296,6 +296,45 @@ test("a newer save by someone else keeps the draft and offers Reload", async () 
   ).toBeDisabled();
 });
 
+test("Reload drops the staged file changes with the text", async () => {
+  ownerRoutes({
+    "DELETE /api/skills/custom/custom-1/files?path=references%2Fguide.md&base_version_id=version-2":
+      () =>
+        new Response(
+          JSON.stringify({
+            error_code: "PLUGIN_VERSION_STALE",
+            detail: "stale",
+          }),
+          { status: 409 }
+        ),
+  });
+  window.history.replaceState(
+    null,
+    "",
+    "/app/customize/skills/custom-1?edit=1"
+  );
+  render(<CustomizeSkillPage skillId="custom-1" />);
+  const user = setupUser();
+  await user.click(
+    await screen.findByRole("button", { name: "references/guide.md" })
+  );
+  await user.click(
+    screen.getByRole("button", { name: "Remove references/guide.md" })
+  );
+  const save = screen.getByRole("button", { name: copy.contents.saveVersion });
+  await user.click(save);
+  await user.click(
+    await screen.findByRole("button", {
+      name: messages.skills.editor.staleVersion.reload.label,
+    })
+  );
+
+  expect(
+    await screen.findByRole("button", { name: "references/guide.md" })
+  ).toBeVisible();
+  await waitFor(() => expect(save).toBeDisabled());
+});
+
 test("a failed refresh keeps the page and the editor", async () => {
   let reads = 0;
   ownerRoutes({
