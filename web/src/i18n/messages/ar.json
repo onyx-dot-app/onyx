@@ -12682,25 +12682,6 @@
         "toggleRow": {
           "ariaLabel": "تبديل الخط الزمني"
         },
-        "toolNames": {
-          "codeInterpreter": "مفسر الأكواد",
-          "customTool": "أداة مخصصة",
-          "generateImage": "توليد صورة",
-          "generatePlan": "توليد خطة",
-          "internalSearch": "بحث داخلي",
-          "knowledgeBaseQuery": "استعلام قاعدة المعرفة",
-          "memory": "الذاكرة",
-          "openUrls": "فتح عناوين URL",
-          "researchAgent": "وكيل البحث",
-          "thinking": "التفكير",
-          "tool": "أداة",
-          "webSearch": "البحث في الويب",
-          "terminal": "الطرفية",
-          "applyPatch": "تطبيق التصحيح",
-          "editFile": "تعديل ملف",
-          "writeFile": "كتابة ملف",
-          "publishFiles": "نشر الملفات"
-        },
         "webSearch": {
           "searching": {
             "status": "جارٍ البحث في الويب"
@@ -12747,16 +12728,13 @@
             "title": "التصحيح",
             "progress": {
               "writing": {
-                "status": "جارٍ كتابة {path}… {lines, plural, zero {# سطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}"
+                "status": "{named, select, true {جارٍ كتابة {path}… {lines, plural, zero {# سطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}} other {جارٍ كتابة ملف…}}"
               },
               "editing": {
-                "status": "جارٍ تعديل {path}… {lines, plural, zero {# سطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}"
+                "status": "{named, select, true {جارٍ تعديل {path}… {lines, plural, zero {# سطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}} other {جارٍ تعديل ملف…}}"
               },
               "patching": {
                 "status": "{count, plural, =0 {جارٍ تصحيح الملفات…} one {جارٍ تصحيح ملف واحد…} two {جارٍ تصحيح ملفين…} few {جارٍ تصحيح # ملفات…} many {جارٍ تصحيح # ملفًا…} other {جارٍ تصحيح # ملف…}}"
-              },
-              "starting": {
-                "status": "{tool, select, write {جارٍ كتابة ملف…} other {جارٍ تعديل ملف…}}"
               }
             }
           },

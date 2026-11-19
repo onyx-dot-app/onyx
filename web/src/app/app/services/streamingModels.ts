@@ -443,8 +443,7 @@ export interface ExecEnd extends BaseObj {
 }
 
 // The names of the backend's file tools (sandbox_tools.py)
-export const FILE_TOOL_NAMES = ["apply_patch", "edit", "write"] as const;
-export type FileToolName = (typeof FILE_TOOL_NAMES)[number];
+export type FileToolName = "apply_patch" | "edit" | "write";
 
 // What a file tool call's arguments hold while the model streams them; the
 // call's start packet follows

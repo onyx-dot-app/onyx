@@ -12682,25 +12682,6 @@
         "toggleRow": {
           "ariaLabel": "Toggle timeline"
         },
-        "toolNames": {
-          "codeInterpreter": "Code Interpreter",
-          "customTool": "Custom Tool",
-          "generateImage": "Generate Image",
-          "generatePlan": "Generate plan",
-          "internalSearch": "Internal Search",
-          "knowledgeBaseQuery": "Knowledge Base Query",
-          "memory": "Memory",
-          "openUrls": "Open URLs",
-          "researchAgent": "Research agent",
-          "thinking": "Thinking",
-          "tool": "Tool",
-          "webSearch": "Web Search",
-          "terminal": "Terminal",
-          "applyPatch": "Apply Patch",
-          "editFile": "Edit File",
-          "writeFile": "Write File",
-          "publishFiles": "Publish Files"
-        },
         "webSearch": {
           "searching": {
             "status": "Searching the web"
@@ -12747,16 +12728,13 @@
             "title": "Patch",
             "progress": {
               "writing": {
-                "status": "Writing {path}… {lines, plural, one {# line} other {# lines}}"
+                "status": "{named, select, true {Writing {path}… {lines, plural, one {# line} other {# lines}}} other {Writing a file…}}"
               },
               "editing": {
-                "status": "Editing {path}… {lines, plural, one {# line} other {# lines}}"
+                "status": "{named, select, true {Editing {path}… {lines, plural, one {# line} other {# lines}}} other {Editing a file…}}"
               },
               "patching": {
                 "status": "{count, plural, =0 {Patching files…} one {Patching # file…} other {Patching # files…}}"
-              },
-              "starting": {
-                "status": "{tool, select, write {Writing a file…} other {Editing a file…}}"
               }
             }
           },

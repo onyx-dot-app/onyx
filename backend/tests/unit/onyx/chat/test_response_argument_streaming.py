@@ -1,15 +1,27 @@
-"""Chat decodes streamed arguments only for tools with live argument display."""
+"""Chat decodes streamed arguments only for tools with live argument display.
+
+Every test runs under two clocks: one where each fragment reports, and one
+that stands still, so only the first fragment reports before the end.
+"""
 
 import json
 from collections.abc import Iterable
+from typing import Literal
 from unittest.mock import patch
 
 import pytest
 
+from onyx.agents.events import (
+    AgentEndEvent,
+    MessageEndEvent,
+    MessageStartEvent,
+    MessageUpdateEvent,
+)
 from onyx.agents.models import ExecutionStatus, RunStatus, StepRecord
 from onyx.chat import renderer as renderer_module
+from onyx.chat.emitter import Emitter
 from onyx.chat.models import MessageRendering, PresentationMode, ResponseRecord
-from onyx.chat.presentation import replay_response
+from onyx.chat.presentation import ResponsePresenter, replay_response
 from onyx.chat.renderer import (
     ARGUMENT_REPORT_INTERVAL_SECONDS,
     MessageRenderer,
@@ -50,19 +62,22 @@ from onyx.tools.tool_implementations.sandbox.patch import display_patch
 class Clock:
     """The renderer's clock: each read moves it `step` seconds."""
 
-    def __init__(self) -> None:
+    def __init__(self, step: float) -> None:
         self.now = 0.0
-        self.step = ARGUMENT_REPORT_INTERVAL_SECONDS
+        self.step = step
 
     def __call__(self) -> float:
         self.now += self.step
         return self.now
 
 
-@pytest.fixture(autouse=True)
-def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
-    # By default every fragment reports; throttle tests stop the clock.
-    clock = Clock()
+@pytest.fixture(
+    autouse=True,
+    params=[ARGUMENT_REPORT_INTERVAL_SECONDS, 0.0],
+    ids=["each", "stopped"],
+)
+def clock(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> Clock:
+    clock = Clock(request.param)
     monkeypatch.setattr(renderer_module, "monotonic", clock)
     return clock
 
@@ -85,6 +100,65 @@ def chunk(
             )
         ),
     )
+
+
+def content_events(events: Iterable[GenerationEvent]) -> list[GenerationContentEvent]:
+    return [
+        event for event in events if not isinstance(event, GenerationLifecycleEvent)
+    ]
+
+
+class Live:
+    """A provider stream through the accumulator into a renderer. Collects
+    every packet, including those of the end events and the completion."""
+
+    def __init__(self, settings: MessageRendering | None = None) -> None:
+        self.accumulator = MessageAccumulator()
+        self.renderer = MessageRenderer(
+            settings or MessageRendering(), {}, ResponseLayout()
+        )
+        self.accepted = AssistantMessage(id="response:0")
+        self.packets: list[Packet] = []
+
+    def _consume(self, events: list[GenerationEvent]) -> None:
+        for event in events:
+            apply_generation_event(self.accepted, event)
+        for event in content_events(events):
+            self.packets += self.renderer.consume(event)
+
+    def add(self, fragment: str, index: int = 0, name: str = "run_python") -> None:
+        self._consume(self.accumulator.add(chunk(fragment, index, name)))
+
+    def end_calls(self) -> None:
+        """The provider's end: each open call's end event."""
+        self._consume(self.accumulator.end())
+
+    def end(self) -> None:
+        self.end_calls()
+        self.packets += self.renderer.complete(self.accepted)
+
+    def interrupt(self, how: Literal["complete", "finish"]) -> None:
+        """A stream that stops without end events."""
+        self.packets += (
+            self.renderer.complete(self.accepted)
+            if how == "complete"
+            else self.renderer.finish()
+        )
+
+    def code(self, placement: Placement | None = None) -> str:
+        return "".join(
+            str(packet.obj.argument_deltas.get("code", ""))
+            for packet in self.packets
+            if isinstance(packet.obj, ToolCallArgumentDelta)
+            and (placement is None or packet.placement == placement)
+        )
+
+    def progress(self) -> list[FileToolProgress]:
+        return [
+            packet.obj
+            for packet in self.packets
+            if isinstance(packet.obj, FileToolProgress)
+        ]
 
 
 @pytest.mark.parametrize(
@@ -111,55 +185,29 @@ def test_decoded_strings_survive_arbitrary_fragment_boundaries(
     raw = json.dumps(
         {"code": text, "count": 3, "enabled": True, "items": [1, {"x": "y"}]}
     )
-    accumulator = MessageAccumulator()
-    renderer = MessageRenderer(
-        MessageRendering(),
-        {},
-        ResponseLayout(),
-    )
-    emitted: list[str] = []
+    live = Live()
     for offset in range(0, len(raw), size):
-        for event in accumulator.add(chunk(raw[offset : offset + size])):
-            if isinstance(event, GenerationLifecycleEvent):
-                continue
-            emitted.extend(
-                packet.obj.argument_deltas.get("code", "")
-                for packet in renderer.consume(event)
-                if isinstance(packet.obj, ToolCallArgumentDelta)
-            )
-    for event in accumulator.end():
-        if not isinstance(event, GenerationLifecycleEvent):
-            renderer.consume(event)
-    assert "".join(emitted) == text
-    assert accumulator.message.tool_calls[0].arguments == json.loads(raw)
+        live.add(raw[offset : offset + size])
+    live.end()
+    assert live.code() == text
+    assert live.accumulator.message.tool_calls[0].arguments == json.loads(raw)
 
 
 def test_interleaved_calls_have_independent_arguments_and_identities() -> None:
-    accumulator = MessageAccumulator()
-    renderer = MessageRenderer(
-        MessageRendering(),
-        {},
-        ResponseLayout(),
-    )
-    contents: dict[str, str] = {}
+    live = Live()
     for index, fragment in [
         (0, '{"code":"a'),
         (1, '{"code":"b'),
         (0, 'c"}'),
         (1, 'd"}'),
     ]:
-        for event in accumulator.add(chunk(fragment, index)):
-            if isinstance(event, GenerationLifecycleEvent):
-                continue
-            for packet in renderer.consume(event):
-                if isinstance(packet.obj, ToolCallArgumentDelta):
-                    call_id = str(packet.placement.tab_index)
-                    contents[call_id] = contents.get(
-                        call_id, ""
-                    ) + packet.obj.argument_deltas.get("code", "")
-    accumulator.end()
-    assert contents == {"0": "ac", "1": "bd"}
-    assert [call.arguments for call in accumulator.message.tool_calls] == [
+        live.add(fragment, index)
+    live.end()
+    assert [
+        live.code(live.renderer.tool_placement(call.id))
+        for call in live.accumulator.message.tool_calls
+    ] == ["ac", "bd"]
+    assert [call.arguments for call in live.accumulator.message.tool_calls] == [
         {"code": "ac"},
         {"code": "bd"},
     ]
@@ -199,63 +247,64 @@ def test_partial_events_retain_raw_arguments_until_completion() -> None:
 
 
 def test_search_arguments_do_not_need_partial_json_parsing() -> None:
-    accumulator = MessageAccumulator()
-    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
+    live = Live()
     with patch("onyx.chat.renderer.parse_partial_object") as parse:
         for fragment in ['{"queries":["first', '","second"]}']:
-            for event in accumulator.add(chunk(fragment, name="internal_search")):
-                if not isinstance(event, GenerationLifecycleEvent):
-                    assert not renderer.consume(event)
-        for event in accumulator.end():
-            if not isinstance(event, GenerationLifecycleEvent):
-                assert not renderer.consume(event)
+            live.add(fragment, name="internal_search")
+        live.end()
         parse.assert_not_called()
-    assert accumulator.message.tool_calls[0].arguments == {
+    assert not live.packets
+    assert live.accumulator.message.tool_calls[0].arguments == {
         "queries": ["first", "second"]
     }
 
 
 def test_invalid_python_arguments_stop_display_but_retain_raw_input() -> None:
-    accumulator = MessageAccumulator()
-    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
+    live = Live()
+    # A raw newline is not valid inside a JSON string.
     fragments = ['{"code":"a', "\nb", 'c"}']
-    code: list[str] = []
     for fragment in fragments:
-        for event in accumulator.add(chunk(fragment)):
-            if not isinstance(event, GenerationLifecycleEvent):
-                code.extend(
-                    packet.obj.argument_deltas.get("code", "")
-                    for packet in renderer.consume(event)
-                    if isinstance(packet.obj, ToolCallArgumentDelta)
-                )
-    for event in accumulator.end():
-        if not isinstance(event, GenerationLifecycleEvent):
-            assert not renderer.consume(event)
-    assert "".join(code) == "a"
-    assert accumulator.message.tool_calls[0].raw_arguments == "".join(fragments)
-    assert accumulator.message.tool_calls[0].argument_error is not None
+        live.add(fragment)
+    live.end()
+    assert live.code() == "a"
+    assert live.accumulator.message.tool_calls[0].raw_arguments == "".join(fragments)
+    assert live.accumulator.message.tool_calls[0].argument_error is not None
 
 
-def test_interrupted_python_call_replays_the_streamed_code() -> None:
-    accumulator = MessageAccumulator()
-    live = MessageRenderer(MessageRendering(), {}, ResponseLayout())
-    accepted = AssistantMessage(id="response:0")
-    emitted: list[str] = []
+@pytest.mark.parametrize("name", ["run_python", "write"])
+def test_an_invalid_call_shows_every_fragment_it_streamed(name: str) -> None:
+    """Arguments cut off at the token limit end the call with an error and
+    empty arguments; the end reports what the fragments hold."""
+    live = Live()
+    key = {"run_python": "code", "write": "content"}[name]
+    for fragment in ['{"file_path": "a.md", "' + key + '": "a', "\\nb", "c"]:
+        live.add(fragment, name=name)
+    live.end_calls()
+    assert live.accumulator.message.tool_calls[0].argument_error is not None
+    if name == "run_python":
+        assert live.code() == "a\nbc"
+    else:
+        assert live.progress()[-1] == FileToolProgress(
+            tool_name="write", paths=["a.md"], lines=2
+        )
+
+
+@pytest.mark.parametrize("how", ["complete", "finish"])
+def test_interrupted_python_call_replays_the_streamed_code(
+    how: Literal["complete", "finish"],
+) -> None:
+    live = Live()
     fragments = ['{"code":"print(', '\\"hello\\")\\n']
     for fragment in fragments:
-        for event in accumulator.add(chunk(fragment)):
-            apply_generation_event(accepted, event)
-            if not isinstance(event, GenerationLifecycleEvent):
-                emitted.extend(
-                    packet.obj.argument_deltas.get("code", "")
-                    for packet in live.consume(event)
-                    if isinstance(packet.obj, ToolCallArgumentDelta)
-                )
+        live.add(fragment)
+    live.interrupt(how)
     response = ResponseRecord(
         run_id="response",
         status=RunStatus.CANCELLED,
         steps=[
-            StepRecord(message=accepted, generation_status=ExecutionStatus.CANCELLED)
+            StepRecord(
+                message=live.accepted, generation_status=ExecutionStatus.CANCELLED
+            )
         ],
     )
     saved = ResponseRecord.model_validate_json(response.model_dump_json())
@@ -263,7 +312,7 @@ def test_interrupted_python_call_replays_the_streamed_code() -> None:
     code = [
         packet.obj.code for packet in packets if isinstance(packet.obj, PythonToolStart)
     ]
-    assert code == ["".join(emitted)] == ['print("hello")\n']
+    assert code == [live.code()] == ['print("hello")\n']
     call = saved.steps[0].message.tool_calls[0]
     assert call.raw_arguments == "".join(fragments)
     assert call.arguments == {}
@@ -288,16 +337,21 @@ def test_code_argument_streams_live_as_execute_code() -> None:
     assert packet.obj.argument_deltas == {"code": "print(1)"}
 
 
-def content_events(events: Iterable[GenerationEvent]) -> list[GenerationContentEvent]:
-    return [
-        event for event in events if not isinstance(event, GenerationLifecycleEvent)
+@pytest.mark.parametrize("name", ["run_python", CodeModeTool.NAME])
+def test_code_reports_merge_the_text_between_them(clock: Clock, name: str) -> None:
+    clock.step = 0
+    live = Live()
+    for fragment in ['{"code": "a', *["b"] * 100, 'c"}']:
+        live.add(fragment, name=name)
+    # The first fragment reports; the rest wait for the interval or the end.
+    assert live.code() == "a"
+    live.end()
+    deltas = [
+        packet.obj.argument_deltas["code"]
+        for packet in live.packets
+        if isinstance(packet.obj, ToolCallArgumentDelta)
     ]
-
-
-def progress(packets: Iterable[Packet]) -> list[FileToolProgress]:
-    return [
-        packet.obj for packet in packets if isinstance(packet.obj, FileToolProgress)
-    ]
+    assert deltas == ["a", "b" * 100 + "c"]
 
 
 PATCH_TEXT = "\n".join(
@@ -344,16 +398,11 @@ def test_file_progress_survives_arbitrary_fragment_boundaries(
     size: int,
 ) -> None:
     raw = json.dumps(arguments, ensure_ascii=ensure_ascii)
-    accumulator = MessageAccumulator()
-    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
-    shown: list[FileToolProgress] = []
+    live = Live()
     for offset in range(0, len(raw), size):
-        for event in content_events(
-            accumulator.add(chunk(raw[offset : offset + size], name=name))
-        ):
-            shown += progress(renderer.consume(event))
-    for event in content_events(accumulator.end()):
-        shown += progress(renderer.consume(event))
+        live.add(raw[offset : offset + size], name=name)
+    live.end()
+    shown = live.progress()
     assert shown[-1] == expected
     for report in shown:
         # A path shows only once whole, and the line count only grows.
@@ -363,55 +412,35 @@ def test_file_progress_survives_arbitrary_fragment_boundaries(
     )
 
 
-def test_reports_are_throttled_and_merge_the_text_between_them(clock: Clock) -> None:
+def test_file_reports_are_throttled_and_merge_the_text_between_them(
+    clock: Clock,
+) -> None:
     clock.step = 0
-    accumulator = MessageAccumulator()
-    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
-    fragments = [
-        '{"file_path": "a.txt", "content": "',
-        *["x\\n"] * 1000,
-        '"}',
-    ]
-    shown: list[Packet] = []
-    for fragment in fragments:
-        for event in content_events(accumulator.add(chunk(fragment, name="write"))):
-            shown += renderer.consume(event)
-    for event in content_events(accumulator.end()):
-        shown += renderer.consume(event)
-    # The first fragment reports; the rest wait for the interval or the end.
-    assert progress(shown) == [
+    live = Live()
+    live.add('{"file_path": "a.txt", "content": "', name="write")
+    for _ in range(1000):
+        live.add("x\\n", name="write")
+    live.add('"}', name="write")
+    live.end()
+    assert live.progress() == [
         FileToolProgress(tool_name="write", paths=["a.txt"], lines=0),
         FileToolProgress(tool_name="write", paths=["a.txt"], lines=1000),
     ]
-    assert len(shown) == 2
+    assert len(live.packets) == 2
 
 
-def test_code_deltas_merge_the_text_between_reports(clock: Clock) -> None:
-    clock.step = 0
-    accumulator = MessageAccumulator()
-    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
-    code: list[str] = []
-    for fragment in ['{"code": "a', *["b"] * 100, 'c"}']:
-        for event in content_events(accumulator.add(chunk(fragment))):
-            code += [
-                packet.obj.argument_deltas["code"]
-                for packet in renderer.consume(event)
-                if isinstance(packet.obj, ToolCallArgumentDelta)
-            ]
-    assert code == ["a"]
-    for event in content_events(accumulator.end()):
-        code += [
-            packet.obj.argument_deltas["code"]
-            for packet in renderer.consume(event)
-            if isinstance(packet.obj, ToolCallArgumentDelta)
-        ]
-    assert code == ["a", "b" * 100 + "c"]
+def test_a_report_that_changes_nothing_sends_no_packet() -> None:
+    live = Live()
+    for fragment in ['{"file_path": "a.txt", "content": "x', "y", "z", '"}']:
+        live.add(fragment, name="write")
+    live.end()
+    assert live.progress() == [
+        FileToolProgress(tool_name="write", paths=["a.txt"], lines=1)
+    ]
 
 
 def test_parallel_file_calls_report_their_own_progress() -> None:
-    accumulator = MessageAccumulator()
-    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
-    shown: dict[int, FileToolProgress] = {}
+    live = Live()
     for index, name, fragment in [
         (0, "write", '{"file_path": "a.md", '),
         (1, "edit", '{"file_path": "b.py", '),
@@ -420,70 +449,128 @@ def test_parallel_file_calls_report_their_own_progress() -> None:
         (0, "write", '3"}'),
         (1, "edit", '"}'),
     ]:
-        for event in content_events(accumulator.add(chunk(fragment, index, name))):
-            for packet in renderer.consume(event):
-                assert isinstance(packet.obj, FileToolProgress)
-                shown[packet.placement.tab_index] = packet.obj
-    for event in content_events(accumulator.end()):
-        renderer.consume(event)
-    assert shown == {
+        live.add(fragment, index, name)
+    live.end()
+    last: dict[int, FileToolProgress] = {}
+    for packet in live.packets:
+        assert isinstance(packet.obj, FileToolProgress)
+        last[packet.placement.tab_index] = packet.obj
+    assert last == {
         0: FileToolProgress(tool_name="write", paths=["a.md"], lines=3),
         1: FileToolProgress(tool_name="edit", paths=["b.py"], lines=1),
     }
 
 
-@pytest.mark.parametrize(
-    "fragments",
-    [
-        # A raw newline is not valid inside a JSON string.
-        ['{"file_path": "a.txt", "content": "a', "\nb", 'c"}'],
-        # Arguments cut off at the token limit never complete.
-        ['{"file_path": "a.txt", "content": "a', "bc"],
-    ],
-)
-def test_invalid_file_arguments_stop_progress(fragments: list[str]) -> None:
-    accumulator = MessageAccumulator()
-    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
-    shown: list[FileToolProgress] = []
-    for fragment in fragments:
-        for event in content_events(accumulator.add(chunk(fragment, name="write"))):
-            shown += progress(renderer.consume(event))
-    for event in content_events(accumulator.end()):
-        assert not renderer.consume(event)
-    assert shown[-1].paths == ["a.txt"]
-    assert accumulator.message.tool_calls[0].argument_error is not None
-
-
-def test_an_interrupted_file_call_reports_its_last_fragments(clock: Clock) -> None:
-    clock.step = 0
-    accumulator = MessageAccumulator()
-    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
-    accepted = AssistantMessage()
-    shown: list[FileToolProgress] = []
-    for fragment in ['{"input": "*** Begin Patch\\n', "*** Add File: a.md\\n+x"]:
-        for event in accumulator.add(chunk(fragment, name="apply_patch")):
-            apply_generation_event(accepted, event)
-            if not isinstance(event, GenerationLifecycleEvent):
-                shown += progress(renderer.consume(event))
-    assert shown == [FileToolProgress(tool_name="apply_patch", lines=1)]
-    # The interrupted message has no end event; completing it reports.
-    assert progress(renderer.complete(accepted)) == [
-        FileToolProgress(tool_name="apply_patch", paths=["a.md"], lines=3)
+def test_invalid_file_arguments_stop_progress() -> None:
+    live = Live()
+    # A raw newline is not valid inside a JSON string.
+    for fragment in ['{"file_path": "a.txt", "content": "a', "\nb", 'c"}']:
+        live.add(fragment, name="write")
+    live.end()
+    assert live.progress() == [
+        FileToolProgress(tool_name="write", paths=["a.txt"], lines=1)
     ]
+    assert live.accumulator.message.tool_calls[0].argument_error is not None
+
+
+@pytest.mark.parametrize("how", ["complete", "finish"])
+def test_an_interrupted_file_call_reports_its_last_fragments(
+    clock: Clock, how: Literal["complete", "finish"]
+) -> None:
+    clock.step = 0
+    live = Live()
+    for fragment in ['{"input": "*** Begin Patch\\n', "*** Add File: a.md\\n+x"]:
+        live.add(fragment, name="apply_patch")
+    assert live.progress() == [
+        FileToolProgress(tool_name="apply_patch", paths=[], lines=1)
+    ]
+    # The interrupted message has no end event; its completion reports.
+    live.interrupt(how)
+    assert live.progress()[-1] == FileToolProgress(
+        tool_name="apply_patch", paths=["a.md"], lines=3
+    )
+
+
+def test_a_stopped_file_call_shows_as_on_replay_apart_from_its_progress() -> None:
+    output: list[Packet] = []
+    presenter = ResponsePresenter(Emitter(output.append))
+    raw = '{"file_path": "a.md", "content": "x\\ny'
+    call = ToolCall(
+        id="write",
+        name="write",
+        arguments={},
+        raw_arguments=raw,
+        arguments_complete=False,
+    )
+    message = AssistantMessage(id="m", content=[call])
+    presenter.consume(MessageStartEvent(run_id="r", message_id="m", step_index=0))
+    for update in (
+        ToolCallStartEvent(content_index=0, tool_call_id=call.id, tool_name=call.name),
+        ToolCallDeltaEvent(content_index=0, arguments_delta=raw[:20]),
+        ToolCallDeltaEvent(content_index=0, arguments_delta=raw[20:]),
+    ):
+        presenter.consume(
+            MessageUpdateEvent(
+                run_id="r", message_id="m", step_index=0, generation_event=update
+            )
+        )
+    presenter.consume(
+        MessageEndEvent(
+            run_id="r",
+            message_id="m",
+            step_index=0,
+            message=message,
+            status=ExecutionStatus.CANCELLED,
+        )
+    )
+    presenter.consume(AgentEndEvent(run_id="r", outcome=RunStatus.CANCELLED))
+    replay = replay_response(
+        ResponseRecord(
+            run_id="r",
+            status=RunStatus.CANCELLED,
+            steps=[
+                StepRecord(message=message, generation_status=ExecutionStatus.CANCELLED)
+            ],
+        ),
+        {},
+        {},
+        {},
+    )
+    assert any(isinstance(packet.obj, FileToolProgress) for packet in output)
+
+    def shown(packets: list[Packet]) -> list[tuple[Placement, object]]:
+        # Live packets name the model of a multi-model turn; replay does not.
+        return [
+            (packet.placement.model_copy(update={"model_index": None}), packet.obj)
+            for packet in packets
+            if not isinstance(packet.obj, FileToolProgress)
+        ]
+
+    assert shown(output) == shown(replay)
 
 
 @pytest.mark.parametrize(
-    "arguments,complete,paths",
+    "text,complete,paths",
     [
         # The last header may still be cut off until its line ends.
-        ({"input": "*** Add File: a.md\n*** Delete File: b"}, False, ["a.md"]),
-        ({"input": "*** Add File: a.md\n*** Delete File: b"}, True, ["a.md", "b"]),
+        ("*** Add File: a.md\n*** Delete File: b", False, ["a.md"]),
+        ("*** Add File: a.md\n*** Delete File: b", True, ["a.md", "b"]),
+        # Two hunks of one file name it once.
+        ("*** Update File: a.py\n@@\n*** Update File: a.py\n", False, ["a.py"]),
     ],
 )
 def test_patch_paths_come_from_whole_header_lines(
-    arguments: dict[str, str], complete: bool, paths: list[str]
+    text: str, complete: bool, paths: list[str]
 ) -> None:
-    assert file_tool_progress("apply_patch", dict(arguments), complete).paths == paths
+    assert file_tool_progress("apply_patch", {"input": text}, complete).paths == paths
+
+
+@pytest.mark.parametrize(
+    "text,lines", [("", 0), ("a", 1), ("a\n", 1), ("a\nb", 2), ("\n\n", 2)]
+)
+def test_lines_count_a_last_unfinished_line(text: str, lines: int) -> None:
+    progress = file_tool_progress("write", {"file_path": "a", "content": text}, True)
+    assert progress.lines == lines
 
 
 @pytest.mark.parametrize(
@@ -503,7 +590,6 @@ def test_a_file_path_shows_once_whole(
 
 
 def test_a_file_call_with_wrong_typed_arguments_keeps_the_patch_card() -> None:
-    # Its streamed progress opened a patch card; the start keeps that card.
     call = ToolCall(id="c", name="write", arguments={"file_path": None, "content": "x"})
     assert [
         packet.obj for packet in tool_renderer(call, Placement(turn_index=0)).start()

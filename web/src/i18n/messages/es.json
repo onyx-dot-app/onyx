@@ -12682,25 +12682,6 @@
         "toggleRow": {
           "ariaLabel": "Alternar la línea de tiempo"
         },
-        "toolNames": {
-          "codeInterpreter": "Intérprete de código",
-          "customTool": "Herramienta personalizada",
-          "generateImage": "Generar imagen",
-          "generatePlan": "Generar plan",
-          "internalSearch": "Búsqueda interna",
-          "knowledgeBaseQuery": "Consulta de la base de conocimiento",
-          "memory": "Memoria",
-          "openUrls": "Abrir URL",
-          "researchAgent": "Agente de investigación",
-          "thinking": "Pensando",
-          "tool": "Herramienta",
-          "webSearch": "Búsqueda web",
-          "terminal": "Terminal",
-          "applyPatch": "Aplicar parche",
-          "editFile": "Editar archivo",
-          "writeFile": "Escribir archivo",
-          "publishFiles": "Publicar archivos"
-        },
         "webSearch": {
           "searching": {
             "status": "Buscando en la web"
@@ -12747,16 +12728,13 @@
             "title": "Parche",
             "progress": {
               "writing": {
-                "status": "Escribiendo {path}… {lines, plural, one {# línea} other {# líneas}}"
+                "status": "{named, select, true {Escribiendo {path}… {lines, plural, one {# línea} other {# líneas}}} other {Escribiendo un archivo…}}"
               },
               "editing": {
-                "status": "Editando {path}… {lines, plural, one {# línea} other {# líneas}}"
+                "status": "{named, select, true {Editando {path}… {lines, plural, one {# línea} other {# líneas}}} other {Editando un archivo…}}"
               },
               "patching": {
                 "status": "{count, plural, =0 {Aplicando parche a archivos…} one {Aplicando parche a # archivo…} other {Aplicando parche a # archivos…}}"
-              },
-              "starting": {
-                "status": "{tool, select, write {Escribiendo un archivo…} other {Editando un archivo…}}"
               }
             }
           },
