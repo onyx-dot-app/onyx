@@ -326,7 +326,7 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
   }
 });
 
-test("parallel edit and write calls are titled by their file tool", async () => {
+test("parallel edit and write calls render as separate steps", async () => {
   const edited = at({ turn_index: 0, tab_index: 0 });
   const written = at({ turn_index: 0, tab_index: 1 });
   const view = render(
@@ -348,8 +348,9 @@ test("parallel edit and write calls are titled by their file tool", async () => 
   );
   try {
     await expandTimeline();
-    expect(screen.getByText("Edit File")).toBeInTheDocument();
-    expect(screen.getByText("Write File")).toBeInTheDocument();
+    // Each call is its own step with its own patch head.
+    expect(screen.getAllByText(/\+print\('hi'\)/)).toHaveLength(2);
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   } finally {
     view.unmount();
   }

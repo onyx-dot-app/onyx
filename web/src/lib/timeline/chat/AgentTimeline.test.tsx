@@ -44,13 +44,13 @@ function step(tabIndex: number): TransformedStep {
   };
 }
 
+// Parallel calls render as one step each, in order.
 const parallelTurn: TurnGroup[] = [
-  { turnIndex: 0, isParallel: true, steps: [step(0), step(1)] },
+  { turnIndex: 0, steps: [step(0)] },
+  { turnIndex: 0, steps: [step(1)] },
 ];
 const noTurns: TurnGroup[] = [];
-const sequentialTurn: TurnGroup[] = [
-  { turnIndex: 0, isParallel: false, steps: [step(0)] },
-];
+const sequentialTurn: TurnGroup[] = [{ turnIndex: 0, steps: [step(0)] }];
 
 beforeEach(() => {
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: "s" });
