@@ -14,6 +14,7 @@
 task CHECK_FOR_INDEXING: Beat check that finds cc-pairs due for indexing and sends their docfetching tasks.
 task CONNECTOR_DOC_FETCHING_TASK: Long connector crawl for one index attempt, on the docfetching worker.
 task DOCPROCESSING_TASK: Chunks and embeds one fetched batch, on the docprocessing worker.
+task DOCCONVERSION_TASK: Converts one stub batch from a lister into a document batch, on the docconversion worker.
 task TARGETED_REINDEX_TASK: User-started reindex of chosen documents, too long for an API request.
 task CHECK_FOR_CHECKPOINT_CLEANUP: Beat check that finds old index attempt checkpoints and sends their cleanup.
 task CLEANUP_CHECKPOINT: Deletes the checkpoint of one index attempt, sent for each by its beat check.
