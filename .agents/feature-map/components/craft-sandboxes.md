@@ -274,7 +274,8 @@ the stored token on each request, so a new token takes effect at once.
   tracked executions per VM) and files (read, write, upload, list, delete,
   zip; session-relative. All but upload also take an absolute VM path with
   no session, anywhere except the denied VM paths; the daemon confines only
-  such paths in `/tmp/onyx`, like session paths). Write and
+  such paths in its `--onyx-root` (default `/tmp/onyx`), like session
+  paths). Write and
   upload take bytes or a seekable binary file, streamed whole from its start
   in 1 MiB messages; the daemon checks the size. Every call but Health sends
   `x-sandboxd-key`.
