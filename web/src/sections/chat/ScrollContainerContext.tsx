@@ -16,6 +16,8 @@ interface ScrollContainerContextType {
   contentWrapperRef: RefObject<HTMLDivElement | null>;
   /** Shared ref for the DynamicBottomSpacer's current height (written by spacer, read by scroll container). */
   spacerHeightRef: MutableRefObject<number>;
+  /** The chat shown, for state kept per chat. */
+  sessionId?: string;
   /**
    * Reports whether `target` is within `OVERSCAN_VIEWPORTS` viewport heights
    * of the scroll container, above or below. Returns a function that stops
@@ -36,11 +38,13 @@ export function ScrollContainerProvider({
   scrollContainerRef,
   contentWrapperRef,
   spacerHeightRef,
+  sessionId,
 }: {
   children: React.ReactNode;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
   contentWrapperRef: RefObject<HTMLDivElement | null>;
   spacerHeightRef: MutableRefObject<number>;
+  sessionId?: string;
 }) {
   // One observer for every row of the container, rebuilt only when the
   // container's height changes the margin.
@@ -105,12 +109,14 @@ export function ScrollContainerProvider({
       scrollContainerRef,
       contentWrapperRef,
       spacerHeightRef,
+      sessionId,
       observeNearViewport,
     }),
     [
       scrollContainerRef,
       contentWrapperRef,
       spacerHeightRef,
+      sessionId,
       observeNearViewport,
     ]
   );

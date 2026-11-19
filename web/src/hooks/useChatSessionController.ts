@@ -26,7 +26,11 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { useUser } from "@/providers/UserProvider";
-import { chatPageUrl, reloadLatestChatPage } from "@/lib/chat/pagedSession";
+import {
+  chatPageUrl,
+  mergeLatestChatPage,
+  reloadLatestChatPage,
+} from "@/lib/chat/pagedSession";
 import type { ProjectFile } from "@/lib/projects/types";
 import { getProjectFilesForSession } from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
@@ -289,14 +293,27 @@ export default function useChatSessionController({
         }
       }
 
-      const localMessages = useChatSessionStore
+      const localSession = useChatSessionStore
         .getState()
-        .sessions.get(chatSession.chat_session_id)?.messageTree;
+        .sessions.get(chatSession.chat_session_id);
+      const localMessages = localSession?.messageTree;
       let savedMessages = processRawChatHistory(
         chatSession.messages,
         chatSession.packets
       );
-      if (recovering && localMessages?.size) {
+      let hasOlderMessages = chatSession.has_older_messages ?? false;
+      if (!recovering && !isIncognito && localSession && localMessages?.size) {
+        // A cached chat keeps the older pages it loaded, so a reopen does not
+        // drop the rows its saved scroll position is on. An older page that
+        // failed to load is retried.
+        const merged = mergeLatestChatPage(chatSession, {
+          messageTree: localMessages,
+          hasOlderMessages:
+            localSession.hasOlderMessages || localSession.olderMessagesFailed,
+        });
+        savedMessages = merged.messageTree;
+        hasOlderMessages = merged.hasOlderMessages;
+      } else if (recovering && localMessages?.size) {
         savedMessages = isIncognito
           ? restoreIncognitoMessages(
               savedMessages,
@@ -343,7 +360,8 @@ export default function useChatSessionController({
         useChatSessionStore
           .getState()
           .updateSessionData(chatSession.chat_session_id, {
-            hasOlderMessages: chatSession.has_older_messages ?? false,
+            hasOlderMessages,
+            olderMessagesFailed: false,
             approvalsVersion: chatSession.approvals_version,
           });
         chatSessionIdRef.current = chatSession.chat_session_id;

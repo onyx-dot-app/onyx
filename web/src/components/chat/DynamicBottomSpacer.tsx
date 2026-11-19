@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useCurrentChatState } from "@/app/app/stores/useChatSessionStore";
 import { useScrollContainer } from "@/sections/chat/ScrollContainerContext";
+import { getChatScrollMemory } from "@/lib/chat/scrollMemory";
 
 // Small offset from the top of the scroll viewport where the anchor should appear.
 // The header is outside the scroll container, so when scrolled to the bottom
@@ -13,10 +14,8 @@ const ANCHOR_TOP_OFFSET_PX = 16;
 const SMOOTH_SCROLL_DURATION_MS = 600;
 
 export interface DynamicBottomSpacerProps {
-  /**
-   * Node ID of the anchor message (the new user message)
-   */
-  anchorNodeId?: number;
+  /** DOM id of the anchor message's row (the new user message). */
+  anchorRowId?: string;
 }
 
 /**
@@ -25,7 +24,7 @@ export interface DynamicBottomSpacerProps {
  * Uses ResizeObserver to efficiently detect content changes instead of polling.
  */
 const DynamicBottomSpacer = React.memo(
-  ({ anchorNodeId }: DynamicBottomSpacerProps) => {
+  ({ anchorRowId }: DynamicBottomSpacerProps) => {
     const spacerRef = useRef<HTMLDivElement>(null);
     const chatState = useCurrentChatState();
     const isStreaming = chatState === "streaming" || chatState === "loading";
@@ -35,12 +34,16 @@ const DynamicBottomSpacer = React.memo(
     const sentHereRef = useRef(false);
 
     // Get scroll container refs from context (provided by ChatScrollContainer)
-    const { scrollContainerRef, contentWrapperRef, spacerHeightRef } =
-      useScrollContainer();
+    const {
+      scrollContainerRef,
+      contentWrapperRef,
+      spacerHeightRef,
+      sessionId,
+    } = useScrollContainer();
 
     // Track state with refs to avoid re-renders
     const isActiveRef = useRef(false);
-    const prevAnchorNodeIdRef = useRef<number | undefined>(undefined);
+    const prevAnchorRowIdRef = useRef<string | undefined>(undefined);
     const wasStreamingRef = useRef(false);
     const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
@@ -71,8 +74,8 @@ const DynamicBottomSpacer = React.memo(
      * below the anchor keeps the anchor in place.
      */
     const measureSpacerHeight = useCallback((): number | null => {
-      if (!anchorNodeId) return null;
-      const anchor = document.getElementById(`message-${anchorNodeId}`);
+      if (!anchorRowId) return null;
+      const anchor = document.getElementById(anchorRowId);
       const scrollContainer = getScrollContainer();
       const spacer = spacerRef.current;
       if (!anchor || !scrollContainer || !spacer) return null;
@@ -90,7 +93,7 @@ const DynamicBottomSpacer = React.memo(
         scrollContainer.clientHeight -
         contentEnd
       );
-    }, [anchorNodeId, getScrollContainer]);
+    }, [anchorRowId, getScrollContainer]);
 
     /**
      * Stop observing and clean up
@@ -146,6 +149,9 @@ const DynamicBottomSpacer = React.memo(
       isActiveRef.current = true;
       setHeight(spacerHeight);
       startObserving();
+      if (sessionId && anchorRowId) {
+        getChatScrollMemory(sessionId).spaceAnchorRowId = anchorRowId;
+      }
 
       // No room needed: the anchor already reaches the top (a tall message),
       // and scrolling to the end would scroll past it.
@@ -173,6 +179,8 @@ const DynamicBottomSpacer = React.memo(
         });
       });
     }, [
+      sessionId,
+      anchorRowId,
       measureSpacerHeight,
       setHeight,
       getScrollContainer,
@@ -181,22 +189,45 @@ const DynamicBottomSpacer = React.memo(
     ]);
 
     /**
+     * Reopening a chat whose latest turn had space: fit the space again, with
+     * no scroll. A layout effect, so the space is there before
+     * ChatScrollContainer restores the saved position.
+     */
+    useLayoutEffect(() => {
+      if (!sessionId || !anchorRowId || isActiveRef.current) return;
+      if (getChatScrollMemory(sessionId).spaceAnchorRowId !== anchorRowId) {
+        return;
+      }
+      const spacerHeight = measureSpacerHeight();
+      if (spacerHeight === null) return;
+      isActiveRef.current = true;
+      setHeight(spacerHeight);
+      startObserving();
+    }, [
+      sessionId,
+      anchorRowId,
+      measureSpacerHeight,
+      setHeight,
+      startObserving,
+    ]);
+
+    /**
      * Main effect: detect streaming start/stop and anchor changes
      */
     useEffect(() => {
       if (chatState === "loading") sentHereRef.current = true;
       else if (!isStreaming) sentHereRef.current = false;
-      const anchorChanged = prevAnchorNodeIdRef.current !== anchorNodeId;
+      const anchorChanged = prevAnchorRowIdRef.current !== anchorRowId;
       const streamingStarted = isStreaming && !wasStreamingRef.current;
 
-      prevAnchorNodeIdRef.current = anchorNodeId;
+      prevAnchorRowIdRef.current = anchorRowId;
       wasStreamingRef.current = isStreaming;
 
       // Activate when a turn sent from this page starts: a new anchor appears
       // while it streams, or streaming starts with an anchor.
       if (
         sentHereRef.current &&
-        anchorNodeId &&
+        anchorRowId &&
         ((anchorChanged && isStreaming) || streamingStarted)
       ) {
         requestAnimationFrame(() => {
@@ -208,18 +239,18 @@ const DynamicBottomSpacer = React.memo(
       // We intentionally do NOT clear it when streaming ends — for fast responses,
       // streaming can end before the smooth scroll animation completes, which would
       // remove the suppression too early and flash the scroll-to-bottom button.
-    }, [anchorNodeId, chatState, isStreaming, activate]);
+    }, [anchorRowId, chatState, isStreaming, activate]);
 
     /**
      * Reset when anchor is cleared
      */
     useEffect(() => {
-      if (!anchorNodeId) {
+      if (!anchorRowId) {
         setHeight(0);
         isActiveRef.current = false;
         stopObserving();
       }
-    }, [anchorNodeId, setHeight, stopObserving]);
+    }, [anchorRowId, setHeight, stopObserving]);
 
     // The scroll container outlives the spacer (a chat switch remounts only
     // the spacer), so the shared height must not outlive the spacer's element.

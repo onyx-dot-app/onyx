@@ -40,7 +40,9 @@ function Chat({
                 element.getBoundingClientRect = () => ({ top: 900 }) as DOMRect;
             }}
           />
-          {showSpacer && <DynamicBottomSpacer anchorNodeId={ANCHOR_NODE_ID} />}
+          {showSpacer && (
+            <DynamicBottomSpacer anchorRowId={`message-${ANCHOR_NODE_ID}`} />
+          )}
         </ScrollContainerProvider>
       </div>
     </div>

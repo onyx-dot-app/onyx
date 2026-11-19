@@ -37,6 +37,8 @@ import ToolApprovalsRegion from "@/sections/chat/ToolApprovalsRegion";
 import ToolQuestionsRegion from "@/sections/chat/ToolQuestionsRegion";
 import { cn } from "@opal/utils";
 import { CHAT_COLUMN_WIDTH } from "@/lib/chat/layout";
+import { messageRowId } from "@/lib/chat/rowIds";
+import { getChatScrollMemory } from "@/lib/chat/scrollMemory";
 
 /** Width constraint for normal (non-multi-model) messages. */
 
@@ -48,6 +50,9 @@ const INITIALLY_MOUNTED_ROWS = 6;
 
 /** Rows at the end of the chat that never unmount: the latest turn. */
 const PINNED_ROWS = 2;
+
+/** Rows on each side of a saved position that mount on the first render. */
+const SAVED_ROW_NEIGHBORS = 4;
 
 export interface ChatUIProps {
   activeAgent: MinimalAgent;
@@ -116,9 +121,24 @@ const ChatUI = React.memo(
     // Stable fallbacks to avoid changing prop identities on each render
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
-    const rowHeightCache = useRef(new Map<string, number>()).current;
     const hasOlderMessages = useHasOlderMessages();
-    const scrollContainerRef = useOptionalScrollContainer()?.scrollContainerRef;
+    const scrollContainer = useOptionalScrollContainer();
+    const scrollContainerRef = scrollContainer?.scrollContainerRef;
+    // Kept per chat, so a chat opened again lays out its windowed rows at
+    // their real heights and its saved position lands exactly. This component
+    // remounts per chat, so the first render's chat is the one shown.
+    const fallbackRowHeights = useRef(new Map<string, number>()).current;
+    const scrollMemory = scrollContainer?.sessionId
+      ? getChatScrollMemory(scrollContainer.sessionId)
+      : null;
+    const rowHeightCache = scrollMemory?.rowHeights ?? fallbackRowHeights;
+    // The rows around a saved position mount on the first render, so a chat
+    // opened there paints no blank placeholders.
+    const savedRowIdRef = useRef(
+      scrollMemory?.position?.kind === "row"
+        ? scrollMemory.position.rowId
+        : null
+    );
 
     // A page of older messages goes in above the first row. Keep the view
     // still: scroll by the distance the former first row moved. Native scroll
@@ -230,6 +250,17 @@ const ChatUI = React.memo(
       [messageTree, modelProviderLookup]
     );
 
+    const savedRowIndex = savedRowIdRef.current
+      ? messages.findIndex(
+          (message) => messageRowId(message) === savedRowIdRef.current
+        )
+      : -1;
+    const anchorMessage =
+      anchorNodeId === undefined
+        ? undefined
+        : messages.find((message) => message.nodeId === anchorNodeId);
+    const anchorRowId = anchorMessage ? messageRowId(anchorMessage) : undefined;
+
     return (
       <>
         {/* No max-width on container — individual messages control their own width.
@@ -243,13 +274,16 @@ const ChatUI = React.memo(
           {hasOlderMessages && <OlderMessagesLoader className={msgWidth} />}
 
           {messages.map((message, i) => {
-            const messageReactComponentKey = `message-${message.nodeId}`;
+            const messageReactComponentKey = messageRowId(message);
             const rowsFromEnd = messages.length - i;
             const pinned =
               rowsFromEnd <= PINNED_ROWS ||
               message.is_generating ||
               message.nodeId === anchorNodeId;
-            const initiallyMounted = rowsFromEnd <= INITIALLY_MOUNTED_ROWS;
+            const initiallyMounted =
+              rowsFromEnd <= INITIALLY_MOUNTED_ROWS ||
+              (savedRowIndex >= 0 &&
+                Math.abs(i - savedRowIndex) <= SAVED_ROW_NEIGHBORS);
             const parentMessage = message.parentNodeId
               ? messageTree?.get(message.parentNodeId)
               : null;
@@ -434,7 +468,7 @@ const ChatUI = React.memo(
           )}
         </div>
         {/* Dynamic spacer for "fresh chat" effect - pushes content up when new message is sent */}
-        <DynamicBottomSpacer anchorNodeId={anchorNodeId} />
+        <DynamicBottomSpacer anchorRowId={anchorRowId} />
       </>
     );
   }
