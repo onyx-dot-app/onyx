@@ -42,11 +42,14 @@ impl UploadEntry<'_> {
 
 impl Drop for UploadEntry<'_> {
     fn drop(&mut self) {
-        self.state
-            .uploads
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .remove(&self.id);
+        // A reloaded launcher can reuse the id for a newer upload; leave that one.
+        let mut uploads = self.state.uploads.lock().unwrap_or_else(|p| p.into_inner());
+        if uploads
+            .get(&self.id)
+            .is_some_and(|flag| Arc::ptr_eq(flag, &self.cancelled))
+        {
+            uploads.remove(&self.id);
+        }
     }
 }
 
