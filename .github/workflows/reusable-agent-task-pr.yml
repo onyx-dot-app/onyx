@@ -175,6 +175,9 @@ jobs:
           private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
+          # A branch from a release base differs from main in .github/workflows.
+          # GitHub rejects a push from an App that changes .github/workflows/** without this.
+          permission-workflows: write
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -394,22 +397,6 @@ jobs:
           VALIDATION_SCRIPT: ${{ inputs.validation-script }}
         run: python3 "${VALIDATION_SCRIPT}"
 
-      # A new branch from a release base differs from main in .github/workflows,
-      # so GitHub rejects the push unless the token has workflows write. Mint
-      # that token only after the task ran, so the task never holds it.
-      - name: Mint GitHub App publish token
-        id: publish-token
-        if: >-
-          github.event_name != 'workflow_run' ||
-          steps.repair-guard.outputs.proceed == 'true'
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
-        with:
-          client-id: ${{ vars.CHERRY_PICK_APP_ID }}
-          private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
-          permission-workflows: write
-
       - name: Open or update PR
         id: pr
         if: >-
@@ -417,7 +404,6 @@ jobs:
           steps.repair-guard.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          PUSH_TOKEN: ${{ steps.publish-token.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
           FAILED_SHA: ${{ github.event.workflow_run.head_sha }}
