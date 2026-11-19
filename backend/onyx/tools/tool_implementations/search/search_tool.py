@@ -1322,7 +1322,16 @@ class SearchTool(Tool):
             for results, weight in zip(search_results, search_weights, strict=True)
             if results is not None
         ]
-        if search_results and not successful_results:
+        # Index lanes come first. The Slack lane returns [] when it fails, so
+        # only the index lanes show whether every query was rejected.
+        index_results = search_results[
+            : len(deduplicated_semantic_queries) + len(deduplicated_keyword_queries)
+        ]
+        if (
+            index_results
+            and all(results is None for results in index_results)
+            and not any(results for results, _ in successful_results)
+        ):
             raise ToolCallException(
                 message="Every internal search query exceeded the index clause limit",
                 llm_facing_message=(

@@ -1463,3 +1463,36 @@ def test_other_index_errors_are_not_treated_as_oversized_queries() -> None:
     assert results[0].is_error
     assert "security_exception" in results[0].text
     fusion.assert_not_called()
+
+
+@pytest.mark.parametrize("slack_chunks", [[], [_chunk("slack")]])
+def test_every_index_query_oversized_with_slack(
+    slack_chunks: list[InferenceChunk],
+) -> None:
+    tool = _make_tool()
+    tool.enable_slack_search = True
+    pipeline, _ = _pipeline_failing_for(
+        {"rephrased query", "ticket", _ORIGINAL_MESSAGE}, _CLAUSE_LIMIT_ERRORS[0]
+    )
+    fusion = MagicMock(return_value=[])
+    results: list[ToolResult] = []
+
+    with (
+        patch.object(
+            tool, "_prefetch_slack_data", return_value=("slack-token", None, {})
+        ),
+        # A failed Slack search also returns [].
+        patch.object(tool, "_run_slack_search", return_value=slack_chunks),
+    ):
+        _run(
+            tool,
+            connected_sources=[DocumentSource.SLACK],
+            search_pipeline_mock=pipeline,
+            fusion_mock=fusion,
+            results=results,
+        )
+
+    # Slack results still answer; with none, the model is told to shorten.
+    assert results[0].is_error == (not slack_chunks)
+    if slack_chunks:
+        assert fusion.call_args.kwargs["ranked_results"] == [slack_chunks]
