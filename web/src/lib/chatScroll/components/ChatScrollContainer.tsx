@@ -156,6 +156,8 @@ const ChatScrollContainer = React.memo(
       // on the view (a scrollbar drag). Only read, never acted on directly.
       const userInputAtRef = useRef(-Infinity);
       const pointerHeldRef = useRef(false);
+      // Until when this view's own smooth scroll to an anchor runs.
+      const anchorGlideUntilRef = useRef(0);
       const sessionIdRef = useRef(sessionId);
       const saveFrameRef = useRef<number | null>(null);
       // Scroll position and content height that the next scroll event is
@@ -398,7 +400,13 @@ const ChatScrollContainer = React.memo(
         const byUser =
           pointerHeldRef.current ||
           performance.now() - userInputAtRef.current < USER_INPUT_WINDOW_MS;
-        if (scrolledUp && !byUser) {
+        // This view's own smooth scrolls move without user input too.
+        const ownGlide =
+          performance.now() < anchorGlideUntilRef.current ||
+          container.dataset.smoothScrollActive === "true";
+        if (scrolledUp && !byUser && ownGlide) {
+          // Neither the user nor layout: leave the glide alone.
+        } else if (scrolledUp && !byUser) {
           // Layout moved a following view off the end: put it back. The
           // user is not scrolling, so this write interrupts nothing.
           if (
@@ -665,6 +673,9 @@ const ChatScrollContainer = React.memo(
             );
           }
 
+          if (behavior === "smooth") {
+            anchorGlideUntilRef.current = performance.now() + 700;
+          }
           container.scrollTo({ top: targetScrollTop, behavior });
 
           // Measure the next scroll from the new position
