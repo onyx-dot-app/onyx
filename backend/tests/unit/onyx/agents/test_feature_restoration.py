@@ -123,7 +123,6 @@ def chat(*tools: Tool, agent_id: str | None = None) -> ChatAgent:
         persona=None,
         user_memory_context=None,
         llm=model(),
-        token_counter=len,
     )
 
 
@@ -276,7 +275,6 @@ def test_chat_suspends_and_resumes_with_fresh_feature_and_model() -> None:
         persona=None,
         user_memory_context=None,
         llm=model(),
-        token_counter=len,
         agent_id=checkpoint.run_state.agent_id,
         checkpoint=checkpoint.agent_state.checkpoint,
     )
@@ -761,7 +759,6 @@ def test_chat_binary_checkpoint_resumes_new_execution_in_same_coordinator() -> N
             persona=None,
             user_memory_context=None,
             llm=model(),
-            token_counter=len,
             agent_id=decoded.run_state.agent_id,
         )
         resumed = restored.resume(decoded.run_state, coordinator=coordinator)

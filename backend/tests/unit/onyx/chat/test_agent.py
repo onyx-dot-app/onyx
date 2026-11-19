@@ -113,7 +113,6 @@ def chat_agent(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=lambda text: len(text) // 4,
         is_subagent=is_subagent,
         create_subagent=lambda: chat_agent(
             llm, tools, code_mode=code_mode, is_subagent=True
@@ -206,7 +205,6 @@ def test_chat_preserves_parallel_tool_history_preference_and_packets(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
         preferred_tool=CapabilityEntry(tool_id=1),
     )
     project = partial(
@@ -550,7 +548,6 @@ def test_search_stages_files_only_when_python_needs_them(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
         chat_files=[staged] if already_available else [],
     )
     run_agent(agent, messages=[UserMessage(content="Find evidence twice")], max_steps=3)
@@ -613,7 +610,6 @@ def test_chat_preserves_search_filters_in_accepted_result_and_projection(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
     )
     runs: list[Run] = []
     run_agent(
@@ -694,7 +690,6 @@ def test_cancelled_source_file_staging_drains_before_completion(
         None,
         None,
         llm,
-        len,
     )
     project = partial(
         project_response,
@@ -796,7 +791,6 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
     )
     for _ in range(2):
         output: queue.Queue[Packet] = queue.Queue()
@@ -900,7 +894,6 @@ def test_context_file_citations_keep_history_numbers_across_turns(
             persona=None,
             user_memory_context=None,
             llm=FakeModelClient(reply),
-            token_counter=len,
         )
         # Resume decodes feature state separately from the retained conversation.
         feature.restore_state(
@@ -977,7 +970,6 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
         ),
         user_memory_context=None,
         llm=ScriptedLLM([]),
-        token_counter=len,
         reminders_enabled=False,
     )
     prepared = agent._prepare_step(
@@ -1057,7 +1049,6 @@ def test_user_information_is_split_out_of_the_shared_system_prompt(
                 memories=[f"{name} works on billing."],
             ),
             llm=ScriptedLLM([]),
-            token_counter=len,
             inject_memories_in_prompt=inject_memories,
             reminders_enabled=False,
         )
@@ -1136,7 +1127,6 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
         persona=None,
         user_memory_context=None,
         llm=FakeModelClient(reply),
-        token_counter=len,
         reminders_enabled=False,
     )
     original = make_agent(messages=[], preferred_tool=CapabilityEntry(tool_id=1))
@@ -1363,7 +1353,6 @@ def test_child_notification_remaps_citations() -> None:
         persona=None,
         user_memory_context=None,
         llm=FakeModelClient(reply),
-        token_counter=len,
     )
     coordinator = AgentCoordinator(
         ownership=FakeRunOwnership(
