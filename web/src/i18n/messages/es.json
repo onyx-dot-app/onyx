@@ -12014,6 +12014,9 @@
         },
         "skillsGroup": {
           "label": "Habilidades"
+        },
+        "manageSkills": {
+          "label": "Gestionar habilidades"
         }
       },
       "inputChip": {
@@ -14646,15 +14649,12 @@
         "empty": "¡Empieza a construir! El historial de sesiones aparecerá aquí.",
         "title": "Sesiones"
       },
-      "skills": {
-        "label": "Habilidades"
-      },
       "toast": {
         "deleteFailed": "No se pudo eliminar la sesión",
         "deleted": "Se eliminó \"{title}\"."
       },
-      "plugins": {
-        "label": "Plugins"
+      "customize": {
+        "label": "Personalizar"
       }
     },
     "skillsStale": {
@@ -16309,8 +16309,8 @@
       "searchChats": {
         "label": "Buscar chats"
       },
-      "plugins": {
-        "label": "Complementos"
+      "customize": {
+        "label": "Personalizar"
       }
     },
     "chatButton": {
@@ -16911,7 +16911,8 @@
       "toasts": {
         "disableFailed": "No se pudo desactivar {name}",
         "enableFailed": "No se pudo activar {name}",
-        "refreshFailed": "{name} se actualizó, pero no se pudo actualizar la lista de habilidades."
+        "refreshFailed": "{name} se actualizó, pero no se pudo actualizar la lista de habilidades.",
+        "listRefreshFailed": "No se pudo actualizar la lista de habilidades. Vuelve a cargar la página para ver el cambio."
       },
       "builtins": {
         "title": "Habilidades integradas ({count, number})"
@@ -17086,46 +17087,10 @@
   },
   "plugins": {
     "member": {
-      "title": "Plugins",
-      "description": "Habilidades e integraciones que puede usar en chats y agentes.",
-      "filters": {
-        "label": "Tipo de plugin",
-        "all": {
-          "label": "Todos"
-        },
-        "skills": {
-          "label": "Habilidades"
-        },
-        "integrations": {
-          "label": "Integraciones"
-        }
-      },
       "sections": {
         "organization": "Biblioteca de la organización",
         "mine": "Mis subidas",
         "shared": "Compartidos con usted"
-      },
-      "row": {
-        "skillCount": "{count, plural, one {# habilidad} other {# habilidades}}",
-        "integrationCount": "{count, plural, one {# integración} other {# integraciones}}",
-        "needsConnection": "{count, plural, one {# necesita inicio de sesión} other {# necesitan inicio de sesión}}",
-        "open": {
-          "label": "Abrir {name}"
-        }
-      },
-      "state": {
-        "loading": "Cargando plugins",
-        "loadFailed": "Algunos plugins no se pudieron cargar.",
-        "emptyTitle": "Aún no hay plugins",
-        "emptyDescription": "Pida a su administrador que añada un plugin.",
-        "noResultsTitle": "No hay plugins coincidentes",
-        "noResultsDescription": "Pruebe otro nombre u otro filtro.",
-        "retry": {
-          "label": "Intentar de nuevo"
-        },
-        "clear": {
-          "label": "Mostrar todos los plugins"
-        }
       },
       "detail": {
         "title": "Plugin",
@@ -17147,9 +17112,6 @@
         "skills": {
           "off": "Desactivada",
           "invalid": "No válida"
-        },
-        "back": {
-          "label": "Plugins"
         },
         "switch": {
           "title": "Usar este plugin",
@@ -17232,12 +17194,6 @@
       "search": {
         "placeholder": "Buscar plugins"
       },
-      "addIntegration": {
-        "label": "Añadir Integración"
-      },
-      "manage": {
-        "label": "Gestionar plugins"
-      },
       "share": {
         "title": "Compartir {name}",
         "description": "Da acceso a este plugin a personas y grupos.",
@@ -17293,5 +17249,116 @@
   },
   "integrations": {
     "connectionState": "{state, select, connected {Conectada} not_connected {No conectada} needs_reconnect {Requiere reconexión} not_set_up {Sin configurar} other {Desconocido}}"
+  },
+  "customize": {
+    "title": "Personalizar",
+    "tabs": {
+      "label": "Secciones de personalización",
+      "skills": "Habilidades",
+      "integrations": "Integraciones",
+      "plugins": "Plugins"
+    },
+    "skills": {
+      "loadFailed": "No se pudieron cargar tus habilidades.",
+      "filter": {
+        "label": "Filtrar",
+        "all": "Todas las habilidades",
+        "on": "Activadas",
+        "off": "Desactivadas"
+      },
+      "sort": {
+        "label": "Ordenar",
+        "updated": "Actualizadas recientemente",
+        "name": "Nombre"
+      },
+      "add": {
+        "label": "Añadir",
+        "upload": "Subir habilidad",
+        "create": "Crear una habilidad",
+        "github": "Importar desde GitHub"
+      },
+      "groups": {
+        "mine": "Creadas por ti",
+        "organization": "De tu organización",
+        "shared": "Compartidas contigo",
+        "builtin": "Integradas"
+      },
+      "source": {
+        "mine": "por ti",
+        "organization": "de tu organización",
+        "sharedBy": "compartida por {email}",
+        "shared": "compartida contigo",
+        "builtin": "integrada"
+      },
+      "subtitle": "{source} · {description}",
+      "tag": {
+        "off": "Desactivada",
+        "required": "Obligatoria",
+        "pending": "Pendiente de revisión",
+        "invalid": "No válida"
+      },
+      "open": "Abrir {name}",
+      "menu": {
+        "label": "Más opciones de {name}",
+        "turnOn": "Activar",
+        "turnOff": "Desactivar",
+        "share": "Compartir",
+        "remove": "Quitar"
+      },
+      "empty": {
+        "title": "Aún no hay habilidades",
+        "description": "Crea o sube una habilidad para enseñarle una tarea al asistente."
+      },
+      "noMatches": {
+        "title": "No hay habilidades que coincidan",
+        "description": "Prueba con otra búsqueda o filtro.",
+        "clear": "Mostrar todas las habilidades"
+      }
+    },
+    "integrations": {
+      "title": "Integraciones",
+      "loadFailed": "No se pudieron cargar tus integraciones.",
+      "columns": {
+        "name": "Integración",
+        "type": "Tipo",
+        "authorization": "Autorización",
+        "status": "Estado"
+      },
+      "status": {
+        "connected": "Conectada"
+      },
+      "add": {
+        "label": "Añadir",
+        "integration": "Añadir integración",
+        "manage": "Gestionar integraciones"
+      },
+      "open": "Abrir {name}",
+      "empty": {
+        "title": "Aún no hay integraciones",
+        "description": "Pide a tu administrador que añada una integración."
+      },
+      "noMatches": {
+        "title": "No hay integraciones que coincidan",
+        "description": "Prueba con otra búsqueda."
+      }
+    },
+    "plugins": {
+      "contents": "{skills, plural, =0 {} one {1 habilidad} other {{skills} habilidades}}{both, select, yes { · } other {}}{integrations, plural, =0 {} one {1 integración} other {{integrations} integraciones}}",
+      "needsSignIn": "{count, plural, one {# requiere inicio de sesión} other {# requieren inicio de sesión}}",
+      "loadFailed": "No se pudieron cargar tus plugins.",
+      "switchFailed": "No se pudo cambiar el plugin.",
+      "filter": {
+        "all": "Todos los plugins"
+      },
+      "empty": {
+        "title": "Aún no hay plugins",
+        "description": "Crea una habilidad o añade una integración. Cada una es un plugin."
+      },
+      "noMatches": {
+        "title": "No hay plugins que coincidan",
+        "clear": "Mostrar todos los plugins"
+      }
+    },
+    "search": "Buscar"
   }
 }

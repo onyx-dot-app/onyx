@@ -9,9 +9,7 @@ import { connectAction } from "@/lib/integrations/connect";
  * a personal plugin of someone else that the user can see. */
 export type PluginSection = "organization" | "mine" | "shared";
 
-export type PluginFilter = "all" | "skills" | "integrations";
-
-/** One plugin of the member Plugins page: a custom skill, the plugin that
+/** One plugin of the Customize pages: a custom skill, the plugin that
  * holds integrations, or both. A custom skill's id is its plugin id. */
 export interface MemberPluginEntry {
   id: string;
@@ -130,27 +128,6 @@ export function ownsPrivateIntegrationPlugin(
   );
 }
 
-export function filterPlugins(
-  entries: readonly MemberPluginEntry[],
-  filter: PluginFilter,
-  query: string
-): MemberPluginEntry[] {
-  const search = query.trim().toLocaleLowerCase();
-  return entries.filter(
-    (entry) =>
-      (filter === "all" ||
-        (filter === "skills" ? entry.skills : entry.integrations).length > 0) &&
-      [
-        entry.name,
-        entry.description ?? "",
-        ...entry.integrations.map((integration) => integration.name),
-      ]
-        .join(" ")
-        .toLocaleLowerCase()
-        .includes(search)
-  );
-}
-
 /** The integrations of a plugin that the user needs to connect or reconnect. */
 export function pendingIntegrations(
   integrations: readonly MemberIntegration[]
@@ -158,25 +135,4 @@ export function pendingIntegrations(
   return integrations.filter(
     (integration) => connectAction(integration) !== null
   );
-}
-
-export function memberPluginHref(
-  pluginId: string,
-  tab?: MemberPluginTab
-): `/app/plugins/${string}` {
-  return tab && tab !== "overview"
-    ? `/app/plugins/${pluginId}?tab=${tab}`
-    : `/app/plugins/${pluginId}`;
-}
-
-export type MemberPluginTab =
-  | "overview"
-  | "skills"
-  | "integrations"
-  | "versions";
-
-export function parseMemberPluginTab(value: string | null): MemberPluginTab {
-  return value === "skills" || value === "integrations" || value === "versions"
-    ? value
-    : "overview";
 }

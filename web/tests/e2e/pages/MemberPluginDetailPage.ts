@@ -12,7 +12,7 @@ export type IntegrationStatusLabel =
   | "Needs reconnect"
   | "Not set up";
 
-/** One plugin at /app/plugins/[pluginId]. */
+/** One plugin at /app/customize/plugins/[pluginId]. */
 export class MemberPluginDetailPage {
   readonly page: Page;
   readonly credentials: IntegrationCredentialsDialog;
@@ -24,7 +24,7 @@ export class MemberPluginDetailPage {
 
   async goto(pluginId: string, tab?: MemberPluginTab): Promise<void> {
     const query = tab && tab !== "Overview" ? `?tab=${tab.toLowerCase()}` : "";
-    await this.page.goto(`/app/plugins/${pluginId}${query}`);
+    await this.page.goto(`/app/customize/plugins/${pluginId}${query}`);
   }
 
   async openTab(tab: MemberPluginTab): Promise<void> {

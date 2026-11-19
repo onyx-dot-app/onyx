@@ -3,24 +3,7 @@ import { expect, test } from "@playwright/test";
 test("SKILL.md populates the create form after confirmation", async ({
   page,
 }) => {
-  const settingsResponse = await page.request.get("/api/settings");
-  const settings = settingsResponse.ok() ? await settingsResponse.json() : null;
-  test.skip(
-    settings?.settings?.onyx_craft_enabled !== true,
-    "Onyx Craft is disabled in this environment"
-  );
-
-  await page.goto("/craft/v1/skills/new");
-
-  const intro = page.getByRole("dialog").filter({ hasText: "Meet Craft" });
-  const introAppeared = await intro
-    .waitFor({ state: "visible", timeout: 3000 })
-    .then(() => true)
-    .catch(() => false);
-  if (introAppeared) {
-    await page.keyboard.press("Escape");
-    await expect(intro).toBeHidden();
-  }
+  await page.goto("/app/customize/skills/new");
 
   await page.locator('input[name="name"]').fill("Typed title");
   await page.locator('textarea[name="description"]').fill("Typed description");

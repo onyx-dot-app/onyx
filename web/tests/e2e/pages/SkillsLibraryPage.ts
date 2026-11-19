@@ -1,11 +1,11 @@
 /**
- * Page Object Model for the Craft Skills library (/craft/v1/skills) and the
- * skill dialog it opens.
+ * Page Object Model for the Skills tab of Customize (/app/customize/skills)
+ * and the skill dialog that its row menu opens.
  */
 
 import { type Locator, type Page, expect } from "@playwright/test";
 
-const SKILLS_PATH = "/craft/v1/skills";
+const SKILLS_PATH = "/app/customize/skills";
 
 export class SkillsLibraryPage {
   readonly page: Page;
@@ -16,24 +16,13 @@ export class SkillsLibraryPage {
 
   async goto(): Promise<void> {
     await this.page.goto(SKILLS_PATH);
-    const intro = this.page
-      .getByRole("dialog")
-      .filter({ hasText: "Meet Craft" });
-    const introAppeared = await intro
-      .waitFor({ state: "visible", timeout: 3000 })
-      .then(() => true)
-      .catch(() => false);
-    if (introAppeared) {
-      await this.page.keyboard.press("Escape");
-      await expect(intro).toBeHidden();
-    }
-    await expect(this.page.getByTestId("SkillsPage/container")).toBeVisible();
+    await expect(
+      this.page.getByRole("tab", { name: "Skills", exact: true })
+    ).toHaveAttribute("aria-selected", "true");
   }
 
   card(name: string): Locator {
-    return this.page.getByTestId("SkillCard").filter({
-      has: this.page.getByRole("button", { name, exact: true }),
-    });
+    return this.page.getByRole("button", { name: `Open ${name}`, exact: true });
   }
 
   get dialog(): Locator {
@@ -42,8 +31,10 @@ export class SkillsLibraryPage {
 
   async openSkill(name: string): Promise<void> {
     await this.page
-      .getByTestId("SkillsPage/container")
-      .getByRole("button", { name, exact: true })
+      .getByRole("button", { name: `More for ${name}`, exact: true })
+      .click();
+    await this.page
+      .getByRole("menuitem", { name: "Share", exact: true })
       .click();
     await expect(this.dialog).toBeVisible();
   }

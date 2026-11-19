@@ -66,11 +66,11 @@ import {
   deleteUserSkill,
   bulkUpdateSkills,
   type SkillShareUpdatePayload,
-  isSkillNameConflict,
-  setSkillEnabled,
 } from "@/lib/skills/api";
 import { useSettings } from "@/lib/settings/hooks";
-import { useSkillLimitCopy } from "@/lib/skills/hooks";
+import { useSkillEnablement } from "@/lib/skills/hooks";
+import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
+import { newSkillHref, skillHref } from "@/lib/customize/paths";
 
 interface SkillsPageProps {
   admin?: boolean;
@@ -79,7 +79,6 @@ interface SkillsPageProps {
 export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const t = useTranslations("skills");
   const bulkCopy = useTranslations("skills.bulk");
-  const { describeError } = useSkillLimitCopy();
   const { isAdmin } = useUser();
   const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
@@ -115,15 +114,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     tab: "details" | "sharing";
   } | null>(null);
   const previewTarget = skillDialog?.item ?? null;
-  const [pendingSkillIds, setPendingSkillIds] = useState<Set<string>>(
-    new Set()
-  );
-  const [optimisticEnabledById, setOptimisticEnabledById] = useState<
-    Map<string, boolean>
-  >(new Map());
-  const [pendingSwitchTarget, setPendingSwitchTarget] =
-    useState<SkillCardItem | null>(null);
-  const switchModal = useCreateModal();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useOnMount(() => {
@@ -164,127 +154,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   }
 
   function handleEdit(item: CustomSkillCardItem) {
-    navigation.go(`/craft/v1/skills/edit/${item.id}`);
+    navigation.go(skillHref(item.id));
   }
 
-  async function updateSkillEnabled(
-    item: SkillCardItem,
-    enabled: boolean,
-    replaceConflict = false
-  ) {
-    if (
-      enabled &&
-      !replaceConflict &&
-      items.some(
-        (candidate) =>
-          candidate.id !== item.id &&
-          candidate.name === item.name &&
-          candidate.enabled
-      )
-    ) {
-      setPendingSwitchTarget(item);
-      switchModal.toggle(true);
-      return;
-    }
-
-    const affectedItems =
-      enabled && replaceConflict
-        ? items.filter(
-            (candidate) =>
-              candidate.id === item.id ||
-              (candidate.name === item.name && candidate.enabled)
-          )
-        : [item];
-    const affectedIds = new Set(affectedItems.map(({ id }) => id));
-    setPendingSkillIds((current) => {
-      const next = new Set(current);
-      affectedIds.forEach((id) => next.add(id));
-      return next;
-    });
-    setOptimisticEnabledById((current) => {
-      const next = new Map(current);
-      if (enabled) {
-        affectedItems.forEach((candidate) =>
-          next.set(candidate.id, candidate.id === item.id)
-        );
-      } else {
-        next.set(item.id, false);
-      }
-      return next;
-    });
-    try {
-      const updatedSkill = await setSkillEnabled(
-        item.id,
-        enabled,
-        replaceConflict
-      );
-      if (replaceConflict) switchModal.toggle(false);
-      await refresh(
-        (current) => {
-          if (!current) return current;
-          return {
-            ...current,
-            builtins: current.builtins.map((skill) => {
-              if (
-                updatedSkill.source === "builtin" &&
-                skill.id === updatedSkill.id
-              ) {
-                return updatedSkill;
-              }
-              if (enabled && skill.name === updatedSkill.name) {
-                return { ...skill, enabled: false };
-              }
-              return skill;
-            }),
-            customs: current.customs.map((skill) => {
-              if (
-                updatedSkill.source === "custom" &&
-                skill.id === updatedSkill.id
-              ) {
-                return updatedSkill;
-              }
-              if (enabled && skill.name === updatedSkill.name) {
-                return { ...skill, enabled: false };
-              }
-              return skill;
-            }),
-          };
-        },
-        { revalidate: false }
-      );
-      void refreshSkillLists(mutate).catch(() => {
-        toast.error(t("page.toasts.refreshFailed", { name: item.name }));
-      });
-    } catch (error) {
-      if (enabled && !replaceConflict && isSkillNameConflict(error)) {
-        setPendingSwitchTarget(item);
-        switchModal.toggle(true);
-        return;
-      }
-      toast.error(
-        describeError(
-          error,
-          t(
-            enabled ? "page.toasts.enableFailed" : "page.toasts.disableFailed",
-            { name: item.name }
-          )
-        )
-      );
-    } finally {
-      setOptimisticEnabledById((current) => {
-        const next = new Map(current);
-        affectedIds.forEach((id) => next.delete(id));
-        return next;
-      });
-      setPendingSkillIds((current) => {
-        const next = new Set(current);
-        affectedIds.forEach((id) => next.delete(id));
-        return next;
-      });
-    }
-  }
-
-  const items = useMemo<SkillCardItem[]>(() => {
+  const loadedItems = useMemo<SkillCardItem[]>(() => {
     if (!data) return [];
     const builtinItems: SkillCardItem[] = data.builtins
       .filter(
@@ -296,7 +169,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         name: b.name,
         description: b.description,
         source: "builtin",
-        enabled: optimisticEnabledById.get(b.id) ?? b.enabled,
+        enabled: b.enabled,
         can_toggle: b.can_toggle,
         is_available: b.is_available,
         unavailable_reason: b.unavailable_reason,
@@ -311,7 +184,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         skill: c,
         author_email: c.author_email,
         is_personal: c.is_personal && c.user_permission === "OWNER",
-        enabled: optimisticEnabledById.get(c.id) ?? c.enabled,
+        enabled: c.enabled,
         can_toggle: c.can_toggle,
       }));
     const groupRank = (item: SkillCardItem): number => {
@@ -327,7 +200,12 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         groupRank(a) - groupRank(b) ||
         a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
     );
-  }, [data, optimisticEnabledById, admin]);
+  }, [data, admin]);
+  const enablement = useSkillEnablement(loadedItems, refresh);
+  const items = loadedItems.map((item) => ({
+    ...item,
+    enabled: enablement.enabledOf(item),
+  }));
 
   // The groups of the summaries the caller may see.
   const groupOptions = useMemo(() => {
@@ -386,7 +264,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const toggleableItems = selectedItems.filter((item) => item.can_toggle);
   // A card toggle still in flight must settle before a bulk action may race it.
   const bulkLocked =
-    bulkBusy || selectedItems.some((item) => pendingSkillIds.has(item.id));
+    bulkBusy || selectedItems.some((item) => enablement.isPending(item.id));
 
   const bulkToggleActions: DropdownMenuRow[] = [];
   if (selectedItems.some((item) => !item.enabled)) {
@@ -455,8 +333,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     }
   }
 
-  const switchPending =
-    pendingSwitchTarget !== null && pendingSkillIds.has(pendingSwitchTarget.id);
   const editablePreview =
     previewTarget?.source === "custom" &&
     (previewTarget.skill.user_permission === "OWNER" ||
@@ -499,7 +375,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                   description: t("page.createMenu.scratch.description", {
                     appName,
                   }),
-                  onSelect: () => navigation.go("/craft/v1/skills/new"),
+                  onSelect: () => navigation.go(newSkillHref()),
                 },
                 {
                   kind: "action",
@@ -760,10 +636,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                               setSkillDialog({ item: skill, tab: "details" })
                             }
                             onEnabledChange={(skill, enabled) =>
-                              void updateSkillEnabled(skill, enabled)
+                              void enablement.setEnabled(skill, enabled)
                             }
                             enablementPending={
-                              bulkBusy || pendingSkillIds.has(item.id)
+                              bulkBusy || enablement.isPending(item.id)
                             }
                           />
                         ))}
@@ -888,7 +764,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         onContinue={(draft) => {
           const draftId = stageSkillCreationDraft(draft);
           setCreateOpen(false);
-          navigation.go(`/craft/v1/skills/new?draft=${draftId}`);
+          navigation.go(newSkillHref(draftId));
         }}
       />
 
@@ -928,37 +804,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         onClose={() => setSkillDialog(null)}
       />
 
-      <switchModal.Provider>
-        {pendingSwitchTarget && (
-          <ConfirmationModalLayout
-            icon={SvgAlertTriangle}
-            title={t("page.switchModal.title", {
-              name: pendingSwitchTarget.name,
-            })}
-            description={t("page.switchModal.description", {
-              name: pendingSwitchTarget.name,
-            })}
-            onClose={
-              switchPending ? undefined : () => switchModal.toggle(false)
-            }
-            submit={
-              <Button
-                disabled={switchPending}
-                onClick={() => {
-                  const target = pendingSwitchTarget;
-                  void updateSkillEnabled(target, true, true);
-                }}
-              >
-                {switchPending
-                  ? t("page.switchModal.submit.pendingLabel")
-                  : t("page.switchModal.submit.label")}
-              </Button>
-            }
-          >
-            {t("page.switchModal.body")}
-          </ConfirmationModalLayout>
-        )}
-      </switchModal.Provider>
+      <SkillSwitchModal enablement={enablement} />
     </SettingsLayouts.Root>
   );
 }

@@ -7,8 +7,11 @@ import type { AdminIntegration } from "@/lib/integrations/types";
 export function useIntegrationLabels() {
   const t = useTranslations("admin.integrations");
   return {
-    shape: (integration: AdminIntegration) => t(`shape.${integration.shape}`),
-    signIn: (integration: AdminIntegration) =>
+    shape: (integration: Pick<AdminIntegration, "shape">) =>
+      t(`shape.${integration.shape}`),
+    signIn: (
+      integration: Pick<AdminIntegration, "auth_mode" | "auth_method">
+    ) =>
       t("signInSummary", {
         mode: integration.auth_mode,
         method: integration.auth_method ?? "none",

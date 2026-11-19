@@ -82,7 +82,7 @@ jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
-  usePathname: () => "/craft/v1/skills/new",
+  usePathname: () => "/app/customize/skills/new",
   useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({
     replace: mockRouterReplace,
@@ -211,7 +211,7 @@ describe("SkillEditorPage", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
-      expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/skills")
+      expect(mockRouterReplace).toHaveBeenCalledWith("/app/customize/skills")
     );
     await waitFor(() =>
       expect(consoleError).toHaveBeenCalledWith(
@@ -273,7 +273,7 @@ describe("SkillEditorPage", () => {
       )
     );
     expect(mockDiscardSkillCreationDraft).toHaveBeenCalledWith("draft-id");
-    expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/skills");
+    expect(mockRouterReplace).toHaveBeenCalledWith("/app/customize/skills");
   });
 
   it("confirms before canceling a create page with unsaved changes", async () => {
@@ -295,7 +295,7 @@ describe("SkillEditorPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/skills");
+    expect(mockRouterReplace).toHaveBeenCalledWith("/app/customize/skills");
   });
 
   it("sends the base version and offers a reload when it is stale", async () => {
@@ -613,7 +613,7 @@ describe("SkillEditorPage", () => {
     expect(mockRouterReplace).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/skills");
+    expect(mockRouterReplace).toHaveBeenCalledWith("/app/customize/skills");
     expect(mockDiscardSkillCreationDraft).not.toHaveBeenCalled();
   });
 
@@ -632,7 +632,7 @@ describe("SkillEditorPage", () => {
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     await waitFor(() =>
-      expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/skills")
+      expect(mockRouterReplace).toHaveBeenCalledWith("/app/customize/skills")
     );
     expect(mockDeleteUserSkill).toHaveBeenCalledWith(skill.id);
     expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.userSkills);
@@ -701,7 +701,7 @@ describe("SkillEditorPage", () => {
         }),
         undefined
       );
-      expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/skills");
+      expect(mockRouterReplace).toHaveBeenCalledWith("/app/customize/skills");
     });
     expect(
       screen.queryByText("Create another “report-writer” skill?")
