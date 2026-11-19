@@ -34,6 +34,7 @@ import {
   type DropdownMenuItem,
 } from "@opal/components";
 import { Hoverable } from "@opal/core";
+import { Section } from "@opal/layouts";
 import { SvgPlus, SvgX } from "@opal/icons";
 import type { IconFunctionComponent, RichNodes } from "@opal/types";
 import { cn } from "@opal/utils";
@@ -113,7 +114,7 @@ function SortableTab({
           register(element);
         }}
         className={cn(
-          "group relative flex h-5.5 w-full max-w-[180px] touch-none select-none items-center gap-1 rounded-md",
+          "group relative h-5.5 w-full max-w-[180px] touch-none select-none rounded-md",
           active ? "bg-background-neutral-02" : "bg-background-neutral-01",
           isDragging && "z-10 shadow-md"
         )}
@@ -130,7 +131,10 @@ function SortableTab({
           listeners?.onPointerDown?.(event);
         }}
       >
-        {children}
+        {/* Section takes no style, and the sortable node needs its transform */}
+        <Section flexDirection="row" justifyContent="start" gap={1}>
+          {children}
+        </Section>
       </div>
     </Hoverable.Root>
   );
@@ -240,8 +244,12 @@ export function PanelTabStrip({
         );
       }}
     >
-      <div
-        className="flex min-w-0 flex-1 items-center gap-1"
+      <Section
+        flexDirection="row"
+        justifyContent="start"
+        height="auto"
+        gap={1}
+        className="min-w-0 flex-1"
         onPointerDownCapture={() => {
           suppressClick.current = false;
         }}
@@ -273,9 +281,13 @@ export function PanelTabStrip({
             }}
           >
             {/* Tabs shrink to a minimum before the strip scrolls */}
-            <div
+            <Section
               dir={direction}
-              className="flex min-w-full items-center gap-1 [&>*]:min-w-16 [&>*]:shrink"
+              flexDirection="row"
+              justifyContent="start"
+              height="auto"
+              gap={1}
+              className="min-w-full [&>*]:min-w-16 [&>*]:shrink"
             >
               <SortableContext
                 items={sortableIds}
@@ -286,12 +298,15 @@ export function PanelTabStrip({
                   const active = id === activeTabId;
                   const Icon = tab.icon;
                   const iconTile = (
-                    <div
-                      className="flex size-5 items-center justify-center text-text-03"
+                    <Section
+                      width={1.25}
+                      height={1.25}
+                      gap={0}
+                      className="text-text-03"
                       aria-hidden
                     >
                       <Icon className="size-3" />
-                    </div>
+                    </Section>
                   );
                   return (
                     <SortableTab
@@ -306,30 +321,36 @@ export function PanelTabStrip({
                         else nodes.current.delete(id);
                       }}
                     >
-                      <div className="flex size-5 shrink-0 items-center justify-center">
-                        {tab.closable ? (
-                          <Hoverable.Item
-                            group="resource-tab"
-                            variant="replace-on-hover"
-                            resting={iconTile}
-                          >
-                            <Button
-                              data-tab-close
-                              disabled={disabled}
-                              icon={SvgX}
-                              size="2xs"
-                              prominence="tertiary"
-                              aria-label={t("close.label", { name: tab.label })}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                closedTab.current = id;
-                                onClose(id);
-                              }}
-                            />
-                          </Hoverable.Item>
-                        ) : (
-                          iconTile
-                        )}
+                      {/* Not a sized Section: its overflow would clip the
+                          close button's focus ring */}
+                      <div className="size-5 shrink-0">
+                        <Section gap={0}>
+                          {tab.closable ? (
+                            <Hoverable.Item
+                              group="resource-tab"
+                              variant="replace-on-hover"
+                              resting={iconTile}
+                            >
+                              <Button
+                                data-tab-close
+                                disabled={disabled}
+                                icon={SvgX}
+                                size="2xs"
+                                prominence="tertiary"
+                                aria-label={t("close.label", {
+                                  name: tab.label,
+                                })}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  closedTab.current = id;
+                                  onClose(id);
+                                }}
+                              />
+                            </Hoverable.Item>
+                          ) : (
+                            iconTile
+                          )}
+                        </Section>
                       </div>
                       <div className="min-w-0 overflow-hidden pe-2 [&_p]:truncate">
                         <TextButton
@@ -405,7 +426,7 @@ export function PanelTabStrip({
                   );
                 })}
               </SortableContext>
-            </div>
+            </Section>
           </div>
           {edges.start && (
             <div
@@ -446,7 +467,7 @@ export function PanelTabStrip({
         <div className="sr-only" role="status" aria-live="polite">
           {announcement}
         </div>
-      </div>
+      </Section>
     </DndContext>
   );
 }

@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Button, SelectCard, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
 import { Hoverable } from "@opal/core";
+import { Section } from "@opal/layouts";
 import { SvgDownloadCloud } from "@opal/icons";
 import UnseenMarker from "@/app/craft/components/UnseenMarker";
 
@@ -68,13 +69,21 @@ export function OutputTileFrame({
           rounding={3}
           onClick={onOpen}
         >
-          <div className="relative flex min-w-0 flex-col gap-1.5">
-            <div
-              className="flex aspect-[3/2] min-h-0 items-center justify-center overflow-hidden rounded-md bg-background-neutral-03"
+          <Section
+            alignItems="stretch"
+            justifyContent="start"
+            height="auto"
+            gap={1.5}
+            className="relative min-w-0"
+          >
+            <Section
+              height="auto"
+              gap={0}
+              className="aspect-[3/2] min-h-0 overflow-hidden rounded-md bg-background-neutral-03"
               aria-hidden={onOpen ? true : undefined}
             >
               {preview}
-            </div>
+            </Section>
             {isUnseen && (
               <OutputUnseenMarker className="absolute end-2 top-2" />
             )}
@@ -91,7 +100,7 @@ export function OutputTileFrame({
                 {name}
               </Text>
             </div>
-          </div>
+          </Section>
         </SelectCard>
         {onDownload && (
           <div className="absolute end-2 bottom-1">
@@ -118,13 +127,4 @@ export function OutputTileFrame({
 export function OutputUnseenMarker({ className }: { className: string }) {
   const t = useTranslations("outputPanel.tile");
   return <UnseenMarker label={t("unseen")} className={className} />;
-}
-
-/** The grid that output tiles sit in: two columns, three when wider. */
-export function OutputTileGrid({ children }: { children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-2 gap-2 @[24rem]:grid-cols-3">
-      {children}
-    </div>
-  );
 }
