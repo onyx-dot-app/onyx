@@ -638,7 +638,7 @@ class SearchTool(Tool):
         embedding_model: EmbeddingModel,
         federated_retrieval_infos: list[FederatedRetrievalInfo],
         effective_filters: BaseFilters | None,
-    ) -> list[InferenceChunk]:
+    ) -> list[InferenceChunk] | None:
         """Run search pipeline for a single query using pre-fetched data.
 
         All DB data (ACL filters, embedding model, federated retrieval info)
@@ -655,49 +655,29 @@ class SearchTool(Tool):
                 scope already applied (computed once in run()).
 
         Returns:
-            List of InferenceChunk results
+            List of InferenceChunk results, or None when the index rejects the
+            query for exceeding its clause limit, so the other queries of the
+            call can still answer.
         """
-        return search_pipeline(
-            chunk_search_request=ChunkSearchRequest(
-                query=query,
-                hybrid_alpha=hybrid_alpha,
-                # Project-only searches ignore user-selected filters.
-                user_selected_filters=(
-                    effective_filters if not self._is_project_only_search else None
-                ),
-                limit=num_hits,
-            ),
-            project_id_filter=self.project_id_filter,
-            persona_id_filter=self.persona_id_filter,
-            document_index=self.document_index,
-            user=self.user,
-            persona_search_info=self.persona_search_info,
-            acl_filters=acl_filters,
-            embedding_model=embedding_model,
-            prefetched_federated_retrieval_infos=federated_retrieval_infos,
-        )
-
-    def _run_search_for_query_unless_too_large(
-        self,
-        query: str,
-        hybrid_alpha: float | None,
-        num_hits: int,
-        acl_filters: UserAccessFilters,
-        embedding_model: EmbeddingModel,
-        federated_retrieval_infos: list[FederatedRetrievalInfo],
-        effective_filters: BaseFilters | None,
-    ) -> list[InferenceChunk] | None:
-        """Returns None when the index rejects the query for exceeding its
-        clause limit, so the other queries of the call can still answer."""
         try:
-            return self._run_search_for_query(
-                query,
-                hybrid_alpha,
-                num_hits,
-                acl_filters,
-                embedding_model,
-                federated_retrieval_infos,
-                effective_filters,
+            return search_pipeline(
+                chunk_search_request=ChunkSearchRequest(
+                    query=query,
+                    hybrid_alpha=hybrid_alpha,
+                    # Project-only searches ignore user-selected filters.
+                    user_selected_filters=(
+                        effective_filters if not self._is_project_only_search else None
+                    ),
+                    limit=num_hits,
+                ),
+                project_id_filter=self.project_id_filter,
+                persona_id_filter=self.persona_id_filter,
+                document_index=self.document_index,
+                user=self.user,
+                persona_search_info=self.persona_search_info,
+                acl_filters=acl_filters,
+                embedding_model=embedding_model,
+                prefetched_federated_retrieval_infos=federated_retrieval_infos,
             )
         except Exception as e:
             if not is_clause_limit_error(e):
@@ -1257,7 +1237,7 @@ class SearchTool(Tool):
         for query, weight in deduplicated_semantic_queries:
             search_functions.append(
                 (
-                    self._run_search_for_query_unless_too_large,
+                    self._run_search_for_query,
                     (
                         query,
                         None,
@@ -1275,7 +1255,7 @@ class SearchTool(Tool):
         for query, weight in deduplicated_keyword_queries:
             search_functions.append(
                 (
-                    self._run_search_for_query_unless_too_large,
+                    self._run_search_for_query,
                     (
                         query,
                         KEYWORD_QUERY_HYBRID_ALPHA,

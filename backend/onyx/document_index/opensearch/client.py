@@ -244,10 +244,6 @@ def is_clause_limit_error(e: BaseException) -> bool:
     )
 
 
-def _search_error_type(e: BaseException) -> str:
-    return "too_many_clauses" if is_clause_limit_error(e) else type(e).__name__
-
-
 class OpenSearchIndexWriteBlockedError(Exception):
     """An existing index rejected a write because of a block (e.g.
     read_only_allow_delete at the disk flood-stage watermark, or the write block
@@ -1996,7 +1992,12 @@ class OpenSearchIndexClient(OpenSearchClient):
                     observe_opensearch_search(search_type, client_duration_s, time_took)
             except Exception as e:
                 if self._emit_metrics:
-                    record_opensearch_search_error(search_type, _search_error_type(e))
+                    record_opensearch_search_error(
+                        search_type,
+                        "too_many_clauses"
+                        if is_clause_limit_error(e)
+                        else type(e).__name__,
+                    )
                 raise
         return hits
 
@@ -2070,7 +2071,12 @@ class OpenSearchIndexClient(OpenSearchClient):
                     observe_opensearch_search(search_type, client_duration_s, time_took)
             except Exception as e:
                 if self._emit_metrics:
-                    record_opensearch_search_error(search_type, _search_error_type(e))
+                    record_opensearch_search_error(
+                        search_type,
+                        "too_many_clauses"
+                        if is_clause_limit_error(e)
+                        else type(e).__name__,
+                    )
                 raise
 
         # TODO(andrei): Implement scroll/point in time for results so that we
