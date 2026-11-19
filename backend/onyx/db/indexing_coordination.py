@@ -1,7 +1,7 @@
 """Database-based indexing coordination to replace Redis fencing."""
 
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -216,6 +216,112 @@ class IndexingCoordination:
                 "Failed to update batch completion for attempt %s", index_attempt_id
             )
             raise
+
+    @staticmethod
+    def record_stub_batch_stored(
+        db_session: Session, index_attempt_id: int, batch_num: int
+    ) -> int:
+        """Counts stub batch `batch_num` as stored and returns the new count.
+        One lister stores batches in order, so `batch_num` must equal the
+        current count. A gap would let a claim hand out a missing batch."""
+        stored = db_session.execute(
+            update(IndexAttempt)
+            .where(
+                IndexAttempt.id == index_attempt_id,
+                IndexAttempt.stub_batches_stored == batch_num,
+            )
+            .values(stub_batches_stored=IndexAttempt.stub_batches_stored + 1)
+            .returning(IndexAttempt.stub_batches_stored)
+        ).scalar_one_or_none()
+        if stored is None:
+            db_session.rollback()
+            raise RuntimeError(
+                f"Stub batch {batch_num} of attempt {index_attempt_id} is out of order"
+            )
+        db_session.commit()
+        return stored
+
+    @staticmethod
+    def claim_stub_batches(
+        db_session: Session, index_attempt_id: int, window: int
+    ) -> list[int]:
+        """Claims the next stored stub batches for conversion and returns their
+        numbers. It claims no more than are stored and not sent, and keeps
+        the batches sent but not converted at or under `window`.
+
+        One statement: the CTE locks the row and reads `sent` before the
+        update, so concurrent callers never get the same number. It is built
+        from the model, so a tenant session's schema applies to it."""
+        before = (
+            select(
+                IndexAttempt.id.label("id"),
+                IndexAttempt.stub_batches_sent.label("sent"),
+            )
+            .where(IndexAttempt.id == index_attempt_id)
+            .with_for_update()
+            .cte("before")
+        )
+        claim = (
+            update(IndexAttempt)
+            .where(IndexAttempt.id == before.c.id)
+            .values(
+                stub_batches_sent=IndexAttempt.stub_batches_sent
+                + func.greatest(
+                    0,
+                    func.least(
+                        IndexAttempt.stub_batches_stored
+                        - IndexAttempt.stub_batches_sent,
+                        window
+                        - (
+                            IndexAttempt.stub_batches_sent
+                            - IndexAttempt.stub_batches_converted
+                        ),
+                    ),
+                )
+            )
+            .returning(before.c.sent, IndexAttempt.stub_batches_sent)
+        )
+        row = db_session.execute(claim).one_or_none()
+        db_session.commit()
+        if row is None:
+            return []
+        sent_before, sent_after = row
+        return list(range(sent_before, sent_after))
+
+    @staticmethod
+    def record_stub_batch_converted(db_session: Session, index_attempt_id: int) -> int:
+        """Counts one sent stub batch as converted and returns the new count.
+        The count never passes `sent`, so a redelivered task cannot open the
+        window past its size."""
+        converted = db_session.execute(
+            update(IndexAttempt)
+            .where(
+                IndexAttempt.id == index_attempt_id,
+                IndexAttempt.stub_batches_converted < IndexAttempt.stub_batches_sent,
+            )
+            .values(stub_batches_converted=IndexAttempt.stub_batches_converted + 1)
+            .returning(IndexAttempt.stub_batches_converted)
+        ).scalar_one_or_none()
+        if converted is None:
+            db_session.rollback()
+            logger.warning(
+                "Stub batch conversion not counted: attempt=%s has none in flight",
+                index_attempt_id,
+            )
+            return IndexingCoordination._get_stub_batches_converted(
+                db_session, index_attempt_id
+            )
+        db_session.commit()
+        return converted
+
+    @staticmethod
+    def _get_stub_batches_converted(db_session: Session, index_attempt_id: int) -> int:
+        converted = db_session.scalar(
+            select(IndexAttempt.stub_batches_converted).where(
+                IndexAttempt.id == index_attempt_id
+            )
+        )
+        return converted or 0
 
     @staticmethod
     def get_coordination_status(
