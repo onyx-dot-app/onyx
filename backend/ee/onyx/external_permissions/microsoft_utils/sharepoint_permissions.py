@@ -13,8 +13,6 @@ from ee.onyx.external_permissions.microsoft_utils.entra_groups import (
     resolve_entra_group_name,
 )
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.microsoft_utils.models import (
@@ -297,7 +295,6 @@ def _get_external_access_from_securable(
     site_url: str,
     securable: SharepointSecurable,
     permission_cache: SharepointPermissionCache,
-    add_prefix: bool = False,
 ) -> ExternalAccess:
     assignments = reader.list_role_assignments(site_url=site_url, securable=securable)
     principals = _collect_principals(reader, site_url, granting_members(assignments))
@@ -315,13 +312,7 @@ def _get_external_access_from_securable(
             is_public=True,
         )
 
-    group_ids: set[str] = set()
-    for group_name in resolved_groups.group_ids:
-        if add_prefix:
-            group_name = build_ext_group_name_for_onyx(
-                group_name, DocumentSource.SHAREPOINT
-            )
-        group_ids.add(group_name.lower())
+    group_ids = {group_name.lower() for group_name in resolved_groups.group_ids}
 
     logger.info("User emails: %s", len(principals.user_emails))
     logger.info("Group IDs: %s", len(group_ids))
@@ -338,7 +329,6 @@ def get_external_access_from_sharepoint(
     list_id: str | None,
     drive_item: DriveItemData | None,
     site_page: dict[str, Any] | None,
-    add_prefix: bool = False,
     treat_sharing_link_as_public: bool = False,
     permission_cache: SharepointPermissionCache | None = None,
 ) -> ExternalAccess:
@@ -372,7 +362,6 @@ def get_external_access_from_sharepoint(
         site_url,
         securable,
         permission_cache,
-        add_prefix,
     )
 
 
@@ -408,7 +397,6 @@ def get_hierarchy_node_external_access_from_sharepoint(
         site_url,
         securable,
         permission_cache,
-        add_prefix=True,
     )
 
 
