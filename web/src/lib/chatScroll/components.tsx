@@ -7,6 +7,7 @@ import React, {
   useContext,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -33,6 +34,8 @@ interface ChatScrollContextValue {
   /** Call before a requested move (`scrollIntoView`), so the view keeps it
    *  instead of reading it as drift. */
   markScrollInput: () => void;
+  /** A windowed row registers how to mount it at once, for the opening. */
+  registerRowMounter: (row: Element, mount: () => void) => () => void;
   /**
    * Reports whether `target` is within `OVERSCAN_VIEWPORTS` viewport heights
    * of the scroll container, above or below. Returns a function that stops
@@ -194,6 +197,7 @@ export const ChatScrollView = React.forwardRef(function ChatScrollView(
       rowHeights: scroll.rowHeights,
       scrolledByUser: scroll.scrolledByUser,
       markScrollInput: scroll.markScrollInput,
+      registerRowMounter: scroll.registerRowMounter,
       observeNearViewport,
     }),
     [
@@ -201,6 +205,7 @@ export const ChatScrollView = React.forwardRef(function ChatScrollView(
       scroll.rowHeights,
       scroll.scrolledByUser,
       scroll.markScrollInput,
+      scroll.registerRowMounter,
       observeNearViewport,
     ]
   );
@@ -272,6 +277,7 @@ export function WindowedRow({
 }: WindowedRowProps) {
   const scroll = useOptionalChatScroll();
   const observeNearViewport = scroll?.observeNearViewport;
+  const registerRowMounter = scroll?.registerRowMounter;
   const rowHeights = scroll?.rowHeights;
   const rowRef = useRef<HTMLDivElement>(null);
   const hasFocusRef = useRef(false);
@@ -279,6 +285,14 @@ export function WindowedRow({
   const [nearViewport, setNearViewport] = useState(initiallyMounted);
 
   const mounted = !scroll || pinned || nearViewport;
+
+  // A layout effect: a view that opens mounts the rows around its position
+  // before paint, and it runs after the rows' layout effects.
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    if (!registerRowMounter || !row) return;
+    return registerRowMounter(row, () => setNearViewport(true));
+  }, [registerRowMounter]);
 
   useEffect(() => {
     const row = rowRef.current;

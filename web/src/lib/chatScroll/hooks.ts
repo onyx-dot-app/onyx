@@ -88,6 +88,9 @@ export interface ChatScrollController {
   startTurn: () => void;
   /** Call before a requested move (`scrollIntoView`): it is the user's. */
   markScrollInput: () => void;
+  /** A windowed row registers how to mount it at once. Register in a layout
+   *  effect, so the row is known when the view opens. */
+  registerRowMounter: (row: Element, mount: () => void) => () => void;
 }
 
 function maxScrollTop(container: HTMLElement): number {
@@ -199,6 +202,7 @@ export function useChatScroll({
   const openingRef = useRef(0);
   const restoreRef = useRef<"idle" | "pending" | "done">("idle");
   const revealTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rowMountersRef = useRef(new Map<Element, () => void>());
   const modeRef = useRef<Mode>({ kind: "opening" });
   const revealedRef = useRef(false);
   const expectedTopRef = useRef(0);
@@ -402,14 +406,23 @@ export function useChatScroll({
         write(container, maxScrollTop(container));
       }
 
+      // Mount the rows around the position now, in this layout pass, so the
+      // first painted frame has them. Wait only for rows that cannot.
       const viewportTop = container.getBoundingClientRect().top;
       const viewportBottom = viewportTop + container.clientHeight;
-      const waiting = Array.from(
+      const margin = container.clientHeight;
+      let waiting = false;
+      for (const placeholder of Array.from(
         container.querySelectorAll(`[${PLACEHOLDER_ATTRIBUTE}]`)
-      ).some((placeholder) => {
+      )) {
         const rect = placeholder.getBoundingClientRect();
-        return rect.bottom > viewportTop && rect.top < viewportBottom;
-      });
+        if (rect.bottom <= viewportTop - margin) continue;
+        if (rect.top >= viewportBottom + margin) continue;
+        const mount = rowMountersRef.current.get(placeholder);
+        if (mount) mount();
+        else if (rect.bottom > viewportTop && rect.top < viewportBottom)
+          waiting = true;
+      }
       if (!waiting) reveal(container);
     },
     // reconcile and scheduleReveal are declared below and never change.
@@ -492,6 +505,13 @@ export function useChatScroll({
     if (container.scrollTop < glideStart) write(container, glideStart);
     tween(container, () => maxScrollTop(container));
   }, [tween, write]);
+
+  const registerRowMounter = useCallback((row: Element, mount: () => void) => {
+    rowMountersRef.current.set(row, mount);
+    return () => {
+      rowMountersRef.current.delete(row);
+    };
+  }, []);
 
   const markScrollInput = useCallback(() => {
     userInputAtRef.current = performance.now();
@@ -692,5 +712,6 @@ export function useChatScroll({
     scrollToBottom,
     startTurn,
     markScrollInput,
+    registerRowMounter,
   };
 }
