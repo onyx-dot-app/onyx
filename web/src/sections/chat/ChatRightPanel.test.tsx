@@ -319,9 +319,17 @@ test("only file tabs move, and the strip announces only real moves", async () =>
       target.dispatchEvent(event);
     });
   };
-  pointer("pointerdown", screen.getByRole("tab", { name: "Q3 report" }), 0);
-  pointer("pointermove", document, -20);
-  pointer("pointerup", document, -20);
+  // After a drag, dnd-kit stops document clicks for 50ms. The fake clock ends
+  // that here, not in the next test.
+  jest.useFakeTimers();
+  try {
+    pointer("pointerdown", screen.getByRole("tab", { name: "Q3 report" }), 0);
+    pointer("pointermove", document, -20);
+    pointer("pointerup", document, -20);
+    act(() => jest.advanceTimersByTime(50));
+  } finally {
+    jest.useRealTimers();
+  }
   expect(fileTabs()).toEqual(order);
   expect(moved()).toBeNull();
 
