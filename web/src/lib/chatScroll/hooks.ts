@@ -365,9 +365,21 @@ export function useChatScroll({
       if (revealedRef.current) return;
       revealedRef.current = true;
       setRevealed(true);
+      const position = memoryRef.current.position;
+      // Hold the saved position itself: rows mounted for the opening have not
+      // rendered yet, so the row now at the top can be off.
       modeRef.current =
-        memoryRef.current.position?.kind === "row"
-          ? { kind: "free", held: captureTopRow(container) }
+        position?.kind === "row"
+          ? {
+              kind: "free",
+              held: findHeldRow(container, position)
+                ? {
+                    rowId: position.rowId,
+                    rowIndexFromEnd: position.rowIndexFromEnd,
+                    rowOffset: position.rowOffset,
+                  }
+                : captureTopRow(container),
+            }
           : {
               kind: "following",
               held: null,
@@ -383,10 +395,13 @@ export function useChatScroll({
   const placeOpening = useCallback(
     (container: HTMLElement) => {
       const position = memoryRef.current.position;
-      if (position?.kind === "row" && findHeldRow(container, position)) {
-        hold(container, position);
-      } else if (
+      // Look the saved row up by its id first: the by-rank fallback can name
+      // another row once newer messages arrived.
+      const loaded =
+        position?.kind === "row" && findById(container, position.rowId);
+      if (
         position?.kind === "row" &&
+        !loaded &&
         restoreRowRef.current &&
         restoreRef.current !== "done"
       ) {
@@ -402,6 +417,9 @@ export function useChatScroll({
           });
         }
         return;
+      }
+      if (position?.kind === "row" && findHeldRow(container, position)) {
+        hold(container, position);
       } else {
         write(container, maxScrollTop(container));
       }

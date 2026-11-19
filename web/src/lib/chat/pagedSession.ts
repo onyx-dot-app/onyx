@@ -169,11 +169,14 @@ export async function loadChatMessagesUntil(
   for (let page = 0; page < MAX_RESTORE_PAGES; page++) {
     const session = useChatSessionStore.getState().sessions.get(sessionId);
     if (!session?.hasOlderMessages) return;
-    const loaded = getLatestMessageChain(session.messageTree).some(
-      (message) => message.messageId === messageId
-    );
-    if (loaded) return;
+    const chain = getLatestMessageChain(session.messageTree);
+    if (chain.some((message) => message.messageId === messageId)) return;
     await loadOlderChatMessages(sessionId);
+    // No older page attached (an empty page reloads the branch instead):
+    // asking again would repeat the same request.
+    const after = useChatSessionStore.getState().sessions.get(sessionId);
+    const oldest = after && getLatestMessageChain(after.messageTree)[0];
+    if (oldest?.messageId === chain[0]?.messageId) return;
   }
 }
 
