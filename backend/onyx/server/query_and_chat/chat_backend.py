@@ -122,7 +122,11 @@ from onyx.db.chat_inputs import (
     submit_human_message__no_commit,
     withdraw_human_message__no_commit,
 )
-from onyx.db.chat_response import load_chat_approvals, waiting_approval_reply_ids
+from onyx.db.chat_response import (
+    load_chat_approvals,
+    load_child_responses,
+    waiting_approval_reply_ids,
+)
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
@@ -596,11 +600,13 @@ def get_chat_session(
     chat_approvals = load_chat_approvals(
         db_session, session_id, [msg.id for msg in responses]
     )
+    child_responses = load_child_responses(db_session, responses)
     replay_packet_lists: list[list[Packet]] = [
         translate_assistant_message_to_packets(
             chat_message=msg,
             tools_by_id=tools_by_id,
             chat_approvals=chat_approvals,
+            child_responses=child_responses,
             db_session=db_session,
         )
         for msg in responses
