@@ -428,8 +428,8 @@ shows no step. `expandCodeModeSteps` returns the steps and `codeModeWorking`
 in one pass: a program runs from `code_mode_start` until a `code_mode_delta`
 reports a status, and a running program whose cell has no running call sets
 it. A yield (status `running`) ends the program's turn: the model acts next.
-`useTimelineHeader` takes `codeModeWorking`, so the header reads "Working"
-while the program runs between calls.
+`useTimelineHeader` takes `codeModeWorking`, so the run header reads
+"Working" while the program runs between calls.
 The header names a step's activity from its own first packet; nested packets
 do not decide it. `TransformedStep.groupKey` keeps the packet group of a step,
 so pacing still knows restored steps. The expanded timeline renders one list

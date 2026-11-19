@@ -29,6 +29,13 @@ type LogVariant = "default" | `${Exclude<LogStatus, "default">}-${LogWeight}`;
 type LogBaseProps = {
   /** Colours the icon; a heavy variant also tints the line. */
   variant?: LogVariant;
+  /**
+   * The line's outer padding, as a spacing step (`N / 4` rem): `1` is
+   * 0.25rem, `0` none, for a log inside a container that pads it already.
+   * The line is 1.75rem tall plus this padding, and the body follows it.
+   * @default 1
+   */
+  padding?: 0 | 1;
   /** Shown at 1rem, in the status colour. */
   icon: IconFunctionComponent;
   /** What the line is about. One line, in a 10rem column. */
@@ -95,6 +102,7 @@ const VARIANTS: Record<LogVariant, { status: LogStatus; weight: LogWeight }> = {
  */
 function Log({
   variant = "default",
+  padding = 1,
   icon: Icon,
   title,
   centerChildren,
@@ -111,8 +119,9 @@ function Log({
     <Section
       flexDirection="row"
       justifyContent="start"
-      height={2.25}
-      padding={1}
+      // 1.75rem of content plus the padding on both sides.
+      height={1.75 + (padding * 2) / 4}
+      padding={padding}
       gap={0}
       className="opal-log-line"
     >
@@ -184,6 +193,7 @@ function Log({
       className="opal-log"
       data-opal-log-status={status}
       data-opal-log-weight={weight}
+      data-opal-log-padding={padding}
     >
       {onClick ? (
         // The whole log is one surface: the line and its body hover and

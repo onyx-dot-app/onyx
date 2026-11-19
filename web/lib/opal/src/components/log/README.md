@@ -13,6 +13,7 @@ body below it with `expandable`.
 | Prop              | Type                    | Default     | Description                                                                      |
 | ----------------- | ----------------------- | ----------- | -------------------------------------------------------------------------------- |
 | `variant`         | `LogVariant`            | `"default"` | Status and weight: colours the icon; heavy also tints the line                   |
+| `padding`         | `0 \| 1`                | `1`         | The line's outer padding, as a spacing step (`N / 4` rem). `0` for a log inside a container that pads it already; the line is then 1.75rem tall, and the body keeps its place under the title |
 | `icon`            | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                              |
 | `title`           | `string \| RichStr`     | —           | `secondary-action` in `text-03`, one line, in a 10rem column                     |
 | `centerChildren`  | `ReactNode`             | —           | Fills the rest of the row from its start; the caller sets its colour and fit     |
@@ -45,7 +46,7 @@ can match it to the variant.
 
 ## Layout
 
-- A row `Section`, 2.25rem tall with 0.25rem padding. Everything but `endButton`
+- A row `Section`, 2.25rem tall with 0.25rem padding (`padding`; with `0` it is 1.75rem tall). Everything but `endButton`
   sits in an inner row with another 0.25rem and a 0.25rem gap, so tall
   trailing content cannot stretch the line. The title column is exactly 10rem,
   and 1rem separates it from the centre content, and the centre content from

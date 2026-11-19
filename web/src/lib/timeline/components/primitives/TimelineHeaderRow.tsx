@@ -2,48 +2,60 @@ import React from "react";
 import { cn } from "@opal/utils";
 
 export interface TimelineHeaderRowProps {
+  /** Folds the run: a click anywhere on the row toggles it. */
+  onClick?: () => void;
   children?: React.ReactNode;
 }
 
-/** TimelineHeaderRow spans the run's card, above the rail and the steps. */
-export function TimelineHeaderRow({ children }: TimelineHeaderRowProps) {
+/**
+ * A run's header row: the header text and its fold button. Its height comes
+ * from them: the fold button is 28px.
+ */
+export function TimelineHeaderRow({
+  onClick,
+  children,
+}: TimelineHeaderRowProps) {
   return (
-    <div className="flex w-full h-(--timeline-header-row-height)">
+    <div
+      role="presentation"
+      className={cn(
+        "flex w-full items-center justify-between",
+        onClick && "cursor-pointer select-none"
+      )}
+      onClick={onClick}
+    >
       {children}
     </div>
   );
 }
 
-export interface RunHeaderRowProps {
-  /** The header folds the run, so it reacts to hover. */
+export interface RunCardSurfaceProps {
+  /** The header folds the run, so the folded card reacts to hover. */
   interactive: boolean;
   /** Tinted while the run works or is open. */
   tinted: boolean;
-  /** Rounded at the bottom when no steps show below it. */
-  roundedBottom: boolean;
   children?: React.ReactNode;
 }
 
-/** A run's header row: the header on the top of the run's card. */
-export function RunHeaderRow({
+/**
+ * The run card itself: one 0.25rem padding and one tint around the header and
+ * the steps, so its rows add no padding of their own.
+ */
+export function RunCardSurface({
   interactive,
   tinted,
-  roundedBottom,
   children,
-}: RunHeaderRowProps) {
+}: RunCardSurfaceProps) {
   return (
-    <TimelineHeaderRow>
-      <div
-        className={cn(
-          "flex flex-1 min-w-0 h-full items-center justify-between p-(--spacing-inline-4) rounded-t-12 transition-colors duration-300",
-          interactive && "hover:bg-background-tint-00",
-          tinted && "bg-background-tint-00",
-          roundedBottom && "rounded-b-12"
-        )}
-      >
-        {children}
-      </div>
-    </TimelineHeaderRow>
+    <div
+      className={cn(
+        "rounded-12 p-(--spacing-inline-4) transition-colors duration-300",
+        tinted && "bg-background-tint-00",
+        interactive && !tinted && "hover:bg-background-tint-00"
+      )}
+    >
+      {children}
+    </div>
   );
 }
 

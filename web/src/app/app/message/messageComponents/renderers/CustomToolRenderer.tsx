@@ -282,7 +282,6 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         icon,
         status,
         supportsCollapsible: false,
-        noPaddingRight: true,
         surfaceBackground: "error" as const,
         content,
       },
@@ -296,7 +295,6 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         icon,
         status,
         supportsCollapsible: true,
-        noPaddingRight: true,
         content,
       },
     ]);

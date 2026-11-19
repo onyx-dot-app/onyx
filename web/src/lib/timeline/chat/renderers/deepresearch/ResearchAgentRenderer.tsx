@@ -317,7 +317,6 @@ export const ResearchAgentRenderer: MessageRenderer<
           isLastStep={!stopPacketSeen && !isComplete}
           isFirstStep={!researchTask && nestedCalls.length === 0}
           isHover={isHover}
-          noPaddingRight={true}
         >
           <div className="ps-(--timeline-common-text-padding)">
             <ExpandableTextDisplay

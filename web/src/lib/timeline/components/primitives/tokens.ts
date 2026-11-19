@@ -5,9 +5,6 @@ import React from "react";
  * Values are applied as CSS variables via TimelineRoot.
  */
 export interface TimelineTokens {
-  headerRowHeight: string;
-  stepHeaderHeight: string;
-  stepHeaderRightSectionWidth: string;
   headerPaddingLeft: string;
   headerPaddingRight: string;
   headerTextPaddingX: string;
@@ -21,9 +18,6 @@ export interface TimelineTokens {
  * Default sizing for the timeline layout. Override in TimelineRoot if needed.
  */
 export const timelineTokenDefaults: TimelineTokens = {
-  headerRowHeight: "var(--spacing-block-36)",
-  stepHeaderHeight: "2rem",
-  stepHeaderRightSectionWidth: "2.125rem",
   headerPaddingLeft: "0.5rem",
   headerPaddingRight: "0.25rem",
   headerTextPaddingX: "var(--padding-text-4)",
@@ -41,10 +35,6 @@ export function getTimelineStyles(
 ): React.CSSProperties {
   const merged: TimelineTokens = { ...timelineTokenDefaults, ...tokens };
   return {
-    "--timeline-header-row-height": merged.headerRowHeight,
-    "--timeline-step-header-height": merged.stepHeaderHeight,
-    "--timeline-step-header-right-section-width":
-      merged.stepHeaderRightSectionWidth,
     "--timeline-header-padding-left": merged.headerPaddingLeft,
     "--timeline-header-padding-right": merged.headerPaddingRight,
     "--timeline-header-text-padding-x": merged.headerTextPaddingX,

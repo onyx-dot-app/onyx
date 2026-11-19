@@ -1,91 +1,16 @@
 "use client";
 
-import React from "react";
-import { useTranslations } from "next-intl";
-import { SvgFold, SvgExpand } from "@opal/icons";
-import { Button, Presence, Text } from "@opal/components";
 import { TextLoader } from "@opal/loaders";
-import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
-import { formatDurationSeconds } from "@opal/time";
 
 export interface StreamingHeaderProps {
   headerText: string;
-  collapsible: boolean;
-  buttonTitle?: string;
-  isExpanded: boolean;
-  onToggle: () => void;
-  streamingStartTime?: number;
-  /** Tool processing duration from backend (freezes timer when available) */
-  toolProcessingDuration?: number;
 }
 
-/** Header during streaming - shimmer text with current activity */
-export const StreamingHeader = React.memo(function StreamingHeader({
-  headerText,
-  collapsible,
-  buttonTitle,
-  isExpanded,
-  onToggle,
-  streamingStartTime,
-  toolProcessingDuration,
-}: StreamingHeaderProps) {
-  const t = useTranslations("chat.messages.timeline");
-  // Use backend duration when available, otherwise continue live timer
-  const elapsedSeconds = useStreamingDuration(
-    toolProcessingDuration === undefined, // Stop updating when we have backend duration
-    streamingStartTime,
-    toolProcessingDuration
-  );
-  const showElapsedTime =
-    isExpanded && streamingStartTime !== undefined && elapsedSeconds > 0;
-
+/** The working run's title: shimmer text with its current activity. */
+export function StreamingHeader({ headerText }: StreamingHeaderProps) {
   return (
-    <>
-      <div className="flex-1 min-w-0 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-        <TextLoader>{headerText}</TextLoader>
-      </div>
-
-      {collapsible &&
-        (buttonTitle ? (
-          <Button
-            prominence="tertiary"
-            size="md"
-            onClick={onToggle}
-            rightIcon={isExpanded ? SvgFold : SvgExpand}
-            aria-expanded={isExpanded}
-          >
-            {buttonTitle}
-          </Button>
-        ) : (
-          <>
-            {/* The timer is plain text beside the button: a button label
-                animates its changes, so each tick would flash. */}
-            <Presence show={showElapsedTime} from="end" width="fit">
-              <div className="px-(--padding-text-4)">
-                <Text
-                  as="p"
-                  font="secondary-body"
-                  color="text-03"
-                  wordWrap="whitespace-nowrap"
-                >
-                  {formatDurationSeconds(elapsedSeconds)}
-                </Text>
-              </div>
-            </Presence>
-            <Button
-              prominence="tertiary"
-              size="md"
-              onClick={onToggle}
-              icon={isExpanded ? SvgFold : SvgExpand}
-              aria-label={
-                isExpanded
-                  ? t("collapseButton.ariaLabel")
-                  : t("expandButton.ariaLabel")
-              }
-              aria-expanded={isExpanded}
-            />
-          </>
-        ))}
-    </>
+    <div className="flex-1 min-w-0 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+      <TextLoader>{headerText}</TextLoader>
+    </div>
   );
-});
+}

@@ -12412,9 +12412,6 @@
             "status": "プランを生成中"
           }
         },
-        "doneStep": {
-          "header": "完了"
-        },
         "expandButton": {
           "ariaLabel": "タイムラインを展開"
         },
@@ -12649,9 +12646,6 @@
         },
         "stepsButton": {
           "label": "{count, plural, one {# ステップ} other {# ステップ}}"
-        },
-        "stoppedStep": {
-          "header": "停止しました"
         },
         "thoughtDuration": {
           "label": "{duration} 思考しました"

@@ -181,7 +181,6 @@ export function ExecToolRenderer({
       icon: STEP_ICONS.execute,
       status,
       supportsCollapsible: true,
-      noPaddingRight: true,
       content,
     },
   ]);

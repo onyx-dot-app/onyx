@@ -112,7 +112,6 @@ export const ReasoningRenderer: MessageRenderer<
         icon: STEP_ICONS.thinking,
         status: thinkingStatus,
         content: <></>,
-        noPaddingRight: true,
       },
     ]);
   }
@@ -131,7 +130,6 @@ export const ReasoningRenderer: MessageRenderer<
       status: displayStatus,
       content: reasoningContent,
       expandedText: reasoningContent,
-      noPaddingRight: true,
     },
   ]);
 };

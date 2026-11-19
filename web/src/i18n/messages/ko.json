@@ -12412,9 +12412,6 @@
             "status": "계획 생성 중"
           }
         },
-        "doneStep": {
-          "header": "완료"
-        },
         "expandButton": {
           "ariaLabel": "타임라인 펼치기"
         },
@@ -12649,9 +12646,6 @@
         },
         "stepsButton": {
           "label": "{count, plural, one {#단계} other {#단계}}"
-        },
-        "stoppedStep": {
-          "header": "중지됨"
         },
         "thoughtDuration": {
           "label": "{duration} 동안 생각함"

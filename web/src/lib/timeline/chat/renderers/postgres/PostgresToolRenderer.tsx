@@ -115,7 +115,6 @@ export const PostgresToolRenderer: MessageRenderer<PostgresToolPacket, {}> = ({
       status: statusLabel,
       supportsCollapsible: documents.length > 0,
       timelineLayout: "timeline",
-      noPaddingRight: true,
       content: (
         <Section gap={0} alignItems="stretch" height="fit">
           {chips.length > 0 && (

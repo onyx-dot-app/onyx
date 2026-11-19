@@ -67,6 +67,19 @@ function scrollRef() {
   return { current: el };
 }
 
+// Opens a folded run card. Its fold button is named by the step count.
+function openRun() {
+  const fold = screen.queryByRole("button", { name: /^\d+ steps?$/ });
+  if (fold?.getAttribute("aria-expanded") === "false") fireEvent.click(fold);
+}
+
+// Opens every closed step.
+function openSteps() {
+  for (const step of screen.queryAllByRole("button", { expanded: false })) {
+    fireEvent.click(step);
+  }
+}
+
 function renderList(props: {
   messages?: BuildMessage[];
   timelineEvents?: TimelineEvent[];
@@ -272,8 +285,8 @@ describe("BuildMessageList thinking visibility", () => {
   it("shows restored thought packets as collapsed thinking rows", () => {
     renderList({ messages: [savedAssistantMessage] });
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand timeline" }));
-    fireEvent.click(screen.getByRole("button", { name: "Thinking" }));
+    openRun();
+    openSteps();
 
     expect(screen.getByText("Thinking")).toBeInTheDocument();
     expect(screen.getByText("Checking the app structure.")).toBeInTheDocument();
@@ -284,7 +297,7 @@ describe("BuildMessageList thinking visibility", () => {
     renderList({ messages: [savedAssistantMessage] });
 
     // The saved run is folded; opening it shows the thought step closed.
-    fireEvent.click(screen.getByRole("button", { name: "Expand timeline" }));
+    openRun();
     expect(screen.getByText("Thinking")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
@@ -305,9 +318,9 @@ describe("BuildMessageList thinking visibility", () => {
     // follows it.
     expect(await screen.findByText(/^Final answer/)).toBeInTheDocument();
     expect(
-      await screen.findByRole("button", { name: "Expand timeline" })
+      await screen.findByRole("button", { name: "1 step", expanded: false })
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Expand timeline" }));
+    openRun();
     expect(screen.getByText("Thinking")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
@@ -325,7 +338,7 @@ describe("BuildMessageList thinking visibility", () => {
       screen.queryByText("Checking the app structure.")
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Thinking/ }));
+    openSteps();
 
     expect(screen.getByText("Checking the app structure.")).toBeInTheDocument();
   });

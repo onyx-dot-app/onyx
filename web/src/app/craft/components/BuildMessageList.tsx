@@ -143,12 +143,11 @@ export default function BuildMessageList({
   // Inline items between timeline steps.
   const renderConnectCard = (
     key: string,
-    topMargin: string,
     requestId: string,
     externalAppId: number,
     reason: string | null
   ) => (
-    <div key={key} className={cn(topMargin)}>
+    <div key={key}>
       <SetupCard
         requestId={requestId}
         externalAppId={externalAppId}
@@ -157,24 +156,19 @@ export default function BuildMessageList({
       />
     </div>
   );
-  const renderCompaction = (
-    key: string,
-    topMargin: string,
-    summary: string | null
-  ) => (
-    <div key={key} className={cn(topMargin)}>
+  const renderCompaction = (key: string, summary: string | null) => (
+    <div key={key}>
       <CompactionMarker summary={summary} />
     </div>
   );
   const renderError = (
     key: string,
-    topMargin: string,
     content: string,
     rateLimit: RateLimitDetails | undefined
   ) => {
     if (rateLimit) {
       return (
-        <div key={key} className={cn(topMargin)}>
+        <div key={key}>
           <ErrorBanner
             error={content}
             errorCode={RATE_LIMITED_ERROR_CODE}
@@ -188,7 +182,6 @@ export default function BuildMessageList({
       <div
         key={key}
         className={cn(
-          topMargin,
           "flex items-start gap-2 rounded-08 border border-status-error-02 bg-status-error-00 px-3 py-2 text-sm text-status-error-05"
         )}
         role="alert"
@@ -202,13 +195,12 @@ export default function BuildMessageList({
   // A message or notice between runs.
   const renderInlineEntry = (
     entry: AcpTimelineEntry,
-    topMargin: string,
     isCurrentStream: boolean
   ) => {
     switch (entry.payload.kind) {
       case "message":
         return (
-          <div key={entry.id} className={cn(topMargin)}>
+          <div key={entry.id}>
             <AnswerText>
               <TextChunk
                 sessionId={sessionId}
@@ -227,17 +219,15 @@ export default function BuildMessageList({
           case "connect_app_request":
             return renderConnectCard(
               entry.id,
-              topMargin,
               notice.requestId,
               notice.externalAppId,
               notice.reason
             );
           case "compaction":
-            return renderCompaction(entry.id, topMargin, notice.summary);
+            return renderCompaction(entry.id, notice.summary);
           case "error":
             return renderError(
               entry.id,
-              topMargin,
               notice.message || t("turnFailed.message"),
               notice.rateLimit
             );
@@ -286,15 +276,19 @@ export default function BuildMessageList({
             key={block.id}
             entries={block.entries}
             autoCollapse={followedByMessage}
+            // As in chat, a run works until its end marker: anything after
+            // it, or the end of the turn. Between two calls it still works.
+            isActive={
+              opts.isCurrentStream && isStreaming && idx === blocks.length - 1
+            }
           />
         );
       }
 
-      const topMargin = cn(blocks[idx - 1]?.kind === "steps" && "mt-3");
       const { entry } = block;
       return (
         <div key={entry.id}>
-          {renderInlineEntry(entry, topMargin, opts.isCurrentStream)}
+          {renderInlineEntry(entry, opts.isCurrentStream)}
         </div>
       );
     });
@@ -344,12 +338,12 @@ export default function BuildMessageList({
     return (
       <div
         key={message.id}
-        className="flex flex-col gap-2 py-4"
+        className="flex flex-col gap-3 py-4"
         data-testid="craft-assistant-message"
         aria-busy={finalizing}
       >
         <Hoverable.Root group="craftAgentMessage" width="full">
-          <div className="flex flex-col gap-2 min-w-0">
+          <div className="flex flex-col gap-3 min-w-0">
             {visibleSavedRender ? (
               visibleSavedRender.nodes
             ) : (
@@ -477,7 +471,7 @@ export default function BuildMessageList({
 
         {showStreamingArea && (
           <div
-            className="flex flex-col gap-2 py-4"
+            className="flex flex-col gap-3 py-4"
             data-testid="craft-assistant-message"
             aria-busy={isStreaming}
           >

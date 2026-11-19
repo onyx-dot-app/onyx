@@ -11,7 +11,6 @@ import {
   SvgLoader,
   SvgSearchMenu,
   SvgSparkle,
-  SvgStopCircle,
   SvgTerminal,
 } from "@opal/icons";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
@@ -35,7 +34,6 @@ export const STEP_ICONS = {
   agent: SvgCpu,
   skill: SvgSparkle,
   done: SvgCheckCircle,
-  stopped: SvgStopCircle,
   /** Replaces the kind's icon while the step runs. */
   running: SpinningLoader,
   /** Replaces the kind's icon when the step failed or was stopped. */

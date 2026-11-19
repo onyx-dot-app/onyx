@@ -1,17 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Collapsible } from "@opal/components";
 import { STEP_ICONS } from "@/lib/timeline/icons";
-import { StepContainer } from "@/lib/timeline/components/StepContainer";
-import { TimelineSteps } from "@/lib/timeline/components/TimelineSteps";
-import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
-import { RunHeaderRow } from "@/lib/timeline/components/primitives/TimelineHeaderRow";
-import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
-import { CompletedHeader } from "@/lib/timeline/components/headers/CompletedHeader";
-import { StoppedHeader } from "@/lib/timeline/components/headers/StoppedHeader";
-import { groupTimelineEntries } from "@/lib/timeline/entries";
+import { RunCard } from "@/lib/timeline/components/RunCard";
+import { RunStep } from "@/lib/timeline/components/RunStep";
 import type { TimelineStepPosition } from "@/lib/timeline/types";
 import TaskBody from "@/lib/timeline/craft/components/tool-cards/TaskBody";
 import SkillBadge from "@/lib/timeline/craft/components/tool-cards/SkillBadge";
@@ -20,7 +12,7 @@ import {
   splitThinkingTitle,
 } from "@/lib/timeline/components/bodies/ThinkingBody";
 import {
-  getToolCallStepIcon,
+  getToolCallIcon,
   hasToolCallBody,
   renderToolCallBody,
   renderToolCallHeader,
@@ -51,8 +43,6 @@ function CraftTimelineStep({
   defaultExpanded,
 }: CraftTimelineStepProps) {
   const t = useTranslations("chat.messages.timeline");
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const toggle = () => setIsExpanded((prev) => !prev);
   const { payload } = entry;
 
   if (payload.kind === "thinking") {
@@ -65,26 +55,22 @@ function CraftTimelineStep({
           : "header.thinking.label"
       );
     return (
-      <StepContainer
-        stepIcon={STEP_ICONS.thinking}
-        header={header}
-        toggleLabel={header}
-        isExpanded={isExpanded}
-        onToggle={toggle}
-        supportsCollapsible
-        isFirstStep={position.isFirst}
-        isLastStep={position.isLast}
-        noPaddingRight
-        foldBody
-      >
-        <ThinkingBody
-          content={payload.content}
-          displayContent={normalizeThinking(
-            title ? remainingContent : payload.content
-          )}
-          isStreaming={payload.isStreaming}
-        />
-      </StepContainer>
+      <RunStep
+        // Thinking keeps its own icon while it streams.
+        status={entry.status === "streaming" ? "done" : entry.status}
+        position={position}
+        icon={STEP_ICONS.thinking}
+        title={header}
+        body={
+          <ThinkingBody
+            content={payload.content}
+            displayContent={normalizeThinking(
+              title ? remainingContent : payload.content
+            )}
+            isStreaming={payload.isStreaming}
+          />
+        }
+      />
     );
   }
 
@@ -92,39 +78,31 @@ function CraftTimelineStep({
   // The task row is its own control: it opens the sub-agent's transcript.
   if (toolCall.kind === "task") {
     return (
-      <StepContainer
+      <RunStep
+        status={entry.status}
+        position={position}
         hideHeader
-        isFirstStep={position.isFirst}
-        isLastStep={position.isLast}
-      >
-        <TaskBody toolCall={toolCall} />
-      </StepContainer>
+        body={<TaskBody toolCall={toolCall} />}
+      />
     );
   }
 
-  const failed = entry.status === "error";
-  // Failed calls stay expandable so the error is reachable.
-  const expandable = hasToolCallBody(toolCall) || failed;
+  const header = renderToolCallHeader(toolCall);
   return (
-    <StepContainer
-      stepIcon={getToolCallStepIcon(toolCall)}
-      header={renderToolCallHeader(toolCall)}
+    <RunStep
+      status={entry.status}
+      position={position}
+      icon={getToolCallIcon(toolCall)}
+      title={header.title}
+      detail={header.detail}
       headerAccessory={
         toolCall.skillName && toolCall.toolName !== "skill" ? (
           <SkillBadge name={toolCall.skillName} />
         ) : undefined
       }
-      toggleLabel={toolCall.title}
-      isExpanded={isExpanded}
-      onToggle={toggle}
-      supportsCollapsible={expandable}
-      isFirstStep={position.isFirst}
-      isLastStep={position.isLast}
-      surfaceBackground={failed ? "error" : undefined}
-      foldBody
-    >
-      {expandable ? renderToolCallBody(toolCall) : null}
-    </StepContainer>
+      defaultExpanded={defaultExpanded}
+      body={hasToolCallBody(toolCall) ? renderToolCallBody(toolCall) : null}
+    />
   );
 }
 
@@ -133,131 +111,30 @@ interface CraftTimelineProps {
   entries: CraftTimelineEntry[];
   /** Fold the run closed once an assistant message follows it. */
   autoCollapse?: boolean;
+  /** The run still works: it is the live turn's last item. */
+  isActive?: boolean;
 }
 
-/**
- * CraftTimeline renders one run of a Craft turn's tool calls and thinking on
- * the shared timeline rail, under the shared run header. A run with more
- * than one entry folds, and shows a Done or Stopped row when expanded.
- */
+/** One run of a Craft turn, on the shared run card. */
 export default function CraftTimeline({
   entries,
   autoCollapse = false,
+  isActive = false,
 }: CraftTimelineProps) {
   const t = useTranslations("craft.toolCards.group");
-  const tTimeline = useTranslations("chat.messages.timeline");
-  const groups = useMemo(() => groupTimelineEntries(entries), [entries]);
-  const isRunning = entries.some((entry) => entry.status === "streaming");
-  const isStopped =
-    !isRunning && entries.some((entry) => entry.status === "stopped");
-  // Every run folds, even with one step. Open while the run is active so
-  // streaming steps stay visible; settled runs start folded.
-  const [isOpen, setIsOpen] = useState(isRunning);
-  // A run the user folded or opened keeps their choice.
-  const userToggled = useRef(false);
-  const toggle = () => {
-    userToggled.current = true;
-    setIsOpen((prev) => !prev);
-  };
-
-  // Open when the run becomes active after mounting settled (its first call
-  // arrived complete); only on that change, so a later fold sticks.
-  const wasRunning = useRef(isRunning);
-  useEffect(() => {
-    if (isRunning && !wasRunning.current && !userToggled.current) {
-      setIsOpen(true);
-    }
-    wasRunning.current = isRunning;
-  }, [isRunning]);
-
-  // Fold closed once a message follows; fire once so a manual re-open sticks.
-  const didAutoCollapse = useRef(false);
-  useEffect(() => {
-    if (autoCollapse && !didAutoCollapse.current) {
-      didAutoCollapse.current = true;
-      setIsOpen(false);
-    }
-  }, [autoCollapse]);
-
-  // A run that streams here is timed; a saved run has no duration.
-  const [startedAt] = useState<number | undefined>(() =>
-    isRunning ? Date.now() : undefined
-  );
-  const [durationSeconds, setDurationSeconds] = useState(0);
-  useEffect(() => {
-    if (!isRunning && startedAt !== undefined) {
-      setDurationSeconds(
-        Math.max(1, Math.round((Date.now() - startedAt) / 1000))
-      );
-    }
-  }, [isRunning, startedAt]);
-
-  // The end row folds with the steps, so it does not depend on `isOpen`.
-  const showEndRow = !isRunning;
-
   return (
-    <TimelineRoot>
-      <RunHeaderRow
-        interactive
-        tinted={isRunning || isOpen}
-        roundedBottom={!isOpen}
-      >
-        {isRunning ? (
-          <StreamingHeader
-            headerText={t("working.label")}
-            collapsible
-            isExpanded={isOpen}
-            onToggle={toggle}
-            streamingStartTime={startedAt}
-          />
-        ) : isStopped ? (
-          <StoppedHeader
-            totalSteps={entries.length}
-            collapsible
-            isExpanded={isOpen}
-            onToggle={toggle}
-          />
-        ) : (
-          <CompletedHeader
-            totalSteps={entries.length}
-            collapsible
-            isExpanded={isOpen}
-            onToggle={toggle}
-            processingDurationSeconds={durationSeconds}
-          />
-        )}
-      </RunHeaderRow>
-      <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
-        <Collapsible.Content>
-          <TimelineSteps
-            groups={groups}
-            renderEntry={(entry, position) => (
-              <CraftTimelineStep
-                entry={entry}
-                position={{
-                  ...position,
-                  isLast: position.isLast && !showEndRow,
-                }}
-                defaultExpanded={
-                  entries.length === 1 && entry.status === "error"
-                }
-              />
-            )}
-          />
-          {showEndRow && (
-            <StepContainer
-              stepIcon={isStopped ? STEP_ICONS.stopped : STEP_ICONS.done}
-              header={tTimeline(
-                isStopped ? "stoppedStep.header" : "doneStep.header"
-              )}
-              isLastStep
-              isFirstStep={false}
-            >
-              {null}
-            </StepContainer>
-          )}
-        </Collapsible.Content>
-      </Collapsible.Root>
-    </TimelineRoot>
+    <RunCard
+      steps={entries}
+      workingText={t("working.label")}
+      autoCollapse={autoCollapse}
+      isActive={isActive || entries.some((e) => e.status === "streaming")}
+      renderStep={(entry, position) => (
+        <CraftTimelineStep
+          entry={entry}
+          position={position}
+          defaultExpanded={entries.length === 1 && entry.status === "error"}
+        />
+      )}
+    />
   );
 }

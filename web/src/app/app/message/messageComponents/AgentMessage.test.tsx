@@ -114,13 +114,13 @@ function seedSessionAwaitingAnswer() {
   store.setCurrentSession(SESSION_ID);
 }
 
-// A run that works or has one step is already open; only a folded run has
-// the expand button.
+// Opens the run card when it is folded. Its fold button is named by the
+// step count.
 async function openRun() {
   await act(async () => {});
-  const expand = screen.queryByRole("button", { name: "Expand timeline" });
-  if (expand) {
-    await act(async () => expand.click());
+  const fold = screen.queryByRole("button", { name: /^\d+ steps?$/ });
+  if (fold?.getAttribute("aria-expanded") === "false") {
+    await act(async () => fold.click());
   }
 }
 
@@ -1355,9 +1355,7 @@ test("a tool step after an accepted user message follows that message", async ()
     const bubble = await screen.findByText("Use the latest report");
     // Each search gets its own timeline, on its side of the user message.
     expect(screen.queryByText("2 steps")).not.toBeInTheDocument();
-    const timelines = screen.getAllByRole("button", {
-      name: "Toggle timeline",
-    });
+    const timelines = screen.getAllByRole("button", { name: "1 step" });
     expect(timelines).toHaveLength(2);
     expect(
       timelines[0]!.compareDocumentPosition(bubble) &

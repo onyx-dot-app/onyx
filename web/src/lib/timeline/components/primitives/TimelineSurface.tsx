@@ -38,15 +38,6 @@ export function TimelineSurface({
     (background === "tint" || background === "error") && isHover
       ? "bg-background-tint-02"
       : "";
-  // The same colour as a variable, so a step icon can mask the rail line.
-  const surfaceColor = hoverBackground
-    ? "var(--background-tint-02)"
-    : background === "tint"
-      ? "var(--background-tint-00)"
-      : background === "error"
-        ? "var(--status-error-00)"
-        : "transparent";
-
   return (
     <div
       className={cn(
@@ -57,7 +48,6 @@ export function TimelineSurface({
         roundedBottom && "rounded-b-12",
         className
       )}
-      style={{ "--timeline-surface": surfaceColor } as React.CSSProperties}
     >
       {children}
     </div>

@@ -16,6 +16,11 @@
   @apply ps-8 pe-2 pb-2;
 }
 
+/* Without the outer padding, the body keeps its place under the title. */
+.opal-log[data-opal-log-padding="0"] .opal-log-body {
+  @apply ps-7 pe-1 pb-1;
+}
+
 .opal-log .opal-log-icon {
   @apply shrink-0 text-text-03;
 }

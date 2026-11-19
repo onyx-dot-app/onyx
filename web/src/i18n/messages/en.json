@@ -12412,9 +12412,6 @@
             "status": "Generating plan"
           }
         },
-        "doneStep": {
-          "header": "Done"
-        },
         "expandButton": {
           "ariaLabel": "Expand timeline"
         },
@@ -12649,9 +12646,6 @@
         },
         "stepsButton": {
           "label": "{count, plural, one {# step} other {# steps}}"
-        },
-        "stoppedStep": {
-          "header": "Stopped"
         },
         "thoughtDuration": {
           "label": "Thought for {duration}"
