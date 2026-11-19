@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { SWRConfig } from "swr";
 import {
   nextPollDelay,
+  settledSuggestions,
   useSuggestedQuestions,
 } from "@/lib/suggestedQuestions/hooks";
 import type { PersonSuggestions } from "@/lib/suggestedQuestions/types";
@@ -150,5 +151,21 @@ describe("checking again while questions are being prepared", () => {
   test("does not check before the chat open reached the server", () => {
     expect(nextPollDelay(preparing, undefined, opened)).toBe(0);
     expect(nextPollDelay(undefined, opened, opened)).toBe(0);
+  });
+
+  test("a preparing state still cached after the window shows as ready", () => {
+    const withQuestion: PersonSuggestions = {
+      questions: [{ id: "q1", message: "Late question?", private: false }],
+      state: "preparing",
+    };
+
+    expect(settledSuggestions(preparing, opened, opened + 119_000)).toBe(
+      preparing
+    );
+    expect(settledSuggestions(withQuestion, opened, opened + 121_000)).toEqual({
+      ...withQuestion,
+      state: "ready",
+    });
+    expect(settledSuggestions(ready, opened, opened + 121_000)).toBe(ready);
   });
 });
