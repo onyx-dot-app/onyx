@@ -4,10 +4,6 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import JsonValue
 
-from onyx.coding_agent.tool_definitions import (
-    BASH_TOOL_DESCRIPTION,
-    GENERATE_ANSWER_TOOL_DESCRIPTION,
-)
 from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_DESCRIPTION,
     GENERATE_REPORT_TOOL_DESCRIPTION,
@@ -15,10 +11,6 @@ from onyx.deep_research.tool_definitions import (
 )
 from onyx.llm.models import ToolDefinition
 from onyx.tools.interface import Tool
-from onyx.tools.tool_implementations.bash.bash_tool import BashTool
-from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
-    CodingAgentTool,
-)
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
@@ -68,8 +60,6 @@ def _check_closed_objects(schema: JsonValue) -> None:
         *[
             _builtin_definition(tool_class)
             for tool_class in (
-                BashTool,
-                CodingAgentTool,
                 FileReaderTool,
                 ImageGenerationTool,
                 KnowledgeGraphTool,
@@ -80,8 +70,6 @@ def _check_closed_objects(schema: JsonValue) -> None:
                 WebSearchTool,
             )
         ],
-        BASH_TOOL_DESCRIPTION,
-        GENERATE_ANSWER_TOOL_DESCRIPTION,
         GENERATE_PLAN_TOOL_DESCRIPTION,
         GENERATE_REPORT_TOOL_DESCRIPTION,
         RESEARCH_AGENT_TOOL_DESCRIPTION,
@@ -181,31 +169,6 @@ _STRINGS: dict[str, JsonValue] = {"type": "array", "items": _STRING}
                     "description": "One or more queries to look up on the web. Must "
                     "contain only printable characters",
                 }
-            ),
-        ),
-        (
-            BashTool,
-            _strict_parameters(
-                cmd={
-                    **_STRING,
-                    "description": "Bash command to execute in the session.",
-                }
-            ),
-        ),
-        (
-            CodingAgentTool,
-            _strict_parameters(
-                query={
-                    **_STRING,
-                    "description": "The user's question or task to perform against "
-                    "the repository.",
-                },
-                github_repo={
-                    **_STRING,
-                    "description": "GitHub repository URL or 'owner/repo' identifier "
-                    "(e.g. 'https://github.com/onyx-dot-app/onyx' or "
-                    "'onyx-dot-app/onyx').",
-                },
             ),
         ),
         (

@@ -73,10 +73,6 @@ describe("findRenderer", () => {
         "research agent",
         makePacket({ type: "research_agent_start", research_task: "dig" }),
       ],
-      [
-        "coding agent",
-        makePacket({ type: "coding_agent_start", query: "fix", repo: null }),
-      ],
     ];
 
     it.each(toolStarts)(

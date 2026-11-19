@@ -44,7 +44,7 @@ def fetch_github_skill_bundles(
     selected_paths: set[str] | None = None,
 ) -> tuple[GitHubRepository, list[GitHubSkillBundle]]:
     """Fetch one immutable repository revision and discover its skills."""
-    github_source = parse_github_source(source, allow_tree_path=True)
+    github_source = parse_github_source(source)
     resolved_source = resolve_github_revision(
         github_source,
         authorization_header,

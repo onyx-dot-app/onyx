@@ -55,7 +55,6 @@ test("a later report start replaces the text of an earlier one", () => {
     <ResearchAgentRenderer
       packets={packets}
       nestedCalls={[]}
-      streamPackets={packets}
       state={chatState}
       onComplete={() => {}}
       renderType={RenderType.FULL}

@@ -2,7 +2,7 @@
 
 > The shared machinery for every tool the chat model can call: the `Tool`
 > interface, the built-in tool registry, per-model tool construction and gating,
-> and the research and coding sub-agents. Concrete tools live in their own
+> and research subagents. Concrete tools live in their own
 > components; this one owns the rules that they all depend on.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
@@ -21,10 +21,8 @@ The interface is `tools/interface.py:Tool`, which returns
   it to an agent. Keep [[#built-in-needs-constructor-branch]],
   [[#is-available-cheap-and-silent]], [[#run-errors-become-results]],
   [[#renderer-dispatches-by-name]], [[#durable-details-registered]],
-  [[#parallel-by-default]], [[#tool-name-is-lookup-key]] and
-  [[#child-wait-cleanup]]. Checkpoint resume is not wired ([[agent-runtime]]).
-  When it is, a change to `tool_definition()` stops saved checkpoints from
-  resuming ([[agent-runtime#restored-tools-must-match]]). The concrete tools are
+  [[#parallel-by-default]] and [[#tool-name-is-lookup-key]]. Changing a tool
+  definition can prevent a saved checkpoint from resuming ([[agent-runtime#restored-tools-must-match]]). The concrete tools are
   [[internal-search]], [[web-search]], [[image-generation]],
   [[code-execution]], [[mcp-and-custom-tools]], [[chat-preferences]]
   (`MemoryTool`) and [[file-store-and-user-files]] (`read_file`).
@@ -36,9 +34,7 @@ The interface is `tools/interface.py:Tool`, which returns
   `skills_list` and `skills_read` in its research phase, and gets the skills
   catalog ([[skills]]). It passes the tools to each
   `deep_research/research_agent.py:ResearchAgent` child, which binds them with
-  its own `ToolContext`. `coding_agent/agent.py:CodingAgent` calls `BashTool.run` from its own
-  `AgentTool`, so `Tool.run` error handling applies but no construction gate
-  does ([[code-execution#errors-are-results]]).
+  its own `ToolContext`.
 - **[[citations]]** gets a block of citation numbers per search-like call.
 
 ---
@@ -46,8 +42,7 @@ The interface is `tools/interface.py:Tool`, which returns
 ## Scope
 
 This component owns the `Tool` interface and `ToolContext`, tool construction
-and its gates, the built-in tool registry, the research-agent and coding-agent
-features, and the `CodingAgentTool` wrapper.
+and its gates, the built-in tool registry, and the research-agent features.
 
 Neighbours own the rest:
 - Each concrete tool belongs to the component listed in Callers.
@@ -207,7 +202,7 @@ strict mode requires every object to be closed. Parsing ignores unknown argument
 sets `extra="forbid"`, because not every provider enforces the schema. A
 validation error names the argument and returns to the model as a tool error.
 The skill, subagent, memory, file reader, knowledge graph, internal search, web
-search, open URL, Python, bash, image generation, coding agent, `execute_code`
+search, open URL, Python, image generation, `execute_code`
 and `wait_code` tools use it.
 
 **Default subagent controls.** `ChatAgent` adds the tools in
@@ -217,8 +212,7 @@ delivers follow-up responses, the request sets `accepts_follow_ups`, as the web 
 the turn has one model.
 Mobile, the CLI and other API clients omit the flag. Incognito chats and one-shot callers
 (`chat/process_message.py:run_chat_turn`, used by Slack, evals and the non-streaming API)
-omit these controls. In incognito, chat also excludes the coding agent from tool configuration
-(`chat/execution.py:create_chat_agent`), and preparation rejects deep research before it saves
+omit these controls. Preparation also rejects deep research in incognito before it saves
 the user message (`chat/process_message.py:prepare_chat_turn`). These controls have no
 catalog rows or persona switches. `chat/agent.py:chat_subagent_factory` builds children
 with `build_chat_agent`, the same builder that restores saved children.
@@ -273,18 +267,10 @@ answer as `{"answers": {"<id>": {"answers": ["<label>", "user_note: <text>"]}}}`
 or the text that the user typed, after the query hook and with nothing added
 (`chat/tool_questions.py:question_answer`).
 
-**Sub-agents.** `DeepResearchAgent`, `ResearchAgent` and `CodingAgent` are
-runtime agents. `DeepResearchAgent` and `CodingAgentTool` spawn a child run and
-return `ChildRunWait`; the runtime calls `result_from_children` when the child
-ends ([[#child-wait-cleanup]]). A step count bounds the coding agent, not time:
-`CodingAgentTool` gives it `MAX_CODING_AGENT_CYCLES + 1` steps.
-`coding_agent/agent.py:CodingAgent._prepare_step` forces a final answer step
-with tool execution disabled on the last step, after a `generate_answer` call, or after a step
-with no tool calls. Definitions remain advertised on that step
-([[llm-providers#none-tool-choice-keeps-tools]]), and the runtime handles any call
-([[core-chat-loop#stopping-tools]]).
-Their control functions, such as `generate_report` and
-`generate_answer`, are plain `AgentTool` objects with no `Tool` row, and
+**Subagents.** `DeepResearchAgent` spawns a `ResearchAgent` child and returns
+`ChildRunWait`. The runtime calls `result_from_children` when the child ends.
+Research control functions, such as `generate_report`,
+are plain `AgentTool` objects with no `Tool` row, and
 `chat/renderer.py:HIDDEN_TOOLS` keeps them out of the stream.
 
 ---
@@ -441,14 +427,6 @@ Their control functions, such as `generate_report` and
     return a `ToolResult`: a `ChildRunWait` fails the batch with `ValueError`.
     Search, web search and `open_url` merge. A tool whose calls must stay
     separate leaves `merge_list_argument` unset.
-13. `child-wait-cleanup` **A tool that returns `ChildRunWait` releases its
-    resources through the child's completion.** `_run` returns before the
-    child ends, so register cleanup with
-    `invocation.agents.add_completion_cleanup(run_id, cleanup)` during `_run`.
-    It runs on completion, cancellation or release. If `_run` fails before it
-    returns the wait, clean up in `_run`. `CodingAgentTool._run` does both for
-    its sandbox ([[code-execution]]). `result_from_children` must not depend on
-    state held from `_run`.
 
 ---
 
@@ -497,8 +475,7 @@ Their control functions, such as `generate_report` and
   resolution, `Tool.enabled` and the `Tool` table helpers.
 - [[plugins]]: Default Chat tool selection and per-user preferences.
 - [[chat-persistence]]: `StoredToolResult` saves each result and its details.
-- [[code-execution]]: the coding agent runs `BashTool` in a Code Interpreter
-  session.
+- [[code-execution]]: Python, code mode, and sandbox tools.
 - [[observability]]: `Tool.run` opens one `function_span` per call.
 
 ---

@@ -189,10 +189,8 @@ def test_finalized_tool_ids_serialize_in_stable_order() -> None:
     assert RunProgress.model_validate_json(progress.model_dump_json()) == progress
 
 
-@pytest.mark.parametrize(
-    "mode", [PresentationMode.CODING_THINKING, PresentationMode.CODING_ANSWER]
-)
-def test_coding_rendering_survives_checkpoint_round_trip(
+@pytest.mark.parametrize("mode", [PresentationMode.PLAN, PresentationMode.REPORT])
+def test_message_rendering_survives_checkpoint_round_trip(
     mode: PresentationMode,
 ) -> None:
     captured = checkpoint()

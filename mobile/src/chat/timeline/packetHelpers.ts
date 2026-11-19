@@ -16,12 +16,11 @@ export const COLLAPSED_STREAMING_PACKET_TYPES = new Set<PacketType>([
   PacketType.PYTHON_TOOL_START,
   PacketType.CUSTOM_TOOL_START,
   PacketType.RESEARCH_AGENT_START,
-  PacketType.CODING_AGENT_START,
   PacketType.REASONING_START,
   PacketType.DEEP_RESEARCH_PLAN_START,
 ]);
 
-// A packet from a tool call nested under a parent tool (code mode, research agent, coding agent).
+// A packet from a tool call nested under a parent tool (code mode, research agent).
 // Nested packets share the parent's group key and set sub_turn_index.
 export const isNestedPacket = (packet: Packet): boolean =>
   packet.placement.sub_turn_index != null;
@@ -87,16 +86,6 @@ export function nextCodeModeProgram(
 // the packets of nested calls.
 export const isResearchAgentPackets = (packets: Packet[]): boolean =>
   packets.some((p) => p.obj.type === PacketType.RESEARCH_AGENT_START);
-
-// Parent-level packet types that identify a coding agent group. The agent's bash calls and
-// thinking stream as nested sections of the same group.
-export const CODING_AGENT_PACKET_TYPES = new Set<PacketType>([
-  PacketType.CODING_AGENT_START,
-  PacketType.CODING_AGENT_FINAL,
-]);
-
-export const isCodingAgentPackets = (packets: Packet[]): boolean =>
-  packets.some((p) => CODING_AGENT_PACKET_TYPES.has(p.obj.type as PacketType));
 
 // Parent-level packets that identify a code mode group: the streamed program (argument deltas),
 // its start, and its output deltas.
@@ -185,10 +174,6 @@ export const stepHasCollapsedStreamingContent = (
     packetTypes.has(PacketType.INTERMEDIATE_REPORT_DELTA) ||
     packetTypes.has(PacketType.INTERMEDIATE_REPORT_CITED_DOCS)
   ) {
-    return true;
-  }
-
-  if (isCodingAgentPackets(packets)) {
     return true;
   }
 

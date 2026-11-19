@@ -471,19 +471,6 @@ class LlmPythonExecutionResult(BaseModel):
     staging_notice: str | None = None
 
 
-class BashArguments(BaseModel):
-    cmd: str = Field(description="Bash command to execute in the session.")
-
-
-class LlmBashExecutionResult(BaseModel):
-    type: Literal["bash_execution"] = "bash_execution"
-    stdout: str
-    stderr: str
-    exit_code: int | None
-    timed_out: bool
-    error: str | None = None
-
-
 class SearchResult(BaseModel):
     """One document of a search-like tool result, as the model and code mode
     programs read it."""

@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "커넥터 추가"
       },
-      "codingAgentIncognito": {
-        "tooltip": "시크릿 모드에서는 코딩 에이전트를 사용할 수 없습니다"
-      },
       "configure": {
         "tooltip": "구성"
       },
@@ -266,9 +263,6 @@
       },
       "addMemory": {
         "label": "메모리에 추가"
-      },
-      "codingAgent": {
-        "label": "코딩 에이전트"
       }
     },
     "toolsPopover": {
@@ -323,9 +317,6 @@
       "tooltips": {
         "askAdminSuffix": {
           "text": "관리자에게 구성을 요청하세요."
-        },
-        "codingAgent": {
-          "description": "GitHub 저장소를 조사하고 코드에 관한 질문에 답합니다."
         },
         "configureSuffix": {
           "text": "활성화하려면 설정 톱니바퀴를 누르세요."
@@ -1506,10 +1497,6 @@
         "codeInterpreter": {
           "description": "코드를 생성하고 실행합니다.",
           "title": "코드 인터프리터"
-        },
-        "codingAgent": {
-          "description": "GitHub 저장소를 조사하고 코드에 대한 질문에 답변합니다.",
-          "title": "코딩 에이전트"
         },
         "description": "채팅에서 사용할 수 있는 도구와 기능입니다. 에이전트에는 적용되지 않습니다.",
         "pluginsNote": "MCP 서버와 OpenAPI 앱은 [연동]({url})에서 관리하세요.",
@@ -10747,10 +10734,6 @@
           "description": "코드를 생성하고 실행합니다.",
           "title": "코드 인터프리터"
         },
-        "codingAgent": {
-          "description": "GitHub 저장소를 조사하고 코드에 관한 질문에 답합니다.",
-          "title": "코딩 에이전트"
-        },
         "description": "이 에이전트가 사용할 수 있는 도구와 기능입니다.",
         "imageGeneration": {
           "description": "AI 기반 도구로 이미지를 생성하고 편집합니다.",
@@ -12350,41 +12333,6 @@
         }
       },
       "timeline": {
-        "codingAgent": {
-          "bashExit": {
-            "header": "Bash · 종료 코드 {exitCode}"
-          },
-          "bashFailed": {
-            "header": "Bash · 실패"
-          },
-          "bashRequest": {
-            "label": "요청"
-          },
-          "bashResponse": {
-            "label": "응답"
-          },
-          "bashRunning": {
-            "header": "Bash · 실행 중…"
-          },
-          "bashTimedOut": {
-            "header": "Bash · 시간 초과"
-          },
-          "noOutput": {
-            "text": "출력 없음"
-          },
-          "response": {
-            "header": "응답"
-          },
-          "task": {
-            "header": "코딩 작업"
-          },
-          "taskWithRepo": {
-            "text": "{query}\n\n리포지토리: {repo}"
-          },
-          "thinking": {
-            "header": "생각 중"
-          }
-        },
         "collapseButton": {
           "ariaLabel": "타임라인 접기"
         },
@@ -12647,7 +12595,6 @@
         },
         "toolNames": {
           "codeInterpreter": "코드 인터프리터",
-          "codingAgent": "코딩 에이전트",
           "customTool": "사용자 지정 도구",
           "generateImage": "이미지 생성",
           "generatePlan": "계획 생성",

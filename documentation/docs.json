@@ -39,8 +39,7 @@
                   "overview/core_features/craft_apps",
                   "overview/core_features/craft_scheduled_tasks"
                 ]
-              },
-              "overview/core_features/coding_agent"
+              }
             ]
           },
           {
@@ -364,8 +363,7 @@
                   "admins/actions/web_search",
                   "admins/actions/code_interpreter",
                   "admins/actions/image_generation",
-                  "admins/actions/voice_mode",
-                  "admins/actions/coding_agent"
+                  "admins/actions/voice_mode"
                 ]
               },
               {

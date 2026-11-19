@@ -163,7 +163,6 @@ def test_prepared_tool_selection_survives_json_handoff_without_repreparation() -
 def test_handoff_release_failure_settles_waiters_after_saving() -> None:
     saved: list[ExecutionCheckpoint] = []
     released: list[str] = []
-    finished = threading.Event()
     failure = RuntimeError("Ownership release failed")
 
     def release(run_id: str) -> None:
@@ -186,13 +185,12 @@ def test_handoff_release_failure_settles_waiters_after_saving() -> None:
     try:
         assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(3)
-        run.add_done_callback(finished.set)
         with pytest.raises(RuntimeError) as raised:
             run.handoff(save=saved.append)
         assert raised.value is failure
         assert released == [run.id]
         assert len(saved) == 1 and saved[0].run_state.status == RunStatus.SUSPENDED
-        assert finished.is_set() and run.is_done
+        assert run.is_done
         assert coordinator.newest_run(agent.id) is None
         with pytest.raises(RuntimeError) as result_error:
             run.result(0)

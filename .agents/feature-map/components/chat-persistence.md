@@ -141,7 +141,7 @@ those pointers from the root gives the active conversation
 (`db/chat.py:set_as_latest_chat_message`). A multi-model pick sets
 `preferred_response_id` and moves the same pointer (`db/chat.py:set_preferred_response`).
 
-**Child sessions.** When a research, coding or background sub-agent runs in a
+**Child sessions.** When a research or background subagent runs in a
 content-persisting chat, `reserve_child_response__no_commit` creates a
 `ChatSession` with `spawned_by_message_id` set to the parent response. It
 copies the root's user, agent, Slack flag and record mode. A child session has
@@ -326,7 +326,7 @@ Content-persisting sessions retain PostgreSQL evidence for replay and citations.
 `USAGE_ONLY` sessions store no conversation content there. Their temporary history
 can lose evidence before model compaction under the retention limits below.
 
-**Incognito.** Chat does not start subagents, deep research, or coding agents in
+**Incognito.** Chat does not start subagents or deep research in
 incognito. Temporary history retains root messages and response receipts for
 idempotent saves. It does not index child conversations. A session pins `incognito_record_mode` when it is created
 (`chat/incognito.py:resolve_incognito_record_mode`, read past the settings

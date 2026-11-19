@@ -63,7 +63,6 @@ from onyx.agents.models import (
 )
 from onyx.auth.schemas import UserRole
 from onyx.chat.mention_models import Mention, PickedSkillMessage, RecordedMention
-from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
     DEFAULT_BOOST,
@@ -172,7 +171,6 @@ from onyx.skills.models import SkillOmission
 from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
-    LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
     ToolExecutionError,
@@ -4036,10 +4034,8 @@ class ChatInput(Base):
 SavedToolResultDetails = Annotated[
     SearchDocsResponse
     | ResearchAgentCallResult
-    | CodingAgentCallResult
     | CustomToolCallSummary
     | FileReadResult
-    | LlmBashExecutionResult
     | LlmPythonExecutionResult
     | MemoryUpdated
     | ToolExecutionError

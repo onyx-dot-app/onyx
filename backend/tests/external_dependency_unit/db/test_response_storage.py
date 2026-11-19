@@ -73,7 +73,6 @@ from onyx.chat.process_message import read_repaired_chat_inbox
 from onyx.chat.response import response_record, response_snapshot
 from onyx.chat.run_store import ChatRunStore
 from onyx.chat.tool_results import tool_result_sources
-from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
 from onyx.db import chat_subagents
@@ -173,7 +172,6 @@ from onyx.server.query_and_chat.session_loading import (
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     CitationInfo,
-    CodingAgentFinal,
     ImageGenerationFinal,
     MemoryToolDelta,
     Packet,
@@ -186,7 +184,6 @@ from onyx.tools.models import (
     CustomToolUserFileSnapshot,
     FileReadResult,
     GeneratedImage,
-    LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryOperation,
     MemoryUpdated,
@@ -194,9 +191,6 @@ from onyx.tools.models import (
     PythonExecutionFile,
     ToolCallInfo,
     ToolExecutionError,
-)
-from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
-    CodingAgentTool,
 )
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -1083,7 +1077,6 @@ def test_thinking_preserves_signed_content_and_final_display_text(
         LlmPythonExecutionResult(
             stdout="hello", stderr="", exit_code=0, timed_out=False, generated_files=[]
         ),
-        LlmBashExecutionResult(stdout="hello", stderr="", exit_code=0, timed_out=False),
         MemoryUpdated(
             memory_text="Prefers tea", operation=MemoryOperation.ADD, memory_id=12
         ),
@@ -1094,7 +1087,6 @@ def test_thinking_preserves_signed_content_and_final_display_text(
             end_char=5,
             total_chars=5,
         ),
-        CodingAgentCallResult(answer="Done"),
         ResearchAgentCallResult(intermediate_report="Report", citation_mapping={}),
         FinalImageGenerationResponse(
             generated_images=[
@@ -2384,7 +2376,7 @@ def test_response_reservation_preserves_model_order_and_active_branch(
 
 
 @pytest.mark.parametrize(
-    "tool_kind", ["python", "coding", "image", "memory", "search", "search_empty"]
+    "tool_kind", ["python", "image", "memory", "search", "search_empty"]
 )
 def test_completed_tool_display_matches_reload_without_duplicate_streamed_output(
     db_session: Session, conversation: ChatSession, tool_record: Tool, tool_kind: str
@@ -2456,7 +2448,7 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
         )
         progress = ToolProgress(details=result.details)
         implementation = SearchTool.__name__
-    elif tool_kind == "memory":
+    else:
         call = ToolCall(
             id="call", name=MemoryTool.NAME, arguments={"memory": "Prefers tea"}
         )
@@ -2466,18 +2458,6 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
         result = ToolResult(content=memory.model_dump_json(), details=memory)
         progress = ToolProgress(details=result.details)
         implementation = MemoryTool.__name__
-    else:
-        call = ToolCall(
-            id="call",
-            name=CodingAgentTool.NAME,
-            arguments={"query": "task", "github_repo": "repo"},
-        )
-        result = ToolResult(
-            content="coding answer",
-            details=CodingAgentCallResult(answer="coding answer"),
-        )
-        progress = ToolProgress(details=CodingAgentCallResult(answer="partial answer"))
-        implementation = CodingAgentTool.__name__
     session = conversation
     tool = tool_record
     tool.name = call.name
@@ -2650,7 +2630,7 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
                 for query in packet.obj.queries
             ] == ["forecast"]
         assert len(row.search_docs) == 1
-    elif tool_kind == "memory":
+    else:
         for packets in (live, saved):
             memories = [
                 packet.obj
@@ -2661,18 +2641,6 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
             assert memories[0].memory_text == "Prefers tea"
             assert memories[0].operation == "add"
             assert memories[0].memory_id == 12
-    else:
-        live_answers = [
-            packet.obj.answer
-            for packet in live
-            if isinstance(packet.obj, CodingAgentFinal)
-        ]
-        saved_answers = [
-            packet.obj.answer
-            for packet in saved
-            if isinstance(packet.obj, CodingAgentFinal)
-        ]
-        assert live_answers[-1] == saved_answers[-1] == "coding answer"
 
 
 def test_new_summary_replaces_previous_summary_on_selected_branch(

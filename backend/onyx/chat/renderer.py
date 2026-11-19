@@ -22,12 +22,6 @@ from onyx.chat.models import (
     ToolApprovalDenial,
 )
 from onyx.chat.response import tool_arguments_for_display
-from onyx.coding_agent.models import CodingAgentCallResult
-from onyx.coding_agent.tool_definitions import (
-    BASH_TOOL_NAME,
-    CODING_AGENT_TOOL_NAME,
-    GENERATE_ANSWER_TOOL_NAME,
-)
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.enums import QuestionAnsweredVia, QuestionOutcome
@@ -64,7 +58,6 @@ from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
     FileReadResult,
-    LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
     PythonExecutionDelta,
@@ -119,7 +112,6 @@ HIDDEN_TOOLS = frozenset(
     {
         GENERATE_PLAN_TOOL_NAME,
         GENERATE_REPORT_TOOL_NAME,
-        GENERATE_ANSWER_TOOL_NAME,
     }
 )
 
@@ -207,23 +199,6 @@ class MessageRenderer:
             return []
         # Tool tabs cannot span an intervening text or reasoning section.
         self._last_tool_placement = None
-        if self.settings.mode == PresentationMode.CODING_THINKING or (
-            thinking and self.settings.mode == PresentationMode.CODING_ANSWER
-        ):
-            if self.parent is None:
-                raise ValueError("Coding output requires a parent tool placement")
-            if thinking:
-                self.reasoning += text
-            else:
-                self.answer += text
-            if self._answer_placement is None:
-                self._answer_placement = self.layout.next_section(self.parent)
-            return [
-                packets.Packet(
-                    placement=self._answer_placement,
-                    obj=packets.CodingAgentThinkingDelta(content=text),
-                )
-            ]
         if thinking:
             self.reasoning += text
             result = []
@@ -243,9 +218,6 @@ class MessageRenderer:
                 )
             )
             return result
-        if self.settings.mode == PresentationMode.CODING_ANSWER:
-            # The parent tool publishes the final answer in CodingAgentFinal.
-            return []
         self.answer += text
         result = []
         if self._answer_placement is None:
@@ -662,10 +634,6 @@ class ToolRenderer:
                     code=_STRING.validate_python(args.get("code", ""))
                 )
             ]
-        elif name == BASH_TOOL_NAME:
-            objects = [
-                packets.BashToolStart(cmd=_STRING.validate_python(args.get("cmd", "")))
-            ]
         elif name == ExecCommandTool.NAME:
             objects = [
                 packets.ExecCommandStart(
@@ -737,13 +705,6 @@ class ToolRenderer:
             objects = [
                 packets.ResearchAgentStart(
                     research_task=_STRING.validate_python(args.get("task", ""))
-                )
-            ]
-        elif name == CODING_AGENT_TOOL_NAME:
-            objects = [
-                packets.CodingAgentStart(
-                    query=_STRING.validate_python(args.get("query", "")),
-                    repo=_STRING.validate_python(args.get("github_repo", "")),
                 )
             ]
         return objects
@@ -850,15 +811,6 @@ class ToolRenderer:
                 )
             )
             self._files.update(file.file_link for file in details.generated_files)
-        elif isinstance(details, LlmBashExecutionResult):
-            objects.append(
-                packets.BashToolDelta(
-                    stdout=details.stdout,
-                    stderr=details.stderr,
-                    exit_code=details.exit_code,
-                    timed_out=details.timed_out,
-                )
-            )
         elif isinstance(details, FinalImageGenerationResponse):
             objects.append(
                 packets.ImageGenerationFinal(
@@ -902,9 +854,6 @@ class ToolRenderer:
                     else None,
                 )
             )
-        elif isinstance(details, CodingAgentCallResult):
-            # Child message events carry thinking; completion carries the final answer.
-            return []
         elif isinstance(details, ResearchAgentCallResult):
             if not self.has_child_output:
                 objects.extend(
@@ -996,13 +945,6 @@ class ToolRenderer:
 
     def _result_packets(self, result: ToolResult | None) -> list[packets.Packet]:
         """The packets of a final result of the call, before its section end."""
-        if result is not None and isinstance(result.details, CodingAgentCallResult):
-            return [
-                packets.Packet(
-                    placement=self.placement,
-                    obj=packets.CodingAgentFinal(answer=result.details.answer),
-                )
-            ]
         if (
             result is not None
             and result.is_error

@@ -18,11 +18,7 @@ import {
 import { MessageTextRenderer } from "@/app/app/message/messageComponents/renderers/MessageTextRenderer";
 import { ImageToolRenderer } from "@/app/app/message/messageComponents/renderers/ImageToolRenderer";
 import { PythonToolRenderer } from "@/lib/timeline/chat/renderers/code/PythonToolRenderer";
-import { CodingAgentRenderer } from "@/lib/timeline/chat/renderers/code/CodingAgentRenderer";
-import {
-  isCodingAgentPackets,
-  NestedCall,
-} from "@/lib/timeline/chat/packetHelpers";
+import { NestedCall } from "@/lib/timeline/chat/packetHelpers";
 import { ReasoningRenderer } from "@/lib/timeline/chat/renderers/reasoning/ReasoningRenderer";
 import CustomToolRenderer from "@/app/app/message/messageComponents/renderers/CustomToolRenderer";
 import { ExecToolRenderer } from "@/lib/timeline/chat/renderers/sandbox/ExecToolRenderer";
@@ -153,9 +149,6 @@ export function findRenderer(
   if (packets.some(isResearchAgentPacket)) {
     return ResearchAgentRenderer;
   }
-  if (isCodingAgentPackets(packets)) {
-    return CodingAgentRenderer;
-  }
   if (packets.some(isWebSearchPacket)) {
     return WebSearchToolRenderer;
   }
@@ -203,7 +196,6 @@ export function findRenderer(
 interface RendererComponentProps {
   packets: Packet[];
   nestedCalls: NestedCall[];
-  streamPackets: Packet[];
   chatState: FullChatState;
   messageNodeId?: number;
   hasTimelineThinking?: boolean;
@@ -223,7 +215,6 @@ function areRendererPropsEqual(
   return (
     prev.packets === next.packets &&
     prev.nestedCalls === next.nestedCalls &&
-    prev.streamPackets === next.streamPackets &&
     prev.stopPacketSeen === next.stopPacketSeen &&
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
@@ -238,7 +229,6 @@ function areRendererPropsEqual(
 export const RendererComponent = memo(function RendererComponent({
   packets,
   nestedCalls,
-  streamPackets,
   chatState,
   messageNodeId,
   hasTimelineThinking,
@@ -259,7 +249,6 @@ export const RendererComponent = memo(function RendererComponent({
     <RendererFn
       packets={packets}
       nestedCalls={nestedCalls}
-      streamPackets={streamPackets}
       state={chatState}
       messageNodeId={messageNodeId}
       hasTimelineThinking={hasTimelineThinking}

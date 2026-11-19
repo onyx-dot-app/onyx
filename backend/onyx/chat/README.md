@@ -283,4 +283,4 @@ fences and new ownership leases cannot safely coordinate overlapping writers.
 
 Stream reconnection replays cached packets. It does not restart computation.
 Only a valid suspended checkpoint, resumed through a runtime caller, restores
-computation. A cleaned-up coding sandbox cannot generally be restored.
+computation.

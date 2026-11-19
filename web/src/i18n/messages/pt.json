@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "Adicionar conectores"
       },
-      "codingAgentIncognito": {
-        "tooltip": "O agente de código não está disponível no modo anônimo"
-      },
       "configure": {
         "tooltip": "Configurar"
       },
@@ -266,9 +263,6 @@
       },
       "addMemory": {
         "label": "Adicionar à memória"
-      },
-      "codingAgent": {
-        "label": "Agente de código"
       }
     },
     "toolsPopover": {
@@ -323,9 +317,6 @@
       "tooltips": {
         "askAdminSuffix": {
           "text": "Peça a um administrador para configurar."
-        },
-        "codingAgent": {
-          "description": "Investigue um repositório do GitHub e responda a perguntas sobre seu código."
         },
         "configureSuffix": {
           "text": "Pressione a engrenagem de configurações para ativar."
@@ -1506,10 +1497,6 @@
         "codeInterpreter": {
           "description": "Gera e executa código.",
           "title": "Interpretador de código"
-        },
-        "codingAgent": {
-          "description": "Investiga um repositório do GitHub e responde a perguntas sobre o código dele.",
-          "title": "Agente de código"
         },
         "description": "Ferramentas e recursos disponíveis para o chat usar. Isso não se aplica aos agentes.",
         "pluginsNote": "Gerencie servidores MCP e aplicativos OpenAPI em [Integrações]({url}).",
@@ -10747,10 +10734,6 @@
           "description": "Gere e execute código.",
           "title": "Interpretador de código"
         },
-        "codingAgent": {
-          "description": "Investigue um repositório do GitHub e responda perguntas sobre seu código.",
-          "title": "Agente de programação"
-        },
         "description": "Ferramentas e capacidades disponíveis para este agente usar.",
         "imageGeneration": {
           "description": "Gere e manipule imagens usando ferramentas com tecnologia de IA.",
@@ -12350,41 +12333,6 @@
         }
       },
       "timeline": {
-        "codingAgent": {
-          "bashExit": {
-            "header": "Bash · saída {exitCode}"
-          },
-          "bashFailed": {
-            "header": "Bash · falhou"
-          },
-          "bashRequest": {
-            "label": "Solicitação"
-          },
-          "bashResponse": {
-            "label": "Resposta"
-          },
-          "bashRunning": {
-            "header": "Bash · em execução…"
-          },
-          "bashTimedOut": {
-            "header": "Bash · tempo esgotado"
-          },
-          "noOutput": {
-            "text": "Sem saída"
-          },
-          "response": {
-            "header": "Resposta"
-          },
-          "task": {
-            "header": "Tarefa de código"
-          },
-          "taskWithRepo": {
-            "text": "{query}\n\nRepositório: {repo}"
-          },
-          "thinking": {
-            "header": "Pensando"
-          }
-        },
         "collapseButton": {
           "ariaLabel": "Recolher a linha do tempo"
         },
@@ -12647,7 +12595,6 @@
         },
         "toolNames": {
           "codeInterpreter": "Interpretador de código",
-          "codingAgent": "Agente de código",
           "customTool": "Ferramenta personalizada",
           "generateImage": "Gerar imagem",
           "generatePlan": "Gerar plano",
