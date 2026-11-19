@@ -14,11 +14,16 @@ from celery import Task, shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.orm import Session
 
+from onyx.access.access import get_censoring_enabled_sources
+from onyx.access.hierarchy_access import get_user_external_group_ids
 from onyx.cache.interface import CacheLockAcquisitionError
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
-from onyx.db.suggested_questions import count_candidate_documents
+from onyx.db.suggested_questions import (
+    count_candidate_documents,
+    get_visible_document_ids,
+)
 from onyx.db.users import fetch_user_by_id
 from onyx.secondary_llm_flows.suggested_questions import (
     build_triage_clients,
@@ -198,7 +203,7 @@ def _run_pool(tenant_id: str, reason: str, requester_id: UUID | None) -> None:
         evict_first: set[str] = set()
         if decision.run and requester_id is not None:
             requester = load_user_record(requester_id, refresh_cache=True)
-            if _has_enough_shared(pool, requester, db_session, started):
+            if _has_enough_shared(pool, requester_id, requester, db_session, started):
                 decision = RunDecision(
                     run=False, reason="the person is no longer short"
                 )
@@ -243,14 +248,28 @@ def _run_pool(tenant_id: str, reason: str, requester_id: UUID | None) -> None:
 
 
 def _has_enough_shared(
-    pool: QuestionPool, record: UserRecord, db_session: Session, now: datetime
+    pool: QuestionPool,
+    requester_id: UUID,
+    record: UserRecord,
+    db_session: Session,
+    now: datetime,
 ) -> bool:
     """Whether the person now has more unused shared questions than the point
     at which they asked for a run, for example because another run filled the
-    shelf. Shared documents are company-wide, so only their existence counts."""
+    shelf. Counted the way the chat page counts them: only questions about
+    documents the person may open now. A person who is gone needs no run."""
+    user = fetch_user_by_id(db_session, requester_id)
+    if user is None or not user.is_active:
+        return True
     unused = [q for q in pool.questions if q.id not in record.used]
-    live = get_live_document_ids(db_session, [q.document_id for q in unused])
-    return count_usable_questions(unused, live, now) > SQ_SHARED_REFRESH_AT
+    visible = get_visible_document_ids(
+        db_session,
+        user,
+        get_user_external_group_ids(db_session, user),
+        [q.document_id for q in unused],
+        get_censoring_enabled_sources(),
+    )
+    return count_usable_questions(unused, visible, now) > SQ_SHARED_REFRESH_AT
 
 
 def _run_topup(tenant_id: str, user_id: UUID, attempt: dict[str, bool]) -> None:
