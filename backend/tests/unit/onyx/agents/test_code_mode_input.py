@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Mapping
+from typing import Any
 
 import pydantic_monty
 import pytest
@@ -594,6 +595,52 @@ def test_a_background_cell_continues_once_its_request_has_an_answer() -> None:
         "Cell 1 completed before the run paused; its output and result are in "
         "its earlier result."
     )
+
+
+def test_an_answer_before_a_background_program_parks_still_runs_its_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The user approves while another call of the background program runs,
+    so the program has not parked yet. Once it parks, the approved call runs
+    in the same step."""
+    offers: list[int] = []
+    continue_open = CodeCells.continue_open
+
+    def counted(self: CodeCells, *args: Any, **kwargs: Any) -> list[str]:
+        taken = continue_open(self, *args, **kwargs)
+        offers.append(len(taken))
+        return taken
+
+    monkeypatch.setattr(CodeCells, "continue_open", counted)
+    agents = Agents(
+        reply=_one_call_per_step(
+            _execute(
+                "background",
+                "yield_control()\n"
+                'a, b = await asyncio.gather(tools.wait(value="a"), tools.send(value="bg"))\n'
+                'print("sent", a, b)',
+            ),
+            _execute("program", PROGRAM),
+        )
+    )
+    agents.gate = threading.Event()
+    run = agents.agent().start(max_steps=5, messages=[UserMessage(content="Send")])
+    try:
+        until(lambda: "program" in _pending_calls(run))
+        run.submit(_answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID))
+        # Offered before the park, so the program took nothing.
+        until(lambda: offers == [0])
+        agents.gate.set()
+        saved = _suspended(run)
+
+        assert agents.sent == ["bg"]
+        assert saved.progress is not None
+        assert saved.progress.step_index == 1
+        assert list(saved.progress.pending_tool_calls) == ["program"]
+    finally:
+        agents.gate.set()
+        run.cancel()
+        assert run.wait_for_idle(10)
 
 
 def test_a_program_too_large_to_park_continues_without_the_call(

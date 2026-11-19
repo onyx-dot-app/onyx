@@ -335,8 +335,7 @@ class AgentTool:
         # requests have answers, such as a background program's, with the
         # answers of the requests that `invocation`'s call opened. Returns
         # the IDs of the requests it took; the run ends those. The others
-        # stay open, and the run offers them again when the call's answered
-        # requests change.
+        # stay open, and the run offers them again later.
         self.continue_open_input = continue_open_input
         self.execution_mode = execution_mode
         self.sequence_group = sequence_group

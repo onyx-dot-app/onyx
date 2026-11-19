@@ -251,7 +251,7 @@ The continuation returns a result, or another `NestedInputWait`.
 A tool that stops waiting, for example because its program ended, ends the request with `NestedCallGate.withdraw`.
 A request that no `NestedInputWait` holds stays open: the run saves it in `RunProgress.open_inputs`, also while it suspends.
 Its answer goes to `AgentTool.continue_open_input` of the tool that made the call, such as for a program that waits in the background.
-The tool returns the requests that it took; the run ends those, and offers the others again when the call's answered requests change.
+The tool returns the requests that it took; the run ends those, and offers the others again later.
 Open requests end with the run.
 A hook that raises fails the run, as for a direct call: `decide` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
 A code mode program stops at the failure; the observation that reports its end raises it.
