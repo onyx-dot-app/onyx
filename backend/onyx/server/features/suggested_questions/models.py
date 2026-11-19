@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk
@@ -41,6 +41,42 @@ class TriagedChunk(BaseModel):
     topic: UseCase | None
     # Probability that it states a number, date, name or short list.
     has_fact: float
+
+
+class WrittenQuestion(BaseModel):
+    """One question as the writing call returns it, before any check."""
+
+    # 1-based number of the passage it was written from.
+    passage: int
+    question: str
+    # None fits every use case: "any", a missing value, or a value the model
+    # made up. A bad value never fails the whole output.
+    best_for: UseCase | None = None
+
+    @field_validator("best_for", mode="before")
+    @classmethod
+    def unknown_use_case_fits_everyone(cls, value: object) -> UseCase | None:
+        try:
+            use_case = UseCase(str(value).strip().lower())
+        except ValueError:
+            return None
+        return None if use_case == UseCase.OTHER else use_case
+
+
+class WritingOutput(BaseModel):
+    """The JSON object the writing call returns."""
+
+    questions: list[WrittenQuestion]
+
+
+class DraftQuestion(BaseModel):
+    """A question the writing call wrote, before the search test."""
+
+    text: str
+    # The chunk it was written from; its document is the one the search test
+    # must find.
+    chunk: InferenceChunk
+    best_for: UseCase | None
 
 
 class PoolQuestion(BaseModel):
