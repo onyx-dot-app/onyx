@@ -190,8 +190,10 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
    processor must mask and must drop incognito traces.** Braintrust masks
    through `tracing/dynamic_processor.py:_build_braintrust_processor`, which
    calls `braintrust.set_masking_function`. Langfuse masks in
-   `tracing/langfuse_tracing_processor.py:LangfuseTracingProcessor._mask_if_enabled`,
-   on by default. At trace start each processor calls
+   `tracing/langfuse_tracing_processor.py:LangfuseTracingProcessor._bound_and_mask`,
+   always. Both use `tracing/masking.py:bound_trace_data`, which masks each
+   whole string before it cuts it to `MASKING_LENGTH`. At trace start each
+   processor calls
    `tracing/incognito.py:suppresses_external_traces`. When it is true, the
    processor drops the whole trace, spans included. Only a `USAGE_ONLY`
    incognito turn makes it true. A new destination must do both.
