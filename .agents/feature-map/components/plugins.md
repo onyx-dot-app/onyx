@@ -16,9 +16,10 @@ Group or user restriction needs EE.
 - **An admin** opens the Agents & Plugins sidebar section. Admin >
   Integrations (`/admin/integrations`) lists the MCP servers and apps from
   `GET /admin/integrations`, with Name, Type, Sign-in, Access and Status, a
-  kind filter, search and "Needs setup". "Add" asks for the kind (MCP server,
-  OpenAPI app, app from a preset, custom app; the last two only with Craft),
-  then posts the kind's form to `POST /admin/integrations`. Only a global
+  type filter, search and "Needs setup". "Add" opens `/admin/integrations/new`
+  (`/app/customize/integrations/new` from Customize): MCP Server, OpenAPI App
+  or App (only with Craft; Start From is a preset or Custom app), then posts
+  to `POST /admin/integrations`. Only a global
   action manager sees "For the organization"; everyone else adds "For me".
   Admin > Plugins (`/admin/plugins`) lists the plugins that hold integrations,
   built from the `plugins` refs of that list
@@ -40,8 +41,8 @@ Group or user restriction needs EE.
   If sign-in fails or is cancelled, the tools stay off.
 - **A member** opens Customize (`/app/customize`, sidebar "Customize"; `/app/plugins`,
   `/app/plugins/[id]` and `/craft/v1/plugins` redirect here with their query in
-  `web/next.config.js`). It has three path tabs: Plugins (`/app/customize/plugins`,
-  first), Skills and Integrations. Plugins lists each plugin of
+  `web/next.config.js`). It has three path tabs: Skills (first, and where
+  `/app/customize` opens), Integrations and Plugins (`/app/customize/plugins`). Plugins lists each plugin of
   `lib/plugins/directory.ts:memberPluginEntries` in the groups Created by you
   (the user's own, published or not), From your organization and Shared with you
   (`lib/customize/plugins.ts:groupPlugins`), with its skill and integration
