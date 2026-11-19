@@ -14302,6 +14302,11 @@
         "label": "Modèles recommandés uniquement"
       }
     },
+    "messageList": {
+      "turnFailed": {
+        "message": "Le tour a échoué."
+      }
+    },
     "onboarding": {
       "livingMap": {
         "examplePrompts": {

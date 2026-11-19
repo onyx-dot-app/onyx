@@ -14302,6 +14302,11 @@
         "label": "النماذج الموصى بها فقط"
       }
     },
+    "messageList": {
+      "turnFailed": {
+        "message": "فشل الدور."
+      }
+    },
     "onboarding": {
       "livingMap": {
         "examplePrompts": {
