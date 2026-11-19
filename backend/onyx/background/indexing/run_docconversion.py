@@ -144,6 +144,9 @@ def _build_context(
                 tenant_id=tenant_id,
             ),
             should_stop=lambda: bool(redis_connector.stop.fenced),
+            # Many conversion threads share the budget: their calls wait after
+            # listing and permission sync.
+            bulk_source_api_calls=True,
         )
         # The same rules as docfetching, which makes these choices for the
         # documents it fetches itself.
