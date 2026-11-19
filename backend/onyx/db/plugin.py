@@ -976,10 +976,10 @@ def check_access_change(
     is_global_manager = actor is not None and has_global_permission(
         actor, manage_permission
     )
-    subject, manager = (
-        ("integration", "action manager")
+    subject, manager, a_manager = (
+        ("integration", "action manager", "an action manager")
         if manage_permission is Permission.MANAGE_ACTIONS
-        else ("skill", "skill manager")
+        else ("skill", "skill manager", "a skill manager")
     )
     if actor is not None and not is_global_manager:
         if is_set(change.company_installation_policy):
@@ -1035,8 +1035,8 @@ def check_access_change(
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 f"This {subject} is Not available to one of the groups. Ask "
-                f"an organization-wide {manager} to change that group's access "
-                "before you share with it.",
+                f"{a_manager} to change that group's access before you share "
+                "with it.",
             )
 
     # A change to group shares is a ``manage_permission`` action. The
