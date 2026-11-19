@@ -11633,50 +11633,11 @@
       }
     },
     "skill": {
-      "edit": {
-        "tooltip": "Modifier la compétence"
-      },
-      "invalid": {
-        "description": "Supprimez cette compétence non valide et créez-en une nouvelle."
-      },
       "tags": {
-        "builtin": {
-          "label": "Intégrée"
-        },
-        "invalid": {
-          "label": "Non valide"
-        },
-        "personal": {
-          "label": "Personnelle"
-        },
-        "required": {
-          "tooltip": "L’administrateur de votre organisation exige que vous disposiez de cette compétence."
-        },
-        "unavailable": {
-          "label": "Indisponible - cliquez pour en savoir plus"
-        },
-        "shared": {
-          "label": "Partagée"
-        },
-        "organization": {
-          "label": "Organisation"
-        },
         "unpublished": {
           "label": "Modifications non publiées",
           "tooltip": "L'organisation utilise encore la version {number}."
         }
-      },
-      "toggle": {
-        "disable": {
-          "ariaLabel": "Désactiver {name}"
-        },
-        "enable": {
-          "ariaLabel": "Activer {name}"
-        }
-      },
-      "tooltips": {
-        "invalid": "Cette compétence n'est pas valide. Supprimez-la et créez une nouvelle compétence.",
-        "unavailable": "La compétence est actuellement indisponible. Cliquez pour voir les détails."
       }
     }
   },
@@ -16525,11 +16486,11 @@
         "savingSkill": "Enregistrement de la compétence..."
       },
       "staleVersion": {
+        "description": "Quelqu’un a enregistré une version plus récente. Rechargez pour l’obtenir. Vos modifications non enregistrées seront perdues.",
         "reload": {
           "label": "Recharger"
         },
-        "title": "Cette compétence a changé depuis son ouverture",
-        "description": "Quelqu’un a enregistré une version plus récente. Rechargez pour l’obtenir. Vos modifications non enregistrées seront perdues."
+        "title": "Cette compétence a changé depuis son ouverture"
       },
       "toasts": {
         "created": "« {name} » créée",
@@ -16841,9 +16802,6 @@
       "browse": {
         "title": "Sélectionner des compétences"
       },
-      "countSeparator": {
-        "label": "{count, plural, one {Compétence} other {Compétences}}"
-      },
       "createMenu": {
         "github": {
           "description": "Importez une ou plusieurs compétences depuis un dépôt.",
@@ -16873,7 +16831,6 @@
         }
       },
       "header": {
-        "description": "Ensembles de capacités que votre agent Craft peut mobiliser. Cette page présente les compétences intégrées, celles partagées avec vous et vos compétences personnelles.",
         "title": "Compétences"
       },
       "loadError": {
@@ -16900,9 +16857,6 @@
         "enableFailed": "Échec de l'activation de {name}",
         "refreshFailed": "{name} a été mise à jour, mais la liste des compétences n'a pas pu être actualisée.",
         "listRefreshFailed": "La liste des compétences n'a pas pu être actualisée. Rechargez la page pour voir la modification."
-      },
-      "builtins": {
-        "title": "Compétences intégrées ({count, number})"
       }
     },
     "sections": {
@@ -17016,6 +16970,10 @@
       "version": {
         "firstPublish": "v{number} · Première publication",
         "update": "v{number} · Mise à jour depuis v{published}"
+      },
+      "banner": {
+        "title": "{count, plural, one {# compétence attend d’être publiée} other {# compétences attendent d’être publiées}}",
+        "review": "Examiner"
       }
     },
     "installationPolicy": {
@@ -17057,6 +17015,25 @@
         "user": "{email} : {size}, {files, plural, one {# fichier} other {# fichiers}}, {notLoaded, plural, one {# skill non chargé} other {# skills non chargés}}",
         "more": "Et {count, number} de plus."
       }
+    },
+    "adminTable": {
+      "label": "Compétences personnalisées",
+      "columns": {
+        "name": "Nom",
+        "source": "Source",
+        "version": "Version",
+        "audience": "Audience"
+      },
+      "organizationLibrary": "Bibliothèque de l’organisation",
+      "noOwner": "Aucun propriétaire",
+      "version": "v{current}{published, select, none {} other { · v{published} en ligne}}",
+      "private": "Le propriétaire seul",
+      "shared": "Partagée avec des personnes ou des groupes",
+      "select": "Sélectionner {name}",
+      "open": "Ouvrir {name}",
+      "menu": "Plus d’options pour {name}",
+      "share": "Partager",
+      "delete": "Supprimer"
     }
   },
   "opensearchHealth": {
@@ -17380,6 +17357,7 @@
         "tools": "Intégrations et actions",
         "instructionsOnly": "Ajoute seulement des instructions pour l’agent"
       },
+      "backAdmin": "Inventaire des compétences",
       "contents": {
         "version": "{name} v{version} · actuelle",
         "edit": "Modifier",

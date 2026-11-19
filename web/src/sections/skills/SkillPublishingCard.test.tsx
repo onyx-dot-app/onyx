@@ -1,5 +1,5 @@
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
-import SkillPublishingCard from "@/views/admin/CraftPreferencesPage/SkillPublishingCard";
+import SkillPublishingCard from "@/sections/skills/SkillPublishingCard";
 import { PluginPublishingPolicy } from "@/lib/settings/types";
 import type { OrganizationLibraryDefaultPolicy } from "@/lib/skills/types";
 

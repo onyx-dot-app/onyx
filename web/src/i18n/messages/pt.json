@@ -11633,50 +11633,11 @@
       }
     },
     "skill": {
-      "edit": {
-        "tooltip": "Editar habilidade"
-      },
-      "invalid": {
-        "description": "Exclua esta habilidade inválida e crie uma nova."
-      },
       "tags": {
-        "builtin": {
-          "label": "Integrada"
-        },
-        "invalid": {
-          "label": "Inválida"
-        },
-        "personal": {
-          "label": "Pessoal"
-        },
-        "required": {
-          "tooltip": "O administrador da sua organização exige que você tenha esta habilidade."
-        },
-        "unavailable": {
-          "label": "Indisponível - clique para saber mais"
-        },
-        "shared": {
-          "label": "Compartilhada"
-        },
-        "organization": {
-          "label": "Organização"
-        },
         "unpublished": {
           "label": "Alterações não publicadas",
           "tooltip": "A organização ainda usa a versão {number}."
         }
-      },
-      "toggle": {
-        "disable": {
-          "ariaLabel": "Desativar {name}"
-        },
-        "enable": {
-          "ariaLabel": "Ativar {name}"
-        }
-      },
-      "tooltips": {
-        "invalid": "Esta habilidade é inválida. Exclua-a e crie uma nova habilidade.",
-        "unavailable": "A habilidade está indisponível no momento. Clique para ver os detalhes."
       }
     }
   },
@@ -16525,11 +16486,11 @@
         "savingSkill": "Salvando a habilidade..."
       },
       "staleVersion": {
+        "description": "Alguém salvou uma versão mais recente. Recarregue para obtê-la. Suas alterações não salvas serão perdidas.",
         "reload": {
           "label": "Recarregar"
         },
-        "title": "Esta habilidade mudou desde que você a abriu",
-        "description": "Alguém salvou uma versão mais recente. Recarregue para obtê-la. Suas alterações não salvas serão perdidas."
+        "title": "Esta habilidade mudou desde que você a abriu"
       },
       "toasts": {
         "created": "\"{name}\" criada",
@@ -16841,9 +16802,6 @@
       "browse": {
         "title": "Selecionar habilidades"
       },
-      "countSeparator": {
-        "label": "{count, plural, one {Habilidade} other {Habilidades}}"
-      },
       "createMenu": {
         "github": {
           "description": "Importe uma ou mais habilidades de um repositório.",
@@ -16873,7 +16831,6 @@
         }
       },
       "header": {
-        "description": "Pacotes de capacidades que seu agente do Craft pode usar. Esta página mostra habilidades integradas, habilidades compartilhadas com você e suas habilidades pessoais.",
         "title": "Habilidades"
       },
       "loadError": {
@@ -16900,9 +16857,6 @@
         "enableFailed": "Falha ao ativar {name}",
         "refreshFailed": "{name} foi atualizada, mas não foi possível atualizar a lista de habilidades.",
         "listRefreshFailed": "Não foi possível atualizar a lista de habilidades. Recarregue a página para ver a alteração."
-      },
-      "builtins": {
-        "title": "Habilidades integradas ({count, number})"
       }
     },
     "sections": {
@@ -17016,6 +16970,10 @@
       "version": {
         "firstPublish": "v{number} · Primeira publicação",
         "update": "v{number} · Atualização da v{published}"
+      },
+      "banner": {
+        "title": "{count, plural, one {# habilidade aguarda publicação} other {# habilidades aguardam publicação}}",
+        "review": "Revisar"
       }
     },
     "installationPolicy": {
@@ -17057,6 +17015,25 @@
         "user": "{email}: {size}, {files, plural, one {# arquivo} other {# arquivos}}, {notLoaded, plural, one {# skill não carregou} other {# skills não carregaram}}",
         "more": "E mais {count, number}."
       }
+    },
+    "adminTable": {
+      "label": "Habilidades personalizadas",
+      "columns": {
+        "name": "Nome",
+        "source": "Origem",
+        "version": "Versão",
+        "audience": "Público"
+      },
+      "organizationLibrary": "Biblioteca da organização",
+      "noOwner": "Sem proprietário",
+      "version": "v{current}{published, select, none {} other { · v{published} ativa}}",
+      "private": "Somente o proprietário",
+      "shared": "Compartilhada com pessoas ou grupos",
+      "select": "Selecionar {name}",
+      "open": "Abrir {name}",
+      "menu": "Mais opções de {name}",
+      "share": "Compartilhar",
+      "delete": "Excluir"
     }
   },
   "opensearchHealth": {
@@ -17380,6 +17357,7 @@
         "tools": "Integrações e ações",
         "instructionsOnly": "Só adiciona instruções para o agente"
       },
+      "backAdmin": "Inventário de habilidades",
       "contents": {
         "version": "{name} v{version} · atual",
         "edit": "Editar",

@@ -57,7 +57,8 @@
   (`db/skill.py:may_delete_skill`); the UI shows Delete from `can_delete`.
   `required_for_user` (the setting for the caller is REQUIRED, from the company
   or a group) shows the Required badge.
-- **Admin skill policies** on Admin Panel → Craft → Preferences: Skill
+- **Admin skill policies** on Admin Panel → Skills, which shows whether
+  or not Craft is on: Skill
   Publishing ([[#publishing-review]]), **Default Access** (the Organization
   library default for published skills with no own setting: Available,
   Installed by default or Not available; never Required) and **Sharing** (off:
@@ -69,11 +70,12 @@
   stay selected. Search and group filter changes clear selection.
   `SkillResponse.group_summaries` lists the `plugin__user_group` rows (group,
   permission or none, setting) to a caller who may edit the skill, and to a
-  scoped manager only the rows of their groups. Custom cards show them as a
-  groups line, and the list has a group filter built from them.
-  Custom cards show Personal, Shared, or Organization access from
-  `public_permission` and the server's `is_personal`; share-detail arrays can
-  be hidden, so empty arrays do not mean a skill is personal.
+  scoped manager only the rows of their groups. The admin table shows them in
+  the Audience column, and the list has a group filter built from them.
+  The Audience column shows the install setting of a published skill, else
+  "Only the owner" or "Shared with people or groups" from `public_permission`
+  and the server's `is_personal`; share-detail arrays can be hidden, so empty
+  arrays do not mean a skill is personal.
 - **Skill limit notices.** A refused write of the user's own (413
   `SKILL_LIMIT_EXCEEDED`) shows the limit where the user made the change
   (`web/src/lib/skills/hooks.ts:useSkillLimitCopy`). Bulk and import rows
@@ -103,8 +105,17 @@
   The skill comes from `GET /skills`; only owners and editors read
   `/skills/custom/{id}/edit` (it is 404 for a viewer), and a viewer reads the
   instructions and the supporting file list from `/skills/{id}/preview`. `ShareSkillModal` holds only the
-  share settings. The admin Skills page opens the same skill page; built-in
-  skills keep a preview-only dialog.
+  share settings. Admin Panel → Skills (`views/SkillsPage.tsx`,
+  `sections/skills/AdminSkillsTable.tsx`) is an inventory table (Name, Source,
+  Version, Audience with the group names, switch, row menu with Share and
+  Delete) above which the bulk toolbar and a publish request banner stay (its
+  Review opens the requests in a dialog, and a request's Review swaps it for
+  the review dialog); a row opens
+  the same skill page at `/admin/skills/[id]` with a back link to the
+  inventory. The skill, integration and plugin pages share
+  `sections/customize/CustomizeDetailLayout.tsx` (back link, header, underline
+  tabs, and `DetailOverview`: the description beside a card of `KeyValue`
+  facts). Built-in skills keep a preview-only dialog.
 - **Access at import.** GitHub import and multiple-ZIP upload accept one set
   of sharing settings for the selection. The single-skill editor accepts
   sharing before creation. These use the same sharing checks as later edits.
@@ -764,8 +775,8 @@ the app from the same rule
     `created_at`, and the admin approves or denies from a view of the version
     preview. The web hook `usePublishAction` mirrors the setting for the
     share dialog and the Versions tab.
-    The **Skill Publishing** card on Admin Panel → Craft → Preferences
-    (`web/src/views/admin/CraftPreferencesPage/SkillPublishingCard.tsx`) also
+    The **Skill Publishing** card on Admin Panel → Skills
+    (`web/src/sections/skills/SkillPublishingCard.tsx`) also
     holds **Default Access**, saved with
     `PUT /skills/organization-library/default-access`, and **Sharing**, saved
     as `plugin_sharing`.

@@ -11633,50 +11633,11 @@
       }
     },
     "skill": {
-      "edit": {
-        "tooltip": "编辑技能"
-      },
-      "invalid": {
-        "description": "删除此无效技能，然后创建一个新技能。"
-      },
       "tags": {
-        "builtin": {
-          "label": "内置"
-        },
-        "invalid": {
-          "label": "无效"
-        },
-        "personal": {
-          "label": "个人"
-        },
-        "required": {
-          "tooltip": "你的组织管理员要求你拥有此技能。"
-        },
-        "unavailable": {
-          "label": "不可用 - 点击了解更多"
-        },
-        "shared": {
-          "label": "共享"
-        },
-        "organization": {
-          "label": "组织"
-        },
         "unpublished": {
           "label": "未发布的更改",
           "tooltip": "组织仍在使用版本 {number}。"
         }
-      },
-      "toggle": {
-        "disable": {
-          "ariaLabel": "禁用 {name}"
-        },
-        "enable": {
-          "ariaLabel": "启用 {name}"
-        }
-      },
-      "tooltips": {
-        "invalid": "此技能无效。请删除它并创建新技能。",
-        "unavailable": "技能当前不可用。点击查看详情。"
       }
     }
   },
@@ -16525,11 +16486,11 @@
         "savingSkill": "正在保存技能..."
       },
       "staleVersion": {
+        "description": "有人保存了更新的版本。请重新加载以获取。未保存的更改将丢失。",
         "reload": {
           "label": "重新加载"
         },
-        "title": "此技能在您打开后已被更改",
-        "description": "有人保存了更新的版本。请重新加载以获取。未保存的更改将丢失。"
+        "title": "此技能在您打开后已被更改"
       },
       "toasts": {
         "created": "已创建“{name}”",
@@ -16841,9 +16802,6 @@
       "browse": {
         "title": "选择技能"
       },
-      "countSeparator": {
-        "label": "{count, plural, one {技能} other {技能}}"
-      },
       "createMenu": {
         "github": {
           "description": "从仓库导入一个或多个技能。",
@@ -16873,7 +16831,6 @@
         }
       },
       "header": {
-        "description": "您的 Craft 智能体可调用的能力包。此页面显示内置技能、与您共享的技能以及您的个人技能。",
         "title": "技能"
       },
       "loadError": {
@@ -16900,9 +16857,6 @@
         "enableFailed": "启用 {name} 失败",
         "refreshFailed": "{name} 已更新，但技能列表无法刷新。",
         "listRefreshFailed": "技能列表无法刷新。请重新加载页面以查看更改。"
-      },
-      "builtins": {
-        "title": "内置技能（{count, number}）"
       }
     },
     "sections": {
@@ -17016,6 +16970,10 @@
       "version": {
         "firstPublish": "v{number} · 首次发布",
         "update": "v{number} · 从 v{published} 更新"
+      },
+      "banner": {
+        "title": "{count, plural, other {# 个技能等待发布}}",
+        "review": "审核"
       }
     },
     "installationPolicy": {
@@ -17057,6 +17015,25 @@
         "user": "{email}：{size}，{files, plural, other {# 个文件}}，{notLoaded, plural, other {# 个技能未加载}}",
         "more": "另有 {count, number} 人。"
       }
+    },
+    "adminTable": {
+      "label": "自定义技能",
+      "columns": {
+        "name": "名称",
+        "source": "来源",
+        "version": "版本",
+        "audience": "受众"
+      },
+      "organizationLibrary": "组织库",
+      "noOwner": "无所有者",
+      "version": "v{current}{published, select, none {} other { · v{published} 已上线}}",
+      "private": "仅所有者",
+      "shared": "与用户或群组共享",
+      "select": "选择 {name}",
+      "open": "打开 {name}",
+      "menu": "{name} 的更多操作",
+      "share": "共享",
+      "delete": "删除"
     }
   },
   "opensearchHealth": {
@@ -17380,6 +17357,7 @@
         "tools": "集成和操作",
         "instructionsOnly": "仅为代理添加说明"
       },
+      "backAdmin": "技能清单",
       "contents": {
         "version": "{name} v{version} · 当前",
         "edit": "编辑",

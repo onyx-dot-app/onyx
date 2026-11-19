@@ -91,10 +91,10 @@ test("marks only Decision Models as a beta entry", () => {
   expect(betaLinks).toEqual(["/admin/decision-models"]);
 });
 
-test("Agents & Plugins holds Agents, Plugins, Integrations and Skills", () => {
+test("Agents & Plugins holds Agents, Plugins, Skills and Integrations, with Craft off too", () => {
   const links = buildItems(
     [Permission.FULL_ADMIN_PANEL_ACCESS],
-    { ...flags, craftAvailable: true },
+    { ...flags, craftAvailable: false },
     null
   )
     .filter((item) => item.sectionId === "agentsAndPlugins")
@@ -102,8 +102,8 @@ test("Agents & Plugins holds Agents, Plugins, Integrations and Skills", () => {
   expect(links).toEqual([
     "/admin/agents",
     "/admin/plugins",
-    "/admin/integrations",
     "/admin/skills",
+    "/admin/integrations",
   ]);
 });
 

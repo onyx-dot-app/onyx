@@ -11633,50 +11633,11 @@
       }
     },
     "skill": {
-      "edit": {
-        "tooltip": "تعديل المهارة"
-      },
-      "invalid": {
-        "description": "احذف هذه المهارة غير الصالحة وأنشئ واحدة جديدة."
-      },
       "tags": {
-        "builtin": {
-          "label": "مدمجة"
-        },
-        "invalid": {
-          "label": "غير صالحة"
-        },
-        "personal": {
-          "label": "شخصية"
-        },
-        "required": {
-          "tooltip": "يفرض مسؤول مؤسستك أن تكون هذه المهارة لديك."
-        },
-        "unavailable": {
-          "label": "غير متاحة - انقر لمعرفة المزيد"
-        },
-        "shared": {
-          "label": "مُشاركة"
-        },
-        "organization": {
-          "label": "المؤسسة"
-        },
         "unpublished": {
           "label": "تغييرات غير منشورة",
           "tooltip": "لا تزال المؤسسة تستخدم الإصدار {number}."
         }
-      },
-      "toggle": {
-        "disable": {
-          "ariaLabel": "تعطيل {name}"
-        },
-        "enable": {
-          "ariaLabel": "تفعيل {name}"
-        }
-      },
-      "tooltips": {
-        "invalid": "هذه المهارة غير صالحة. احذفها وأنشئ مهارة جديدة.",
-        "unavailable": "المهارة غير متاحة حاليًا. انقر لعرض التفاصيل."
       }
     }
   },
@@ -16525,11 +16486,11 @@
         "savingSkill": "جارٍ حفظ المهارة..."
       },
       "staleVersion": {
+        "description": "حفظ شخص ما إصدارًا أحدث. أعد التحميل للحصول عليه. ستفقد التغييرات غير المحفوظة.",
         "reload": {
           "label": "إعادة التحميل"
         },
-        "title": "تغيّرت هذه المهارة منذ فتحها",
-        "description": "حفظ شخص ما إصدارًا أحدث. أعد التحميل للحصول عليه. ستفقد التغييرات غير المحفوظة."
+        "title": "تغيّرت هذه المهارة منذ فتحها"
       },
       "toasts": {
         "created": "تم إنشاء \"{name}\"",
@@ -16841,9 +16802,6 @@
       "browse": {
         "title": "تحديد المهارات"
       },
-      "countSeparator": {
-        "label": "{count, plural, one {مهارة} other {مهارات}}"
-      },
       "createMenu": {
         "github": {
           "description": "استورد مهارة واحدة أو أكثر من مستودع.",
@@ -16873,7 +16831,6 @@
         }
       },
       "header": {
-        "description": "حزم قدرات يمكن لوكيل Craft الخاص بك استخدامها. تعرض هذه الصفحة المهارات المدمجة والمهارات المشاركة معك ومهاراتك الشخصية.",
         "title": "المهارات"
       },
       "loadError": {
@@ -16900,9 +16857,6 @@
         "enableFailed": "فشل تفعيل {name}",
         "refreshFailed": "تم تحديث {name}، لكن تعذّر تحديث قائمة المهارات.",
         "listRefreshFailed": "تعذّر تحديث قائمة المهارات. أعد تحميل الصفحة لرؤية التغيير."
-      },
-      "builtins": {
-        "title": "المهارات المضمنة ({count, number})"
       }
     },
     "sections": {
@@ -17016,6 +16970,10 @@
       "version": {
         "firstPublish": "v{number} · أول نشر",
         "update": "v{number} · تحديث من v{published}"
+      },
+      "banner": {
+        "title": "{count, plural, zero {لا توجد مهارات بانتظار النشر} one {مهارة واحدة بانتظار النشر} two {مهارتان بانتظار النشر} few {# مهارات بانتظار النشر} many {# مهارة بانتظار النشر} other {# مهارة بانتظار النشر}}",
+        "review": "مراجعة"
       }
     },
     "installationPolicy": {
@@ -17057,6 +17015,25 @@
         "user": "{email}: {size}، {files, plural, zero {لا ملفات} one {ملف واحد} two {ملفان} few {# ملفات} many {# ملفًا} other {# ملف}}، {notLoaded, plural, zero {لا مهارات غير محمّلة} one {مهارة واحدة لم تُحمَّل} two {مهارتان لم تُحمَّلا} few {# مهارات لم تُحمَّل} many {# مهارة لم تُحمَّل} other {# مهارة لم تُحمَّل}}",
         "more": "و{count, number} آخرون."
       }
+    },
+    "adminTable": {
+      "label": "المهارات المخصصة",
+      "columns": {
+        "name": "الاسم",
+        "source": "المصدر",
+        "version": "الإصدار",
+        "audience": "الجمهور"
+      },
+      "organizationLibrary": "مكتبة المؤسسة",
+      "noOwner": "بلا مالك",
+      "version": "v{current}{published, select, none {} other { · v{published} منشور}}",
+      "private": "المالك فقط",
+      "shared": "مشاركة مع أشخاص أو مجموعات",
+      "select": "تحديد {name}",
+      "open": "فتح {name}",
+      "menu": "المزيد لـ {name}",
+      "share": "مشاركة",
+      "delete": "حذف"
     }
   },
   "opensearchHealth": {
@@ -17380,6 +17357,7 @@
         "tools": "عمليات التكامل والإجراءات",
         "instructionsOnly": "تضيف تعليمات للوكيل فقط"
       },
+      "backAdmin": "مخزون المهارات",
       "contents": {
         "version": "{name} الإصدار {version} · الحالي",
         "edit": "تعديل",

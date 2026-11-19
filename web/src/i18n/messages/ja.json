@@ -11633,50 +11633,11 @@
       }
     },
     "skill": {
-      "edit": {
-        "tooltip": "スキルを編集"
-      },
-      "invalid": {
-        "description": "この無効なスキルを削除して、新しいスキルを作成してください。"
-      },
       "tags": {
-        "builtin": {
-          "label": "組み込み"
-        },
-        "invalid": {
-          "label": "無効"
-        },
-        "personal": {
-          "label": "個人用"
-        },
-        "required": {
-          "tooltip": "組織の管理者により、このスキルの利用が必須になっています。"
-        },
-        "unavailable": {
-          "label": "利用できません - クリックして詳細を表示"
-        },
-        "shared": {
-          "label": "共有"
-        },
-        "organization": {
-          "label": "組織"
-        },
         "unpublished": {
           "label": "未公開の変更",
           "tooltip": "組織はまだバージョン {number} を使用しています。"
         }
-      },
-      "toggle": {
-        "disable": {
-          "ariaLabel": "{name} を無効にする"
-        },
-        "enable": {
-          "ariaLabel": "{name} を有効にする"
-        }
-      },
-      "tooltips": {
-        "invalid": "このスキルは無効です。削除して新しいスキルを作成してください。",
-        "unavailable": "このスキルは現在利用できません。クリックすると詳細を表示します。"
       }
     }
   },
@@ -16525,11 +16486,11 @@
         "savingSkill": "スキルを保存中..."
       },
       "staleVersion": {
+        "description": "他のユーザーが新しいバージョンを保存しました。再読み込みして取得してください。保存されていない変更は失われます。",
         "reload": {
           "label": "再読み込み"
         },
-        "title": "このスキルは開いた後に変更されました",
-        "description": "他のユーザーが新しいバージョンを保存しました。再読み込みして取得してください。保存されていない変更は失われます。"
+        "title": "このスキルは開いた後に変更されました"
       },
       "toasts": {
         "created": "「{name}」を作成しました",
@@ -16841,9 +16802,6 @@
       "browse": {
         "title": "スキルを選択"
       },
-      "countSeparator": {
-        "label": "{count, plural, one {スキル} other {スキル}}"
-      },
       "createMenu": {
         "github": {
           "description": "リポジトリから1つ以上のスキルをインポートします。",
@@ -16873,7 +16831,6 @@
         }
       },
       "header": {
-        "description": "Craftエージェントが利用できる機能バンドルです。このページには、組み込みスキル、共有されたスキル、あなたの個人スキルが表示されます。",
         "title": "スキル"
       },
       "loadError": {
@@ -16900,9 +16857,6 @@
         "enableFailed": "{name}を有効にできませんでした",
         "refreshFailed": "{name}は更新されましたが、スキル一覧を更新できませんでした。",
         "listRefreshFailed": "スキル一覧を更新できませんでした。ページを再読み込みして変更を確認してください。"
-      },
-      "builtins": {
-        "title": "組み込みスキル（{count, number}）"
       }
     },
     "sections": {
@@ -17016,6 +16970,10 @@
       "version": {
         "firstPublish": "v{number} · 初回公開",
         "update": "v{number} · v{published} からの更新"
+      },
+      "banner": {
+        "title": "{count, plural, other {# 件のスキルが公開を待っています}}",
+        "review": "確認"
       }
     },
     "installationPolicy": {
@@ -17057,6 +17015,25 @@
         "user": "{email}: {size}、{files, plural, other {# ファイル}}、読み込まれなかったスキル {notLoaded, plural, other {# 件}}",
         "more": "ほか {count, number} 人。"
       }
+    },
+    "adminTable": {
+      "label": "カスタムスキル",
+      "columns": {
+        "name": "名前",
+        "source": "ソース",
+        "version": "バージョン",
+        "audience": "対象"
+      },
+      "organizationLibrary": "組織ライブラリ",
+      "noOwner": "所有者なし",
+      "version": "v{current}{published, select, none {} other { · v{published} 公開中}}",
+      "private": "所有者のみ",
+      "shared": "ユーザーまたはグループと共有",
+      "select": "{name} を選択",
+      "open": "{name} を開く",
+      "menu": "{name} のその他の操作",
+      "share": "共有",
+      "delete": "削除"
     }
   },
   "opensearchHealth": {
@@ -17380,6 +17357,7 @@
         "tools": "インテグレーションとアクション",
         "instructionsOnly": "エージェントへの指示のみを追加します"
       },
+      "backAdmin": "スキル一覧",
       "contents": {
         "version": "{name} v{version} · 現在",
         "edit": "編集",

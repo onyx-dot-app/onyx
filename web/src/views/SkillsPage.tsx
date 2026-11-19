@@ -7,7 +7,6 @@ import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import {
   Button,
-  Collapsible,
   InputTypeIn,
   InputCheckbox,
   InputSingleSelect,
@@ -21,7 +20,6 @@ import {
   ConfirmationModalLayout,
   IllustrationContent,
   SettingsLayouts,
-  CardGrid,
   Content,
   Section,
   toast,
@@ -45,23 +43,19 @@ import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModa
 import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
-import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
-import SkillCard, {
-  type CustomSkillCardItem,
-  type SkillCardItem,
-} from "@/sections/cards/SkillCard";
+import AdminSkillsTable from "@/sections/skills/AdminSkillsTable";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
-import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import SkillReviewRequests from "@/sections/skills/SkillReviewRequests";
 import SkillLimitUsersBanner from "@/sections/skills/SkillLimitUsersBanner";
-import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
+import SkillPublishingCard from "@/sections/skills/SkillPublishingCard";
+import type { CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
-import { refreshSkillLists } from "@/lib/skills/cache";
+import { refreshSkillListsChecked } from "@/lib/skills/cache";
 import {
   deleteUserSkill,
   bulkUpdateSkills,
@@ -70,13 +64,9 @@ import {
 import { useSettings } from "@/lib/settings/hooks";
 import { useSkillEnablement } from "@/lib/skills/hooks";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
-import { newSkillHref, skillEditHref, skillHref } from "@/lib/customize/paths";
+import { adminSkillHref, newSkillHref } from "@/lib/customize/paths";
 
-interface SkillsPageProps {
-  admin?: boolean;
-}
-
-export default function SkillsPage({ admin = false }: SkillsPageProps) {
+export default function AdminSkillsPage() {
   const t = useTranslations("skills");
   const bulkCopy = useTranslations("skills.bulk");
   const { isAdmin } = useUser();
@@ -93,27 +83,21 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const { appName } = useSettings();
   const navigation = useNavigation();
   const { data, error, isLoading, refresh } = useUserSkills();
-  const { mutate } = useSWRConfig();
-  // Revalidation after a successful change is best effort.
+  const { mutate, cache } = useSWRConfig();
   function revalidateSkills() {
-    return refreshSkillLists(mutate).catch(() => undefined);
+    return refreshSkillListsChecked(mutate, cache).then((ok) => {
+      if (!ok) toast.error(t("page.toasts.listRefreshFailed"));
+    });
   }
-  const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
-    null
-  );
+  const [deleteTarget, setDeleteTarget] = useState<CustomSkill | null>(null);
   const deleteModal = useCreateModal();
   const [deleting, setDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [groupFilter, setGroupFilter] = useState("");
-  const [builtinsOpen, setBuiltinsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const githubImportModal = useCreateModal();
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
-  const [skillDialog, setSkillDialog] = useState<{
-    item: SkillCardItem;
-    tab: "details" | "sharing";
-  } | null>(null);
-  const previewTarget = skillDialog?.item ?? null;
+  const [shareTarget, setShareTarget] = useState<CustomSkill | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useOnMount(() => {
@@ -124,8 +108,8 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     if (
       !deleteTarget ||
       deleting ||
-      (deleteTarget.skill.user_permission !== "OWNER" &&
-        deleteTarget.skill.user_permission !== "EDITOR")
+      (deleteTarget.user_permission !== "OWNER" &&
+        deleteTarget.user_permission !== "EDITOR")
     )
       return;
     setDeleting(true);
@@ -153,54 +137,15 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     }
   }
 
-  function handleEdit(item: CustomSkillCardItem) {
-    navigation.go(skillEditHref(item.id));
-  }
-
-  const loadedItems = useMemo<SkillCardItem[]>(() => {
-    if (!data) return [];
-    const builtinItems: SkillCardItem[] = data.builtins
-      .filter(
-        (b): b is BuiltinSkill =>
-          !admin && b.source === "builtin" && b.is_available !== null
-      )
-      .map((b) => ({
-        id: b.id,
-        name: b.name,
-        description: b.description,
-        source: "builtin",
-        enabled: b.enabled,
-        can_toggle: b.can_toggle,
-        is_available: b.is_available,
-        unavailable_reason: b.unavailable_reason,
-      }));
-    const customItems: SkillCardItem[] = data.customs
-      .filter((c): c is CustomSkill => c.source === "custom")
-      .map((c) => ({
-        id: c.id,
-        name: c.name,
-        description: c.description,
-        source: "custom",
-        skill: c,
-        author_email: c.author_email,
-        is_personal: c.is_personal && c.user_permission === "OWNER",
-        enabled: c.enabled,
-        can_toggle: c.can_toggle,
-      }));
-    const groupRank = (item: SkillCardItem): number => {
-      switch (item.source) {
-        case "builtin":
-          return 0;
-        case "custom":
-          return item.is_personal ? 2 : 1;
-      }
-    };
-    return [...builtinItems, ...customItems].sort(
-      (a, b) =>
-        groupRank(a) - groupRank(b) ||
-        a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
-    );
-  }, [data, admin]);
+  const loadedItems = useMemo<CustomSkill[]>(
+    () =>
+      (data?.customs ?? [])
+        .filter((skill): skill is CustomSkill => skill.source === "custom")
+        .sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+        ),
+    [data]
+  );
   const enablement = useSkillEnablement(loadedItems, refresh);
   const items = loadedItems.map((item) => ({
     ...item,
@@ -211,8 +156,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const groupOptions = useMemo(() => {
     const names = new Map<number, string>();
     for (const item of items) {
-      if (item.source !== "custom") continue;
-      for (const summary of item.skill.group_summaries) {
+      for (const summary of item.group_summaries) {
         names.set(summary.group_id, summary.group_name);
       }
     }
@@ -226,28 +170,27 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   // does not come back on when the group returns.
   if (groupFilter !== "" && activeGroupId === null) setGroupFilter("");
 
+  const organizationLibrary = t("adminTable.organizationLibrary");
   const visibleItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return items.filter(
       (item) =>
         (activeGroupId === null ||
-          (item.source === "custom" &&
-            item.skill.group_summaries.some(
-              (summary) => summary.group_id === activeGroupId
-            ))) &&
+          item.group_summaries.some(
+            (summary) => summary.group_id === activeGroupId
+          )) &&
         (!q ||
-          item.name.toLowerCase().includes(q) ||
-          item.description.toLowerCase().includes(q))
+          [
+            item.name,
+            item.description,
+            item.owner?.email ?? "",
+            item.published_version_number !== null ? organizationLibrary : "",
+            ...item.group_summaries.map((summary) => summary.group_name),
+          ].some((field) => field.toLowerCase().includes(q)))
     );
-  }, [activeGroupId, items, searchQuery]);
+  }, [activeGroupId, items, searchQuery, organizationLibrary]);
 
-  const selectableItems = visibleItems.filter(
-    (item): item is CustomSkillCardItem => item.source === "custom"
-  );
-  const visibleBuiltins = visibleItems.filter(
-    (item): item is Extract<SkillCardItem, { source: "builtin" }> =>
-      item.source === "builtin"
-  );
+  const selectableItems = visibleItems;
   const selectedItems = selectableItems.filter((item) =>
     selectedIds.has(item.id)
   );
@@ -258,8 +201,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     selectedItems.length > 0 &&
     selectedItems.every(
       (item) =>
-        item.skill.user_permission === "OWNER" ||
-        item.skill.user_permission === "EDITOR"
+        item.user_permission === "OWNER" || item.user_permission === "EDITOR"
     );
   const toggleableItems = selectedItems.filter((item) => item.can_toggle);
   // A card toggle still in flight must settle before a bulk action may race it.
@@ -333,26 +275,12 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     }
   }
 
-  const editablePreview =
-    previewTarget?.source === "custom" &&
-    (previewTarget.skill.user_permission === "OWNER" ||
-      previewTarget.skill.user_permission === "EDITOR")
-      ? previewTarget
-      : null;
-  const previewUnavailableReason =
-    previewTarget?.source === "builtin" && !previewTarget.is_available
-      ? (previewTarget.unavailable_reason ??
-        t("page.preview.unavailableFallback"))
-      : null;
-
   return (
     <SettingsLayouts.Root data-testid="SkillsPage/container">
       <SettingsLayouts.Header
         icon={SvgBlocks}
         title={t("page.header.title")}
-        description={
-          admin ? bulkCopy("adminDescription") : t("page.header.description")
-        }
+        description={bulkCopy("adminDescription")}
         actions={[
           <Dropdown
             key="primary"
@@ -397,70 +325,11 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
             />
           </Dropdown>,
         ]}
-      >
-        <Section
-          flexDirection="row"
-          wrap
-          gap={2}
-          height="auto"
-          alignItems="stretch"
-        >
-          <Section
-            height="auto"
-            alignItems="stretch"
-            className="min-w-0 grow-[3] basis-64"
-          >
-            <InputTypeIn
-              ref={searchInputRef}
-              placeholder={t("page.search.placeholder")}
-              value={searchQuery}
-              readOnly={bulkBusy}
-              onChange={(event) => {
-                setSearchQuery(event.target.value);
-                setSelectedIds(new Set());
-                setBulkFailures([]);
-              }}
-              icon="search"
-            />
-          </Section>
-          {groupOptions.length > 0 && (
-            <Section
-              height="auto"
-              alignItems="stretch"
-              className="min-w-0 grow basis-48"
-            >
-              <InputSingleSelect
-                search
-                placeholder={t("groups.filter.placeholder")}
-                value={activeGroupId === null ? "all" : String(activeGroupId)}
-                defaultOption="all"
-                disabled={bulkBusy}
-                options={[
-                  {
-                    value: "all",
-                    title: t("groups.filter.all"),
-                    icon: SvgUsers,
-                  },
-                  ...groupOptions.map((group) => ({
-                    value: String(group.id),
-                    title: group.name,
-                    icon: SvgUsers,
-                  })),
-                ]}
-                onValueChange={(value) => {
-                  setGroupFilter(value);
-                  setSelectedIds(new Set());
-                  setBulkFailures([]);
-                }}
-              />
-            </Section>
-          )}
-        </Section>
-      </SettingsLayouts.Header>
+      />
 
       <SettingsLayouts.Body>
-        {admin && canManageOrgSkills && <SkillLimitUsersBanner />}
-        {canManageOrgSkills && (admin || !isAdmin) && (
+        {canManageOrgSkills && <SkillLimitUsersBanner />}
+        {canManageOrgSkills && (
           <SkillReviewRequests onReviewed={() => void revalidateSkills()} />
         )}
         {bulkFailures.length > 0 && (
@@ -485,6 +354,68 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
 
         {!isLoading && !error && (
           <>
+            {items.length > 0 && (
+              <Section
+                flexDirection="row"
+                wrap
+                gap={2}
+                height="auto"
+                alignItems="stretch"
+              >
+                <Section
+                  height="auto"
+                  alignItems="stretch"
+                  className="min-w-0 grow-[3] basis-64"
+                >
+                  <InputTypeIn
+                    ref={searchInputRef}
+                    placeholder={t("page.search.placeholder")}
+                    value={searchQuery}
+                    readOnly={bulkBusy}
+                    onChange={(event) => {
+                      setSearchQuery(event.target.value);
+                      setSelectedIds(new Set());
+                      setBulkFailures([]);
+                    }}
+                    icon="search"
+                  />
+                </Section>
+                {groupOptions.length > 0 && (
+                  <Section
+                    height="auto"
+                    alignItems="stretch"
+                    className="min-w-0 grow basis-48"
+                  >
+                    <InputSingleSelect
+                      search
+                      placeholder={t("groups.filter.placeholder")}
+                      value={
+                        activeGroupId === null ? "all" : String(activeGroupId)
+                      }
+                      defaultOption="all"
+                      disabled={bulkBusy}
+                      options={[
+                        {
+                          value: "all",
+                          title: t("groups.filter.all"),
+                          icon: SvgUsers,
+                        },
+                        ...groupOptions.map((group) => ({
+                          value: String(group.id),
+                          title: group.name,
+                          icon: SvgUsers,
+                        })),
+                      ]}
+                      onValueChange={(value) => {
+                        setGroupFilter(value);
+                        setSelectedIds(new Set());
+                        setBulkFailures([]);
+                      }}
+                    />
+                  </Section>
+                )}
+              </Section>
+            )}
             {visibleItems.length === 0 ? (
               <IllustrationContent
                 illustration={SvgNoResult}
@@ -593,7 +524,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                                         disabled:
                                           selectedItems.length === 0 ||
                                           selectedItems.some(
-                                            (item) => !item.skill.can_delete
+                                            (item) => !item.can_delete
                                           ),
                                         onSelect: () => {
                                           setBulkDeleteTargets(selectedItems);
@@ -608,54 +539,33 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                           </Section>
                         )}
                       </Section>
-                      <CardGrid>
-                        {selectableItems.map((item) => (
-                          <SkillCard
-                            key={item.id}
-                            selection={{
-                              checked: selectedIds.has(item.id),
-                              disabled: bulkBusy,
-                              onCheckedChange: (checked) =>
-                                setSelectedIds((current) => {
-                                  const next = new Set(current);
-                                  if (checked) next.add(item.id);
-                                  else next.delete(item.id);
-                                  return next;
-                                }),
-                            }}
-                            item={item}
-                            onEdit={handleEdit}
-                            onShare={(skill) =>
-                              setSkillDialog({ item: skill, tab: "sharing" })
-                            }
-                            onDelete={(skill) => {
-                              setDeleteTarget(skill);
-                              deleteModal.toggle(true);
-                            }}
-                            onClick={(skill) =>
-                              skill.source === "custom"
-                                ? navigation.go(skillHref(skill.id))
-                                : setSkillDialog({
-                                    item: skill,
-                                    tab: "details",
-                                  })
-                            }
-                            onEnabledChange={(skill, enabled) =>
-                              void enablement.setEnabled(skill, enabled)
-                            }
-                            enablementPending={
-                              bulkBusy || enablement.isPending(item.id)
-                            }
-                          />
-                        ))}
-                      </CardGrid>
+                      <AdminSkillsTable
+                        skills={selectableItems}
+                        selectedIds={selectedIds}
+                        onSelectedChange={(id, checked) =>
+                          setSelectedIds((current) => {
+                            const next = new Set(current);
+                            if (checked) next.add(id);
+                            else next.delete(id);
+                            return next;
+                          })
+                        }
+                        busy={bulkBusy}
+                        isPending={enablement.isPending}
+                        enabledOf={enablement.enabledOf}
+                        onEnabledChange={(skill, enabled) =>
+                          void enablement.setEnabled(skill, enabled)
+                        }
+                        onOpen={(skill) =>
+                          navigation.go(adminSkillHref(skill.id))
+                        }
+                        onShare={setShareTarget}
+                        onDelete={(skill) => {
+                          setDeleteTarget(skill);
+                          deleteModal.toggle(true);
+                        }}
+                      />
                     </Section>
-                    <TextSeparator
-                      count={selectableItems.length}
-                      text={t("page.countSeparator.label", {
-                        count: selectableItems.length,
-                      })}
-                    />
                   </>
                 ) : !searchQuery.trim() ? (
                   <IllustrationContent
@@ -664,41 +574,18 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                     description={t("page.empty.noSkills.description")}
                   />
                 ) : null}
-                {visibleBuiltins.length > 0 && (
-                  <Collapsible
-                    title={t("page.builtins.title", {
-                      count: visibleBuiltins.length,
-                    })}
-                    open={
-                      builtinsOpen ||
-                      (searchQuery.trim() !== "" && visibleBuiltins.length > 0)
-                    }
-                    onOpenChange={setBuiltinsOpen}
-                  >
-                    <CardGrid>
-                      {visibleBuiltins.map((item) => (
-                        <SkillCard
-                          key={item.id}
-                          item={item}
-                          onClick={(skill) =>
-                            setSkillDialog({ item: skill, tab: "details" })
-                          }
-                        />
-                      ))}
-                    </CardGrid>
-                  </Collapsible>
-                )}
               </>
             )}
           </>
         )}
+        {canManageOrgSkills && <SkillPublishingCard />}
       </SettingsLayouts.Body>
 
       <BulkSkillSharingModal
         count={selectedItems.length}
         canChangeOrgAccess={
           isAdmin ||
-          selectedItems.every((item) => item.skill.user_permission === "OWNER")
+          selectedItems.every((item) => item.user_permission === "OWNER")
         }
         open={bulkSharingOpen}
         saving={bulkBusy}
@@ -750,13 +637,13 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         </ConfirmationModalLayout>
       </bulkDeleteModal.Provider>
 
-      {editablePreview && (
+      {shareTarget && (
         <ShareSkillModal
           mode="edit"
-          skillId={editablePreview.id}
-          fallbackTitle={editablePreview.name}
+          skillId={shareTarget.id}
+          fallbackTitle={shareTarget.name}
           open
-          onClose={() => setSkillDialog(null)}
+          onClose={() => setShareTarget(null)}
           onSaved={() => void revalidateSkills()}
         />
       )}
@@ -799,14 +686,6 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           />
         )}
       </deleteModal.Provider>
-
-      <SkillPreviewModal
-        open={previewTarget !== null && editablePreview === null}
-        skillId={previewTarget?.id ?? null}
-        fallbackTitle={previewTarget?.name}
-        unavailableReason={previewUnavailableReason}
-        onClose={() => setSkillDialog(null)}
-      />
 
       <SkillSwitchModal enablement={enablement} />
     </SettingsLayouts.Root>

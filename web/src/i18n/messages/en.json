@@ -11633,50 +11633,11 @@
       }
     },
     "skill": {
-      "edit": {
-        "tooltip": "Edit skill"
-      },
-      "invalid": {
-        "description": "Delete this invalid skill and create a new one."
-      },
       "tags": {
-        "builtin": {
-          "label": "Built-in"
-        },
-        "invalid": {
-          "label": "Invalid"
-        },
-        "personal": {
-          "label": "Personal"
-        },
-        "required": {
-          "tooltip": "Your organization admin requires you to have this skill."
-        },
-        "unavailable": {
-          "label": "Unavailable - click to learn more"
-        },
-        "shared": {
-          "label": "Shared"
-        },
-        "organization": {
-          "label": "Organization"
-        },
         "unpublished": {
           "label": "Unpublished changes",
           "tooltip": "The organization still runs version {number}."
         }
-      },
-      "toggle": {
-        "disable": {
-          "ariaLabel": "Disable {name}"
-        },
-        "enable": {
-          "ariaLabel": "Enable {name}"
-        }
-      },
-      "tooltips": {
-        "invalid": "This skill is invalid. Delete it and create a new skill.",
-        "unavailable": "Skill is currently unavailable. Click to view details."
       }
     }
   },
@@ -16525,11 +16486,11 @@
         "savingSkill": "Saving skill..."
       },
       "staleVersion": {
+        "description": "Someone saved a newer version. Reload to get it. Your unsaved changes will be lost.",
         "reload": {
           "label": "Reload"
         },
-        "title": "This skill changed since you opened it",
-        "description": "Someone saved a newer version. Reload to get it. Your unsaved changes will be lost."
+        "title": "This skill changed since you opened it"
       },
       "toasts": {
         "created": "Created \"{name}\"",
@@ -16841,9 +16802,6 @@
       "browse": {
         "title": "Select skills"
       },
-      "countSeparator": {
-        "label": "{count, plural, one {Skill} other {Skills}}"
-      },
       "createMenu": {
         "github": {
           "description": "Import one or more skills from a repository.",
@@ -16873,7 +16831,6 @@
         }
       },
       "header": {
-        "description": "Capability bundles your Craft agent can reach for. This page shows built-in skills, skills shared with you, and your own personal skills.",
         "title": "Skills"
       },
       "loadError": {
@@ -16900,9 +16857,6 @@
         "enableFailed": "Failed to enable {name}",
         "refreshFailed": "{name} was updated, but the skill list could not be refreshed.",
         "listRefreshFailed": "The skill list could not be refreshed. Reload the page to see the change."
-      },
-      "builtins": {
-        "title": "Built-in skills ({count, number})"
       }
     },
     "sections": {
@@ -17016,6 +16970,10 @@
       "version": {
         "firstPublish": "v{number} · First publish",
         "update": "v{number} · Update from v{published}"
+      },
+      "banner": {
+        "title": "{count, plural, one {# skill is waiting to be published} other {# skills are waiting to be published}}",
+        "review": "Review"
       }
     },
     "installationPolicy": {
@@ -17057,6 +17015,25 @@
         "user": "{email}: {size}, {files, plural, one {# file} other {# files}}, {notLoaded, plural, one {# skill did not load} other {# skills did not load}}",
         "more": "And {count, number} more."
       }
+    },
+    "adminTable": {
+      "label": "Custom skills",
+      "columns": {
+        "name": "Name",
+        "source": "Source",
+        "version": "Version",
+        "audience": "Audience"
+      },
+      "organizationLibrary": "Organization library",
+      "noOwner": "No owner",
+      "version": "v{current}{published, select, none {} other { · v{published} live}}",
+      "private": "Only the owner",
+      "shared": "Shared with people or groups",
+      "select": "Select {name}",
+      "open": "Open {name}",
+      "menu": "More for {name}",
+      "share": "Share",
+      "delete": "Delete"
     }
   },
   "opensearchHealth": {
@@ -17380,6 +17357,7 @@
         "tools": "Integrations & actions",
         "instructionsOnly": "Only adds instructions for the agent"
       },
+      "backAdmin": "Skill inventory",
       "contents": {
         "version": "{name} v{version} · current",
         "edit": "Edit",

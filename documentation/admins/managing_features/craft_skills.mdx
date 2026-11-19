@@ -6,7 +6,11 @@ icon: "wand-magic-sparkles"
 
 Skills package reusable instructions and supporting files that teach Craft how to perform a kind of work.
 Open **Admin Panel → Skills** to manage custom Skills across your organization.
-Open **Craft → Skills** to manage your own library.
+The table shows each custom Skill with its **Source** (the owner, or **Organization library** for a published Skill),
+its **Version** (the newest version and the version that the organization uses),
+its **Audience** (the install setting or who has access), and its on/off switch. Select a row to open the Skill page,
+with **Overview**, **Contents**, and **Versions**. The row menu has **Share** and **Delete**.
+Open **Customize → Skills** in the sidebar to manage your own skills.
 
 <Note>
   Anyone with Craft access can create a Skill and manage the Skills they own or can edit.
@@ -185,8 +189,8 @@ Publishing means reviewing that Skill and then sharing it with the intended audi
 
 ## Control who publishes
 
-The **Skill Publishing** setting controls how Skill authors publish to the organization. Open **Admin Panel**,
-select **Craft → Preferences**, and choose a value under **Skill Publishing**:
+The **Skill Publishing** setting controls how Skill authors publish to the organization.
+Open **Admin Panel → Skills** and choose a value under **Skill Publishing**:
 
 | Value | Effect |
 | --- | --- |
@@ -200,8 +204,7 @@ and GitHub import. Users with the organization-wide `manage:plugins` permission 
 ### Set the default access
 
 The **Default Access** setting applies to every published Skill that does not have its own installation policy,
-including Skills that are published later. Open **Admin Panel**, select **Craft → Preferences**,
-and choose a value under **Default Access**:
+including Skills that are published later. Open **Admin Panel → Skills** and choose a value under **Default Access**:
 
 | Value | Effect |
 | --- | --- |
@@ -219,7 +222,7 @@ In the sharing dialog, the **Default access** choice makes a Skill follow this s
 ### Control who shares
 
 The **Sharing** setting controls whether members can share Skills with people and groups. It is on by default.
-Open **Admin Panel**, select **Craft → Preferences**, and turn **Sharing** on or off.
+Open **Admin Panel → Skills** and turn **Sharing** on or off.
 
 When **Sharing** is off, members cannot add people or groups in the sharing dialog, and the dialog says why.
 Onyx also refuses a change to a share level and an ownership transfer by a member,
@@ -233,10 +236,11 @@ and make sure that no group setting of that group gives a more open level.
 ### Review publish requests
 
 Under **Requires review**, a publish from an author makes a request, and the version shows **Pending review**.
-To review requests, open **Admin Panel → Skills**. **Publish Requests** shows each pending request with the Skill name,
-the version, the author, and when the version was saved. It does not show when there are no requests.
-Users with the organization-wide `manage:plugins` permission who are not admins see **Publish Requests** on the Craft
-**Skills** page.
+To review requests, open **Admin Panel → Skills**. When requests are waiting, a banner at the top shows how many.
+Select **Review** in the banner to open **Publish Requests**, which lists each request with the Skill name, the version,
+the author, and when the version was saved.
+Users with the organization-wide `manage:plugins` permission who are not admins see the same banner on the **Skills**
+tab of **Customize**.
 
 Select **Review** on a request to see the description and instructions of that version.
 Then select **Approve** to publish it, or **Deny** to remove the request. If another published Skill has the same name,
@@ -297,11 +301,11 @@ A member in several groups gets the most open policy, in this order: **Required*
 **Available to install**, **Not available**. Groups give access. They are not a security boundary:
 a person with a direct share still sees the Skill.
 
-To set a group policy, open the Skill, select the **Sharing** tab, and use **Group Access**.
-Each row is a group and its policy. Choose **Organization setting** to remove the group policy.
+To set a group policy, open the Skill, select **Share**, and use **Group Access**. Each row is a group and its policy.
+Choose **Organization setting** to remove the group policy.
 Select **Add a group** to add a group with a policy but no share. Running sessions get the change at once.
 
-On **Admin Panel → Skills**, each custom Skill card lists its groups and their policies.
+On **Admin Panel → Skills**, the **Audience** column of each custom Skill lists its groups.
 Use **Filter by group** next to the search field to show only the Skills of one group.
 
 A published Skill can have a group policy without a share. A group with a share (**Can use** or **Can edit**)
@@ -413,7 +417,7 @@ Do not transfer ownership to bots, service accounts, limited accounts, or inacti
 
 <Steps>
   <Step title="Select the Skills">
-    Open **Admin Panel → Skills** and use the checkboxes on the custom Skill cards.
+    Open **Admin Panel → Skills** and use the checkboxes in the table.
     Use the checkbox beside **Select skills** to select all visible custom Skills. Search first to limit the selection.
   </Step>
 
@@ -466,7 +470,7 @@ Configure access once before importing the batch. Onyx reports invalid bundles s
 <Accordion title="Users cannot find a shared Skill">
   Confirm that the Skill is enabled and that the user or one of their groups has **Can use** or **Can edit** access.
   If it was shared during an active session, start a new turn or session and check the picker again.
-  For a published Skill with no installation policy of its own, check **Default Access** under **Craft → Preferences**.
+  For a published Skill with no installation policy of its own, check **Default Access** on **Admin Panel → Skills**.
   With **Not available**, only the author and the people and groups it is shared with see it.
 </Accordion>
 
