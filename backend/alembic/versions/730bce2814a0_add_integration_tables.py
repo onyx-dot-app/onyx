@@ -7,9 +7,14 @@ makes no plugin.
 The old tables stay the tables of each kind: each integration points at its
 mcp_server, external_app or OpenAPI tool row, as gated_app does. The old tables
 only get new columns, and approval_request.gated_app_id becomes nullable; a
-rollback undoes both. The data copy is SQL, except the actions of an OpenAPI
-spec and of a built-in app catalog, which only app code can read. It moves no
-secret in clear: each credential is copied as its encrypted bytes.
+rollback undoes both. The data copy is SQL only. It moves no secret in
+clear: each credential is copied as its encrypted bytes.
+
+Some data needs app code to read: the actions of an OpenAPI spec and of a
+built-in app catalog, and the header template of a per-user API key MCP
+server, which is in its encrypted admin config. The copy leaves synced_at
+NULL, and the app fills that data on the first database session of the
+schema (onyx/integrations/sync.py).
 
 Revision ID: 730bce2814a0
 Revises: 2bb0e564ae2d
@@ -17,26 +22,14 @@ Create Date: 2026-11-13 14:42:45.411165
 
 """
 
-import json
 import logging
 import time
 from collections.abc import Callable
-from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import DBAPIError
-
-from onyx.db.enums import ActionPolicy, ExternalAppType
-from onyx.external_apps.matching.engine import WHOLE_DOMAIN_ACTION_TYPE
-from onyx.external_apps.providers.registry import get_endpoint_catalog
-from onyx.integrations.connections import header_field_keys
-from onyx.server.features.mcp.models import DENYLISTED_MCP_HEADERS
-from onyx.tools.tool_implementations.custom.openapi_parsing import (
-    openapi_to_method_specs,
-)
-from onyx.utils.encryption import decrypt_bytes_to_string
 
 logger = logging.getLogger("alembic.runtime.migration")
 
@@ -212,6 +205,8 @@ def _create_tables() -> None:
             server_default=sa.text("true"),
             nullable=False,
         ),
+        # NULL until the app fills the data that only app code can read.
+        sa.Column("synced_at", sa.DateTime(timezone=True), nullable=True),
         # The row of its kind that holds the settings: exactly one is set, and
         # it matches kind. Deleting that row deletes the integration.
         sa.Column(
@@ -857,7 +852,7 @@ _INSERT_OAUTH_CLIENTS = """
 """
 
 # Each MCP tool row. The actions of an OpenAPI spec and of a provider catalog
-# need app code to read, so the action sync writes them.
+# need app code to read, so the app writes them.
 _INSERT_MCP_ACTIONS = """
     INSERT INTO integration_action (
         integration_id, key, source, display_name, description, read_only,
@@ -875,8 +870,9 @@ _INSERT_MCP_ACTIONS = """
 
 # Credentials. The old columns use the same encryption as the new ones, so
 # each secret is copied as its bytes, never decrypted. legacy_format names
-# the old format, which the credential code reads. The one exception is the
-# header template of a per-user API key MCP server (_copy_mcp_header_templates).
+# the old format, which the credential code reads. The header template of a
+# per-user API key MCP server is in its encrypted admin config, so the app
+# copies it.
 
 # The configuration of an MCP server that the admin set up.
 _INSERT_MCP_ORGANIZATION_CONNECTIONS = """
@@ -1394,115 +1390,6 @@ _FILL_TOOL_OPTIONS = """
 """
 
 
-def _seed_api_actions() -> None:
-    """Write the actions of each OpenAPI spec and each external app catalog,
-    as the action sync of the app does: an OpenAPI GET is Allow and each
-    other method Ask; a catalog action keeps its catalog policy; a custom app
-    has one action for any request. A spec that does not parse gets none."""
-    bind = op.get_bind()
-    rows: list[dict[str, Any]] = []
-
-    def add(integration: Any, **action: Any) -> None:
-        rows.append(
-            {
-                "input_schema": None,
-                "http_method": None,
-                "path_template": None,
-                **action,
-                "integration_id": integration.id,
-                "created_at": integration.created_at,
-                "updated_at": integration.updated_at,
-            }
-        )
-
-    for integration in bind.execute(
-        sa.text(
-            "SELECT i.id, i.created_at, i.updated_at, t.openapi_schema "
-            "FROM integration i JOIN tool t ON t.id = i.tool_id ORDER BY i.id"
-        )
-    ):
-        try:
-            method_specs = openapi_to_method_specs(integration.openapi_schema)
-        except ValueError as e:
-            logger.warning(
-                "Integration %s: the OpenAPI spec gives no actions: %s",
-                integration.id,
-                e,
-            )
-            continue
-        for spec in method_specs:
-            is_get = spec.method.upper() == "GET"
-            add(
-                integration,
-                key=spec.raw_name,
-                source="openapi",
-                display_name=spec.spec.get("summary") or spec.raw_name,
-                description=spec.summary,
-                read_only=is_get,
-                default_policy="allow" if is_get else "ask",
-                input_schema=json.dumps(spec.to_tool_definition().parameters),
-                http_method=spec.method.upper(),
-                path_template=spec.path,
-            )
-
-    catalog_policies = {
-        ActionPolicy.ALWAYS: "allow",
-        ActionPolicy.ASK: "ask",
-        ActionPolicy.DENY: "blocked",
-    }
-    for integration in bind.execute(
-        sa.text(
-            "SELECT i.id, i.name, i.created_at, i.updated_at, a.app_type "
-            "FROM integration i JOIN external_app a ON a.id = i.external_app_id "
-            "ORDER BY i.id"
-        )
-    ):
-        if integration.app_type == ExternalAppType.CUSTOM.value:
-            add(
-                integration,
-                key=WHOLE_DOMAIN_ACTION_TYPE,
-                source="external_app",
-                display_name=integration.name,
-                description=f"Any request to {integration.name}.",
-                read_only=None,
-                default_policy="ask",
-            )
-            continue
-        try:
-            app_type = ExternalAppType(integration.app_type)
-        except ValueError:
-            logger.warning(
-                "Integration %s: unknown app type %s",
-                integration.id,
-                integration.app_type,
-            )
-            continue
-        for endpoint in get_endpoint_catalog(app_type):
-            add(
-                integration,
-                key=endpoint.id.value,
-                source="external_app",
-                display_name=endpoint.normalised_name,
-                description=endpoint.description,
-                read_only=endpoint.default_policy is ActionPolicy.ALWAYS,
-                default_policy=catalog_policies[endpoint.default_policy],
-            )
-
-    if rows:
-        bind.execute(
-            sa.text(
-                "INSERT INTO integration_action (integration_id, key, source, "
-                "display_name, description, read_only, default_policy, "
-                "input_schema, http_method, path_template, created_at, updated_at) "
-                "VALUES (:integration_id, :key, :source, :display_name, "
-                ":description, :read_only, :default_policy, "
-                "CAST(:input_schema AS jsonb), :http_method, :path_template, "
-                ":created_at, :updated_at) ON CONFLICT DO NOTHING"
-            ),
-            rows,
-        )
-
-
 def _copy_integrations() -> None:
     for statement in (
         _CREATE_SOURCES,
@@ -1537,73 +1424,6 @@ def _copy_integrations() -> None:
         op.execute(statement)
 
 
-def _mcp_header_template(config: object) -> dict[str, str] | None:
-    """Old configs kept the template in ``headers``."""
-    if not isinstance(config, dict):
-        return None
-    template = config.get("header_template") or config.get("headers")
-    if not isinstance(template, dict):
-        return None
-    return {
-        name: value
-        for name, value in template.items()
-        if isinstance(name, str)
-        and isinstance(value, str)
-        and name.lower() not in DENYLISTED_MCP_HEADERS
-    } or None
-
-
-def _copy_mcp_header_templates() -> None:
-    """A per-user API key MCP server kept its header template in the
-    encrypted admin config, so SQL cannot copy it. A config that does not
-    read leaves no template, and the admin list shows the integration as
-    not set up."""
-    bind = op.get_bind()
-    updates: list[dict[str, Any]] = []
-    for row in bind.execute(
-        sa.text(
-            "SELECT i.id, c.config FROM integration i "
-            "JOIN mcp_server m ON m.id = i.mcp_server_id "
-            "JOIN mcp_connection_config c ON c.id = m.admin_connection_config_id "
-            "WHERE i.auth_mode = 'individual' AND i.auth_method = 'api_key' "
-            "ORDER BY i.id"
-        )
-    ):
-        try:
-            config = json.loads(decrypt_bytes_to_string(bytes(row.config)))
-        except Exception as error:
-            logger.warning(
-                "Integration %s: the MCP admin config does not read (%s)",
-                row.id,
-                type(error).__name__,
-            )
-            continue
-        template = _mcp_header_template(config)
-        if template is None:
-            continue
-        fields = [
-            {"key": key, "label": key.replace("_", " "), "secret": True}
-            for key in header_field_keys(template)
-        ]
-        updates.append(
-            {
-                "id": row.id,
-                "header_template": json.dumps(template),
-                "credential_fields": json.dumps(fields) if fields else None,
-            }
-        )
-    if updates:
-        bind.execute(
-            sa.text(
-                "UPDATE integration SET "
-                "header_template = CAST(:header_template AS jsonb), "
-                "credential_fields = CAST(:credential_fields AS jsonb) "
-                "WHERE id = :id"
-            ),
-            updates,
-        )
-
-
 def upgrade() -> None:
     bind = op.get_bind()
     schema: str = bind.execute(sa.text("SELECT current_schema()")).scalar_one()
@@ -1614,8 +1434,6 @@ def upgrade() -> None:
         # tool against writes while the tables are made.
         _with_bounded_lock_wait(_create_tables)
         _copy_integrations()
-        _copy_mcp_header_templates()
-        _seed_api_actions()
         # The chat tables stay locked from here to the commit, so they are
         # altered last, with only the statement that needs a new column of
         # theirs after them.

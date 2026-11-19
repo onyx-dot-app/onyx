@@ -86,6 +86,7 @@ from onyx.integrations.connections import (
     MissingHeaderValueError,
     connect_with_fields__no_commit,
     credential_field_keys,
+    credential_fields_json,
     has_placeholder,
     header_field_keys,
     header_template_missing,
@@ -388,29 +389,6 @@ def _validate_url_patterns(patterns: list[str]) -> None:
             UrlGlob.parse(pattern)
         except ValueError as error:
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(error)) from error
-
-
-def _credential_fields_json(
-    fields: list[CredentialField] | None,
-    header_template: Mapping[str, str] | None,
-    stored: list[dict[str, Any]] | None = None,
-) -> list[dict[str, Any]] | None:
-    if fields is not None:
-        stored = [field.model_dump() for field in fields]
-    if not header_template:
-        return stored if fields is not None else None
-    kept = {field.get("key"): field for field in stored or []}
-    template_fields = [
-        kept.get(key) or {"key": key, "label": key.replace("_", " "), "secret": True}
-        for key in header_field_keys(header_template)
-    ]
-    if fields is not None:
-        listed = {field["key"] for field in stored or []}
-        return [
-            *(stored or []),
-            *(f for f in template_fields if f["key"] not in listed),
-        ]
-    return template_fields or None
 
 
 _TOKEN_PLACEHOLDERS = frozenset({"access_token", "refresh_token", "token_type"})
@@ -779,7 +757,7 @@ def create_integration__no_commit(
         auth_mode=request.auth_mode,
         auth_method=auth_method,
         credential_fields=(
-            _credential_fields_json(request.credential_fields, header_template)
+            credential_fields_json(request.credential_fields, header_template)
             if auth_method is IntegrationAuthMethod.API_KEY
             else None
         ),
@@ -977,7 +955,7 @@ def update_integration__no_commit(
     if auth_method is not IntegrationAuthMethod.API_KEY:
         integration.credential_fields = None
     elif "credential_fields" in fields or "header_template" in fields:
-        integration.credential_fields = _credential_fields_json(
+        integration.credential_fields = credential_fields_json(
             request.credential_fields,
             header_template,
             None if "credential_fields" in fields else integration.credential_fields,

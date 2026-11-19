@@ -5939,6 +5939,11 @@ class Integration(Base):
     users_can_save_always_allow: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )
+    # NULL: the migration copied the row, and app code has not yet filled the
+    # data that only it can read (see onyx/integrations/sync.py).
+    synced_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=func.now()
+    )
     # The row of its kind that holds the settings: exactly one is set, and it
     # matches kind. Deleting that row deletes the integration.
     mcp_server_id: Mapped[int | None] = mapped_column(

@@ -529,6 +529,12 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
     if not is_valid_schema_name(tenant_id):
         raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid tenant ID")
 
+    if not (MULTI_TENANT and tenant_id == POSTGRES_DEFAULT_SCHEMA):
+        # Imported here: the integrations package imports this module.
+        from onyx.integrations.sync import sync_new_integrations_once
+
+        sync_new_integrations_once(tenant_id)
+
     with _session_on_schema(get_engine_for_tenant(tenant_id), tenant_id) as session:
         yield session
 
