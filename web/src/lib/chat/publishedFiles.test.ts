@@ -7,6 +7,7 @@ import type { ChatPublishedFile, Message } from "@/app/app/types";
 import {
   branchPublishedFiles,
   filesSharingALabel,
+  loadedPublishedFiles,
   publishedFileLabel,
 } from "@/lib/chat/publishedFiles";
 
@@ -66,7 +67,7 @@ describe("branchPublishedFiles", () => {
     ];
     const answer = response(2, 2, packets);
     const fileIds = () =>
-      branchPublishedFiles([], tree([answer]), [answer]).all.map(
+      branchPublishedFiles(null, tree([answer]), [answer]).all.map(
         (file) => file.file_id
       );
 
@@ -89,7 +90,7 @@ describe("branchPublishedFiles", () => {
     ]);
 
     expect(
-      branchPublishedFiles([], tree([answer]), [answer]).latest.map(
+      branchPublishedFiles(null, tree([answer]), [answer]).latest.map(
         ({ file_id, title }) => [file_id, title]
       )
     ).toEqual([
@@ -101,12 +102,15 @@ describe("branchPublishedFiles", () => {
   test("merges the load's list with live publishes by path", () => {
     // The load lists an older answer that is not loaded, and the loaded
     // answer, with a file of its background subagent that its packets lack.
-    const branchFiles = [
-      loaded(published("old-report", "/w/report.md", "Report"), 2),
-      loaded(published("old-chart", "/w/chart.png"), 2),
-      loaded(published("loaded", "/w/data.csv"), 6),
-      loaded(published("subagent", "/w/notes.md"), 6),
-    ];
+    const branchFiles = {
+      files: [
+        loaded(published("old-report", "/w/report.md", "Report"), 2),
+        loaded(published("old-chart", "/w/chart.png"), 2),
+        loaded(published("loaded", "/w/data.csv"), 6),
+        loaded(published("subagent", "/w/notes.md"), 6),
+      ],
+      throughMessageId: 6,
+    };
     const saved = response(6, 6, [
       publishEnd([published("loaded", "/w/data.csv")]),
     ]);
@@ -128,28 +132,60 @@ describe("branchPublishedFiles", () => {
     ]);
   });
 
-  test("a file that the load does not list keeps its publish order", () => {
-    // The load lists no path for the first answer's file, so it is not
-    // listed. The second answer publishes its path again.
-    const branchFiles = [loaded(published("new", "/w/report.md"), 4)];
-    const older = response(2, 2, [
-      publishEnd([published("unlisted", "/w/report.md")]),
+  test("the load's list decides the files of the messages it knew of", () => {
+    // The load leaves out the answer's own file, whose object is missing,
+    // and lists its background subagent's file of the same path.
+    const branchFiles = {
+      files: [loaded(published("subagent", "/w/report.md"), 2)],
+      throughMessageId: 2,
+    };
+    const saved = response(2, 2, [
+      publishEnd([published("missing", "/w/report.md")]),
     ]);
+    // An answer saved after the load publishes the path again.
     const newer = response(4, 4, [
-      publishEnd([published("new", "/w/report.md")]),
+      publishEnd([published("newer", "/w/report.md")]),
     ]);
 
     expect(
-      branchPublishedFiles(branchFiles, tree([older, newer]), [
-        older,
+      branchPublishedFiles(branchFiles, tree([saved]), [saved]).all.map(
+        ({ file_id }) => file_id
+      )
+    ).toEqual(["subagent"]);
+    expect(
+      branchPublishedFiles(branchFiles, tree([saved, newer]), [
+        saved,
         newer,
       ]).latest.map(({ file_id }) => file_id)
-    ).toEqual(["new"]);
+    ).toEqual(["newer"]);
+  });
+
+  test("the shared view shows the load's list, or the packets without one", () => {
+    const answer = response(2, 2, [
+      publishEnd([published("missing", "/w/report.md")]),
+    ]);
+    const fileIds = (load: Parameters<typeof loadedPublishedFiles>[0]) =>
+      branchPublishedFiles(loadedPublishedFiles(load), tree([answer]), [
+        answer,
+      ]).all.map(({ file_id }) => file_id);
+
+    expect(
+      fileIds({
+        messages: [{ message_id: 1 }, { message_id: 2 }],
+        published_files: [loaded(published("subagent", "/w/report.md"), 2)],
+      })
+    ).toEqual(["subagent"]);
+    expect(
+      fileIds({ messages: [{ message_id: 1 }, { message_id: 2 }] })
+    ).toEqual(["missing"]);
   });
 
   test("leaves out the load's files of loaded messages off the branch", () => {
     // A branch switch: answer 6 is loaded but no longer on the branch.
-    const branchFiles = [loaded(published("switched", "/w/report.md"), 6)];
+    const branchFiles = {
+      files: [loaded(published("switched", "/w/report.md"), 6)],
+      throughMessageId: 7,
+    };
     const hidden = response(6, 6, [
       publishEnd([published("switched", "/w/report.md")]),
     ]);

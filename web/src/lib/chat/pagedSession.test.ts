@@ -80,7 +80,7 @@ describe("loadSelectedBranch", () => {
     await expect(loading).resolves.toBe(true);
     const session = useChatSessionStore.getState().sessions.get(SESSION);
     expect(pageSwitch()).toBeNull();
-    expect(session?.branchPublishedFiles).toEqual([file]);
+    expect(session?.branchPublishedFiles?.files).toEqual([file]);
     expect(session?.messageTree).toBe(treeBefore);
   });
 
@@ -181,6 +181,7 @@ describe("loadSelectedBranch", () => {
 
     expect(
       useChatSessionStore.getState().sessions.get(SESSION)?.branchPublishedFiles
+        ?.files
     ).toEqual(files("second"));
   });
 

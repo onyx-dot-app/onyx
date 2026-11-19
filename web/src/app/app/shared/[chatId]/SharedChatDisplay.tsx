@@ -25,6 +25,7 @@ import useOnMount from "@/hooks/useOnMount";
 import SharedAppInputBar from "@/sections/input/SharedAppInputBar";
 import {
   branchPublishedFiles,
+  loadedPublishedFiles,
   openFilesOfTabs,
 } from "@/lib/chat/publishedFiles";
 import { PublishedFilesButton } from "@/sections/chat/PublishedFileViews";
@@ -100,7 +101,7 @@ export default function SharedChatDisplay({
   const firstMessage = messages[0];
   const { all: allPublishedFiles, latest: publishedFiles } =
     branchPublishedFiles(
-      chatSession.published_files ?? [],
+      loadedPublishedFiles(chatSession),
       messageTree,
       messages
     );

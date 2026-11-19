@@ -24,19 +24,44 @@ function readPublishedFiles(packets: Packet[]): PublishedFile[] {
 }
 
 /**
+ * A load's list of the branch's published files, oldest first. The list is
+ * complete for the messages that the load knew of: every message up to
+ * `throughMessageId`, the newest message ID of the load. It leaves out files
+ * on purpose, such as those whose object is missing.
+ */
+export interface LoadedPublishedFiles {
+  files: readonly ChatPublishedFile[];
+  throughMessageId: number;
+}
+
+/** A load's list of published files, or null when the load has none. */
+export function loadedPublishedFiles(load: {
+  messages: readonly { message_id: number }[];
+  published_files?: readonly ChatPublishedFile[];
+}): LoadedPublishedFiles | null {
+  if (!load.published_files) return null;
+  return {
+    files: load.published_files,
+    throughMessageId: Math.max(
+      0,
+      ...load.messages.map((message) => message.message_id)
+    ),
+  };
+}
+
+/**
  * Every file published on the selected branch, oldest first, each file ID
  * once.
  *
- * `branchFiles` is the latest load's list for the branch, oldest first. It
- * also holds the files of messages that are not loaded and of the branch's
- * background subagents. A load entry of a loaded message that is no longer on
- * the branch, after a branch switch, is left out. The packets of the loaded
- * branch, oldest first, add the files that the load does not list. Those
- * after the last listed one are newer, such as live publishes. Those before
- * it are older, such as files saved without a path.
+ * The load's list is the files of every message that it knew of, also of
+ * messages that are not loaded and of the branch's background subagents. A
+ * list entry of a loaded message that is no longer on the branch, after a
+ * branch switch, is left out. The packets add only the files of messages
+ * newer than the load, such as live publishes. Without a list, the packets
+ * give all the files.
  */
 function publishedFilesOnBranch(
-  branchFiles: readonly ChatPublishedFile[],
+  loaded: LoadedPublishedFiles | null,
   messageTree: MessageTreeState,
   branch: readonly Message[]
 ): PublishedFile[] {
@@ -46,24 +71,19 @@ function publishedFilesOnBranch(
       .map((message) => message.messageId)
       .filter((messageId) => !branchMessageIds.has(messageId))
   );
-  const listed = branchFiles.filter(
+  const listed = (loaded?.files ?? []).filter(
     (file) => !offBranchMessageIds.has(file.message_id)
   );
-  const listedIds = new Set(listed.map((file) => file.file_id));
-  const packetFiles = branch.flatMap((message) =>
-    readPublishedFiles(message.packets)
-  );
-  const lastListed = packetFiles.findLastIndex((file) =>
-    listedIds.has(file.file_id)
-  );
+  const newer = branch
+    .filter(
+      (message) =>
+        loaded === null ||
+        message.messageId === undefined ||
+        message.messageId > loaded.throughMessageId
+    )
+    .flatMap((message) => readPublishedFiles(message.packets));
   const seenFileIds = new Set<string>();
-  return [
-    ...packetFiles
-      .slice(0, lastListed + 1)
-      .filter((file) => !listedIds.has(file.file_id)),
-    ...listed,
-    ...packetFiles.slice(lastListed + 1),
-  ].filter((file) => {
+  return [...listed, ...newer].filter((file) => {
     if (seenFileIds.has(file.file_id)) return false;
     seenFileIds.add(file.file_id);
     return true;
@@ -73,11 +93,11 @@ function publishedFilesOnBranch(
 /** The branch's published files: all of them, oldest first, and the newest
  * publish of each path, newest first, as the Files list shows them. */
 export function branchPublishedFiles(
-  branchFiles: readonly ChatPublishedFile[],
+  loaded: LoadedPublishedFiles | null,
   messageTree: MessageTreeState,
   branch: readonly Message[]
 ): { all: PublishedFile[]; latest: PublishedFile[] } {
-  const all = publishedFilesOnBranch(branchFiles, messageTree, branch);
+  const all = publishedFilesOnBranch(loaded, messageTree, branch);
   const newestByPath = new Map<string, PublishedFile>();
   for (const file of all) {
     // Deleting first moves the path to the end: the newest publish

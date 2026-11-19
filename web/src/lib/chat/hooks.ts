@@ -65,6 +65,7 @@ import {
 import {
   branchPublishedFiles,
   openFilesOfTabs,
+  type LoadedPublishedFiles,
 } from "@/lib/chat/publishedFiles";
 import {
   awaitsDecision,
@@ -80,11 +81,7 @@ import {
   type WaitingToolRequest,
 } from "@/lib/chat/toolApprovals";
 import type { Packet, PublishedFile } from "@/app/app/services/streamingModels";
-import {
-  APPROVAL_PENDING_ERROR_CODE,
-  type ChatPublishedFile,
-  type ChatStream,
-} from "@/app/app/types";
+import { APPROVAL_PENDING_ERROR_CODE, type ChatStream } from "@/app/app/types";
 
 const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
 const SERVER_WORK_POLL_MS = 2000;
@@ -900,22 +897,22 @@ const NO_PUBLISHED_FILES: PublishedFile[] = [];
 const publishedFileLists = new WeakMap<
   MessageTreeState,
   {
-    branchFiles: ChatPublishedFile[];
+    loaded: LoadedPublishedFiles | null;
     all: PublishedFile[];
     latest: PublishedFile[];
   }
 >();
 
 function sessionPublishedFiles(
-  branchFiles: ChatPublishedFile[],
+  loaded: LoadedPublishedFiles | null,
   messageTree: MessageTreeState
 ): { all: PublishedFile[]; latest: PublishedFile[] } {
   const cached = publishedFileLists.get(messageTree);
-  if (cached?.branchFiles === branchFiles) return cached;
+  if (cached && cached.loaded === loaded) return cached;
   const lists = {
-    branchFiles,
+    loaded,
     ...branchPublishedFiles(
-      branchFiles,
+      loaded,
       messageTree,
       getLatestMessageChain(messageTree)
     ),
