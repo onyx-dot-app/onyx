@@ -522,14 +522,22 @@ def test_download_retries_outlast_one_minute() -> None:
 
 class _RecordingLimiter(SourceApiLimiter):
     def __init__(self) -> None:
+        self.bulk: list[bool] = []
         self.spent: list[tuple[str, int, str | None]] = []
         self.request_counts: list[int] = []
         self.reported: list[tuple[str, str | None, bool]] = []
         self.report_counts: list[int] = []
 
     def acquire(
-        self, api: str, cost: int, user: str | None = None, request_count: int = 1
+        self,
+        api: str,
+        cost: int,
+        user: str | None = None,
+        request_count: int = 1,
+        *,
+        bulk: bool = False,
     ) -> None:
+        self.bulk.append(bulk)
         self.spent.append((api, cost, user))
         self.request_counts.append(request_count)
 
@@ -572,6 +580,7 @@ def test_each_list_page_spends_list_units_before_its_request() -> None:
 
     assert files == [{"id": "1"}, {"id": "2"}]
     assert limiter.spent == [("drive", 100, "a@co.com")] * 2
+    assert limiter.bulk == [False] * 2
     assert limiter.reported == []
 
 
@@ -595,6 +604,8 @@ def test_reads_downloads_and_docs_spend_their_own_costs() -> None:
         ("drive", 200, "a@co.com"),
         ("drive", 200, "b@co.com"),
     ]
+    # Content reads wait after the other calls; a metadata read does not.
+    assert limiter.bulk == [False, True, True]
 
 
 @pytest.mark.parametrize(
@@ -939,6 +950,7 @@ def test_a_docs_fetch_that_recovers_reports_and_spends_each_try() -> None:
 
     assert doc == {"title": "t"}
     assert [api for api, _, _ in limiter.spent] == ["docs"] * 4
+    assert limiter.bulk == [True] * 4
     assert limiter.reported == [("docs", "a@co.com", True)] * 3
 
 

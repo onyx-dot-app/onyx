@@ -171,13 +171,27 @@ them. Connector code does not import Redis. Each per-minute budget is enforced
 in a 10 s window at the same rate, so a full minute cannot go in one burst. A
 second window of the full minute holds the configured budget. The budgets are
 not a hard quota cap: one request always fits an empty window, so a single
-batch larger than a budget goes through, and a call goes on with no slot when
-Redis cannot be reached or after it waited 300 s (`MAX_WAIT_SECONDS`). A
-window cuts only when the refused share of its requests in the last 30 s is at
+batch larger than a budget goes through. A call goes on with no slot when
+Redis cannot be reached, and takes its slot over the budget after it waited
+300 s (`MAX_WAIT_SECONDS`, counted in `onyx_source_api_limiter_overdrafts_total`).
+Waiting calls take turns in a queue for each window: the content reads of
+conversion (`_spend(..., bulk=True)`: downloads, exports, Docs API reads) go
+after every other call, such as listing and permission sync, and leave 5 % of
+each window to them (`PRIORITY_RESERVE`). Calls of one class go in the order
+they came, and a waiter that stops trying for 20 s leaves the queue. A window
+cuts only when the refused share of its requests in the current epoch is at
 least 2 % with at least 10 refusals: by 0.8, or in a storm (10 % or more) by
-the accepted share, at most 0.5. A cut holds for 60 s, but a storm can cut again
-after 10 s. Then the share grows by 0.05 each 10 s, and by 0.005 near the share
-of the last cut. EE group sync and doc permission sync
+the accepted share, at most 0.5. A cut does not go below 90 % of the share
+that Google accepted (the share of the window that the recent requests used,
+less the refused share), and takes at least 5 % off. Each cut starts a new
+epoch. A refusal of a request that took its slot before the cut is late and
+does not count, so one burst gives one cut. The limiter keeps the epoch of
+each window per thread, so a refusal must be reported from the thread that
+took the slot. A cut holds for 60 s, but a storm of refusals in the new epoch
+can cut again after 10 s. The ceiling is the accepted share, or 80 % of the
+last ceiling when that is higher. After the hold the share grows by 0.05 each
+10 s up to 80 % of the ceiling, then by 0.005; above the ceiling it moves the
+ceiling up. EE group sync and doc permission sync
 (`ee/onyx/external_permissions/google_drive/`) spend from the same budgets.
 
 **Request and back-off metrics.** The gateway counts each request it sends,
@@ -185,7 +199,8 @@ each try of a retry included, in `onyx_source_api_requests_total{source, api,
 outcome}` (`server/metrics/source_api_metrics.py`). A media download retries in
 googleapiclient, so `_CountingHttp` counts each of its HTTP requests. The
 limiter sets `onyx_source_api_limiter_budget{scope}` from the shares that the
-Redis scripts return, and counts cuts and waits. The listing pool
+Redis scripts return, `onyx_source_api_limiter_ceiling` at each project cut,
+and counts cuts, late refusals and waits. The listing pool
 (`AdaptiveConcurrency(metrics_name="drive_listing")`) records its limit,
 in-flight tasks, cuts and growth (`server/metrics/adaptive_pool_metrics.py`).
 docfetching runs the connector in a spawned process, so
@@ -193,7 +208,8 @@ docfetching runs the connector in a spawned process, so
 metrics server. A sampler can also read the shared budget in Redis:
 `<tenant>:source_api_limit:google_drive:<credential id>:<api>:all:meta` (and
 `:user:<email>:meta`) holds `factor`, the share of the limit, as of the last
-request.
+request, and `ceiling` and `epoch`. The `:queue` sorted set of the same window
+holds its waiters.
 
 **Clients.** `connectors/google_utils/resources.py:get_google_service` builds the Docs,
 Drive, Admin and Gmail clients from a `GoogleService` member, and impersonates

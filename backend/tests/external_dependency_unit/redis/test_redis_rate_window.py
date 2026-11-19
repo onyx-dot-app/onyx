@@ -6,8 +6,9 @@ only Redis."""
 
 import subprocess
 import sys
+import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
@@ -24,7 +25,12 @@ from onyx.connectors.source_api_limiter import (
 )
 from onyx.redis import redis_rate_window
 from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.redis_rate_window import RateWindow, RedisRateWindows, RefusalResult
+from onyx.redis.redis_rate_window import (
+    RateWindow,
+    RedisRateWindows,
+    RefusalResult,
+    WaitTurn,
+)
 from onyx.server.metrics import source_api_metrics
 
 _API = "drive"
@@ -192,7 +198,7 @@ def test_a_refused_share_over_the_threshold_cuts_gently(
     result = windows.report_refusals(window, count=15)
 
     assert result == RefusalResult(
-        share=0.8, applied=True, hard=False, refused_share=0.03
+        share=0.8, applied=True, hard=False, refused_share=0.03, ceiling=0.8
     )
     assert windows.try_acquire([window], cost=80) == 0
     assert windows.try_acquire([window], cost=1) > 0
@@ -206,7 +212,7 @@ def test_a_storm_cuts_to_the_accepted_share(windows: RedisRateWindows) -> None:
     result = windows.report_refusals(window, count=70)
 
     assert result == RefusalResult(
-        share=0.3, applied=True, hard=True, refused_share=0.7
+        share=0.3, applied=True, hard=True, refused_share=0.7, ceiling=0.3
     )
 
 
@@ -259,29 +265,79 @@ def test_a_cut_stops_at_the_lowest_share(
     assert shares == [0.1, 0.1, 0.1]
 
 
-def test_the_share_grows_back_and_slowly_near_the_last_cut(
+def test_a_storm_cut_keeps_most_of_the_accepted_share(
+    windows: RedisRateWindows,
+) -> None:
+    """The window was full and Google refused 30 %: it accepted 70 % of the
+    limit. Half of the share would cut far below that."""
+    window = RateWindow(key="w", limit=1000, period_seconds=10)
+    assert (
+        windows.try_acquire_with_shares([window], cost=1000, requests=100).wait_seconds
+        == 0
+    )
+
+    result = windows.report_refusals(window, count=30)
+
+    assert (result.applied, result.hard) == (True, True)
+    assert result.accepted_share == 0.7
+    assert result.share == 0.63
+
+
+def test_a_late_refusal_does_not_cut_again(
+    windows: RedisRateWindows, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One burst gives one cut. Refusals that arrive after the cut, for
+    requests sent before it, do not count. Refusals for requests sent after
+    the cut still can cut again."""
+    monkeypatch.setattr(redis_rate_window, "STORM_RECUT_SECONDS", 0.0)
+    window = RateWindow(key="w", limit=100, period_seconds=10)
+    before = windows.try_acquire_with_shares([window], cost=0, requests=100)
+    assert before.epochs == [0]
+    first = windows.report_refusals(window, count=50, epoch=0)
+    assert (first.share, first.applied) == (0.5, True)
+
+    # The rest of the burst arrives late: no cut, and no count.
+    for _ in range(5):
+        late = windows.report_refusals(window, count=50, epoch=0)
+        assert (late.share, late.applied, late.late) == (0.5, False, True)
+
+    # Google goes on refusing the requests sent at the lower share.
+    after = windows.try_acquire_with_shares([window], cost=0, requests=100)
+    assert after.epochs == [1]
+    again = windows.report_refusals(window, count=50, epoch=1)
+    assert (again.share, again.applied, again.late) == (0.25, True, False)
+
+
+def test_the_share_grows_fast_below_the_ceiling_and_slowly_near_it(
     windows: RedisRateWindows, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(redis_rate_window, "CUT_HOLD_SECONDS", 0.3)
+    monkeypatch.setattr(redis_rate_window, "STORM_RECUT_SECONDS", 0.0)
     monkeypatch.setattr(redis_rate_window, "GROW_INTERVAL_SECONDS", 0.1)
     monkeypatch.setattr(redis_rate_window, "GROW_STEP", 0.1)
-    monkeypatch.setattr(redis_rate_window, "SLOW_GROW_STEP", 0.05)
-    monkeypatch.setattr(redis_rate_window, "SLOW_ZONE", 0.75)
-    window = RateWindow(key="w", limit=100, period_seconds=0.05)
-    _send(windows, window, 20)
-    # A storm cuts from 100 % to 50 %.
-    assert windows.report_refusals(window, count=10).share == 0.5
+    monkeypatch.setattr(redis_rate_window, "SLOW_GROW_STEP", 0.02)
+    monkeypatch.setattr(redis_rate_window, "SLOW_ZONE", 0.8)
+    window = RateWindow(key="w", limit=1000, period_seconds=10)
+    # A storm cuts from 100 % to 50 %: the ceiling is 50 %.
+    windows.try_acquire_with_shares([window], cost=600, requests=100)
+    assert windows.report_refusals(window, count=50).share == 0.5
+    # Google refuses 90 % of the requests after the cut, while its quota
+    # recovers from the burst. The second cut goes to the floor, and the
+    # ceiling keeps 90 % of 50 %.
+    windows.try_acquire_with_shares([window], cost=0, requests=100)
+    assert windows.report_refusals(window, count=90, epoch=1).share == 0.1
 
     def share_after_one_interval() -> float:
         time.sleep(0.12)  # test-flakes: allow the window reads the Redis clock
-        return windows.try_acquire_with_shares([window], cost=1).shares[0]
+        return windows.try_acquire_with_shares([window], cost=0).shares[0]
 
     # No growth in the hold.
-    assert windows.try_acquire_with_shares([window], cost=1).shares[0] == 0.5
+    assert windows.try_acquire_with_shares([window], cost=0).shares[0] == 0.1
     time.sleep(0.3)  # test-flakes: allow the window reads the Redis clock
     grown = [share_after_one_interval() for _ in range(7)]
-    # Fast steps up to 75 % of the share before the cut, then slow steps.
-    assert grown == [0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0]
+    # Fast steps up to 80 % of the ceiling of 45 %, then slow steps. Past the
+    # ceiling, the ceiling moves up and the steps stay slow.
+    assert grown == [0.2, 0.3, 0.4, 0.42, 0.44, 0.46, 0.48]
 
 
 def test_a_cut_resets_the_refused_share(windows: RedisRateWindows) -> None:
@@ -413,15 +469,173 @@ def test_a_stop_signal_ends_the_wait(tenant_id: str) -> None:
         limiter.acquire(_API, 100)
 
 
-def test_a_call_goes_on_after_the_longest_wait(
+def test_a_call_takes_its_slot_over_the_budget_after_the_longest_wait(
     tenant_id: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(source_api_limiter, "MAX_WAIT_SECONDS", 0.3)
     limiter = _limiter(tenant_id, per_credential=100, per_user=None)
+
+    def overdrafts() -> float:
+        return (
+            REGISTRY.get_sample_value(
+                "onyx_source_api_limiter_overdrafts_total",
+                {"source": "google_drive", "api": _API},
+            )
+            or 0.0
+        )
+
+    before = overdrafts()
     limiter.acquire(_API, 100)
     started = time.monotonic()
     limiter.acquire(_API, 100)
     assert 0.3 <= time.monotonic() - started < 3
+    assert overdrafts() == before + 1
+    # The window counts the slot that the call took over the budget.
+    assert limiter.try_acquire(_API, 1) > 0
+
+
+def _short_limiter(
+    tenant_id: str,
+    limit: int,
+    period_seconds: float,
+    should_stop: Callable[[], bool] | None = None,
+) -> RedisSourceApiLimiter:
+    return RedisSourceApiLimiter(
+        tenant_id,
+        "google_drive:1",
+        {_API: SourceApiBudget(per_credential=limit, period_seconds=period_seconds)},
+        should_stop,
+        source=DocumentSource.GOOGLE_DRIVE,
+    )
+
+
+def test_a_new_call_does_not_take_the_room_that_a_waiter_waits_for(
+    tenant_id: str,
+) -> None:
+    limiter = _short_limiter(tenant_id, limit=2, period_seconds=0.3)
+    assert limiter.try_acquire(_API, 2) == 0
+    turn = WaitTurn(token="waiter", bulk=True)
+    assert limiter.try_acquire(_API, 2, turn=turn) > 0
+
+    time.sleep(0.35)  # test-flakes: allow the window reads the Redis clock
+
+    # The window is empty, but the waiter came first and waits for 2 units.
+    assert limiter.try_acquire(_API, 1) > 0
+    assert limiter.try_acquire(_API, 2, turn=turn) == 0
+
+
+def test_a_priority_call_goes_before_the_bulk_waiters(tenant_id: str) -> None:
+    limiter = _short_limiter(tenant_id, limit=1, period_seconds=0.3)
+    assert limiter.try_acquire(_API, 1) == 0
+    conversion = WaitTurn(token="conversion", bulk=True)
+    assert limiter.try_acquire(_API, 1, turn=conversion) > 0
+
+    time.sleep(0.35)  # test-flakes: allow the window reads the Redis clock
+
+    # Group sync comes later, but it does not wait behind conversion.
+    assert limiter.try_acquire(_API, 1, turn=WaitTurn(token="sync")) == 0
+    assert limiter.try_acquire(_API, 1, turn=conversion) > 0
+
+
+def test_waiting_calls_of_one_class_go_in_the_order_they_came(
+    tenant_id: str,
+) -> None:
+    limiter = _short_limiter(tenant_id, limit=1, period_seconds=0.2)
+    limiter.acquire(_API, 1)
+    order: list[int] = []
+    lock = threading.Lock()
+
+    def call(index: int) -> None:
+        limiter.acquire(_API, 1, bulk=True)
+        with lock:
+            order.append(index)
+
+    threads = []
+    for index in range(4):
+        thread = threading.Thread(target=call, args=(index,))
+        thread.start()
+        threads.append(thread)
+        time.sleep(0.03)  # test-flakes: allow each call gets its place in turn
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert order == [0, 1, 2, 3]
+
+
+def test_every_call_of_a_bulk_worker_waits_after_the_other_callers(
+    tenant_id: str,
+) -> None:
+    stop = threading.Event()
+    budget = {_API: SourceApiBudget(per_credential=1, period_seconds=30)}
+    conversion = RedisSourceApiLimiter(
+        tenant_id,
+        "google_drive:1",
+        budget,
+        stop.is_set,
+        source=DocumentSource.GOOGLE_DRIVE,
+        bulk=True,
+    )
+    conversion.acquire(_API, 1)
+
+    # A listing call of the conversion worker is bulk too.
+    thread = threading.Thread(
+        target=lambda: pytest.raises(ConnectorStopSignal, conversion.acquire, _API, 1)
+    )
+    thread.start()
+    window = conversion.credential_window(_API)
+    assert window is not None
+    client = get_redis_client(tenant_id=tenant_id)
+    queue: list[tuple[bytes, float]] = []
+    for _ in range(100):
+        queue = client.zrange(f"{window.key}:queue", 0, -1, withscores=True)
+        if queue:
+            break
+        stop.wait(0.02)
+    stop.set()
+    thread.join(timeout=10)
+
+    assert len(queue) == 1
+    # A bulk place sorts after the place of every priority waiter.
+    assert queue[0][1] >= 10**13
+
+
+def test_a_waiter_that_stops_trying_leaves_the_queue(
+    tenant_id: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(redis_rate_window, "WAITER_STALE_SECONDS", 0.2)
+    limiter = _short_limiter(tenant_id, limit=1, period_seconds=0.3)
+    assert limiter.try_acquire(_API, 1) == 0
+    assert limiter.try_acquire(_API, 1, turn=WaitTurn(token="gone")) > 0
+
+    time.sleep(0.35)  # test-flakes: allow the window reads the Redis clock
+
+    assert limiter.try_acquire(_API, 1) == 0
+
+
+def test_a_stopped_call_gives_up_its_place(tenant_id: str) -> None:
+    stop = threading.Event()
+    limiter = _short_limiter(
+        tenant_id, limit=1, period_seconds=0.5, should_stop=stop.is_set
+    )
+    limiter.acquire(_API, 1)
+    errors: list[BaseException] = []
+
+    def call() -> None:
+        try:
+            limiter.acquire(_API, 1, bulk=True)
+        except ConnectorStopSignal as error:
+            errors.append(error)
+
+    thread = threading.Thread(target=call)
+    thread.start()
+    time.sleep(0.1)  # test-flakes: allow the call takes its place first
+    stop.set()
+    thread.join(timeout=10)
+    assert len(errors) == 1
+
+    time.sleep(0.5)  # test-flakes: allow the window reads the Redis clock
+    # No waiter is left before a new call.
+    assert limiter.try_acquire(_API, 1) == 0
 
 
 def test_the_factory_builds_the_drive_limiter_and_wires_the_stop_signal(
@@ -506,7 +720,7 @@ def test_the_limiter_metrics_show_a_cut_and_the_recovery(
     monkeypatch.setattr(redis_rate_window, "CUT_HOLD_SECONDS", 0.3)
     monkeypatch.setattr(redis_rate_window, "GROW_INTERVAL_SECONDS", 0.1)
     monkeypatch.setattr(redis_rate_window, "GROW_STEP", 0.25)
-    monkeypatch.setattr(redis_rate_window, "SLOW_ZONE", 1.0)
+    monkeypatch.setattr(redis_rate_window, "SLOW_GROW_STEP", 0.25)
     # Only this test's users count toward the user gauges.
     monkeypatch.setattr(
         source_api_metrics, "_user_budgets", source_api_metrics._UserBudgets()
@@ -539,11 +753,17 @@ def test_the_limiter_metrics_show_a_cut_and_the_recovery(
     # A storm: half of 20 requests refused.
     assert limiter.try_acquire(_API, 0, "a@x.com", request_count=19) == 0
     limiter.report_rate_limit(_API, "a@x.com", user_scope=False, count=10)
-    # More pushback in the same hold does not cut again.
+    # More pushback for requests sent before the cut does not cut again.
+    late = sample("onyx_source_api_limiter_late_refusals_total", scope="project")
     limiter.report_rate_limit(_API, "a@x.com", user_scope=False, count=10)
+    assert (
+        sample("onyx_source_api_limiter_late_refusals_total", scope="project")
+        == late + 10
+    )
     limiter.report_rate_limit(_API, "a@x.com", user_scope=True, count=10)
     assert (budget("project"), budget("user")) == (500, 50)
     assert cuts("project") == project_cuts + 1
+    assert sample("onyx_source_api_limiter_ceiling") == 500
     assert cuts("user") == user_cuts + 1
     assert sample("onyx_source_api_limiter_cut_users") == 1
 

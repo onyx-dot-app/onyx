@@ -787,7 +787,7 @@ class GoogleDriveSourceOperations(SourceOperations):
         user_email: str,
         report_rate_limit: Callable[[Exception], None],
     ) -> bytes:
-        self._spend(DriveQuotaApi.DRIVE, DRIVE_CONTENT_UNITS, user_email)
+        self._spend(DriveQuotaApi.DRIVE, DRIVE_CONTENT_UNITS, user_email, bulk=True)
         try:
             return _download(request, file_id, size_threshold)
         except HttpError as error:
@@ -805,11 +805,14 @@ class GoogleDriveSourceOperations(SourceOperations):
             return user_email
         return auth.primary_admin_email
 
-    def _spend(self, api: DriveQuotaApi, units: int, user_email: str) -> None:
-        """For a call that is not a plain request, such as a media download."""
+    def _spend(
+        self, api: DriveQuotaApi, units: int, user_email: str, *, bulk: bool = False
+    ) -> None:
+        """For a call that is not a plain request, such as a media download.
+        A content read is ``bulk``: it waits after listing and sync calls."""
         limiter = self._limiter()
         if limiter is not None:
-            limiter.acquire(api.value, units, self._quota_user(user_email))
+            limiter.acquire(api.value, units, self._quota_user(user_email), bulk=bulk)
 
     def _report_rate_limit(
         self, api: DriveQuotaApi, user_email: str, error: Exception
@@ -1340,7 +1343,7 @@ class GoogleDriveSourceOperations(SourceOperations):
         max_response_bytes: int,
         report_rate_limit: Callable[[Exception], None],
     ) -> dict[str, Any] | None:
-        self._spend(DriveQuotaApi.DOCS, DOCS_READ_UNITS, user_email)
+        self._spend(DriveQuotaApi.DOCS, DOCS_READ_UNITS, user_email, bulk=True)
         return self._get_capped_json(
             api=DriveQuotaApi.DOCS.value,
             user_email=user_email,
