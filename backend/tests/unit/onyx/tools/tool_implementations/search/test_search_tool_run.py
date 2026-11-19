@@ -1442,6 +1442,29 @@ def test_every_query_oversized_is_a_tool_error(error: Exception) -> None:
     fusion.assert_not_called()
 
 
+def test_empty_query_result_is_not_an_oversized_query() -> None:
+    def search(**kwargs: Any) -> list[InferenceChunk]:
+        if kwargs["chunk_search_request"].query == "ticket":
+            return []
+        raise _CLAUSE_LIMIT_ERRORS[0]
+
+    fusion = MagicMock(return_value=[])
+    results: list[ToolResult] = []
+
+    _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.CONFLUENCE],
+        search_pipeline_mock=MagicMock(side_effect=search),
+        fusion_mock=fusion,
+        results=results,
+    )
+
+    assert not results[0].is_error
+    fused = fusion.call_args.kwargs
+    assert fused["ranked_results"] == [[]]
+    assert fused["weights"] == [LLM_NON_CUSTOM_QUERY_WEIGHT]
+
+
 def test_other_index_errors_are_not_treated_as_oversized_queries() -> None:
     error = AuthorizationException(
         403,
