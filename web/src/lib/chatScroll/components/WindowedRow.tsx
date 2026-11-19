@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
+import { useOptionalScrollContainer } from "@/lib/chatScroll/components/ScrollContainerContext";
 
 /** Placeholder height of a row that has never been measured. */
 export const ESTIMATED_ROW_HEIGHT_PX = 320;

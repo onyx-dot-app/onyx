@@ -2,8 +2,8 @@ import { createRef, useLayoutEffect } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
-} from "@/sections/chat/ChatScrollContainer";
-import { useScrollContainer } from "@/sections/chat/ScrollContainerContext";
+} from "@/lib/chatScroll/components/ChatScrollContainer";
+import { useScrollContainer } from "@/lib/chatScroll/components/ScrollContainerContext";
 
 interface SpacerProps {
   height: number;

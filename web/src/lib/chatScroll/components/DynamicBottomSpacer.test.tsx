@@ -1,7 +1,7 @@
 import { useRef, type MutableRefObject } from "react";
 import { act, render, waitFor } from "@tests/setup/test-utils";
-import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
-import { ScrollContainerProvider } from "@/sections/chat/ScrollContainerContext";
+import DynamicBottomSpacer from "@/lib/chatScroll/components/DynamicBottomSpacer";
+import { ScrollContainerProvider } from "@/lib/chatScroll/components/ScrollContainerContext";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import type { ChatState } from "@/app/app/types";
 
