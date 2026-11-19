@@ -144,6 +144,7 @@ jobs:
         with:
           context: backend
           file: backend/Dockerfile
+          build-contexts: agent-plugin=extensions/agent-plugin
           target: runtime
           build-args: BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           load: true

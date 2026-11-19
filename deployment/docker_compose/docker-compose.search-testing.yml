@@ -6,6 +6,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      additional_contexts:
+        agent-plugin: ../../extensions/agent-plugin
       # The shipped image; the Dockerfile's default (last) stage is the dev variant
       # with debugging tools (published with a -dev tag suffix).
       target: runtime
@@ -50,6 +52,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      additional_contexts:
+        agent-plugin: ../../extensions/agent-plugin
       # The shipped image; the Dockerfile's default (last) stage is the dev variant
       # with debugging tools (published with a -dev tag suffix).
       target: runtime

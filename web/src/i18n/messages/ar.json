@@ -19,6 +19,21 @@
       "loadFailed": "تعذر على Onyx تحميل هذا الطلب. حاول مرة أخرى.",
       "retry": "إعادة المحاولة"
     },
+    "connectTools": {
+      "title": "ربط أدوات الذكاء الاصطناعي",
+      "description": "استخدم هذا النشر من Onyx في Claude وChatGPT وCodex وعملاء MCP الآخرين. يسجّل كل شخص الدخول بحسابه الخاص في Onyx.",
+      "guides": "أدلة الإعداد",
+      "mcpUrl": {
+        "title": "عنوان MCP",
+        "copy": "نسخ"
+      },
+      "plugin": {
+        "title": "إضافة Onyx",
+        "description": "لـ Claude. خادم MCP الخاص بـ Onyx مضمّن فيها.",
+        "download": "تنزيل"
+      },
+      "downloadFailed": "تعذّر تنزيل الإضافة."
+    },
     "connections": {
       "cancel": "إلغاء",
       "title": "التطبيقات المتصلة",

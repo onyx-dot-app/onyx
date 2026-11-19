@@ -34,13 +34,20 @@ To develop the plugin from a checkout, start Claude Code with `--plugin-dir exte
 
 Organizations can require the plugin on every machine through managed settings. See [Manage plugins for your organization](https://code.claude.com/docs/en/plugins/org).
 
+## Export from Onyx
+
+An Onyx user can download this plugin with the deployment's address set: **Settings → Accounts & Access → Connect AI tools**, then **Download**. That zip is for a host that takes no install options, such as claude.ai chat. The MCP server in it has a fixed URL and signs in through OAuth, and the token option is only for the prefetch.
+
+The backend reads this folder. Its image is built from `backend/` alone, so a build passes the folder as the `agent-plugin` build context (`--build-context agent-plugin=extensions/agent-plugin`, or `additional_contexts` in Compose). An image built without it has no plugin files, and the export is off.
+
+ChatGPT on the web marks a plugin that declares an MCP server as Desktop only, so the export has no ChatGPT form. Add Onyx there as a custom MCP server.
+
 ## Codex
 
 The same directory is a Codex plugin: `.codex-plugin/plugin.json` is the manifest Codex reads, `hooks/codex.json` holds the Codex hook definitions, and the repo marketplace at `.agents/plugins/marketplace.json` lists it. The manifest uses Codex's own format rather than the portable Agent Plugins one, because Codex loads bundled hooks only from its own format. Codex cannot take a per-user server URL from a plugin, so the plugin bundles no MCP server there. Add the Onyx server yourself, named `onyx`, then install the plugin:
 
 ```
 codex mcp add onyx --url https://onyx.example.com/mcp/
-codex mcp login onyx
 codex plugin marketplace add onyx-dot-app/onyx --sparse extensions/agent-plugin --sparse .agents/plugins
 codex plugin add onyx@onyx
 ```

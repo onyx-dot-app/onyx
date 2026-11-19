@@ -1,10 +1,37 @@
 ---
 title: "Claude Code"
-description: "Connect Claude Code to the Onyx MCP server with OAuth, the Onyx plugin, or a personal access token."
+description: "Connect Claude Code to Onyx with the Onyx plugin, or add the Onyx MCP server with OAuth or a personal access token."
 icon: "square-terminal"
 ---
 
-## Add Onyx
+## Install the Onyx plugin
+
+The [Onyx plugin](https://github.com/onyx-dot-app/onyx/tree/main/extensions/agent-plugin) adds the Onyx MCP server,
+a skill, and hooks that tell Claude to search Onyx first for company knowledge.
+It needs a personal access token with `read:search`, from **Settings > Accounts & Access > Access Tokens**.
+
+Run these commands in a terminal, with your Onyx web address:
+
+```bash
+claude plugin marketplace add https://raw.githubusercontent.com/onyx-dot-app/onyx/main/extensions/agent-plugin/.claude-plugin/marketplace.json
+claude plugin install onyx@onyx --config onyx_url=https://onyx.example.com
+```
+
+In Claude Code, enter `/plugin configure onyx@onyx` and enter the token.
+Then send the [test prompt](/overview/onyx_anywhere/mcp_server#test-the-connection).
+The hooks need `bun` or Node 23.6 or later.
+
+| Option | Effect |
+| --- | --- |
+| **Strict retrieval** | Blocks other search tools until Claude searches Onyx for the prompt. |
+| **Prefetch results** | Searches Onyx before each prompt and gives Claude the top results. Adds up to 3 seconds per prompt. |
+
+Administrators can require the plugin on every machine with [managed
+settings](https://code.claude.com/docs/en/plugins/org).
+
+## Add the MCP server only
+
+If you do not use the Onyx plugin, add Onyx as an MCP server. You sign in with OAuth and need no token.
 
 ```bash
 claude mcp add --scope user --transport http onyx https://onyx.example.com/mcp/
@@ -30,27 +57,6 @@ Each member signs in with their own Onyx account. Use user or project configurat
   }
 }
 ```
-
-## Onyx plugin
-
-The [Onyx plugin](https://github.com/onyx-dot-app/onyx/tree/main/extensions/agent-plugin)
-tells Claude to search Onyx first for company knowledge. It needs a personal access token with `read:search`,
-from **Settings > Accounts & Access > Access Tokens**.
-
-```
-/plugin marketplace add https://raw.githubusercontent.com/onyx-dot-app/onyx/main/extensions/agent-plugin/.claude-plugin/marketplace.json
-/plugin install onyx@onyx
-```
-
-Claude Code asks for your Onyx URL and the token. The hooks need `bun` or Node 23.6 or later.
-
-| Option | Effect |
-| --- | --- |
-| **Strict retrieval** | Blocks other search tools until Claude searches Onyx for the prompt. |
-| **Prefetch results** | Searches Onyx before each prompt and gives Claude the top results. Adds up to 3 seconds per prompt. |
-
-Administrators can require the plugin on every machine with [managed
-settings](https://code.claude.com/docs/en/plugins/org).
 
 ## Personal access token
 

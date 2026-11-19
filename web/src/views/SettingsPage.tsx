@@ -100,6 +100,7 @@ import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { DOCS_BASE_URL } from "@/lib/constants";
 import { Collapsible } from "@opal/components";
 import type { ErrorResponseBody } from "@/lib/fetcher";
+import ConnectAiTools from "@/sections/oauth-provider/ConnectAiTools";
 import OAuthProviderConnections from "@/sections/oauth-provider/OAuthProviderConnections";
 
 interface PAT {
@@ -2495,6 +2496,7 @@ function AccountsAccessSettings() {
             )}
           </Section>
         )}
+        <ConnectAiTools />
         <OAuthProviderConnections />
       </Section>
     </>

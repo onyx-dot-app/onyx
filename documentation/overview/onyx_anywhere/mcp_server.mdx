@@ -1,7 +1,7 @@
 ---
 title: "Onyx MCP server"
 sidebarTitle: "Overview"
-description: "Search Onyx from Claude, ChatGPT, Codex, and Claude Code using OAuth."
+description: "Search Onyx from Claude, Claude Code, ChatGPT, and Codex."
 icon: "plug"
 ---
 
@@ -14,7 +14,7 @@ Connect your AI client to Onyx so it can search your Onyx documents, search the 
 
 ## Before you connect
 
-- Get your Onyx MCP URL from your administrator, such as `https://onyx.example.com/mcp/`.
+- Copy your Onyx MCP URL in Onyx from **Settings > Accounts & Access > Connect AI tools**. An example is `https://onyx.example.com/mcp/`.
 - Your Onyx account needs the **Search** and **Create User Access Token** permissions.
 - Self-hosted Onyx needs HTTPS for OAuth. The MCP server is in all editions and is on by default.
 
@@ -22,21 +22,23 @@ Connect your AI client to Onyx so it can search your Onyx documents, search the 
 
 <CardGroup cols={2}>
   <Card title="Claude" icon="message" href="/overview/onyx_anywhere/mcp_server/claude">
-    Claude Desktop and claude.ai.
-  </Card>
-
-  <Card title="ChatGPT" icon="comments" href="/overview/onyx_anywhere/mcp_server/chatgpt">
-    ChatGPT on the web and desktop.
-  </Card>
-
-  <Card title="Codex" icon="terminal" href="/overview/onyx_anywhere/mcp_server/codex">
-    CLI, desktop app, and IDE extension.
+    Claude Desktop and claude.ai, with the Onyx plugin.
   </Card>
 
   <Card title="Claude Code" icon="square-terminal" href="/overview/onyx_anywhere/mcp_server/claude_code">
-    User or project configuration.
+    The Onyx plugin, or the MCP server only.
+  </Card>
+
+  <Card title="ChatGPT" icon="comments" href="/overview/onyx_anywhere/mcp_server/chatgpt">
+    ChatGPT on the web and desktop, with a custom MCP server.
+  </Card>
+
+  <Card title="Codex" icon="terminal" href="/overview/onyx_anywhere/mcp_server/codex">
+    CLI, desktop app, and IDE extension, with the Onyx plugin.
   </Card>
 </CardGroup>
+
+### Other MCP clients
 
 For another client, add your Onyx MCP URL as a remote Streamable HTTP server with OAuth.
 

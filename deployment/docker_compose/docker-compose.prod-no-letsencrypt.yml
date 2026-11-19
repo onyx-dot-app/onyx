@@ -12,6 +12,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      additional_contexts:
+        agent-plugin: ../../extensions/agent-plugin
       # The shipped image; the Dockerfile's default (last) stage is the dev variant
       # with debugging tools (published with a -dev tag suffix).
       target: runtime
@@ -97,6 +99,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      additional_contexts:
+        agent-plugin: ../../extensions/agent-plugin
       # The shipped image; the Dockerfile's default (last) stage is the dev variant
       # with debugging tools (published with a -dev tag suffix).
       target: runtime
@@ -219,6 +223,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      additional_contexts:
+        agent-plugin: ../../extensions/agent-plugin
       target: runtime
     command: >
       /bin/sh -c "if [ \"${MCP_SERVER_ENABLED:-true}\" != \"True\" ] && [ \"${MCP_SERVER_ENABLED:-true}\" != \"true\" ]; then
@@ -263,6 +269,8 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+      additional_contexts:
+        agent-plugin: ../../extensions/agent-plugin
       target: runtime
     command: python -m onyx.webhook_server_main
     env_file:

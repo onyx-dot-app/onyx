@@ -162,6 +162,9 @@ class Settings(BaseModel):
 
 class UserSettings(Settings):
     oauth_provider_enabled: bool = False
+    onyx_plugin_export_enabled: bool = False
+    # None when the OAuth provider is off: MCP clients then have no sign-in.
+    onyx_mcp_url: str | None = None
     notifications: list[NotificationResponse]
     needs_reindexing: bool
     tenant_id: str = POSTGRES_DEFAULT_SCHEMA

@@ -104,6 +104,11 @@ RUN --mount=type=bind,source=requirements/default.txt,target=/requirements.txt \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
+# extensions/agent-plugin is outside this build context. A build that passes
+# `--build-context agent-plugin=extensions/agent-plugin` replaces this empty stage.
+# Without it the image has no plugin files and the Onyx plugin export is off.
+FROM scratch AS agent-plugin
+
 FROM os AS runtime
 
 LABEL com.danswer.maintainer="founders@onyx.app"
@@ -195,6 +200,8 @@ COPY --chown=onyx:onyx ./alembic.ini /app/alembic.ini
 COPY supervisord.conf /usr/etc/supervisord.conf
 COPY --chown=onyx:onyx ./static /app/static
 COPY --chown=onyx:onyx ./keys /app/keys
+# The plugin export reads this folder at its repo path, with / as the repo root.
+COPY --from=agent-plugin --chown=onyx:onyx . /extensions/agent-plugin
 
 # Escape hatch scripts
 COPY --chown=onyx:onyx ./scripts/debugging /app/scripts/debugging

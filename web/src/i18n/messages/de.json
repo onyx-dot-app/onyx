@@ -19,6 +19,21 @@
       "loadFailed": "Onyx konnte diese Anfrage nicht laden. Versuchen Sie es erneut.",
       "retry": "Erneut versuchen"
     },
+    "connectTools": {
+      "title": "KI-Tools verbinden",
+      "description": "Nutzen Sie diese Onyx-Bereitstellung in Claude, ChatGPT, Codex und anderen MCP-Clients. Jede Person meldet sich mit dem eigenen Onyx-Konto an.",
+      "guides": "Einrichtungsanleitungen",
+      "mcpUrl": {
+        "title": "MCP-URL",
+        "copy": "Kopieren"
+      },
+      "plugin": {
+        "title": "Onyx-Plugin",
+        "description": "Für Claude. Der Onyx-MCP-Server ist enthalten.",
+        "download": "Herunterladen"
+      },
+      "downloadFailed": "Das Plugin konnte nicht heruntergeladen werden."
+    },
     "connections": {
       "cancel": "Abbrechen",
       "title": "Verbundene Apps",

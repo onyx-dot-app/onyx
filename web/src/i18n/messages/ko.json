@@ -19,6 +19,21 @@
       "loadFailed": "Onyx에서 이 요청을 불러오지 못했습니다. 다시 시도하세요.",
       "retry": "다시 시도"
     },
+    "connectTools": {
+      "title": "AI 도구 연결",
+      "description": "이 Onyx 배포를 Claude, ChatGPT, Codex 및 기타 MCP 클라이언트에서 사용합니다. 각 사용자는 자신의 Onyx 계정으로 로그인합니다.",
+      "guides": "설정 가이드",
+      "mcpUrl": {
+        "title": "MCP URL",
+        "copy": "복사"
+      },
+      "plugin": {
+        "title": "Onyx 플러그인",
+        "description": "Claude용. Onyx MCP 서버가 포함되어 있습니다.",
+        "download": "다운로드"
+      },
+      "downloadFailed": "플러그인을 다운로드할 수 없습니다."
+    },
     "connections": {
       "cancel": "취소",
       "title": "연결된 앱",

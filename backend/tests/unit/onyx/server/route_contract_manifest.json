@@ -324,6 +324,7 @@
   "GET /persona/{persona_id}": "current_limited_user",
   "GET /persona/{persona_id}/avatar": "basic",
   "GET /plugins/agents/{persona_id}": "basic",
+  "GET /plugins/onyx-plugin/export": "basic",
   "GET /plugins/{plugin_id}/access": "basic",
   "GET /proxy/billing-information": "get_license_payload_allow_expired",
   "GET /proxy/license/{tenant_id}": "get_license_payload_allow_expired",
