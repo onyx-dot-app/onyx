@@ -1,0 +1,149 @@
+---
+title: "Confluence overview"
+description: "Index Confluence pages, comments, and attachments"
+---
+
+The Confluence connector indexes pages that its connector account can view. It also indexes page comments, labels,
+last editors, hierarchy, and attachments when you enable **Include Attachments**. After the first full sync,
+Onyx checks for updates every 30 minutes by default. You can change the refresh interval under **Schedule**.
+
+## Choose your deployment
+
+| Deployment | Authentication | Site URL | Onyx setting |
+| --- | --- | --- | --- |
+| Confluence Cloud | Onyx Cloud OAuth, or an Atlassian API token | `https://your-domain.atlassian.net/wiki` | Select **Confluence Cloud** |
+| Confluence Data Center | Personal access token (PAT) | Your site root or context path | Select **Confluence Data Center** |
+| Confluence Server | Personal access token (PAT), available in 7.9 and later | Your site root or context path | Select **Confluence Data Center** |
+
+- Follow [Confluence Cloud setup](./confluence-cloud) for an Atlassian-hosted site.
+- Follow [Confluence Data Center and Server setup](./confluence-data-center) for a self-managed site.
+
+<Warning>
+  Atlassian ended support for Confluence Server on February 15, 2024.
+  Onyx still uses the Data Center integration path for Server,
+  but Atlassian recommends migration to Cloud or Data Center.
+  See Atlassian's [Server end-of-support notice](https://www.atlassian.com/licensing/server-end-of-support).
+</Warning>
+
+## Configure the connector in Onyx
+
+First, complete the authentication steps in the guide for your deployment.
+Then open **Admin Panel → Connectors** and select **Confluence**.
+
+<Steps>
+  <Step title="Set the deployment and URL">
+    Under **Index Configurations**, choose **Confluence Cloud** or **Confluence Data Center**.
+    The deployment decides which account form Onyx shows in the next step.
+
+    - **Site URL**: For Cloud, include `/wiki`. For Data Center or Server, enter the site root or configured context
+    path. Do not add `/rest/api`.
+    - **Scoped API Token**: Enable this only for a Confluence Cloud API token that you created with scopes.
+    Leave it off for a classic Cloud token and for Data Center or Server.
+
+    ![Confluence Cloud connector settings](/assets/admins/connectors/confluence/connector-form-cloud.webp)
+  </Step>
+
+  <Step title="Connect a Confluence account">
+    Under **Authentication Account**, select **New Confluence Account** and enter the token from your deployment guide.
+
+    - Cloud: enter the **Confluence Account Email** and its **API Token**.
+    - Data Center or Server: enter the **Personal Access Token**. Onyx sends it as a bearer token.
+    - Onyx Cloud: you can select **Authorize with Confluence** instead and sign in with Atlassian.
+
+    ![Confluence account form](/assets/admins/connectors/confluence/credential-form.webp)
+  </Step>
+
+  <Step title="Choose what to index">
+    Choose one tab:
+
+    | Tab | Result |
+    | --- | --- |
+    | **Index Everything** | Index every space and page the connector account can view. |
+    | **Select Spaces/Pages** | Add one or more space keys or URLs under **Spaces**, page IDs or URLs under **Pages**, or both. Keep **Include Child Pages** on to index every page nested under the named pages. |
+    | **CQL Query** | Index pages returned by a custom Confluence Query Language query. Select **Test Query** to run it before you create the connector. |
+
+    A CQL query must use `type=page` as its only content-type filter. Do not add `order by`, `lastModified`,
+    or other date filters. Onyx adds its own time filters during incremental sync, and yours can break them.
+    Onyx still retrieves comments and enabled attachments for the returned pages.
+    See Atlassian's [CQL
+    documentation](https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/).
+  </Step>
+
+  <Step title="Choose attachment processing">
+    Keep **Include Attachments** enabled to index files and images attached to the indexed pages.
+    Image attachments also need image processing enabled under **Admin Panel → Index Settings**.
+    Disable attachment processing when you want only page text and comments.
+
+    An attachment larger than 10 MB, or whose extracted text is longer than 200,000 characters, is skipped.
+    Set `CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD` and `CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD` to
+    change these limits.
+  </Step>
+
+  <Step title="Choose who can see the pages">
+    Under **Document Access**, choose **Everyone in Your Organization**, **Specific Groups**,
+    or **Sync with Confluence**. **Sync with Confluence** mirrors Confluence space permissions, page restrictions,
+    and inherited ancestor restrictions.
+
+    **Specific Groups** and **Sync with Confluence** are available on Onyx Cloud and Enterprise Edition.
+  </Step>
+
+  <Step title="Create and verify">
+    **Create Connector** is enabled once the required [connection checks](#connection-checks) pass. Select it,
+    then open **Admin Panel → Indexing Status**, select the connector,
+    and wait for the first indexing attempt to complete. Then search for a known page in Onyx.
+  </Step>
+</Steps>
+
+## Connection checks
+
+Each check reads from Confluence with the selected account, so a failure points at that account's access.
+
+| Check | Passes when |
+| --- | --- |
+| Sign in to Confluence | Confluence accepts the token and the **Site URL**. |
+| List spaces, List pages | The account sees at least one space, and can search pages. |
+| Find selected spaces, Find selected pages | Every space key and page ID you entered exists for the account. |
+| Run CQL query | Your CQL query returns pages. |
+| Sample page content, Sample comments, Sample attachments | The account can read a page body, its comments, and, with **Include Attachments**, an attachment. |
+| Read user names | The account can read the names of page authors and editors. |
+| Read page restrictions, Read space permissions, Read anonymous access, Read user emails | **Sync with Confluence** only. The account can read restrictions, space permissions, and user emails. |
+| List users, Group membership | **Sync with Confluence** only. The account can list Confluence users and their groups. |
+
+The permission checks run again before each scheduled permission sync,
+so an account that loses access stops the sync instead of hiding pages.
+
+You can set **Run Checks Every** under **Schedule** to repeat the checks on a timer.
+
+## Permission sync behavior
+
+Onyx applies the closest read restriction in this order:
+
+- A page restriction.
+- The closest restricted ancestor page.
+- The page's space permissions.
+
+Onyx maps users by email address. A missing, hidden, masked,
+or different email address prevents a Confluence identity from matching an Onyx user.
+Test at least one page with each restriction pattern that your site uses.
+
+The first indexing attempt indexes the pages. The first permission sync runs after it,
+and Onyx repeats document permission sync and group sync every 30 minutes by default.
+Set `CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY` and `CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY` (seconds)
+to change them.
+
+## Skip pages by label
+
+Set `CONFLUENCE_CONNECTOR_LABELS_TO_SKIP` to a comma-separated list of Confluence labels.
+Onyx does not index a page that carries one of these labels.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| No spaces found | Confirm that the account can open at least one space, the **Site URL** is correct, and the deployment matches your site. |
+| Cloud returns `401` | Replace an expired or revoked token. Confirm that **Scoped API Token** matches the token type. |
+| Cloud returns `403` | Grant the account access to the requested space or page. For a scoped token, add the required read scopes. |
+| Data Center or Server returns `401` | Confirm that the PAT is current and that the **Site URL** includes any configured context path. |
+| Pages are missing | Sign in as the connector account and open the missing page. Check the space, page, and ancestor restrictions. |
+| Permission sync misses users | Confirm that Confluence exposes each user's email and that the same email belongs to an Onyx user. |
+| A CQL connector stops updating | Remove your `lastModified` filter and any `order by`. Onyx adds time filters during incremental sync. Use `type=page` as the only content-type filter. |

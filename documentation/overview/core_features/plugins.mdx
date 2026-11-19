@@ -1,0 +1,219 @@
+---
+title: "Plugins"
+description: "Use MCP servers, OpenAPI plugins, and Craft Apps to work with live data and take actions"
+icon: "plug"
+---
+
+import BuiltInActionsTable from '/snippets/built-in-actions-table.mdx';
+
+Plugins connect Onyx agents to the tools that your team uses. With a plugin, an agent can read live data,
+such as a Linear issue, or take an action, such as post a Slack reply.
+
+A plugin holds skills, integrations, or both. An integration is an MCP server or an app that the agent calls.
+Your admin adds plugins to the Organization library. You connect your account to each integration that needs it.
+
+<Note>
+  In Onyx 5.0, MCP and OpenAPI actions became plugins. Find them in **Customize** in the sidebar,
+  and in Chat under **Actions → Plugins**. Craft Apps moved from **Craft → Apps** to **Customize**.
+</Note>
+
+## Plugin types
+
+| Type | What it does | Where you can use it |
+| --- | --- | --- |
+| **MCP** | Connects to a [Model Context Protocol](https://modelcontextprotocol.io/) server, such as Linear, Notion, or Atlassian | Chat, custom agents, and Craft |
+| **OpenAPI** | Calls a REST API that your admin describes with an OpenAPI schema | Chat and custom agents |
+| **Craft App** | Lets Craft act as you in Slack, Gmail, Google Calendar, Google Drive, Notion, Linear, GitHub, HubSpot, or Zendesk | Craft only |
+
+For Craft Apps, see [Craft Apps](/overview/core_features/craft_apps).
+
+### Plugins and Onyx knowledge
+
+Plugins and [connectors](/overview/core_features/connectors) give agents different access.
+
+- **Onyx knowledge** is an index of company documents. Onyx applies the source permissions,
+  so you find only documents that you can access. Search is read only.
+- **Plugins** call the external service live. When you connect your own account, the service applies your permissions.
+  The plugin can read only what your account can read,
+  and it can change content only if your account and your admin allow it.
+
+## Find a plugin
+
+Select **Customize** in the Chat sidebar or the Craft sidebar. Customize has three tabs: **Skills**,
+**Integrations** and **Plugins**. It opens on **Skills**.
+A plugin packages skills and integrations that you turn on together.
+Each skill and each integration that you add comes in its own plugin.
+The **Plugins** tab shows each plugin that you can use, in three groups:
+
+| Group | Plugins |
+| --- | --- |
+| **Created by you** | The plugins that you added, also after you publish them |
+| **From your organization** | The plugins that your admin published for the organization |
+| **Shared with you** | The plugins that other people added and shared with you |
+
+Each row shows how many skills and integrations the plugin holds.
+A plugin that has an integration you must sign in to shows how many need sign-in. Search by name,
+or use the filter to show only the plugins that are on or off.
+
+The **Skills** tab lists each skill, and the **Integrations** tab lists each integration with its status.
+A skill or an integration also shows in the **Plugins** tab, in the plugin that holds it.
+
+<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugins_directory.webp" alt="The Plugins tab of Customize, with its description and plugins in the Created by you and From your organization groups"/>
+
+Click a plugin to open it. A plugin that holds only one skill opens that skill. The plugin page has these tabs.
+A tab with nothing to show does not appear.
+
+| Tab | What it shows |
+| --- | --- |
+| **Overview** | The description, the group, and the owner |
+| **Skills** | The skills of the plugin |
+| **Integrations** | Each integration with its status |
+| **Versions** | The versions of a skill that you own or can edit |
+
+### Turn a plugin on or off
+
+The plugin page has the **Use this plugin** switch in its header. In the **Plugins** tab,
+a plugin that is off shows **Turn on**, and the row menu has **Turn on** or **Turn off**.
+The default agent uses only the plugins that you turn on. A custom agent uses each of its plugins that you can see,
+with the switch on or off.
+
+| Install setting | The switch |
+| --- | --- |
+| **Required** | Always on. You cannot turn it off. |
+| **Installed** | On until you turn it off. |
+| **Available** | Off until you turn it on. |
+
+An admin sets the install setting of each plugin in the Organization library.
+
+## Connect an integration
+
+Select **Customize → Integrations**. Each integration shows one status. Click an integration to open its page,
+with the tabs **Overview** (the type, the sign-in, and the plugins that hold it), **Configuration** (your connection)
+and **Actions** (how each action runs). The **Integrations** tab of a plugin page shows the same status:
+
+| Status | What you see | Who fixes it |
+| --- | --- | --- |
+| **Connected** | A check mark | Nobody |
+| **Not connected** | **Connect** | You |
+| **Needs reconnect** | The reason, for example a change to the sign-in settings, and **Reconnect** | You |
+| **Not set up** | **Ask your admin** | An admin, or the owner of a personal integration |
+
+<img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugin_mcp_detail.webp" alt="The Integrations tab of the Weather API plugin with a connected integration, one action set to Allow and one set to Ask with its Always allow switch"/>
+
+To connect:
+
+1. Click **Connect** or **Reconnect**.
+2. Do one of these steps:
+    - For an OAuth sign-in, sign in with the service in the new tab. The tab closes when the sign-in is done.
+      If your browser blocks the new tab, the sign-in continues in the same tab, then Onyx opens the plugin again.
+    - For an API key, enter the values that the form asks for, then click **Connect**. Only you use these values.
+
+Sign in with the account that the agent should use. The agent acts as that account.
+An integration that is not connected gives the agent no actions until you connect it.
+
+### Always allow an action
+
+Your admin sets each action of an integration to **Allow**, **Ask**, or **Blocked**.
+An action set to **Ask** asks for your approval in chat.
+The **Actions** tab of the integration page lists each action with its setting. If your admin lets users save it,
+turn on **Always allow** for an action that asks, and it runs with no prompt. Some actions always ask,
+and their switch stays off with the reason. An action set to **Blocked** never runs.
+
+### Disconnect
+
+Click **Disconnect** on an integration that you connected with your own account. Onyx deletes your connection.
+The plugin stays available to you.
+
+## Add your own integration
+
+If you have the manage actions permission, click **Add → Add integration** in **Customize**.
+Onyx opens the **Add an Integration** page. Choose the type, fill in the details, then click **Add**.
+Onyx puts the integration in a new plugin under **Created by you** and turns the plugin on for you.
+Only you can use it until you share the plugin.
+
+### Share or publish your plugin
+
+Open a plugin under **Created by you** that holds only integrations:
+
+- Click **Share** to give people and groups access. If an integration uses one account for everybody,
+  each person with access uses the account that you connected. The dialog tells you so.
+- Click **Publish** to move the plugin to the Organization library. You cannot undo this.
+  Only a user with the organization-wide manage actions permission can publish a plugin that holds an integration.
+  For other users, **Publish** is off. Ask an admin to publish the plugin.
+  If a skill in the Organization library has the same name, Onyx does not publish the plugin and shows the name.
+  If another integration plugin has the same name, the plugin gets a free name, for example `Weather-2`.
+
+## Use plugins in Chat
+
+Click the actions button in the message bar, then select **Plugins**.
+The menu lists the plugins of the current agent that hold integrations. Turn a plugin on or off.
+Onyx keeps your choice for the agent, so new chats with the agent use it too.
+An existing chat in which you did not change a plugin or tool also uses the choice for the agent.
+A plugin with an integration that needs sign-in shows **Connect** or **Reconnect**.
+
+<img className="rounded-image" src="/assets/overview/core_features/plugins/chat_actions_plugins_flyout.webp" alt="The actions menu in Chat with the Plugins menu open"/>
+
+The agent decides when to call a plugin action. To guide it, name the plugin or the service in your message.
+For example: "Use DeepWiki to explain how the `onyx-dot-app/onyx` repository handles authentication."
+
+If Chat shows **integrations need sign-in**, click it and connect the listed integrations.
+Until you connect an integration, the agent does not get its actions. You can continue chatting with other tools.
+
+### Approve tool calls
+
+Your admin sets an approval policy for each MCP tool. When the agent calls a tool with the **Ask** policy,
+the answer pauses. An approval card shows **Approval requested** with the tool name and the arguments of the call.
+The card shows below the last message of the chat. If more cards wait, they show in the order of the requests.
+When you compare models, each card names its model. Select one of these options:
+
+| Option | Effect |
+| --- | --- |
+| **Approve once** | The call runs with the arguments that the card shows. |
+| **Approve for this chat** | The call runs. Later calls of the same tool in this chat run without a card. |
+| **Reject** | The call does not run. The agent is told that you rejected the call. |
+
+The request does not expire. It waits until you decide, also when you close the chat or reload the page.
+After the answer stops to wait for your decision, you cannot send a new message in the chat.
+
+After your decision, the card becomes a one-line record of the result, and the answer continues.
+The record moves to the tool call in the answer. It stays when the answer finishes and when you open the chat again.
+If your admin disables the tool before you approve, the call does not run, and the card shows **Disabled**.
+If you stop the answer while it runs, Onyx rejects the call, and the card shows **Not approved**.
+After the answer stops to wait for your decision, **Stop** is not available. To end the wait, reject the call.
+
+A subagent that works in the background can also ask for approval. Its card names the subagent.
+The request waits until you decide, also after the answer that started the subagent finishes or stops.
+You can send new messages while it waits. After your decision, the subagent continues in the background.
+
+The Onyx web app, the mobile app, the website widget, and the Onyx CLI show approval requests.
+The Slack and Discord bots cannot show approval requests, so they do not get tools that need approval,
+except the tools that their agent had before integrations were added. Incognito chats can block approvals,
+if your admin sets them to keep no content. There, a tool that needs approval does not run, and the agent is told why.
+
+Tools with the **Allow** policy run without a card. By default, an OpenAPI `GET` operation runs without a card,
+and the OpenAPI plugins made before integrations were added keep running without a card.
+If your admin sets one of these tools to the **Ask** policy, its calls show a card.
+Check the result in the service after a change.
+
+<Note>
+  The default agent uses each plugin that you turned on.
+  A custom agent uses the plugins that the agent builder selected. See [Agents](/overview/core_features/agents).
+</Note>
+
+## Built-in actions
+
+Onyx also includes built-in actions that do not need a plugin:
+
+<BuiltInActionsTable />
+
+## For admins
+
+<CardGroup cols={2}>
+  <Card title="Manage plugins" icon="plug" href="/admins/plugins/overview">
+    Add plugins and set workspace availability.
+  </Card>
+
+  <Card title="Craft Apps" icon="hammer" href="/overview/core_features/craft_apps">
+    Let Craft act as you in Slack, Gmail, Notion, and more.
+  </Card>
+</CardGroup>

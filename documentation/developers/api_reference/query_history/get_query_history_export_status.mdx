@@ -1,0 +1,17 @@
+---
+title: "Get Query History Export Status"
+openapi: "GET /admin/query-history/export-status"
+---
+
+import BusinessEditionInfo from "/snippets/business-edition-info.mdx";
+
+<BusinessEditionInfo />
+
+<Info>
+  **Required permission:** View Query History (`read:query_history`), or Admin (`admin`).
+</Info>
+
+An export returns `FAILURE` if its task is lost or stops before completion. The hourly cleanup detects stale exports.
+A queued export becomes stale after one hour plus a five-minute grace period.
+A started export becomes stale after `JOB_TIMEOUT_SECONDS`, which defaults to six hours, plus the grace period.
+Failed exports remain available for 24 hours after failure. Start a new export to try again.

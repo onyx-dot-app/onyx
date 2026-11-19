@@ -1,0 +1,69 @@
+---
+title: "S3 Assume Role"
+description: "This method automatically uses the IAM role attached to your EC2 instance to access S3 buckets. No manual credential entry is required."
+---
+
+### Prerequisites
+
+This method works only for a self-hosted Onyx that runs on an Amazon EC2 instance. It is not available on Onyx Cloud.
+
+- Ensure your EC2 instance has an IAM role attached.
+- Verify the instance profile is properly configured via AWS Console under **EC2 › Instance Settings
+  › Attach/Replace IAM role**.
+
+### Updating the Existing IAM Role
+
+Your EC2 instance already has an IAM role attached. Add the S3 permissions to it:
+
+<Steps>
+  <Step title="Attach S3 policy">
+    In AWS Console, go to **IAM › Roles** and open your EC2 instance's existing role. Go to the **Permissions** tab.
+    Click **Add permissions › Attach policies**. Search for and select **AmazonS3ReadOnlyAccess** policy.
+    Click **Attach policies**.
+  </Step>
+</Steps>
+
+For finer control, create a custom inline policy instead:
+
+<Steps>
+  <Step title="Create inline policy">
+    In the same role's **Permissions** tab, click **Add permissions › Create inline policy**.
+    Switch to JSON and add this policy (replace `your-source-bucket-name`):
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": [
+           "s3:GetObject",
+           "s3:ListBucket"
+         ],
+         "Resource": [
+           "arn:aws:s3:::your-source-bucket-name",
+           "arn:aws:s3:::your-source-bucket-name/*"
+         ]
+       }
+     ]
+   }
+   ```
+
+    Name the policy (e.g., `OnyxS3Access`) and click **Create policy**.
+  </Step>
+</Steps>
+
+### Credential Entry in Onyx
+
+When you create the authentication account for the S3 connector in Onyx:
+
+<Steps>
+  <Step title="No credentials required">
+    Select the **Assume Role** tab, enter a **Display Name**, and select **Create**.
+    The connector uses the role attached to your EC2 instance.
+  </Step>
+</Steps>
+
+<img className="rounded-image" src="/assets/admins/connectors/blob/s3/onyx-assume-role.webp" alt="Screenshot of Onyx S3 assume role configuration"/>
+
+Then follow the [indexing steps in the overview](./overview#indexing) to configure your S3 connector.

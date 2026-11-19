@@ -1,0 +1,319 @@
+---
+title: "Skills"
+description: "Give Craft reusable instructions, examples, and files for repeatable work"
+icon: "wand-magic-sparkles"
+---
+
+Skills teach Craft **how to do a kind of work**. A skill can provide a workflow, quality standards, examples, templates,
+scripts, and other supporting files that Craft can reuse across sessions.
+
+For example, a slide skill can tell Craft how to choose layouts, apply a template, validate the finished deck,
+and save the presentation in the right format. You provide the goal and source material; the skill provides the method.
+
+You can also use your custom skills in [chat](/overview/core_features/chat#skills).
+
+<Note>
+  Skills do not connect external accounts or hold credentials. To let Craft read from or act in tools like Slack, Gmail,
+  or GitHub, connect an [App](/overview/core_features/craft_apps).
+</Note>
+
+<img className="rounded-image" src="/assets/overview/core_features/craft_skills.webp" alt="The Skills tab of Customize, with skills in the Created by you, From your organization, and Shared with you groups"/>
+
+## How Craft uses skills
+
+Craft can choose an available skill automatically when your request matches its description.
+You can also select one explicitly when you want Craft to follow a particular workflow.
+
+<Steps>
+  <Step title="Choose a skill">
+    In a Craft session, select **+**, then **Skills**, and choose a skill.
+    You can also type **/** followed by the skill name.
+  </Step>
+
+  <Step title="Describe the result">
+    Tell Craft what to produce and provide the audience, source material, and requirements that matter.
+    Selecting a skill does not replace a clear prompt.
+  </Step>
+</Steps>
+
+| Goal                            | How to use a Skill                                                                                                                         |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Build a presentation**        | Select the `pptx` Skill, attach a company deck as a template, and ask Craft to build a presentation from your source material.             |
+| **Search company knowledge**    | Ask a company-specific question and let the `company-search` Skill retrieve information you already have permission to access.             |
+| **Navigate a website**          | Select the Browser Skill and ask Craft to open a site, follow links, interact with pages, or take screenshots.                             |
+| **Generate a visual**           | Select the image generation Skill and describe the subject, composition, style, aspect ratio, and where the visual will be used.           |
+| **Standardize repeatable work** | Use a custom Skill to capture your team's process for reports, briefs, reviews, or another workflow you want Craft to repeat consistently. |
+
+## Browse and inspect skills
+
+Open **Customize** from the Chat sidebar or the Craft sidebar, then select the **Skills** tab.
+This page does not need Craft. The tab lists the skills that you can use, in groups:
+
+| Group                      | Skills                                                                              |
+| -------------------------- | ----------------------------------------------------------------------------------- |
+| **Created by you**         | The skills that you own, also after you publish them to the organization            |
+| **From your organization** | The skills that are published to the organization                                   |
+| **Shared with you**        | The skills that other people shared with you or your group                          |
+| **Built-in**               | The skills that Onyx maintains. This group shows only when Craft is on, because built-in skills run in Craft. |
+
+Search by name or description. The filter shows the skills that are on or off. Sort by **Recently updated** or **Name**.
+A skill that is off shows **Disabled** and **Turn on**. The menu of a row has **Turn on** or **Turn off**, **Share**,
+and **Remove**. Select a built-in skill to preview its instructions.
+
+Select a custom skill to open its page. The header shows the owner, the current version,
+the version that the organization uses, and the date of the last change. It also has **Copy link**, **Share**,
+a menu with **Edit** and **Remove**, and the on/off switch. The page has these tabs:
+
+| Tab | What it shows |
+| --- | --- |
+| **Overview** | The description, the owner, and who has access |
+| **Contents** | `SKILL.md` and the supporting files. Owners and editors also see **Edit**. |
+| **Versions** | The version history. Only owners, editors, and admins see this tab. |
+
+A published skill that you did not turn on shows **From Organization library** and **Add**.
+Select **Add** to turn it on for you.
+
+Built-in skills cover presentations (`pptx`), company search, image generation, website navigation (Browser),
+and Craft documentation. Each built-in [App](/overview/core_features/craft_apps)
+that you have also brings its own Skill. You get the Skill before you connect the App,
+but Craft can act in the App only after you connect your account.
+The exact list you see depends on what your organization has enabled.
+
+<Tip>
+  A skill's description tells Craft when to use it. If Craft repeatedly misses a custom skill,
+  make the description concrete about the tasks it covers, or select the skill explicitly in your prompt.
+</Tip>
+
+## Create a personal skill
+
+Create a personal Skill when you have instructions, examples, or reference files you want to reuse across sessions.
+Open **Customize → Skills**, select **Add**, then choose how you want to begin:
+
+| Starting point | Choose | What happens |
+| --- | --- | --- |
+| You want to write the Skill in Onyx | **Create a skill** | The Skill editor opens so you can write the details and instructions, then add supporting files. |
+| You already have a Skill | **Upload skill** | Upload `SKILL.md`, a ZIP, or a Skill folder. Onyx reads the instructions and creates the Skill for you. |
+| The Skill lives in a GitHub repository | **Import from GitHub** | Enter the repository. Onyx lists the importable Skills it finds, and you choose which ones to import. |
+
+Every new Skill is personal and private. After you create it, Onyx opens its page, where you can share it.
+
+### Start from scratch
+
+The creation page has the same editor as the **Contents** tab of a Skill: the file list beside `SKILL.md`.
+
+<Steps>
+  <Step title="Write SKILL.md">
+    `SKILL.md` starts with a block between `---` lines.
+    Enter the `name` and a `description` that says when Craft should use the Skill. Use lowercase letters, numbers,
+    and single hyphens in the name. Under the block, describe the workflow Craft should follow,
+    including important constraints, expected outputs, and checks.
+  </Step>
+
+  <Step title="Add supporting files">
+    Select **Add File** under the file list to add references, examples, templates, scripts, or assets.
+    You can select files or a ZIP, or drag files or a folder onto **Add File**.
+    Onyx unpacks ZIP files and keeps the directory structure. To remove a file, select it and select the trash icon.
+  </Step>
+
+  <Step title="Create the Skill">
+    Select **Create**. Onyx creates the Skill with `SKILL.md` and every file in the list, and opens its page.
+  </Step>
+</Steps>
+
+<Info>
+  If you already have a Skill, add its `SKILL.md`, ZIP, or folder with **Add File**.
+  Onyx fills in `SKILL.md` and the file list from it. If you have already entered content,
+  Onyx asks before it replaces it.
+</Info>
+
+### Upload an existing Skill
+
+Upload `SKILL.md` directly when the Skill contains instructions only. When it includes supporting files,
+upload a ZIP or drag in a folder with `SKILL.md` at the top level.
+
+```text
+weekly-customer-update/
+├── SKILL.md
+├── examples/
+│   └── finished-update.md
+└── templates/
+    └── update-template.md
+```
+
+At minimum, `SKILL.md` needs a name and description in YAML frontmatter, followed by the instructions Craft should use:
+
+```md
+---
+name: Weekly customer update
+description: Create a concise weekly customer update from meeting notes and account activity.
+---
+
+# Weekly customer update
+
+1. Summarize material changes since the previous update.
+2. Separate customer decisions, open risks, and next steps.
+3. Name an owner and due date for every next step.
+4. Follow the format in `templates/update-template.md`.
+```
+
+<Steps>
+  <Step title="Prepare the bundle">
+    Put the instructions in `SKILL.md` and keep supporting files in the same folder. For a folder or ZIP,
+    use a lowercase, hyphenated name such as `weekly-customer-update`; that name becomes the Skill's identifier.
+    For a standalone `SKILL.md`, Onyx creates the identifier from its frontmatter `name`.
+  </Step>
+
+  <Step title="Upload the Skill">
+    Open **Customize → Skills**, select **Add** > **Upload skill**, and select `SKILL.md` or a ZIP. For one Skill,
+    review the editor and configure **Edit sharing** before creating it. To import several Skills together,
+    select multiple ZIP files. Each ZIP must contain one Skill. Configure access once for the batch before importing it.
+  </Step>
+</Steps>
+
+### Import from GitHub
+
+Select **Add** > **Import from GitHub** and enter the repository, such as `owner/repo`.
+Onyx scans the repository for folders that contain a `SKILL.md` and lists the importable Skills.
+Select the Skills you want. Select **Configure access** to share them with people, groups, or your organization.
+The access settings apply to all selected Skills. Import the selection and review the results.
+Onyx shows which Skills it imported and which it could not.
+
+Public repositories work without setup. To import from a private repository, use **Connect GitHub** in the
+import dialog. If GitHub is not set up for your workspace, ask an admin.
+
+### Update a Skill
+
+Open a Skill and select **Edit** in its menu or on the **Contents** tab. The **Contents** tab changes in place:
+
+- `SKILL.md` opens as text, with its `name` and `description` at the top. Change the description or the
+  instructions. The name cannot change.
+- Select **Add File** under the file list to add files, ZIP files, or folders. A file with the path of an existing
+  file replaces it. To replace `SKILL.md`, edit its text.
+- Select a file, then select the trash icon to remove it. `SKILL.md` cannot be removed.
+
+Nothing is saved until you select **Save Version**. Select **Cancel** to discard your changes.
+A save of text changes and of file changes can make more than one version. If a save stops partway,
+the steps that finished stay saved, and **Save Version** saves the rest.
+
+Changes are synchronized to the people you shared the Skill with. For a Skill that is published to the organization,
+the rest of the organization keeps the published version until the author publishes the update.
+See [Publish an update](#publish-an-update). You can also disable the Skill without deleting it, change its sharing,
+transfer ownership, or delete it. Only an admin can delete a Skill that is published to the organization.
+This needs the organization-wide `manage:plugins` permission.
+
+If another person saves the Skill while you edit it, Onyx does not save your change.
+Onyx shows **This skill changed since you opened it** and keeps your text. Copy the text you need,
+select **Reload** to load the newest version, then make your change again. Reload discards your unsaved changes.
+
+### Version history
+
+Each save of a custom Skill makes a new version. To see earlier versions,
+open the Skill and select the **Versions** tab. The author, editors,
+and admins with the organization-wide `manage:plugins` permission can see this tab. Each row shows the version number,
+who made it, and when. A row can also show these badges:
+
+| Badge | What it means |
+| --- | --- |
+| **Current** | The newest version. |
+| **Published** | The version that the organization uses. |
+| **Pending review** | The author asked to publish this version, and an admin must approve it. |
+
+- Select a row to preview the description and instructions of that version.
+- Select **Restore** to copy that version into a new version. The old versions stay in the list.
+  If the restored files are the same as the current files, Onyx makes no new version.
+- If another person saves the Skill while you restore a version, Onyx shows **This skill changed since you opened it**.
+  Select **Reload**, then try again.
+
+### Publish an update
+
+When you save a published Skill, the new version does not go to the organization at once.
+The Skill row shows **Unpublished changes**. To send the newest version to the organization, open the Skill,
+select the **Versions** tab, and select **Publish update**.
+
+Only the author of the Skill and users with the organization-wide `manage:plugins` permission can publish an update.
+Your admin can require a review before a publish, or turn publishing off.
+If you save a newer version while a version waits for review,
+select **Publish update** to send the newer version for review in its place.
+
+### Share a Skill
+
+Owners and editors select **Share** on the Skill page, or in the menu of a Skill row, to manage access.
+Specific people or groups can have access, or everyone in the organization can have access.
+Only admins can change how a Skill is installed, because this needs the organization-wide `manage:plugins` permission.
+Choose who can use it and give each person or group **Can use** or **Can edit** access.
+The organization can only get **Can use** access.
+
+Publishing a Skill to the organization cannot be undone. The dialog tells you this before you save.
+After you publish a Skill, it shows **Organization**, and you cannot make it private again.
+
+Under **Installation**, choose how the Skill is installed for people with access:
+
+| Option | Effect |
+| --- | --- |
+| **Default access** | The Skill uses the organization's **Default Access** setting. |
+| **Required** | Installed and always on. Members cannot turn it off. |
+| **Installed** | Installed for every member. Members can turn it off. |
+| **Available** | Members find it and turn it on if they want it. |
+| **Not available** | Hidden. Members cannot find it or turn it on. |
+
+Admins can also set a policy for each group under **Group Access**.
+A group policy replaces the organization policy for the members of that group.
+
+### Manage several Skills
+
+Admins can select several Skills in **Admin Panel → Skills** to share, enable, disable, or delete them together.
+See [Manage several Skills](/admins/managing_features/craft_skills#manage-several-skills).
+
+<Warning>
+  Never put passwords, API keys, tokens, or production credentials in a skill bundle.
+  Use [Apps](/overview/core_features/craft_apps) for authenticated access to external services.
+  Review every script and file before uploading a bundle you did not create.
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="A skill is missing from the picker">
+    Confirm the skill is enabled and shared with you. Unavailable built-in skills do not appear in the session picker.
+    If the skill depends on a model or deployment feature, ask an admin to configure that dependency.
+  </Accordion>
+
+  <Accordion title="My change was not saved because the Skill changed">
+    Another person saved the Skill after you opened it. Copy the text you need, select **Reload**,
+    then make your change again.
+  </Accordion>
+
+  <Accordion title="My Skill will not upload">
+    Keep one Skill in each ZIP. You can upload several ZIP files together.
+    Put `SKILL.md` at the top level of the folder. In a ZIP,
+    place it at the archive root or directly inside one enclosing folder.
+    Confirm that its frontmatter contains non-empty `name` and `description` fields. For a folder or ZIP,
+    check that its name is lowercase and hyphenated. If you started from scratch, try a different Skill name.
+    A custom Skill cannot use the same identifier as an existing or built-in Skill.
+  </Accordion>
+
+  <Accordion title="A session says that Skills did not load">
+    Your Skills must fit in the session: 900 MB and 10,000 files. Onyx left out the Skills that the notice names,
+    so the agent cannot use them in this session. Select **Manage skills** and turn off Skills you do not need.
+    Then select **Reload** in the session.
+  </Accordion>
+
+  <Accordion title="A change says it puts me past the skill limit">
+    The Skills that you have on can use at most 500 MB and 5,000 files. Turn off Skills you do not use, then try again.
+  </Accordion>
+
+  <Accordion title="My SKILL.md is too large">
+    A `SKILL.md` can be at most 256 KiB. This limit applies to uploads, GitHub imports, and edits.
+    Split the instructions into several files in the Skill, and link them from `SKILL.md`.
+  </Accordion>
+</AccordionGroup>
+
+<CardGroup cols={2}>
+  <Card title="For admins" icon="user-shield" href="/admins/managing_features/craft_skills">
+    Publish organization skills, configure availability, and review custom bundles.
+  </Card>
+
+  <Card title="Connect Apps" icon="plug" href="/overview/core_features/craft_apps">
+    Give Craft controlled access to external tools and approve actions safely.
+  </Card>
+</CardGroup>
