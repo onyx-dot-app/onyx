@@ -291,6 +291,9 @@ pub fn keep_app_shown(app: &AppHandle) {
 /// results and recent questions. Updates from requests still running reach
 /// the old page only.
 pub fn reset(app: &AppHandle) {
+    // The cleared answer must not notify later (a rejected session resets
+    // the launcher without a sign-out).
+    crate::aonyx::answer_discarded(app);
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         platform::hide(&handle);
