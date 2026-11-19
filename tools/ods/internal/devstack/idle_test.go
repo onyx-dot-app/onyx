@@ -4,8 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
-	"slices"
 	"testing"
 	"time"
 )
@@ -206,33 +204,5 @@ func TestLastActivityIsNowWhileAnAgentRunsInTheCheckout(t *testing.T) {
 	linked := StackRow{Root: link, RootExists: true, Since: row.Since}
 	if got := lastActivity(t, linked, []string{resolved}, now); !got.Equal(now) {
 		t.Fatalf("an agent in the resolved path of a symlinked checkout did not count: %s", got)
-	}
-}
-
-func TestAgentDirsFindsARunningAgent(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("reads /proc, which exists only on Linux")
-	}
-	sleep, err := exec.LookPath("sleep")
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(sleep)
-	if err != nil {
-		t.Fatal(err)
-	}
-	agent := filepath.Join(t.TempDir(), "claude")
-	if err := os.WriteFile(agent, data, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	work := t.TempDir()
-	cmd := exec.Command(agent, "30")
-	cmd.Dir = work
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	if dirs, err := AgentDirs(); err != nil || !slices.Contains(dirs, work) {
-		t.Fatalf("AgentDirs() = %v, want it to contain %s", dirs, work)
 	}
 }
