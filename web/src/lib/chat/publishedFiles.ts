@@ -25,27 +25,34 @@ function readPublishedFiles(packets: Packet[]): PublishedFile[] {
 
 /**
  * A load's list of the branch's published files, oldest first. The list is
- * complete for the messages that the load knew of: every message up to
- * `throughMessageId`, the newest message ID of the load. It leaves out files
- * on purpose, such as those whose object is missing.
+ * complete for the messages up to `throughMessageId` and leaves out files on
+ * purpose, such as those whose object is missing.
  */
 export interface LoadedPublishedFiles {
   files: readonly ChatPublishedFile[];
   throughMessageId: number;
 }
 
-/** A load's list of published files, or null when the load has none. */
+/**
+ * A load's list of published files, or null when the load has none. The list
+ * covers every message of the load, except the answers of a run in flight:
+ * the run saves their files when it ends, so the list stops before the run's
+ * question, the newest user message.
+ */
 export function loadedPublishedFiles(load: {
-  messages: readonly { message_id: number }[];
+  messages: readonly { message_id: number; message_type: string }[];
   published_files?: readonly ChatPublishedFile[];
+  is_processing?: boolean;
+  current_stream?: unknown;
 }): LoadedPublishedFiles | null {
   if (!load.published_files) return null;
+  const running = Boolean(load.is_processing || load.current_stream);
+  const covered = running
+    ? load.messages.filter((message) => message.message_type === "user")
+    : load.messages;
   return {
     files: load.published_files,
-    throughMessageId: Math.max(
-      0,
-      ...load.messages.map((message) => message.message_id)
-    ),
+    throughMessageId: Math.max(0, ...covered.map((m) => m.message_id)),
   };
 }
 

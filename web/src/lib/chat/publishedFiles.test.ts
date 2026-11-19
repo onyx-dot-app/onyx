@@ -169,15 +169,38 @@ describe("branchPublishedFiles", () => {
         answer,
       ]).all.map(({ file_id }) => file_id);
 
+    const messages = [
+      { message_id: 1, message_type: "user" },
+      { message_id: 2, message_type: "assistant" },
+    ];
     expect(
       fileIds({
-        messages: [{ message_id: 1 }, { message_id: 2 }],
+        messages,
         published_files: [loaded(published("subagent", "/w/report.md"), 2)],
       })
     ).toEqual(["subagent"]);
+    expect(fileIds({ messages })).toEqual(["missing"]);
+  });
+
+  test("a load during a run leaves the run's answer to its packets", () => {
+    // The run saves the answer's files when it ends
+    const answer = response(2, 2, [
+      publishEnd([published("live", "/w/report.md")]),
+    ]);
+    const load = loadedPublishedFiles({
+      messages: [
+        { message_id: 1, message_type: "user" },
+        { message_id: 2, message_type: "assistant" },
+      ],
+      published_files: [],
+      is_processing: true,
+    });
+
     expect(
-      fileIds({ messages: [{ message_id: 1 }, { message_id: 2 }] })
-    ).toEqual(["missing"]);
+      branchPublishedFiles(load, tree([answer]), [answer]).all.map(
+        ({ file_id }) => file_id
+      )
+    ).toEqual(["live"]);
   });
 
   test("leaves out the load's files of loaded messages off the branch", () => {

@@ -415,7 +415,7 @@ parts, and a change to them changes Craft's panel too. Its previews use
 that `PreviewModal` also uses; Craft's previewers read sandbox paths, not
 chat files. The Files list merges the latest load's `published_files` (the
 session's `branchPublishedFiles`, which every load and settle sets, with the
-newest message ID of the load) with the packets of the loaded branch
+newest message ID that it covers: during a run, the run's question) with the packets of the loaded branch
 (`lib/chat/publishedFiles.ts:branchPublishedFiles`, which also gives each
 file's latest publish of its path). The load's list decides the files of
 every message up to that ID, also of unloaded messages and of subagents; it
