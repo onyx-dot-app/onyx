@@ -128,10 +128,14 @@ pub enum Outcome {
 /// Called when a launcher answer has ended.
 pub fn answer_finished(app: &AppHandle, answer: Answer, outcome: Outcome) {
     let state = app.state::<AppState>();
-    if !should_notify(enabled(&state), answer.is_current(&state), || {
-        crate::launcher::is_visible(app)
-    }) || !permitted(app)
-    {
+    let allowed = || {
+        should_notify(enabled(&state), answer.is_current(&state), || {
+            crate::launcher::is_visible(app)
+        })
+    };
+    // Checked again after the permission prompt, which can wait for the user
+    // while policy, the setting or the launcher changes.
+    if !allowed() || !permitted(app) || !allowed() {
         return;
     }
     let (title, body) = match outcome {
