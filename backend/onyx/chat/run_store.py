@@ -315,11 +315,12 @@ def _waits_on_user(request: PendingToolInput) -> bool:
 
 
 def _saved_answers(
-    session: Session, requests: Sequence[PendingToolInput]
+    session: Session, requests: Sequence[PendingToolInput], *, deleted: bool = True
 ) -> dict[str, HumanToolAnswer]:
     """The answers that the saved rows give `requests`, by request ID: each
     approval request's decision and each question's answer. A deleted row
-    gives its call no tool; a row that still waits gives no answer."""
+    gives its call no tool, or with `deleted` False no answer; a row that
+    still waits gives no answer."""
     approval_ids = [
         UUID(request.request_id) for request in requests if request.approval
     ]
@@ -331,14 +332,18 @@ def _saved_answers(
     answers: dict[str, HumanToolAnswer] = {}
     for approval_id in approval_ids:
         approval = approvals.get(approval_id)
-        if approval is None or approval.decision is not None:
+        if (approval is None and deleted) or (
+            approval is not None and approval.decision is not None
+        ):
             answers[str(approval_id)] = tool_answer(
                 approval_id,
                 SavedToolApproval.model_validate(approval) if approval else None,
             )
     for question_id in question_ids:
         question = questions.get(question_id)
-        if question is None or question.outcome is not None:
+        if (question is None and deleted) or (
+            question is not None and question.outcome is not None
+        ):
             answers[str(question_id)] = question_answer(
                 question_id,
                 SavedToolQuestion.model_validate(question) if question else None,
@@ -1402,6 +1407,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             self._next_park_poll = time.monotonic() + INPUT_POLL_SECONDS
             with self._lock:
                 runs = [owned.run for owned in self._owned.values()]
+            self._submit_saved_answers(runs)
             for run in runs:
                 if not self.may_park(run):
                     continue
@@ -1427,6 +1433,35 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 if int(run.id) == self.response_id and self._on_root_parked:
                     self._on_root_parked(run)
         self._dispatch_messages()
+
+    def _submit_saved_answers(self, runs: Sequence[Run]) -> None:
+        """Give live runs the answers saved for their waiting requests, so a
+        decision applies without a park. A deleted row waits for the run to
+        park; its resume ends the call."""
+        waits = [
+            (run, request)
+            for run in runs
+            for request in run.pending_inputs
+            if _waits_on_user(request)
+        ]
+        if not waits:
+            return
+        try:
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                answers = _saved_answers(
+                    session, [request for _, request in waits], deleted=False
+                )
+        except Exception:
+            logger.exception("Could not read saved answers; a later poll retries")
+            return
+        for run, request in waits:
+            answer = answers.get(request.request_id)
+            if answer is None:
+                continue
+            try:
+                run.submit(answer)
+            except Exception:
+                logger.exception("Run %s did not take a saved answer", run.id)
 
     def may_park(self, run: Run) -> bool:
         """Whether a suspended, idle run waits, and waits only on people.

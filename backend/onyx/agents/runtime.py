@@ -2,7 +2,7 @@
 
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import Future
 from contextlib import ExitStack, closing
 from contextvars import copy_context
@@ -561,10 +561,6 @@ class Run:
         self._execution_active = True
         self._execution_request = ExecutionRequest.NONE
         self._watched_children: dict[str, Future[RunState]] = {}
-        # Open requests of calls that tools make for the model, by request ID,
-        # until a NestedInputWait saves them; see NestedCallGate. They are not
-        # saved, so the run withdraws those still open when it suspends or ends.
-        self._open_nested: dict[str, NestedInputRequest] = {}
         self._llm: LLM | None = None
         self._defaults = PreparedStep()
         self._configured_tools: tuple[AgentTool, ...] = ()
@@ -626,9 +622,13 @@ class Run:
         """Copy unanswered tool requests without copying execution history."""
         with self.execution_lock:
             progress = self._state.progress
-            saved = progress.input_requests if progress is not None else ()
-            opened = (nested.request for nested in self._open_nested.values())
-            return [request.model_copy(deep=True) for request in (*saved, *opened)]
+            if progress is None:
+                return []
+            return [
+                request.model_copy(deep=True)
+                for request in progress.input_requests
+                if request.request_id not in progress.human_tool_answers
+            ]
 
     @property
     def approvals(self) -> "ToolApprovals | None":
@@ -691,10 +691,7 @@ class Run:
                 if existing is None:
                     raise ValueError("Run is not accepting input")
                 return
-            # A request that a tool opened takes its answer before a
-            # NestedInputWait saves it.
-            opened = (nested.request for nested in self._open_nested.values())
-            if _record_answer(progress, answer, [*progress.input_requests, *opened]):
+            if _record_answer(progress, answer, progress.input_requests):
                 self._state.revision += 1
             self._wake_execution(resume=True)
 
@@ -839,7 +836,10 @@ class Run:
                     raise ValueError("Input request IDs must be unique within a run")
                 for nested in pending.requests:
                     # A request that the gate opened is already shown.
-                    if self._open_nested.pop(nested.request.request_id, None) is None:
+                    if (
+                        self._progress.open_inputs.pop(nested.request.request_id, None)
+                        is None
+                    ):
                         self._check_new_request_id(nested.request.request_id)
                         shown.append(nested)
             self._progress.pending_tool_calls[call.id] = pending.model_copy(deep=True)
@@ -854,12 +854,8 @@ class Run:
         """Reject a request ID that an open, saved or answered request of this
         run already uses. Call under the execution lock."""
         progress = self._progress
-        if (
-            request_id in self._open_nested
-            or request_id in progress.human_tool_answers
-            or any(
-                request.request_id == request_id for request in progress.input_requests
-            )
+        if request_id in progress.human_tool_answers or any(
+            request.request_id == request_id for request in progress.input_requests
         ):
             raise ValueError("Input request IDs must be unique within a run")
 
@@ -869,9 +865,10 @@ class Run:
         with self.execution_lock:
             self.cancellation_signal.check()
             self._check_new_request_id(request.request.request_id)
-            self._open_nested[request.request.request_id] = request.model_copy(
+            self._progress.open_inputs[request.request.request_id] = request.model_copy(
                 deep=True
             )
+            self._state.revision += 1
             self.publish_event(
                 InputRequiredEvent(**self.event_context, **dict(request))
             )
@@ -882,8 +879,9 @@ class Run:
         any; no-op once a NestedInputWait saved it or it ended."""
         request_id = request.request.request_id
         with self.execution_lock:
-            if self._open_nested.pop(request_id, None) is None:
+            if self._progress.open_inputs.pop(request_id, None) is None:
                 return
+            self._state.revision += 1
             answer = self._progress.human_tool_answers.get(request_id)
         approvals = self.approvals
         if request.request.approval and approvals is not None:
@@ -960,8 +958,9 @@ class Run:
                     if result.is_error
                     else ExecutionStatus.COMPLETE
                 )
-        ended.extend(self._open_nested.values())
-        self._open_nested.clear()
+        if progress is not None:
+            ended.extend(progress.open_inputs.values())
+            progress.open_inputs.clear()
         if self.event_delivery:
             for wait in ended:
                 self.event_delivery.publish(
@@ -984,6 +983,24 @@ class Run:
                         **self.event_context,
                         **dict(wait),
                         answer=progress.human_tool_answers.get(wait.request.request_id),
+                    )
+                )
+
+    def resolve_open_inputs(self, request_ids: Collection[str]) -> None:
+        """End open requests whose tool took their answers
+        (`AgentTool.continue_open_input`)."""
+        with self.execution_lock:
+            progress = self._progress
+            for request_id in request_ids:
+                request = progress.open_inputs.pop(request_id, None)
+                if request is None:
+                    continue
+                self._state.revision += 1
+                self.publish_event(
+                    InputEndedEvent(
+                        **self.event_context,
+                        **dict(request),
+                        answer=progress.human_tool_answers.get(request_id),
                     )
                 )
 
@@ -1302,10 +1319,6 @@ class Run:
         if failure is not None:
             # The run fails instead of suspending.
             raise failure
-        with self.execution_lock:
-            unsaved = list(self._open_nested.values())
-        for request in unsaved:
-            self.withdraw_nested_input(request)
         if self._restoration is not None:
             feature_state = _FEATURE_STATE.validate_python(
                 self._restoration.capture_state().model_dump(mode="json")

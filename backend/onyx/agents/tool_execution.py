@@ -268,20 +268,20 @@ class ToolBatch:
                             self._start([call], children=children)
                             continue
                         self._start_compatible_calls(call, index, completed_call_ids)
+                    if not self.run.suspension_requested:
+                        self._continue_open_inputs()
                     if not self.futures:
                         if len(self._completed_call_ids()) > len(completed_call_ids):
                             continue
-                        # Work that tools joined through `run_work`, such as a
-                        # running code cell, keeps the run from suspending. An
-                        # answer, a child's end or Stop wakes the wait first.
-                        unsubscribe = self.run.work.tracker.on_idle(
+                        # See ToolInvocation.run_work.
+                        unsubscribe = self.run.work.held.on_idle(
                             self.run.notify_tool_activity
                         )
                         try:
-                            if self.run.work.tracker.idle:
+                            if self.run.work.held.idle:
                                 return False
                             self.run.wait_for_tool_activity(
-                                lambda: self.run.work.tracker.idle
+                                lambda: self.run.work.held.idle
                             )
                         finally:
                             unsubscribe()
@@ -336,6 +336,44 @@ class ToolBatch:
                     for request, answer in zip(pending.requests, found, strict=True)
                 ],
             )
+
+    def _continue_open_inputs(self) -> None:
+        """Give the answers of open requests to the tools that made their
+        calls, one call's requests at a time; see
+        AgentTool.continue_open_input."""
+        with self.run.execution_lock:
+            answers = self.progress.human_tool_answers
+            by_call: dict[str, list[NestedInputAnswer]] = {}
+            for request_id, request in self.progress.open_inputs.items():
+                answer = answers.get(request_id)
+                if answer is not None:
+                    by_call.setdefault(request.tool_call.id, []).append(
+                        NestedInputAnswer(request=request, answer=answer)
+                    )
+        for answered in by_call.values():
+            call = answered[0].request.tool_call
+            tool = self.tools.get(call.name)
+            if tool is None or tool.continue_open_input is None:
+                continue
+            invocation = ToolInvocation(
+                call_id=call.id,
+                call_index=self.call_indices.get(call.id, 0),
+                arguments=call.model_copy(deep=True).arguments,
+                cancellation=self.run.cancellation_signal,
+                # Nothing observes the call, which already returned.
+                update=lambda _progress: None,
+                messages=[_tool_view(message) for message in self.context_messages],
+                recorded_results=self._recorded_before(),
+                nested_calls=_NestedCallGate(self, call),
+                run_work=self.run.work,
+            )
+            try:
+                taken = tool.continue_open_input(invocation, answered)
+            except Exception:
+                # The requests stay open with their answers.
+                logger.exception("Tool %s did not take its answers", call.name)
+                continue
+            self.run.resolve_open_inputs(taken)
 
     def _start_compatible_calls(
         self, call: ToolCall, index: int, completed_call_ids: set[str]

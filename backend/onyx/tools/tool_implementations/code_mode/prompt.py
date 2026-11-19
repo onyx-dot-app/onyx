@@ -120,9 +120,7 @@ _STATUS_TEXT: dict[CodeModeStatus, str] = {
     "cancelled": "was cancelled",
 }
 # Statuses of a program that ended by itself.
-ENDED_STATUSES: frozenset[CodeModeStatus] = frozenset(
-    {"completed", "failed", "timed_out"}
-)
+_ENDED: frozenset[CodeModeStatus] = frozenset({"completed", "failed", "timed_out"})
 
 
 def calls_note(calls: Sequence[CodeModeCall]) -> str | None:
@@ -190,7 +188,7 @@ def observation_heading(details: CodeModeExecutionResult) -> str:
     count = details.tool_call_count
     calls = f"{count} tool call{'' if count == 1 else 's'}"
     status = details.status
-    timing = f"in {seconds}" if status in ENDED_STATUSES else f"after {seconds}"
+    timing = f"in {seconds}" if status in _ENDED else f"after {seconds}"
     so_far = " so far" if status == "running" else ""
     return (
         f"Execution {_STATUS_TEXT[status]} in cell {details.cell_id} {timing} "
@@ -207,7 +205,7 @@ def closing_heading(cell_id: int, closing: CellClosing) -> str:
             "this output are not known; they may have run."
         )
     event = "the run paused" if closing.reason == "suspended" else "the response ended"
-    if closing.status in ENDED_STATUSES:
+    if closing.status in _ENDED:
         return (
             f"Cell {cell_id} {_STATUS_TEXT[closing.status]} after this output, "
             f"before {event}."
@@ -215,10 +213,33 @@ def closing_heading(cell_id: int, closing: CellClosing) -> str:
     return f"Cell {cell_id} stopped when {event}."
 
 
-def paused_end_heading(cell_id: int, status: CodeModeStatus) -> str:
-    """How a `wait_code` result starts when it returns the end of a cell that
-    ended by itself before the run paused."""
-    return f"Cell {cell_id} {_STATUS_TEXT[status]} before the run paused."
+def closed_cell_text(
+    cell_id: int, closing: CellClosing | None, *, returned_end: bool
+) -> str:
+    """What `wait_code` returns for a closed cell: how the cell's saved results
+    report its end. `closing` is the cell's closing record; `returned_end` says
+    that an observation reported the end."""
+    if closing is not None and closing.reason == "interrupted":
+        return (
+            f"Cell {cell_id} was interrupted when the server stopped. Start a new "
+            "execute_code call."
+        )
+    if closing is not None:
+        event = (
+            "the run paused" if closing.reason == "suspended" else "the response ended"
+        )
+        if closing.status in _ENDED:
+            return (
+                f"Cell {cell_id} {_STATUS_TEXT[closing.status]} before {event}; its "
+                "output and result are in its earlier result."
+            )
+        return f"Cell {cell_id} stopped when {event}. Start a new execute_code call."
+    if returned_end:
+        return f"Cell {cell_id} already returned its final result."
+    return (
+        f"Cell {cell_id} stopped when its response ended or its run paused. Start "
+        "a new execute_code call."
+    )
 
 
 def continues_note(cell_id: int) -> str:

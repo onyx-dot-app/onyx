@@ -95,28 +95,44 @@ def wait_operation[T](
 
 
 class ExecutionWork:
-    """Track a run's jobs independently of its terminal result."""
+    """Track a run's jobs independently of its terminal result.
+
+    `tracker` counts every job: the run drains after all of them end. `held`
+    counts the jobs that the tool phase also waits for before it suspends:
+    all but those of `track_detached`.
+    """
 
     def __init__(self) -> None:
         self.tracker = WorkTracker()
+        self.held = WorkTracker()
 
     def start[T](self, operation: Callable[[], T]) -> Future[T]:
         self.tracker.started()
+        self.held.started()
         try:
             future = start_thread_future(operation, name="agent-operation")
         except BaseException:
+            self.held.finished()
             self.tracker.finished()
             raise
-        future.add_done_callback(lambda _future: self.tracker.finished())
+        future.add_done_callback(lambda _future: self._finished(held=True))
         return future
 
     def track_operation[T](self, future: Future[T]) -> None:
         self.tracker.started()
+        self.held.started()
+        future.add_done_callback(lambda _future: self._finished(held=True))
 
-        def finished(_future: Future[T]) -> None:
-            self.tracker.finished()
+    def track_detached[T](self, future: Future[T]) -> None:
+        """Work that the tool phase does not wait for, such as a tool call that
+        a program left running when it ended."""
+        self.tracker.started()
+        future.add_done_callback(lambda _future: self._finished(held=False))
 
-        future.add_done_callback(finished)
+    def _finished(self, *, held: bool) -> None:
+        if held:
+            self.held.finished()
+        self.tracker.finished()
 
 
 class EventDispatcher:

@@ -353,8 +353,7 @@ def test_a_running_cell_ends_by_its_own_time_limit_before_the_run_suspends() -> 
     try:
         assert run.wait_until_settled(timeout=10).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(5)
-        # The run waited for the cell, which ended at its own time limit
-        # instead of being stopped to suspend.
+        # The cell ended at its own time limit before the run suspended.
         details = _saved_result(run.capture().run_state, "loop").details
         assert isinstance(details, CodeModeExecutionResult)
         assert details.closing is not None

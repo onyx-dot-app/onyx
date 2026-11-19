@@ -61,12 +61,13 @@ from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     WaitCodeTool,
 )
 from onyx.tools.tool_implementations.code_mode.models import (
+    CellClosing,
     CodeModeExecutionResult,
     SavedCodeCell,
 )
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
-from tests.unit.onyx.tools.code_mode.fakes import LIMITS, FakeTool
+from tests.unit.onyx.tools.code_mode.fakes import LIMITS, FakeTool, until
 
 # The default memory limit: a dump fits within its share of it.
 PARKING_LIMITS = LIMITS.model_copy(update={"max_memory_bytes": 128 * 1024 * 1024})
@@ -74,6 +75,9 @@ PROGRAM = 'print("before")\nr = await tools.send(value="x")\nprint("sent", r)'
 REQUEST_ID = "send-approval"
 # A cell that keeps running in the background until the test opens the gate.
 BACKGROUND = 'yield_control()\nr = await tools.wait(value="b")\nprint("waited", r)'
+# A cell that asks for its own approval in the background.
+BACKGROUND_SEND = 'yield_control()\nr = await tools.send(value="bg")\nprint("sent", r)'
+BACKGROUND_REQUEST_ID = "send-bg"
 
 Reply = Callable[[GenerationRequest, CancellationSignal], AssistantMessage]
 
@@ -96,10 +100,15 @@ class CellsFeature(RestorableFeature):
 
 
 def _ask_for_send(context: ToolCallContext) -> PendingToolInput | None:
+    """Asks for each `send`; the value "bg" gets BACKGROUND_REQUEST_ID."""
     if context.call.name != "send":
         return None
     return PendingToolInput(
-        request_id=REQUEST_ID, prompt="Send?", mode=InputMode.EXECUTE
+        request_id=BACKGROUND_REQUEST_ID
+        if context.call.arguments.get("value") == "bg"
+        else REQUEST_ID,
+        prompt="Send?",
+        mode=InputMode.EXECUTE,
     )
 
 
@@ -136,6 +145,7 @@ class Agents:
         # Builds agents without the `send` tool, as after its server is removed.
         self.send_removed = False
         self.gate: threading.Event | None = None
+        self.limits = PARKING_LIMITS
         # Set once a request shows; later model steps wait for it.
         self.shown = threading.Event()
 
@@ -145,8 +155,20 @@ class Agents:
         return ToolResult(content=json.dumps({"sent": invocation.arguments["value"]}))
 
     def wait(self, invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
-        assert self.gate is not None and self.gate.wait(10)
+        """Returns once the gate opens; it stops when its cell stops, as a tool
+        that checks its cancellation does."""
+        gate = self.gate
+        assert gate is not None
+        deadline = time.monotonic() + 10
+        while not gate.wait(0.05):
+            invocation.cancellation.check()
+            assert time.monotonic() < deadline
         return ToolResult(content=json.dumps({"waited": invocation.arguments["value"]}))
+
+    def stuck(self, invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
+        """Returns once the gate opens, whatever its cancellation."""
+        assert self.gate is not None and self.gate.wait(10)
+        return ToolResult(content=json.dumps({"stuck": invocation.arguments["value"]}))
 
     def agent(self, state: AgentState | None = None) -> Agent:
         cells = CodeCells()
@@ -157,8 +179,9 @@ class Agents:
                 else [FakeTool("send", self.send, parameters=self.parameters)]
             ),
             FakeTool("wait", self.wait),
+            FakeTool("stuck", self.stuck),
         ]
-        execute = CodeModeTool(tools, cells=cells, limits=PARKING_LIMITS)
+        execute = CodeModeTool(tools, cells=cells, limits=self.limits)
         return Agent(
             FakeModelClient(self.reply or _reply(self.steps, self.shown)),
             generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
@@ -195,9 +218,9 @@ def _transferred(run: Run) -> ExecutionCheckpoint:
     return ExecutionCheckpoint.model_validate(run.capture().model_dump(mode="json"))
 
 
-def _answer(decision: InputDecision) -> HumanToolAnswer:
+def _answer(decision: InputDecision, request_id: str = REQUEST_ID) -> HumanToolAnswer:
     return HumanToolAnswer(
-        request_id=REQUEST_ID,
+        request_id=request_id,
         decision=decision,
         result=ToolResult(content="rejected", is_error=True)
         if decision == InputDecision.DENY
@@ -326,23 +349,47 @@ def _read_cell(cell_id: int) -> ToolCall:
 
 
 def _start_with_request(agents: Agents) -> tuple[Run, list[AgentEvent]]:
-    """Start the run; return once its request shows and while a cell runs, the
-    run does not settle."""
-    requested = threading.Event()
+    """Start the run; return once the program's call waits for its request,
+    after a check that the run does not suspend while the other cell runs."""
+    suspended = threading.Event()
     events: list[AgentEvent] = []
 
     def on_event(event: AgentEvent) -> None:
         events.append(event)
-        if isinstance(event, InputRequiredEvent):
-            requested.set()
+        if isinstance(event, AgentSuspendedEvent):
+            suspended.set()
 
     run = agents.agent().start(
         max_steps=5, messages=[UserMessage(content="Send")], on_event=on_event
     )
-    assert requested.wait(10)
-    with pytest.raises(TimeoutError):
-        run.wait_until_settled(timeout=1)
+    until(lambda: "program" in _pending_calls(run))
+    # Without the other cell, the run suspends at once from here.
+    assert not suspended.wait(1)
+    assert run.status != RunStatus.SUSPENDED
     return run, events
+
+
+def _pending_calls(run: Run) -> set[str]:
+    progress = run.snapshot().progress
+    return set() if progress is None else set(progress.pending_tool_calls)
+
+
+def _closing(state: RunState, call_id: str) -> CellClosing | None:
+    """The closing record of `call_id`'s saved result, if any."""
+    execution = state.steps[0].tools.get(call_id) if state.steps else None
+    result = execution.result if execution is not None else None
+    if result is None or not isinstance(result.details, CodeModeExecutionResult):
+        return None
+    return result.details.closing
+
+
+def _closing_text(state: RunState, call_id: str) -> str:
+    """The saved result of `call_id`, whose closing record ends it."""
+    result = state.steps[0].tools[call_id].result
+    assert result is not None
+    assert isinstance(result.details, CodeModeExecutionResult)
+    assert result.details.closing is not None
+    return result.text
 
 
 def test_a_cell_that_ends_while_a_request_waits_keeps_its_result() -> None:
@@ -358,18 +405,22 @@ def test_a_cell_that_ends_while_a_request_waits_keeps_its_result() -> None:
     try:
         run, _events = _start_with_request(agents)
         agents.gate.set()
-        _suspended(run)
+        saved = _suspended(run)
     finally:
         agents.gate.set()
 
+    # The cell's end is in the closing record of its saved observation.
+    assert "waited {'waited': 'b'}" in _closing_text(saved, "background")
     run.submit(_answer(InputDecision.APPROVE))
     output = run.result(timeout=20).output.text
     assert run.wait_for_idle(10)
 
     assert agents.sent == ["x"]
-    # wait_code returns the end of the cell that ended before the run paused.
-    assert output.startswith("Cell 1 completed before the run paused."), output
-    assert "waited {'waited': 'b'}" in output
+    # wait_code points to that record instead of repeating it.
+    assert output == (
+        "Cell 1 completed before the run paused; its output and result are in "
+        "its earlier result."
+    )
 
 
 def test_an_answer_while_a_cell_runs_continues_without_suspending() -> None:
@@ -420,6 +471,113 @@ def test_stop_while_a_cell_runs_ends_the_run_and_its_cells() -> None:
     closing = result.details.closing
     assert closing is not None
     assert (closing.reason, closing.status) == ("response_ended", "cancelled")
+
+
+def test_a_call_that_outlives_its_program_does_not_hold_the_run() -> None:
+    """The background cell ends at its time limit while its call ignores the
+    cancellation. The run then pauses for the other request; the call only
+    delays the drain."""
+    agents = Agents(
+        reply=_one_call_per_step(
+            _execute("background", 'yield_control()\nawait tools.stuck(value="s")'),
+            _execute("program", PROGRAM),
+            _read_cell(1),
+        )
+    )
+    agents.limits = PARKING_LIMITS.model_copy(update={"lifetime_seconds": 1})
+    agents.gate = threading.Event()
+    try:
+        run = agents.agent().start(max_steps=5, messages=[UserMessage(content="Send")])
+        # The pause closes the cell while its call still runs.
+        until(lambda: _closing(run.snapshot(), "background") is not None)
+        closing = _closing(run.snapshot(), "background")
+        assert closing is not None and closing.status == "timed_out"
+        assert run.snapshot().failure is None
+    finally:
+        agents.gate.set()
+    _suspended(run)
+
+    run.submit(_answer(InputDecision.APPROVE))
+    output = run.result(timeout=20).output.text
+    assert run.wait_for_idle(10)
+    assert run.status == RunStatus.COMPLETE
+    assert agents.sent == ["x"]
+    assert output.startswith("Cell 1 timed out before the run paused;"), output
+
+
+def _background_send_agents() -> Agents:
+    """A background cell that asks to send "bg", then a program that asks to
+    send "x", then a read of the background cell."""
+    return Agents(
+        reply=_one_call_per_step(
+            _execute("background", BACKGROUND_SEND),
+            _execute("program", PROGRAM),
+            _read_cell(1),
+        )
+    )
+
+
+def test_a_background_cell_keeps_its_request_across_a_handoff() -> None:
+    agents = _background_send_agents()
+    events: list[AgentEvent] = []
+    run = agents.agent().start(
+        max_steps=5, messages=[UserMessage(content="Send")], on_event=events.append
+    )
+    saved = _suspended(run)
+
+    # Both requests stay open; the background cell is saved with the run.
+    assert not any(isinstance(event, InputEndedEvent) for event in events)
+    assert saved.progress is not None
+    assert list(saved.progress.open_inputs) == [BACKGROUND_REQUEST_ID]
+    checkpoint = _transferred(run)
+    assert checkpoint.run_state.progress is not None
+    cells = SavedCells.model_validate(checkpoint.run_state.progress.feature_state)
+    assert {cell.cell_id: cell.observer is None for cell in cells.cells} == {
+        1: True,
+        2: False,
+    }
+
+    resumed = agents.agent(checkpoint.agent_state).resume(
+        checkpoint.run_state,
+        answers=[
+            _answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID),
+            _answer(InputDecision.APPROVE),
+        ],
+    )
+    output = resumed.result(timeout=20).output.text
+    assert resumed.wait_for_idle(10)
+
+    assert set(agents.sent) == {"bg", "x"} and len(agents.sent) == 2
+    assert "sent {'sent': 'bg'}" in output
+
+
+def test_a_background_cell_continues_once_its_request_has_an_answer() -> None:
+    """The background cell's answer arrives first: the cell continues in the
+    resident run, which pauses again for the other request."""
+    agents = _background_send_agents()
+    events: list[AgentEvent] = []
+    run = agents.agent().start(
+        max_steps=5, messages=[UserMessage(content="Send")], on_event=events.append
+    )
+    _suspended(run)
+
+    run.submit(_answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID))
+    until(lambda: agents.sent_once.is_set() and run.status == RunStatus.SUSPENDED)
+    saved = _suspended(run)
+
+    assert agents.sent == ["bg"]
+    ended = [event for event in events if isinstance(event, InputEndedEvent)]
+    assert [event.request.request_id for event in ended] == [BACKGROUND_REQUEST_ID]
+    assert "sent {'sent': 'bg'}" in _closing_text(saved, "background")
+
+    run.submit(_answer(InputDecision.APPROVE))
+    output = run.result(timeout=20).output.text
+    assert run.wait_for_idle(10)
+    assert agents.sent == ["bg", "x"]
+    assert output == (
+        "Cell 1 completed before the run paused; its output and result are in "
+        "its earlier result."
+    )
 
 
 def test_a_program_too_large_to_park_continues_without_the_call(

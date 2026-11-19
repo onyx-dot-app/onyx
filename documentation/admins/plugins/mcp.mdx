@@ -163,10 +163,10 @@ After the decision, the card becomes a one-line record: **Approved**, **Approved
 It stays after the answer finishes and when the user opens the chat again.
 
 A request has no time limit. It waits until the user decides.
-When only approval requests remain and no other part of the answer runs, Onyx saves the answer and stops it.
-No API server holds the answer while it waits, so a closed tab, a reload,
-or an API server restart does not end the request. After the user decides every request of the answer,
-the answer continues on any API server, and the web app shows it in the same message.
+When only approval requests remain and no other part of the answer runs, Onyx saves the answer and stops it. After that,
+no API server holds the answer, so a closed tab, a reload, or an API server restart does not end the request.
+After the user decides every request of the answer, the answer continues on any API server,
+and the web app shows it in the same message.
 
 After the answer stops to wait for approval, the user can type a message but cannot send it.
 Onyx keeps the draft and shows the card that waits. If the user reloads the page or opens the chat again,

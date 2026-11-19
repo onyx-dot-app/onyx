@@ -249,7 +249,10 @@ When every request has an answer, the runtime calls `AgentTool.resume_with_input
 An approved request runs its call; a denied one gives the call the answer's result.
 The continuation returns a result, or another `NestedInputWait`.
 A tool that stops waiting, for example because its program ended, ends the request with `NestedCallGate.withdraw`.
-A request that no `NestedInputWait` saved ends when the run suspends or ends.
+A request that no `NestedInputWait` holds stays open: the run saves it in `RunProgress.open_inputs`, also while it suspends.
+Its answer goes to `AgentTool.continue_open_input` of the tool that made the call, such as for a program that waits in the background.
+The tool returns the requests that it took; the run ends those, and offers the others again later.
+Open requests end with the run.
 A hook that raises fails the run, as for a direct call: `decide` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
 A code mode program stops at the failure; the observation that reports its end raises it.
 When no observation reports that end, the cells' finish or suspend hook raises `ReleaseFailed`.
@@ -259,7 +262,7 @@ Approval is separate from the callbacks. An `AgentTool` lists the call names tha
 The runtime gates those calls through the coordinator's `ToolApprovals` (`AgentCoordinator(approvals=...)`).
 A call whose `before_tool_call` request the user approves runs without asking `ToolApprovals`.
 `ToolApprovals.request_approval(run, tool_call, nested_call)` returns a `PendingToolInput` to wait for, a `ToolResult` for a call that cannot wait, or `None` when a standing grant approves the call. `tool_call` is the call of the run's step; `nested_call` is the call that its tool makes for the model, or `None` for a direct call.
-`ToolApprovals.withdraw_approval(request_id)` ends the request of a call that a tool made for the model when that call stops waiting while the run goes on: its program ended, its park was refused, or the run suspended before any wait saved it.
+`ToolApprovals.withdraw_approval(request_id)` ends the request of a call that a tool made for the model when that call stops waiting while the run goes on: its program ended or its park was refused.
 The runtime logs a `withdraw_approval` that raises, so the waiting call still ends.
 The requests of a run that ends are the application's to close; the run store does it when it releases the run.
 Answers live in `RunProgress.human_tool_answers`. A request ends with the answer recorded there, or none, and the run reports it in `input_ended`.
@@ -288,8 +291,10 @@ The `ToolInvocation` argument provides everything the tool needs:
   The details type defines snapshot or delta semantics. Return the complete value in `ToolResult`.
 - `agents` — the subagent coordinator (next section).
 - `run_work` — the run's work. A tool that starts work which outlives the call, such as a code mode
-  program's driver and tool call threads, adds it with `run_work.track_operation(future)`. The run
-  drains, calls `on_drained` and becomes idle only after that work.
+  program's driver, adds it with `run_work.track_operation(future)`. The tool phase does not suspend
+  and the run does not drain until this work ends; an answer or Stop wakes the wait.
+  `run_work.track_detached(future)` holds only the drain, for work such as a tool call that a program
+  left running when it ended. The run calls `on_drained` and becomes idle after both.
 
 Tool calls run in parallel by default. `SEQUENTIAL` orders calls to the same registered tool name
 within one step. Sequential tools with the same `sequence_group`, such as the sandbox file tools,
@@ -527,11 +532,10 @@ The runtime finishes in-flight tools and callbacks before releasing its workers.
 It can suspend during the tool phase with unanswered calls, or before the next step after its feature hooks finish.
 Snapshots taken during provider I/O or arbitrary callbacks support inspection only.
 
-The tool phase suspends only when the run is idle: no call of the step runs, and the work that tools joined
-through `ToolInvocation.run_work` has drained. A code cell's program and its tool calls join this work, so a
-running cell keeps the run from suspending. Its own time limit bounds the wait. The runtime does not stop work to suspend.
-An answer, a watched child's end, or Stop wakes the wait. An answer that arrives first is applied in the same execution,
-without a suspension. The runtime then calls `on_suspend` and saves the run. The feature keeps in that save the results that ended during the wait.
+The tool phase suspends only when no call of the step runs and the run's work is idle (see `run_work` in [Tools](#tools)).
+A code cell's lifetime bounds its program; a tool call that the program left running does not hold the phase.
+`OPERATION_TIMEOUT_SECONDS` bounds the wait as a backstop. The runtime does not stop work to suspend.
+An answer that arrives first is applied in the same execution, without a suspension.
 Foreground children are separate runs: suspension does not stop them, and the application keeps a suspended
 parent resident while its children execute locally.
 
