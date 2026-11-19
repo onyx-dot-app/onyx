@@ -70,16 +70,18 @@ export function stripBidiControls(text: string): string {
 
 /**
  * Inline markdown for a code span holding any text, backticks included: the
- * fence is one backtick longer than the longest run inside. Use inside
- * `markdown()`, e.g. `markdown(\`Read ${codeSpan(path)}\`)`.
+ * fence is one backtick longer than the longest run inside. Line breaks show
+ * as spaces, since a code span cannot cross a line. Use inside `markdown()`,
+ * e.g. `markdown(\`Read ${codeSpan(path)}\`)`.
  */
 export function codeSpan(text: string): string {
+  const line = text.replace(/[\r\n]+/g, " ");
   const longestRun = Math.max(
     0,
-    ...(text.match(/`+/g) ?? []).map((run) => run.length)
+    ...(line.match(/`+/g) ?? []).map((run) => run.length)
   );
   const fence = "`".repeat(longestRun + 1);
-  return `${fence} ${text} ${fence}`;
+  return `${fence} ${line} ${fence}`;
 }
 
 export function escapeMarkdown(value: string): string {
