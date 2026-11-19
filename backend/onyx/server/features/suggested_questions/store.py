@@ -1,4 +1,4 @@
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Collection, Iterable
 from contextlib import AbstractContextManager
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -77,10 +77,13 @@ def merge_questions(
     new: Iterable[PoolQuestion],
     live_document_ids: set[str],
     max_size: int = SQ_SHARED_SHELF,
+    evict_first: Collection[str] = (),
 ) -> list[PoolQuestion]:
     """Merge a run's questions into a shelf: drop questions whose document is
     gone, keep one question per document (the best search position, then the
-    newest), and keep the newest `max_size`."""
+    newest), and keep the newest `max_size`. When the shelf is over its size,
+    the questions in `evict_first` leave before older ones: a person who ran
+    short already used them."""
 
     def rank(question: PoolQuestion) -> tuple[int, float]:
         return question.search_position, -question.created_at.timestamp()
@@ -92,10 +95,10 @@ def merge_questions(
         current = best_by_document.get(question.document_id)
         if current is None or rank(question) < rank(current):
             best_by_document[question.document_id] = question
+    evict = set(evict_first)
     newest_first = sorted(
         best_by_document.values(),
-        key=lambda question: question.created_at,
-        reverse=True,
+        key=lambda question: (question.id in evict, -question.created_at.timestamp()),
     )
     return newest_first[:max_size]
 
@@ -151,6 +154,14 @@ def mark_used(user_id: UUID, question_id: str) -> UserRecord:
         )
 
     return _update_user_record(user_id, add)
+
+
+def record_requested(user_id: UUID, now: datetime) -> UserRecord:
+    """A chat open asked for a run for this person; the page shows it as
+    preparing for a short while."""
+    return _update_user_record(
+        user_id, lambda record: record.model_copy(update={"requested_at": now})
+    )
 
 
 def record_topup(user_id: UUID, now: datetime, window: timedelta) -> UserRecord:
