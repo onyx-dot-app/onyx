@@ -544,6 +544,18 @@ def test_a_private_server_lists_each_group_with_access(
             setting.group_id
             for setting in load_integration_group_settings(integration.id, db_session)
         ] == [group.id]
+
+        # The legacy groups are each group with access, so groups=[] takes
+        # the access away, setting and all.
+        mcp_api.update_mcp_server_alias(
+            server_id,
+            MCPServerSimpleUpdateRequest(groups=[]),
+            db_session,
+            admin,
+        )
+        assert load_integration_group_settings(integration.id, db_session) == []
+        server = mcp_api.get_mcp_server_alias(server_id, db_session, admin)
+        assert server.groups == []
     finally:
         db_session.rollback()
         db_session.execute(

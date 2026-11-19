@@ -42,6 +42,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.access import (
     publish_integration__no_commit,
     set_company_policy__no_commit,
+    set_group_settings__no_commit,
     share_integration__no_commit,
 )
 from onyx.integrations.connection_models import read_connection_secret
@@ -261,8 +262,10 @@ def _apply_access(
     db_session: Session,
 ) -> set[UUID]:
     """Public is Available to the organization, with no shares. Private has
-    the users and groups as its shares. The caller locked the integration
-    and checked that the user manages it. Returns the affected users."""
+    the users and groups as its shares. ``group_ids`` is the full set of
+    groups with access; ``None`` keeps the groups. The caller locked the
+    integration and checked that the user manages it. Returns the affected
+    users."""
     if is_public is None and group_ids is None and user_ids is None:
         return set()
     affected: set[UUID] = set()
@@ -278,6 +281,19 @@ def _apply_access(
         affected |= set_company_policy__no_commit(
             integration, PluginInstallationPolicy.NOT_AVAILABLE, db_session
         )
+    if group_ids is not None:
+        # The legacy groups are each group with access (_admin_view). A
+        # group left out loses the setting that gives it access, too.
+        dropped = {
+            setting.group_id: None
+            for setting in load_integration_group_settings(integration.id, db_session)
+            if setting.installation_policy != PluginInstallationPolicy.NOT_AVAILABLE
+            and setting.group_id not in group_ids
+        }
+        if dropped:
+            affected |= set_group_settings__no_commit(
+                user, integration, dropped, db_session
+            )
     users, groups = _shares(integration, db_session)
     return affected | share_integration__no_commit(
         user,
