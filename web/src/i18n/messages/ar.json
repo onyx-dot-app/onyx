@@ -16854,26 +16854,12 @@
           "label": "اسحب وأفلت أو انقر للرفع"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "لا توجد ملفات داعمة بعد."
-        },
-        "remove": {
-          "label": "إزالة {name}"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "إضافة ملفات"
-        },
         "input": {
           "ariaLabel": "إضافة ملفات المهارة"
         },
         "preparing": {
           "label": "جارٍ التجهيز..."
-        },
-        "prompt": {
-          "description": "اختر ملفات أو ملف ZIP، أو أفلت مجلدًا هنا."
         }
       },
       "instructionsToggle": {
@@ -16961,11 +16947,11 @@
         "description": "مثبتة ومفعلة دائمًا. لا يمكن للأعضاء إيقافها."
       },
       "DEFAULT": {
-        "label": "مثبتة افتراضيًا",
+        "label": "مثبتة",
         "description": "مثبتة لكل عضو. يمكن للأعضاء إيقافها."
       },
       "AVAILABLE": {
-        "label": "متاح للتثبيت",
+        "label": "متاحة",
         "description": "يجدها الأعضاء ويفعّلونها إذا أرادوا."
       },
       "NOT_AVAILABLE": {

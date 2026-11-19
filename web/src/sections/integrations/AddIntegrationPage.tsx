@@ -21,8 +21,7 @@ import {
   toast,
 } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
-import { SvgBlocks, SvgCodeFile, SvgPlug, SvgServer } from "@opal/icons";
-import type { IconFunctionComponent } from "@opal/types";
+import { SvgCodeFile, SvgPlug } from "@opal/icons";
 import { useNavigation } from "@opal/navigation";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { customizeTabHref, integrationHref } from "@/lib/customize/paths";
@@ -35,6 +34,7 @@ import AddOpenAPIActionModal from "@/sections/actions/modals/AddOpenAPIActionMod
 import McpServerFields from "@/sections/integrations/McpServerFields";
 import IntegrationSignInFields from "@/sections/integrations/IntegrationSignInFields";
 import CredentialFieldInputs from "@/sections/integrations/CredentialFieldInputs";
+import { INTEGRATION_SHAPE_ICONS } from "@/sections/integrations/integrationLabels";
 import {
   DEFAULT_SIGN_IN,
   normalizedUrl,
@@ -60,12 +60,6 @@ import type { MCPSetupProbeResult } from "@/lib/mcp/types";
 type IntegrationType = "mcp_server" | "openapi" | "app";
 
 const CUSTOM_APP = "custom";
-
-const TYPE_ICONS: Record<IntegrationType, IconFunctionComponent> = {
-  mcp_server: SvgServer,
-  openapi: SvgCodeFile,
-  app: SvgBlocks,
-};
 
 interface AddIntegrationPageProps {
   /** Admin adds to either library; Customize adds to the user's own. */
@@ -318,7 +312,11 @@ export default function AddIntegrationPage({ from }: AddIntegrationPageProps) {
                     onClick={() => pickType(option)}
                   >
                     <Content
-                      icon={TYPE_ICONS[option]}
+                      icon={
+                        INTEGRATION_SHAPE_ICONS[
+                          option === "app" ? "preset" : option
+                        ]
+                      }
                       title={t(`type.${option}.title`)}
                       description={t(`type.${option}.description`)}
                     />

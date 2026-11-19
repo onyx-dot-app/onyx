@@ -16854,26 +16854,12 @@
           "label": "Drag and drop or click to upload"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "No supporting files yet."
-        },
-        "remove": {
-          "label": "Remove {name}"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "Add files"
-        },
         "input": {
           "ariaLabel": "Add skill files"
         },
         "preparing": {
           "label": "Preparing..."
-        },
-        "prompt": {
-          "description": "Choose files or a ZIP, or drop a folder here."
         }
       },
       "instructionsToggle": {
@@ -16961,11 +16947,11 @@
         "description": "Installed and always on. Members can't turn it off."
       },
       "DEFAULT": {
-        "label": "Installed by default",
+        "label": "Installed",
         "description": "Installed for every member. Members can turn it off."
       },
       "AVAILABLE": {
-        "label": "Available to install",
+        "label": "Available",
         "description": "Members find it and turn it on if they want it."
       },
       "NOT_AVAILABLE": {

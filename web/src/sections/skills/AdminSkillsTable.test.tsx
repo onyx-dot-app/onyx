@@ -59,9 +59,7 @@ test("shows the source, version, audience and groups of each skill", () => {
   expect(within(row).getByText("Organization library")).toBeVisible();
   expect(within(row).getByText("v3 · v2 live")).toBeVisible();
   expect(within(row).getAllByText("Required", { exact: true })).toHaveLength(2);
-  expect(
-    within(row).getByText("Groups: Sales: Available to install")
-  ).toBeVisible();
+  expect(within(row).getByText("Groups: Sales: Available")).toBeVisible();
 
   const other = screen.getByRole("row", { name: "Open sql-helper" });
   expect(within(other).getByText("other@example.com")).toBeVisible();

@@ -16854,26 +16854,12 @@
           "label": "Glissez-déposez ou cliquez pour téléverser"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "Aucun fichier joint pour l'instant."
-        },
-        "remove": {
-          "label": "Retirer {name}"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "Ajouter des fichiers"
-        },
         "input": {
           "ariaLabel": "Ajouter des fichiers de compétence"
         },
         "preparing": {
           "label": "Préparation..."
-        },
-        "prompt": {
-          "description": "Choisissez des fichiers ou un ZIP, ou déposez un dossier ici."
         }
       },
       "instructionsToggle": {
@@ -16961,11 +16947,11 @@
         "description": "Installé et toujours actif. Les membres ne peuvent pas le désactiver."
       },
       "DEFAULT": {
-        "label": "Installé par défaut",
+        "label": "Installé",
         "description": "Installé pour chaque membre. Les membres peuvent le désactiver."
       },
       "AVAILABLE": {
-        "label": "Disponible à l’installation",
+        "label": "Disponible",
         "description": "Les membres le trouvent et l'activent s'ils le souhaitent."
       },
       "NOT_AVAILABLE": {

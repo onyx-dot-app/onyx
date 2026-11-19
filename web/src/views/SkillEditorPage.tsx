@@ -48,7 +48,8 @@ import { useSkillLimitCopy } from "@/lib/skills/hooks";
 import { customizeTabHref, skillHref } from "@/lib/customize/paths";
 import { BackLink } from "@/sections/customize/CustomizeDetailLayout";
 import SkillBundleEditor, {
-  type BundleFile,
+  bundleFiles,
+  uploadPaths,
 } from "@/sections/customize/SkillBundleEditor";
 
 const EMPTY_SKILL_MD = composeSkillMarkdown({
@@ -56,12 +57,6 @@ const EMPTY_SKILL_MD = composeSkillMarkdown({
   description: "",
   instructions: "",
 });
-
-function entriesOf(upload: PreparedSkillFilesUpload): string[] {
-  return (upload.entries ?? [{ path: upload.displayName }]).map(
-    (entry) => entry.path
-  );
-}
 
 interface SkillEditorPageProps {
   draftId?: string;
@@ -156,21 +151,7 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
           : undefined;
   const canCreate = !busy && createTooltip === undefined;
 
-  // An added file with the path of an earlier one replaces it.
-  const byPath = new Map<string, BundleFile>();
-  for (const upload of uploads)
-    for (const entry of upload.entries ?? [
-      { path: upload.displayName, size: upload.file.size },
-    ])
-      if (!removed.has(entry.path))
-        byPath.set(entry.path, {
-          path: entry.path,
-          size: entry.size,
-          added: true,
-        });
-  const files = [...byPath.values()].sort((a, b) =>
-    a.path.localeCompare(b.path)
-  );
+  const files = bundleFiles([], uploads, removed);
 
   function handleCancel() {
     if (busy) return;
@@ -213,7 +194,7 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
       return;
     }
     setUploads((current) => [...current, upload]);
-    const paths = new Set(entriesOf(upload));
+    const paths = new Set(uploadPaths(upload));
     setRemoved(
       (current) => new Set([...current].filter((path) => !paths.has(path)))
     );
@@ -224,16 +205,16 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
     baseVersionId: string | null
   ): Promise<void> {
     let versionId = baseVersionId;
-    const present = new Set(uploads[0] ? entriesOf(uploads[0]) : []);
+    const present = new Set(uploads[0] ? uploadPaths(uploads[0]) : []);
     for (const upload of uploads.slice(1)) {
-      if (entriesOf(upload).every((path) => removed.has(path))) continue;
+      if (uploadPaths(upload).every((path) => removed.has(path))) continue;
       const updated = await uploadUserSkillFiles(
         skillId,
         upload.file,
         versionId
       );
       versionId = updated.current_version_id;
-      entriesOf(upload).forEach((path) => present.add(path));
+      uploadPaths(upload).forEach((path) => present.add(path));
     }
     for (const path of removed) {
       if (!present.has(path)) continue;

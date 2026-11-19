@@ -20,7 +20,8 @@ import { useSkillLimitCopy } from "@/lib/skills/hooks";
 import type { SkillBundleFile, SkillEditableDetail } from "@/lib/skills/types";
 import { type InstructionsDisplayMode } from "@/sections/skills/InstructionsDisplayModeToggle";
 import SkillBundleEditor, {
-  type BundleFile,
+  bundleFiles,
+  uploadPaths,
 } from "@/sections/customize/SkillBundleEditor";
 
 interface SkillContentsTabProps {
@@ -120,24 +121,7 @@ export default function SkillContentsTab({
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
 
-  // An added file with the path of a saved one replaces it.
-  const byPath = new Map<string, BundleFile>();
-  for (const file of [
-    ...(files ?? []).map((file) => ({
-      path: file.path,
-      size: file.size,
-      added: false,
-    })),
-    ...added.flatMap((upload) =>
-      (
-        upload.entries ?? [{ path: upload.displayName, size: upload.file.size }]
-      ).map((entry) => ({ path: entry.path, size: entry.size, added: true }))
-    ),
-  ])
-    if (!removed.has(file.path)) byPath.set(file.path, file);
-  const listed = [...byPath.values()].sort((a, b) =>
-    a.path.localeCompare(b.path)
-  );
+  const listed = bundleFiles(files ?? [], added, removed);
   const preview = editing
     ? (() => {
         const parsed = parseSkillMarkdown(text);
@@ -174,12 +158,6 @@ export default function SkillContentsTab({
     });
   }
 
-  function entriesOf(upload: PreparedSkillFilesUpload): string[] {
-    return (upload.entries ?? [{ path: upload.displayName }]).map(
-      (entry) => entry.path
-    );
-  }
-
   function add(upload: PreparedSkillFilesUpload): void {
     if (upload.containsSkillMd) {
       toast.error(t("errors.skillMd"));
@@ -187,7 +165,7 @@ export default function SkillContentsTab({
     }
     setAdded((current) => [...current, upload]);
     // A new file replaces a saved one that was marked for removal.
-    const paths = new Set(entriesOf(upload));
+    const paths = new Set(uploadPaths(upload));
     setRemoved(
       (current) => new Set([...current].filter((path) => !paths.has(path)))
     );
@@ -231,7 +209,7 @@ export default function SkillContentsTab({
       }
       // A staged file that was removed again is not uploaded.
       const uploads = added.filter((upload) =>
-        entriesOf(upload).some((path) => !removed.has(path))
+        uploadPaths(upload).some((path) => !removed.has(path))
       );
       const present = new Set([
         ...(files ?? []).map((file) => file.path),
@@ -244,7 +222,7 @@ export default function SkillContentsTab({
           versionId
         );
         versionId = updated.current_version_id;
-        entriesOf(upload).forEach((path) => {
+        uploadPaths(upload).forEach((path) => {
           present.add(path);
           uploadedPaths.current.add(path);
         });

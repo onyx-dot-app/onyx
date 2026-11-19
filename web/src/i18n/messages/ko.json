@@ -16854,26 +16854,12 @@
           "label": "끌어다 놓거나 클릭하여 업로드"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "아직 보조 파일이 없습니다."
-        },
-        "remove": {
-          "label": "{name} 제거"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "파일 추가"
-        },
         "input": {
           "ariaLabel": "스킬 파일 추가"
         },
         "preparing": {
           "label": "준비 중..."
-        },
-        "prompt": {
-          "description": "파일이나 ZIP을 선택하거나 폴더를 여기에 놓으세요."
         }
       },
       "instructionsToggle": {
@@ -16961,11 +16947,11 @@
         "description": "설치되어 항상 켜져 있습니다. 구성원이 끌 수 없습니다."
       },
       "DEFAULT": {
-        "label": "기본 설치",
+        "label": "설치됨",
         "description": "모든 구성원에게 설치됩니다. 구성원이 끌 수 있습니다."
       },
       "AVAILABLE": {
-        "label": "설치 가능",
+        "label": "사용 가능",
         "description": "구성원이 찾아서 원하면 켭니다."
       },
       "NOT_AVAILABLE": {

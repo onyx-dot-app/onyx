@@ -16854,26 +16854,12 @@
           "label": "拖放文件或点击上传"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "暂无支持文件。"
-        },
-        "remove": {
-          "label": "移除 {name}"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "添加文件"
-        },
         "input": {
           "ariaLabel": "添加技能文件"
         },
         "preparing": {
           "label": "正在准备…"
-        },
-        "prompt": {
-          "description": "选择文件或 ZIP，也可以将文件夹拖放到这里。"
         }
       },
       "instructionsToggle": {
@@ -16961,11 +16947,11 @@
         "description": "已安装且始终开启。成员无法关闭。"
       },
       "DEFAULT": {
-        "label": "默认安装",
+        "label": "已安装",
         "description": "为每位成员安装。成员可以关闭。"
       },
       "AVAILABLE": {
-        "label": "可供安装",
+        "label": "可用",
         "description": "成员可以找到它，并按需开启。"
       },
       "NOT_AVAILABLE": {

@@ -135,7 +135,7 @@ export default function AdminPluginsPage() {
       kind: "display",
       id: "installation",
       title: t("columns.installation"),
-      width: { weight: 22, minWidth: 220 },
+      width: { weight: 16 },
       cell: (row) => {
         const policy = row.plugin.installation_policy;
         // Only an Organization library plugin has an install setting.

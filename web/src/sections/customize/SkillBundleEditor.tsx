@@ -26,6 +26,37 @@ export interface BundleFile {
   added: boolean;
 }
 
+/** The paths an upload adds: its entries, or its own name. */
+export function uploadPaths(upload: PreparedSkillFilesUpload): string[] {
+  return (upload.entries ?? [{ path: upload.displayName }]).map(
+    (entry) => entry.path
+  );
+}
+
+/** The files to list: the saved ones, then the added ones, where an added
+ * path replaces a saved one, without the removed paths, sorted by path. */
+export function bundleFiles(
+  saved: readonly { path: string; size: number | null }[],
+  added: readonly PreparedSkillFilesUpload[],
+  removed: ReadonlySet<string>
+): BundleFile[] {
+  const byPath = new Map<string, BundleFile>();
+  for (const file of saved)
+    byPath.set(file.path, { path: file.path, size: file.size, added: false });
+  for (const upload of added)
+    for (const entry of upload.entries ?? [
+      { path: upload.displayName, size: upload.file.size },
+    ])
+      byPath.set(entry.path, {
+        path: entry.path,
+        size: entry.size,
+        added: true,
+      });
+  return [...byPath.values()]
+    .filter((file) => !removed.has(file.path))
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
 interface SkillBundleEditorProps {
   /** The supporting files, without SKILL.md. */
   files: readonly BundleFile[];
@@ -92,9 +123,8 @@ export default function SkillBundleEditor({
           </Section>
           {editing && (
             <SkillFilesPicker
-              compact
-              buttonIcon={SvgPlus}
-              buttonLabel={t("addFile")}
+              icon={SvgPlus}
+              label={t("addFile")}
               disabled={busy}
               onChange={onAdd}
               onPreparingChange={onPreparingChange}

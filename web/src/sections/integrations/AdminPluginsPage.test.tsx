@@ -123,7 +123,7 @@ test("an organization-wide action manager changes the install setting", async ()
   );
   await user.click(
     await screen.findByRole("option", {
-      name: new RegExp(policyCopy.DEFAULT.label),
+      name: new RegExp(`^${policyCopy.DEFAULT.label}`),
     })
   );
   await waitFor(() =>
@@ -153,7 +153,7 @@ test("locks the install setting while its change saves", async () => {
   await user.click(select);
   await user.click(
     await screen.findByRole("option", {
-      name: new RegExp(policyCopy.DEFAULT.label),
+      name: new RegExp(`^${policyCopy.DEFAULT.label}`),
     })
   );
   await waitFor(() =>

@@ -16854,26 +16854,12 @@
           "label": "Arraste e solte ou clique para enviar"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "Ainda não há arquivos de apoio."
-        },
-        "remove": {
-          "label": "Remover {name}"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "Adicionar arquivos"
-        },
         "input": {
           "ariaLabel": "Adicionar arquivos da habilidade"
         },
         "preparing": {
           "label": "Preparando..."
-        },
-        "prompt": {
-          "description": "Escolha arquivos ou um ZIP, ou solte uma pasta aqui."
         }
       },
       "instructionsToggle": {
@@ -16961,11 +16947,11 @@
         "description": "Instalado e sempre ativo. Os membros não podem desativá-lo."
       },
       "DEFAULT": {
-        "label": "Instalado por padrão",
+        "label": "Instalado",
         "description": "Instalado para cada membro. Os membros podem desativá-lo."
       },
       "AVAILABLE": {
-        "label": "Disponível para instalar",
+        "label": "Disponível",
         "description": "Os membros o encontram e o ativam se quiserem."
       },
       "NOT_AVAILABLE": {

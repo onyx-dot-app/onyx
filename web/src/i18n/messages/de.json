@@ -16854,26 +16854,12 @@
           "label": "Ziehen Sie eine Datei hierher oder klicken Sie zum Hochladen"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "Noch keine zusätzlichen Dateien."
-        },
-        "remove": {
-          "label": "{name} entfernen"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "Dateien hinzufügen"
-        },
         "input": {
           "ariaLabel": "Skill-Dateien hinzufügen"
         },
         "preparing": {
           "label": "Wird vorbereitet..."
-        },
-        "prompt": {
-          "description": "Wählen Sie Dateien oder eine ZIP-Datei aus oder legen Sie einen Ordner hier ab."
         }
       },
       "instructionsToggle": {
@@ -16961,11 +16947,11 @@
         "description": "Installiert und immer aktiv. Mitglieder können es nicht deaktivieren."
       },
       "DEFAULT": {
-        "label": "Standardmäßig installiert",
+        "label": "Installiert",
         "description": "Für jedes Mitglied installiert. Mitglieder können es deaktivieren."
       },
       "AVAILABLE": {
-        "label": "Zur Installation verfügbar",
+        "label": "Verfügbar",
         "description": "Mitglieder finden es und aktivieren es bei Bedarf."
       },
       "NOT_AVAILABLE": {

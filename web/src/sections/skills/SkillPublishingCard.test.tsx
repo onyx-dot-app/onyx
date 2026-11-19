@@ -78,7 +78,7 @@ describe("SkillPublishingCard", () => {
     expect(
       screen.queryByRole("combobox", { name: "Default Access" })
     ).not.toBeInTheDocument();
-    expect(screen.queryByText("Available to install")).not.toBeInTheDocument();
+    expect(screen.queryByText("Available")).not.toBeInTheDocument();
   });
 
   it("describes the saved setting", () => {

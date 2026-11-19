@@ -16854,26 +16854,12 @@
           "label": "Arrastra y suelta o haz clic para subir"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "Todavía no hay archivos complementarios."
-        },
-        "remove": {
-          "label": "Quitar {name}"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "Añadir archivos"
-        },
         "input": {
           "ariaLabel": "Añadir archivos de la habilidad"
         },
         "preparing": {
           "label": "Preparando..."
-        },
-        "prompt": {
-          "description": "Elige archivos o un ZIP, o suelta una carpeta aquí."
         }
       },
       "instructionsToggle": {
@@ -16961,11 +16947,11 @@
         "description": "Instalado y siempre activo. Los miembros no pueden desactivarlo."
       },
       "DEFAULT": {
-        "label": "Instalado de forma predeterminada",
+        "label": "Instalado",
         "description": "Instalado para cada miembro. Los miembros pueden desactivarlo."
       },
       "AVAILABLE": {
-        "label": "Disponible para instalar",
+        "label": "Disponible",
         "description": "Los miembros lo encuentran y lo activan si lo quieren."
       },
       "NOT_AVAILABLE": {

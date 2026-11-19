@@ -16854,26 +16854,12 @@
           "label": "ドラッグ＆ドロップするか、クリックしてアップロード"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "補助ファイルはまだありません。"
-        },
-        "remove": {
-          "label": "{name} を削除"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "ファイルを追加"
-        },
         "input": {
           "ariaLabel": "スキルファイルを追加"
         },
         "preparing": {
           "label": "準備中..."
-        },
-        "prompt": {
-          "description": "ファイルまたは ZIP を選択するか、フォルダーをここにドロップしてください。"
         }
       },
       "instructionsToggle": {
@@ -16961,11 +16947,11 @@
         "description": "インストール済みで常にオンです。メンバーはオフにできません。"
       },
       "DEFAULT": {
-        "label": "既定でインストール",
+        "label": "インストール済み",
         "description": "すべてのメンバーにインストールされます。メンバーはオフにできます。"
       },
       "AVAILABLE": {
-        "label": "インストール可能",
+        "label": "利用可能",
         "description": "メンバーが見つけて、必要に応じてオンにします。"
       },
       "NOT_AVAILABLE": {
