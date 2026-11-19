@@ -44,6 +44,20 @@ func TestBaseline_saveAndLoadRoundTrip(t *testing.T) {
 		t.Fatalf("failed to load the baseline: %v", err)
 	}
 
+	// A baseline that reorders between runs would show up as a diff on every
+	// update, so a second save must be byte-identical.
+	again := filepath.Join(t.TempDir(), BaselineFile)
+	if err := original.Save(again, GoTests); err != nil {
+		t.Fatalf("failed to save the baseline: %v", err)
+	}
+	data := readFile(t, path)
+	if data != readFile(t, again) {
+		t.Fatal("expected two saves of the same baseline to be byte-identical")
+	}
+	if !strings.HasPrefix(data, "# Minimum statement coverage") {
+		t.Fatalf("expected the explanatory header, got:\n%s", data)
+	}
+
 	if loaded.Total != original.Total {
 		t.Fatalf("expected total %v, got %v", original.Total, loaded.Total)
 	}
@@ -54,32 +68,6 @@ func TestBaseline_saveAndLoadRoundTrip(t *testing.T) {
 		if loaded.Packages[name] != floor {
 			t.Fatalf("expected %s at %v, got %v", name, floor, loaded.Packages[name])
 		}
-	}
-}
-
-func TestBaseline_saveIsDeterministic(t *testing.T) {
-	dir := t.TempDir()
-	baseline := NewBaseline(profileOf(map[string][2]int{
-		"cmd": {1, 4}, "internal/audit": {1, 2}, "internal/tui": {3, 4},
-	}))
-
-	first := filepath.Join(dir, "first.yaml")
-	second := filepath.Join(dir, "second.yaml")
-	if err := baseline.Save(first, GoTests); err != nil {
-		t.Fatalf("failed to save the baseline: %v", err)
-	}
-	if err := baseline.Save(second, GoTests); err != nil {
-		t.Fatalf("failed to save the baseline: %v", err)
-	}
-
-	// A baseline that reorders between runs would show up as a diff on every
-	// update, so key order has to be stable.
-	firstData := readFile(t, first)
-	if firstData != readFile(t, second) {
-		t.Fatal("expected two saves of the same baseline to be byte-identical")
-	}
-	if !strings.Contains(firstData, "# Minimum statement coverage") {
-		t.Fatalf("expected the explanatory header, got:\n%s", firstData)
 	}
 }
 

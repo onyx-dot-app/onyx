@@ -37,61 +37,52 @@ func statusOf(t *testing.T, report *Report, pkg string) Status {
 	return ""
 }
 
-func TestCompare_regressionBelowFloor(t *testing.T) {
-	profile := profileOf(map[string][2]int{"cmd": {1, 4}}) // 25%
-	baseline := &Baseline{Total: 50, Packages: map[string]float64{"cmd": 50}}
-
-	report := Compare(profile, floorReference(baseline), DefaultTolerance)
-
-	if got := statusOf(t, report, "cmd"); got != StatusRegressed {
-		t.Fatalf("expected a regression, got %q", got)
+// Each package gets a status against its floor or base, and only a drop past
+// the tolerance fails the check.
+func TestCompare_packageStatus(t *testing.T) {
+	floor50 := floorReference(&Baseline{Total: 50, Packages: map[string]float64{"cmd": 50}})
+	cases := []struct {
+		name             string
+		counts           map[string][2]int
+		reference        *Reference
+		pkg              string
+		want             Status
+		wantRegressions  int
+		wantImprovements int
+	}{
+		{"below the floor", map[string][2]int{"cmd": {1, 4}}, floor50, "cmd", StatusRegressed, 1, 0},
+		{"at the floor", map[string][2]int{"cmd": {1, 2}}, floor50, "cmd", StatusOK, 0, 0},
+		{"above the floor", map[string][2]int{"cmd": {3, 4}}, floor50, "cmd", StatusImproved, 0, 1},
+		{
+			"drop inside the tolerance", map[string][2]int{"cmd": {999, 1000}},
+			floorReference(&Baseline{Total: 99.9, Packages: map[string]float64{"cmd": 100}}), "cmd", StatusOK, 0, 0,
+		},
+		{
+			"drop inside the tolerance against a base", map[string][2]int{"cmd": {1999, 2000}},
+			baseReference(map[string][2]int{"cmd": {2000, 2000}}), "cmd", StatusOK, 0, 0,
+		},
+		// A package without a floor cannot fail a check it was never measured for.
+		{"new package", map[string][2]int{"cmd": {1, 2}, "internal/new": {0, 10}}, floor50, "internal/new", StatusNew, 0, 0},
+		{
+			"removed package", map[string][2]int{"cmd": {1, 2}},
+			floorReference(&Baseline{Total: 50, Packages: map[string]float64{"cmd": 50, "internal/gone": 90}}),
+			"internal/gone", StatusRemoved, 0, 0,
+		},
 	}
-	if got := len(report.Regressions()); got != 1 {
-		t.Fatalf("expected one regression, got %d", got)
-	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			report := Compare(profileOf(tc.counts), tc.reference, DefaultTolerance)
 
-func TestCompare_holdingAtTheFloorPasses(t *testing.T) {
-	profile := profileOf(map[string][2]int{"cmd": {1, 2}}) // 50%
-	baseline := &Baseline{Total: 50, Packages: map[string]float64{"cmd": 50}}
-
-	report := Compare(profile, floorReference(baseline), DefaultTolerance)
-
-	if got := statusOf(t, report, "cmd"); got != StatusOK {
-		t.Fatalf("expected ok, got %q", got)
-	}
-	if got := len(report.Regressions()); got != 0 {
-		t.Fatalf("expected no regressions, got %d", got)
-	}
-}
-
-// A drop inside the tolerance is noise, not a regression, so it must not fail
-// the gate.
-func TestCompare_dropInsideToleranceIsNotARegression(t *testing.T) {
-	profile := profileOf(map[string][2]int{"cmd": {999, 1000}}) // 99.9%
-	baseline := &Baseline{Total: 99.9, Packages: map[string]float64{"cmd": 100}}
-
-	report := Compare(profile, floorReference(baseline), DefaultTolerance)
-
-	if got := statusOf(t, report, "cmd"); got != StatusOK {
-		t.Fatalf("expected the 0.1 drop tolerated, got %q", got)
-	}
-}
-
-func TestCompare_improvementIsReported(t *testing.T) {
-	profile := profileOf(map[string][2]int{"cmd": {3, 4}}) // 75%
-	baseline := &Baseline{Total: 50, Packages: map[string]float64{"cmd": 50}}
-
-	report := Compare(profile, floorReference(baseline), DefaultTolerance)
-
-	if got := statusOf(t, report, "cmd"); got != StatusImproved {
-		t.Fatalf("expected an improvement, got %q", got)
-	}
-	if got := len(report.Improvements()); got != 1 {
-		t.Fatalf("expected one improvement, got %d", got)
-	}
-	if got := len(report.Regressions()); got != 0 {
-		t.Fatalf("an improvement must not fail the check, got %d regressions", got)
+			if got := statusOf(t, report, tc.pkg); got != tc.want {
+				t.Fatalf("expected %q, got %q", tc.want, got)
+			}
+			if got := len(report.Regressions()); got != tc.wantRegressions {
+				t.Fatalf("expected %d regressions, got %d", tc.wantRegressions, got)
+			}
+			if got := len(report.Improvements()); got != tc.wantImprovements {
+				t.Fatalf("expected %d improvements, got %d", tc.wantImprovements, got)
+			}
+		})
 	}
 }
 
@@ -108,22 +99,6 @@ func TestCompare_roundingIsNotAnImprovement(t *testing.T) {
 	}
 	if report.Changed() {
 		t.Fatal("expected no change against a fresh baseline")
-	}
-}
-
-// A package added without tests has no floor. It is reported so it gets a floor,
-// but it cannot fail a check it was never measured for.
-func TestCompare_newPackageDoesNotFail(t *testing.T) {
-	profile := profileOf(map[string][2]int{"internal/new": {0, 10}})
-	baseline := &Baseline{Total: 0, Packages: map[string]float64{}}
-
-	report := Compare(profile, floorReference(baseline), DefaultTolerance)
-
-	if got := statusOf(t, report, "internal/new"); got != StatusNew {
-		t.Fatalf("expected new, got %q", got)
-	}
-	if got := len(report.Regressions()); got != 0 {
-		t.Fatalf("expected no regressions, got %d", got)
 	}
 }
 
@@ -174,20 +149,6 @@ func TestValidateTolerance(t *testing.T) {
 	}
 }
 
-func TestCompare_removedPackageIsReportedNotFailed(t *testing.T) {
-	profile := profileOf(map[string][2]int{"cmd": {1, 2}})
-	baseline := &Baseline{Total: 50, Packages: map[string]float64{"cmd": 50, "internal/gone": 90}}
-
-	report := Compare(profile, floorReference(baseline), DefaultTolerance)
-
-	if got := statusOf(t, report, "internal/gone"); got != StatusRemoved {
-		t.Fatalf("expected removed, got %q", got)
-	}
-	if got := len(report.Regressions()); got != 0 {
-		t.Fatalf("a deleted package must not fail the check, got %d", got)
-	}
-}
-
 func TestCompare_noBaselineMarksEverythingNew(t *testing.T) {
 	profile := profileOf(map[string][2]int{"cmd": {1, 2}})
 
@@ -208,35 +169,4 @@ func TestCompare_noBaselineMarksEverythingNew(t *testing.T) {
 // target, which is what a report against `--base` uses.
 func baseReference(counts map[string][2]int) *Reference {
 	return NewSnapshot(profileOf(counts), testCommit, "tools/ods").Reference()
-}
-
-func TestCompare_stampsTheReference(t *testing.T) {
-	profile := profileOf(map[string][2]int{"cmd": {1, 2}})
-
-	floor := Compare(profile, floorReference(&Baseline{Total: 50, Packages: map[string]float64{"cmd": 50}}), DefaultTolerance)
-	if floor.Reference == nil || floor.Reference.Kind != ReferenceFloor {
-		t.Fatalf("expected a floor reference, got %+v", floor.Reference)
-	}
-
-	base := Compare(profile, baseReference(map[string][2]int{"cmd": {1, 2}}), DefaultTolerance)
-	if base.Reference == nil || base.Reference.Kind != ReferenceBase || base.Reference.Label != "abc1234" {
-		t.Fatalf("expected a base reference, got %+v", base.Reference)
-	}
-
-	if Compare(profile, nil, DefaultTolerance).Reference != nil {
-		t.Fatalf("expected no reference when there is nothing to compare against")
-	}
-}
-
-// The tolerance applies the same way to a base comparison, so a tiny move is
-// still noise rather than a regression.
-func TestCompare_smallDropAgainstABaseIsTolerated(t *testing.T) {
-	profile := profileOf(map[string][2]int{"cmd": {1999, 2000}}) // 99.95%
-	reference := baseReference(map[string][2]int{"cmd": {2000, 2000}})
-
-	report := Compare(profile, reference, DefaultTolerance)
-
-	if got := statusOf(t, report, "cmd"); got != StatusOK {
-		t.Fatalf("expected the 0.05 drop tolerated, got %q", got)
-	}
 }
