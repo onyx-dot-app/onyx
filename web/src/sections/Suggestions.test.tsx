@@ -3,7 +3,7 @@ import { AnalyticsEvent } from "@/lib/analytics/utils";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import type { PersonSuggestions } from "@/lib/suggestedQuestions/types";
 import Suggestions from "@/sections/Suggestions";
-import { render, screen, setupUser } from "@tests/setup/test-utils";
+import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 
 interface MockAgent {
   id: number;
@@ -12,6 +12,7 @@ interface MockAgent {
 
 let mockAgent: MockAgent | null = null;
 let mockSuggestions: PersonSuggestions | undefined;
+let mockIsLoading = false;
 const mockMutate = jest.fn();
 const mockTrack = jest.fn();
 const mockMarkUsed = jest.fn((_id: string) => Promise.resolve());
@@ -23,6 +24,7 @@ jest.mock("@/lib/agents/hooks", () => ({
 jest.mock("@/lib/suggestedQuestions/hooks", () => ({
   useSuggestedQuestions: () => ({
     suggestions: mockSuggestions,
+    isLoading: mockIsLoading,
     mutate: mockMutate,
   }),
 }));
@@ -48,24 +50,26 @@ function suggestions(
 beforeEach(() => {
   mockAgent = { id: DEFAULT_AGENT_ID, starter_messages: null };
   mockSuggestions = undefined;
+  mockIsLoading = false;
   jest.clearAllMocks();
 });
 
 describe("an agent's own starter messages", () => {
   test("win over suggested questions", async () => {
-    const onSubmit = jest.fn();
+    const onChat = jest.fn();
     mockAgent = { id: 7, starter_messages: [{ message: "What can you do?" }] };
     mockSuggestions = suggestions("ready", [
       { id: "q1", message: "Unused suggestion?", private: false },
     ]);
-    render(<Suggestions onSubmit={onSubmit} />);
+    render(<Suggestions onChat={onChat} />);
 
     await setupUser().click(screen.getByText("What can you do?"));
 
     expect(screen.queryByText("Unused suggestion?")).toBeNull();
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ message: "What can you do?" })
-    );
+    expect(onChat).toHaveBeenCalledWith({
+      message: "What can you do?",
+      mentions: [],
+    });
     expect(mockTrack).not.toHaveBeenCalled();
     expect(mockMarkUsed).not.toHaveBeenCalled();
   });
@@ -73,18 +77,19 @@ describe("an agent's own starter messages", () => {
 
 describe("suggested questions on the default agent", () => {
   test("a click sends the question, marks it used and tracks it", async () => {
-    const onSubmit = jest.fn();
+    const onChat = jest.fn();
     mockSuggestions = suggestions("ready", [
       { id: "q1", message: "What are our Q3 goals?", private: true },
       { id: "q2", message: "Who approves long trips?", private: false },
     ]);
-    render(<Suggestions onSubmit={onSubmit} />);
+    render(<Suggestions onChat={onChat} />);
 
     await setupUser().click(screen.getByText("Who approves long trips?"));
 
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ message: "Who approves long trips?" })
-    );
+    expect(onChat).toHaveBeenCalledWith({
+      message: "Who approves long trips?",
+      mentions: [],
+    });
     expect(mockMarkUsed).toHaveBeenCalledWith("q2");
     expect(mockTrack).toHaveBeenCalledWith(
       AnalyticsEvent.CLICKED_SUGGESTED_QUESTION,
@@ -94,25 +99,61 @@ describe("suggested questions on the default agent", () => {
     expect(mockMutate).toHaveBeenCalledWith(expect.any(Function), {
       revalidate: false,
     });
+    const update = mockMutate.mock.calls[0][0];
+    expect(update(mockSuggestions)).toEqual({
+      state: "ready",
+      questions: [
+        { id: "q1", message: "What are our Q3 goals?", private: true },
+      ],
+    });
+  });
+
+  test("a click that cannot be saved still sends, and is logged", async () => {
+    const onChat = jest.fn();
+    const error = new Error("network down");
+    mockMarkUsed.mockReturnValueOnce(Promise.reject(error));
+    const logged = jest.spyOn(console, "error").mockImplementation(() => {});
+    mockSuggestions = suggestions("ready", [
+      { id: "q1", message: "What are our Q3 goals?", private: true },
+    ]);
+    render(<Suggestions onChat={onChat} />);
+
+    await setupUser().click(screen.getByText("What are our Q3 goals?"));
+
+    expect(onChat).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(logged).toHaveBeenCalledWith(
+        "Could not mark the suggested question used:",
+        error
+      )
+    );
+    logged.mockRestore();
+  });
+
+  test("shows the preparing line while the first request is pending", () => {
+    mockIsLoading = true;
+    render(<Suggestions onChat={jest.fn()} />);
+
+    expect(screen.getByText(copy.preparing.text)).toBeInTheDocument();
   });
 
   test("shows one line while questions are being prepared", () => {
     mockSuggestions = suggestions("preparing");
-    render(<Suggestions onSubmit={jest.fn()} />);
+    render(<Suggestions onChat={jest.fn()} />);
 
     expect(screen.getByText(copy.preparing.text)).toBeInTheDocument();
   });
 
   test("shows one line when the person has no documents yet", () => {
     mockSuggestions = suggestions("no_documents");
-    render(<Suggestions onSubmit={jest.fn()} />);
+    render(<Suggestions onChat={jest.fn()} />);
 
     expect(screen.getByText(copy.noDocuments.text)).toBeInTheDocument();
   });
 
   test("shows nothing when ready with no questions", () => {
     mockSuggestions = suggestions("ready");
-    const { container } = render(<Suggestions onSubmit={jest.fn()} />);
+    const { container } = render(<Suggestions onChat={jest.fn()} />);
 
     expect(container).toBeEmptyDOMElement();
   });
@@ -122,7 +163,7 @@ describe("suggested questions on the default agent", () => {
     mockSuggestions = suggestions("ready", [
       { id: "q1", message: "Not for this agent?", private: false },
     ]);
-    const { container } = render(<Suggestions onSubmit={jest.fn()} />);
+    const { container } = render(<Suggestions onChat={jest.fn()} />);
 
     expect(container).toBeEmptyDOMElement();
   });

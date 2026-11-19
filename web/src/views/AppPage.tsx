@@ -76,6 +76,7 @@ import { getProjectTokenCount } from "@/lib/projects/svc";
 import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
+import { useSuggestedQuestions } from "@/lib/suggestedQuestions/hooks";
 import { OnboardingFlow } from "@/lib/onboarding/components";
 import { OnboardingStep } from "@/lib/onboarding/types";
 import { STEP_CONFIG } from "@/lib/onboarding/constants";
@@ -174,8 +175,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     currentChatSessionId,
     isLoading: isLoadingChatSessions,
   } = useChatSessions();
-  const { vectorDbEnabled, disable_default_assistant, is_playground } =
-    useSettings();
+  const { vectorDbEnabled, disable_default_assistant } = useSettings();
 
   const {
     currentMessageFiles,
@@ -198,6 +198,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const { user: resolvedUser } = useCurrentUser();
 
   const activeAgent = useActiveAgent();
+  // On the Playground, every chat open asks for the person's suggested
+  // questions, whatever the agent, so the server records the visit. Only the
+  // default agent shows them.
+  const { suggestions, isLoading: suggestionsLoading } = useSuggestedQuestions(
+    appPosition.isNewSession() || appPosition.isAgent()
+      ? (activeAgent?.id ?? null)
+      : null
+  );
 
   // An explicit agent pick supersedes project context — the two cannot both
   // scope a new chat. This used to ride on the agent-selection callback, but
@@ -744,10 +752,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const hasAgentStarterMessages =
     (activeAgent?.starter_messages?.length ?? 0) > 0;
-  // On the Playground, the default agent suggests questions from the
-  // person's own documents.
   const hasSuggestedQuestions =
-    is_playground === true && activeAgent?.id === DEFAULT_AGENT_ID;
+    activeAgent?.id === DEFAULT_AGENT_ID &&
+    (suggestionsLoading ||
+      (suggestions !== undefined &&
+        (suggestions.questions.length > 0 || suggestions.state !== "ready")));
 
   const gridStyle = {
     // The chat column's width, set once here: the messages, the first-open
@@ -1202,12 +1211,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   <Fade
                     show={
                       (appPosition.isNewSession() || appPosition.isAgent()) &&
+                      !isSearch &&
                       (hasAgentStarterMessages || hasSuggestedQuestions)
                     }
                     className="h-full flex-1 w-full max-w-(--app-page-main-content-width)"
                   >
                     <Spacer rem={0.5} />
-                    <Suggestions onSubmit={onSubmit} />
+                    <Suggestions onChat={onChat} />
                   </Fade>
 
                   {/* SearchUI */}

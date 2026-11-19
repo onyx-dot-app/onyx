@@ -1,9 +1,9 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { OnSubmitProps } from "@/hooks/useChatController";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import { AnalyticsEvent, track } from "@/lib/analytics/utils";
+import type { ComposedMessage } from "@/lib/chat/types";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSuggestedQuestions } from "@/lib/suggestedQuestions/hooks";
 import { markSuggestedQuestionUsed } from "@/lib/suggestedQuestions/svc";
@@ -13,7 +13,8 @@ import { Interactive } from "@opal/core";
 import { Content } from "@opal/layouts";
 
 export interface SuggestionsProps {
-  onSubmit: (props: OnSubmitProps) => void;
+  /** The input bar's send, so a click keeps the chosen models and options. */
+  onChat: (composed: ComposedMessage) => void;
 }
 
 /**
@@ -21,20 +22,15 @@ export interface SuggestionsProps {
  * win. On the Playground's default agent, the person gets questions written
  * from their own documents, or one line while those are being prepared.
  */
-export default function Suggestions({ onSubmit }: SuggestionsProps) {
+export default function Suggestions({ onChat }: SuggestionsProps) {
   const t = useTranslations("chat.suggestedQuestions");
   const activeAgent = useActiveAgent();
-  const { suggestions, mutate } = useSuggestedQuestions(
+  const { suggestions, isLoading, mutate } = useSuggestedQuestions(
     activeAgent?.id ?? null
   );
 
   function send(message: string) {
-    onSubmit({
-      message,
-      mentions: [],
-      currentMessageFiles: [],
-      deepResearch: false,
-    });
+    onChat({ message, mentions: [] });
   }
 
   function handleQuestionClick(question: ShownQuestion, position: number) {
@@ -43,8 +39,11 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
       position,
       private: question.private,
     });
-    // The click must not wait for, or fail because of, the bookkeeping.
-    void markSuggestedQuestionUsed(question.id).catch(() => undefined);
+    // The click must not wait for, or fail because of, the bookkeeping. A
+    // failure only means the question can come back on a later visit.
+    void markSuggestedQuestionUsed(question.id).catch((error: unknown) =>
+      console.error("Could not mark the suggested question used:", error)
+    );
     void mutate(
       (current) =>
         current && {
@@ -68,18 +67,21 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
     );
   }
 
-  if (activeAgent?.id !== DEFAULT_AGENT_ID || !suggestions) return null;
+  if (activeAgent?.id !== DEFAULT_AGENT_ID) return null;
+  if (!suggestions) {
+    return isLoading ? <SuggestionsLine text={t("preparing.text")} /> : null;
+  }
 
   if (suggestions.questions.length === 0) {
     if (suggestions.state === "ready") return null;
     return (
-      <div className="max-w-(--app-page-main-content-width) w-full p-1">
-        <Text as="p" font="main-ui-muted" color="text-03">
-          {suggestions.state === "preparing"
+      <SuggestionsLine
+        text={
+          suggestions.state === "preparing"
             ? t("preparing.text")
-            : t("noDocuments.text")}
-        </Text>
-      </div>
+            : t("noDocuments.text")
+        }
+      />
     );
   }
 
@@ -91,6 +93,21 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
         onClick: () => handleQuestionClick(question, position),
       }))}
     />
+  );
+}
+
+interface SuggestionsLineProps {
+  text: string;
+}
+
+/** One line in place of the buttons, while there are none to show. */
+function SuggestionsLine({ text }: SuggestionsLineProps) {
+  return (
+    <div className="max-w-(--app-page-main-content-width) w-full p-1">
+      <Text as="p" font="main-ui-muted" color="text-03">
+        {text}
+      </Text>
+    </div>
   );
 }
 
