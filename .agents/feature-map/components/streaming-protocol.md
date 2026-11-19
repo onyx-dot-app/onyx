@@ -207,7 +207,16 @@ response from its `approval_request` row, and a suspended response ends with
 `stop(awaiting_user)` ([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
 `chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
 model writes it, with the tool name as `tool_type`. Native model reasoning streams
-as reasoning packets. Code mode (`code_mode_start`,
+as reasoning packets. The file tools (`write`,
+`edit`, `apply_patch`) stream progress, not their arguments:
+`ToolCallArgumentDelta.file_progress` holds the whole paths and the line count
+of the file text (`content`, `new_string`, or the patch, whose
+`*** Add/Update/Delete File:` headers give the paths), with empty
+`argument_deltas` (`chat/file_tool_progress.py:FileArgumentStream`). It is
+sent on the first fragment, then at most once per
+`PROGRESS_INTERVAL_SECONDS` (0.25 s) when it changes, and once more from the
+complete arguments. Replay sends none; `ApplyPatchToolRenderer` shows the
+progress as the step status until `apply_patch_start` arrives. Code mode (`code_mode_start`,
 `code_mode_delta`) renders each tool call its program makes with that tool's
 own packets at `sub_turn_index` = call index, inside the code mode tab. A
 call that runs across observations keeps its `sub_turn_index` in each tab, so

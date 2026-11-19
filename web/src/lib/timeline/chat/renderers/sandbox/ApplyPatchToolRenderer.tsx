@@ -7,6 +7,7 @@ import {
   ApplyPatchEnd,
   ApplyPatchFileChange,
   ApplyPatchToolPacket,
+  FileToolProgress,
   PacketType,
 } from "@/app/app/services/streamingModels";
 import { MessageRenderer } from "@/app/app/message/messageComponents/types";
@@ -79,17 +80,27 @@ export function ApplyPatchToolRenderer({
   children,
 }: ApplyPatchToolRendererProps) {
   const t = useTranslations("chat.messages.timeline");
-  const { patch, end } = useMemo(() => {
+  const { started, patch, end, progress, progressTool } = useMemo(() => {
+    let started = false;
     let patch = "";
     let end: ApplyPatchEnd | null = null;
+    let progress: FileToolProgress | null = null;
+    let progressTool = "";
     for (const { obj } of packets) {
       if (obj.type === PacketType.APPLY_PATCH_START) {
+        started = true;
         patch = obj.patch;
       } else if (obj.type === PacketType.APPLY_PATCH_END) {
         end = obj;
+      } else if (
+        obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
+        obj.file_progress
+      ) {
+        progress = obj.file_progress;
+        progressTool = obj.tool_type;
       }
     }
-    return { patch, end };
+    return { started, patch, end, progress, progressTool };
   }, [packets]);
   const { error, stopped } = useSandboxCallStatus(
     packets,
@@ -110,16 +121,51 @@ export function ApplyPatchToolRenderer({
     return lineEnd + 1 < patch.length ? `${patch.slice(0, lineEnd)}\n…` : patch;
   }, [patch]);
 
+  // While the model writes the arguments, their progress names the step; the
+  // start packet replaces it with the card that replay shows.
+  const liveProgress = started ? null : progress;
+  const progressPath = liveProgress?.paths[0];
+  const progressStatus =
+    liveProgress === null
+      ? null
+      : progressTool === "apply_patch"
+        ? t("sandbox.patch.progress.patching.status", {
+            count: liveProgress.paths.length,
+          })
+        : progressPath === undefined
+          ? t("sandbox.patch.progress.starting.status", { tool: progressTool })
+          : t(
+              progressTool === "write"
+                ? "sandbox.patch.progress.writing.status"
+                : "sandbox.patch.progress.editing.status",
+              { path: progressPath, lines: liveProgress.lines }
+            );
+
   const status = stopped
     ? t("sandbox.stopped.status")
     : error !== null
       ? t("sandbox.patch.failed.status")
       : end !== null
         ? t("sandbox.patch.edited.status", { count: end.files.length })
-        : t("header.editingFiles.label");
+        : (progressStatus ?? t("header.editingFiles.label"));
 
   const content = (
     <SandboxCallContent renderType={renderType}>
+      {liveProgress !== null && progressTool === "apply_patch" && (
+        <Section gap={1} alignItems="start" height="fit">
+          {liveProgress.paths.map((path, index) => (
+            <Text
+              key={index}
+              font="secondary-mono"
+              color="text-04"
+              wordWrap="break-all"
+            >
+              {path}
+            </Text>
+          ))}
+        </Section>
+      )}
+
       {end !== null && end.files.length > 0 && (
         <Section gap={1} alignItems="start" height="fit">
           {end.files.map((file) => (

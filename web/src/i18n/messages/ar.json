@@ -12637,7 +12637,21 @@
             "failed": {
               "status": "فشل التعديل"
             },
-            "title": "التصحيح"
+            "title": "التصحيح",
+            "progress": {
+              "writing": {
+                "status": "جارٍ كتابة {path}… {lines, plural, zero {# سطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}"
+              },
+              "editing": {
+                "status": "جارٍ تعديل {path}… {lines, plural, zero {# سطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {جارٍ تصحيح الملفات…} one {جارٍ تصحيح ملف واحد…} two {جارٍ تصحيح ملفين…} few {جارٍ تصحيح # ملفات…} many {جارٍ تصحيح # ملفًا…} other {جارٍ تصحيح # ملف…}}"
+              },
+              "starting": {
+                "status": "{tool, select, write {جارٍ كتابة ملف…} other {جارٍ تعديل ملف…}}"
+              }
+            }
           },
           "stopped": {
             "status": "تم الإيقاف"

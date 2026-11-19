@@ -12637,7 +12637,21 @@
             "failed": {
               "status": "Edit failed"
             },
-            "title": "Patch"
+            "title": "Patch",
+            "progress": {
+              "writing": {
+                "status": "Writing {path}… {lines, plural, one {# line} other {# lines}}"
+              },
+              "editing": {
+                "status": "Editing {path}… {lines, plural, one {# line} other {# lines}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {Patching files…} one {Patching # file…} other {Patching # files…}}"
+              },
+              "starting": {
+                "status": "{tool, select, write {Writing a file…} other {Editing a file…}}"
+              }
+            }
           },
           "stopped": {
             "status": "Stopped"

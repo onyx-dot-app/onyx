@@ -49,9 +49,13 @@ _TOOL_STARTS: dict[str, tuple[str, str]] = {
 }
 
 # A streamed argument opens its call before the start packet; its tool type
-# names it until the start arrives. Python streams its code.
+# names it until the start arrives. Python streams its code; file tools
+# stream their progress.
 _ARGUMENT_TOOL_TYPES: dict[str, tuple[str, str]] = {
     "python": ("execute", "Writing code"),
+    "apply_patch": ("edit", "Editing files"),
+    "edit": ("edit", "Editing files"),
+    "write": ("edit", "Editing files"),
 }
 
 _MESSAGE_TYPES = {"message_start", "message_delta"}

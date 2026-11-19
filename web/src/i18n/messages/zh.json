@@ -12637,7 +12637,21 @@
             "failed": {
               "status": "编辑失败"
             },
-            "title": "补丁"
+            "title": "补丁",
+            "progress": {
+              "writing": {
+                "status": "正在写入 {path}… {lines, plural, one {# 行} other {# 行}}"
+              },
+              "editing": {
+                "status": "正在编辑 {path}… {lines, plural, one {# 行} other {# 行}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {正在修补文件…} one {正在修补 # 个文件…} other {正在修补 # 个文件…}}"
+              },
+              "starting": {
+                "status": "{tool, select, write {正在写入文件…} other {正在编辑文件…}}"
+              }
+            }
           },
           "stopped": {
             "status": "已停止"

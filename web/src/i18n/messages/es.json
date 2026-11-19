@@ -12637,7 +12637,21 @@
             "failed": {
               "status": "La edición falló"
             },
-            "title": "Parche"
+            "title": "Parche",
+            "progress": {
+              "writing": {
+                "status": "Escribiendo {path}… {lines, plural, one {# línea} other {# líneas}}"
+              },
+              "editing": {
+                "status": "Editando {path}… {lines, plural, one {# línea} other {# líneas}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {Aplicando parche a archivos…} one {Aplicando parche a # archivo…} other {Aplicando parche a # archivos…}}"
+              },
+              "starting": {
+                "status": "{tool, select, write {Escribiendo un archivo…} other {Editando un archivo…}}"
+              }
+            }
           },
           "stopped": {
             "status": "Detenido"
