@@ -2,7 +2,6 @@ import React, { JSX, memo } from "react";
 import {
   ChatPacket,
   isCodeInterpreterToolType,
-  isFileToolType,
   Packet,
   PacketType,
   ReasoningPacket,
@@ -89,8 +88,7 @@ function isExecToolPacket(packet: Packet) {
 function isApplyPatchToolPacket(packet: Packet) {
   return (
     packet.obj.type === PacketType.APPLY_PATCH_START ||
-    (packet.obj.type === PacketType.TOOL_CALL_ARGUMENT_DELTA &&
-      isFileToolType((packet.obj as ToolCallArgumentDelta).tool_type))
+    packet.obj.type === PacketType.FILE_TOOL_PROGRESS
   );
 }
 

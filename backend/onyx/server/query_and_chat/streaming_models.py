@@ -101,6 +101,7 @@ class StreamingType(Enum):
     WRITE_STDIN_START = "write_stdin_start"
     EXEC_OUTPUT_DELTA = "exec_output_delta"
     EXEC_END = "exec_end"
+    FILE_TOOL_PROGRESS = "file_tool_progress"
     APPLY_PATCH_START = "apply_patch_start"
     APPLY_PATCH_END = "apply_patch_end"
     PUBLISH_FILES_START = "publish_files_start"
@@ -343,14 +344,6 @@ class CustomToolDelta(BaseObj):
     error: CustomToolErrorInfo | None = None
 
 
-# What a file tool call's streamed arguments hold so far.
-class FileToolProgress(BaseModel):
-    # The files the arguments name, in order.
-    paths: list[str] = []
-    # The lines of the file text or patch.
-    lines: int = 0
-
-
 class ToolCallArgumentDelta(BaseObj):
     type: Literal["tool_call_argument_delta"] = (
         StreamingType.TOOL_CALL_ARGUMENT_DELTA.value
@@ -358,8 +351,17 @@ class ToolCallArgumentDelta(BaseObj):
 
     tool_type: str
     argument_deltas: dict[str, Any]
-    # Set for file tools, which report progress instead of their arguments.
-    file_progress: FileToolProgress | None = None
+
+
+# What a file tool call's arguments hold while the model streams them; the
+# call's start packet follows.
+class FileToolProgress(BaseObj):
+    type: Literal["file_tool_progress"] = StreamingType.FILE_TOOL_PROGRESS.value
+    tool_name: FileToolName
+    # The files the arguments name so far, in order.
+    paths: list[str] = []
+    # The lines of the file text or patch so far.
+    lines: int = 0
 
 
 ################################################
@@ -696,6 +698,7 @@ PacketObj = Union[
     WriteStdinStart,
     ExecOutputDelta,
     ExecEnd,
+    FileToolProgress,
     ApplyPatchStart,
     ApplyPatchEnd,
     PublishFilesStart,

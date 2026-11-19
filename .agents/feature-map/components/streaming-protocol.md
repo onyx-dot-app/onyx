@@ -207,16 +207,15 @@ response from its `approval_request` row, and a suspended response ends with
 `stop(awaiting_user)` ([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
 `chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
 model writes it, with the tool name as `tool_type`. Native model reasoning streams
-as reasoning packets. The file tools (`write`,
-`edit`, `apply_patch`) stream progress, not their arguments:
-`ToolCallArgumentDelta.file_progress` holds the whole paths and the line count
-of the file text (`content`, `new_string`, or the patch, whose
-`*** Add/Update/Delete File:` headers give the paths), with empty
-`argument_deltas` (`chat/file_tool_progress.py:FileArgumentStream`). It is
-sent on the first fragment, then at most once per
-`PROGRESS_INTERVAL_SECONDS` (0.25 s) when it changes, and once more from the
-complete arguments. Replay sends none; `ApplyPatchToolRenderer` shows the
-progress as the step status until `apply_patch_start` arrives. Code mode (`code_mode_start`,
+as reasoning packets. Streamed arguments report at most once per
+`chat/renderer.py:ARGUMENT_REPORT_INTERVAL_SECONDS`: the first fragment
+reports, later fragments wait for the interval, and the call's end, or the
+message's completion when the stream stops, reports the rest. The file tools
+(`write`, `edit`, `apply_patch`) report `file_tool_progress` instead of their
+arguments: `tool_name`, the whole `paths` so far, and the `lines` of the file
+text or patch (`chat/renderer.py:file_tool_progress`). A report that changes
+nothing sends no packet. Replay sends no progress, and the call's
+`apply_patch_start` replaces it (`ApplyPatchToolRenderer`). Code mode (`code_mode_start`,
 `code_mode_delta`) renders each tool call its program makes with that tool's
 own packets at `sub_turn_index` = call index, inside the code mode tab. A
 call that runs across observations keeps its `sub_turn_index` in each tab, so
@@ -251,7 +250,8 @@ end with `exec_end` or `apply_patch_end`. An `edit` or `write` call also
 renders as a patch card: `chat/renderer.py` builds `apply_patch_start.patch`
 from its arguments (`patch.display_patch`: an update of the old lines to the
 new ones, or an added file), live and on replay, and its `apply_patch_end`
-says whether `write` added or updated the file. `apply_patch_start.tool_name`
+says whether `write` added or updated the file. A missing or wrong-typed
+argument reads as empty, so every file tool call gets a patch card. `apply_patch_start.tool_name`
 names the file tool, which titles the call (`toolDisplayHelpers.getToolName`, as in parallel tabs). `exec_end.output` is the output
 that the model got (cut to its character budget), which replaces the streamed
 preview. When the output went to a file in the sandbox VM, it is the head and

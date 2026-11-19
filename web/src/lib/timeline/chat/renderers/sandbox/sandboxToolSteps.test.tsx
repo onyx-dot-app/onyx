@@ -325,7 +325,8 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
     await expandTimeline();
     expect(screen.getByText("Edited 2 files")).toBeInTheDocument();
     expect(screen.getByText("new.py")).toBeInTheDocument();
-    expect(screen.getByText("old.py → moved.py")).toBeInTheDocument();
+    // Each path is its own isolated element.
+    expect(view.container).toHaveTextContent("old.py → moved.py");
     // The card lays out only the head of each patch.
     expect(screen.getAllByText(/\+print\('hi'\)/)).toHaveLength(2);
     expect(screen.queryByText(/\+a = 2/)).not.toBeInTheDocument();
@@ -339,17 +340,28 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
 });
 
 function fileProgress(
-  tool_type: FileToolName,
+  tool_name: FileToolName,
   paths: string[],
   lines: number
 ): ObjTypes {
-  return {
-    type: PacketType.TOOL_CALL_ARGUMENT_DELTA,
-    tool_type,
-    tool_id: "",
-    argument_deltas: {},
-    file_progress: { paths, lines },
-  };
+  return { type: PacketType.FILE_TOOL_PROGRESS, tool_name, paths, lines };
+}
+
+// A path in a status line sits in Unicode isolates.
+const isolated = (path: string) => `\u2068${path}\u2069`;
+
+/** The text of a message's steps, from `from` on: the run header measures
+ * the live thinking time, which the steps do not depend on. */
+async function stepsText(packets: Packet[], from: string): Promise<string> {
+  const view = render(renderMessage(packets));
+  try {
+    await openRun();
+    await screen.findAllByText(from);
+    const text = view.container.textContent ?? "";
+    return text.slice(text.indexOf(from));
+  } finally {
+    view.unmount();
+  }
 }
 
 test("a write shows its progress while it streams, then the replayed card", async () => {
@@ -373,52 +385,139 @@ test("a write shows its progress while it streams, then the replayed card", asyn
     call(sectionEnd),
     ...answer(1),
   ];
-  // The run header measures the live thinking time; the step card must match.
-  const stepCard = (text: string | null) =>
-    text?.slice(text.indexOf("Edited 1 file"));
-  const replay = render(renderMessage(finished));
-  let replayCard: string | undefined;
-  try {
-    await expandTimeline();
-    replayCard = stepCard(replay.container.textContent);
-  } finally {
-    replay.unmount();
-  }
+  const replayed = await stepsText(finished, "Edited 1 file");
 
   const view = render(renderMessage(streaming));
   try {
-    expect(
-      (await screen.findAllByText("Writing report.md… 120 lines")).length
-    ).toBeGreaterThan(0);
+    const progress = `Writing ${isolated("report.md")}… 120 lines`;
+    expect((await screen.findAllByText(progress)).length).toBeGreaterThan(0);
+    // The run header names the activity before the start packet arrives.
+    expect(screen.getAllByText("Editing files").length).toBeGreaterThan(0);
 
-    view.rerender(renderMessage([...streaming, ...finished]));
-    await expandTimeline();
-    expect(screen.getByText("Edited 1 file")).toBeInTheDocument();
-    expect(view.container).not.toHaveTextContent("Writing report.md");
-    expect(stepCard(view.container.textContent)).toBe(replayCard);
+    // The start packet alone replaces the progress line.
+    view.rerender(renderMessage([...streaming, ...finished.slice(0, 1)]));
+    await openRun();
+    expect(view.container).not.toHaveTextContent("Writing");
+  } finally {
+    view.unmount();
+  }
+  expect(await stepsText([...streaming, ...finished], "Edited 1 file")).toBe(
+    replayed
+  );
+});
+
+test("a patch names its files while it streams, then matches its replay", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const streaming = [
+    call(fileProgress("apply_patch", [], 1)),
+    call(fileProgress("apply_patch", ["new.py", "old.py"], 7)),
+  ];
+  const finished = [
+    call({
+      type: PacketType.APPLY_PATCH_START,
+      patch: PATCH,
+      tool_name: "apply_patch",
+    }),
+    call({
+      type: PacketType.APPLY_PATCH_END,
+      files: [
+        { path: "new.py", change: "add", move_path: null },
+        { path: "old.py", change: "update", move_path: "moved.py" },
+      ],
+      error: null,
+    }),
+    call(sectionEnd),
+    ...answer(1),
+  ];
+  const view = render(renderMessage(streaming));
+  try {
+    await screen.findAllByText("Patching 2 files…");
+    await openRun();
+    expect(screen.getByText("new.py")).toBeInTheDocument();
+    expect(screen.getByText("old.py")).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+  expect(await stepsText([...streaming, ...finished], "Edited 2 files")).toBe(
+    await stepsText(finished, "Edited 2 files")
+  );
+});
+
+test("an edit names its file and the lines of its new text", async () => {
+  const view = render(
+    renderMessage([
+      at({ turn_index: 0, tab_index: 0 })(
+        fileProgress("edit", ["src/app.py"], 3)
+      ),
+    ])
+  );
+  try {
+    expect(
+      (await screen.findAllByText(`Editing ${isolated("src/app.py")}… 3 lines`))
+        .length
+    ).toBeGreaterThan(0);
   } finally {
     view.unmount();
   }
 });
 
-test("streamed progress names an edit's file and a patch's files", async () => {
-  const edit = at({ turn_index: 0, tab_index: 0 });
-  const patch = at({ turn_index: 0, tab_index: 1 });
+test("a patch stopped while it streams shows only that it stopped, as on replay", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const stop = at({ turn_index: 1, tab_index: 0 })({
+    type: PacketType.STOP,
+    stop_reason: StopReason.USER_CANCELLED,
+  });
+  const progress = call(fileProgress("apply_patch", ["new.py"], 3));
+  // A stop before the call's start: the live card keeps no partial progress.
+  const view = render(renderMessage([progress, stop]));
+  try {
+    await openRun();
+    expect((await screen.findAllByText("Stopped")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("new.py")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Patching/)).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+  // The stopped call's start and end follow its progress live; replay sends
+  // them alone.
+  const stopped = [
+    call({
+      type: PacketType.APPLY_PATCH_START,
+      patch: "*** Begin Patch\n*** Add File: new.py\n+x",
+      tool_name: "apply_patch",
+    }),
+    call(sectionEnd),
+    stop,
+  ];
+  expect(await stepsText([progress, ...stopped], "Stopped")).toBe(
+    await stepsText(stopped, "Stopped")
+  );
+});
+
+test("a write whose call fails after its progress shows the error", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
   const view = render(
     renderMessage([
-      edit(fileProgress("edit", ["src/app.py"], 3)),
-      patch(fileProgress("apply_patch", [], 1)),
-      patch(fileProgress("apply_patch", ["docs/new.md", "src/app.py"], 9)),
+      call(fileProgress("write", ["a.md"], 2)),
+      call({
+        type: PacketType.APPLY_PATCH_START,
+        patch: "*** Begin Patch\n*** Add File: a.md\n+x\n*** End Patch",
+        tool_name: "write",
+      }),
+      call({
+        type: PacketType.APPLY_PATCH_END,
+        files: [],
+        error: "Permission denied",
+      }),
+      call(sectionEnd),
+      ...answer(1),
     ])
   );
   try {
-    await screen.findAllByText(
-      /Patching 2 files…|Editing src\/app\.py… 3 lines/
-    );
-    await openRun();
-    expect(view.container).toHaveTextContent("Editing src/app.py… 3 lines");
-    expect(view.container).toHaveTextContent("Patching 2 files…");
-    expect(screen.getByText("docs/new.md")).toBeInTheDocument();
+    await expandTimeline();
+    expect(screen.getByText("Edit failed")).toBeInTheDocument();
+    expect(screen.getByText("Permission denied")).toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent("Writing");
   } finally {
     view.unmount();
   }

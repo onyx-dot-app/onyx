@@ -1,14 +1,22 @@
 """Chat decodes streamed arguments only for tools with live argument display."""
 
 import json
+from collections.abc import Iterable
 from unittest.mock import patch
 
 import pytest
 
 from onyx.agents.models import ExecutionStatus, RunStatus, StepRecord
+from onyx.chat import renderer as renderer_module
 from onyx.chat.models import MessageRendering, PresentationMode, ResponseRecord
 from onyx.chat.presentation import replay_response
-from onyx.chat.renderer import MessageRenderer, ResponseLayout
+from onyx.chat.renderer import (
+    ARGUMENT_REPORT_INTERVAL_SECONDS,
+    MessageRenderer,
+    ResponseLayout,
+    file_tool_progress,
+    tool_renderer,
+)
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -19,16 +27,44 @@ from onyx.llm.model_response import (
 )
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationContentEvent,
+    GenerationEvent,
     GenerationLifecycleEvent,
+    ToolCall,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
     apply_generation_event,
 )
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
+    ApplyPatchStart,
+    FileToolProgress,
+    Packet,
     PythonToolStart,
     ToolCallArgumentDelta,
 )
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
+from onyx.tools.tool_implementations.sandbox.patch import display_patch
+
+
+class Clock:
+    """The renderer's clock: each read moves it `step` seconds."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.step = ARGUMENT_REPORT_INTERVAL_SECONDS
+
+    def __call__(self) -> float:
+        self.now += self.step
+        return self.now
+
+
+@pytest.fixture(autouse=True)
+def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
+    # By default every fragment reports; throttle tests stop the clock.
+    clock = Clock()
+    monkeypatch.setattr(renderer_module, "monotonic", clock)
+    return clock
 
 
 def chunk(
@@ -250,3 +286,225 @@ def test_code_argument_streams_live_as_execute_code() -> None:
     assert isinstance(packet.obj, ToolCallArgumentDelta)
     assert packet.obj.tool_type == CodeModeTool.NAME
     assert packet.obj.argument_deltas == {"code": "print(1)"}
+
+
+def content_events(events: Iterable[GenerationEvent]) -> list[GenerationContentEvent]:
+    return [
+        event for event in events if not isinstance(event, GenerationLifecycleEvent)
+    ]
+
+
+def progress(packets: Iterable[Packet]) -> list[FileToolProgress]:
+    return [
+        packet.obj for packet in packets if isinstance(packet.obj, FileToolProgress)
+    ]
+
+
+PATCH_TEXT = "\n".join(
+    [
+        "*** Begin Patch",
+        "*** Add File: réport 😀.md",
+        "+hi",
+        "*** Update File: src/app.py",
+        "@@",
+        "-a",
+        "+b",
+        "*** Delete File: old.txt",
+        "*** End Patch",
+    ]
+)
+
+
+@pytest.mark.parametrize(
+    "name,arguments,expected",
+    [
+        (
+            "write",
+            {"file_path": "réport 😀.md", "content": '# Title\nsnowman ☃\n"q"\nlast'},
+            FileToolProgress(tool_name="write", paths=["réport 😀.md"], lines=4),
+        ),
+        (
+            "apply_patch",
+            {"input": PATCH_TEXT},
+            FileToolProgress(
+                tool_name="apply_patch",
+                paths=["réport 😀.md", "src/app.py", "old.txt"],
+                lines=9,
+            ),
+        ),
+    ],
+)
+@pytest.mark.parametrize("ensure_ascii", [True, False])
+@pytest.mark.parametrize("size", [1, 3, 1000])
+def test_file_progress_survives_arbitrary_fragment_boundaries(
+    name: str,
+    arguments: dict[str, str],
+    expected: FileToolProgress,
+    ensure_ascii: bool,
+    size: int,
+) -> None:
+    raw = json.dumps(arguments, ensure_ascii=ensure_ascii)
+    accumulator = MessageAccumulator()
+    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
+    shown: list[FileToolProgress] = []
+    for offset in range(0, len(raw), size):
+        for event in content_events(
+            accumulator.add(chunk(raw[offset : offset + size], name=name))
+        ):
+            shown += progress(renderer.consume(event))
+    for event in content_events(accumulator.end()):
+        shown += progress(renderer.consume(event))
+    assert shown[-1] == expected
+    for report in shown:
+        # A path shows only once whole, and the line count only grows.
+        assert report.paths == expected.paths[: len(report.paths)]
+    assert [report.lines for report in shown] == sorted(
+        report.lines for report in shown
+    )
+
+
+def test_reports_are_throttled_and_merge_the_text_between_them(clock: Clock) -> None:
+    clock.step = 0
+    accumulator = MessageAccumulator()
+    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
+    fragments = [
+        '{"file_path": "a.txt", "content": "',
+        *["x\\n"] * 1000,
+        '"}',
+    ]
+    shown: list[Packet] = []
+    for fragment in fragments:
+        for event in content_events(accumulator.add(chunk(fragment, name="write"))):
+            shown += renderer.consume(event)
+    for event in content_events(accumulator.end()):
+        shown += renderer.consume(event)
+    # The first fragment reports; the rest wait for the interval or the end.
+    assert progress(shown) == [
+        FileToolProgress(tool_name="write", paths=["a.txt"], lines=0),
+        FileToolProgress(tool_name="write", paths=["a.txt"], lines=1000),
+    ]
+    assert len(shown) == 2
+
+
+def test_code_deltas_merge_the_text_between_reports(clock: Clock) -> None:
+    clock.step = 0
+    accumulator = MessageAccumulator()
+    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
+    code: list[str] = []
+    for fragment in ['{"code": "a', *["b"] * 100, 'c"}']:
+        for event in content_events(accumulator.add(chunk(fragment))):
+            code += [
+                packet.obj.argument_deltas["code"]
+                for packet in renderer.consume(event)
+                if isinstance(packet.obj, ToolCallArgumentDelta)
+            ]
+    assert code == ["a"]
+    for event in content_events(accumulator.end()):
+        code += [
+            packet.obj.argument_deltas["code"]
+            for packet in renderer.consume(event)
+            if isinstance(packet.obj, ToolCallArgumentDelta)
+        ]
+    assert code == ["a", "b" * 100 + "c"]
+
+
+def test_parallel_file_calls_report_their_own_progress() -> None:
+    accumulator = MessageAccumulator()
+    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
+    shown: dict[int, FileToolProgress] = {}
+    for index, name, fragment in [
+        (0, "write", '{"file_path": "a.md", '),
+        (1, "edit", '{"file_path": "b.py", '),
+        (0, "write", '"content": "1\\n2\\n'),
+        (1, "edit", '"old_string": "x\\ny\\nz", "new_string": "w'),
+        (0, "write", '3"}'),
+        (1, "edit", '"}'),
+    ]:
+        for event in content_events(accumulator.add(chunk(fragment, index, name))):
+            for packet in renderer.consume(event):
+                assert isinstance(packet.obj, FileToolProgress)
+                shown[packet.placement.tab_index] = packet.obj
+    for event in content_events(accumulator.end()):
+        renderer.consume(event)
+    assert shown == {
+        0: FileToolProgress(tool_name="write", paths=["a.md"], lines=3),
+        1: FileToolProgress(tool_name="edit", paths=["b.py"], lines=1),
+    }
+
+
+@pytest.mark.parametrize(
+    "fragments",
+    [
+        # A raw newline is not valid inside a JSON string.
+        ['{"file_path": "a.txt", "content": "a', "\nb", 'c"}'],
+        # Arguments cut off at the token limit never complete.
+        ['{"file_path": "a.txt", "content": "a', "bc"],
+    ],
+)
+def test_invalid_file_arguments_stop_progress(fragments: list[str]) -> None:
+    accumulator = MessageAccumulator()
+    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
+    shown: list[FileToolProgress] = []
+    for fragment in fragments:
+        for event in content_events(accumulator.add(chunk(fragment, name="write"))):
+            shown += progress(renderer.consume(event))
+    for event in content_events(accumulator.end()):
+        assert not renderer.consume(event)
+    assert shown[-1].paths == ["a.txt"]
+    assert accumulator.message.tool_calls[0].argument_error is not None
+
+
+def test_an_interrupted_file_call_reports_its_last_fragments(clock: Clock) -> None:
+    clock.step = 0
+    accumulator = MessageAccumulator()
+    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
+    accepted = AssistantMessage()
+    shown: list[FileToolProgress] = []
+    for fragment in ['{"input": "*** Begin Patch\\n', "*** Add File: a.md\\n+x"]:
+        for event in accumulator.add(chunk(fragment, name="apply_patch")):
+            apply_generation_event(accepted, event)
+            if not isinstance(event, GenerationLifecycleEvent):
+                shown += progress(renderer.consume(event))
+    assert shown == [FileToolProgress(tool_name="apply_patch", lines=1)]
+    # The interrupted message has no end event; completing it reports.
+    assert progress(renderer.complete(accepted)) == [
+        FileToolProgress(tool_name="apply_patch", paths=["a.md"], lines=3)
+    ]
+
+
+@pytest.mark.parametrize(
+    "arguments,complete,paths",
+    [
+        # The last header may still be cut off until its line ends.
+        ({"input": "*** Add File: a.md\n*** Delete File: b"}, False, ["a.md"]),
+        ({"input": "*** Add File: a.md\n*** Delete File: b"}, True, ["a.md", "b"]),
+    ],
+)
+def test_patch_paths_come_from_whole_header_lines(
+    arguments: dict[str, str], complete: bool, paths: list[str]
+) -> None:
+    assert file_tool_progress("apply_patch", dict(arguments), complete).paths == paths
+
+
+@pytest.mark.parametrize(
+    "arguments,complete,paths",
+    [
+        # A partial parse keeps a cut-off path as the last key.
+        ({"file_path": "rep"}, False, []),
+        ({"file_path": "report.md"}, True, ["report.md"]),
+        ({"file_path": "report.md", "content": ""}, False, ["report.md"]),
+        ({"file_path": None, "content": "x"}, True, []),
+    ],
+)
+def test_a_file_path_shows_once_whole(
+    arguments: dict[str, str | None], complete: bool, paths: list[str]
+) -> None:
+    assert file_tool_progress("write", dict(arguments), complete).paths == paths
+
+
+def test_a_file_call_with_wrong_typed_arguments_keeps_the_patch_card() -> None:
+    # Its streamed progress opened a patch card; the start keeps that card.
+    call = ToolCall(id="c", name="write", arguments={"file_path": None, "content": "x"})
+    assert [
+        packet.obj for packet in tool_renderer(call, Placement(turn_index=0)).start()
+    ] == [ApplyPatchStart(patch=display_patch("", None, "x"), tool_name="write")]

@@ -46,17 +46,16 @@ _TOOL_STARTS: dict[str, tuple[str, str]] = {
     "exec_command_start": ("execute", "Running command"),
     "write_stdin_start": ("execute", "Sending input"),
     "apply_patch_start": ("edit", "Editing files"),
+    "file_tool_progress": ("edit", "Editing files"),
 }
 
 # A streamed argument opens its call before the start packet; its tool type
-# names it until the start arrives. Python streams its code; file tools
-# stream their progress.
+# names it until the start arrives. Python streams its code.
 _ARGUMENT_TOOL_TYPES: dict[str, tuple[str, str]] = {
     "python": ("execute", "Writing code"),
-    "apply_patch": ("edit", "Editing files"),
-    "edit": ("edit", "Editing files"),
-    "write": ("edit", "Editing files"),
 }
+# Packets that open a call before its start packet.
+_PRE_START_TYPES = {"tool_call_argument_delta", "file_tool_progress"}
 
 _MESSAGE_TYPES = {"message_start", "message_delta"}
 _REASONING_TYPES = {"reasoning_start", "reasoning_delta", "reasoning_done"}
@@ -162,10 +161,7 @@ class ChatAcpTranslator:
                 "toolCallId": call_id,
                 "_meta": _onyx_meta(packet=packet, placement=placement),
             }
-            if (
-                packet_type in _TOOL_STARTS
-                and packet_type != "tool_call_argument_delta"
-            ):
+            if packet_type in _TOOL_STARTS and packet_type not in _PRE_START_TYPES:
                 # The real start of a call its streamed arguments opened.
                 update["kind"], update["title"] = _TOOL_STARTS[packet_type]
             if packet_type == "section_end":

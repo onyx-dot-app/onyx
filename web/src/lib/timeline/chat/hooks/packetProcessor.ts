@@ -12,7 +12,6 @@ import {
   PublishedFile,
   ToolCallArgumentDelta,
   isCodeInterpreterToolType,
-  isFileToolType,
 } from "@/app/app/services/streamingModels";
 import { CitationMap } from "@/app/app/types";
 import { OnyxDocument } from "@/lib/search/types";
@@ -198,8 +197,15 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.RESEARCH_AGENT_START,
   PacketType.EXEC_COMMAND_START,
   PacketType.WRITE_STDIN_START,
+  PacketType.FILE_TOOL_PROGRESS,
   PacketType.APPLY_PATCH_START,
   PacketType.PUBLISH_FILES_START,
+]);
+
+// Packets of a tool call that the model is still writing; its start follows.
+const PRE_START_PACKET_TYPES = new Set<PacketType>([
+  PacketType.TOOL_CALL_ARGUMENT_DELTA,
+  PacketType.FILE_TOOL_PROGRESS,
 ]);
 
 function hasContentPackets(packets: Packet[]): boolean {
@@ -207,8 +213,9 @@ function hasContentPackets(packets: Packet[]): boolean {
     if (isCodeModePacket(packet)) return true;
     const type = packet.obj.type as PacketType;
     if (type === PacketType.TOOL_CALL_ARGUMENT_DELTA) {
-      const toolType = (packet.obj as ToolCallArgumentDelta).tool_type;
-      return isCodeInterpreterToolType(toolType) || isFileToolType(toolType);
+      return isCodeInterpreterToolType(
+        (packet.obj as ToolCallArgumentDelta).tool_type
+      );
     }
     return CONTENT_PACKET_TYPES_SET.has(type);
   });
@@ -426,7 +433,7 @@ function handleToolAfterMessagePacket(
   ) {
     state.finalAnswerComing = false;
   }
-  if (packet.obj.type !== PacketType.TOOL_CALL_ARGUMENT_DELTA) {
+  if (!PRE_START_PACKET_TYPES.has(packet.obj.type as PacketType)) {
     state.startedToolGroupKeys.add(groupKey);
   }
 }
