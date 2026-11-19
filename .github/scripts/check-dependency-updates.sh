@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Write the Slack alert for pending dependency updates. Fail once an update is past due.
+# Write the Slack alert for pending dependency updates. Fail when an update is past due or a check broke.
 # Usage: check-dependency-updates.sh <ods-audit> <update policy file> <alert file>
 set -euo pipefail
 
@@ -14,7 +14,7 @@ releases="$(python3 .github/scripts/supported-release-branches.py)"
 
 lines=()
 failed=0
-# A repeated alert posts once. A broken check has no stable text, so it posts on each run.
+# A repeated alert posts once. A broken check must alert on every run, so it is not stable.
 stable=true
 if [ "${OBSERVE_OUTCOME:-success}" != success ]; then
   lines+=("• Release observation failed. Deadlines use the last recorded release.")
@@ -24,12 +24,13 @@ fi
 while IFS= read -r base; do
   [ -n "$base" ] || continue
   echo "Checking ${base}"
-  if ! installed="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${installer}?ref=${base}" --jq .content | base64 --decode | sed -n 's/^version=//p')"; then
+  if ! installed="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${installer}?ref=${base}" --jq .content | base64 --decode | sed -n 's/^version=//p')" || [ -z "$installed" ]; then
     lines+=("• *${base}*: could not read the installed Chrome version.")
     failed=1
     stable=false
     continue
   fi
+  # A non-zero exit with JSON is a pending update. With no output the check itself broke.
   if status="$("$ods_audit" updates --monitor --state "$policy" --package chrome --version "$installed")"; then
     continue
   fi
@@ -48,7 +49,6 @@ while IFS= read -r base; do
   lines+=("• *${base}*: Chrome ${installed}, latest ${latest}, $(jq -r '.message' <<< "$status")${marker}${pr:+ <${pr}|update PR>}")
 done <<< "main"$'\n'"${releases}"
 
-: > "$alert"
 if [ "${#lines[@]}" -eq 0 ]; then
   echo "All dependency updates are current."
   exit 0
@@ -60,8 +60,9 @@ fi
 } > "$alert"
 cat "$alert"
 
-key="$(printf '%s\n' "${lines[@]}" | sha256sum | cut -d ' ' -f 1)"
-if [ "$stable" = false ]; then key="${key}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; fi
-echo "key=${key}" >> "$GITHUB_OUTPUT"
+{
+  echo "key=$(printf '%s\n' "${lines[@]}" | sha256sum | cut -d ' ' -f 1)"
+  echo "stable=${stable}"
+} >> "$GITHUB_OUTPUT"
 
 exit "$failed"
