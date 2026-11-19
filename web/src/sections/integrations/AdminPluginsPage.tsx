@@ -15,6 +15,7 @@ import {
   IllustrationContent,
   Section,
   SettingsLayouts,
+  Toolbar,
   toast,
 } from "@opal/layouts";
 import { SvgUnPlugged } from "@opal/illustrations";
@@ -208,18 +209,8 @@ export default function AdminPluginsPage() {
         description={t("description")}
       />
       <SettingsLayouts.Body>
-        <Section
-          flexDirection="row"
-          wrap
-          gap={2}
-          height="auto"
-          alignItems="center"
-        >
-          <Section
-            height="auto"
-            alignItems="stretch"
-            className="min-w-0 grow-[3] basis-64"
-          >
+        <Toolbar
+          search={
             <InputTypeIn
               icon="search"
               aria-label={t("search")}
@@ -227,13 +218,10 @@ export default function AdminPluginsPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
-          </Section>
-          <Section
-            height="auto"
-            alignItems="stretch"
-            className="min-w-0 grow basis-48"
-          >
+          }
+          filters={[
             <InputSingleSelect
+              key="filter"
               placeholder={t("filters.label")}
               value={library}
               defaultOption="all"
@@ -246,9 +234,9 @@ export default function AdminPluginsPage() {
                   LIBRARY_FILTERS.find((option) => option === value) ?? "all"
                 )
               }
-            />
-          </Section>
-        </Section>
+            />,
+          ]}
+        />
         <Table
           label={t("title")}
           items={entries}

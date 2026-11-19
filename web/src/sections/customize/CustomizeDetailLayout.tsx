@@ -146,12 +146,7 @@ export function DetailOverview({
 }: DetailOverviewProps) {
   return (
     <Section flexDirection="row" alignItems="start" height="auto" gap={6} wrap>
-      <Section
-        gap={1}
-        alignItems="stretch"
-        height="auto"
-        className="min-w-0 flex-1 basis-80"
-      >
+      <Section gap={1} alignItems="stretch" height="auto" grow={3} basis={20}>
         <Text font="secondary-body" color="text-03">
           {descriptionLabel}
         </Text>
@@ -159,11 +154,7 @@ export function DetailOverview({
           {description}
         </Text>
       </Section>
-      <Section
-        width="auto"
-        height="auto"
-        className="max-sm:basis-full sm:min-w-72"
-      >
+      <Section height="auto" alignItems="stretch" grow={1} basis={18}>
         <Card padding={4}>
           <Section gap={3} alignItems="stretch" height="auto">
             {facts.map((fact, index) => (

@@ -305,7 +305,8 @@ export default function AddIntegrationPage({ from }: AddIntegrationPageProps) {
                   key={option}
                   height="auto"
                   alignItems="stretch"
-                  className="min-w-0 flex-1 basis-56"
+                  grow={1}
+                  basis={14}
                 >
                   <SelectCard
                     padding={3}

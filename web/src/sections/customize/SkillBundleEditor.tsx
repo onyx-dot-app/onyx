@@ -4,13 +4,12 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
-  Card,
   CompactMarkdown,
   InputTextArea,
   LineItemButton,
   Text,
 } from "@opal/components";
-import { Section, toast } from "@opal/layouts";
+import { Section, SplitCard, toast } from "@opal/layouts";
 import { SvgFileText, SvgPlus, SvgTrash } from "@opal/icons";
 import type { PreparedSkillFilesUpload } from "@/lib/skills/bundleUpload";
 import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
@@ -72,17 +71,10 @@ export default function SkillBundleEditor({
   const selectedFile = listed.find((file) => file.path === shown);
 
   return (
-    <Card border="solid" rounding={4} padding={0}>
-      <Section flexDirection="row" alignItems="stretch" height="auto" gap={0}>
-        <Section
-          justifyContent="between"
-          alignItems="stretch"
-          width="auto"
-          height="auto"
-          gap={1}
-          padding={1}
-          className="shrink-0 basis-56 border-e border-border-01 max-sm:basis-40"
-        >
+    <SplitCard
+      minHeight={32}
+      aside={
+        <>
           <Section gap={0.25} alignItems="stretch" height="auto">
             {[{ path: SKILL_MD, size: null, added: false }, ...listed].map(
               (file) => (
@@ -109,63 +101,51 @@ export default function SkillBundleEditor({
               onError={(message) => toast.error(message)}
             />
           )}
-        </Section>
-
-        <Section
-          gap={2}
-          alignItems="stretch"
-          justifyContent="start"
-          height="auto"
-          padding={2}
-          className="min-h-[32rem] min-w-0 flex-1"
-        >
-          <Section
-            flexDirection="row"
-            justifyContent="between"
-            alignItems="center"
-            height="auto"
-            gap={1}
-          >
-            <Text font="secondary-mono" color="text-03" maxLines={1}>
-              {`/${shown}`}
-            </Text>
-            {shown === SKILL_MD ? (
-              <InstructionsDisplayModeToggle
-                value={mode}
-                onChange={onModeChange}
-              />
-            ) : (
-              editing &&
-              selectedFile && (
-                <Button
-                  prominence="tertiary"
-                  icon={SvgTrash}
-                  disabled={busy}
-                  aria-label={t("removeFile", { name: shown })}
-                  tooltip={t("removeFile", { name: shown })}
-                  onClick={() => onRemove(selectedFile.path)}
-                />
-              )
-            )}
-          </Section>
-          {shown !== SKILL_MD ? (
-            <Text font="secondary-body" color="text-03">
-              {selectedFile?.added ? addedFileNote : t("noPreview")}
-            </Text>
-          ) : mode === "raw" ? (
-            <InputTextArea
-              aria-label={t("editorLabel")}
-              mono
-              rows={18}
-              value={text}
-              onChange={(event) => onTextChange(event.target.value)}
-              variant={!editing ? "readOnly" : busy ? "disabled" : "internal"}
+        </>
+      }
+    >
+      <Section
+        flexDirection="row"
+        justifyContent="between"
+        alignItems="center"
+        height="auto"
+        gap={1}
+      >
+        <Text font="secondary-mono" color="text-03" maxLines={1}>
+          {`/${shown}`}
+        </Text>
+        {shown === SKILL_MD ? (
+          <InstructionsDisplayModeToggle value={mode} onChange={onModeChange} />
+        ) : (
+          editing &&
+          selectedFile && (
+            <Button
+              prominence="tertiary"
+              icon={SvgTrash}
+              disabled={busy}
+              aria-label={t("removeFile", { name: shown })}
+              tooltip={t("removeFile", { name: shown })}
+              onClick={() => onRemove(selectedFile.path)}
             />
-          ) : (
-            <CompactMarkdown>{preview}</CompactMarkdown>
-          )}
-        </Section>
+          )
+        )}
       </Section>
-    </Card>
+      {shown !== SKILL_MD ? (
+        <Text font="secondary-body" color="text-03">
+          {selectedFile?.added ? addedFileNote : t("noPreview")}
+        </Text>
+      ) : mode === "raw" ? (
+        <InputTextArea
+          aria-label={t("editorLabel")}
+          mono
+          rows={18}
+          value={text}
+          onChange={(event) => onTextChange(event.target.value)}
+          variant={!editing ? "readOnly" : busy ? "disabled" : "internal"}
+        />
+      ) : (
+        <CompactMarkdown>{preview}</CompactMarkdown>
+      )}
+    </SplitCard>
   );
 }

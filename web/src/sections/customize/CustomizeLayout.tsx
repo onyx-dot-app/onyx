@@ -72,13 +72,9 @@ export default function CustomizeLayout({
             width="auto"
             height="auto"
             gap={0.5}
-            className="min-w-0 grow"
+            grow={1}
           >
-            <Section
-              width="auto"
-              height="auto"
-              className="min-w-0 max-w-64 flex-1"
-            >
+            <Section height="auto" basis={16}>
               <InputTypeIn
                 icon="search"
                 value={query}

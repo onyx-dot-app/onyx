@@ -19,6 +19,7 @@ import {
   ConfirmationModalLayout,
   IllustrationContent,
   SettingsLayouts,
+  Toolbar,
   Content,
   Section,
   toast,
@@ -354,18 +355,8 @@ export default function AdminSkillsPage() {
         {!isLoading && !error && (
           <>
             {items.length > 0 && (
-              <Section
-                flexDirection="row"
-                wrap
-                gap={2}
-                height="auto"
-                alignItems="center"
-              >
-                <Section
-                  height="auto"
-                  alignItems="stretch"
-                  className="min-w-0 grow-[3] basis-64"
-                >
+              <Toolbar
+                search={
                   <InputTypeIn
                     ref={searchInputRef}
                     placeholder={t("page.search.placeholder")}
@@ -378,102 +369,98 @@ export default function AdminSkillsPage() {
                     }}
                     icon="search"
                   />
-                </Section>
-                {groupOptions.length > 0 && (
-                  <Section
-                    height="auto"
-                    alignItems="stretch"
-                    className="min-w-0 grow basis-48"
-                  >
-                    <InputSingleSelect
-                      search
-                      placeholder={t("groups.filter.placeholder")}
-                      value={
-                        activeGroupId === null ? "all" : String(activeGroupId)
-                      }
-                      defaultOption="all"
-                      disabled={bulkBusy}
-                      options={[
-                        {
-                          value: "all",
-                          title: t("groups.filter.all"),
-                          icon: SvgUsers,
-                        },
-                        ...groupOptions.map((group) => ({
-                          value: String(group.id),
-                          title: group.name,
-                          icon: SvgUsers,
-                        })),
-                      ]}
-                      onValueChange={(value) => {
-                        setGroupFilter(value);
-                        setSelectedIds(new Set());
-                        setBulkFailures([]);
-                      }}
-                    />
-                  </Section>
-                )}
-                {selectedItems.length > 0 && (
-                  <Section
-                    flexDirection="row"
-                    width="auto"
-                    height="auto"
-                    gap={2}
-                    alignItems="center"
-                    className="shrink-0"
-                  >
-                    <Text font="secondary-body" color="text-03">
-                      {bulkCopy("selected", { count: selectedItems.length })}
-                    </Text>
-                    <Button
-                      prominence="secondary"
-                      icon={SvgShare}
-                      disabled={bulkLocked || !canManageSelected}
-                      onClick={() => setBulkSharingOpen(true)}
-                    >
-                      {bulkCopy("share")}
-                    </Button>
-                    <Dropdown align="end" disabled={bulkLocked}>
-                      <Dropdown.Trigger asChild>
-                        <Button
-                          prominence="tertiary"
-                          icon={SvgMoreHorizontal}
-                          aria-label={bulkCopy("moreActions")}
-                          tooltip={bulkCopy("moreActions")}
-                          disabled={bulkLocked}
-                        />
-                      </Dropdown.Trigger>
-                      <Dropdown.Data
-                        label={bulkCopy("moreActions")}
-                        items={[
-                          { kind: "group", items: bulkToggleActions },
-                          {
-                            kind: "group",
-                            items: [
-                              {
-                                kind: "action",
-                                id: "delete",
-                                icon: SvgTrash,
-                                title: bulkCopy("delete"),
-                                danger: true,
-                                disabled:
-                                  selectedItems.length === 0 ||
-                                  selectedItems.some(
-                                    (item) => !item.can_delete
-                                  ),
-                                onSelect: () => {
-                                  setBulkDeleteTargets(selectedItems);
-                                  bulkDeleteModal.toggle(true);
+                }
+                filters={
+                  groupOptions.length > 0
+                    ? [
+                        <InputSingleSelect
+                          key="group"
+                          search
+                          placeholder={t("groups.filter.placeholder")}
+                          value={
+                            activeGroupId === null
+                              ? "all"
+                              : String(activeGroupId)
+                          }
+                          defaultOption="all"
+                          disabled={bulkBusy}
+                          options={[
+                            {
+                              value: "all",
+                              title: t("groups.filter.all"),
+                              icon: SvgUsers,
+                            },
+                            ...groupOptions.map((group) => ({
+                              value: String(group.id),
+                              title: group.name,
+                              icon: SvgUsers,
+                            })),
+                          ]}
+                          onValueChange={(value) => {
+                            setGroupFilter(value);
+                            setSelectedIds(new Set());
+                            setBulkFailures([]);
+                          }}
+                        />,
+                      ]
+                    : []
+                }
+                actions={
+                  selectedItems.length > 0 && (
+                    <>
+                      <Text font="secondary-body" color="text-03">
+                        {bulkCopy("selected", { count: selectedItems.length })}
+                      </Text>
+                      <Button
+                        prominence="secondary"
+                        icon={SvgShare}
+                        disabled={bulkLocked || !canManageSelected}
+                        onClick={() => setBulkSharingOpen(true)}
+                      >
+                        {bulkCopy("share")}
+                      </Button>
+                      <Dropdown align="end" disabled={bulkLocked}>
+                        <Dropdown.Trigger asChild>
+                          <Button
+                            prominence="tertiary"
+                            icon={SvgMoreHorizontal}
+                            aria-label={bulkCopy("moreActions")}
+                            tooltip={bulkCopy("moreActions")}
+                            disabled={bulkLocked}
+                          />
+                        </Dropdown.Trigger>
+                        <Dropdown.Data
+                          label={bulkCopy("moreActions")}
+                          items={[
+                            { kind: "group", items: bulkToggleActions },
+                            {
+                              kind: "group",
+                              items: [
+                                {
+                                  kind: "action",
+                                  id: "delete",
+                                  icon: SvgTrash,
+                                  title: bulkCopy("delete"),
+                                  danger: true,
+                                  disabled:
+                                    selectedItems.length === 0 ||
+                                    selectedItems.some(
+                                      (item) => !item.can_delete
+                                    ),
+                                  onSelect: () => {
+                                    setBulkDeleteTargets(selectedItems);
+                                    bulkDeleteModal.toggle(true);
+                                  },
                                 },
-                              },
-                            ],
-                          },
-                        ]}
-                      />
-                    </Dropdown>
-                  </Section>
-                )}
-              </Section>
+                              ],
+                            },
+                          ]}
+                        />
+                      </Dropdown>
+                    </>
+                  )
+                }
+              />
             )}
             {visibleItems.length === 0 ? (
               <IllustrationContent

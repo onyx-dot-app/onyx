@@ -23,7 +23,7 @@ interface SkillFilesPickerProps {
   onChange: (upload: PreparedSkillFilesUpload) => void;
   onError: (message: string) => void;
   onPreparingChange?: (preparing: boolean) => void;
-  /** Only the button, with no drop area or prompt. */
+  /** Only the button, with no drop area or prompt. Dropped files are not taken. */
   compact?: boolean;
   buttonIcon?: IconFunctionComponent;
 }
@@ -95,10 +95,10 @@ export default function SkillFilesPicker({
 
   if (compact)
     return (
-      <div {...getRootProps()}>
+      <>
         {input}
         {button}
-      </div>
+      </>
     );
 
   return (

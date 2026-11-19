@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import {
   Button,
   Dropdown,
+  IconContainer,
   Table,
   Text,
   type TableColumn,
@@ -45,7 +46,7 @@ function IntegrationStatusCell({ integration }: IntegrationStatusCellProps) {
         height="auto"
         aria-label={t("status.connected")}
       >
-        <SvgCheck size={16} className="stroke-text-03" />
+        <IconContainer icon={SvgCheck} />
       </Section>
     );
   return (

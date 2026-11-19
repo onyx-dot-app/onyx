@@ -22,6 +22,15 @@ export {
   type ContentActionProps,
 } from "@opal/layouts/content-action/components";
 
+/* Toolbar */
+export { Toolbar, type ToolbarProps } from "@opal/layouts/toolbar/components";
+
+/* SplitCard */
+export {
+  SplitCard,
+  type SplitCardProps,
+} from "@opal/layouts/split-card/components";
+
 /* Card */
 export { Card, type CardHeaderProps } from "@opal/layouts/cards/components";
 

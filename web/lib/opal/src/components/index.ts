@@ -185,6 +185,13 @@ export {
   type DividerSpacing,
 } from "@opal/components/divider/components";
 
+/* Icon tints */
+export {
+  tintedIcon,
+  ICON_TINTS,
+  type IconTint,
+} from "@opal/components/icon-container/tint";
+
 /* IconContainer */
 export {
   IconContainer,

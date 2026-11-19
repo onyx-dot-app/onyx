@@ -2,7 +2,7 @@
 
 import type { RichStr } from "@opal/types";
 import { IconLoader } from "@opal/loaders";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, CompactMarkdown, MessageCard, Text } from "@opal/components";
@@ -47,18 +47,22 @@ export function SkillInstructionsPanel({
   const [instructionsDisplayMode, setInstructionsDisplayMode] =
     useState<InstructionsDisplayMode>("rendered");
   const contentBox = useRef<HTMLDivElement>(null);
-
   // The two modes have different heights. Keep the box at the tallest height
-  // seen, so a toggle does not move the content below it or resize a modal.
+  // seen (in rem) for these instructions, so a toggle does not move the
+  // content below it or resize a modal.
+  const [held, setHeld] = useState<{ text: string; rem: number } | null>(null);
+  const minHeight = held?.text === instructionsMarkdown ? held.rem : undefined;
+
   function changeDisplayMode(mode: InstructionsDisplayMode) {
     const box = contentBox.current;
-    if (box) box.style.minHeight = `${box.offsetHeight}px`;
+    if (box) {
+      const rootPx = parseFloat(
+        getComputedStyle(document.documentElement).fontSize
+      );
+      setHeld({ text: instructionsMarkdown, rem: box.offsetHeight / rootPx });
+    }
     setInstructionsDisplayMode(mode);
   }
-
-  useEffect(() => {
-    if (contentBox.current) contentBox.current.style.minHeight = "";
-  }, [instructionsMarkdown]);
 
   return (
     <Section gap={1} height="auto" alignItems="stretch">
@@ -79,6 +83,7 @@ export function SkillInstructionsPanel({
       <Section
         ref={contentBox}
         height="auto"
+        minHeight={minHeight}
         justifyContent="start"
         padding={3}
         gap={0}
