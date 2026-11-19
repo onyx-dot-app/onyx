@@ -10366,10 +10366,9 @@
     },
     "plugins": {
       "title": "プラグイン",
-      "description": "プラグインはユーザーにスキルと連携を提供します。このページには連携を含むプラグインが表示されます。",
+      "description": "プラグインは、一緒にオンにするスキルと連携をまとめたものです。この一覧には、連携を含むプラグインが表示されます。スキルは「スキル」ページで管理します。",
       "search": "プラグインを検索",
       "loadFailed": "プラグインを読み込めませんでした。",
-      "manageIntegrations": "連携を管理",
       "columns": {
         "name": "プラグイン",
         "library": "ライブラリ",
@@ -10387,6 +10386,13 @@
       "empty": {
         "title": "連携を含むプラグインはありません",
         "description": "連携を追加してください。Onyx がそれを含むプラグインを作成します。"
+      },
+      "contents": "{count, plural, other {# 件の連携}}",
+      "filters": {
+        "label": "ライブラリ",
+        "all": "すべてのライブラリ",
+        "organization": "組織ライブラリ",
+        "personal": "個人のアップロード"
       }
     },
     "integrations": {
@@ -10398,31 +10404,27 @@
       "add": {
         "label": "追加",
         "title": "連携を追加",
-        "description": "連携の種類を選択してください。",
+        "description": "サービスを接続して、チャットとCraftで使えるようにします。Onyxは各連携を専用のプラグインに入れます。",
         "created": "{name} を追加しました。",
         "createFailed": "連携を追加できませんでした。",
-        "formTitle": {
-          "mcp_server": "MCP サーバーを追加",
-          "openapi": "OpenAPI アプリを追加",
-          "preset": "プリセットからアプリを追加",
-          "custom": "カスタムアプリを追加"
-        },
-        "kindDescription": {
-          "mcp_server": "URL を指定してリモート MCP サーバーに接続します。",
-          "openapi": "OpenAPI スキーマからアクションを作成します。",
-          "preset": "GitHub や Slack などの組み込みアプリに接続します。",
-          "custom": "URL パターンに一致する HTTP サービスを Craft から呼び出せるようにします。"
-        },
         "openapi": {
-          "title": "OpenAPI アプリを追加"
+          "title": "OpenAPI アプリを追加",
+          "schema": {
+            "title": "スキーマ",
+            "description": "アクションを定義するOpenAPIスキーマを追加します。",
+            "added": "{count, plural, other {スキーマには # 個のパスがあります。}}",
+            "required": "スキーマを追加してください。",
+            "add": "スキーマを追加",
+            "edit": "スキーマを編集"
+          }
         },
         "preset": {
-          "title": "プリセット",
-          "placeholder": "プリセットを選択",
-          "required": "プリセットを選択してください。",
+          "title": "開始点",
           "loadFailed": "プリセットを読み込めませんでした。",
           "instructions": "セットアップ手順",
-          "credentialRequired": "この値を入力してください。"
+          "credentialRequired": "この値を入力してください。",
+          "description": "プリセットは、組み込みアプリの名前とサインインを入力します。任意のHTTPサービスを設定するには「カスタムアプリ」を選択します。",
+          "custom": "カスタムアプリ"
         },
         "name": {
           "title": "名前",
@@ -10468,13 +10470,35 @@
           "personalDescription": "Onyx は連携をマイアップロード内のプラグインに追加します。プラグインは後で共有できます。",
           "organizationDescription": "Onyx は連携を組織ライブラリ内のプラグインに追加します。"
         },
-        "back": "戻る",
         "submit": "追加",
-        "adding": "追加しています…"
+        "adding": "追加しています…",
+        "cancel": "キャンセル",
+        "type": {
+          "title": "種類",
+          "description": "Onyxがサービスに接続する方法を選択します。",
+          "mcp_server": {
+            "title": "MCPサーバー",
+            "description": "URLでリモートのMCPサーバーに接続します。"
+          },
+          "openapi": {
+            "title": "OpenAPIアプリ",
+            "description": "OpenAPIスキーマからアクションを作成します。"
+          },
+          "app": {
+            "title": "アプリ",
+            "description": "GitHubなどのプリセット、またはカスタムアプリから始めます。"
+          }
+        },
+        "details": {
+          "title": "詳細"
+        },
+        "signIn": {
+          "title": "サインイン"
+        }
       },
       "filters": {
         "label": "連携の種類",
-        "all": "すべて",
+        "all": "すべての種類",
         "mcp": "MCP サーバー",
         "api": "アプリ"
       },
@@ -15601,7 +15625,9 @@
       "sort": "並べ替え",
       "sortBy": "並べ替え基準",
       "sortingOrder": "並べ替え順",
-      "viewSelected": "選択項目を表示"
+      "viewSelected": "選択項目を表示",
+      "selectAll": "すべて選択",
+      "selectRow": "行を選択"
     },
     "tabs": {
       "scrollLeft": "タブを左にスクロール",
@@ -16429,7 +16455,7 @@
       },
       "files": {
         "busyLabel": "アップロード中...",
-        "description": "このスキルで使用する参照、スクリプト、アセット、その他のファイルを追加します。ZIPファイルは自動的に展開されます。",
+        "description": "このスキルで使用する参照、スクリプト、アセット、その他のファイルを追加します。OnyxはZIPを展開します。SKILL.mdは上のフィールドに入力します。",
         "input": {
           "ariaLabel": "サポートファイルを追加"
         },
@@ -16446,21 +16472,10 @@
         "createTitle": "スキルを作成",
         "editTitle": "スキルを編集",
         "save": {
-          "label": "保存",
-          "pendingLabel": "保存中..."
-        }
-      },
-      "import": {
-        "busyLabel": "インポート中...",
-        "button": {
-          "label": "スキルをインポート"
+          "label": "作成",
+          "pendingLabel": "作成中..."
         },
-        "description": "SKILL.md、ZIP、またはスキルフォルダをインポートすると、フォームが事前入力され、ファイルが含まれます。",
-        "input": {
-          "ariaLabel": "既存のスキルをインポート"
-        },
-        "prompt": "SKILL.mdまたはZIPを選択するか、スキルフォルダをここにドロップしてください。",
-        "title": "既存のスキルがありますか？"
+        "cancel": "キャンセル"
       },
       "instructions": {
         "description": "このスキルがエージェントに追加する動作とワークフローを記述します。",
@@ -16496,7 +16511,6 @@
         "created": "「{name}」を作成しました",
         "deleteFailed": "スキルの削除に失敗しました",
         "deleted": "「{name}」を削除しました",
-        "importMissingSkillMd": "SKILL.md、ZIP、またはSKILL.mdを含むフォルダをインポートしてください。",
         "inspectFailed": "スキルバンドルの検査に失敗しました",
         "saveFailed": "スキルの保存に失敗しました",
         "saved": "「{name}」を保存しました"
@@ -16917,7 +16931,6 @@
     },
     "bulk": {
       "adminDescription": "組織全体のスキルとアクセス権を管理します。",
-      "selectAll": "表示中のカスタムスキルをすべて選択",
       "selected": "{count, plural, one {# 件選択中} other {# 件選択中}}",
       "share": "共有",
       "enable": "自分用に有効化",
@@ -17026,11 +17039,11 @@
       "version": "v{current}{published, select, none {} other { · v{published} 公開中}}",
       "private": "所有者のみ",
       "shared": "ユーザーまたはグループと共有",
-      "select": "{name} を選択",
       "open": "{name} を開く",
       "menu": "{name} のその他の操作",
       "share": "共有",
-      "delete": "削除"
+      "delete": "削除",
+      "select": "{name} を選択"
     }
   },
   "opensearchHealth": {
@@ -17321,7 +17334,8 @@
       "noMatches": {
         "title": "一致するプラグインはありません",
         "clear": "すべてのプラグインを表示"
-      }
+      },
+      "intro": "プラグインは、一緒にオンにするスキルとインテグレーションをまとめたものです。追加した各スキルと各インテグレーションは、それぞれ専用のプラグインに入ります。"
     },
     "skillPage": {
       "title": "スキル",

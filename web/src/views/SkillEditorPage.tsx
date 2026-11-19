@@ -8,7 +8,6 @@ import {
   Button,
   Card,
   CompactMarkdown,
-  Divider,
   InputTextArea,
   InputTypeIn,
   Tooltip,
@@ -55,6 +54,7 @@ import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { useSkillLimitCopy } from "@/lib/skills/hooks";
 import { customizeTabHref, skillHref } from "@/lib/customize/paths";
+import { BackLink } from "@/sections/customize/CustomizeDetailLayout";
 
 interface SkillEditorPageProps {
   draftId?: string;
@@ -63,6 +63,7 @@ interface SkillEditorPageProps {
 /** Creates a skill. An existing skill is edited in place on its Contents tab. */
 export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
   const t = useTranslations("skills");
+  const tabCopy = useTranslations("customize.tabs");
   const { describeError } = useSkillLimitCopy();
   const navigation = useNavigation();
   const { user } = useUser();
@@ -215,14 +216,6 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
     void applyFilesUpload(upload);
   }
 
-  function handleImportSelected(upload: PreparedSkillFilesUpload) {
-    if (!upload.containsSkillMd) {
-      toast.error(t("editor.toasts.importMissingSkillMd"));
-      return;
-    }
-    handleFilesSelected(upload);
-  }
-
   const saveTooltip = isSaving
     ? t("editor.saveTooltip.savingSkill")
     : !name.trim()
@@ -245,13 +238,27 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
       data-testid="SkillEditorPage/container"
       onSubmit={handleSave}
     >
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root width="lg">
         <SettingsLayouts.Header
+          back={
+            <BackLink
+              to={customizeTabHref("skills")}
+              label={tabCopy("skills")}
+            />
+          }
           icon={SvgBlocks}
           title={t("editor.header.createTitle")}
           description={t("editor.header.createDescription")}
-          cancel={handleCancel}
+          stackActionsOnMobile
           actions={[
+            <Button
+              key="cancel"
+              type="button"
+              prominence="secondary"
+              onClick={handleCancel}
+            >
+              {t("editor.header.cancel")}
+            </Button>,
             <Tooltip key="save" tooltip={saveTooltip} side="bottom">
               <Button disabled={!canSave} type="submit">
                 {isSaving
@@ -260,52 +267,10 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
               </Button>
             </Tooltip>,
           ]}
-          divider
         />
 
         <SettingsLayouts.Body>
           <>
-            {!creationDraft && (
-              <>
-                <Section gap={2} alignItems="stretch" height="auto">
-                  <Card border="solid" rounding={4} padding={2}>
-                    <Section gap={2} alignItems="stretch" height="auto">
-                      <Content
-                        font="main-content-emphasis"
-                        title={t("editor.import.title")}
-                        description={t("editor.import.description")}
-                      />
-                      <SkillFilesPicker
-                        disabled={filesUploadDisabled}
-                        busyLabel={
-                          isUploadingFiles
-                            ? t("editor.import.busyLabel")
-                            : undefined
-                        }
-                        buttonLabel={t("editor.import.button.label")}
-                        inputLabel={t("editor.import.input.ariaLabel")}
-                        prompt={t("editor.import.prompt")}
-                        onChange={handleImportSelected}
-                        onError={(message) => toast.error(message)}
-                        onPreparingChange={setIsPreparingFiles}
-                      />
-                    </Section>
-                  </Card>
-                </Section>
-
-                <Divider paddingParallel={0} paddingPerpendicular={0} />
-              </>
-            )}
-
-            <SkillSharingSummary
-              title={t("editor.creationAccess.title")}
-              draft={sharingDraft}
-              count={1}
-              configureLabel={t("editor.management.sharing.edit.label")}
-              disabled={fieldsLocked}
-              onConfigure={() => setShareOpen(true)}
-            />
-
             <Section alignItems="stretch">
               <Content
                 font="main-content-emphasis"
@@ -346,8 +311,6 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
                 />
               </InputVertical>
             </Section>
-
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
 
             <Section alignItems="stretch">
               <Section
@@ -392,8 +355,6 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
               </Card>
             </Section>
 
-            <Divider paddingParallel={0} paddingPerpendicular={0} />
-
             <Section gap={2} alignItems="stretch" height="auto">
               <Content
                 font="main-content-emphasis"
@@ -430,6 +391,15 @@ export default function SkillEditorPage({ draftId }: SkillEditorPageProps) {
                 </div>
               </Card>
             </Section>
+
+            <SkillSharingSummary
+              title={t("editor.creationAccess.title")}
+              draft={sharingDraft}
+              count={1}
+              configureLabel={t("editor.management.sharing.edit.label")}
+              disabled={fieldsLocked}
+              onConfigure={() => setShareOpen(true)}
+            />
           </>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>

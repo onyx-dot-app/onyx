@@ -40,7 +40,7 @@ function renderTable(skills: CustomSkill[]) {
     <AdminSkillsTable
       skills={skills}
       selectedIds={new Set()}
-      onSelectedChange={jest.fn()}
+      onSelectionChange={jest.fn()}
       busy={false}
       isPending={() => false}
       enabledOf={(skill) => skill.enabled}

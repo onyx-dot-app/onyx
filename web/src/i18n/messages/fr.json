@@ -10366,10 +10366,9 @@
     },
     "plugins": {
       "title": "Extensions",
-      "description": "Les extensions fournissent des compétences et des intégrations aux utilisateurs. Cette page affiche les extensions qui contiennent des intégrations.",
+      "description": "Une extension regroupe des compétences et des intégrations que les personnes activent ensemble. Cette liste affiche les extensions qui contiennent des intégrations. Gérez les compétences sur la page Compétences.",
       "search": "Rechercher des extensions",
       "loadFailed": "Impossible de charger les extensions.",
-      "manageIntegrations": "Gérer les intégrations",
       "columns": {
         "name": "Extension",
         "library": "Bibliothèque",
@@ -10387,6 +10386,13 @@
       "empty": {
         "title": "Aucune extension avec des intégrations",
         "description": "Ajoutez une intégration. Onyx crée une extension qui la contient."
+      },
+      "contents": "{count, plural, one {# intégration} other {# intégrations}}",
+      "filters": {
+        "label": "Bibliothèque",
+        "all": "Toutes les bibliothèques",
+        "organization": "Bibliothèque de l’organisation",
+        "personal": "Importations personnelles"
       }
     },
     "integrations": {
@@ -10398,31 +10404,27 @@
       "add": {
         "label": "Ajouter",
         "title": "Ajouter une intégration",
-        "description": "Choisissez le type d’intégration.",
+        "description": "Connectez un service pour que les personnes puissent l’utiliser dans le chat et dans Craft. Onyx place chaque intégration dans sa propre extension.",
         "created": "{name} a été ajoutée.",
         "createFailed": "Impossible d’ajouter l’intégration.",
-        "formTitle": {
-          "mcp_server": "Ajouter un serveur MCP",
-          "openapi": "Ajouter une application OpenAPI",
-          "preset": "Ajouter une application à partir d’un modèle",
-          "custom": "Ajouter une application personnalisée"
-        },
-        "kindDescription": {
-          "mcp_server": "Connectez un serveur MCP distant à l’aide de son URL.",
-          "openapi": "Créez des actions à partir d’un schéma OpenAPI.",
-          "preset": "Connectez une application intégrée, comme GitHub ou Slack.",
-          "custom": "Permettez à Craft d’appeler un service HTTP qui correspond à des modèles d’URL."
-        },
         "openapi": {
-          "title": "Ajouter une application OpenAPI"
+          "title": "Ajouter une application OpenAPI",
+          "schema": {
+            "title": "Schéma",
+            "description": "Ajoutez le schéma OpenAPI qui définit les actions.",
+            "added": "{count, plural, one {Le schéma contient # chemin.} other {Le schéma contient # chemins.}}",
+            "required": "Ajoutez un schéma.",
+            "add": "Ajouter un schéma",
+            "edit": "Modifier le schéma"
+          }
         },
         "preset": {
-          "title": "Modèle",
-          "placeholder": "Choisir un modèle",
-          "required": "Choisissez un modèle.",
+          "title": "Point de départ",
           "loadFailed": "Impossible de charger les modèles.",
           "instructions": "Instructions de configuration",
-          "credentialRequired": "Saisissez cette valeur."
+          "credentialRequired": "Saisissez cette valeur.",
+          "description": "Un modèle remplit le nom et la connexion d’une application intégrée. Choisissez Application personnalisée pour configurer n’importe quel service HTTP.",
+          "custom": "Application personnalisée"
         },
         "name": {
           "title": "Nom",
@@ -10468,13 +10470,35 @@
           "personalDescription": "Onyx place l’intégration dans une extension de vos Mes importations. Vous pourrez partager l’extension plus tard.",
           "organizationDescription": "Onyx place l’intégration dans une extension de la Bibliothèque de l’organisation."
         },
-        "back": "Retour",
         "submit": "Ajouter",
-        "adding": "Ajout…"
+        "adding": "Ajout…",
+        "cancel": "Annuler",
+        "type": {
+          "title": "Type",
+          "description": "Choisissez comment Onyx se connecte au service.",
+          "mcp_server": {
+            "title": "Serveur MCP",
+            "description": "Connectez un serveur MCP distant par son URL."
+          },
+          "openapi": {
+            "title": "Application OpenAPI",
+            "description": "Créez des actions à partir d’un schéma OpenAPI."
+          },
+          "app": {
+            "title": "Application",
+            "description": "Partez d’un modèle, comme GitHub, ou d’une application personnalisée."
+          }
+        },
+        "details": {
+          "title": "Détails"
+        },
+        "signIn": {
+          "title": "Connexion"
+        }
       },
       "filters": {
         "label": "Type d’intégration",
-        "all": "Toutes",
+        "all": "Tous les types",
         "mcp": "Serveurs MCP",
         "api": "Applications"
       },
@@ -15601,7 +15625,9 @@
       "sort": "Trier",
       "sortBy": "Trier par",
       "sortingOrder": "Sens du tri",
-      "viewSelected": "Voir la sélection"
+      "viewSelected": "Voir la sélection",
+      "selectAll": "Tout sélectionner",
+      "selectRow": "Sélectionner la ligne"
     },
     "tabs": {
       "scrollLeft": "Faire défiler les onglets vers la gauche",
@@ -16429,7 +16455,7 @@
       },
       "files": {
         "busyLabel": "Téléversement...",
-        "description": "Ajoutez des références, scripts, ressources ou autres fichiers utilisés par cette compétence. Les fichiers ZIP sont décompressés automatiquement.",
+        "description": "Ajoutez des références, des scripts, des ressources ou d’autres fichiers que cette compétence utilise. Onyx décompresse un ZIP. Un fichier SKILL.md remplit les champs ci-dessus.",
         "input": {
           "ariaLabel": "Ajouter des fichiers annexes"
         },
@@ -16446,21 +16472,10 @@
         "createTitle": "Créer une compétence",
         "editTitle": "Modifier la compétence",
         "save": {
-          "label": "Enregistrer",
-          "pendingLabel": "Enregistrement..."
-        }
-      },
-      "import": {
-        "busyLabel": "Importation...",
-        "button": {
-          "label": "Importer une compétence"
+          "label": "Créer",
+          "pendingLabel": "Création..."
         },
-        "description": "Importez un SKILL.md, un ZIP ou un dossier de compétence pour préremplir le formulaire et inclure ses fichiers.",
-        "input": {
-          "ariaLabel": "Importer une compétence existante"
-        },
-        "prompt": "Choisissez un SKILL.md ou un ZIP, ou déposez un dossier de compétence ici.",
-        "title": "Vous avez déjà une compétence ?"
+        "cancel": "Annuler"
       },
       "instructions": {
         "description": "Décrivez le comportement et le flux de travail que cette compétence ajoute à l’agent.",
@@ -16496,7 +16511,6 @@
         "created": "« {name} » créée",
         "deleteFailed": "Échec de la suppression de la compétence",
         "deleted": "« {name} » supprimée",
-        "importMissingSkillMd": "Importez un SKILL.md, un ZIP ou un dossier contenant SKILL.md.",
         "inspectFailed": "Échec de l'inspection du paquet de compétence",
         "saveFailed": "Échec de l'enregistrement de la compétence",
         "saved": "« {name} » enregistrée"
@@ -16917,7 +16931,6 @@
     },
     "bulk": {
       "adminDescription": "Gérez les compétences et les accès dans votre organisation.",
-      "selectAll": "Sélectionner toutes les compétences personnalisées visibles",
       "selected": "{count, plural, one {# sélectionnée} other {# sélectionnées}}",
       "share": "Partager",
       "enable": "Activer pour moi",
@@ -17026,11 +17039,11 @@
       "version": "v{current}{published, select, none {} other { · v{published} en ligne}}",
       "private": "Le propriétaire seul",
       "shared": "Partagée avec des personnes ou des groupes",
-      "select": "Sélectionner {name}",
       "open": "Ouvrir {name}",
       "menu": "Plus d’options pour {name}",
       "share": "Partager",
-      "delete": "Supprimer"
+      "delete": "Supprimer",
+      "select": "Sélectionner {name}"
     }
   },
   "opensearchHealth": {
@@ -17321,7 +17334,8 @@
       "noMatches": {
         "title": "Aucun plugin correspondant",
         "clear": "Afficher tous les plugins"
-      }
+      },
+      "intro": "Un plugin regroupe des compétences et des intégrations que vous activez ensemble. Chaque compétence et chaque intégration que vous ajoutez vient dans son propre plugin."
     },
     "skillPage": {
       "title": "Compétence",

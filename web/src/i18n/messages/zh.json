@@ -10366,10 +10366,9 @@
     },
     "plugins": {
       "title": "插件",
-      "description": "插件为用户提供技能和集成。此页面显示包含集成的插件。",
+      "description": "插件将人们一起开启的技能和集成打包在一起。此列表显示包含集成的插件。请在技能页面管理技能。",
       "search": "搜索插件",
       "loadFailed": "无法加载插件。",
-      "manageIntegrations": "管理集成",
       "columns": {
         "name": "插件",
         "library": "库",
@@ -10387,6 +10386,13 @@
       "empty": {
         "title": "没有包含集成的插件",
         "description": "添加集成后，Onyx 会创建一个包含它的插件。"
+      },
+      "contents": "{count, plural, other {# 个集成}}",
+      "filters": {
+        "label": "库",
+        "all": "所有库",
+        "organization": "组织库",
+        "personal": "个人上传"
       }
     },
     "integrations": {
@@ -10398,31 +10404,27 @@
       "add": {
         "label": "添加",
         "title": "添加集成",
-        "description": "选择集成类型。",
+        "description": "连接一项服务，让人们可以在聊天和 Craft 中使用它。Onyx 会将每个集成放入各自的插件中。",
         "created": "已添加 {name}。",
         "createFailed": "无法添加集成。",
-        "formTitle": {
-          "mcp_server": "添加 MCP 服务器",
-          "openapi": "添加 OpenAPI 应用",
-          "preset": "从预设添加应用",
-          "custom": "添加自定义应用"
-        },
-        "kindDescription": {
-          "mcp_server": "通过 URL 连接远程 MCP 服务器。",
-          "openapi": "根据 OpenAPI 架构创建操作。",
-          "preset": "连接内置应用，例如 GitHub 或 Slack。",
-          "custom": "允许 Craft 调用与 URL 模式匹配的 HTTP 服务。"
-        },
         "openapi": {
-          "title": "添加 OpenAPI 应用"
+          "title": "添加 OpenAPI 应用",
+          "schema": {
+            "title": "架构",
+            "description": "添加定义操作的 OpenAPI 架构。",
+            "added": "{count, plural, other {该架构有 # 个路径。}}",
+            "required": "请添加架构。",
+            "add": "添加架构",
+            "edit": "编辑架构"
+          }
         },
         "preset": {
-          "title": "预设",
-          "placeholder": "选择预设",
-          "required": "请选择预设。",
+          "title": "起点",
           "loadFailed": "无法加载预设。",
           "instructions": "设置说明",
-          "credentialRequired": "请填写此值。"
+          "credentialRequired": "请填写此值。",
+          "description": "预设会填写内置应用的名称和登录方式。选择“自定义应用”可设置任意 HTTP 服务。",
+          "custom": "自定义应用"
         },
         "name": {
           "title": "名称",
@@ -10468,13 +10470,35 @@
           "personalDescription": "Onyx 会将集成放入“我的上传”中的一个插件。您之后可以共享该插件。",
           "organizationDescription": "Onyx 会将集成放入组织库中的一个插件。"
         },
-        "back": "返回",
         "submit": "添加",
-        "adding": "正在添加…"
+        "adding": "正在添加…",
+        "cancel": "取消",
+        "type": {
+          "title": "类型",
+          "description": "选择 Onyx 连接该服务的方式。",
+          "mcp_server": {
+            "title": "MCP 服务器",
+            "description": "通过 URL 连接远程 MCP 服务器。"
+          },
+          "openapi": {
+            "title": "OpenAPI 应用",
+            "description": "根据 OpenAPI 架构创建操作。"
+          },
+          "app": {
+            "title": "应用",
+            "description": "从 GitHub 等预设或自定义应用开始。"
+          }
+        },
+        "details": {
+          "title": "详细信息"
+        },
+        "signIn": {
+          "title": "登录"
+        }
       },
       "filters": {
         "label": "集成类型",
-        "all": "全部",
+        "all": "所有类型",
         "mcp": "MCP 服务器",
         "api": "应用"
       },
@@ -15601,7 +15625,9 @@
       "sort": "排序",
       "sortBy": "排序依据",
       "sortingOrder": "排序方向",
-      "viewSelected": "查看已选"
+      "viewSelected": "查看已选",
+      "selectAll": "全选",
+      "selectRow": "选择行"
     },
     "tabs": {
       "scrollLeft": "向左滚动标签",
@@ -16429,7 +16455,7 @@
       },
       "files": {
         "busyLabel": "正在上传...",
-        "description": "添加此技能使用的参考资料、脚本、资源或其他文件。ZIP 文件会自动解压。",
+        "description": "添加此技能使用的参考资料、脚本、资源或其他文件。Onyx 会解压 ZIP 文件。SKILL.md 会填写上方的字段。",
         "input": {
           "ariaLabel": "添加支持文件"
         },
@@ -16446,21 +16472,10 @@
         "createTitle": "创建技能",
         "editTitle": "编辑技能",
         "save": {
-          "label": "保存",
-          "pendingLabel": "正在保存..."
-        }
-      },
-      "import": {
-        "busyLabel": "正在导入...",
-        "button": {
-          "label": "导入技能"
+          "label": "创建",
+          "pendingLabel": "正在创建..."
         },
-        "description": "导入 SKILL.md、ZIP 或技能文件夹以预填表单并包含其文件。",
-        "input": {
-          "ariaLabel": "导入现有技能"
-        },
-        "prompt": "选择 SKILL.md 或 ZIP，或将技能文件夹拖放到此处。",
-        "title": "已有技能？"
+        "cancel": "取消"
       },
       "instructions": {
         "description": "编写此技能为代理添加的行为和工作流程。",
@@ -16496,7 +16511,6 @@
         "created": "已创建“{name}”",
         "deleteFailed": "删除技能失败",
         "deleted": "已删除“{name}”",
-        "importMissingSkillMd": "请导入 SKILL.md、ZIP 或包含 SKILL.md 的文件夹。",
         "inspectFailed": "检查技能包失败",
         "saveFailed": "保存技能失败",
         "saved": "已保存“{name}”"
@@ -16917,7 +16931,6 @@
     },
     "bulk": {
       "adminDescription": "管理整个组织的技能和访问权限。",
-      "selectAll": "选择所有可见的自定义技能",
       "selected": "{count, plural, one {已选择 # 项} other {已选择 # 项}}",
       "share": "分享",
       "enable": "为我启用",
@@ -17026,11 +17039,11 @@
       "version": "v{current}{published, select, none {} other { · v{published} 已上线}}",
       "private": "仅所有者",
       "shared": "与用户或群组共享",
-      "select": "选择 {name}",
       "open": "打开 {name}",
       "menu": "{name} 的更多操作",
       "share": "共享",
-      "delete": "删除"
+      "delete": "删除",
+      "select": "选择 {name}"
     }
   },
   "opensearchHealth": {
@@ -17321,7 +17334,8 @@
       "noMatches": {
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
-      }
+      },
+      "intro": "插件将你一起开启的技能和集成打包在一起。你添加的每个技能和集成都位于各自的插件中。"
     },
     "skillPage": {
       "title": "技能",

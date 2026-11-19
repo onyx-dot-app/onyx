@@ -4,7 +4,6 @@ import { useFormatter, useTranslations } from "next-intl";
 import {
   Button,
   Dropdown,
-  InputCheckbox,
   InputSwitch,
   Table,
   Text,
@@ -20,7 +19,7 @@ import { skillIcon } from "@/sections/customize/skillIcon";
 interface AdminSkillsTableProps {
   skills: CustomSkill[];
   selectedIds: ReadonlySet<string>;
-  onSelectedChange: (id: string, selected: boolean) => void;
+  onSelectionChange: (ids: ReadonlySet<string>) => void;
   busy: boolean;
   isPending: (id: string) => boolean;
   enabledOf: (skill: CustomSkill) => boolean;
@@ -33,7 +32,7 @@ interface AdminSkillsTableProps {
 export default function AdminSkillsTable({
   skills,
   selectedIds,
-  onSelectedChange,
+  onSelectionChange,
   busy,
   isPending,
   enabledOf,
@@ -51,23 +50,8 @@ export default function AdminSkillsTable({
 
   const columns: TableColumn<CustomSkill>[] = [
     {
-      kind: "display",
-      id: "select",
-      width: { fixed: 40 },
-      cell: (skill) => (
-        <Section
-          width="auto"
-          height="auto"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <InputCheckbox
-            aria-label={t("select", { name: skill.name })}
-            checked={selectedIds.has(skill.id)}
-            disabled={busy}
-            onCheckedChange={(checked) => onSelectedChange(skill.id, checked)}
-          />
-        </Section>
-      ),
+      kind: "qualifier",
+      selectLabel: (skill) => t("select", { name: skill.name }),
     },
     {
       kind: "data",
@@ -251,6 +235,9 @@ export default function AdminSkillsTable({
       columns={columns}
       getRowId={(skill) => skill.id}
       pageSize={false}
+      selectionBehavior="multi-select"
+      values={selectedIds}
+      onSelectionChange={onSelectionChange}
       onRowClick={onOpen}
       getRowLabel={(skill) => t("open", { name: skill.name })}
     />

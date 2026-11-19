@@ -1,4 +1,4 @@
-export const CUSTOMIZE_TABS = ["plugins", "skills", "integrations"] as const;
+export const CUSTOMIZE_TABS = ["skills", "integrations", "plugins"] as const;
 
 export type CustomizeTab = (typeof CUSTOMIZE_TABS)[number];
 
@@ -59,3 +59,5 @@ export function integrationHref(
     ? `/app/customize/integrations/${integrationId}?tab=${tab}`
     : `/app/customize/integrations/${integrationId}`;
 }
+
+export const NEW_INTEGRATION_PATH = "/app/customize/integrations/new";

@@ -10366,10 +10366,9 @@
     },
     "plugins": {
       "title": "플러그인",
-      "description": "플러그인은 사용자에게 스킬과 연동을 제공합니다. 이 페이지에는 연동이 포함된 플러그인이 표시됩니다.",
+      "description": "플러그인은 함께 켜는 스킬과 연동을 묶은 것입니다. 이 목록에는 연동이 포함된 플러그인이 표시됩니다. 스킬은 스킬 페이지에서 관리하세요.",
       "search": "플러그인 검색",
       "loadFailed": "플러그인을 불러올 수 없습니다.",
-      "manageIntegrations": "연동 관리",
       "columns": {
         "name": "플러그인",
         "library": "라이브러리",
@@ -10387,6 +10386,13 @@
       "empty": {
         "title": "연동이 포함된 플러그인이 없습니다",
         "description": "연동을 추가하세요. Onyx가 해당 연동을 포함하는 플러그인을 만듭니다."
+      },
+      "contents": "{count, plural, other {연동 #개}}",
+      "filters": {
+        "label": "라이브러리",
+        "all": "모든 라이브러리",
+        "organization": "조직 라이브러리",
+        "personal": "개인 업로드"
       }
     },
     "integrations": {
@@ -10398,31 +10404,27 @@
       "add": {
         "label": "추가",
         "title": "연동 추가",
-        "description": "연동 유형을 선택하세요.",
+        "description": "서비스를 연결해 채팅과 Craft에서 사용할 수 있게 합니다. Onyx는 각 연동을 자체 플러그인에 넣습니다.",
         "created": "{name}을(를) 추가했습니다.",
         "createFailed": "연동을 추가할 수 없습니다.",
-        "formTitle": {
-          "mcp_server": "MCP 서버 추가",
-          "openapi": "OpenAPI 앱 추가",
-          "preset": "프리셋에서 앱 추가",
-          "custom": "사용자 지정 앱 추가"
-        },
-        "kindDescription": {
-          "mcp_server": "URL로 원격 MCP 서버를 연결합니다.",
-          "openapi": "OpenAPI 스키마에서 액션을 만듭니다.",
-          "preset": "GitHub, Slack 등 기본 제공 앱을 연결합니다.",
-          "custom": "Craft가 URL 패턴과 일치하는 HTTP 서비스를 호출하도록 합니다."
-        },
         "openapi": {
-          "title": "OpenAPI 앱 추가"
+          "title": "OpenAPI 앱 추가",
+          "schema": {
+            "title": "스키마",
+            "description": "작업을 정의하는 OpenAPI 스키마를 추가하세요.",
+            "added": "{count, plural, other {스키마에 경로가 #개 있습니다.}}",
+            "required": "스키마를 추가하세요.",
+            "add": "스키마 추가",
+            "edit": "스키마 편집"
+          }
         },
         "preset": {
-          "title": "프리셋",
-          "placeholder": "프리셋 선택",
-          "required": "프리셋을 선택하세요.",
+          "title": "시작점",
           "loadFailed": "프리셋을 불러올 수 없습니다.",
           "instructions": "설정 안내",
-          "credentialRequired": "이 값을 입력하세요."
+          "credentialRequired": "이 값을 입력하세요.",
+          "description": "프리셋은 기본 제공 앱의 이름과 로그인을 채웁니다. 모든 HTTP 서비스를 설정하려면 사용자 지정 앱을 선택하세요.",
+          "custom": "사용자 지정 앱"
         },
         "name": {
           "title": "이름",
@@ -10468,13 +10470,35 @@
           "personalDescription": "Onyx가 연동을 내 업로드의 플러그인에 넣습니다. 나중에 플러그인을 공유할 수 있습니다.",
           "organizationDescription": "Onyx가 연동을 조직 라이브러리의 플러그인에 넣습니다."
         },
-        "back": "뒤로",
         "submit": "추가",
-        "adding": "추가 중…"
+        "adding": "추가 중…",
+        "cancel": "취소",
+        "type": {
+          "title": "유형",
+          "description": "Onyx가 서비스에 연결하는 방법을 선택하세요.",
+          "mcp_server": {
+            "title": "MCP 서버",
+            "description": "URL로 원격 MCP 서버를 연결합니다."
+          },
+          "openapi": {
+            "title": "OpenAPI 앱",
+            "description": "OpenAPI 스키마에서 작업을 만듭니다."
+          },
+          "app": {
+            "title": "앱",
+            "description": "GitHub 같은 프리셋이나 사용자 지정 앱에서 시작합니다."
+          }
+        },
+        "details": {
+          "title": "세부 정보"
+        },
+        "signIn": {
+          "title": "로그인"
+        }
       },
       "filters": {
         "label": "연동 유형",
-        "all": "전체",
+        "all": "모든 유형",
         "mcp": "MCP 서버",
         "api": "앱"
       },
@@ -15601,7 +15625,9 @@
       "sort": "정렬",
       "sortBy": "정렬 기준",
       "sortingOrder": "정렬 순서",
-      "viewSelected": "선택 항목 보기"
+      "viewSelected": "선택 항목 보기",
+      "selectAll": "모두 선택",
+      "selectRow": "행 선택"
     },
     "tabs": {
       "scrollLeft": "탭을 왼쪽으로 스크롤",
@@ -16429,7 +16455,7 @@
       },
       "files": {
         "busyLabel": "업로드 중...",
-        "description": "이 스킬에서 사용하는 참조 자료, 스크립트, 에셋 또는 기타 파일을 추가하세요. ZIP 파일은 자동으로 압축이 풀립니다.",
+        "description": "이 스킬이 사용하는 참조, 스크립트, 에셋 또는 기타 파일을 추가하세요. Onyx는 ZIP의 압축을 풉니다. SKILL.md는 위 필드를 채웁니다.",
         "input": {
           "ariaLabel": "지원 파일 추가"
         },
@@ -16446,21 +16472,10 @@
         "createTitle": "스킬 만들기",
         "editTitle": "스킬 편집",
         "save": {
-          "label": "저장",
-          "pendingLabel": "저장 중..."
-        }
-      },
-      "import": {
-        "busyLabel": "가져오는 중...",
-        "button": {
-          "label": "스킬 가져오기"
+          "label": "만들기",
+          "pendingLabel": "만드는 중..."
         },
-        "description": "SKILL.md, ZIP 또는 스킬 폴더를 가져와 양식을 미리 채우고 파일을 포함하세요.",
-        "input": {
-          "ariaLabel": "기존 스킬 가져오기"
-        },
-        "prompt": "SKILL.md 또는 ZIP을 선택하거나 스킬 폴더를 여기에 끌어다 놓으세요.",
-        "title": "기존 스킬이 있나요?"
+        "cancel": "취소"
       },
       "instructions": {
         "description": "이 스킬이 에이전트에 추가하는 동작과 워크플로를 작성하세요.",
@@ -16496,7 +16511,6 @@
         "created": "\"{name}\"을(를) 생성했습니다",
         "deleteFailed": "스킬을 삭제하지 못했습니다",
         "deleted": "\"{name}\"을(를) 삭제했습니다",
-        "importMissingSkillMd": "SKILL.md, ZIP 또는 SKILL.md가 포함된 폴더를 가져오세요.",
         "inspectFailed": "스킬 번들을 검사하지 못했습니다",
         "saveFailed": "스킬을 저장하지 못했습니다",
         "saved": "\"{name}\"을(를) 저장했습니다"
@@ -16917,7 +16931,6 @@
     },
     "bulk": {
       "adminDescription": "조직 전체의 스킬과 액세스를 관리합니다.",
-      "selectAll": "표시된 모든 사용자 지정 스킬 선택",
       "selected": "{count, plural, one {#개 선택됨} other {#개 선택됨}}",
       "share": "공유",
       "enable": "내 스킬 활성화",
@@ -17026,11 +17039,11 @@
       "version": "v{current}{published, select, none {} other { · v{published} 게시됨}}",
       "private": "소유자만",
       "shared": "사용자 또는 그룹과 공유됨",
-      "select": "{name} 선택",
       "open": "{name} 열기",
       "menu": "{name} 추가 작업",
       "share": "공유",
-      "delete": "삭제"
+      "delete": "삭제",
+      "select": "{name} 선택"
     }
   },
   "opensearchHealth": {
@@ -17321,7 +17334,8 @@
       "noMatches": {
         "title": "일치하는 플러그인이 없습니다",
         "clear": "모든 플러그인 보기"
-      }
+      },
+      "intro": "플러그인은 함께 켜는 스킬과 통합을 묶은 것입니다. 추가한 각 스킬과 통합은 각자의 플러그인에 들어갑니다."
     },
     "skillPage": {
       "title": "스킬",

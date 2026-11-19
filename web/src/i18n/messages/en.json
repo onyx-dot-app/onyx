@@ -10366,10 +10366,9 @@
     },
     "plugins": {
       "title": "Plugins",
-      "description": "Plugins give people skills and integrations. This page shows the plugins that hold integrations.",
+      "description": "A plugin packages skills and integrations that people turn on together. This list shows the plugins that hold integrations. Manage skills on the Skills page.",
       "search": "Search plugins",
       "loadFailed": "Could not load the plugins.",
-      "manageIntegrations": "Manage integrations",
       "columns": {
         "name": "Plugin",
         "library": "Library",
@@ -10387,6 +10386,13 @@
       "empty": {
         "title": "No plugins with integrations",
         "description": "Add an integration. Onyx makes a plugin that holds it."
+      },
+      "contents": "{count, plural, one {# integration} other {# integrations}}",
+      "filters": {
+        "label": "Library",
+        "all": "All libraries",
+        "organization": "Organization library",
+        "personal": "Personal uploads"
       }
     },
     "integrations": {
@@ -10398,31 +10404,27 @@
       "add": {
         "label": "Add",
         "title": "Add an Integration",
-        "description": "Choose the type of integration.",
+        "description": "Connect a service so people can use it in chat and Craft. Onyx puts each integration in its own plugin.",
         "created": "Added {name}.",
         "createFailed": "Could not add the integration.",
-        "formTitle": {
-          "mcp_server": "Add an MCP Server",
-          "openapi": "Add an OpenAPI App",
-          "preset": "Add an App from a Preset",
-          "custom": "Add a Custom App"
-        },
-        "kindDescription": {
-          "mcp_server": "Connect a remote MCP server by its URL.",
-          "openapi": "Make actions from an OpenAPI schema.",
-          "preset": "Connect a built-in app, such as GitHub or Slack.",
-          "custom": "Let Craft call an HTTP service that matches URL patterns."
-        },
         "openapi": {
-          "title": "Add an OpenAPI App"
+          "title": "Add an OpenAPI App",
+          "schema": {
+            "title": "Schema",
+            "description": "Add the OpenAPI schema that defines the actions.",
+            "added": "{count, plural, one {The schema has # path.} other {The schema has # paths.}}",
+            "required": "Add a schema.",
+            "add": "Add schema",
+            "edit": "Edit schema"
+          }
         },
         "preset": {
-          "title": "Preset",
-          "placeholder": "Choose a preset",
-          "required": "Choose a preset.",
+          "title": "Start From",
           "loadFailed": "Could not load the presets.",
           "instructions": "Setup instructions",
-          "credentialRequired": "Add this value."
+          "credentialRequired": "Add this value.",
+          "description": "A preset fills in the name and sign-in of a built-in app. Choose Custom app to set up any HTTP service.",
+          "custom": "Custom app"
         },
         "name": {
           "title": "Name",
@@ -10468,13 +10470,35 @@
           "personalDescription": "Onyx puts the integration in a plugin in your My uploads. You can share the plugin later.",
           "organizationDescription": "Onyx puts the integration in a plugin in the Organization library."
         },
-        "back": "Back",
         "submit": "Add",
-        "adding": "Adding…"
+        "adding": "Adding…",
+        "cancel": "Cancel",
+        "type": {
+          "title": "Type",
+          "description": "Choose how Onyx connects to the service.",
+          "mcp_server": {
+            "title": "MCP Server",
+            "description": "Connect a remote MCP server by its URL."
+          },
+          "openapi": {
+            "title": "OpenAPI App",
+            "description": "Make actions from an OpenAPI schema."
+          },
+          "app": {
+            "title": "App",
+            "description": "Start from a preset, such as GitHub, or a custom app."
+          }
+        },
+        "details": {
+          "title": "Details"
+        },
+        "signIn": {
+          "title": "Sign-In"
+        }
       },
       "filters": {
         "label": "Integration type",
-        "all": "All",
+        "all": "All types",
         "mcp": "MCP servers",
         "api": "Apps"
       },
@@ -15601,7 +15625,9 @@
       "sort": "Sort",
       "sortBy": "Sort by",
       "sortingOrder": "Sorting Order",
-      "viewSelected": "View selected"
+      "viewSelected": "View selected",
+      "selectAll": "Select all",
+      "selectRow": "Select row"
     },
     "tabs": {
       "scrollLeft": "Scroll tabs left",
@@ -16429,7 +16455,7 @@
       },
       "files": {
         "busyLabel": "Uploading...",
-        "description": "Add references, scripts, assets, or other files used by this skill. ZIP files are unpacked automatically.",
+        "description": "Add references, scripts, assets or other files that this skill uses. Onyx unpacks a ZIP. A SKILL.md fills in the fields above.",
         "input": {
           "ariaLabel": "Add supporting files"
         },
@@ -16446,21 +16472,10 @@
         "createTitle": "Create skill",
         "editTitle": "Edit skill",
         "save": {
-          "label": "Save",
-          "pendingLabel": "Saving..."
-        }
-      },
-      "import": {
-        "busyLabel": "Importing...",
-        "button": {
-          "label": "Import skill"
+          "label": "Create",
+          "pendingLabel": "Creating..."
         },
-        "description": "Import a SKILL.md, ZIP, or skill folder to prefill the form and include its files.",
-        "input": {
-          "ariaLabel": "Import existing skill"
-        },
-        "prompt": "Choose a SKILL.md or ZIP, or drop a skill folder here.",
-        "title": "Have an existing skill?"
+        "cancel": "Cancel"
       },
       "instructions": {
         "description": "Write the behavior and workflow this skill adds to the agent.",
@@ -16496,7 +16511,6 @@
         "created": "Created \"{name}\"",
         "deleteFailed": "Failed to delete skill",
         "deleted": "Deleted \"{name}\"",
-        "importMissingSkillMd": "Import a SKILL.md, ZIP, or folder containing SKILL.md.",
         "inspectFailed": "Failed to inspect skill bundle",
         "saveFailed": "Failed to save skill",
         "saved": "Saved \"{name}\""
@@ -16917,7 +16931,6 @@
     },
     "bulk": {
       "adminDescription": "Manage skills and access across your organization.",
-      "selectAll": "Select all visible custom skills",
       "selected": "{count, plural, one {# selected} other {# selected}}",
       "share": "Share",
       "enable": "Enable for me",
@@ -17026,11 +17039,11 @@
       "version": "v{current}{published, select, none {} other { · v{published} live}}",
       "private": "Only the owner",
       "shared": "Shared with people or groups",
-      "select": "Select {name}",
       "open": "Open {name}",
       "menu": "More for {name}",
       "share": "Share",
-      "delete": "Delete"
+      "delete": "Delete",
+      "select": "Select {name}"
     }
   },
   "opensearchHealth": {
@@ -17321,7 +17334,8 @@
       "noMatches": {
         "title": "No matching plugins",
         "clear": "Show all plugins"
-      }
+      },
+      "intro": "A plugin packages skills and integrations that you turn on together. Each skill and integration you add comes in its own plugin."
     },
     "skillPage": {
       "title": "Skill",

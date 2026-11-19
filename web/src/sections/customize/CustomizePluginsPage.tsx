@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import {
   Button,
   LineItemButton,
+  Text,
   type DropdownMenuItem,
 } from "@opal/components";
 import { toast } from "@opal/layouts";
@@ -24,7 +25,7 @@ import {
   groupPlugins,
   type PluginGroup,
 } from "@/lib/customize/plugins";
-import { pluginHref } from "@/lib/customize/paths";
+import { NEW_INTEGRATION_PATH, pluginHref } from "@/lib/customize/paths";
 import type { SkillStatusFilter } from "@/lib/customize/skills";
 import { useMemberIntegrations } from "@/lib/integrations/hooks";
 import { setPluginEnabled } from "@/lib/integrations/svc";
@@ -52,7 +53,6 @@ import {
   StatusFilter,
 } from "@/sections/customize/CustomizeList";
 import { skillIcon } from "@/sections/customize/skillIcon";
-import AddIntegrationModal from "@/sections/integrations/AddIntegrationModal";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
 import SharePluginModal from "@/sections/plugins/SharePluginModal";
@@ -191,7 +191,6 @@ export default function CustomizePluginsPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<SkillStatusFilter>("all");
   const [switching, setSwitching] = useState<ReadonlySet<string>>(new Set());
-  const [adding, setAdding] = useState(false);
   const [sharing, setSharing] = useState<MemberPluginEntry | null>(null);
 
   const userEmail = user?.email ?? null;
@@ -254,7 +253,7 @@ export default function CustomizePluginsPage() {
                   id: "integration",
                   icon: SvgPlug,
                   title: t("integrations.add.integration"),
-                  onSelect: () => setAdding(true),
+                  onSelect: () => navigation.go(NEW_INTEGRATION_PATH),
                 },
               ]
             : []
@@ -274,6 +273,9 @@ export default function CustomizePluginsPage() {
         skills.error || integrations.error ? t("plugins.loadFailed") : false
       }
     >
+      <Text font="secondary-body" color="text-03">
+        {t("plugins.intro")}
+      </Text>
       {shownCount === 0 ? (
         <CustomizeEmpty
           illustration={SvgNoResult}
@@ -342,20 +344,6 @@ export default function CustomizePluginsPage() {
             .map((integration) => integration.name)}
           onClose={() => setSharing(null)}
           onSaved={() => setSharing(null)}
-        />
-      )}
-      {adding && (
-        <AddIntegrationModal
-          canChooseOrganization={false}
-          onClose={() => setAdding(false)}
-          onCreated={(created) => {
-            setAdding(false);
-            // The plugin page reads the new plugin from the list.
-            void integrations.mutate().finally(() => {
-              const plugin = created.plugins[0];
-              if (plugin) navigation.go(pluginHref(plugin.plugin_id));
-            });
-          }}
         />
       )}
     </CustomizeLayout>

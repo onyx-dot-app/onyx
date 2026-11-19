@@ -241,26 +241,22 @@ describe("SkillsPage preference toggles", () => {
     ).toBeInTheDocument();
   });
 
-  it("replaces the selection label with the count and restores it when cleared", async () => {
+  it("shows the selection count and bulk actions until the selection clears", async () => {
     render(<SkillsPage />);
     const user = setupUser();
-    const row = screen.getByRole("group", { name: "Select skills" });
-    expect(within(row).getByText("Select skills")).toBeInTheDocument();
+    expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("checkbox", { name: "Select first-skill" })
     );
-    expect(within(row).getByText("1 selected")).toBeInTheDocument();
-    expect(within(row).queryByText("Select skills")).not.toBeInTheDocument();
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
     await user.click(
       screen.getByRole("checkbox", { name: "Select second-skill" })
     );
-    expect(within(row).getByText("2 selected")).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
-    expect(within(row).getByText("Select skills")).toBeInTheDocument();
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Select all" }));
+    expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
     expect(
-      within(row).queryByRole("button", { name: "Share" })
+      screen.queryByRole("button", { name: "Share" })
     ).not.toBeInTheDocument();
   });
 
@@ -271,14 +267,9 @@ describe("SkillsPage preference toggles", () => {
     });
     render(<SkillsPage />);
     const user = setupUser();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
-    const browseRow = screen.getByRole("group", { name: "Select skills" });
-    expect(within(browseRow).getByText("2 selected")).toBeInTheDocument();
-    await user.click(
-      within(browseRow).getByRole("button", { name: "More actions" })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Select all" }));
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More actions" }));
     await user.click(screen.getByText("Enable for me", { exact: true }));
     await waitFor(() =>
       expect(mockBulkUpdateSkills).toHaveBeenCalledWith({
@@ -312,7 +303,7 @@ describe("SkillsPage preference toggles", () => {
       const user = setupUser();
       await user.click(
         screen.getByRole("checkbox", {
-          name: "Select all visible custom skills",
+          name: "Select all",
         })
       );
       await user.click(screen.getByRole("button", { name: "More actions" }));
@@ -334,9 +325,7 @@ describe("SkillsPage preference toggles", () => {
     });
     render(<SkillsPage />);
     const user = setupUser();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Select all" }));
     await user.click(screen.getByRole("button", { name: "More actions" }));
     await user.click(screen.getByText("Enable for me", { exact: true }));
     await waitFor(() =>
@@ -353,21 +342,14 @@ describe("SkillsPage preference toggles", () => {
     mockSetSkillEnabled.mockReturnValueOnce(mutation.promise);
     render(<SkillsPage />);
     await user.click(screen.getByRole("switch", { name: "first-skill" }));
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
-    const browseRow = screen.getByRole("group", { name: "Select skills" });
-    expect(
-      within(browseRow).getByRole("button", { name: "More actions" })
-    ).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: "Select all" }));
+    expect(screen.getByRole("button", { name: "More actions" })).toBeDisabled();
     await act(async () => {
       mutation.resolve(enabledCustomAt(0));
       await mutation.promise;
     });
     await waitFor(() =>
-      expect(
-        within(browseRow).getByRole("button", { name: "More actions" })
-      ).toBeEnabled()
+      expect(screen.getByRole("button", { name: "More actions" })).toBeEnabled()
     );
   });
 
@@ -424,12 +406,9 @@ describe("SkillsPage preference toggles", () => {
   it("clears selection when search changes so hidden skills are not changed", async () => {
     render(<SkillsPage />);
     const user = setupUser();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Select all" }));
     await user.type(screen.getByPlaceholderText("Search skills..."), "first");
     expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
-    expect(screen.getByText("Select skills")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Enable for me" })
     ).not.toBeInTheDocument();
@@ -495,9 +474,7 @@ describe("SkillsPage preference toggles", () => {
     ];
     render(<SkillsPage />);
     const user = setupUser();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Select all" }));
 
     const filter = screen.getByRole("combobox", { name: "Filter by group" });
     expect(filter).toHaveValue("All groups");

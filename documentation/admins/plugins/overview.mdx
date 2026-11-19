@@ -45,18 +45,20 @@ Onyx has three plugin types. Each type connects to a different kind of external 
 ## Add an integration
 
 <Steps>
-  <Step title="Open the add dialog">
+  <Step title="Open the add page">
     Go to **Admin Panel → Integrations** and click **Add**.
   </Step>
 
   <Step title="Select the type">
-    Select **MCP server**, **OpenAPI app**, **App** (from a preset), or **Custom app**.
-    **App** and **Custom app** show only when Craft is available on your plan.
+    Under **Type**, select **MCP Server**, **OpenAPI App**, or **App**.
+    **App** shows only when Craft is available on your plan.
   </Step>
 
-  <Step title="Fill in the form">
-    Fill in the form of that type. For an MCP server, pick a suggested server or enter its URL.
-    Onyx checks the server URL and suggests the sign-in settings.
+  <Step title="Fill in the details">
+    Fill in the details of that type. For an MCP server, pick a suggested server or enter its URL.
+    Onyx checks the server URL and suggests the sign-in settings. For an App,
+    select a preset under **Start From** to fill in the name and sign-in,
+    or keep **Custom app** to set up any HTTP service.
   </Step>
 
   <Step title="Set the sign-in">
@@ -91,7 +93,8 @@ To keep an integration but stop all use of it, turn off **Enabled** on its **Ove
 ## The Plugins page
 
 **Admin Panel → Plugins** lists each plugin that holds integrations, with its library, its install setting,
-and its integrations. Each **Organization library** plugin has an install setting:
+and its integrations. Search by name, or filter the list by library.
+Each **Organization library** plugin has an install setting:
 
 | Install setting | Effect |
 | --- | --- |

@@ -10366,10 +10366,9 @@
     },
     "plugins": {
       "title": "Plugins",
-      "description": "Os plugins dão habilidades e integrações às pessoas. Esta página mostra os plugins que contêm integrações.",
+      "description": "Um plugin agrupa habilidades e integrações que as pessoas ativam juntas. Esta lista mostra os plugins que contêm integrações. Gerencie as habilidades na página Habilidades.",
       "search": "Pesquisar plugins",
       "loadFailed": "Não foi possível carregar os plugins.",
-      "manageIntegrations": "Gerenciar integrações",
       "columns": {
         "name": "Plugin",
         "library": "Biblioteca",
@@ -10387,6 +10386,13 @@
       "empty": {
         "title": "Nenhum plugin com integrações",
         "description": "Adicione uma integração. O Onyx cria um plugin que a contém."
+      },
+      "contents": "{count, plural, one {# integração} other {# integrações}}",
+      "filters": {
+        "label": "Biblioteca",
+        "all": "Todas as bibliotecas",
+        "organization": "Biblioteca da organização",
+        "personal": "Envios pessoais"
       }
     },
     "integrations": {
@@ -10398,31 +10404,27 @@
       "add": {
         "label": "Adicionar",
         "title": "Adicionar uma integração",
-        "description": "Escolha o tipo de integração.",
+        "description": "Conecte um serviço para que as pessoas possam usá-lo no chat e no Craft. O Onyx coloca cada integração no próprio plugin.",
         "created": "{name} foi adicionada.",
         "createFailed": "Não foi possível adicionar a integração.",
-        "formTitle": {
-          "mcp_server": "Adicionar um servidor MCP",
-          "openapi": "Adicionar um aplicativo OpenAPI",
-          "preset": "Adicionar um aplicativo de um modelo",
-          "custom": "Adicionar um aplicativo personalizado"
-        },
-        "kindDescription": {
-          "mcp_server": "Conecte um servidor MCP remoto pela URL.",
-          "openapi": "Crie ações a partir de um esquema OpenAPI.",
-          "preset": "Conecte um aplicativo integrado, como GitHub ou Slack.",
-          "custom": "Permita que o Craft chame um serviço HTTP que corresponda a padrões de URL."
-        },
         "openapi": {
-          "title": "Adicionar um aplicativo OpenAPI"
+          "title": "Adicionar um aplicativo OpenAPI",
+          "schema": {
+            "title": "Esquema",
+            "description": "Adicione o esquema OpenAPI que define as ações.",
+            "added": "{count, plural, one {O esquema tem # caminho.} other {O esquema tem # caminhos.}}",
+            "required": "Adicione um esquema.",
+            "add": "Adicionar esquema",
+            "edit": "Editar esquema"
+          }
         },
         "preset": {
-          "title": "Modelo",
-          "placeholder": "Escolha um modelo",
-          "required": "Escolha um modelo.",
+          "title": "Começar de",
           "loadFailed": "Não foi possível carregar os modelos.",
           "instructions": "Instruções de configuração",
-          "credentialRequired": "Adicione este valor."
+          "credentialRequired": "Adicione este valor.",
+          "description": "Um modelo preenche o nome e o login de um app integrado. Escolha App personalizado para configurar qualquer serviço HTTP.",
+          "custom": "App personalizado"
         },
         "name": {
           "title": "Nome",
@@ -10468,13 +10470,35 @@
           "personalDescription": "O Onyx coloca a integração em um plugin nos seus Meus uploads. Você pode compartilhar o plugin depois.",
           "organizationDescription": "O Onyx coloca a integração em um plugin na Biblioteca da organização."
         },
-        "back": "Voltar",
         "submit": "Adicionar",
-        "adding": "Adicionando…"
+        "adding": "Adicionando…",
+        "cancel": "Cancelar",
+        "type": {
+          "title": "Tipo",
+          "description": "Escolha como o Onyx se conecta ao serviço.",
+          "mcp_server": {
+            "title": "Servidor MCP",
+            "description": "Conecte um servidor MCP remoto pela URL."
+          },
+          "openapi": {
+            "title": "App OpenAPI",
+            "description": "Crie ações a partir de um esquema OpenAPI."
+          },
+          "app": {
+            "title": "App",
+            "description": "Comece de um modelo, como o GitHub, ou de um app personalizado."
+          }
+        },
+        "details": {
+          "title": "Detalhes"
+        },
+        "signIn": {
+          "title": "Login"
+        }
       },
       "filters": {
         "label": "Tipo de integração",
-        "all": "Todas",
+        "all": "Todos os tipos",
         "mcp": "Servidores MCP",
         "api": "Aplicativos"
       },
@@ -15601,7 +15625,9 @@
       "sort": "Ordenar",
       "sortBy": "Ordenar por",
       "sortingOrder": "Direção da ordenação",
-      "viewSelected": "Ver selecionados"
+      "viewSelected": "Ver selecionados",
+      "selectAll": "Selecionar tudo",
+      "selectRow": "Selecionar linha"
     },
     "tabs": {
       "scrollLeft": "Rolar abas para a esquerda",
@@ -16429,7 +16455,7 @@
       },
       "files": {
         "busyLabel": "Enviando...",
-        "description": "Adicione referências, scripts, recursos ou outros arquivos usados por esta habilidade. Arquivos ZIP são descompactados automaticamente.",
+        "description": "Adicione referências, scripts, recursos ou outros arquivos que esta habilidade usa. O Onyx descompacta um ZIP. Um SKILL.md preenche os campos acima.",
         "input": {
           "ariaLabel": "Adicionar arquivos de apoio"
         },
@@ -16446,21 +16472,10 @@
         "createTitle": "Criar habilidade",
         "editTitle": "Editar habilidade",
         "save": {
-          "label": "Salvar",
-          "pendingLabel": "Salvando..."
-        }
-      },
-      "import": {
-        "busyLabel": "Importando...",
-        "button": {
-          "label": "Importar habilidade"
+          "label": "Criar",
+          "pendingLabel": "Criando..."
         },
-        "description": "Importe um SKILL.md, um ZIP ou uma pasta de habilidade para preencher o formulário e incluir seus arquivos.",
-        "input": {
-          "ariaLabel": "Importar habilidade existente"
-        },
-        "prompt": "Escolha um SKILL.md ou ZIP, ou solte uma pasta de habilidade aqui.",
-        "title": "Já tem uma habilidade?"
+        "cancel": "Cancelar"
       },
       "instructions": {
         "description": "Escreva o comportamento e o fluxo de trabalho que esta habilidade adiciona ao agente.",
@@ -16496,7 +16511,6 @@
         "created": "\"{name}\" criada",
         "deleteFailed": "Falha ao excluir a habilidade",
         "deleted": "\"{name}\" excluída",
-        "importMissingSkillMd": "Importe um SKILL.md, um ZIP ou uma pasta contendo SKILL.md.",
         "inspectFailed": "Falha ao inspecionar o pacote da habilidade",
         "saveFailed": "Falha ao salvar a habilidade",
         "saved": "\"{name}\" salva"
@@ -16917,7 +16931,6 @@
     },
     "bulk": {
       "adminDescription": "Gerencie habilidades e acesso em toda a organização.",
-      "selectAll": "Selecionar todas as habilidades personalizadas visíveis",
       "selected": "{count, plural, one {# selecionada} other {# selecionadas}}",
       "share": "Compartilhar",
       "enable": "Ativar para mim",
@@ -17026,11 +17039,11 @@
       "version": "v{current}{published, select, none {} other { · v{published} ativa}}",
       "private": "Somente o proprietário",
       "shared": "Compartilhada com pessoas ou grupos",
-      "select": "Selecionar {name}",
       "open": "Abrir {name}",
       "menu": "Mais opções de {name}",
       "share": "Compartilhar",
-      "delete": "Excluir"
+      "delete": "Excluir",
+      "select": "Selecionar {name}"
     }
   },
   "opensearchHealth": {
@@ -17321,7 +17334,8 @@
       "noMatches": {
         "title": "Nenhum plugin correspondente",
         "clear": "Mostrar todos os plugins"
-      }
+      },
+      "intro": "Um plugin agrupa habilidades e integrações que você ativa juntas. Cada habilidade e integração que você adiciona vem no próprio plugin."
     },
     "skillPage": {
       "title": "Habilidade",

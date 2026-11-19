@@ -124,7 +124,7 @@ describe("SkillEditorPage", () => {
       screen.getByRole("button", { name: "Choose organization access" })
     );
     expect(mockCreateCustomSkillFromEditor).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
     expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
       expect.objectContaining({
         sharing: {
@@ -149,7 +149,7 @@ describe("SkillEditorPage", () => {
 
     render(<SkillEditorPage />);
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() =>
       expect(mockRouterReplace).toHaveBeenCalledWith(
@@ -163,7 +163,7 @@ describe("SkillEditorPage", () => {
     toastError.mockRestore();
   });
 
-  it("prefills an uploaded draft without creating it until Save", async () => {
+  it("prefills an uploaded draft without creating it until Create", async () => {
     const user = setupUser();
     const upload = new File(["bundle"], "report-writer.zip");
     mockGetSkillCreationDraft.mockReturnValue({
@@ -194,12 +194,9 @@ describe("SkillEditorPage", () => {
     expect(
       screen.getByDisplayValue("Write the requested report.")
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText("Have an existing skill?")
-    ).not.toBeInTheDocument();
     expect(mockCreateCustomSkillFromEditor).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() =>
       expect(mockCreateCustomSkillFromEditor).toHaveBeenCalledWith(
@@ -222,7 +219,6 @@ describe("SkillEditorPage", () => {
     const user = setupUser();
     render(<SkillEditorPage />);
 
-    expect(screen.getByText("Have an existing skill?")).toBeInTheDocument();
     await user.type(screen.getByPlaceholderText("Name your skill"), "draft");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
@@ -256,7 +252,7 @@ describe("SkillEditorPage", () => {
 
     render(<SkillEditorPage />);
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(
       await screen.findByText("Create another “report-writer” skill?")
@@ -304,7 +300,7 @@ describe("SkillEditorPage", () => {
 
     render(<SkillEditorPage />);
     await fillRequiredFields(user);
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
     await user.click(
       await screen.findByRole("button", { name: "Create anyway" })
     );

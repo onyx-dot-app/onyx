@@ -8,7 +8,6 @@ import { useSWRConfig } from "swr";
 import {
   Button,
   InputTypeIn,
-  InputCheckbox,
   InputSingleSelect,
   MessageCard,
   Dropdown,
@@ -276,7 +275,7 @@ export default function AdminSkillsPage() {
   }
 
   return (
-    <SettingsLayouts.Root data-testid="SkillsPage/container">
+    <SettingsLayouts.Root width="lg" data-testid="SkillsPage/container">
       <SettingsLayouts.Header
         icon={SvgBlocks}
         title={t("page.header.title")}
@@ -362,39 +361,6 @@ export default function AdminSkillsPage() {
                 height="auto"
                 alignItems="center"
               >
-                {selectableItems.length > 0 && (
-                  <Section
-                    flexDirection="row"
-                    width="auto"
-                    height="auto"
-                    gap={2}
-                    className="shrink-0 ms-2"
-                  >
-                    <InputCheckbox
-                      aria-label={bulkCopy("selectAll")}
-                      checked={selectedItems.length === selectableItems.length}
-                      indeterminate={
-                        selectedItems.length > 0 &&
-                        selectedItems.length < selectableItems.length
-                      }
-                      disabled={bulkBusy}
-                      onCheckedChange={(checked) =>
-                        setSelectedIds(
-                          new Set(
-                            checked
-                              ? selectableItems.map((item) => item.id)
-                              : []
-                          )
-                        )
-                      }
-                    />
-                    {selectedItems.length > 0 && (
-                      <Text font="secondary-body" color="text-03">
-                        {bulkCopy("selected", { count: selectedItems.length })}
-                      </Text>
-                    )}
-                  </Section>
-                )}
                 <Section
                   height="auto"
                   alignItems="stretch"
@@ -453,8 +419,12 @@ export default function AdminSkillsPage() {
                     width="auto"
                     height="auto"
                     gap={2}
+                    alignItems="center"
                     className="shrink-0"
                   >
+                    <Text font="secondary-body" color="text-03">
+                      {bulkCopy("selected", { count: selectedItems.length })}
+                    </Text>
                     <Button
                       prominence="secondary"
                       icon={SvgShare}
@@ -528,14 +498,7 @@ export default function AdminSkillsPage() {
                     <AdminSkillsTable
                       skills={selectableItems}
                       selectedIds={selectedIds}
-                      onSelectedChange={(id, checked) =>
-                        setSelectedIds((current) => {
-                          const next = new Set(current);
-                          if (checked) next.add(id);
-                          else next.delete(id);
-                          return next;
-                        })
-                      }
+                      onSelectionChange={(ids) => setSelectedIds(new Set(ids))}
                       busy={bulkBusy}
                       isPending={enablement.isPending}
                       enabledOf={enablement.enabledOf}

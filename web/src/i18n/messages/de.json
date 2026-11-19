@@ -10366,10 +10366,9 @@
     },
     "plugins": {
       "title": "Plugins",
-      "description": "Plugins stellen Personen Skills und Integrationen bereit. Diese Seite zeigt die Plugins, die Integrationen enthalten.",
+      "description": "Ein Plugin bündelt Skills und Integrationen, die Personen gemeinsam aktivieren. Diese Liste zeigt die Plugins mit Integrationen. Verwalten Sie Skills auf der Seite „Skills“.",
       "search": "Plugins suchen",
       "loadFailed": "Die Plugins konnten nicht geladen werden.",
-      "manageIntegrations": "Integrationen verwalten",
       "columns": {
         "name": "Plugin",
         "library": "Bibliothek",
@@ -10387,6 +10386,13 @@
       "empty": {
         "title": "Keine Plugins mit Integrationen",
         "description": "Fügen Sie eine Integration hinzu. Onyx erstellt ein Plugin, das sie enthält."
+      },
+      "contents": "{count, plural, one {# Integration} other {# Integrationen}}",
+      "filters": {
+        "label": "Bibliothek",
+        "all": "Alle Bibliotheken",
+        "organization": "Organisationsbibliothek",
+        "personal": "Persönliche Uploads"
       }
     },
     "integrations": {
@@ -10398,31 +10404,27 @@
       "add": {
         "label": "Hinzufügen",
         "title": "Integration hinzufügen",
-        "description": "Wählen Sie den Integrationstyp.",
+        "description": "Verbinden Sie einen Dienst, damit Personen ihn im Chat und in Craft verwenden können. Onyx legt jede Integration in ein eigenes Plugin.",
         "created": "{name} wurde hinzugefügt.",
         "createFailed": "Die Integration konnte nicht hinzugefügt werden.",
-        "formTitle": {
-          "mcp_server": "MCP-Server hinzufügen",
-          "openapi": "OpenAPI-App hinzufügen",
-          "preset": "App aus Vorlage hinzufügen",
-          "custom": "Eigene App hinzufügen"
-        },
-        "kindDescription": {
-          "mcp_server": "Verbinden Sie einen Remote-MCP-Server über seine URL.",
-          "openapi": "Erstellen Sie Aktionen aus einem OpenAPI-Schema.",
-          "preset": "Verbinden Sie eine integrierte App, z. B. GitHub oder Slack.",
-          "custom": "Lassen Sie Craft einen HTTP-Dienst aufrufen, der zu URL-Mustern passt."
-        },
         "openapi": {
-          "title": "OpenAPI-App hinzufügen"
+          "title": "OpenAPI-App hinzufügen",
+          "schema": {
+            "title": "Schema",
+            "description": "Fügen Sie das OpenAPI-Schema hinzu, das die Aktionen definiert.",
+            "added": "{count, plural, one {Das Schema hat # Pfad.} other {Das Schema hat # Pfade.}}",
+            "required": "Fügen Sie ein Schema hinzu.",
+            "add": "Schema hinzufügen",
+            "edit": "Schema bearbeiten"
+          }
         },
         "preset": {
-          "title": "Vorlage",
-          "placeholder": "Vorlage auswählen",
-          "required": "Wählen Sie eine Vorlage.",
+          "title": "Ausgangspunkt",
           "loadFailed": "Die Vorlagen konnten nicht geladen werden.",
           "instructions": "Einrichtungsanleitung",
-          "credentialRequired": "Geben Sie diesen Wert ein."
+          "credentialRequired": "Geben Sie diesen Wert ein.",
+          "description": "Eine Vorlage füllt den Namen und die Anmeldung einer integrierten App aus. Wählen Sie „Benutzerdefinierte App“, um einen beliebigen HTTP-Dienst einzurichten.",
+          "custom": "Benutzerdefinierte App"
         },
         "name": {
           "title": "Name",
@@ -10468,13 +10470,35 @@
           "personalDescription": "Onyx legt die Integration in einem Plugin unter „Meine Uploads“ ab. Sie können das Plugin später teilen.",
           "organizationDescription": "Onyx legt die Integration in einem Plugin in der Organisationsbibliothek ab."
         },
-        "back": "Zurück",
         "submit": "Hinzufügen",
-        "adding": "Wird hinzugefügt …"
+        "adding": "Wird hinzugefügt …",
+        "cancel": "Abbrechen",
+        "type": {
+          "title": "Typ",
+          "description": "Wählen Sie, wie Onyx sich mit dem Dienst verbindet.",
+          "mcp_server": {
+            "title": "MCP-Server",
+            "description": "Verbinden Sie einen entfernten MCP-Server über seine URL."
+          },
+          "openapi": {
+            "title": "OpenAPI-App",
+            "description": "Erstellen Sie Aktionen aus einem OpenAPI-Schema."
+          },
+          "app": {
+            "title": "App",
+            "description": "Beginnen Sie mit einer Vorlage wie GitHub oder einer eigenen App."
+          }
+        },
+        "details": {
+          "title": "Details"
+        },
+        "signIn": {
+          "title": "Anmeldung"
+        }
       },
       "filters": {
         "label": "Integrationstyp",
-        "all": "Alle",
+        "all": "Alle Typen",
         "mcp": "MCP-Server",
         "api": "Apps"
       },
@@ -15601,7 +15625,9 @@
       "sort": "Sortieren",
       "sortBy": "Sortieren nach",
       "sortingOrder": "Sortierrichtung",
-      "viewSelected": "Auswahl anzeigen"
+      "viewSelected": "Auswahl anzeigen",
+      "selectAll": "Alle auswählen",
+      "selectRow": "Zeile auswählen"
     },
     "tabs": {
       "scrollLeft": "Tabs nach links scrollen",
@@ -16429,7 +16455,7 @@
       },
       "files": {
         "busyLabel": "Wird hochgeladen...",
-        "description": "Fügen Sie Referenzen, Skripte, Assets oder andere von diesem Skill verwendete Dateien hinzu. ZIP-Dateien werden automatisch entpackt.",
+        "description": "Fügen Sie Referenzen, Skripte, Assets oder andere Dateien hinzu, die dieser Skill verwendet. Onyx entpackt eine ZIP-Datei. Eine SKILL.md füllt die Felder oben aus.",
         "input": {
           "ariaLabel": "Unterstützende Dateien hinzufügen"
         },
@@ -16446,21 +16472,10 @@
         "createTitle": "Skill erstellen",
         "editTitle": "Skill bearbeiten",
         "save": {
-          "label": "Speichern",
-          "pendingLabel": "Wird gespeichert..."
-        }
-      },
-      "import": {
-        "busyLabel": "Wird importiert...",
-        "button": {
-          "label": "Skill importieren"
+          "label": "Erstellen",
+          "pendingLabel": "Wird erstellt..."
         },
-        "description": "Importieren Sie eine SKILL.md, eine ZIP-Datei oder einen Skill-Ordner, um das Formular vorauszufüllen und die Dateien einzubeziehen.",
-        "input": {
-          "ariaLabel": "Vorhandenen Skill importieren"
-        },
-        "prompt": "Wählen Sie eine SKILL.md oder ZIP-Datei oder ziehen Sie einen Skill-Ordner hierher.",
-        "title": "Haben Sie bereits einen Skill?"
+        "cancel": "Abbrechen"
       },
       "instructions": {
         "description": "Beschreiben Sie das Verhalten und den Ablauf, die dieser Skill dem Agenten hinzufügt.",
@@ -16496,7 +16511,6 @@
         "created": "„{name}“ erstellt",
         "deleteFailed": "Skill konnte nicht gelöscht werden",
         "deleted": "„{name}“ gelöscht",
-        "importMissingSkillMd": "Importieren Sie eine SKILL.md, eine ZIP-Datei oder einen Ordner mit SKILL.md.",
         "inspectFailed": "Skill-Paket konnte nicht geprüft werden",
         "saveFailed": "Skill konnte nicht gespeichert werden",
         "saved": "„{name}“ gespeichert"
@@ -16917,7 +16931,6 @@
     },
     "bulk": {
       "adminDescription": "Skills und Zugriff in Ihrer Organisation verwalten.",
-      "selectAll": "Alle sichtbaren benutzerdefinierten Skills auswählen",
       "selected": "{count, plural, one {# ausgewählt} other {# ausgewählt}}",
       "share": "Teilen",
       "enable": "Für mich aktivieren",
@@ -17026,11 +17039,11 @@
       "version": "v{current}{published, select, none {} other { · v{published} live}}",
       "private": "Nur der Eigentümer",
       "shared": "Mit Personen oder Gruppen geteilt",
-      "select": "{name} auswählen",
       "open": "{name} öffnen",
       "menu": "Mehr zu {name}",
       "share": "Teilen",
-      "delete": "Löschen"
+      "delete": "Löschen",
+      "select": "{name} auswählen"
     }
   },
   "opensearchHealth": {
@@ -17321,7 +17334,8 @@
       "noMatches": {
         "title": "Keine passenden Plugins",
         "clear": "Alle Plugins anzeigen"
-      }
+      },
+      "intro": "Ein Plugin bündelt Skills und Integrationen, die Sie gemeinsam aktivieren. Jeder Skill und jede Integration, die Sie hinzufügen, kommt in einem eigenen Plugin."
     },
     "skillPage": {
       "title": "Skill",

@@ -11,7 +11,7 @@ test("SKILL.md populates the create form after confirmation", async ({
     .locator('textarea[name="instructions_markdown"]')
     .fill("Typed instructions");
 
-  await page.getByLabel("Import existing skill").setInputFiles({
+  await page.getByLabel("Add supporting files").setInputFiles({
     name: "SKILL.md",
     mimeType: "text/markdown",
     buffer: Buffer.from(
