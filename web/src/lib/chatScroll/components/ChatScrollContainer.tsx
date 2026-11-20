@@ -171,8 +171,9 @@ const ChatScrollContainer = React.memo(
       const [isAtBottom, setIsAtBottom] = useState(true);
       const [isScrollReady, setIsScrollReady] = useState(false);
 
-      // The view's mode. Only the user's scroll input, a glide and the
-      // opening change it; layout never does.
+      // The view's mode. The user's scroll input, a glide and the opening
+      // set it. Layout keeps it, except growth with auto-scroll off, which
+      // leaves the end and makes a following view a reading one.
       const modeRef = useRef<ScrollMode>("following");
       const glideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
         null
@@ -190,6 +191,10 @@ const ChatScrollContainer = React.memo(
       // on the view (a scrollbar drag). Only read, never acted on directly.
       const userInputAtRef = useRef(-Infinity);
       const pointerHeldRef = useRef(false);
+      // A catch-up deferred until the user's scroll input settles.
+      const settleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+        null
+      );
       const sessionIdRef = useRef(sessionId);
       const saveFrameRef = useRef<number | null>(null);
 
@@ -328,6 +333,41 @@ const ChatScrollContainer = React.memo(
         });
       }, []);
 
+      // Return a following view to the end once the user's scroll input
+      // settles. A write during the input would stop it, and with no later
+      // content or scroll event nothing else would catch up.
+      const catchUpAfterInput = useCallback(() => {
+        if (settleTimeoutRef.current !== null) return;
+        const check = () => {
+          const remaining = pointerHeldRef.current
+            ? USER_INPUT_WINDOW_MS
+            : userInputAtRef.current + USER_INPUT_WINDOW_MS - performance.now();
+          if (remaining > 0) {
+            settleTimeoutRef.current = setTimeout(check, remaining);
+            return;
+          }
+          settleTimeoutRef.current = null;
+          if (
+            modeRef.current !== "following" ||
+            !autoScrollRef.current ||
+            pauseFollowingRef.current
+          ) {
+            return;
+          }
+          stickToEnd();
+          updateScrollState();
+          savePosition();
+        };
+        check();
+      }, [stickToEnd, updateScrollState, savePosition]);
+
+      const cancelCatchUp = useCallback(() => {
+        if (settleTimeoutRef.current !== null) {
+          clearTimeout(settleTimeoutRef.current);
+          settleTimeoutRef.current = null;
+        }
+      }, []);
+
       // Scroll to the end: a glide for "smooth" (a send, the button), a jump
       // otherwise. Either way the view follows afterwards.
       const scrollToBottom = useCallback(
@@ -344,6 +384,9 @@ const ChatScrollContainer = React.memo(
           }
 
           modeRef.current = "gliding";
+          // Input before the glide (the click that asked for it) must not
+          // make its moves the user's. Input during it still cancels it.
+          userInputAtRef.current = -Infinity;
           const targetScrollTop =
             container.scrollHeight - container.clientHeight;
           // A long smooth scroll would mount every windowed row on the way.
@@ -382,11 +425,12 @@ const ChatScrollContainer = React.memo(
       useEffect(
         () => () => {
           cancelGlide();
+          cancelCatchUp();
           if (saveFrameRef.current !== null) {
             cancelAnimationFrame(saveFrameRef.current);
           }
         },
-        [cancelGlide]
+        [cancelGlide, cancelCatchUp]
       );
 
       // Catch up on content that arrived while following was paused (the
@@ -396,11 +440,20 @@ const ChatScrollContainer = React.memo(
       useEffect(() => {
         const resumed = followingActive && !wasFollowingActiveRef.current;
         wasFollowingActiveRef.current = followingActive;
-        if (resumed && modeRef.current === "following") {
-          stickToEnd();
-          updateScrollState();
+        if (!resumed || modeRef.current !== "following") return;
+        if (userIsScrolling()) {
+          catchUpAfterInput();
+          return;
         }
-      }, [followingActive, stickToEnd, updateScrollState]);
+        stickToEnd();
+        updateScrollState();
+      }, [
+        followingActive,
+        userIsScrolling,
+        catchUpAfterInput,
+        stickToEnd,
+        updateScrollState,
+      ]);
 
       // Expose scrollToBottom via ref
       useImperativeHandle(ref, () => ({ scrollToBottom }), [scrollToBottom]);
@@ -509,7 +562,9 @@ const ChatScrollContainer = React.memo(
           rafId = requestAnimationFrame(() => {
             rafId = null;
             observeLatestTurnRows();
-            if (modeRef.current === "following" && !userIsScrolling()) {
+            if (modeRef.current === "following" && userIsScrolling()) {
+              catchUpAfterInput();
+            } else if (modeRef.current === "following") {
               if (autoScrollRef.current && !pauseFollowingRef.current) {
                 stickToEnd();
               } else if (
@@ -568,6 +623,7 @@ const ChatScrollContainer = React.memo(
         };
       }, [
         userIsScrolling,
+        catchUpAfterInput,
         stickToEnd,
         updateScrollState,
         savePosition,
@@ -582,13 +638,19 @@ const ChatScrollContainer = React.memo(
       useLayoutEffect(() => {
         const container = scrollContainerRef.current;
         if (!container) return;
-        if (placedForRef.current?.key === sessionId) return;
+        if (placedForRef.current && placedForRef.current.key === sessionId) {
+          return;
+        }
 
         // A new chat: reset before placing it.
         if (placedForRef.current) {
           setIsScrollReady(false);
           cancelGlide();
+          cancelCatchUp();
           modeRef.current = "following";
+          // A chat with no messages is never placed, so a return to the
+          // previous chat must not match its record.
+          placedForRef.current = null;
         }
         // No messages yet: nothing to place, so show the view.
         if (!anchorSelector) {
@@ -630,6 +692,7 @@ const ChatScrollContainer = React.memo(
         anchorSelector,
         buttonThresholdPx,
         cancelGlide,
+        cancelCatchUp,
         stickToEnd,
         updateScrollState,
       ]);

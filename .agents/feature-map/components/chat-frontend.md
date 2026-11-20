@@ -716,7 +716,7 @@ up its own branding.
     production caller.** Grouping happens in `processPackets`
     ([[#packet-list-append-only]]).
 
-15. `scroll-follow-intent` **Only the user's input changes the scroll mode.**
+15. `scroll-follow-intent` **The user's input sets the scroll mode; layout keeps it.**
     `lib/chatScroll/components/ChatScrollContainer.tsx` is in one of three
     modes: `following` keeps to the end as content grows; `reading` never moves
     (native scroll anchoring keeps the content still); `gliding` is its own
@@ -724,14 +724,16 @@ up its own branding.
     a timeout. A scroll event is the user's only within 600ms of scroll input
     (wheel, touch, scroll keys, a focus move into the view), or while a pointer
     is held on the view; each such move restarts the 600ms, so a fling stays the
-    user's while it moves. Then the position sets the mode. Any other move is
-    layout (Firefox clamps the position while content briefly shrinks, anchoring
-    adjusts, a glide runs), and only a `following` view reacts, by returning to
-    the end. With auto-scroll off while a reply runs, growth that leaves the end
-    makes the view `reading`, so a later resume never jumps; the typewriter's
-    drain is a pause (`pauseFollowing`), and the view catches up when it ends.
-    Do not write `scrollTop` while the user scrolls, and keep native scroll
-    anchoring on: a script write stops a trackpad fling.
+    user's while it moves. Then the position sets the mode. A glide ignores
+    input from before it started. Any other move is layout (Firefox clamps the
+    position while content briefly shrinks, anchoring adjusts, a glide runs),
+    and only a `following` view reacts, by returning to the end. The one
+    exception: with auto-scroll off while a reply runs, growth that leaves the
+    end makes the view `reading`, so a later resume never jumps. The
+    typewriter's drain is a pause (`pauseFollowing`), and the view catches up
+    when it ends. Do not write `scrollTop` while the user scrolls: a following
+    view catches up once the input settles. Keep native scroll anchoring on: a
+    script write stops a trackpad fling.
     **Turn anchoring is layout.** `sections/chat/ChatUI.tsx` groups each turn (a
     user message and its replies) in a `data-chat-turn` element. The latest turn
     has `min-height: calc(100cqh - 3rem)` (the scroll element is a size
