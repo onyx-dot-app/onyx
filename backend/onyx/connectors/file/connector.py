@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import IO, Any
@@ -351,6 +351,9 @@ class LocalFileConnector(LoadConnector):
             self._zip_metadata_file_id, self._zip_metadata_deprecated
         )
         metadata_uploaded_at = zip_metadata_uploaded_at(self._zip_metadata_file_id)
+        if not self._zip_metadata_file_id and self._zip_metadata_deprecated:
+            # Inline metadata has no upload time, so keep the old always-advance date.
+            metadata_uploaded_at = datetime.now(timezone.utc)
 
         documents: list[Document | HierarchyNode] = []
 

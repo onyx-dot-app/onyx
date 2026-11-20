@@ -26,6 +26,7 @@ def _load(
     file_record: FileRecord,
     zip_metadata: dict[str, Any] | None = None,
     metadata_record: FileRecord | None = None,
+    inline_metadata: dict[str, Any] | None = None,
 ) -> list[Document]:
     records = {file_record.file_id: file_record}
     if metadata_record is not None:
@@ -36,6 +37,7 @@ def _load(
     connector = LocalFileConnector(
         file_locations=[file_record.file_id],
         zip_metadata_file_id=metadata_record.file_id if metadata_record else None,
+        zip_metadata=inline_metadata,
     )
     with (
         patch(f"{MODULE}.get_default_file_store", return_value=store),
@@ -99,6 +101,20 @@ def test_metadata_only_edit_is_indexed() -> None:
 
     assert first.doc_updated_at == old_metadata.created_at
     assert second.doc_updated_at == new_metadata.created_at
+    to_update = get_docs_to_update(
+        [second], db_docs=[_stored(first)], ignore_timestamp_gate=True
+    )
+    assert to_update.updatable_docs == [second]
+
+
+def test_inline_metadata_edit_is_indexed() -> None:
+    record = _record(UPLOADED_AT)
+    old_metadata = {"notes.txt": {"link": "https://a.example"}}
+    new_metadata = {"notes.txt": {"link": "https://b.example"}}
+
+    (first,) = _load(record, old_metadata, inline_metadata=old_metadata)
+    (second,) = _load(record, new_metadata, inline_metadata=new_metadata)
+
     to_update = get_docs_to_update(
         [second], db_docs=[_stored(first)], ignore_timestamp_gate=True
     )
