@@ -96,9 +96,10 @@ export default function AddIntegrationPage({ from }: AddIntegrationPageProps) {
   const [showErrors, setShowErrors] = useState(false);
   const [name, setName] = useState(prefill?.name ?? "");
   const [description, setDescription] = useState("");
-  const [forOrganization, setForOrganization] = useState(
-    canChooseOrganization && prefill?.forOrganization === true
-  );
+  // Null until the user picks: the prefill decides, also when the
+  // permission loads after the first render.
+  const [ownerChoice, setForOrganization] = useState<boolean | null>(null);
+  const forOrganization = ownerChoice ?? prefill?.forOrganization === true;
   const [signIn, setSignIn] = useState<SignInDraft>(DEFAULT_SIGN_IN);
   const [signInTouched, setSignInTouched] = useState(false);
   const [serverUrl, setServerUrl] = useState(prefill?.serverUrl ?? "");
