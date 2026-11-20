@@ -148,7 +148,6 @@ export default function MarketplaceDetailModal({
   }
 
   const name = marketplace?.name ?? "";
-  const syncing = marketplace?.syncing ?? false;
 
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && !busy && onClose()}>
@@ -183,7 +182,7 @@ export default function MarketplaceDetailModal({
           {marketplace?.can_manage && (
             <Button
               icon={SvgRefreshCw}
-              disabled={busy || syncing}
+              disabled={busy}
               onClick={() =>
                 void run(
                   () => syncMarketplace(marketplaceId),

@@ -68,7 +68,7 @@ test("a failed sync shows its reason and offers Sync now", async () => {
   );
 });
 
-test("a running sync disables Sync now", async () => {
+test("a running sync still offers Sync now, which queues another pass", async () => {
   mockFetch({
     "/api/marketplaces": { marketplaces: [summaryFixture({ syncing: true })] },
   });
@@ -81,7 +81,7 @@ test("a running sync disables Sync now", async () => {
   );
   expect(
     await screen.findByRole("menuitem", { name: /Sync now/ })
-  ).toHaveAttribute("aria-disabled", "true");
+  ).not.toHaveAttribute("aria-disabled", "true");
 });
 
 test("a marketplace that never synced offers Sync now", async () => {
