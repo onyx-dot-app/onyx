@@ -45,7 +45,11 @@ The model gets a notice that names the files that Onyx did not copy.
 
 Users can upload source code, script, and config files, for example `.py`, `.js`, `.ts`, `.sh`, `.go`, `.ipynb`,
 and `.toml`. Onyx stores these files but does not index them, so search does not find them.
-The model reads the text of the file in the prompt, and the code can run it.
+A code file attached to a chat message goes into the prompt as text, and the code can run it.
+Project and agent files go into the prompt only when all of them fit in the context budget. If they do not fit,
+the model does not get their text, and search cannot find code files.
+The model can then read a code file only with the Code Interpreter,
+so turn it on for agents that use large projects with code.
 Onyx rejects a code file that is not text or that is larger than the file token limit.
 
 The full list of extensions is `.py`, `.ipynb`, `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.tsx`, `.sh`, `.bash`, `.zsh`,
