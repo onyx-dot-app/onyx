@@ -57,17 +57,32 @@ class ParallelSearchClient(WebSearchProvider):
         return False
 
     def _build_request_body(self, query: str) -> dict[str, Any]:
-        cleaned_query, full_domains = extract_site_operators(query)
+        site_operators = extract_site_operators(query)
+        include_domains = [
+            d.removeprefix("www.") for d in site_operators.include_domains
+        ]
+        exclude_domains = [
+            d.removeprefix("www.") for d in site_operators.exclude_domains
+        ]
         advanced_settings: dict[str, Any] = {"max_results": self._num_results}
-        if full_domains:
-            advanced_settings["source_policy"] = {
-                "include_domains": [d.removeprefix("www.") for d in full_domains]
-            }
+        source_policy: dict[str, list[str]] = {}
+        if include_domains:
+            source_policy["include_domains"] = include_domains
+        if exclude_domains:
+            source_policy["exclude_domains"] = exclude_domains
+        if source_policy:
+            advanced_settings["source_policy"] = source_policy
         if self._location:
             advanced_settings["location"] = self._location
+
+        mode = self._mode
+        # Turbo mode does not support domain/path prefixes in source_policy.
+        if mode == "turbo" and any("/" in d for d in include_domains + exclude_domains):
+            mode = "fast"
+
         return {
-            "search_queries": [cleaned_query or query],
-            "mode": self._mode,
+            "search_queries": [site_operators.query or query],
+            "mode": mode,
             "advanced_settings": advanced_settings,
         }
 

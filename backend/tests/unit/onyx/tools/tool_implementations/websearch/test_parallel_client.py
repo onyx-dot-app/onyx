@@ -161,6 +161,50 @@ def test_search_maps_site_operator_to_include_domains(
     }
 
 
+def test_search_maps_negative_site_operator_to_exclude_domains(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = ParallelSearchClient(api_key="test-key", num_results=5)
+    captured: dict[str, Any] = {}
+
+    def _mock_post(*args: Any, **kwargs: Any) -> DummyResponse:  # noqa: ARG001
+        captured.update(kwargs["json"])
+        return _empty_ok()
+
+    monkeypatch.setattr(parallel_module.requests, "post", _mock_post)
+
+    client.search("release notes -site:spam.example.com")
+
+    assert captured["search_queries"] == ["release notes"]
+    assert captured["advanced_settings"]["source_policy"] == {
+        "exclude_domains": ["spam.example.com"]
+    }
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_mode"),
+    [
+        ("release notes site:onyx.app/blog", "fast"),
+        ("release notes site:onyx.app", "turbo"),
+    ],
+)
+def test_turbo_mode_falls_back_to_fast_for_path_filters(
+    monkeypatch: pytest.MonkeyPatch, query: str, expected_mode: str
+) -> None:
+    client = ParallelSearchClient(api_key="test-key", mode="turbo")
+    captured: dict[str, Any] = {}
+
+    def _mock_post(*args: Any, **kwargs: Any) -> DummyResponse:  # noqa: ARG001
+        captured.update(kwargs["json"])
+        return _empty_ok()
+
+    monkeypatch.setattr(parallel_module.requests, "post", _mock_post)
+
+    client.search(query)
+
+    assert captured["mode"] == expected_mode
+
+
 def test_supports_site_filter() -> None:
     assert ParallelSearchClient(api_key="test-key").supports_site_filter is False
 

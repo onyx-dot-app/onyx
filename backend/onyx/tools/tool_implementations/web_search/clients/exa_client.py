@@ -137,7 +137,9 @@ class ExaClient(WebSearchProvider, WebContentProvider):
 
     @retry_builder(tries=3, delay=1, backoff=2)
     def search(self, query: str) -> list[WebSearchResult]:
-        cleaned_query, full_domains = extract_site_operators(query)
+        site_operators = extract_site_operators(query)
+        cleaned_query = site_operators.query or query
+        full_domains = site_operators.include_domains
 
         if full_domains:
             # Try with include_domains using base domains (e.g., ["reddit.com"])
