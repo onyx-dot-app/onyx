@@ -193,7 +193,7 @@
   rendered page. Each card shows only its file; a later publish of the
   same path adds a card of its own. Cards that show one name also show their
   `display_path`, which the backend sends: relative to the chat's working
-  directory. The path shows under the title, before the type and size, in an
+  directory, or the whole path outside it. The path shows under the title, before the type and size, in an
   LTR code span, and the type shows only for an extension of ASCII letters
   and digits. The timeline step lists the
   files that the call asked for and how it ended. Shared chats show the same
