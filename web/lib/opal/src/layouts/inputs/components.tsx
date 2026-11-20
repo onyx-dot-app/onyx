@@ -1,7 +1,7 @@
 "use client";
 
 import "@opal/layouts/inputs/styles.css";
-import { useContext, useState } from "react";
+import { useContext } from "react";
 import { useField, FormikContext } from "formik";
 import type {
   IconFunctionComponent,
@@ -13,7 +13,10 @@ import { Text, Divider, type BadgeProps } from "@opal/components";
 import { isRichStr } from "@opal/components/text/InlineMarkdown";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { Content, ContentAction, Section } from "@opal/layouts";
-import { InputRowProvider } from "@opal/components/inputs/disabled";
+import {
+  InputRowProvider,
+  useRowHover,
+} from "@opal/components/inputs/disabled";
 
 // ---------------------------------------------------------------------------
 // Label
@@ -168,7 +171,7 @@ function Vertical({
   error,
   warning,
 }: VerticalProps) {
-  const [hovered, setHovered] = useState(false);
+  const rowHover = useRowHover();
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
@@ -210,8 +213,8 @@ function Vertical({
       className="opal-input-layout"
       data-disabled={disabled || undefined}
       // The row's hover opens the input's tooltip (`disabledTooltip`).
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
+      onPointerEnter={rowHover.onPointerEnter}
+      onPointerLeave={rowHover.onPointerLeave}
     >
       {titleRow}
       {children}
@@ -232,7 +235,7 @@ function Vertical({
       fieldName={fieldName}
       disabled={disabled}
       disabledTooltip={disabledTooltip}
-      hovered={hovered}
+      hovered={rowHover.hovered}
     >
       {content}
     </InputRow>
@@ -280,7 +283,7 @@ function Horizontal({
   error,
   warning,
 }: HorizontalProps) {
-  const [hovered, setHovered] = useState(false);
+  const rowHover = useRowHover();
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
@@ -292,8 +295,8 @@ function Horizontal({
       className="opal-input-layout"
       data-disabled={disabled || undefined}
       // The row's hover opens the input's tooltip (`disabledTooltip`).
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
+      onPointerEnter={rowHover.onPointerEnter}
+      onPointerLeave={rowHover.onPointerLeave}
     >
       <ContentAction
         font="main-ui-action"
@@ -319,7 +322,7 @@ function Horizontal({
       fieldName={fieldName}
       disabled={disabled}
       disabledTooltip={disabledTooltip}
-      hovered={hovered}
+      hovered={rowHover.hovered}
     >
       {content}
     </InputRow>

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Tooltip } from "@opal/components/tooltip/components";
 import type { RichStr } from "@opal/types";
 
@@ -41,6 +41,49 @@ function InputRowProvider({
       {children}
     </InputRowContext.Provider>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Row hover
+// ---------------------------------------------------------------------------
+
+/** Radix's default hover delay, which the app's other tooltips use. */
+const ROW_HOVER_DELAY_MS = 700;
+
+interface RowHover {
+  hovered: boolean;
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
+}
+
+/**
+ * The row's hover, for its input's tooltip. It turns on after the same delay
+ * as a hover tooltip, and off at once when the pointer leaves.
+ */
+function useRowHover(): RowHover {
+  const [hovered, setHovered] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearTimer() {
+    if (timer.current !== null) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  }
+
+  useEffect(() => clearTimer, []);
+
+  return {
+    hovered,
+    onPointerEnter: () => {
+      clearTimer();
+      timer.current = setTimeout(() => setHovered(true), ROW_HOVER_DELAY_MS);
+    },
+    onPointerLeave: () => {
+      clearTimer();
+      setHovered(false);
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +136,7 @@ function InputTooltip({ tooltip, children }: InputTooltipProps) {
 
 export {
   InputRowProvider,
+  useRowHover,
   useInputDisabled,
   InputTooltip,
   type InputRowState,
