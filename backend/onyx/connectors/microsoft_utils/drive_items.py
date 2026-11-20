@@ -48,7 +48,12 @@ from onyx.connectors.microsoft_utils.request_pacer import (
     MicrosoftCall,
     MicrosoftRequestPacer,
 )
-from onyx.connectors.models import ImageSection, TabularSection, TextSection
+from onyx.connectors.models import (
+    ConnectorStopSignal,
+    ImageSection,
+    TabularSection,
+    TextSection,
+)
 from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
 from onyx.file_processing.image_utils import (
@@ -648,6 +653,8 @@ def extract_drive_item_content(
                 driveitem.name,
             )
             return None
+        except ConnectorStopSignal:
+            raise
         except Exception as e:
             scrubbed = scrub_url_credentials(str(e))
             logger.warning(
