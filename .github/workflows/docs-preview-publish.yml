@@ -77,7 +77,7 @@ jobs:
       - if: >-
           steps.config.outputs.ready == 'true' && env.BUILD_CONCLUSION == 'success'
           && steps.latest.outputs.outdated != 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # ratchet:actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # ratchet:actions/download-artifact@v4
         with:
           name: docs-preview
           path: ${{ runner.temp }}/docs-preview
