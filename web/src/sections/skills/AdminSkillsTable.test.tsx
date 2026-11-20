@@ -88,3 +88,29 @@ test("Share and Delete call back for an editor, and a viewer gets no Share", asy
     screen.queryByRole("menuitem", { name: "Share" })
   ).not.toBeInTheDocument();
 });
+
+test("marks unpublished changes when the live version is older", () => {
+  const current = customFixture({
+    id: "current",
+    name: "lint-rules",
+    current_version_number: 2,
+    published_version_number: 2,
+  });
+  renderTable([
+    { ...published, installation_policy: "AVAILABLE" },
+    current,
+    viewed,
+  ]);
+  expect(
+    within(screen.getByRole("row", { name: "Open weekly-report" })).getByText(
+      "Unpublished changes"
+    )
+  ).toBeVisible();
+  for (const name of ["lint-rules", "sql-helper"]) {
+    expect(
+      within(screen.getByRole("row", { name: `Open ${name}` })).queryByText(
+        "Unpublished changes"
+      )
+    ).not.toBeInTheDocument();
+  }
+});
