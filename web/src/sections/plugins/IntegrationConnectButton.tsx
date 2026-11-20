@@ -24,6 +24,8 @@ interface IntegrationConnectButtonProps {
   returnPath: string;
   allowDisconnect?: boolean;
   onConnected?: () => void;
+  /** Called when a connect attempt fails or is abandoned. */
+  onConnectFailed?: () => void;
 }
 
 /** Connect, Reconnect, Disconnect or "Ask your admin" for one integration. */
@@ -32,6 +34,7 @@ export default function IntegrationConnectButton({
   returnPath,
   allowDisconnect = false,
   onConnected,
+  onConnectFailed,
 }: IntegrationConnectButtonProps) {
   const t = useTranslations("plugins.member.connection");
   const { mutate } = useSWRConfig();
@@ -72,6 +75,7 @@ export default function IntegrationConnectButton({
               ? error.message
               : t("failed"))
         );
+      onConnectFailed?.();
       await refresh();
     } finally {
       setBusy(false);
@@ -138,6 +142,7 @@ export default function IntegrationConnectButton({
           integration={integration}
           onClose={() => {
             setCredentialsOpen(false);
+            onConnectFailed?.();
             window.requestAnimationFrame(() =>
               connectRef.current?.querySelector("button")?.focus()
             );

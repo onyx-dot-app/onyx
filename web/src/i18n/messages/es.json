@@ -17380,6 +17380,8 @@
       "adminDescription": "Los miembros deben conectar estas integraciones antes de usar Onyx. Puedes continuar sin ellas porque eres administrador.",
       "connected": "Conectada",
       "progress": "{connected} de {total} conectadas",
+      "askAdmin": "¿No puede conectar {name}? Pida ayuda a su administrador. Puede omitirlo por ahora.",
+      "skip": "Omitir por ahora",
       "continue": "Continuar",
       "signOut": "Cerrar sesión",
       "signOutFailed": "No se pudo cerrar la sesión. Inténtalo de nuevo."

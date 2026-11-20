@@ -17380,6 +17380,8 @@
       "adminDescription": "成员必须先连接这些集成才能使用 Onyx。您是管理员，因此可以不连接直接继续。",
       "connected": "已连接",
       "progress": "已连接 {connected}/{total}",
+      "askAdmin": "无法连接 {name}？请联系管理员寻求帮助。您可以暂时跳过。",
+      "skip": "暂时跳过",
       "continue": "继续",
       "signOut": "退出登录",
       "signOutFailed": "无法退出登录，请重试。"

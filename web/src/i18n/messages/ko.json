@@ -17380,6 +17380,8 @@
       "adminDescription": "멤버는 Onyx를 사용하기 전에 이 연동을 연결해야 합니다. 관리자이므로 연결하지 않고 계속할 수 있습니다.",
       "connected": "연결됨",
       "progress": "{total}개 중 {connected}개 연결됨",
+      "askAdmin": "{name}에 연결할 수 없나요? 관리자에게 도움을 요청하세요. 지금은 건너뛸 수 있습니다.",
+      "skip": "지금은 건너뛰기",
       "continue": "계속",
       "signOut": "로그아웃",
       "signOutFailed": "로그아웃하지 못했습니다. 다시 시도하세요."

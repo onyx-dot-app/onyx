@@ -17380,6 +17380,8 @@
       "adminDescription": "Mitglieder müssen diese Integrationen verbinden, bevor sie Onyx nutzen können. Als Admin können Sie ohne sie fortfahren.",
       "connected": "Verbunden",
       "progress": "{connected} von {total} verbunden",
+      "askAdmin": "{name} lässt sich nicht verbinden? Bitten Sie Ihren Administrator um Hilfe. Sie können diesen Schritt vorerst überspringen.",
+      "skip": "Vorerst überspringen",
       "continue": "Weiter",
       "signOut": "Abmelden",
       "signOutFailed": "Abmelden fehlgeschlagen. Versuchen Sie es erneut."

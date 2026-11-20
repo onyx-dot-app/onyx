@@ -248,3 +248,42 @@ test("a failed read does not block the user", async () => {
   await waitFor(() => expect(fetchMock).toHaveBeenCalled());
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
+
+test("a member who cannot connect can skip the gate for the browser session", async () => {
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  mockFetch({ "/api/integrations": () => [required] });
+
+  const { unmount } = render(<RequiredIntegrationGate />);
+
+  const gate = await screen.findByRole("dialog", { name: copy.title });
+  expect(
+    within(gate).queryByRole("button", { name: copy.skip })
+  ).not.toBeInTheDocument();
+
+  await user.click(
+    within(gate).getByRole("button", { name: "Connect Reports API" })
+  );
+  await screen.findByRole("dialog", { name: /^Connect Reports API/ });
+  await user.keyboard("{Escape}");
+
+  expect(
+    await within(gate).findByText(
+      copy.askAdmin.replace("{name}", "Reports API")
+    )
+  ).toBeInTheDocument();
+  await user.click(within(gate).getByRole("button", { name: copy.skip }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("dialog", { name: copy.title })
+    ).not.toBeInTheDocument()
+  );
+
+  expect(window.sessionStorage.getItem("onyx:required-gate-dismissed")).toBe(
+    "user-1"
+  );
+  unmount();
+  render(<RequiredIntegrationGate />);
+  expect(
+    screen.queryByRole("dialog", { name: copy.title })
+  ).not.toBeInTheDocument();
+});

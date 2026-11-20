@@ -25,19 +25,19 @@ import { useUser } from "@/providers/UserProvider";
 import IntegrationConnectButton from "@/sections/plugins/IntegrationConnectButton";
 
 const LOGO_SIZE_PX = 44;
-const ADMIN_DISMISSED_KEY = "onyx:required-gate-dismissed";
+const DISMISSED_KEY = "onyx:required-gate-dismissed";
 
-function readAdminDismissed(userId: string): boolean {
+function readDismissed(userId: string): boolean {
   try {
-    return window.sessionStorage.getItem(ADMIN_DISMISSED_KEY) === userId;
+    return window.sessionStorage.getItem(DISMISSED_KEY) === userId;
   } catch {
     return false;
   }
 }
 
-function storeAdminDismissed(userId: string): void {
+function storeDismissed(userId: string): void {
   try {
-    window.sessionStorage.setItem(ADMIN_DISMISSED_KEY, userId);
+    window.sessionStorage.setItem(DISMISSED_KEY, userId);
   } catch {}
 }
 
@@ -57,9 +57,7 @@ function GateForUser({ userId }: { userId: string }) {
   // the last data.
   const { data } = useMemberIntegrations();
   const [trackedIds, setTrackedIds] = useState<number[]>([]);
-  const [adminDismissed, setAdminDismissed] = useState(() =>
-    readAdminDismissed(userId)
-  );
+  const [dismissed, setDismissed] = useState(() => readDismissed(userId));
 
   const blockingIds = useMemo(
     () =>
@@ -91,7 +89,12 @@ function GateForUser({ userId }: { userId: string }) {
     });
   }, [trackedIds, blockingIds, data]);
 
-  if ((isAdmin && adminDismissed) || rows.length === 0) return null;
+  if (dismissed || rows.length === 0) return null;
+
+  function dismiss() {
+    storeDismissed(userId);
+    setDismissed(true);
+  }
 
   return (
     <RequiredIntegrationGateView
@@ -99,11 +102,10 @@ function GateForUser({ userId }: { userId: string }) {
       canContinue={isAdmin || blockingIds.length === 0}
       isAdmin={isAdmin}
       onContinue={() => {
-        if (isAdmin) {
-          storeAdminDismissed(userId);
-          setAdminDismissed(true);
-        } else setTrackedIds([]);
+        if (isAdmin) dismiss();
+        else setTrackedIds([]);
       }}
+      onSkip={dismiss}
     />
   );
 }
@@ -113,6 +115,7 @@ interface RequiredIntegrationGateViewProps {
   canContinue: boolean;
   isAdmin: boolean;
   onContinue: () => void;
+  onSkip: () => void;
 }
 
 function RequiredIntegrationGateView({
@@ -120,6 +123,7 @@ function RequiredIntegrationGateView({
   canContinue,
   isAdmin,
   onContinue,
+  onSkip,
 }: RequiredIntegrationGateViewProps) {
   const t = useTranslations("integrations.requiredGate");
   const navigation = useNavigation();
@@ -127,6 +131,7 @@ function RequiredIntegrationGateView({
   const query = useSearchParams().toString();
   const returnPath = query ? `${pathname}?${query}` : pathname;
   const containerRef = useRef<HTMLDivElement>(null);
+  const [failedName, setFailedName] = useState<string | null>(null);
   const connectedCount = integrations.filter(
     (integration) => integration.status.state === "connected"
   ).length;
@@ -197,6 +202,7 @@ function RequiredIntegrationGateView({
                       <GateRow
                         integration={integration}
                         returnPath={returnPath}
+                        onConnectFailed={() => setFailedName(integration.name)}
                       />
                     </Section>
                   ))}
@@ -221,6 +227,25 @@ function RequiredIntegrationGateView({
                 >
                   {t("continue")}
                 </Button>
+                {failedName !== null && !canContinue && (
+                  <>
+                    <Text
+                      as="p"
+                      font="secondary-body"
+                      color="text-03"
+                      textPosition="text-center"
+                    >
+                      {t("askAdmin", { name: failedName })}
+                    </Text>
+                    <Button
+                      width="full"
+                      prominence="secondary"
+                      onClick={onSkip}
+                    >
+                      {t("skip")}
+                    </Button>
+                  </>
+                )}
                 {!LOGOUT_DISABLED && (
                   <Button
                     width="full"
@@ -243,9 +268,10 @@ function RequiredIntegrationGateView({
 interface GateRowProps {
   integration: MemberIntegration;
   returnPath: string;
+  onConnectFailed: () => void;
 }
 
-function GateRow({ integration, returnPath }: GateRowProps) {
+function GateRow({ integration, returnPath, onConnectFailed }: GateRowProps) {
   const t = useTranslations("integrations.requiredGate");
   const connected = integration.status.state === "connected";
   const note = connected
@@ -289,6 +315,7 @@ function GateRow({ integration, returnPath }: GateRowProps) {
           <IntegrationConnectButton
             integration={integration}
             returnPath={returnPath}
+            onConnectFailed={onConnectFailed}
           />
         </Section>
       )}

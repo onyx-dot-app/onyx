@@ -173,7 +173,10 @@ Each row reuses `IntegrationConnectButton` and shows `status.reason` when it nee
 stays after it connects (`status.state` is `connected`), and a count shows how many
 rows are connected. A row that stops being required with no connection leaves the
 gate. Continue opens when no row needs a sign-in. An admin can continue at once; the
-choice is kept in `sessionStorage` for the browser tab. The gate renders nothing for
+choice is kept in `sessionStorage` for the browser tab. After a member's
+connect attempt fails or is abandoned (`IntegrationConnectButton` `onConnectFailed`:
+an OAuth error or cancel, or the credentials modal closed), the gate shows an
+"ask your admin" line and Skip for now, which uses the same `sessionStorage` key. The gate renders nothing for
 an anonymous user, until the first `GET /integrations` succeeds (a failed refresh
 keeps the last list), and on an OAuth callback path
 (`lib/oauth/desktopCallback.ts:isOAuthCallbackPath`), so a sign-in can finish.

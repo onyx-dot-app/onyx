@@ -17380,6 +17380,8 @@
       "adminDescription": "メンバーは Onyx を使う前にこれらの連携を接続する必要があります。管理者なので、接続せずに続行できます。",
       "connected": "接続済み",
       "progress": "{total} 件中 {connected} 件接続済み",
+      "askAdmin": "{name} に接続できない場合は、管理者に相談してください。今はスキップできます。",
+      "skip": "今はスキップ",
       "continue": "続行",
       "signOut": "サインアウト",
       "signOutFailed": "サインアウトできませんでした。もう一度お試しください。"

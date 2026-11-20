@@ -17380,6 +17380,8 @@
       "adminDescription": "Les membres doivent connecter ces intégrations avant d'utiliser Onyx. Vous pouvez continuer sans elles, car vous êtes administrateur.",
       "connected": "Connectée",
       "progress": "{connected} sur {total} connectées",
+      "askAdmin": "Impossible de connecter {name} ? Demandez de l'aide à votre administrateur. Vous pouvez passer cette étape pour l'instant.",
+      "skip": "Passer pour l'instant",
       "continue": "Continuer",
       "signOut": "Se déconnecter",
       "signOutFailed": "Impossible de se déconnecter. Réessayez."
