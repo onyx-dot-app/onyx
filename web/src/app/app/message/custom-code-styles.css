@@ -355,15 +355,16 @@ pre[class*="language-"] {
   padding-inline-end: 0.75rem;
 }
 
-/* The table sizes to its content and fills at least the column. Cells wrap
-   past 20rem, so a short table fits and a table with many long columns
-   scrolls instead of squeezing every column narrow. */
+/* The table sizes to its content and fills at least the column. Long text
+   wraps at 16rem, so several columns show at once and a wider table
+   scrolls instead of squeezing every column narrow. A table
+   narrower than the column spreads the spare width across its cells. */
 .markdown-table-breakout table {
   width: max-content;
   min-width: 100%;
 }
 .markdown-table-breakout :is(th, td) {
-  max-width: 20rem;
+  max-width: 16rem;
   vertical-align: top;
   /* A long URL or path breaks inside the cell instead of widening it. */
   overflow-wrap: anywhere;
