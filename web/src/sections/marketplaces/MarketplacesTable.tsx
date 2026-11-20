@@ -133,7 +133,7 @@ export default function MarketplacesTable() {
             id: "sync",
             icon: SvgRefreshCw,
             title: t("sync.now"),
-            disabled,
+            disabled: disabled || row.syncing,
             onSelect: () => syncNow(row),
           },
           ...(row.scope === "company"

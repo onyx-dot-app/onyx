@@ -967,9 +967,8 @@ the app from the same rule
     A running sync extends the lock and the key between steps (read, each
     other repository, each staged bundle, apply) and stops after 30 minutes,
     so a killed worker frees the marketplace within 5 minutes.
-    `request_marketplace_sync` sends no task while one is queued; during a run
-    it sets `marketplace_sync_rerun:{id}`, and the run syncs once more before
-    it ends. A sync whose lock expired writes nothing. A folder URL
+    `request_marketplace_sync` does nothing while `marketplace_syncing` is
+    true, and the web turns Sync now off then. A sync whose lock expired writes nothing. A folder URL
     (`.../tree/<ref>/<folder>`) and `github.com/owner/repo` fill the ref and
     the folder. A personal add of a source that a company marketplace has is
     refused with CONFLICT. A missing branch and a missing repository give

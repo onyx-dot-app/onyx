@@ -305,10 +305,6 @@ def _running_key(marketplace_id: UUID) -> str:
     return f"marketplace_syncing:{marketplace_id}"
 
 
-def _rerun_key(marketplace_id: UUID) -> str:
-    return f"marketplace_sync_rerun:{marketplace_id}"
-
-
 def _lock_heartbeat(marketplace_id: UUID, lock: CacheLock | None) -> Heartbeat:
     """Renews the lock and the running key, and raises CacheLockLostError when
     the lock is gone or the sync ran too long."""
@@ -349,43 +345,27 @@ def _sync_once(marketplace_id: UUID, lock: CacheLock) -> None:
 
 
 def run_marketplace_sync(marketplace_id: UUID) -> None:
-    """Runs again while a Sync now came in during the run."""
     cache = get_cache_backend()
-    while True:
-        lock = cache.lock(_lock_name(marketplace_id), timeout=SYNC_LOCK_TIMEOUT_SECONDS)
-        if not lock.acquire(blocking=False):
-            return
-        try:
-            cache.delete(_queued_key(marketplace_id))
-            while True:
-                cache.delete(_rerun_key(marketplace_id))
-                cache.set(
-                    _running_key(marketplace_id), b"1", ex=SYNC_LOCK_TIMEOUT_SECONDS
-                )
-                _sync_once(marketplace_id, lock)
-                if not lock.owned() or not cache.exists(_rerun_key(marketplace_id)):
-                    break
-        finally:
-            # Only the lock owner clears the flag; a newer run may own it now.
-            if lock.owned():
-                cache.delete(_running_key(marketplace_id))
-                lock.release()
-        if not cache.exists(_rerun_key(marketplace_id)):
-            return
+    lock = cache.lock(_lock_name(marketplace_id), timeout=SYNC_LOCK_TIMEOUT_SECONDS)
+    if not lock.acquire(blocking=False):
+        return
+    try:
+        cache.delete(_queued_key(marketplace_id))
+        cache.set(_running_key(marketplace_id), b"1", ex=SYNC_LOCK_TIMEOUT_SECONDS)
+        _sync_once(marketplace_id, lock)
+    finally:
+        # Only the lock owner clears the flag; a newer run may own it now.
+        if lock.owned():
+            cache.delete(_running_key(marketplace_id))
+            lock.release()
 
 
 def request_marketplace_sync(
     marketplace_id: UUID, background_tasks: BackgroundTasks
 ) -> None:
-    """A request during a run makes the run sync once more when it ends."""
-    cache = get_cache_backend()
-    if cache.exists(_queued_key(marketplace_id)):
+    """A request while a sync is queued or running does nothing."""
+    if marketplace_syncing(marketplace_id):
         return
-    if cache.exists(_running_key(marketplace_id)):
-        cache.set(_rerun_key(marketplace_id), b"1", ex=SYNC_TASK_EXPIRES_SECONDS)
-        # The run may have ended before it saw the request.
-        if cache.exists(_running_key(marketplace_id)):
-            return
     enqueue_marketplace_sync(marketplace_id, background_tasks)
 
 
