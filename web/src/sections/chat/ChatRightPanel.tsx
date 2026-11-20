@@ -15,6 +15,7 @@ import { Button } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgFiles, SvgSearchMenu, SvgX } from "@opal/icons";
 import { cn, richNodes } from "@opal/utils";
+import type { MessageTreeState } from "@/app/app/services/messageTree";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import {
   useChatSessionStore,
@@ -23,6 +24,7 @@ import {
 import { useCurrentPublishedFiles } from "@/lib/chat/hooks";
 import {
   filesSharingALabel,
+  type LoadedPublishedFiles,
   publishOrder,
   publishedFileLabel,
   publishedFilePath,
@@ -66,7 +68,7 @@ interface ChatRightPanelProps {
   // The newest publish of each path, newest first
   files: PublishedFile[];
   // The place of each of the chat's files in publish order, by file ID
-  publishOrder: ReadonlyMap<string, number>;
+  publishIndex: ReadonlyMap<string, number>;
   // The Sources tab's content; `hasSources` says whether it has any
   sources: ReactNode;
   hasSources: boolean;
@@ -86,7 +88,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   state,
   dispatch,
   files,
-  publishOrder,
+  publishIndex,
   sources,
   hasSources,
 }: ChatRightPanelProps) {
@@ -128,7 +130,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   // version when the listed file of its path was published after its file.
   const sharingALabel = filesSharingALabel(state.fileTabs);
   const listedByPath = new Map(files.map((file) => [file.path, file.file_id]));
-  const publishedAt = (fileId: string) => publishOrder.get(fileId) ?? -1;
+  const publishedAt = (fileId: string) => publishIndex.get(fileId) ?? -1;
   const tabs: PanelTabItem[] = [
     ...fixedTabs,
     ...state.fileTabs.map((file): PanelTabItem => {
@@ -229,12 +231,14 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     if (!open || (previous.open && previous.shown === shown)) return;
     const body = bodyRef.current;
     if (!body) return;
+    // Without its tile, such as for an older publish of a listed path or a
+    // tile the search hides, focus goes to the Files tab
     if (returnTo !== null && shown === RIGHT_PANEL_FILES_TAB) {
-      body
-        .querySelector<HTMLElement>(
+      (
+        body.querySelector<HTMLElement>(
           `[data-published-file="${CSS.escape(returnTo)}"] [role="button"]`
-        )
-        ?.focus({ preventScroll: true });
+        ) ?? document.getElementById(panelTabDomId(shown))
+      )?.focus({ preventScroll: true });
       return;
     }
     if (inside) return;
@@ -316,7 +320,6 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                 // Only file tabs move, among themselves
                 const over = tabs[index];
                 if (!over) return;
-                insideChangeRef.current = true;
                 dispatch({ type: "reorderTab", tabId, overTabId: over.id });
               }}
             />
@@ -432,7 +435,12 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   );
 });
 
-const NO_PUBLISH_ORDER: ReadonlyMap<string, number> = new Map();
+const NO_PUBLISH_INDEX: ReadonlyMap<string, number> = new Map();
+// The publish index of each message tree, keyed by the loads it came from
+const publishIndexes = new WeakMap<
+  MessageTreeState,
+  { loaded: LoadedPublishedFiles; index: ReadonlyMap<string, number> }
+>();
 
 interface CurrentChatRightPanelProps {
   open: boolean;
@@ -451,12 +459,19 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
   const state = useCurrentRightPanelState();
   const dispatch = useChatSessionStore.getState().updateCurrentRightPanel;
   const files = useCurrentPublishedFiles();
-  const order = useChatSessionStore(
+  // Built again only when the message tree or the loads change, not on each
+  // store update. An equal index keeps its identity, so a packet that
+  // publishes nothing renders nothing.
+  const publishIndex = useChatSessionStore(
     useShallow((store) => {
       const session = store.sessions.get(store.currentSessionId ?? "");
-      return session
-        ? publishOrder(session.loadedPublishedFiles, session.messageTree)
-        : NO_PUBLISH_ORDER;
+      if (!session) return NO_PUBLISH_INDEX;
+      const { loadedPublishedFiles: loaded, messageTree } = session;
+      const cached = publishIndexes.get(messageTree);
+      if (cached && cached.loaded === loaded) return cached.index;
+      const index = publishOrder(loaded, messageTree);
+      publishIndexes.set(messageTree, { loaded, index });
+      return index;
     })
   );
   return (
@@ -466,7 +481,7 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
       state={state}
       dispatch={dispatch}
       files={files}
-      publishOrder={order}
+      publishIndex={publishIndex}
     />
   );
 }
