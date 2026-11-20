@@ -37,6 +37,10 @@ _SMALL_CORPUS = {
     "sharing_link_fraction": 0.2,
 }
 _CONFIG = {"corpus": _SMALL_CORPUS, "latency": {"enabled": False}}
+# The module's shared server serves several full runs with permission reads
+# in one minute, which pass the smallest tier. Throttle tests use their own
+# server and set its quota.
+_SHARED_CONFIG = {**_CONFIG, "quota": {"ru_per_minute": 1_000_000}}
 
 
 class MockSharepoint(BaseModel):
@@ -186,7 +190,7 @@ class MockSharepoint(BaseModel):
 
 @pytest.fixture(scope="module")
 def mock_sharepoint_url() -> Iterator[str]:
-    process, url = start_mock_server(_CONFIG)
+    process, url = start_mock_server(_SHARED_CONFIG)
     try:
         yield url
     finally:
