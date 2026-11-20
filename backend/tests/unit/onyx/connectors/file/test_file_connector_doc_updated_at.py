@@ -23,14 +23,25 @@ def _record(created_at: datetime | None) -> FileRecord:
 
 
 def _load(
-    file_record: FileRecord, zip_metadata: dict[str, Any] | None = None
+    file_record: FileRecord,
+    zip_metadata: dict[str, Any] | None = None,
+    metadata_record: FileRecord | None = None,
 ) -> list[Document]:
+    records = {file_record.file_id: file_record}
+    if metadata_record is not None:
+        records[metadata_record.file_id] = metadata_record
     store = MagicMock()
-    store.read_file_record.return_value = file_record
+    store.read_file_record.side_effect = lambda file_id: records[file_id]
     store.read_file.return_value = BytesIO(b"hello notes")
-    connector = LocalFileConnector(file_locations=[file_record.file_id])
+    connector = LocalFileConnector(
+        file_locations=[file_record.file_id],
+        zip_metadata_file_id=metadata_record.file_id if metadata_record else None,
+    )
     with (
         patch(f"{MODULE}.get_default_file_store", return_value=store),
+        patch(
+            "onyx.connectors.file.metadata.get_default_file_store", return_value=store
+        ),
         patch(f"{MODULE}.load_zip_metadata", return_value=zip_metadata or {}),
         patch(
             "onyx.file_processing.extract_file_text.get_unstructured_api_key",
@@ -70,6 +81,28 @@ def test_rerun_over_unchanged_file_is_skipped() -> None:
         [second], db_docs=[_stored(first)], ignore_timestamp_gate=True
     )
     assert to_update.updatable_docs == []
+
+
+def test_metadata_only_edit_is_indexed() -> None:
+    record = _record(UPLOADED_AT)
+    old_metadata = FileRecord(
+        file_id="meta-1", created_at=datetime(2026, 2, 1, tzinfo=timezone.utc)
+    )
+    new_metadata = FileRecord(
+        file_id="meta-2", created_at=datetime(2026, 3, 1, tzinfo=timezone.utc)
+    )
+
+    (first,) = _load(record, {"notes.txt": {"link": "https://a.example"}}, old_metadata)
+    (second,) = _load(
+        record, {"notes.txt": {"link": "https://b.example"}}, new_metadata
+    )
+
+    assert first.doc_updated_at == old_metadata.created_at
+    assert second.doc_updated_at == new_metadata.created_at
+    to_update = get_docs_to_update(
+        [second], db_docs=[_stored(first)], ignore_timestamp_gate=True
+    )
+    assert to_update.updatable_docs == [second]
 
 
 def test_metadata_timestamp_takes_precedence() -> None:

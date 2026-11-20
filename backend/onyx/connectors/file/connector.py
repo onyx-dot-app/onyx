@@ -17,6 +17,7 @@ from onyx.connectors.file.metadata import (
     file_document_id,
     load_zip_metadata,
     zip_metadata_entry,
+    zip_metadata_uploaded_at,
 )
 from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector
 from onyx.connectors.models import (
@@ -115,7 +116,7 @@ def _process_file(
     # If a zip is uploaded with a metadata file, we can process it here
     onyx_metadata, custom_tags = process_onyx_metadata(metadata)
     file_display_name = onyx_metadata.file_display_name or os.path.basename(file_name)
-    # A stable fallback lets the content hash gate skip unchanged files.
+    # Stable unless the file or its metadata changes, so the hash gate can skip.
     time_updated = onyx_metadata.doc_updated_at or uploaded_at
     primary_owners = onyx_metadata.primary_owners
     secondary_owners = onyx_metadata.secondary_owners
@@ -349,6 +350,7 @@ class LocalFileConnector(LoadConnector):
         zip_metadata = load_zip_metadata(
             self._zip_metadata_file_id, self._zip_metadata_deprecated
         )
+        metadata_uploaded_at = zip_metadata_uploaded_at(self._zip_metadata_file_id)
 
         documents: list[Document | HierarchyNode] = []
 
@@ -374,7 +376,10 @@ class LocalFileConnector(LoadConnector):
                 stage=self.raw_file_callback,
                 skip_spreadsheet_content=self.skip_spreadsheet_content,
                 file_size=file_record.file_size,
-                uploaded_at=file_record.created_at,
+                uploaded_at=max(
+                    filter(None, [file_record.created_at, metadata_uploaded_at]),
+                    default=None,
+                ),
             )
             documents.extend(new_docs)
 
