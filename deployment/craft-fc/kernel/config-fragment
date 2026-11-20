@@ -12,3 +12,8 @@ CONFIG_CGROUP_MISC=y
 # Expose the running config at /proc/config.gz for debugging and support.
 CONFIG_IKCONFIG=y
 CONFIG_IKCONFIG_PROC=y
+
+# The template VMs' balloon returns freed guest memory to the node with free
+# page reporting. The base config has both; pin them so a base change fails.
+CONFIG_VIRTIO_BALLOON=y
+CONFIG_PAGE_REPORTING=y

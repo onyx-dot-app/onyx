@@ -3,7 +3,11 @@ from typing import cast
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.entity_type import KGEntityType
+from onyx.db.entity_type import (
+    KGEntityType,
+    add_entity_type__no_commit,
+    get_entity_type_id_names,
+)
 from onyx.db.kg_config import get_kg_config_settings, validate_kg_settings
 from onyx.kg.models import (
     KGAttributeEntityOption,
@@ -267,7 +271,7 @@ def populate_missing_default_entity_types__commit(db_session: Session) -> None:
 
     vendor_name = cast(str, kg_config_settings.KG_VENDOR)
 
-    existing_entity_types = {et.id_name for et in db_session.query(KGEntityType).all()}
+    existing_entity_types = get_entity_type_id_names(db_session)
 
     default_entity_types = get_default_entity_types(vendor_name=vendor_name)
     for entity_type_id_name, entity_type_definition in default_entity_types.items():
@@ -287,5 +291,5 @@ def populate_missing_default_entity_types__commit(db_session: Session) -> None:
             grounded_source_name=grounded_source_name,
             active=entity_type_definition.active,
         )
-        db_session.add(kg_entity_type)
+        add_entity_type__no_commit(db_session, kg_entity_type)
     db_session.commit()

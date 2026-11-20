@@ -1,6 +1,8 @@
+import copy
 import csv
 import json
 import uuid
+from collections.abc import Callable
 from io import BytesIO, StringIO
 from typing import Any, Dict, List
 
@@ -25,6 +27,8 @@ from onyx.tools.models import (
     CustomToolErrorInfo,
     CustomToolUserFileSnapshot,
     DynamicSchemaInfo,
+    IntegrationActionRef,
+    ToolApprovalScope,
     ToolCallException,
     ToolContext,
 )
@@ -81,23 +85,32 @@ def validate_custom_tool_url(url: str, *, resolve_dns: bool = True) -> None:
     )
 
 
+_OPERATION_POSITION_KEY = "x-onyx-operation-position"
+
+
 class CustomTool(Tool):
+    """One operation of an OpenAPI integration. The caller renders the
+    credential into ``custom_headers``."""
+
     def __init__(
         self,
-        id: int,
+        integration_id: int,
         method_spec: MethodSpec,
         base_url: str,
         custom_headers: list[HeaderItemDict] | None = None,
-        user_oauth_token: str | None = None,
+        approval: ToolApprovalScope | None = None,
+        # The operationId before placeholder substitution.
+        action_key: str | None = None,
     ) -> None:
-
+        self.approval = approval
+        self.integration_action = IntegrationActionRef(
+            integration_id=integration_id, action=action_key or method_spec.raw_name
+        )
         self._base_url = base_url
         self._method_spec = method_spec
-        self._user_oauth_token = user_oauth_token
-        self._id = id
 
         self._name = normalize_external_tool_name(
-            f"custom__{id}__{method_spec.raw_name}"
+            f"custom__{integration_id}__{method_spec.raw_name}"
         )
         self._tool_definition = self._method_spec.to_tool_definition().model_copy(
             update={"name": self._name}
@@ -107,22 +120,9 @@ class CustomTool(Tool):
             header_list_to_header_dict(custom_headers) if custom_headers else {}
         )
 
-        # Check for both Authorization header and OAuth token
-        has_auth_header = any(
-            key.lower() == "authorization" for key in self.headers.keys()
-        )
-        if has_auth_header and self._user_oauth_token:
-            logger.warning(
-                "Tool '%s' has both an Authorization header and OAuth token set. This is likely a configuration error as the OAuth token will override the custom header.",
-                self._name,
-            )
-
-        if self._user_oauth_token:
-            self.headers["Authorization"] = f"Bearer {self._user_oauth_token}"
-
     @property
-    def id(self) -> int:
-        return self._id
+    def id(self) -> int | None:
+        return None
 
     @property
     def code_mode_exposure(self) -> CodeModeExposure:
@@ -340,11 +340,11 @@ class CustomTool(Tool):
 
 
 def build_custom_tools_from_openapi_schema_and_headers(
-    tool_id: int,
+    integration_id: int,
     openapi_schema: dict[str, Any],
     custom_headers: list[HeaderItemDict] | None = None,
     dynamic_schema_info: DynamicSchemaInfo | None = None,
-    user_oauth_token: str | None = None,
+    approval_for: Callable[[str], ToolApprovalScope | None] | None = None,
 ) -> list[CustomTool]:
     """Build CustomTool instances from an OpenAPI schema.
 
@@ -361,10 +361,19 @@ def build_custom_tools_from_openapi_schema_and_headers(
     Placeholders whose value is ``None`` (e.g. an anonymous user's identity)
     are left untouched in the schema rather than substituted with an empty
     string. Substitution only happens inside the OpenAPI schema; static
-    ``custom_headers`` are not templated.
+    ``custom_headers`` are not templated. ``approval_for`` gets the
+    operationId from before the substitution.
     """
+    action_keys: list[str] = []
     if dynamic_schema_info:
-        schema_str = json.dumps(openapi_schema)
+        # Mark each operation with its position, so that it keeps its own
+        # action key when two paths render to the same path.
+        marked_schema = copy.deepcopy(openapi_schema)
+        for methods in marked_schema.get("paths", {}).values():
+            for operation in methods.values():
+                operation[_OPERATION_POSITION_KEY] = len(action_keys)
+                action_keys.append(operation.get("operationId"))
+        schema_str = json.dumps(marked_schema)
         placeholders = {
             CHAT_SESSION_ID_PLACEHOLDER: dynamic_schema_info.chat_session_id,
             MESSAGE_ID_PLACEHOLDER: dynamic_schema_info.message_id,
@@ -381,13 +390,20 @@ def build_custom_tools_from_openapi_schema_and_headers(
     url = openapi_to_url(openapi_schema)
     method_specs = openapi_to_method_specs(openapi_schema)
 
-    return [
-        CustomTool(
-            id=tool_id,
-            method_spec=method_spec,
-            base_url=url,
-            custom_headers=custom_headers,
-            user_oauth_token=user_oauth_token,
+    tools = []
+    for method_spec in method_specs:
+        position = method_spec.spec.pop(_OPERATION_POSITION_KEY, None)
+        action_key = (
+            action_keys[position] if position is not None else method_spec.raw_name
         )
-        for method_spec in method_specs
-    ]
+        tools.append(
+            CustomTool(
+                integration_id=integration_id,
+                method_spec=method_spec,
+                base_url=url,
+                custom_headers=custom_headers,
+                approval=approval_for(action_key) if approval_for else None,
+                action_key=action_key,
+            )
+        )
+    return tools

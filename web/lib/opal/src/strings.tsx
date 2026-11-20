@@ -99,6 +99,8 @@ export type OpalStrings = {
   dragToReorder: string;
   viewSelected: string;
   deselectAll: string;
+  selectAll: string;
+  selectRow: string;
   selectItemsToContinue: string;
   selectAnItemToContinue: string;
   singleItemSelected: string;
@@ -233,6 +235,8 @@ export const defaultOpalStrings: OpalStrings = {
   dragToReorder: "Drag to reorder",
   viewSelected: "View selected",
   deselectAll: "Deselect all",
+  selectAll: "Select all",
+  selectRow: "Select row",
   selectItemsToContinue: "Select items to continue",
   selectAnItemToContinue: "Select an item to continue",
   singleItemSelected: "Item selected",

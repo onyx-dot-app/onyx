@@ -223,6 +223,9 @@ _OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
 _OPENCODE_TURN_BUDGET_PLUGIN_PATH = "/workspace/opencode-plugins/turn-budget.ts"
 # Surfaces the `webapp` tool (start/status/logs/restart); always on.
 _OPENCODE_WEBAPP_PLUGIN_PATH = "/workspace/opencode-plugins/webapp.ts"
+# Surfaces the `web_search` tool (Onyx's web search, structured results);
+# always on.
+_OPENCODE_WEB_SEARCH_PLUGIN_PATH = "/workspace/opencode-plugins/web-search.ts"
 _MUTABLE_SANDBOX_IMAGE_TAGS = {"latest", "beta", "edge"}
 
 # In-container opencode-history archive builder: reuses the sandbox_daemon
@@ -938,6 +941,7 @@ class DockerSandboxManager(SandboxManager):
                 _OPENCODE_CONNECT_APP_PLUGIN_PATH,
                 _OPENCODE_TURN_BUDGET_PLUGIN_PATH,
                 _OPENCODE_WEBAPP_PLUGIN_PATH,
+                _OPENCODE_WEB_SEARCH_PLUGIN_PATH,
             ]
             if SANDBOX_PROXY_HOST:
                 plugins.append(_OPENCODE_SESSION_TAG_PLUGIN_PATH)

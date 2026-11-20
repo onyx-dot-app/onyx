@@ -4,6 +4,7 @@
 from onyx.configs.constants import DocumentSource
 from onyx.server.query_and_chat.streaming_models import StreamingType
 from onyx.tools.constants import SEARCH_TOOL_ID
+from onyx.tools.models import CapabilityEntry, ToolOptions
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -68,7 +69,7 @@ def test_program_runs_nested_search_and_keeps_its_store_across_messages(
         "chat",
         _program(
             _SEARCH_PROGRAM_ID,
-            'found = await internal_search(queries=["alpha"])\n'
+            'found = await tools.internal_search(queries=["alpha"])\n'
             'store("note", "kept")\n'
             'print("searched")',
         ),
@@ -87,7 +88,7 @@ def test_program_runs_nested_search_and_keeps_its_store_across_messages(
         chat_session_id=chat_session.id,
         message="Search for alpha.",
         user_performing_action=admin_user,
-        preferred_tool_id=search_tool_id,
+        tool_options=ToolOptions(preferred=CapabilityEntry(tool_id=search_tool_id)),
     )
 
     assert first.error is None, f"Unexpected stream error: {first.error}"
@@ -105,7 +106,7 @@ def test_program_runs_nested_search_and_keeps_its_store_across_messages(
     # The nested search streams as a search step of its own.
     assert [tool.tool_name for tool in first.used_tools] == [ToolName.INTERNAL_SEARCH]
     program_request, answer_request = mock_llm.requests_in("chat")
-    assert "internal_search (a function in `execute_code` programs)" in str(
+    assert "tools.internal_search (a function in `execute_code` programs)" in str(
         program_request.body["messages"]
     )
     assert "searched" in (answer_request.tool_result(_SEARCH_PROGRAM_ID) or "")

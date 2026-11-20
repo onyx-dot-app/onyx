@@ -13,7 +13,6 @@ import {
   ToolCallArgumentDelta,
 } from "@/chat/streamingModels";
 import {
-  isCodingAgentPackets,
   isDeepResearchPlanPackets,
   isMemoryToolPackets,
 } from "@/chat/timeline/packetHelpers";
@@ -88,9 +87,6 @@ export function findRenderer(packets: Packet[]): DispatchRenderer | null {
   }
   if (packets.some(isResearchAgentPacket)) {
     return null; // PR 9x: research agent
-  }
-  if (isCodingAgentPackets(packets)) {
-    return null; // PR 9x: coding agent
   }
 
   // Web splits this on `is_internet_search`; both slots are unwired, so one predicate covers the pair.

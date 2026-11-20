@@ -45,10 +45,7 @@ def test_python_streams_chunks_without_repeating_final_output(fails: bool) -> No
         ]
     )
     progress: list[ToolProgress] = []
-    with (
-        patch(f"{TOOL_MODULE}.CodeInterpreterClient") as client_class,
-        patch(f"{TOOL_MODULE}.get_default_file_store"),
-    ):
+    with patch(f"{TOOL_MODULE}.CodeInterpreterClient") as client_class:
         client_class.return_value.__enter__.return_value = client
         result = PythonTool(tool_id=1, chat_session_id=uuid4()).run(
             ToolInvocation(

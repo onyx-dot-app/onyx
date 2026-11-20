@@ -93,7 +93,9 @@ Removes slides not in `<p:sldIdLst>`, unreferenced media, orphaned rels.
 python .opencode/skills/pptx/scripts/office/pack.py outputs/unpacked/ outputs/output.pptx --original input.pptx
 ```
 
-Validates, repairs, condenses XML, re-encodes smart quotes.
+Validates the unpacked files against `--original`, then condenses the XML and zips the package.
+Validation fails on broken XML, on many broken relationships, and on slide, layout, master, or notes XML that does not match the PresentationML schema. It does not catch every error, so check the result visually too. For example, it does not check the `r:id` references of a slide that has no `.rels` file.
+Broken XML and the broken relationships that validation finds fail even when the original deck has them. A schema error fails only when no original slide of the same kind has the same error, so a slide that you add, for example with `add_slide.py`, can keep the errors of the slide that it copies.
 
 ### thumbnail.py
 
@@ -212,5 +214,5 @@ Handled automatically by unpack/pack. But the Edit tool converts smart quotes to
 
 ### Other
 
-- **Whitespace**: Use `xml:space="preserve"` on `<a:t>` with leading/trailing spaces
+- **Whitespace**: `<a:t>` keeps leading and trailing spaces as written. Do not add `xml:space` to `<a:t>`. The schema does not allow it, and `pack.py` rejects it.
 - **XML parsing**: Use `defusedxml.minidom`, not `xml.etree.ElementTree` (corrupts namespaces)

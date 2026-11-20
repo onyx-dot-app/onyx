@@ -3,7 +3,21 @@
  * `backend/onyx/server/features/skill/models.py`.
  */
 
-export type SkillInstallationPolicy = "AVAILABLE" | "DEFAULT" | "REQUIRED";
+export type SkillInstallationPolicy =
+  | "AVAILABLE"
+  | "DEFAULT"
+  | "REQUIRED"
+  | "NOT_AVAILABLE";
+
+/** A marketplace default cannot be REQUIRED. */
+export type OrganizationLibraryDefaultPolicy = Exclude<
+  SkillInstallationPolicy,
+  "REQUIRED"
+>;
+
+export interface OrganizationLibraryDefaultAccess {
+  installation_policy: OrganizationLibraryDefaultPolicy;
+}
 
 export type SkillSource = "builtin" | "custom";
 export type SkillAccessLevel = "OWNER" | "EDITOR" | "VIEWER";
@@ -23,11 +37,14 @@ export interface SkillGroupShare {
   permission: SkillSharePermission;
 }
 
-export interface SkillExternalAppDependency {
-  external_app_id: number;
-  name: string;
-  enabled: boolean;
-  ready: boolean;
+/** One group row of a skill: a share, a group install setting, or both. */
+export interface SkillGroupSummary {
+  group_id: number;
+  group_name: string;
+  /** Null for a row that holds only a setting. */
+  permission: SkillSharePermission | null;
+  /** Null: the group uses the organization setting. */
+  installation_policy: SkillInstallationPolicy | null;
 }
 
 export interface Skill {
@@ -44,7 +61,16 @@ export interface Skill {
   is_personal: boolean;
   enabled: boolean;
   can_toggle: boolean;
-  installation_policy: SkillInstallationPolicy;
+  /** The skill's own Organization setting. Null: Default access applies. */
+  installation_policy: SkillInstallationPolicy | null;
+  /** The Default access that applies when the skill has no own setting. */
+  default_installation_policy: SkillInstallationPolicy | null;
+  /** The caller can delete the skill. A published skill or one required for
+   * anyone needs an organization-wide skill manager. */
+  can_delete: boolean;
+  /** The setting for the current user is REQUIRED, from the company setting
+   * or one of their groups. */
+  required_for_user: boolean;
   author_user_id: string | null;
   author_email: string | null;
   owner: {
@@ -56,9 +82,10 @@ export interface Skill {
   updated_at: string | null;
   user_shares: SkillUserShare[];
   group_shares: SkillGroupShare[];
+  /** The group rows the caller may see; empty for other members. */
+  group_summaries: SkillGroupSummary[];
   public_permission: SkillSharePermission | null;
   user_permission: SkillAccessLevel | null;
-  external_app: SkillExternalAppDependency | null;
   /** Newest plugin version of a custom skill. Edits send it back as
    * `base_version_id`, so a save over a newer version gets a 409. */
   current_version_id: string | null;
@@ -99,7 +126,8 @@ export interface SkillPreview {
   description: string;
   author_email: string | null;
   instructions_markdown: string;
-  external_app: SkillExternalAppDependency | null;
+  /** The supporting files of the version the user runs; empty for a built-in. */
+  files: SkillBundleFile[];
 }
 
 export type SkillEditableDetail = CustomSkill & {

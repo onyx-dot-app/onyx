@@ -1,5 +1,5 @@
-# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob 2bf940d43331a7218ce543f9286bd3112cf16bf4)
-# at commit 379a92a6cb by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob 1b2c0a93d6512da95cdf6f8b9f65fb6c09d3147d)
+# at commit cfd3659a06 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import duration_pb2 as _duration_pb2
@@ -72,6 +72,14 @@ class FileType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     FILE_TYPE_SYMLINK: _ClassVar[FileType]
     FILE_TYPE_OTHER: _ClassVar[FileType]
 
+class StatError(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    STAT_ERROR_UNSPECIFIED: _ClassVar[StatError]
+    STAT_ERROR_MISSING: _ClassVar[StatError]
+    STAT_ERROR_ESCAPES: _ClassVar[StatError]
+    STAT_ERROR_LOOP: _ClassVar[StatError]
+    STAT_ERROR_OTHER: _ClassVar[StatError]
+
 class ManagedSlot(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     MANAGED_SLOT_UNSPECIFIED: _ClassVar[ManagedSlot]
@@ -118,6 +126,11 @@ FILE_TYPE_REGULAR: FileType
 FILE_TYPE_DIRECTORY: FileType
 FILE_TYPE_SYMLINK: FileType
 FILE_TYPE_OTHER: FileType
+STAT_ERROR_UNSPECIFIED: StatError
+STAT_ERROR_MISSING: StatError
+STAT_ERROR_ESCAPES: StatError
+STAT_ERROR_LOOP: StatError
+STAT_ERROR_OTHER: StatError
 MANAGED_SLOT_UNSPECIFIED: ManagedSlot
 MANAGED_SLOT_A: ManagedSlot
 MANAGED_SLOT_B: ManagedSlot
@@ -573,6 +586,44 @@ class DeleteFileResponse(_message.Message):
     DELETED_FIELD_NUMBER: _ClassVar[int]
     deleted: bool
     def __init__(self, deleted: bool = ...) -> None: ...
+
+class StatFilesRequest(_message.Message):
+    __slots__ = ("session_id", "paths")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    PATHS_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    paths: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, session_id: _Optional[str] = ..., paths: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class PathStat(_message.Message):
+    __slots__ = ("path", "exists", "type", "mode", "link_target", "target_error", "target_type", "target_mode", "device", "inode")
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    EXISTS_FIELD_NUMBER: _ClassVar[int]
+    TYPE_FIELD_NUMBER: _ClassVar[int]
+    MODE_FIELD_NUMBER: _ClassVar[int]
+    LINK_TARGET_FIELD_NUMBER: _ClassVar[int]
+    TARGET_ERROR_FIELD_NUMBER: _ClassVar[int]
+    TARGET_TYPE_FIELD_NUMBER: _ClassVar[int]
+    TARGET_MODE_FIELD_NUMBER: _ClassVar[int]
+    DEVICE_FIELD_NUMBER: _ClassVar[int]
+    INODE_FIELD_NUMBER: _ClassVar[int]
+    path: str
+    exists: bool
+    type: FileType
+    mode: int
+    link_target: str
+    target_error: StatError
+    target_type: FileType
+    target_mode: int
+    device: int
+    inode: int
+    def __init__(self, path: _Optional[str] = ..., exists: bool = ..., type: _Optional[_Union[FileType, str]] = ..., mode: _Optional[int] = ..., link_target: _Optional[str] = ..., target_error: _Optional[_Union[StatError, str]] = ..., target_type: _Optional[_Union[FileType, str]] = ..., target_mode: _Optional[int] = ..., device: _Optional[int] = ..., inode: _Optional[int] = ...) -> None: ...
+
+class StatFilesResponse(_message.Message):
+    __slots__ = ("stats",)
+    STATS_FIELD_NUMBER: _ClassVar[int]
+    stats: _containers.RepeatedCompositeFieldContainer[PathStat]
+    def __init__(self, stats: _Optional[_Iterable[_Union[PathStat, _Mapping]]] = ...) -> None: ...
 
 class ZipFilesRequest(_message.Message):
     __slots__ = ("session_id", "path", "exclude_names", "skip_hidden")

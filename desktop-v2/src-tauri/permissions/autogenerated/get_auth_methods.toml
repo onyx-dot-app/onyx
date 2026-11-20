@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-auth-methods"
+description = "Enables the get_auth_methods command without any pre-configured scope."
+commands.allow = ["get_auth_methods"]
+
+[[permission]]
+identifier = "deny-get-auth-methods"
+description = "Denies the get_auth_methods command without any pre-configured scope."
+commands.deny = ["get_auth_methods"]

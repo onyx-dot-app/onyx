@@ -103,11 +103,11 @@ export interface MockLlmScript {
  * A reply that calls tools the way the backend offers them: native tool calls,
  * or with code mode on, one `execute_code` program that awaits each call in
  * order, or with `concurrent` all calls at once through `asyncio.gather`.
- * Native tool calls in one reply always run in parallel. A program names a
- * tool with its other characters as `_`; it can call a deferred (MCP or
- * custom) function without `tool_search`. The program call takes the first
- * call's id, so a later reply can wait for `has_results_for: [calls[0].id]`
- * in both modes.
+ * Native tool calls in one reply always run in parallel. A program calls a
+ * tool as `tools.<name>`, with the other characters of its name as `_`; it
+ * can call a deferred (MCP or custom) function without `tool_search`. The
+ * program call takes the first call's id, so a later reply can wait for
+ * `has_results_for: [calls[0].id]` in both modes.
  */
 export function mockLlmToolCallReply(
   calls: MockLlmToolCall[],
@@ -125,7 +125,7 @@ export function mockLlmToolCallReply(
         `${name}=json.loads(${JSON.stringify(JSON.stringify(value))})`
     );
     const name = call.name.replace(/[^0-9A-Za-z_]/g, "_");
-    return `${name}(${args.join(", ")})`;
+    return `tools.${name}(${args.join(", ")})`;
   });
   const code = concurrent
     ? `import asyncio\nawait asyncio.gather(${invocations.join(", ")})`

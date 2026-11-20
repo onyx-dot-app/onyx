@@ -6,6 +6,7 @@ import re
 from onyx.llm.api_surfaces import LlmApiSurface, resolve_api_surface
 from onyx.llm.constants import AGGREGATOR_PROVIDERS, LlmProviderNames
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.model_capabilities import is_claude_model, model_identity_names
 from onyx.llm.prompt_cache.providers.anthropic import AnthropicPromptCacheProvider
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.providers.noop import NoOpPromptCacheProvider
@@ -34,12 +35,13 @@ def _adapter_for_aggregator(llm_config: LLMConfig) -> PromptCacheProvider:
         == LlmApiSurface.ANTHROPIC_MESSAGES
     ):
         return AnthropicPromptCacheProvider()
-    # Match on name segments only ("anthropic/claude-sonnet", "claude-sonnet-4-5"),
-    # so an unrelated deployment that merely contains the substring
-    # ("claudio-fast", "myanthropic-proxy") is not misclassified.
+    # An "anthropic" name segment ("anthropic/model"), not a substring, so
+    # "myanthropic-proxy" is not misclassified.
     model_name: str = (llm_config.model_name or "").lower()
     segments: frozenset[str] = frozenset(re.split(r"[/._\-\s]+", model_name))
-    if "anthropic" in segments or "claude" in segments:
+    if "anthropic" in segments or is_claude_model(
+        model_identity_names(llm_config.model_name, llm_config.deployment_name)
+    ):
         logger.debug(
             "Prompt caching enabled for gateway Anthropic model: %s (provider=%s)",
             llm_config.model_name,

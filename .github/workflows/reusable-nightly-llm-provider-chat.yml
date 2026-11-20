@@ -217,6 +217,7 @@ jobs:
       - runs-on
       - runner=4cpu-linux-arm64
       - "run-id=${{ github.run_id }}-nightly-${{ matrix.provider }}-provider-chat-test"
+      - volume=100gb
       - extras=ecr-cache
     timeout-minutes: 45
     environment: ci-protected

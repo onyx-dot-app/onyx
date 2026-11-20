@@ -31,6 +31,7 @@ from onyx.tools.tool_implementations.code_mode.sandbox import (
     BUSY_MESSAGE,
     CRASH_MESSAGE,
     PRELUDE_STUBS,
+    TOOLS_IMPORT_MESSAGE,
     YIELD_CONTROL_STUB,
     ExternalCallHandler,
     StdoutCollector,
@@ -74,20 +75,19 @@ class Doc(TypedDict):
     title: str
 
 
-async def search(*, query: str) -> list[Doc]:
-    ...
-
-
-async def slow(*, seconds: float) -> str:
-    ...
-
-
-async def fail(*, message: str) -> Any:
-    ...
-
-
 async def lookup(term: str) -> list[str]:
     ...
+
+
+class tools:
+    async def search(*, query: str) -> list[Doc]:
+        ...
+
+    async def slow(*, seconds: float) -> str:
+        ...
+
+    async def fail(*, message: str) -> Any:
+        ...
 """
 FUNCTIONS = frozenset({"search", "slow", "fail"})
 # The default memory limit: a waiting program dumps only while its worker holds
@@ -187,7 +187,7 @@ def test_gather_runs_tool_calls_in_parallel() -> None:
     started = time.monotonic()
     result = run(
         "import asyncio\n"
-        "out = await asyncio.gather(*[slow(seconds=1) for _ in range(4)])\n"
+        "out = await asyncio.gather(*[tools.slow(seconds=1) for _ in range(4)])\n"
         "print(len(out))\n"
         "out",
         recorder,
@@ -204,27 +204,62 @@ def test_gather_runs_tool_calls_in_parallel() -> None:
 
 def test_positional_arguments_are_rejected() -> None:
     # Untyped parameters hide the call from the type checker; the runtime rejects it.
-    result = run("def call(f, *args):\n    return f(*args)\nawait call(search, 'x')\n")
+    result = run(
+        "def call(f, *args):\n    return f(*args)\nawait call(tools.search, 'x')\n"
+    )
     assert result.status == "failed"
     assert result.error is not None
     assert "keyword arguments only" in result.error
 
 
-def test_functions_import_like_a_module() -> None:
+def test_tool_functions_are_called_through_tools() -> None:
     recorder = Recorder()
     result = run(
-        "from functions import search\n"
-        "import functions\n"
-        "a = await search(query='a')\n"
-        "b = await functions.search(query='b')\n"
-        "functions.store('k', 1)\n"
+        "f = tools.search\n"
+        "a = await f(query='a')\n"
+        "b = await tools.search(query='b')\n"
         "print(a[0]['title'], b[0]['title'])",
         recorder,
     )
     assert result.status == "completed", result
     assert result.stdout == "About a About b\n"
     assert [call.function_name for call in recorder.calls] == ["search", "search"]
-    assert result.store_writes == {"k": 1}
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "print('x')\nimport tools\nawait tools.search(query='a')\n",
+        "print('x')\nfrom tools import search\nawait search(query='a')\n",
+    ],
+)
+def test_an_explicit_tools_import_stops_before_the_program_runs(code: str) -> None:
+    recorder = Recorder()
+    result = run(code, recorder)
+    assert result.status == "failed"
+    assert result.error is not None
+    assert result.error.startswith(TOOLS_IMPORT_MESSAGE)
+    assert result.stdout == ""
+    assert recorder.calls == []
+
+
+@pytest.mark.parametrize(
+    ("code", "hint"),
+    [
+        (
+            "await search(query='x')\n",
+            "; call the tool function as tools.search(...)",
+        ),
+        ("f = search\n", ""),
+    ],
+)
+def test_a_tool_function_is_not_a_global(code: str, hint: str) -> None:
+    recorder = Recorder()
+    result = run(code, recorder)
+    assert result.status == "failed"
+    assert result.error is not None
+    assert f"NameError: name 'search' is not defined{hint}\n" in f"{result.error}\n"
+    assert recorder.calls == []
 
 
 def test_other_imports_still_fail() -> None:
@@ -242,7 +277,9 @@ def test_unknown_function_is_a_name_error() -> None:
 
 def test_type_error_in_tool_call_stops_before_any_tool_runs() -> None:
     recorder = Recorder()
-    result = run("await slow(seconds=0.1)\nawait search(qurey='x')\n", recorder)
+    result = run(
+        "await tools.slow(seconds=0.1)\nawait tools.search(qurey='x')\n", recorder
+    )
     assert result.status == "failed"
     assert result.error is not None
     assert result.error.startswith("Type check failed; the program did not run.")
@@ -252,7 +289,7 @@ def test_type_error_in_tool_call_stops_before_any_tool_runs() -> None:
 
 def test_non_tool_type_errors_do_not_stop_the_program() -> None:
     # Rebinding a name to another type is valid Python but a type error.
-    result = run("docs = await search(query='a')\ndocs = None\nprint(docs)\n")
+    result = run("docs = await tools.search(query='a')\ndocs = None\nprint(docs)\n")
     assert result.status == "completed"
     assert result.stdout == "None\n"
 
@@ -286,7 +323,7 @@ def test_memory_limit() -> None:
 
 
 def test_tool_call_limit() -> None:
-    result = run("for i in range(10):\n    await search(query=str(i))\n")
+    result = run("for i in range(10):\n    await tools.search(query=str(i))\n")
     assert result.status == "failed"
     assert result.tool_call_count == 5
     assert result.error is not None
@@ -298,11 +335,11 @@ def test_handler_base_exception_propagates() -> None:
         raise AgentCancelled()
 
     with pytest.raises(AgentCancelled):
-        run("await search(query='x')\n", handler)
+        run("await tools.search(query='x')\n", handler)
 
 
 def test_each_execution_starts_with_a_fresh_interpreter() -> None:
-    assert run("docs = await search(query='a')\njson = 1\n").status == "completed"
+    assert run("docs = await tools.search(query='a')\njson = 1\n").status == "completed"
     result = run("docs\n")
     assert result.status == "failed"
     assert result.error is not None
@@ -506,7 +543,7 @@ def test_limits_must_be_positive_and_within_the_compute_cap() -> None:
 def test_writes_commit_when_the_program_ends_by_itself() -> None:
     completed = run("store('k', 1)\n")
     raised = run("store('k', 1)\nraise ValueError('x')\n")
-    not_type_checked = run("store('k', 1)\nawait search(query=1)\n")
+    not_type_checked = run("store('k', 1)\nawait tools.search(query=1)\n")
     cancellation = CancellationSignal()
     threading.Timer(0.3, cancellation.cancel).start()
     cancelled = run(
@@ -581,7 +618,7 @@ def test_stop_during_computation_kills_the_worker(two_workers: Monty) -> None:
 def test_wall_clock_timeout_during_computation(two_workers: Monty) -> None:
     started = time.monotonic()
     result = run(
-        "await search(query='a')\nwhile True:\n    pass\n",
+        "await tools.search(query='a')\nwhile True:\n    pass\n",
         limits=SandboxLimits(
             lifetime_seconds=0.3,
             max_tool_calls=5,
@@ -644,7 +681,7 @@ def test_programs_cannot_reach_the_host(
 def test_fatal_diagnostics_are_only_tool_call_errors() -> None:
     diagnostics = parse_type_diagnostics(
         "main.py:1:7: error[unknown-argument] Argument `q` does not match any known "
-        "parameter of function `search`\n"
+        "parameter of function `tools.search`\n"
         "main.py:2:1: error[unresolved-reference] Name `x` used when not defined\n"
         "main.py:3:1: error[invalid-argument-type] Argument to function `len` is "
         "incorrect\n"
@@ -654,13 +691,14 @@ def test_fatal_diagnostics_are_only_tool_call_errors() -> None:
         "unresolved-reference",
         "invalid-argument-type",
     ]
-    assert [is_fatal_diagnostic(d, FUNCTIONS) for d in diagnostics] == [
+    checked = {f"tools.{name}" for name in FUNCTIONS}
+    assert [is_fatal_diagnostic(d, checked) for d in diagnostics] == [
         True,
         False,
         False,
     ]
     syntax = TypeDiagnostic(code="invalid-syntax", message="Expected `)`", line="")
-    assert is_fatal_diagnostic(syntax, FUNCTIONS)
+    assert is_fatal_diagnostic(syntax, checked)
 
 
 @pytest.fixture
@@ -730,7 +768,7 @@ def test_tenant_counters_follow_worker_time_and_busy_rejections(
             "onyx_code_mode_sandbox_busy_rejections_total", tenant_id
         )
         with Monty(min_processes=1, max_processes=1, checkout_timeout=0.1) as pool:
-            ran = run("print(await slow(seconds=0.5))\n", pool=pool)
+            ran = run("print(await tools.slow(seconds=0.5))\n", pool=pool)
             with pool.checkout():
                 rejected = run("print(1)\n", pool=pool)
     finally:
@@ -766,8 +804,8 @@ def test_programs_return_their_worker_while_tools_run(two_workers: Monty) -> Non
     def execute(index: int) -> Ran:
         return run(
             f"store('i', {index})\n"
-            "a = await slow(seconds=0.5)\n"
-            "b = await slow(seconds=0.5)\n"
+            "a = await tools.slow(seconds=0.5)\n"
+            "b = await tools.slow(seconds=0.5)\n"
             "print(a, b, load('i'))\n",
             pool=two_workers,
         )
@@ -797,7 +835,7 @@ def test_a_waiting_program_keeps_its_worker_while_no_other_waits(
 
     monkeypatch.setattr(sandbox, "_suspend", counted)
     result = run(
-        "a = await slow(seconds=0.1)\nb = await slow(seconds=0.1)\nprint(a, b)\n"
+        "a = await tools.slow(seconds=0.1)\nb = await tools.slow(seconds=0.1)\nprint(a, b)\n"
     )
     assert (result.status, result.stdout) == ("completed", "done done\n")
     assert dumps == []
@@ -816,7 +854,7 @@ def test_a_dump_over_the_byte_budget_keeps_the_worker(
             results = list(
                 executor.map(
                     lambda index: run(
-                        f"print(await slow(seconds=0.5), {index})\n", pool=pool
+                        f"print(await tools.slow(seconds=0.5), {index})\n", pool=pool
                     ),
                     range(2),
                 )
@@ -866,7 +904,7 @@ def test_a_program_too_large_to_dump_keeps_its_worker(
     result = run(
         "big = 'x' * (39 * 1024 * 1024)\n"
         "store('k', 'v')\n"
-        "print(await slow(seconds=0.1), len(big))\n",
+        "print(await tools.slow(seconds=0.1), len(big))\n",
         pool=two_workers,
     )
     assert (result.status, result.stdout) == (
@@ -886,7 +924,7 @@ def test_the_worker_s_own_memory_does_not_count_toward_a_dump(
         sandbox, "_worker_memory_bytes", lambda _pid: LIMITS.max_memory_bytes
     )
     dumped = _suspensions("dumped")
-    result = run("print(await slow(seconds=0.1))\n", pool=two_workers)
+    result = run("print(await tools.slow(seconds=0.1))\n", pool=two_workers)
     assert (result.status, result.stdout) == ("completed", "done\n"), result
     assert _suspensions("dumped") == dumped + 1
 
@@ -901,7 +939,7 @@ def test_a_dump_that_runs_out_of_memory_fails_the_program_clearly(
     result = run(
         "big = 'x' * (39 * 1024 * 1024)\n"
         "store('k', 'v')\n"
-        "print(await slow(seconds=0.1), len(big))\n",
+        "print(await tools.slow(seconds=0.1), len(big))\n",
         pool=two_workers,
     )
     assert (result.status, result.error) == ("failed", sandbox.DUMP_MEMORY_MESSAGE)
@@ -1045,7 +1083,7 @@ def _holders(
     threads = [
         threading.Thread(
             target=lambda: results.append(
-                run("print(await slow(seconds=3))\n", pool=pool)
+                run("print(await tools.slow(seconds=3))\n", pool=pool)
             )
         )
         for _ in range(holders)
@@ -1113,7 +1151,7 @@ def test_a_dumped_program_resumes_for_a_batch_of_calls(
     calls = 20
     result = run(
         "out = await asyncio.gather("
-        f"*[slow(seconds=0.2 + i * 0.02) for i in range({calls})])\n"
+        f"*[tools.slow(seconds=0.2 + i * 0.02) for i in range({calls})])\n"
         "print(len(out))\n",
         limits=LIMITS.model_copy(update={"max_tool_calls": calls}),
         pool=two_workers,
@@ -1129,8 +1167,8 @@ def test_a_dumped_program_resumes_without_waiting_for_calls_it_does_not_await(
     printed: list[float] = []
     started = time.monotonic()
     result = run(
-        "first = slow(seconds=3)\n"
-        "second = slow(seconds=0.2)\n"
+        "first = tools.slow(seconds=3)\n"
+        "second = tools.slow(seconds=0.2)\n"
         "print(await second)\n"
         "print(await first)\n",
         on_stdout=lambda _text: printed.append(time.monotonic()),
@@ -1151,7 +1189,7 @@ def test_yield_control_returns_at_once_while_a_dumped_program_waits(
     result = run(
         "print('before')\n"
         "yield_control()\n"
-        "out = await asyncio.gather(slow(seconds=0.2), slow(seconds=1))\n"
+        "out = await asyncio.gather(tools.slow(seconds=0.2), tools.slow(seconds=1))\n"
         "print(len(out))\n",
         on_yield=lambda: yielded.append(time.monotonic()),
         pool=two_workers,
@@ -1169,8 +1207,8 @@ def test_stop_ends_a_dumped_program_that_batches_its_calls(
     threading.Timer(0.6, cancellation.cancel).start()
     started = time.monotonic()
     result = run(
-        "out = await asyncio.gather(slow(seconds=0.2), slow(seconds=0.4), "
-        "slow(seconds=1.5))\n",
+        "out = await asyncio.gather(tools.slow(seconds=0.2), tools.slow(seconds=0.4), "
+        "tools.slow(seconds=1.5))\n",
         cancellation=cancellation,
         pool=two_workers,
     )
@@ -1188,7 +1226,7 @@ def test_program_state_and_store_survive_a_released_wait() -> None:
         "    def doubled(self):\n"
         "        return self.x * 2\n"
         "p = Point(3)\n"
-        "f = slow\n"
+        "f = tools.slow\n"
         "store('a', 1)\n"
         "print('before')\n"
         "r = await f(seconds=0.1)\n"
@@ -1211,7 +1249,7 @@ def test_cancellation_during_a_released_wait(two_workers: Monty) -> None:
     threading.Timer(0.3, cancellation.cancel).start()
     started = time.monotonic()
     result = run(
-        "store('k', 1)\nawait slow(seconds=30)\n",
+        "store('k', 1)\nawait tools.slow(seconds=30)\n",
         handler,
         cancellation=cancellation,
         pool=two_workers,
@@ -1226,7 +1264,7 @@ def test_crashed_worker_reports_the_crash_and_keeps_output() -> None:
     # The pool kills a worker that runs past its request timeout.
     with Monty(min_processes=1, max_processes=1, request_timeout=0.5) as pool:
         result = run(
-            "print('before')\nstore('k', 1)\nawait search(query='a')\n"
+            "print('before')\nstore('k', 1)\nawait tools.search(query='a')\n"
             "while True:\n    pass\n",
             limits=COMPUTE_LIMITS,
             pool=pool,
@@ -1244,7 +1282,7 @@ def test_busy_pool_fails_without_running_the_program(
     with Monty(min_processes=1, max_processes=1, checkout_timeout=0.1) as pool:
         with pool.checkout():
             recorder = Recorder()
-            result = run("await search(query='x')\n", recorder, pool=pool)
+            result = run("await tools.search(query='x')\n", recorder, pool=pool)
     assert result.status == "failed"
     assert result.error == BUSY_MESSAGE
     assert recorder.calls == []
@@ -1258,7 +1296,7 @@ def test_stop_while_waiting_for_a_worker() -> None:
             recorder = Recorder()
             started = time.monotonic()
             result = run(
-                "await search(query='x')\n",
+                "await tools.search(query='x')\n",
                 recorder,
                 cancellation=cancellation,
                 pool=pool,
@@ -1437,7 +1475,7 @@ def test_tool_calls_beyond_the_concurrency_limit_wait_for_a_slot(
 
     result = run(
         "import asyncio\n"
-        "print(await asyncio.gather(*(slow(seconds=0) for _ in range(5))))\n",
+        "print(await asyncio.gather(*(tools.slow(seconds=0) for _ in range(5))))\n",
         handler,
     )
     assert result.status == "completed", result
@@ -1474,7 +1512,7 @@ def test_a_resumed_program_waits_for_a_worker(
             assert held.wait(5)
             return "done"
 
-        result = run("print(await slow(seconds=0))\n", handler, pool=pool)
+        result = run("print(await tools.slow(seconds=0))\n", handler, pool=pool)
         for holder in holders:
             holder.join(5)
     assert result.status == "completed", result
@@ -1502,7 +1540,7 @@ def test_tool_calls_wait_for_a_free_process_thread(
 
     programs = [
         "import asyncio\n"
-        "print(len(await asyncio.gather(*(slow(seconds=0) for _ in range(3)))))\n"
+        "print(len(await asyncio.gather(*(tools.slow(seconds=0) for _ in range(3)))))\n"
     ] * 2
     with ThreadPoolExecutor(max_workers=2) as executor:
         results = list(executor.map(lambda code: run(code, handler), programs))
@@ -1524,7 +1562,7 @@ def test_a_call_that_outlives_its_program_keeps_its_thread_until_it_returns(
         release.wait(5)
         return "late"
 
-    result = run("pending = slow(seconds=1)\n'started'\n", handler)
+    result = run("pending = tools.slow(seconds=1)\n'started'\n", handler)
     assert result.status == "completed", result
     assert [call.function_name for call in result.unawaited_calls] == ["slow"]
     # The unawaited call still holds the only thread, and the gauge shows it.
@@ -1558,7 +1596,9 @@ def test_queued_calls_that_never_started_are_not_reported_as_started(
         release.wait(5)
         return "late"
 
-    result = run("a = slow(seconds=1)\nb = slow(seconds=2)\n'started'\n", handler)
+    result = run(
+        "a = tools.slow(seconds=1)\nb = tools.slow(seconds=2)\n'started'\n", handler
+    )
     release.set()
     assert result.status == "completed", result
     assert [call.index for call in result.unawaited_calls] == [0]
@@ -1597,7 +1637,7 @@ def test_an_async_host_function_answers_when_awaited_without_a_tool_call() -> No
     recorder = Recorder()
     result = run(
         "import asyncio\n"
-        "found, docs = await asyncio.gather(lookup('alpha'), search(query='q'))\n"
+        "found, docs = await asyncio.gather(lookup('alpha'), tools.search(query='q'))\n"
         "print(found, docs[0]['title'])\n"
         "try:\n"
         "    await lookup('')\n"

@@ -8,9 +8,9 @@ import requests
 
 from onyx.agents.tools import ToolInvocation
 from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.service import validate_openapi_definition
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolResult
-from onyx.server.features.tool.api import _validate_tool_definition
 from onyx.server.security.models import SSRFProtectionLevel
 from onyx.tools.models import CustomToolCallSummary, DynamicSchemaInfo, ToolContext
 from onyx.tools.tool_implementations.custom import custom_tool
@@ -128,7 +128,7 @@ class TestCustomTool(unittest.TestCase):
         mock_request.return_value = mock_response
 
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            tool_id=-1,  # dummy tool id
+            integration_id=-1,
             openapi_schema=self.openapi_schema,
             dynamic_schema_info=self.dynamic_schema_info,
         )
@@ -174,7 +174,7 @@ class TestCustomTool(unittest.TestCase):
         mock_request.return_value = mock_response
 
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            tool_id=-1,  # dummy tool id
+            integration_id=-1,
             openapi_schema=self.openapi_schema,
             dynamic_schema_info=self.dynamic_schema_info,
         )
@@ -226,7 +226,7 @@ class TestCustomTool(unittest.TestCase):
             {"key": "Custom-Header", "value": "CustomValue"},
         ]
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            tool_id=-1,  # dummy tool id
+            integration_id=-1,
             openapi_schema=self.openapi_schema,
             custom_headers=custom_headers,
             dynamic_schema_info=self.dynamic_schema_info,
@@ -271,7 +271,7 @@ class TestCustomTool(unittest.TestCase):
 
         custom_headers: list[HeaderItemDict] = []
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            tool_id=-1,  # dummy tool id
+            integration_id=-1,
             openapi_schema=self.openapi_schema,
             custom_headers=custom_headers,
             dynamic_schema_info=self.dynamic_schema_info,
@@ -353,7 +353,7 @@ class TestCustomTool(unittest.TestCase):
         validate_openapi_schema(schema)
 
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            tool_id=-1,
+            integration_id=-1,
             openapi_schema=schema,
             custom_headers=[
                 {"key": "X-Onyx-User-Id", "value": "USER_ID"},
@@ -430,7 +430,7 @@ class TestCustomTool(unittest.TestCase):
         validate_openapi_schema(schema)
 
         tools = build_custom_tools_from_openapi_schema_and_headers(
-            tool_id=-1,
+            integration_id=-1,
             openapi_schema=schema,
             dynamic_schema_info=DynamicSchemaInfo(
                 chat_session_id=None,
@@ -574,7 +574,7 @@ if __name__ == "__main__":
 @pytest.mark.parametrize("status_code", [200, 401, 403, 500])
 def test_custom_tool_http_outcome_sets_shared_error_flag(status_code: int) -> None:
     tools = build_custom_tools_from_openapi_schema_and_headers(
-        tool_id=1,
+        integration_id=1,
         openapi_schema={
             "openapi": "3.0.0",
             "info": {"title": "Status", "version": "1.0.0"},
@@ -622,7 +622,7 @@ def test_custom_tool_file_response_is_serialized_for_llm(
     content_type: str, response_type: str
 ) -> None:
     tools = build_custom_tools_from_openapi_schema_and_headers(
-        tool_id=1,
+        integration_id=1,
         openapi_schema={
             "openapi": "3.0.0",
             "info": {"title": "Files", "version": "1.0.0"},
@@ -787,9 +787,9 @@ def test_save_rejects_metadata_server_url(monkeypatch: pytest.MonkeyPatch) -> No
     _set_ssrf_level(monkeypatch, SSRFProtectionLevel.VALIDATE_ALL)
     for blocked_url in ("http://169.254.169.254", _LOOPBACK_URL):
         with pytest.raises(OnyxError) as exc_info:
-            _validate_tool_definition(_schema(blocked_url))
+            validate_openapi_definition(_schema(blocked_url))
         assert exc_info.value.status_code == 400
-    _validate_tool_definition(_schema("http://10.0.0.5"))
+    validate_openapi_definition(_schema("http://10.0.0.5"))
 
 
 @pytest.mark.parametrize("servers", [[{"url": 123}], [{"url": "   "}], [{}], None])
@@ -800,13 +800,13 @@ def test_save_rejects_invalid_server_url(servers: list[dict[str, Any]] | None) -
     else:
         schema["servers"] = servers
     with pytest.raises(OnyxError) as exc_info:
-        _validate_tool_definition(schema)
+        validate_openapi_definition(schema)
     assert exc_info.value.status_code == 400
 
 
 def _run_ping(server_url: str) -> ToolResult:
     tool = build_custom_tools_from_openapi_schema_and_headers(
-        tool_id=1, openapi_schema=_schema(server_url)
+        integration_id=1, openapi_schema=_schema(server_url)
     )[0]
     response = tool.run(
         ToolInvocation(
@@ -926,7 +926,7 @@ def test_validate_all_allows_private_network_on_self_hosted(
     """Accepted risk (ENG-4421): self-hosted custom tools reach RFC1918 hosts
     even at VALIDATE_ALL. Change this test only with a deliberate policy change."""
     _set_ssrf_level(monkeypatch, SSRFProtectionLevel.VALIDATE_ALL)
-    _validate_tool_definition(_schema("http://10.0.0.1"))
+    validate_openapi_definition(_schema("http://10.0.0.1"))
     response = unittest.mock.MagicMock()
     response.is_redirect = False
     response.status_code = 200

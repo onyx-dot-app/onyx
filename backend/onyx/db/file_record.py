@@ -4,8 +4,7 @@ from sqlalchemy import ColumnElement, String, and_, case, cast, func, select, up
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from onyx.background.task_utils import QUERY_REPORT_NAME_PREFIX
-from onyx.configs.constants import FileOrigin, FileType
+from onyx.configs.constants import QUERY_REPORT_NAME_PREFIX, FileOrigin, FileType
 from onyx.db.enums import IndexingStatus
 from onyx.db.models import FileRecord, IndexAttempt
 from onyx.file_store.constants import (

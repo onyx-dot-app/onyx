@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -17,10 +18,20 @@ import (
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
 )
 
-type fakeStats struct{ diskErr error }
+type fakeStats struct {
+	diskErr  error
+	oomKills *uint64
+}
 
-func (fakeStats) MemInfo() (uint64, uint64, error) { return 8192, 2048, nil }
-func (s fakeStats) DiskFreeBytes() (uint64, error) { return 5 << 30, s.diskErr }
+func (fakeStats) MemInfo() (uint64, uint64, error)    { return 8192, 2048, nil }
+func (s fakeStats) DiskFreeBytes() (uint64, error)    { return 5 << 30, s.diskErr }
+func (fakeStats) SliceRoomMiB() (uint64, bool, error) { return 0, false, nil }
+func (s fakeStats) SliceOOMKills() (uint64, error) {
+	if s.oomKills == nil {
+		return 0, nil
+	}
+	return *s.oomKills, nil
+}
 
 func TestRegistrationAndNames(t *testing.T) {
 	m, err := New(Source{})
@@ -83,13 +94,16 @@ func TestStateCollectorReadsAtScrape(t *testing.T) {
 		{State: pb.VMState_VM_STATE_STARTING, MemMiB: 1024, VCPUs: 2},
 		{State: pb.VMState_VM_STATE_EXITED, MemMiB: 4096, VCPUs: 8},
 	}
+	// The slice had 3 OOM kills before the agent started, and 2 since.
+	kills := uint64(3)
 	m, err := New(Source{
-		VMs: func() []agent.VM { return vms }, Stats: fakeStats{diskErr: errors.New("statfs")},
+		VMs: func() []agent.VM { return vms }, Stats: fakeStats{diskErr: errors.New("statfs"), oomKills: &kills},
 		RelayConns: func() int { return 7 }, DialStreams: func() int { return 3 }, MaxVMs: 60,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	kills = 5
 	want := `
 # HELP craft_fc_host_agent_vms VMs in the agent's table by state (starting, running, exited).
 # TYPE craft_fc_host_agent_vms gauge
@@ -105,10 +119,14 @@ craft_fc_host_agent_vm_vcpus_allocated 8
 # HELP craft_fc_host_agent_node_memory_available_bytes Node MemAvailable (the admission input).
 # TYPE craft_fc_host_agent_node_memory_available_bytes gauge
 craft_fc_host_agent_node_memory_available_bytes 2.147483648e+09
-# HELP craft_fc_host_agent_node_stats_errors 1 if the last scrape could not read node memory, disk, or the private memory of a VM.
+# HELP craft_fc_host_agent_node_stats_errors 1 if the last scrape could not read node memory, disk, the private memory of a VM, or the VM slice OOM kills.
 # TYPE craft_fc_host_agent_node_stats_errors gauge
 craft_fc_host_agent_node_stats_errors{stat="disk"} 1
 craft_fc_host_agent_node_stats_errors{stat="memory"} 0
+craft_fc_host_agent_node_stats_errors{stat="slice_oom"} 0
+# HELP craft_fc_host_agent_vm_slice_oom_kills_total OOM kills in the VM slice and its VM scopes since the agent started (oom_kill of the slice's memory.events). Each one stops a VM: the guest used more than its scope limit, the VMs together more than the slice limit, or the node ran out of memory.
+# TYPE craft_fc_host_agent_vm_slice_oom_kills_total counter
+craft_fc_host_agent_vm_slice_oom_kills_total 2
 # HELP craft_fc_host_agent_relay_open_connections Open egress relay connections.
 # TYPE craft_fc_host_agent_relay_open_connections gauge
 craft_fc_host_agent_relay_open_connections 7
@@ -124,6 +142,7 @@ craft_fc_host_agent_max_vms 60
 		"craft_fc_host_agent_vms", "craft_fc_host_agent_vm_memory_allocated_bytes", "craft_fc_host_agent_vm_vcpus_allocated",
 		"craft_fc_host_agent_node_memory_available_bytes", "craft_fc_host_agent_node_stats_errors",
 		"craft_fc_host_agent_relay_open_connections", "craft_fc_host_agent_dial_open_streams",
+		"craft_fc_host_agent_vm_slice_oom_kills_total",
 		// No disk free gauge: the read failed.
 		"craft_fc_host_agent_node_disk_free_bytes",
 	}
@@ -340,7 +359,7 @@ func TestPrivateMemory(t *testing.T) {
 # HELP craft_fc_host_agent_vm_memory_private_bytes Anonymous memory (smaps_rollup) of the Firecracker processes of the VMs that are not exited: the guest pages each VM wrote, plus the VMM's own heap. Page cache of the snapshot memory files is not in it. Balloon free page reporting and the guest's idle reclaim lower it.
 # TYPE craft_fc_host_agent_vm_memory_private_bytes gauge
 craft_fc_host_agent_vm_memory_private_bytes ` + bytes + `
-# HELP craft_fc_host_agent_node_stats_errors 1 if the last scrape could not read node memory, disk, or the private memory of a VM.
+# HELP craft_fc_host_agent_node_stats_errors 1 if the last scrape could not read node memory, disk, the private memory of a VM, or the VM slice OOM kills.
 # TYPE craft_fc_host_agent_node_stats_errors gauge
 craft_fc_host_agent_node_stats_errors{stat="vm_memory"} ` + failed + `
 `
@@ -359,10 +378,71 @@ craft_fc_host_agent_node_stats_errors{stat="vm_memory"} ` + failed + `
 	// Another error is flagged and the partial sum is not reported.
 	read[11] = errors.New("permission denied")
 	if err := testutil.GatherAndCompare(m.Registry(), strings.NewReader(`
-# HELP craft_fc_host_agent_node_stats_errors 1 if the last scrape could not read node memory, disk, or the private memory of a VM.
+# HELP craft_fc_host_agent_node_stats_errors 1 if the last scrape could not read node memory, disk, the private memory of a VM, or the VM slice OOM kills.
 # TYPE craft_fc_host_agent_node_stats_errors gauge
 craft_fc_host_agent_node_stats_errors{stat="vm_memory"} 1
 `), names...); err != nil {
 		t.Error(err)
+	}
+}
+
+// The OOM counter counts from the agent start and keeps counting when the
+// slice cgroup is made again (its oom_kill starts at 0).
+func TestOOMCountAcrossSliceRecreation(t *testing.T) {
+	raw := uint64(7)
+	c := newStateCollector(Source{Stats: fakeStats{oomKills: &raw}})
+	for i, step := range []struct{ raw, want uint64 }{
+		{7, 0}, {9, 2}, {9, 2},
+		{1, 3}, // the slice was made again and had one kill
+		{4, 6},
+	} {
+		raw = step.raw
+		if got, err := c.oomCount(); err != nil || got != step.want {
+			t.Fatalf("step %d: raw %d counted %d (%v), want %d", i, step.raw, got, err, step.want)
+		}
+	}
+	// No read at start: the first read is the baseline.
+	c = newStateCollector(Source{})
+	raw = 5
+	c.src.Stats = fakeStats{oomKills: &raw}
+	if got, err := c.oomCount(); err != nil || got != 0 {
+		t.Fatalf("first read counted %d (%v)", got, err)
+	}
+}
+
+// heldOOMStats returns 7 at the baseline read and holds every later read
+// until release closes.
+type heldOOMStats struct {
+	fakeStats
+	calls   atomic.Int32
+	held    chan struct{}
+	release chan struct{}
+}
+
+func (s *heldOOMStats) SliceOOMKills() (uint64, error) {
+	if s.calls.Add(1) > 1 {
+		close(s.held)
+		<-s.release
+	}
+	return 7, nil
+}
+
+// The oom_kill read is under oomMu, so a scrape that read an older value
+// cannot apply it after a scrape that read a newer one (the older value would
+// look like a recreated slice).
+func TestOOMCountReadsUnderLock(t *testing.T) {
+	s := &heldOOMStats{held: make(chan struct{}), release: make(chan struct{})}
+	c := newStateCollector(Source{Stats: s})
+	done := make(chan struct{})
+	go func() { defer close(done); _, _ = c.oomCount() }()
+	<-s.held
+	locked := !c.oomMu.TryLock()
+	if !locked {
+		c.oomMu.Unlock()
+	}
+	close(s.release)
+	<-done
+	if !locked {
+		t.Fatal("oomCount reads oom_kill without holding oomMu")
 	}
 }

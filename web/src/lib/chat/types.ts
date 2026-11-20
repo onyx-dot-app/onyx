@@ -1,5 +1,6 @@
 import type { ChatStream, Message } from "@/app/app/types";
 import type { LLMOverride } from "@/app/app/services/lib";
+import type { ToolQuestionAnswer } from "@/app/app/services/streamingModels";
 import type { ProjectFile } from "@/lib/projects/types";
 
 /** A chat skill the user picked with `@`, by name. */
@@ -78,8 +79,9 @@ export interface ChatSessionStatus {
   /** Pending input can start a run now; false while the queue is paused. */
   has_startable_input: boolean;
   latest_response_id: number | null;
-  /** Changes when any approval request of the chat session opens or
-   * resolves, on any branch, a reply's or a background subagent's. */
+  /** Changes when any approval request or question of the chat session
+   * opens or resolves, on any branch, a reply's or a background
+   * subagent's. */
   approvals_version: string;
 }
 
@@ -107,6 +109,19 @@ export interface ChatSessionQueue {
   interrupt: (id: string) => Promise<void>;
   /** Interrupts every running subagent on the selected branch. */
   stopSubagents: () => Promise<void>;
+}
+
+/** The card's answers to a question request's questions, or text that the
+ * user typed in the chat instead, which answers every question of the
+ * response that waits. */
+export type QuestionAnswersBody =
+  | { answers: ToolQuestionAnswer[] }
+  | { message: string };
+
+export interface QuestionAnswersResponse {
+  question_request_id: string;
+  /** The stream that continues the response, when it runs. */
+  continuation: ChatStream | null;
 }
 
 export interface ApprovalDecisionResponse {

@@ -6,6 +6,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.mock_connector.connector import (
     EXTERNAL_USER_EMAILS,
@@ -123,7 +124,11 @@ def test_mock_connector_initial_permission_sync(
         assert db_doc.external_user_emails is not None
         assert db_doc.external_user_group_ids is not None
         assert set(db_doc.external_user_emails) == EXTERNAL_USER_EMAILS
-        assert set(db_doc.external_user_group_ids) == EXTERNAL_USER_GROUP_IDS
+        # Storage adds the source prefix to the connector's bare ids.
+        assert set(db_doc.external_user_group_ids) == {
+            build_ext_group_name_for_onyx(group_id, DocumentSource.MOCK_CONNECTOR)
+            for group_id in EXTERNAL_USER_GROUP_IDS
+        }
         assert db_doc.is_public is False
 
     # After initial indexing, the beat task detects last_time_perm_sync is None

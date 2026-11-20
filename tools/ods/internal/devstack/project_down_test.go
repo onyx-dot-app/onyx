@@ -4,6 +4,7 @@ package devstack
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,15 +16,24 @@ import (
 
 type fakeCompose struct {
 	projects []string
+	volumes  []bool
 }
 
-func (c *fakeCompose) down(_ context.Context, project string, _ bool) error {
+func (c *fakeCompose) down(_ context.Context, project string, volumes bool) error {
 	c.projects = append(c.projects, project)
+	c.volumes = append(c.volumes, volumes)
 	return nil
 }
 
 func discoverWith(containers []docker.ComposeContainer) DiscoverOptions {
-	return DiscoverOptions{ListContainers: func() ([]docker.ComposeContainer, error) { return containers, nil }}
+	return discoverWithVolumes(containers, nil)
+}
+
+func discoverWithVolumes(containers []docker.ComposeContainer, volumes map[string]int) DiscoverOptions {
+	return DiscoverOptions{
+		ListContainers: func() ([]docker.ComposeContainer, error) { return containers, nil },
+		ListVolumes:    func() (map[string]int, error) { return volumes, nil },
+	}
 }
 
 // isolatedLinkedStack starts an isolated stack in a linked worktree.
@@ -94,7 +104,7 @@ func TestDownProjectRefusesLiveWorktreeWithoutForce(t *testing.T) {
 	}
 }
 
-func TestStopProjectKeepsInfrastructure(t *testing.T) {
+func TestStopProjectStopsServicesAndKeepsInfrastructure(t *testing.T) {
 	stack, api := isolatedLinkedStack(t, "stop-data")
 	if err := os.RemoveAll(stack.Root); err != nil {
 		t.Fatal(err)
@@ -107,6 +117,9 @@ func TestStopProjectKeepsInfrastructure(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(stack.StateDir, stateFileName)); err != nil {
 		t.Fatal(err)
+	}
+	if got := leaseNames(t, stack.Registry, stack.Root); got["api"] != 0 {
+		t.Fatalf("stop --project kept application leases: %v", got)
 	}
 }
 
@@ -132,19 +145,6 @@ func TestCleanupRowKeepsContainersOfAnotherOwner(t *testing.T) {
 	}
 }
 
-func TestStopProjectReleasesApplicationLeases(t *testing.T) {
-	stack, _ := isolatedLinkedStack(t, "stop-leases")
-	if err := os.RemoveAll(stack.Root); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := StopProject(context.Background(), stack.Registry, stack.Project, ProjectOptions{StopTimeout: testOptions().StopTimeout, LockWait: time.Second, Discover: discoverWith(nil)}); err != nil {
-		t.Fatal(err)
-	}
-	if got := leaseNames(t, stack.Registry, stack.Root); got["api"] != 0 {
-		t.Fatalf("stop --project kept application leases: %v", got)
-	}
-}
-
 func TestDownProjectRemovesOwnerRecordWithoutState(t *testing.T) {
 	registry := &Registry{Dir: t.TempDir()}
 	path := ownerPath(registry, "old-data")
@@ -160,6 +160,89 @@ func TestDownProjectRemovesOwnerRecordWithoutState(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("owner record remains: %v", err)
+	}
+}
+
+func TestOwnerWithoutStateKeepsItsVolumesUntilTheyAreDeleted(t *testing.T) {
+	registry := &Registry{Dir: t.TempDir()}
+	path := ownerPath(registry, "removed-1")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"state_dir":"/missing/ods-stack"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	discover := discoverWithVolumes(nil, map[string]int{"removed-1": 7, "unrelated": 2})
+	row := rowFor(t, Discover(registry, discover), "removed-1")
+	if row.Status != StatusOrphaned || row.Volumes != 7 || !row.OnlyVolumes() || row.Next != "ods stack prune --volumes" {
+		t.Fatalf("owner without state: %+v", row)
+	}
+
+	compose := &fakeCompose{}
+	opts := ProjectOptions{LockWait: time.Second, Discover: discover}
+	if _, err := CleanupRow(context.Background(), registry, row, compose.down, opts); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("the owner record was removed while its volumes remain: %v", err)
+	}
+
+	// Compose exits 0 and keeps a volume that a container still uses.
+	opts.Volumes = true
+	result, err := CleanupRow(context.Background(), registry, row, compose.down, opts)
+	if err == nil || !strings.Contains(err.Error(), "still uses") {
+		t.Fatalf("an in-use volume did not fail the cleanup: %v", err)
+	}
+	if result.RemovedVolumes || result.RemovedOwner {
+		t.Fatalf("an in-use volume counted as removed: %+v", result)
+	}
+
+	opts.Discover.ListVolumes = func() (map[string]int, error) { return nil, errors.New("docker volume ls failed") }
+	result, err = CleanupRow(context.Background(), registry, row, compose.down, opts)
+	if err == nil || result.RemovedOwner {
+		t.Fatalf("a failed volume check was hidden: err %v, result %+v", err, result)
+	}
+
+	opts.Discover = discoverWithVolumes(nil, map[string]int{"unrelated": 2})
+	result, err = CleanupRow(context.Background(), registry, row, compose.down, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(compose.projects) != 4 || compose.projects[3] != "removed-1" || !compose.volumes[3] || !result.RemovedVolumes || !result.RemovedOwner {
+		t.Fatalf("volumes were not deleted: calls %v %v, result %+v", compose.projects, compose.volumes, result)
+	}
+}
+
+func TestOwnerWithoutStateStaysWhenTheVolumesCannotBeListed(t *testing.T) {
+	registry := &Registry{Dir: t.TempDir()}
+	path := ownerPath(registry, "removed-1")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"state_dir":"/missing/ods-stack"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	discover := DiscoverOptions{
+		ListContainers: func() ([]docker.ComposeContainer, error) { return nil, nil },
+		ListVolumes:    func() (map[string]int, error) { return nil, errors.New("docker volume ls failed") },
+	}
+	var row StackRow
+	for _, r := range Discover(registry, discover).Rows {
+		if r.OwnerRecord == path {
+			row = r
+		}
+	}
+	if row.Status != StatusOrphaned {
+		t.Fatalf("owner without state: %+v", row)
+	}
+	for _, volumes := range []bool{false, true} {
+		opts := ProjectOptions{LockWait: time.Second, Discover: discover, Volumes: volumes}
+		if _, err := CleanupRow(context.Background(), registry, row, (&fakeCompose{}).down, opts); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("volumes %v: the owner record was removed while its volumes are unknown: %v", volumes, err)
+		}
 	}
 }
 
@@ -190,5 +273,23 @@ func TestCleanupRowRefusesWhenTheOwnerRecordIsUnreadable(t *testing.T) {
 	compose := &fakeCompose{}
 	if _, err := CleanupRow(context.Background(), stack.Registry, secondary, compose.down, ProjectOptions{LockWait: time.Second}); err == nil || len(compose.projects) != 0 {
 		t.Fatalf("err = %v, compose = %v", err, compose.projects)
+	}
+}
+
+func TestCleanupRowSkipsAnIdleStackRestartedAfterItWasListed(t *testing.T) {
+	stack, _ := isolatedLinkedStack(t, "restarted-later")
+	st, err := stack.ReadState()
+	if err != nil || st == nil {
+		t.Fatalf("state %v, %v", st, err)
+	}
+	row := StackRow{Project: stack.Project, Mode: Isolated, StateDir: stack.StateDir, Root: stack.Root, RootExists: true,
+		Worktree: true, Status: StatusInfraOnly, Since: time.Now().Add(-48 * time.Hour)}
+	compose := &fakeCompose{}
+	opts := ProjectOptions{LockWait: time.Second, Force: true, IdleCutoff: time.Now().Add(-6 * time.Hour)}
+	if _, err := CleanupRow(context.Background(), stack.Registry, row, compose.down, opts); !errors.Is(err, ErrNotIdle) {
+		t.Fatalf("err = %v, want ErrNotIdle", err)
+	}
+	if len(compose.projects) != 0 {
+		t.Fatalf("a restarted stack was stopped: %v", compose.projects)
 	}
 }

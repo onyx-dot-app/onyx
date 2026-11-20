@@ -11,8 +11,8 @@ import httpx
 import pytest
 
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
+from onyx.db.sandbox import get_running_sandboxes
 from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
-from onyx.server.features.build.db.sandbox import get_running_sandboxes
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.users import create_or_login_admin

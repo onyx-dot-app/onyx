@@ -59,6 +59,25 @@ spec:
             description: {{ `{{ $value }} host agent pods are available, fewer than the DaemonSet wants, for 15m. Sandbox nodes without a Ready agent take no VMs.` | quote }}
             runbook_url: {{ printf "%s#craftfchostagentpodsmissing" $runbook }}
 
+        - alert: CraftFcNodeReportsStale
+          # The agent answers scrapes but the api_server accepts no state
+          # report (for example a lost node key, or 1 h after a wrong
+          # registration secret). 0 = none yet; max keeps the old pod's
+          # value while a new pod starts.
+          expr: |
+            time() - max by (namespace, node) (craft_fc_host_agent_node_report_last_success_timestamp_seconds{ {{- $sel -}} })
+              > {{ dig "nodeReportStaleSeconds" 300 $alerts }}
+          for: 5m
+          labels:
+            severity: critical
+            {{- with $extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{ `The api_server accepts no node reports from {{ $labels.node }}` | quote }}
+            description: {{ `The api_server last accepted a state report from the host agent on node {{ $labels.node }} {{ $value | humanizeDuration }} ago (about 56 years: none since the agent started). After SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS (default 180 s) without a report it places no new VMs on a node that reported before. CraftFcHostAgentDown stays clear.` | quote }}
+            runbook_url: {{ printf "%s#craftfcnodereportsstale" $runbook }}
+
         - alert: CraftFcCreateFailures
           # "failed" = the start failed after admission (VMM, journal, guest
           # key). Refusals before admission are in CraftFcAdmissionRefusals.
@@ -149,6 +168,20 @@ spec:
             summary: {{ `Node {{ $labels.node }} is low on memory` | quote }}
             description: {{ `Node {{ $labels.node }} has {{ $value | humanizePercentage }} of its memory available for 15m. New VMs get CAPACITY_MEMORY.` | quote }}
             runbook_url: {{ printf "%s#craftfcnodememorylow" $runbook }}
+
+        - alert: CraftFcVMOOMKills
+          # The agent counts from its own start, so a new series is new kills.
+          expr: |
+            sum by (namespace, node) ({{ include "onyx.craftFcCounterIncrease" (list (printf `craft_fc_host_agent_vm_slice_oom_kills_total{%s}` $sel) "15m") }}) > 0
+          labels:
+            severity: warning
+            {{- with $extraLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: {{ `The kernel stopped a microVM on node {{ $labels.node }} for memory` | quote }}
+            description: {{ `The kernel OOM-killed {{ $value | humanize }} microVM process(es) on node {{ $labels.node }} in 15m: a microVM used more than its memory limit, the microVMs together more than the VM slice limit, or the node ran out of memory.` | quote }}
+            runbook_url: {{ printf "%s#craftfcvmoomkills" $runbook }}
 
         - alert: CraftFcTemplateUnusable
           # template_ready is 0 before the first build from --rootfs-dir and

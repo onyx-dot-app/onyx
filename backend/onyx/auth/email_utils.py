@@ -1,6 +1,6 @@
 import base64
 import smtplib
-from datetime import datetime
+from datetime import UTC, datetime
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -179,7 +179,7 @@ def build_html_email(
         message=message,
         cta_block=cta_block,
         community_link_fragment=community_link_fragment,
-        year=datetime.now().year,
+        year=datetime.now(UTC).astimezone().year,
     )
 
 

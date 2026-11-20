@@ -17,6 +17,7 @@ from onyx.onyxbot.discord.handle_commands import (
 )
 from onyx.onyxbot.discord.handle_message import process_chat_message, should_respond
 from onyx.onyxbot.discord.utils import get_bot_token
+from onyx.utils.encryption import validate_encryption_configuration
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -207,6 +208,7 @@ def main() -> None:
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
     set_is_ee_if_available()
+    validate_encryption_configuration()
 
     counter = 0
     while True:

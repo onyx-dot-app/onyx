@@ -9,11 +9,11 @@ description: >
   Use when the user asks to merge, clean up, clear out, or land Dependabot (or
   similar bot-authored) PRs.
 license: MIT
-compatibility: Requires git, pre-commit, uv, bun, ods (the repo venv's devtools script), and gh (GitHub CLI) authenticated with write access to onyx-dot-app/onyx.
+compatibility: Requires git, prek, uv, bun, ods (the repo venv's devtools script), and gh (GitHub CLI) authenticated with write access to onyx-dot-app/onyx.
 metadata:
   author: jmelahman
   version: "1.1"
-allowed-tools: Bash(gh:*), Bash(git:*), Bash(pre-commit:*), Bash(bun install:*), Bash(ods audit:*)
+allowed-tools: Bash(gh:*), Bash(git:*), Bash(prek:*), Bash(bun install:*), Bash(ods audit:*)
 ---
 
 # Merge Dependabot PRs
@@ -129,9 +129,9 @@ per-PR confirmation. Known Onyx cases:
 
 - **uv bumps** (`dependabot:python`): the exported `backend/requirements/*.txt`
   files go stale when only `pyproject.toml`/`uv.lock` were bumped. Regenerate
-  via the same pre-commit hooks CI uses:
+  via the same hooks CI uses:
   ```bash
-  pre-commit run --files pyproject.toml uv.lock backend/requirements/*.txt
+  prek run --files pyproject.toml uv.lock backend/requirements/*.txt
   ```
 - **bun bumps** (`dependabot:javascript`): stale `bun.lock` — run
   `bun install` in the bumped directory (repo root or `web/`).

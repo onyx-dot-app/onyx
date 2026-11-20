@@ -15,6 +15,22 @@ adds group shares, group ownership and per-agent usage stats.
   sets, single documents, connector folders, or the user's own files), tools,
   starter messages and an icon. CE grants `ADD_AGENTS` to every user. EE grants
   it through groups.
+- **Integrations in the editor.** The agent editor links integrations by id,
+  not single MCP or OpenAPI tools. `web/src/sections/agents/AgentIntegrationsSection.tsx`
+  offers the integrations of `GET /integrations/agent-catalog` and saves
+  `integrations: [{integration_id, action_settings}]`. For each action the owner
+  picks Use the agent default (no key), Use the integration setting
+  (`inherit`), Allow, Ask or Blocked, and a "Default for other actions" row
+  covers the actions with no key. Allow is hidden when the admin value is
+  locked (`web/src/lib/agents/integrations.ts:lockReason`), except an Allow that is
+  already stored. Each action shows the value that applies
+  (`effectiveSetting`, the backend policy order without the user's grant).
+  An agent gives no access: when the agent is shared and an integration is
+  not shared with everyone (`access.shared_with_everyone`), the card shows a
+  warning; the agent viewer marks an integration the viewer cannot use. Save
+  sends each action key as loaded, so a migrated
+  `{"default": "blocked", "actions": {"x": "inherit"}}` stays as it is, and
+  `tool_ids` holds only built-in tools.
 - **In chat**, picking an agent applies its instructions, scopes search to its
   knowledge, and offers only its tools. An edit applies to the next turn of
   every session that uses the agent. Old messages do not change.
@@ -145,7 +161,9 @@ read. `seed_pinned_personas_from_featured` runs once, at account creation.
    caller without global `MANAGE_AGENTS`, `upsert_persona` checks that each
    added document set and folder is readable by the caller, and that each
    added file is the caller's own. For every signed-in caller, each added
-   MCP-backed tool needs `backend/onyx/db/mcp.py:user_can_access_mcp_server`. Attached items stay when
+   integration link (also one that an old MCP or custom tool id maps to)
+   needs an integration the caller has access to
+   (`backend/onyx/db/persona.py:_write_persona_integrations`). Attached items stay when
    the editor loses access. Single documents are filtered for every caller:
    unreadable ids are dropped, and the call fails only when none remain.
 6. `sharing-not-document-access` **Sharing an agent does not share its
@@ -155,9 +173,12 @@ read. `seed_pinned_personas_from_featured` runs once, at account creation.
    The `db/models.py:Persona__Tool` docstring states this. Disabled and
    unconfigured tools stay attached, and `tools/tool_constructor.py:construct_tools`
    skips them. Never treat the join row as
-   proof that a tool runs ([[tools-framework]]). The editor rebuilds `tool_ids`
-   from `backend/onyx/db/persona.py:get_tool_ids_on_editable_personas`, so a tool missing from that
-   listing is dropped on the next save.
+   proof that a tool runs ([[tools-framework]]). Only built-in tool ids stay
+   on `Persona__Tool`; an old custom or MCP id in `tool_ids` adds a
+   `persona__integration` link
+   (`backend/onyx/db/integration_policy.py:legacy_tool_integration_links`).
+   The link gives no access: each user of the agent needs access to the
+   integration.
 8. `persona-search-info-detached` **`PersonaSearchInfo` must stay a detached
    snapshot.** `db/tools.py:capture_persona_tool_configuration` copies document
    set names, `search_start_date`, document ids and folder ids before the
@@ -241,7 +262,7 @@ read. `seed_pinned_personas_from_featured` runs once, at account creation.
   leaves agent file chunks with the old audience. The web form always sends
   both lists. Not reproduced.
 - **Group sharees cannot open agent files directly.**
-  `backend/onyx/access/access.py:_user_can_access_persona_attached_file`
+  `backend/onyx/db/access.py:user_can_access_persona_attached_file`
   admits public agents, owners and direct user shares, but not group shares or
   owner groups. Search still finds the file chunks through the index ACL.
 

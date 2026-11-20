@@ -12,10 +12,15 @@ import {
   StreamCursor,
   CreateSessionRequest,
   CreateSessionResponse,
+  QuestionAnswersRequest,
+  QuestionAnswersResponse,
   SendMessageRequest,
 } from "@/types/api-types";
 import { TokenProvider } from "@/types/widget-types";
-import type { ApprovalDecision } from "@/services/approvals";
+import {
+  APPROVAL_PENDING_ERROR_CODE,
+  type ApprovalDecision,
+} from "@/services/approvals";
 
 const READINESS_REQUEST_TIMEOUT_MS = 10_000;
 export const READINESS_POLL_INTERVAL_MS = 1_000;
@@ -306,6 +311,69 @@ export class ApiService {
       decided_via: body.decided_via,
       continuation,
     };
+  }
+
+  /**
+   * Answer a question request: its card's answers, or a message that the
+   * user typed, which answers every question of the response that waits.
+   * Returns "closed" when the request no longer waits for this answer (404,
+   * or a 409 conflict). Throws the 409 APPROVAL_PENDING of a message while an
+   * approval request of the response waits.
+   */
+  async submitQuestionAnswers(
+    questionRequestId: string,
+    body: QuestionAnswersRequest
+  ): Promise<QuestionAnswersResponse | "closed"> {
+    // No retry, as for a decision: a failed answer stays on the card or in
+    // the input for the user to submit again.
+    const response = await fetch(
+      `${this.backendUrl}/chat/question-requests/${encodeURIComponent(questionRequestId)}/answers`,
+      {
+        method: "POST",
+        headers: await this.getHeaders(),
+        body: JSON.stringify(body),
+      }
+    );
+    if (response.status === 404) return "closed";
+    if (!response.ok) {
+      const error = await apiErrorFrom(response);
+      if (
+        response.status === 409 &&
+        error.errorCode !== APPROVAL_PENDING_ERROR_CODE
+      )
+        return "closed";
+      throw error;
+    }
+    const result: unknown = await response.json();
+    if (typeof result !== "object" || result === null) {
+      throw new Error("Invalid question answers response");
+    }
+    return {
+      continuation:
+        "continuation" in result ? readChatStream(result.continuation) : null,
+    };
+  }
+
+  /** Record the visitor's rating of a response, or remove it when `isPositive` is null. */
+  async setMessageFeedback(
+    chatMessageId: number,
+    isPositive: boolean | null
+  ): Promise<void> {
+    const response =
+      isPositive === null
+        ? await fetch(
+            `${this.backendUrl}/chat/remove-chat-message-feedback?chat_message_id=${chatMessageId}`,
+            { method: "DELETE", headers: await this.getHeaders() }
+          )
+        : await fetch(`${this.backendUrl}/chat/create-chat-message-feedback`, {
+            method: "POST",
+            headers: await this.getHeaders(),
+            body: JSON.stringify({
+              chat_message_id: chatMessageId,
+              is_positive: isPositive,
+            }),
+          });
+    if (!response.ok) throw await apiErrorFrom(response);
   }
 
   /**

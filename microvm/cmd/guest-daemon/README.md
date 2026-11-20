@@ -42,7 +42,7 @@ executions), `--max-running` (64), `--max-tracked` (64 records, running and ende
 managed calls off), `--ca-anchor`
 (`/usr/local/share/ca-certificates/craft-egress-ca.crt`), `--ca-bundle` (`/etc/ssl/certs/ca-certificates.crt`;
 empty turns the CA install off), `--ca-nssdb` (`/home/sandbox/.pki/nssdb`; empty to skip), `--certutil`
-(`/usr/bin/certutil`), the file flags (`--sessions-root`,
+(`/usr/bin/certutil`), the file flags (`--sessions-root`, `--onyx-root`,
 `--read-link-roots`, `--max-file-bytes`, `--max-zip-bytes`, `--capture-dirs`, `--capture-exclude`,
 `--capture-max-stored-bytes`, `--capture-max-expanded-bytes`, `--capture-max-entries`,
 `--capture-zstd-level`, `--file-owner`; see Files), `--command-user` (`1000:1000`; empty runs commands as
@@ -97,6 +97,7 @@ agent, every call also carries `x-sandbox-id`.
 | `Inspect`, `List` | Execution records (state, PID, times, byte counts, result), `List` filtered by labels. |
 | `ReadFile`, `WriteFile`, `ListFiles`, `DeleteFile`, `ZipFiles` | Session files, or any VM path with no session ID (see Files). |
 | `UploadFile` | A free name in a session directory (`attachments/` by default). Always needs a session ID. |
+| `StatFiles` | Up to 1,000 session paths (1 MiB of path bytes) in one call, through `os.Root`: each path's own entry (exists, type, mode, link target) and its target through the links inside the session (type, mode, device and inode), or why there is none (missing, escapes the session, loop, other). `os.Root` follows at most 8 links per path. Reads no content. Always needs a session ID. |
 | `CaptureSession`, `RestoreSession` | Session saves as tar + zstd (see Session saves). |
 | `BrowserStart`, `BrowserStop` | Reserved for the browser. `UNIMPLEMENTED`. |
 | `ManagedStatus(mount)` | The slot on the mount point (by the mount's device number) and, per slot, the device, size, ext4 UUID (read with `O_DIRECT`) and whether it is in use (an exclusive open fails with `EBUSY` while a mount holds it, also a detached one with open files). The node agent calls it. |
@@ -143,6 +144,11 @@ Files (`internal/guestd/files`):
   fail with `INVALID_ARGUMENT`; `ListFiles` and `ZipFiles` leave them out, and a recursive `DeleteFile` of a
   directory that holds one fails. `UploadFile` and the
   session saves always need a session.
+- A path with no `session_id` in `/tmp/onyx` (`--onyx-root`, the files that Onyx writes outside every
+  session) is confined like a session path: the daemon opens that directory as an `os.Root`, so a link
+  that a command made never takes a call out of it (`INVALID_ARGUMENT`). A write replaces a link in
+  the last part instead of following it. A write with `make_parents` makes a missing onyx root. An
+  onyx root that is a link, or one under a denied path, fails.
 - With a session, every path is relative to `/home/onyx/workspaces/<session_id>/` (`--sessions-root`). Leading `/` are
   dropped, so `/attachments/a.pdf` is `attachments/a.pdf`. The daemon opens that directory as an `os.Root`. A
   path with a `..` part, a NUL byte or bad UTF-8, a path over 4096 bytes, a name over 255 bytes, or a
@@ -161,9 +167,12 @@ Files (`internal/guestd/files`):
   response would pass 12 MiB. Links are listed, not followed. Names that are not valid UTF-8
   are left out.
 - Owner: the files and directories that `WriteFile`, `UploadFile` and `RestoreSession` make, and a
-  sessions root or session directory that the daemon makes, belong to `--file-owner` (default
-  `1000:1000`, the image's `sandbox` user; empty keeps root). Directories that exist keep their owner,
-  also the parents of the sessions root. If the owner change fails, the call fails.
+  sessions root, session directory or onyx root that the daemon makes, belong to `--file-owner` (default
+  `1000:1000`, the image's `sandbox` user; empty keeps root). Directories that exist keep their owner;
+  the parent of the sessions root must exist. The daemon changes the owner through an open handle,
+  never a link's target. If the owner change fails, the call fails.
+- The sessions root, a session directory and the onyx root must not be links, also when a command
+  replaces one while a call opens it (`INVALID_ARGUMENT`).
 - `DeleteFile` removes a file or a link (never its target); a directory needs `recursive`.
 - `ZipFiles` streams a deflate zip of the regular files under a directory. It checks
   `--max-zip-bytes` (1 GiB) and 100,000 files before it sends the first byte.

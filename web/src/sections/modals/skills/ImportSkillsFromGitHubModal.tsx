@@ -30,12 +30,13 @@ import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { importGitHubSkills, previewGitHubSkills } from "@/lib/skills/api";
+import { useInstallationPolicyCopy } from "@/lib/skills/hooks";
 import type {
   GitHubSkillNotImported,
   GitHubSkillsImportResult,
   GitHubSkillsPreview,
 } from "@/lib/skills/types";
-import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
+import type { CraftApp } from "@/lib/integrations/craft";
 
 interface ImportSkillsFromGitHubModalProps {
   open: boolean;
@@ -52,7 +53,7 @@ interface ImportSkillsFromGitHubModalViewProps {
   loading: boolean;
   error: string | null;
   isAdmin: boolean;
-  externalApps: ExternalAppUserResponse[] | undefined;
+  externalApps: CraftApp[] | undefined;
   onClose: () => void;
   onRepositoryChange: (value: string) => void;
   onSelectedPathsChange: (paths: string[]) => void;
@@ -118,7 +119,7 @@ export default function ImportSkillsFromGitHubModal({
         ? await importGitHubSkills(
             preview,
             selectedPaths,
-            serializeSkillSharing(sharing, isAdmin, isOrganizationManager)
+            serializeSkillSharing(sharing, isOrganizationManager)
           )
         : await importGitHubSkills(preview, selectedPaths);
       setResult(nextResult);
@@ -193,6 +194,7 @@ export function ImportSkillsFromGitHubModalView({
   onConfigureSharing,
 }: ImportSkillsFromGitHubModalViewProps) {
   const t = useTranslations("skills.modals");
+  const policyCopy = useInstallationPolicyCopy();
   const importablePaths = useMemo(
     () =>
       preview?.skills
@@ -461,9 +463,7 @@ export function ImportSkillsFromGitHubModalView({
                 >
                   {isAdmin && (
                     <Text font="secondary-body" color="text-03">
-                      {t(
-                        `share.installation.${({ AVAILABLE: "available", DEFAULT: "default", REQUIRED: "required" } as const)[sharing.installation_policy]}`
-                      )}
+                      {policyCopy.label(sharing.installation_policy)}
                     </Text>
                   )}
                   <Text font="secondary-body" color="text-03">

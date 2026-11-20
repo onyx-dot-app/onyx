@@ -155,6 +155,8 @@ export interface SettingsHeaderProps {
    */
   actions?: React.ReactNode[];
   stackActionsOnMobile?: boolean;
+  /** A link back to the parent page, above the title. */
+  back?: React.ReactNode;
   /**
    * Renders a secondary Cancel as the first action. `true` goes back within
    * the app (`clampedBack`), or to `/` when the page was not reached within
@@ -182,6 +184,7 @@ function SettingsHeader({
   children,
   actions,
   stackActionsOnMobile = false,
+  back,
   cancel = false,
   divider,
 }: SettingsHeaderProps) {
@@ -274,13 +277,14 @@ function SettingsHeader({
       <Spacer rem={3.25} />
 
       <div className="flex flex-col gap-6 px-4 @max-[51rem]/settings-page:px-2">
+        {back && <div className="-mb-4 self-start">{back}</div>}
         <div
           className={cn(
             "flex w-full items-start justify-between gap-4",
             stackActionsOnMobile && "flex-col sm:flex-row"
           )}
         >
-          <div aria-label="admin-page-title">
+          <div aria-label="admin-page-title" className="min-w-0">
             <Content
               font="heading-headline"
               orientation="stacked"

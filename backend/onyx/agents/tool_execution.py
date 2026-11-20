@@ -46,6 +46,12 @@ if TYPE_CHECKING:
 
 logger = setup_logger()
 
+# The result of a call on a step where no tool can run. It asks the model for
+# its final answer.
+NO_TOOL_CAN_RUN_RESULT = (
+    "No more tools can run in this response. Write your final answer now."
+)
+
 
 def _tool_view(message: Message) -> Message:
     """An owned copy of a conversation message for a tool. Result details stay
@@ -187,10 +193,10 @@ class ToolBatch:
                 self.run.record_tool_results(outcome, calls)
             return outcome
 
+        # The run's work wakes the tool phase when the operation ends.
         future = self.run.work.start(operation)
         for member in calls:
             self.futures[member.id] = future
-        future.add_done_callback(lambda _future: self.run.notify_tool_activity())
 
     def _collect_results(self) -> None:
         for call_id, future in tuple(self.futures.items()):
@@ -226,16 +232,17 @@ class ToolBatch:
                     completed_call_ids = self._completed_call_ids()
                     if len(self.progress.finalized_tool_call_ids) == len(self.calls):
                         return True
-                    blocked_tool_names: set[str] = set()
+                    blocked_sequences: set[str] = set()
                     for index, call in enumerate(self.calls):
                         if call.id in self.progress.finalized_tool_call_ids:
                             continue
                         tool = self.tools.get(call.name)
                         if tool and tool.execution_mode == ToolExecutionMode.SEQUENTIAL:
-                            if call.name in blocked_tool_names:
+                            sequence = tool.sequence_group or call.name
+                            if sequence in blocked_sequences:
                                 continue
                             # Pending input and child waits retain their place in order.
-                            blocked_tool_names.add(call.name)
+                            blocked_sequences.add(sequence)
                         if call.id in completed_call_ids or call.id in self.futures:
                             continue
                         with self.run.execution_lock:
@@ -261,13 +268,19 @@ class ToolBatch:
                             self._start([call], children=children)
                             continue
                         self._start_compatible_calls(call, index, completed_call_ids)
+                    if not self.run.suspension_requested:
+                        self._continue_open_inputs()
                     if not self.futures:
                         if len(self._completed_call_ids()) > len(completed_call_ids):
                             continue
-                        return False
-                    self.run.wait_for_tool_activity(
-                        lambda: any(future.done() for future in self.futures.values())
-                    )
+                        # See ToolInvocation.run_work. Work that ended since
+                        # the cycle began, such as a program that parked
+                        # after its offer, gets another cycle.
+                        if self.run.tool_phase_idle:
+                            return False
+                    # Each held job that ends, such as a call or a program
+                    # that parks, starts another cycle.
+                    self.run.wait_for_tool_activity()
         except BaseException:
             self.run.cancellation_signal.cancel()
             self.run.notify_tool_activity()
@@ -315,6 +328,47 @@ class ToolBatch:
                     for request, answer in zip(pending.requests, found, strict=True)
                 ],
             )
+
+    def _continue_open_inputs(self) -> None:
+        """Give the answers of open requests to the tools that made their
+        calls, one call's requests at a time; see
+        AgentTool.continue_open_input."""
+        with self.run.execution_lock:
+            answers = self.progress.human_tool_answers
+            by_call: dict[str, list[NestedInputAnswer]] = {}
+            for request_id, request in self.progress.open_inputs.items():
+                answer = answers.get(request_id)
+                if answer is not None:
+                    by_call.setdefault(request.tool_call.id, []).append(
+                        NestedInputAnswer(request=request, answer=answer)
+                    )
+        for answered in by_call.values():
+            opened = answered[0].request
+            call = opened.tool_call
+            tool = self.tools.get(call.name)
+            if tool is None or tool.continue_open_input is None:
+                continue
+            invocation = ToolInvocation(
+                call_id=call.id,
+                call_index=self.call_indices.get(call.id, 0),
+                arguments=call.model_copy(deep=True).arguments,
+                cancellation=self.run.cancellation_signal,
+                # Nothing observes the call, which already returned.
+                update=lambda _progress: None,
+                messages=[_tool_view(message) for message in self.context_messages],
+                recorded_results=self._recorded_before(),
+                nested_calls=_NestedCallGate(
+                    self, call, opened.message_id, opened.step_index
+                ),
+                run_work=self.run.work,
+            )
+            try:
+                taken = tool.continue_open_input(invocation, answered)
+            except Exception:
+                # The requests stay open with their answers.
+                logger.exception("Tool %s did not take its answers", call.name)
+                continue
+            self.run.resolve_open_inputs(taken)
 
     def _start_compatible_calls(
         self, call: ToolCall, index: int, completed_call_ids: set[str]
@@ -397,10 +451,24 @@ class ToolBatch:
                 and call.name != options.tool_choice.name
             )
         ):
-            return ToolResult(
-                content=f"Tool {call.name} is unavailable for this step.",
-                is_error=True,
+            content = (
+                NO_TOOL_CAN_RUN_RESULT
+                if options.tool_choice == ToolChoiceOptions.NONE
+                else f"Tool {call.name} is unavailable for this step."
             )
+            # A call of a tool that runs only inside an offered tool's calls,
+            # such as a code mode function, says how to call it there.
+            if tool is None and options.tool_choice != ToolChoiceOptions.NONE:
+                for offered in self.tools.values():
+                    hint = (
+                        offered.inner_call_hint(call.name)
+                        if offered.inner_call_hint is not None
+                        else None
+                    )
+                    if hint is not None:
+                        content = hint
+                        break
+            return ToolResult(content=content, is_error=True)
         if (
             call.argument_error
             or not call.arguments_complete
@@ -448,9 +516,10 @@ class ToolBatch:
             agents=self.run.coordination.for_tool(call.id, self.message_id, active)
             if self.run.coordination
             else None,
-            nested_calls=_NestedCallGate(self, call)
+            nested_calls=_NestedCallGate(self, call, self.message_id, self.step.index)
             if self.run.before_tool_call is not None or self.run.approval_required
             else None,
+            run_work=self.run.work,
         )
         try:
             if children is not None:
@@ -497,11 +566,16 @@ class ToolBatch:
 
 
 class _NestedCallGate(NestedCallGate):
-    """Decides the calls that one direct call of a step makes for the model."""
+    """Decides the calls that one direct call makes for the model. Its
+    requests show at `message_id` and `step_index`, the place of the call."""
 
-    def __init__(self, batch: ToolBatch, call: ToolCall) -> None:
+    def __init__(
+        self, batch: ToolBatch, call: ToolCall, message_id: str, step_index: int
+    ) -> None:
         self._batch = batch
         self._call = call
+        self._message_id = message_id
+        self._step_index = step_index
 
     def decide(self, call: ToolCall) -> ToolResult | NestedInputRequest | None:
         batch = self._batch
@@ -513,8 +587,8 @@ class _NestedCallGate(NestedCallGate):
         if not isinstance(decision, PendingToolInput):
             return decision
         request = NestedInputRequest(
-            message_id=batch.message_id,
-            step_index=batch.step.index,
+            message_id=self._message_id,
+            step_index=self._step_index,
             tool_call=self._call,
             nested_call=call,
             request=decision,

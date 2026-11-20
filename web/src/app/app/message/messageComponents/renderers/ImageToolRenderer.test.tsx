@@ -1,4 +1,5 @@
 import { render, screen } from "@tests/setup/test-utils";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { ImageToolRenderer } from "@/app/app/message/messageComponents/renderers/ImageToolRenderer";
 import { RenderType } from "@/app/app/message/messageComponents/types";
 import {
@@ -37,14 +38,15 @@ test("the timeline counts unique images across repeated deltas", () => {
     <ImageToolRenderer
       packets={packets}
       nestedCalls={[]}
-      streamPackets={packets}
       state={{}}
       onComplete={() => {}}
       renderType={RenderType.COMPACT}
       animate={false}
       stopPacketSeen
     >
-      {(steps) => <>{steps[0]?.status}</>}
+      {(steps) => (
+        <>{toPlainString(steps[0]?.doneStatus ?? steps[0]?.status ?? "")}</>
+      )}
     </ImageToolRenderer>
   );
   expect(screen.getByText("Generated 1 image")).toBeInTheDocument();
@@ -77,14 +79,15 @@ test.each([
       <ImageToolRenderer
         packets={packets}
         nestedCalls={[]}
-        streamPackets={packets}
         state={{}}
         onComplete={() => {}}
         renderType={RenderType.COMPACT}
         animate={false}
         stopPacketSeen
       >
-        {(steps) => <>{steps[0]?.status}</>}
+        {(steps) => (
+          <>{toPlainString(steps[0]?.doneStatus ?? steps[0]?.status ?? "")}</>
+        )}
       </ImageToolRenderer>
     );
     expect(screen.getByText(expectedStatus)).toBeInTheDocument();

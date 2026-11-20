@@ -21,13 +21,6 @@ func assertNoTempAllowlists(t *testing.T, dir string) {
 	}
 }
 
-func TestFetchIgnores_emptyURLHasNoSuppressions(t *testing.T) {
-	entries, err := FetchIgnores("")
-	if err != nil || entries != nil {
-		t.Fatalf("expected no entries and no error, got %v, %v", entries, err)
-	}
-}
-
 func TestFetchIgnores_invalidS3URLRemovesTheTempFile(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)

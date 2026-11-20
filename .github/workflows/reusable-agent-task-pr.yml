@@ -175,6 +175,9 @@ jobs:
           private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
+          # A branch from a release base differs from main in .github/workflows.
+          # GitHub rejects a push from an App that changes .github/workflows/** without this.
+          permission-workflows: write
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6

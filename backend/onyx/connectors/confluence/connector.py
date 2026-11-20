@@ -1,4 +1,5 @@
 import copy
+import time
 from collections.abc import Generator, Iterable
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -1015,9 +1016,7 @@ class ConfluenceConnector(
         yield from self._yield_space_hierarchy_nodes()
 
         space_level_access: dict[str, ExternalAccess] = (
-            get_all_space_permissions(
-                self.source_operations, self.is_cloud, add_prefix=True
-            )
+            get_all_space_permissions(self.source_operations, self.is_cloud)
             if include_permissions
             else {}
         )
@@ -1078,7 +1077,6 @@ class ConfluenceConnector(
                     doc_or_failure.id,
                     page.get("restrictions") or {},
                     page.get("ancestors", []),
-                    add_prefix=True,
                 ) or space_level_access.get(space_key)
             yield doc_or_failure
 
@@ -1486,8 +1484,8 @@ class ConfluenceConnector(
 if __name__ == "__main__":
     import os
 
+    from onyx.connectors.load_all import load_all_from_connector
     from onyx.utils.variable_functionality import global_version
-    from tests.daily.connectors.utils import load_all_from_connector
 
     # For connector permission testing, set EE to true.
     global_version.set_ee()
@@ -1522,7 +1520,7 @@ if __name__ == "__main__":
     confluence_connector.set_credentials_provider(credentials_provider)
 
     start = 0.0
-    end = datetime.now().timestamp()
+    end = time.time()
 
     # Fetch all `SlimDocuments`.
     for slim_doc in confluence_connector.retrieve_all_slim_docs_perm_sync():

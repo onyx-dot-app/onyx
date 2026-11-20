@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -144,6 +145,129 @@ func TestPathEscapes(t *testing.T) {
 	for _, bad := range []string{"", "..", ".hidden", "a/b"} {
 		if _, _, err := s.List(ctx, bad, ListSpec{}); !errors.Is(err, ErrInvalid) {
 			t.Errorf("session id %q: %v", bad, err)
+		}
+	}
+}
+
+// A command can plant links in the onyx root: a call with no session never
+// follows one out of it.
+func TestOnyxRootConfinesCallsWithoutSession(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	onyx := filepath.Join(dir, "onyx")
+	s, err := New(Config{SessionsRoot: filepath.Join(dir, "sessions"), OnyxRoot: onyx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	write := func(p, data string) error {
+		spec := WriteSpec{Path: p, Size: int64(len(data)), Overwrite: true, MakeParents: true}
+		_, _, err := s.Write(ctx, "", spec, strings.NewReader(data))
+		return err
+	}
+	outside := filepath.Join(dir, "passwd")
+	if err := os.WriteFile(outside, []byte("root"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The daemon makes a missing onyx root.
+	if err := write(onyx+"/./tool-results/../c1.txt", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(onyx, "c1.txt")); err != nil || string(b) != "ok" {
+		t.Fatalf("c1.txt %q %v", b, err)
+	}
+
+	// A link in the last part is replaced, not followed.
+	if err := os.Symlink(outside, filepath.Join(onyx, "out.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := write(onyx+"/out.txt", "new"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(outside); string(b) != "root" {
+		t.Fatalf("the write followed the link: %q", b)
+	}
+	if fi, err := os.Lstat(filepath.Join(onyx, "out.txt")); err != nil || !fi.Mode().IsRegular() {
+		t.Fatalf("out.txt is not the written file: %v", err)
+	}
+
+	// A directory link out of the root fails every call.
+	if err := os.Symlink(dir, filepath.Join(onyx, "up")); err != nil {
+		t.Fatal(err)
+	}
+	if err := write(onyx+"/up/passwd", "new"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("write through a directory link: %v", err)
+	}
+	if err := write(onyx+"/up/new/x.txt", "new"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("write of new directories through a link: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "new")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("made a directory outside the root: %v", err)
+	}
+	err = s.Read(ctx, "", onyx+"/up/passwd", 0, 0, func(Info) error { return nil }, func([]byte) error { return nil })
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("read through a directory link: %v", err)
+	}
+	if _, err := s.Delete("", onyx+"/up/passwd", false); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("delete through a directory link: %v", err)
+	}
+	// A delete of the link removes the link only.
+	if ok, err := s.Delete("", onyx+"/up", true); !ok || err != nil {
+		t.Fatalf("delete link: %v %v", ok, err)
+	}
+	if b, _ := os.ReadFile(outside); string(b) != "root" {
+		t.Fatalf("the delete followed the link: %q", b)
+	}
+
+	// An onyx root that a command replaced with a link is refused.
+	if err := os.RemoveAll(onyx); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(dir, onyx); err != nil {
+		t.Fatal(err)
+	}
+	if err := write(onyx+"/passwd", "new"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("write through a linked onyx root: %v", err)
+	}
+	if b, _ := os.ReadFile(outside); string(b) != "root" {
+		t.Fatalf("the write followed the onyx root link: %q", b)
+	}
+}
+
+// The sandbox user owns the sessions root's parent and can replace the
+// sessions root with a link: session calls refuse it.
+func TestALinkedSessionsRootIsRefused(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	elsewhere := filepath.Join(dir, "etc")
+	if err := os.Mkdir(elsewhere, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sessions := filepath.Join(dir, "sessions")
+	if err := os.Symlink(elsewhere, sessions); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(Config{SessionsRoot: sessions})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := WriteSpec{Path: "a.txt", Size: 1, MakeParents: true}
+	if _, _, err := s.Write(context.Background(), sid, spec, strings.NewReader("x")); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("write in a linked sessions root: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(elsewhere, sid)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("made the session through the link: %v", err)
+	}
+}
+
+func TestAnOnyxRootUnderADeniedPathIsRefused(t *testing.T) {
+	for _, onyx := range []string{"/run/craft-fc/onyx", "/proc", "/dev/shm/onyx"} {
+		if _, err := New(Config{OnyxRoot: onyx}); !errors.Is(err, ErrInvalid) {
+			t.Errorf("onyx root %s: %v", onyx, err)
 		}
 	}
 }
@@ -1206,5 +1330,126 @@ func TestRestoreCountsParentDirectories(t *testing.T) {
 		{h: tar.Header{Typeflag: tar.TypeReg, Name: "work/a/b"}, data: "y"}}
 	if _, err := restore(s, other, makeArchive(t, ms), RestoreSpec{}); !errors.Is(err, ErrArchive) {
 		t.Fatalf("file as a parent: %v", err)
+	}
+}
+
+func TestStat(t *testing.T) {
+	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	managed := filepath.Join(dir, "managed")
+	put(t, managed, "lib.txt", "lib")
+	outsideFile := filepath.Join(dir, "elsewhere.txt")
+	if err := os.WriteFile(outsideFile, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, base := newStore(t, Config{ReadLinkRoots: []string{managed}})
+	put(t, base, "a.txt", "a")
+	if err := os.Chmod(filepath.Join(base, "a.txt"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	put(t, base, "dir/b.txt", "b")
+	put(t, base, "new\nline", "n")
+	links := map[string]string{
+		"l2":      "a.txt",
+		"l1":      "l2",
+		"dirlink": "dir",
+		"broken":  "gone",
+		"loop":    "loop",
+		"absout":  outsideFile,
+		"absroot": base,
+		"library": managed,
+		"escape":  "../" + sid + "/a.txt",
+		"badname": "bad\xffname",
+	}
+	// os.Root follows at most 8 links on one path: hop0 -> ... -> hop8 ->
+	// a.txt takes 9.
+	for i := range 9 {
+		links[fmt.Sprintf("hop%d", i)] = fmt.Sprintf("hop%d", i+1)
+	}
+	links["hop9"] = "a.txt"
+	for name, target := range links {
+		if err := os.Symlink(target, filepath.Join(base, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	aStat, err := os.Stat(filepath.Join(base, "a.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	aSys := aStat.Sys().(*syscall.Stat_t)
+	aDev, aIno := uint64(aSys.Dev), uint64(aSys.Ino) //nolint:unconvert // Dev is int32 on darwin
+
+	cases := []struct {
+		name string
+		path string
+		want PathStat
+	}{
+		{"file", "a.txt", PathStat{Path: "a.txt", Exists: true, Type: TypeRegular, Mode: 0o750, TargetType: TypeRegular, TargetMode: 0o750, Device: aDev, Inode: aIno}},
+		{"missing", "missing", PathStat{Path: "missing", TargetErr: StatMissing}},
+		{"missing parent", "nodir/x", PathStat{Path: "nodir/x", TargetErr: StatMissing}},
+		{"file as a directory", "a.txt/x", PathStat{Path: "a.txt/x", TargetErr: StatOther}},
+		{"link chain", "l1", PathStat{Path: "l1", Exists: true, Type: TypeSymlink, LinkTarget: "l2", TargetType: TypeRegular, TargetMode: 0o750, Device: aDev, Inode: aIno}},
+		{"through a directory link", "dirlink/b.txt", PathStat{Path: "dirlink/b.txt", Exists: true, Type: TypeRegular, Mode: 0o644, TargetType: TypeRegular, TargetMode: 0o644}},
+		{"broken link", "broken", PathStat{Path: "broken", Exists: true, Type: TypeSymlink, LinkTarget: "gone", TargetErr: StatMissing}},
+		{"loop", "loop", PathStat{Path: "loop", Exists: true, Type: TypeSymlink, LinkTarget: "loop", TargetErr: StatLoop}},
+		{"too many links", "hop0", PathStat{Path: "hop0", Exists: true, Type: TypeSymlink, LinkTarget: "hop1", TargetErr: StatLoop}},
+		{"absolute link out", "absout", PathStat{Path: "absout", Exists: true, Type: TypeSymlink, LinkTarget: outsideFile, TargetErr: StatEscapes}},
+		{"absolute link to the session", "absroot", PathStat{Path: "absroot", Exists: true, Type: TypeSymlink, LinkTarget: base, TargetErr: StatEscapes}},
+		{"read-only root", "library/lib.txt", PathStat{Path: "library/lib.txt", TargetErr: StatEscapes}},
+		{"relative escape", "escape", PathStat{Path: "escape", Exists: true, Type: TypeSymlink, LinkTarget: "../" + sid + "/a.txt", TargetErr: StatEscapes}},
+		{"invalid UTF-8 target", "badname", PathStat{Path: "badname", Exists: true, Type: TypeSymlink, LinkTarget: "bad\uFFFDname", TargetErr: StatMissing}},
+		{"session directory", "", PathStat{Path: ".", Exists: true, Type: TypeDirectory, Mode: 0o755, TargetType: TypeDirectory, TargetMode: 0o755}},
+		{"newline name", "new\nline", PathStat{Path: "new\nline", Exists: true, Type: TypeRegular, Mode: 0o644, TargetType: TypeRegular, TargetMode: 0o644}},
+	}
+	paths := make([]string, len(cases))
+	for i, c := range cases {
+		paths[i] = c.path
+	}
+	stats, err := s.Stat(context.Background(), sid, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, c := range cases {
+		got := stats[i]
+		if c.want.Device == 0 && got.TargetErr == StatOK {
+			// Identity is checked where the case names it.
+			got.Device, got.Inode = 0, 0
+		}
+		if got.Type == TypeSymlink {
+			// A link's own mode differs by OS (0777 on Linux, 0755 on macOS).
+			got.Mode = 0
+		}
+		if got != c.want {
+			t.Errorf("%s:\n got %+v\nwant %+v", c.name, got, c.want)
+		}
+	}
+
+	fresh, err := s.Stat(context.Background(), "0a1b2c3d-no-directory-yet", []string{"new.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh[0] != (PathStat{Path: "new.txt", TargetErr: StatMissing}) {
+		t.Errorf("missing session directory: %+v", fresh[0])
+	}
+	if _, err := s.Stat(context.Background(), "", []string{"a.txt"}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("no session: %v", err)
+	}
+	if _, err := s.Stat(context.Background(), sid, make([]string, MaxStatPaths+1)); !errors.Is(err, ErrLimit) {
+		t.Errorf("too many paths: %v", err)
+	}
+	long := []string{strings.Repeat("a", 4000)}
+	if _, err := s.Stat(context.Background(), sid, slices.Repeat(long, 300)); !errors.Is(err, ErrLimit) {
+		t.Errorf("too many path bytes: %v", err)
+	}
+	if _, err := s.Stat(context.Background(), sid, []string{"../x"}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("dot-dot: %v", err)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := s.Stat(cancelled, sid, []string{"a.txt"}); !errors.Is(err, context.Canceled) {
+		t.Errorf("cancelled: %v", err)
 	}
 }

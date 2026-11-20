@@ -9,14 +9,15 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo, SearchDoc
-from onyx.db.enums import GatedAppKind
 from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
 )
+from onyx.integrations.models import ActionSettings, ApprovalMode
 from onyx.tools.constants import FILE_READER_MAX_CHARS
+from onyx.tools.tool_implementations.sandbox.models import PublishedFile
 from onyx.tools.tool_implementations.search.models import SearchContext
-from onyx.utils.headers import HeaderItemDict
+from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
 
 
 class CustomToolErrorInfo(BaseModel):
@@ -88,6 +89,9 @@ class MemoryUpdated(BaseModel):
 
 
 class ToolConfiguration(BaseModel):
+    """A built-in tool of the agent. Integration actions come from
+    ``integration_links``."""
+
     model_config = ConfigDict(frozen=True, from_attributes=True)
 
     id: int
@@ -96,14 +100,33 @@ class ToolConfiguration(BaseModel):
     display_name: str | None
     in_code_tool_id: str | None
     enabled: bool
-    openapi_schema: dict[str, JsonValue] | None
-    mcp_input_schema: dict[str, JsonValue] | None
-    mcp_output_schema: dict[str, JsonValue] | None
-    mcp_read_only: bool | None
-    custom_headers: list[HeaderItemDict] | None
-    passthrough_auth: bool
-    mcp_server_id: int | None
-    oauth_config_id: int | None
+
+
+class IntegrationLinkConfiguration(BaseModel):
+    """An integration that an agent or a task attaches, with its action
+    settings."""
+
+    model_config = ConfigDict(frozen=True)
+
+    integration_id: int
+    action_settings: ActionSettings
+
+
+class IntegrationChatRequest(BaseModel):
+    """The turn values that the tools of an integration need."""
+
+    model_config = ConfigDict(frozen=True)
+
+    persona_id: int
+    integration_links: list[IntegrationLinkConfiguration]
+    approval_mode: ApprovalMode
+    chat_session_id: UUID | None = None
+    message_id: int | None = None
+    additional_headers: dict[str, str] = {}
+    mcp_headers: dict[str, str] | None = None
+    # From the tool options: the integrations to use, each with the action
+    # keys to keep (None keeps each). None uses each integration.
+    allowed_integrations: dict[int, frozenset[str] | None] | None = None
 
 
 class PersonaToolConfiguration(BaseModel):
@@ -113,17 +136,124 @@ class PersonaToolConfiguration(BaseModel):
     persona_name: str
     tools: list[ToolConfiguration]
     search: PersonaSearchInfo
+    # The persona__integration rows of the agent. For the default agent they
+    # only give settings, such as the bot freeze, to the integrations that
+    # are on for the user.
+    integration_links: list[IntegrationLinkConfiguration] = []
 
 
-class ChatToolSelection(BaseModel):
-    """The tools and search filters the user selected for a chat; every later
-    turn uses them."""
+class CapabilityEntry(BaseModel):
+    """A built-in tool of the agent, by its tool row."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    type: Literal["capability"] = "capability"
+    tool_id: int
+
+    def __str__(self) -> str:
+        return f"tool {self.tool_id}"
+
+
+class IntegrationEntry(BaseModel):
+    """An integration of the agent. ``actions`` names the action keys to
+    keep; None keeps each action."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    type: Literal["integration"] = "integration"
+    integration_id: int
+    actions: list[str] | None = None
+
+
+class ActionPreference(BaseModel):
+    """One action of an integration, by its action key."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    type: Literal["action"] = "action"
+    integration_id: int
+    action: str
+
+    def __str__(self) -> str:
+        return f"action {self.action} of integration {self.integration_id}"
+
+
+ToolOptionsEntry = Annotated[
+    CapabilityEntry | IntegrationEntry, Field(discriminator="type")
+]
+ToolPreference = Annotated[
+    CapabilityEntry | ActionPreference, Field(discriminator="type")
+]
+
+
+class ToolOptions(BaseModel):
+    """What a user or a caller picked for a turn. ``allowed`` None means
+    each tool and each integration of the agent. The options only narrow: a
+    Blocked action and the settings of the agent still win. ``preferred`` is
+    a preference that the model can ignore."""
 
     model_config = ConfigDict(extra="forbid")
 
-    allowed_tool_ids: list[int] | None = None
-    preferred_tool_id: int | None = None
+    allowed: list[ToolOptionsEntry] | None = None
+    preferred: ToolPreference | None = None
     internal_search_filters: BaseFilters | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_plugin_entries(cls, data: Any) -> Any:
+        """The released mobile app names an integration by a ``plugin``
+        entry, with the integration id as text (``plugin_ids`` of the tool
+        list). Read it as the integration entry. An entry with another id
+        names no integration, so it goes."""
+        if not isinstance(data, dict) or not isinstance(data.get("allowed"), list):
+            return data
+        allowed: list[Any] = []
+        for entry in data["allowed"]:
+            if not isinstance(entry, dict) or entry.get("type") != "plugin":
+                allowed.append(entry)
+                continue
+            plugin_id = str(entry.get("plugin_id"))
+            if plugin_id.isdecimal():
+                allowed.append(
+                    {
+                        **{k: v for k, v in entry.items() if k != "plugin_id"},
+                        "type": "integration",
+                        "integration_id": int(plugin_id),
+                    }
+                )
+        return {**data, "allowed": allowed}
+
+    def allows_tool(self, tool_id: int) -> bool:
+        return self.allowed is None or any(
+            isinstance(entry, CapabilityEntry) and entry.tool_id == tool_id
+            for entry in self.allowed
+        )
+
+    def allowed_integrations(self) -> dict[int, frozenset[str] | None] | None:
+        """The allowed integrations, each with the action keys to keep (None
+        keeps each); None allows each integration."""
+        if self.allowed is None:
+            return None
+        integrations: dict[int, frozenset[str] | None] = {}
+        for entry in self.allowed:
+            if not isinstance(entry, IntegrationEntry):
+                continue
+            kept = integrations.get(entry.integration_id, frozenset())
+            integrations[entry.integration_id] = (
+                None
+                if entry.actions is None or kept is None
+                else kept | frozenset(entry.actions)
+            )
+        return integrations
+
+
+class IntegrationActionRef(BaseModel):
+    """The integration action that a chat tool calls."""
+
+    model_config = ConfigDict(frozen=True)
+
+    integration_id: int
+    action: str
 
 
 class ToolCallException(Exception):
@@ -201,10 +331,9 @@ class ToolApprovalScope(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    # What the action policy governs, such as an MCP server and its ID.
-    app_kind: GatedAppKind
-    target_id: int
-    # Keys the action policy and session grants, e.g. the MCP tool name.
+    integration_id: int
+    # The action key: the MCP tool name or the OpenAPI operationId. With the
+    # integration, it keys the action policy and session grants.
     action_id: str
 
 
@@ -282,6 +411,8 @@ class ToolCallInfo(BaseModel):
     generated_files: list[PythonExecutionFile] | None = None
     # File-store ids of blobs custom tools saved during the call.
     generated_file_ids: list[str] | None = None
+    # Files that publish_files copied from the sandbox during the call.
+    published_files: list[PublishedFile] | None = None
 
     @property
     def execution_key(self) -> tuple[str, str]:
@@ -368,41 +499,20 @@ class LlmPythonExecutionResult(BaseModel):
     staging_notice: str | None = None
 
 
-class BashArguments(BaseModel):
-    cmd: str = Field(description="Bash command to execute in the session.")
-
-
-class LlmBashExecutionResult(BaseModel):
-    type: Literal["bash_execution"] = "bash_execution"
-    stdout: str
-    stderr: str
-    exit_code: int | None
-    timed_out: bool
-    error: str | None = None
-
-
-def _is_none(value: object) -> bool:
-    return value is None
-
-
-# A key that the JSON leaves out when it has no value.
-_OMITTED_WHEN_NONE = Field(exclude_if=_is_none)
-
-
 class SearchResult(BaseModel):
     """One document of a search-like tool result, as the model and code mode
     programs read it."""
 
     document: int = Field(description="Citation number. Cite it in the answer as [n].")
     title: str
-    updated_at: Annotated[str | None, _OMITTED_WHEN_NONE] = None
-    authors: Annotated[list[str] | None, _OMITTED_WHEN_NONE] = None
-    source_type: Annotated[str | None, _OMITTED_WHEN_NONE] = None
-    url: Annotated[str | None, _OMITTED_WHEN_NONE] = None
-    document_identifier: Annotated[str | None, _OMITTED_WHEN_NONE] = None
-    file_name: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    updated_at: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    authors: Annotated[list[str] | None, OMITTED_WHEN_NONE] = None
+    source_type: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    url: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    document_identifier: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    file_name: Annotated[str | None, OMITTED_WHEN_NONE] = None
     content: str
-    metadata: Annotated[str | None, _OMITTED_WHEN_NONE] = Field(
+    metadata: Annotated[str | None, OMITTED_WHEN_NONE] = Field(
         default=None, description="JSON-encoded metadata of the document."
     )
 
@@ -411,8 +521,8 @@ class SearchResults(BaseModel):
     """The content of internal search, web search, and open URL results."""
 
     results: list[SearchResult]
-    note: Annotated[str | None, _OMITTED_WHEN_NONE] = None
-    message: Annotated[str | None, _OMITTED_WHEN_NONE] = None
+    note: Annotated[str | None, OMITTED_WHEN_NONE] = None
+    message: Annotated[str | None, OMITTED_WHEN_NONE] = None
 
 
 class CodeModeExposure(str, Enum):
@@ -454,6 +564,9 @@ class CodeModeResultKind(str, Enum):
     AUTO = "auto"
     # An MCP result envelope `{"tool_result": value}`; the program gets the value.
     MCP = "mcp"
+    # The program gets the result details as JSON, as `model` (a class of the
+    # details) declares them; the content is for the model only.
+    DETAILS = "details"
 
 
 class CodeModeResultSpec(BaseModel):
@@ -464,8 +577,9 @@ class CodeModeResultSpec(BaseModel):
     kind: CodeModeResultKind
     # The stub's return annotation; the model's name when unset, else Any.
     annotation: str | None = None
-    # The model whose JSON the content is. The stub module declares it, and the
-    # models of its fields, as TypedDicts of the same names.
+    # The model of the value that the program gets. For DETAILS it is a class
+    # of the result details; otherwise the content is its JSON. The stub module
+    # declares it, and the models of its fields, as TypedDicts of the same names.
     model: type[BaseModel] | None = None
     # JSON Schema of the value, from the tool's server. The stub types the value
     # from it, and declares a top-level object as a TypedDict.
@@ -476,6 +590,12 @@ class CodeModeResultSpec(BaseModel):
     usage: str | None = None
     # The tool numbers its results for citation and needs a citation block.
     cites: bool = False
+
+    @model_validator(mode="after")
+    def details_need_model(self) -> Self:
+        if self.kind is CodeModeResultKind.DETAILS and self.model is None:
+            raise ValueError("A DETAILS result needs the model of its details")
+        return self
 
     @property
     def type_annotation(self) -> str:

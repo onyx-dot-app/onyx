@@ -12,3 +12,7 @@ CONTENT_SHA256_METADATA_KEY = "content_sha256"
 STAGED_FOR_CC_PAIR_METADATA_KEY = "staged_for_cc_pair_id"
 
 AGENT_CHECKPOINT_FILE_PREFIX = "agent-checkpoint/"
+# Published files (FileOrigin.CHAT_ARTIFACT) have the ID
+# `<prefix><root chat session ID>-<hex>`, so a chat delete finds them also when
+# no message lists them. No "/": the ID is a path segment of the download route.
+CHAT_ARTIFACT_FILE_PREFIX = "chat-artifact-"

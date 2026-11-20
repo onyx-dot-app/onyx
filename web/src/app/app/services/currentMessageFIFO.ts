@@ -11,7 +11,7 @@ export class CurrentMessageFIFO {
   private stack: PacketType[] = [];
   isComplete: boolean = false;
   error: string | null = null;
-  /** The server refused the send because the chat waits for a tool approval. */
+  /** The server refused the send because the chat waits for the user. */
   approvalPending = false;
   private resolveAdmission: (value: ChatStream | null) => void = () => {};
   private rejectAdmission: (reason: Error) => void = () => {};

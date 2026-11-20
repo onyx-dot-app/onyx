@@ -9,6 +9,7 @@ from fastapi_users.password import PasswordHelper
 from sqlalchemy import Select, case, delete, func, literal, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, lazyload, selectinload
 from sqlalchemy.sql import expression
 from sqlalchemy.sql.elements import ColumnElement, KeyedColumnElement
@@ -21,34 +22,32 @@ from onyx.configs.constants import (
     NO_AUTH_PLACEHOLDER_USER_EMAIL,
     SLACK_SERVICE_ACCOUNT_EMAIL,
 )
-from onyx.db.enums import AccountType, MarketplaceKind, Permission
+from onyx.db.enums import AccountType, Permission
 from onyx.db.models import (
     ChatMessage,
     ChatSession,
     DocumentSet,
     DocumentSet__User,
-    Marketplace,
-    MCPConnectionConfig,
     MCPServer,
     OAuthAccount,
     PermissionGrant,
     Persona,
     Persona__User,
-    Plugin,
     SamlAccount,
+    ScimUserMapping,
     User,
     User__ExternalUserGroupId,
     User__UserGroup,
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.utils import is_check_violation, is_fk_violation
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.sandbox import (
     get_sandbox_purge_targets,
     get_user_sandbox_blob_paths,
 )
+from onyx.db.utils import is_check_violation, is_fk_violation
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes_in_background,
 )
@@ -678,11 +677,6 @@ def reconcile_user_email__no_commit(
         .where(MCPServer.owner == old_email)
         .values(owner=normalized_new_email)
     )
-    db_session.execute(
-        update(MCPConnectionConfig)
-        .where(MCPConnectionConfig.user_email == old_email)
-        .values(user_email=normalized_new_email)
-    )
     return old_email, prior_emails
 
 
@@ -701,6 +695,13 @@ def fetch_users_by_ids(db_session: Session, user_ids: list[UUID]) -> list[User]:
     )
 
 
+def reload_oauth_account(
+    db_session: Session, oauth_account_id: UUID
+) -> OAuthAccount | None:
+    """The login account row as the database has it now."""
+    return db_session.get(OAuthAccount, oauth_account_id, populate_existing=True)
+
+
 def fetch_user_by_id(
     db_session: Session, user_id: UUID, for_update: bool = False
 ) -> User | None:
@@ -715,6 +716,14 @@ def fetch_user_by_id(
         # nullable side of an outer join, so defer it when locking.
         query = query.options(lazyload(User.oauth_accounts)).with_for_update()
     return query.first()
+
+
+async def get_user_from_async_session(
+    db_session: AsyncSession, user_id: UUID
+) -> User | None:
+    """Primary-key lookup: returns the instance the session already holds, if
+    any, without a query."""
+    return await db_session.get(User, user_id)
 
 
 def _generate_password_hash() -> str:
@@ -969,21 +978,26 @@ def delete_user_from_db__no_commit(
     user_to_delete: User,
     db_session: Session,
 ) -> None:
+    # onyx.db.plugin imports this module through onyx.db.user_group.
+    from onyx.db.plugin import private_plugins_blocking_user_delete
+
     # A private plugin lives in its owner's "My uploads". Published plugins stay
     # in the Organization library with no author.
-    if (
-        db_session.scalar(
-            select(Plugin.id)
-            .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-            .where(
-                Marketplace.kind == MarketplaceKind.USER_UPLOADS,
-                Marketplace.owner_user_id == user_to_delete.id,
-            )
-            .limit(1)
+    # An integration stays with no owner (ON DELETE SET NULL), with its
+    # install setting and its shares, so a private one stays private.
+    blocking = db_session.scalars(
+        private_plugins_blocking_user_delete(user_to_delete.id)
+    ).all()
+    if blocking:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            _PRIVATE_SKILLS_BLOCK_DELETE,
+            extra={
+                "private_plugins": [
+                    {"id": str(plugin.id), "name": plugin.name} for plugin in blocking
+                ]
+            },
         )
-        is not None
-    ):
-        raise OnyxError(OnyxErrorCode.CONFLICT, _PRIVATE_SKILLS_BLOCK_DELETE)
     for oauth_account in user_to_delete.oauth_accounts:
         db_session.delete(oauth_account)
 
@@ -1020,7 +1034,6 @@ def delete_user_from_db__no_commit(
         # A private plugin added after the check above.
         if not (
             is_check_violation(exc, "ck_private_plugin_has_owner")
-            or is_check_violation(exc, "ck_private_skill_has_owner")
             or is_fk_violation(exc, "plugin_marketplace_id_fkey")
         ):
             raise
@@ -1161,3 +1174,12 @@ def set_user_groups__no_commit(
         db_session.execute(insert_stmt)
 
     recompute_user_permissions__no_commit(user_id, db_session)
+
+
+def fetch_scim_synced_user_ids(db_session: Session, user_ids: list[UUID]) -> set[UUID]:
+    """The given users that have a SCIM mapping."""
+    return set(
+        db_session.scalars(
+            select(ScimUserMapping.user_id).where(ScimUserMapping.user_id.in_(user_ids))
+        ).all()
+    )

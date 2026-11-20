@@ -25,7 +25,6 @@ from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import dispatch_pending_chat_messages
 from onyx.chat.run_store import INPUT_POLL_SECONDS, ChatRunStore
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
-from onyx.db.enums import GatedAppKind
 from onyx.db.models import ChatMessage, ChatResponseCheckpoint, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -65,7 +64,7 @@ from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool, until
 
 __all__ = ["chat", "owned_runs"]
 
-PROGRAM = f"r = await mcp__1__acme__{ACTION}(value='team')\nprint('sent', r)"
+PROGRAM = f"r = await tools.mcp__1__acme__{ACTION}(value='team')\nprint('sent', r)"
 
 
 def _reply(request: GenerationRequest, _signal: CancellationSignal) -> AssistantMessage:
@@ -79,7 +78,7 @@ def _reply(request: GenerationRequest, _signal: CancellationSignal) -> Assistant
     )
 
 
-def _gated(server_id: int, sent: list[str]) -> FakeMCPTool:
+def _gated(integration_id: int, sent: list[str]) -> FakeMCPTool:
     def send(invocation: ToolInvocation, _context: ToolContext) -> ToolResult:
         sent.append(str(invocation.arguments["value"]))
         return ToolResult(content=json.dumps({"tool_result": "sent"}))
@@ -93,9 +92,7 @@ def _gated(server_id: int, sent: list[str]) -> FakeMCPTool:
             "required": ["value"],
         },
     )
-    tool.approval = ToolApprovalScope(
-        app_kind=GatedAppKind.MCP_SERVER, target_id=server_id, action_id=ACTION
-    )
+    tool.approval = ToolApprovalScope(integration_id=integration_id, action_id=ACTION)
     return tool
 
 
@@ -114,7 +111,7 @@ def _resume_agent_in_process(
     response_id: str,
     agent_response_id: str,
     user_id: str,
-    server_id: str,
+    integration_id: str,
 ) -> None:
     """Resume the parked agent with fresh objects through dispatch, as another
     API pod's agent host does."""
@@ -125,7 +122,7 @@ def _resume_agent_in_process(
         assert user is not None
         db_session.expunge(user)
     sent: list[str] = []
-    tool = _gated(int(server_id), sent)
+    tool = _gated(int(integration_id), sent)
     depths: list[int] = []
 
     def rebuild(checkpoint: ExecutionCheckpoint, depth: int) -> Agent:
@@ -173,7 +170,7 @@ def _park_agent(
 ) -> int:
     """Start a root whose background agent's program call waits for approval;
     returns the agent's response once it parked and this process let go."""
-    tool = _gated(chat.server.id, sent)
+    tool = _gated(chat.integration_id, sent)
     owned = _start(
         chat,
         owned_runs,
@@ -255,7 +252,7 @@ def test_a_parked_agent_resumes_in_another_process(
                 str(chat.response_id),
                 str(agent_response_id),
                 str(chat.user.id),
-                str(chat.server.id),
+                str(chat.integration_id),
             ],
             cwd=Path(__file__).resolve().parents[3],
             capture_output=True,
@@ -288,7 +285,7 @@ def test_a_decided_agent_resumes_only_in_a_store_with_its_saved_model(
     agent_response_id = _park_agent(db_session, chat, owned_runs, sent)
     [row] = chat.rows(db_session)
     chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
-    tool = _gated(chat.server.id, sent)
+    tool = _gated(chat.integration_id, sent)
     rebuilt: list[int] = []
 
     def rebuild(checkpoint: ExecutionCheckpoint, depth: int) -> Agent:
@@ -448,7 +445,7 @@ def test_a_host_that_cannot_start_ends_only_the_agents_of_its_model(
     start on the first agent's model ends that agent only; the other stays
     parked for a host on its own model."""
     sent: list[str] = []
-    tool = _gated(chat.server.id, sent)
+    tool = _gated(chat.integration_id, sent)
     owned = _start(
         chat,
         owned_runs,
@@ -567,7 +564,7 @@ def test_a_decided_agent_whose_host_is_rate_limited_stays_parked(
                 str(chat.response_id),
                 str(agent_response_id),
                 str(chat.user.id),
-                str(chat.server.id),
+                str(chat.integration_id),
             ],
             cwd=Path(__file__).resolve().parents[3],
             capture_output=True,

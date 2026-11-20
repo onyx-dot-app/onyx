@@ -5,7 +5,7 @@ SharePoint connector expands them."""
 from collections.abc import Generator
 
 from ee.onyx.db.external_perm import ExternalUserGroup
-from ee.onyx.external_permissions.sharepoint.permission_utils import (
+from ee.onyx.external_permissions.microsoft_utils.sharepoint_permissions import (
     get_sharepoint_external_groups,
 )
 from ee.onyx.external_permissions.utils import credential_json

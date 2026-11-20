@@ -4,25 +4,13 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import JsonValue
 
-from onyx.coding_agent.tool_definitions import (
-    BASH_TOOL_DESCRIPTION,
-    CODING_AGENT_THINK_TOOL_DESCRIPTION,
-    GENERATE_ANSWER_TOOL_DESCRIPTION,
-)
 from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_DESCRIPTION,
     GENERATE_REPORT_TOOL_DESCRIPTION,
-    RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION,
-    RESEARCH_AGENT_THINK_TOOL_DESCRIPTION,
     RESEARCH_AGENT_TOOL_DESCRIPTION,
-    THINK_TOOL_DESCRIPTION,
 )
 from onyx.llm.models import ToolDefinition
 from onyx.tools.interface import Tool
-from onyx.tools.tool_implementations.bash.bash_tool import BashTool
-from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
-    CodingAgentTool,
-)
 from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
@@ -72,8 +60,6 @@ def _check_closed_objects(schema: JsonValue) -> None:
         *[
             _builtin_definition(tool_class)
             for tool_class in (
-                BashTool,
-                CodingAgentTool,
                 FileReaderTool,
                 ImageGenerationTool,
                 KnowledgeGraphTool,
@@ -84,15 +70,9 @@ def _check_closed_objects(schema: JsonValue) -> None:
                 WebSearchTool,
             )
         ],
-        BASH_TOOL_DESCRIPTION,
-        CODING_AGENT_THINK_TOOL_DESCRIPTION,
-        GENERATE_ANSWER_TOOL_DESCRIPTION,
         GENERATE_PLAN_TOOL_DESCRIPTION,
         GENERATE_REPORT_TOOL_DESCRIPTION,
-        RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION,
-        RESEARCH_AGENT_THINK_TOOL_DESCRIPTION,
         RESEARCH_AGENT_TOOL_DESCRIPTION,
-        THINK_TOOL_DESCRIPTION,
     ],
     ids=lambda definition: definition.name,
 )
@@ -192,31 +172,6 @@ _STRINGS: dict[str, JsonValue] = {"type": "array", "items": _STRING}
             ),
         ),
         (
-            BashTool,
-            _strict_parameters(
-                cmd={
-                    **_STRING,
-                    "description": "Bash command to execute in the session.",
-                }
-            ),
-        ),
-        (
-            CodingAgentTool,
-            _strict_parameters(
-                query={
-                    **_STRING,
-                    "description": "The user's question or task to perform against "
-                    "the repository.",
-                },
-                github_repo={
-                    **_STRING,
-                    "description": "GitHub repository URL or 'owner/repo' identifier "
-                    "(e.g. 'https://github.com/onyx-dot-app/onyx' or "
-                    "'onyx-dot-app/onyx').",
-                },
-            ),
-        ),
-        (
             ImageGenerationTool,
             _strict_parameters(
                 prompt={**_STRING, "description": "Prompt used to generate the image"},
@@ -276,3 +231,45 @@ def test_openapi_tool_preserves_external_schema_and_stays_non_strict() -> None:
     Draft202012Validator(definition.parameters).validate(
         {"requestBody": {"metadata": {"arbitrary_key": None}}}
     )
+
+
+def test_openapi_parameter_description_moves_into_its_property_schema() -> None:
+    method = MethodSpec(
+        name="list_incidents",
+        raw_name="list_incidents",
+        summary="List incidents",
+        path="/incidents/{team}",
+        method="get",
+        spec={
+            "parameters": [
+                {
+                    "name": "sev",
+                    "in": "query",
+                    "description": "Severity bucket of the outage.",
+                    "schema": {"type": "string", "description": "A shared level."},
+                },
+                {"name": "page", "in": "query", "schema": {"type": "integer"}},
+                {
+                    "name": "team",
+                    "in": "path",
+                    "description": "Team that owns the incident.",
+                    "schema": True,
+                },
+                {
+                    "name": "closed",
+                    "in": "query",
+                    "description": "Never accepted.",
+                    "schema": False,
+                },
+            ]
+        },
+    )
+    assert method.to_tool_definition().parameters == {
+        "type": "object",
+        "properties": {
+            "sev": {"type": "string", "description": "Severity bucket of the outage."},
+            "page": {"type": "integer"},
+            "team": {"description": "Team that owns the incident."},
+            "closed": False,
+        },
+    }

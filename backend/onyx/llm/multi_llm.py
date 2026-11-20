@@ -56,6 +56,7 @@ from onyx.llm.interfaces import (
 )
 from onyx.llm.model_capabilities import (
     OPENAI_API_PROVIDERS,
+    PROVIDERS_WITHOUT_NONE_TOOL_CHOICE,
     ReasoningParamStyle,
     anthropic_identity_is_always_thinking,
     anthropic_identity_turns_thinking_off_between_tools,
@@ -65,10 +66,11 @@ from onyx.llm.model_capabilities import (
     find_model_obj,
     gemini_lowest_thinking_level_is_low,
     get_model_map,
+    is_claude_model,
     is_true_openai_model,
     model_is_reasoning_model,
     model_prefers_auto_tool_choice,
-    model_requires_auto_tool_choice,
+    model_supports_none_tool_choice,
     openai_chat_tools_require_reasoning_none,
     openai_chat_variant_rejects_reasoning,
     openai_model_rejects_reasoning_effort,
@@ -201,7 +203,7 @@ _REASONING_KWARG_KEYS = frozenset(
     {"thinking", "output_config", "reasoning", "reasoning_effort"}
 )
 _BEST_EFFORT_KWARG_KEYS = _REASONING_KWARG_KEYS | frozenset(
-    {"temperature", "prompt_cache_options"}
+    {"temperature", "prompt_cache_options", "include"}
 )
 
 # Substrings provider 400s use to name each strippable kwarg (errors may
@@ -211,6 +213,7 @@ _KWARG_ERROR_ALIASES: dict[str, tuple[str, ...]] = {
     "output_config": ("output_config", "effort"),
     "reasoning": ("reasoning", "effort"),
     "reasoning_effort": ("reasoning_effort", "effort"),
+    "include": ("include",),
     "temperature": ("temperature",),
     "prompt_cache_options": ("prompt_cache_options", "prompt_cache_breakpoint"),
 }
@@ -514,14 +517,20 @@ _THINKING_BLOCK_PROVIDERS = {
     LlmProviderNames.VERTEX_AI,
 }
 
+# Substrings of the OpenAI-family 400s for a replayed reasoning item the
+# provider cannot use: encrypted content from another key, org, deployment or
+# model, or an item whose following item is missing.
+_REASONING_ITEM_REJECTIONS = (
+    "encrypted_content",
+    "encrypted content",
+    "of type 'reasoning'",
+    "reasoning item",
+)
 
-def _strip_thinking_blocks_from_messages(
-    messages: list[dict[str, JsonValue]],
-) -> list[dict[str, JsonValue]]:
-    return [
-        {key: value for key, value in msg.items() if key != "thinking_blocks"}
-        for msg in messages
-    ]
+
+def _rejection_names_reasoning_items(error: Exception) -> bool:
+    message = str(error).lower()
+    return any(token in message for token in _REASONING_ITEM_REJECTIONS)
 
 
 def _strip_tool_content_from_messages(
@@ -1031,7 +1040,7 @@ class LitellmLLM(LLM):
         model_identity_names = resolve_model_identity_names(
             self.config.model_name, self.config.deployment_name
         )
-        is_claude_model = any("claude" in name.lower() for name in model_identity_names)
+        is_claude = is_claude_model(model_identity_names)
         uses_adaptive_thinking = any(
             anthropic_uses_adaptive_thinking(name) for name in model_identity_names
         )
@@ -1119,14 +1128,13 @@ class LitellmLLM(LLM):
         ):
             tool_choice = ToolChoiceOptions.AUTO
 
-        # These native adapters drop NONE. Omit schemas but retain history;
-        # Onyx or LiteLLM serializes prior calls and results for each provider.
-        if tool_choice == ToolChoiceOptions.NONE and self._model_provider in {
-            LlmProviderNames.BEDROCK,
-            LlmProviderNames.BEDROCK_CONVERSE,
-            LlmProviderNames.OLLAMA,
-            LlmProviderNames.OLLAMA_CHAT,
-        }:
+        # A raw NONE request to these adapters omits the schemas, because they
+        # cannot forbid calls; the history keeps prior calls and results.
+        # Shared requests send AUTO with their tools instead (_prepare_tools).
+        if (
+            tool_choice == ToolChoiceOptions.NONE
+            and self._model_provider in PROVIDERS_WITHOUT_NONE_TOOL_CHOICE
+        ):
             tools = None
 
         # If no tools are provided, tool_choice should be None
@@ -1163,6 +1171,13 @@ class LitellmLLM(LLM):
         litellm_bridges_tool_turn = bool(
             tools
         ) and _litellm_bridges_tool_turn_to_responses(model, self._custom_llm_provider)
+        # Every route LiteLLM sends to the Responses API, which returns and
+        # replays reasoning items.
+        uses_responses_api = (
+            is_openai_model
+            or self._api_surface is LlmApiSurface.OPENAI_RESPONSES
+            or litellm_bridges_tool_turn
+        )
 
         # Tool turns over chat completions for GPT-5.4+ trade reasoning for a
         # working call. Responses routes, registry bridge included, are exempt.
@@ -1239,7 +1254,7 @@ class LitellmLLM(LLM):
                 openai_style_reasoning["summary"] = "auto"
 
             if reasoning_style is ReasoningParamStyle.OPENAI:
-                if is_claude_model:
+                if is_claude:
                     # Only a gateway routes Claude here, and it still translates
                     # to Anthropic, so the signed-thinking-block constraint
                     # described below applies to these requests too.
@@ -1333,6 +1348,18 @@ class LitellmLLM(LLM):
                 )
             required_kwarg_keys = required_kwarg_keys | {"reasoning_effort"}
 
+        # Every reasoning style can land on the Responses API, and replaying a
+        # reasoning item by id alone needs server storage; the encrypted content
+        # replays anywhere.
+        if (
+            uses_responses_api
+            and reasoning_effort is not ReasoningEffort.OFF
+            and (
+                "reasoning" in optional_kwargs or "reasoning_effort" in optional_kwargs
+            )
+        ):
+            optional_kwargs["include"] = ["reasoning.encrypted_content"]
+
         # Claude 5 thinks unless told not to, and 4.7/4.8 take the same param.
         # No effort with it, which Opus 5 and Sonnet 5.5 cap, and no signed-block
         # guard like the sibling branch: that one binds only while thinking is on.
@@ -1358,10 +1385,7 @@ class LitellmLLM(LLM):
         if structured_response_format:
             optional_kwargs["response_format"] = structured_response_format
 
-        if (
-            not (is_claude_model or is_ollama or is_mistral)
-            or is_openai_compatible_proxy
-        ):
+        if not (is_claude or is_ollama or is_mistral) or is_openai_compatible_proxy:
             # Litellm bug: tool_choice is dropped silently if not specified here for OpenAI
             # However, this param breaks Anthropic and Mistral models,
             # so it must be conditionally included unless the request is
@@ -1382,6 +1406,18 @@ class LitellmLLM(LLM):
 
         # Match LiteLLM's api_base-over-base_url precedence, including custom config.
         base_url = passthrough_kwargs.pop("base_url", self._api_base) or None
+        # `include` is sent once: a configured list keeps its entries ahead of
+        # the encrypted-reasoning entry, and joins the retry ladder with it.
+        configured_include = passthrough_kwargs.pop("include", None)
+        if isinstance(configured_include, list) and "include" in optional_kwargs:
+            requested = optional_kwargs["include"]
+            optional_kwargs["include"] = configured_include + [
+                value
+                for value in (requested if isinstance(requested, list) else [])
+                if value not in configured_include
+            ]
+        elif configured_include is not None:
+            passthrough_kwargs["include"] = configured_include
         # OpenRouter: inject session_id and user into extra_body.
         #
         # session_id — sticky routing: pins all turns of a conversation to the
@@ -1433,14 +1469,23 @@ class LitellmLLM(LLM):
 
             messages = _prompt_to_dicts(prompt)
 
+            # Replayable reasoning state is kept only on the route that can read
+            # it; other routes forward the unknown key verbatim.
+            unreplayable: set[str] = set()
             if not (
-                is_claude_model
+                is_claude
                 and (
                     self._model_provider in _THINKING_BLOCK_PROVIDERS
                     or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
                 )
             ):
-                messages = _strip_thinking_blocks_from_messages(messages)
+                unreplayable.add("thinking_blocks")
+            if not uses_responses_api:
+                unreplayable.add("reasoning_items")
+            messages = [
+                {key: value for key, value in msg.items() if key not in unreplayable}
+                for msg in messages
+            ]
 
             # Bedrock's Converse API requires toolConfig when messages
             # contain toolUse/toolResult content blocks. When no tools are
@@ -1667,18 +1712,39 @@ class LitellmLLM(LLM):
                         _log_chat_completions_tools_disable_reasoning(
                             model, self._api_base
                         )
-                    elif (
-                        "prompt_cache_options" in opts
-                        and _rejection_names_strippable_kwargs(
-                            e, {"prompt_cache_options"}
-                        )
+                    elif _rejection_names_reasoning_items(e) and any(
+                        "reasoning_items" in msg for msg in messages
                     ):
-                        # A cache rejection must preserve the user's reasoning choice.
-                        without_cache = {
-                            k: v for k, v in opts.items() if k != "prompt_cache_options"
+                        # Only the provider that issued a reasoning item can read
+                        # it. After a key, deployment or model change the old
+                        # items stay in history, so the turn proceeds without them.
+                        messages, cache_messages = (
+                            [
+                                {k: v for k, v in msg.items() if k != "reasoning_items"}
+                                for msg in variant
+                            ]
+                            for variant in (messages, cache_messages)
+                        )
+                        attempts.insert(i + 1, dict(opts))
+                        logger.warning(
+                            "Provider rejected replayed reasoning for model %s; "
+                            "retrying without it: %s",
+                            model,
+                            e,
+                        )
+                        continue
+                    elif rejected_tuning := {
+                        key
+                        for key in ("prompt_cache_options", "include")
+                        if key in opts and _rejection_names_strippable_kwargs(e, {key})
+                    }:
+                        # A cache or include rejection must preserve the user's
+                        # reasoning choice.
+                        without_tuning = {
+                            k: v for k, v in opts.items() if k not in rejected_tuning
                         }
                         attempts[i + 1 :] = _retry_attempts(
-                            without_cache, required_kwarg_keys
+                            without_tuning, required_kwarg_keys
                         )
                     elif i == len(attempts) - 1:
                         raise
@@ -2084,10 +2150,12 @@ class LitellmLLM(LLM):
             if model_prefers_auto_tool_choice(model_names):
                 tools = [tool for tool in tools if tool.name == choice.name]
                 choice = ToolChoiceOptions.AUTO
-        if choice == ToolChoiceOptions.NONE and model_requires_auto_tool_choice(
-            model_names
+        # Tools stay declared so the cached prefix and the history's calls stay
+        # valid. Where NONE cannot be sent, the agent runtime denies any call.
+        if choice == ToolChoiceOptions.NONE and not model_supports_none_tool_choice(
+            self.config.model_provider, model_names
         ):
-            tools = []
+            choice = ToolChoiceOptions.AUTO
         return tools, choice
 
     def _prepare_request(
@@ -2151,7 +2219,7 @@ class LitellmLLM(LLM):
                 # A completed response survives its deadline, but explicit Stop wins.
                 if signal.cancelled:
                     raise AgentCancelled()
-                return to_assistant_message(response, request)
+                return to_assistant_message(response, request, tool_choice)
             except (Exception, AgentCancelled) as error:
                 span.set_error(
                     {
@@ -2211,6 +2279,7 @@ class LitellmLLM(LLM):
                         )
                     ),
                     request,
+                    tool_choice,
                 )
                 for event in events:
                     signal.check()

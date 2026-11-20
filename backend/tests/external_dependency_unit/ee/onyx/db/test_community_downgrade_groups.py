@@ -17,6 +17,8 @@ from onyx.configs.constants import TokenRateLimitPeriod, TokenRateLimitScope
 from onyx.db.enums import (
     AccountType,
     GrantSource,
+    IntegrationAuthMode,
+    IntegrationKind,
     Permission,
     PersonaSharePermission,
     PluginInstallationPolicy,
@@ -27,6 +29,9 @@ from onyx.db.models import (
     Base,
     DocumentSet,
     DocumentSet__UserGroup,
+    Integration,
+    Integration__User,
+    Integration__UserGroup,
     LLMProvider,
     LLMProvider__UserGroup,
     MCPServer,
@@ -37,8 +42,7 @@ from onyx.db.models import (
     Persona__UserGroup,
     Plugin,
     Plugin__UserGroup,
-    Skill,
-    Skill__UserGroup,
+    PluginSkill,
     TokenRateLimit,
     User,
     User__UserGroup,
@@ -46,7 +50,6 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.plugin import create_skill_plugin__no_commit, legacy_skill_version_content
 from onyx.db.skill import replace_skill_shares, set_skill_public_permission
 from onyx.db.users import (
     DEFAULT_ADMIN_GROUP_NAME,
@@ -54,10 +57,8 @@ from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
     fetch_default_group,
 )
-from tests.utils.plugin_access import (
-    ORGANIZATION_LIBRARY_ID,
-    plugin_access_mismatches,
-)
+from tests.external_dependency_unit.craft.db_helpers import make_skill
+from tests.utils.plugin_access import ORGANIZATION_LIBRARY_ID
 
 
 def test_every_uncascaded_group_link_is_deleted_by_hand() -> None:
@@ -297,25 +298,15 @@ def test_what_a_group_shared_becomes_public(db_session: Session) -> None:
         db_session.rollback()
 
 
-def _make_skill(db_session: Session, author: User, name: str | None = None) -> Skill:
-    skill = Skill(
-        id=uuid4(),
+def _make_skill(db_session: Session, author: User, name: str | None = None) -> Plugin:
+    return make_skill(
+        db_session,
         name=name or f"downgrade-{uuid4().hex[:8]}",
-        description="",
-        bundle_file_id=f"downgrade-{uuid4().hex[:8]}",
-        bundle_sha256="0" * 64,
-        public_permission=None,
         author_user_id=author.id,
     )
-    db_session.add(skill)
-    db_session.flush()
-    create_skill_plugin__no_commit(
-        skill, legacy_skill_version_content(skill), None, db_session
-    )
-    return skill
 
 
-def _share_with_group(db_session: Session, skill: Skill, group: UserGroup) -> None:
+def _share_with_group(db_session: Session, skill: Plugin, group: UserGroup) -> None:
     replace_skill_shares(
         skill=skill,
         group_shares={group.id: SkillSharePermission.VIEWER},
@@ -333,8 +324,9 @@ def test_group_shared_skill_is_published_with_a_free_name_on_a_clash(
         owner = _make_user(db_session, in_basic=True)
         other = _make_user(db_session, in_basic=True)
         group = _make_group(db_session, [owner])
-        published = _make_skill(db_session, other)
-        shared = _make_skill(db_session, owner, name=published.name)
+        skill_name = f"downgrade-{uuid4().hex[:8]}"
+        published = _make_skill(db_session, other, name=skill_name)
+        shared = _make_skill(db_session, owner, name=skill_name)
         set_skill_public_permission(
             skill=published,
             public_permission=SkillSharePermission.VIEWER,
@@ -345,15 +337,124 @@ def test_group_shared_skill_is_published_with_a_free_name_on_a_clash(
         remove_custom_user_groups__no_commit(db_session)
 
         db_session.refresh(shared)
-        assert shared.public_permission == SkillSharePermission.VIEWER
-        assert shared.name == published.name
-        plugin = db_session.get(Plugin, shared.id)
-        assert plugin is not None
-        db_session.refresh(plugin)
-        assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
-        assert plugin.name == f"{published.name}-2"
-        assert plugin.published_version_id == plugin.current_version_id
-        assert plugin_access_mismatches(db_session, [published.id, shared.id]) == []
+        assert shared.marketplace_id == ORGANIZATION_LIBRARY_ID
+        assert shared.name == f"{skill_name}-2"
+        assert shared.published_version_id == shared.current_version_id
+        assert (
+            db_session.scalar(
+                select(PluginSkill.frontmatter["name"].astext).where(
+                    PluginSkill.plugin_version_id == shared.current_version_id
+                )
+            )
+            == skill_name
+        )
+    finally:
+        db_session.rollback()
+
+
+def _group_shared_integration(
+    db_session: Session, group: UserGroup, owner: User | None
+) -> Integration:
+    """A private MCP integration that is shared with the group."""
+    server = MCPServer(
+        owner=owner.email if owner is not None else "gone@example.com",
+        name=f"downgrade-{uuid4().hex[:8]}",
+        server_url="https://example.com/mcp",
+        is_public=False,
+    )
+    db_session.add(server)
+    db_session.flush()
+    integration = Integration(
+        kind=IntegrationKind.MCP,
+        name="downgrade-mcp",
+        auth_mode=IntegrationAuthMode.NONE,
+        mcp_server_id=server.id,
+        owner_user_id=owner.id if owner is not None else None,
+    )
+    db_session.add(integration)
+    db_session.flush()
+    db_session.add(
+        Integration__UserGroup(
+            integration_id=integration.id,
+            user_group_id=group.id,
+            permission=SkillSharePermission.VIEWER,
+        )
+    )
+    db_session.flush()
+    return integration
+
+
+def _user_shares(db_session: Session, integration: Integration) -> set[UUID]:
+    return set(
+        db_session.scalars(
+            select(Integration__User.user_id).where(
+                Integration__User.integration_id == integration.id
+            )
+        )
+    )
+
+
+@pytest.mark.usefixtures("tenant_context")
+@pytest.mark.parametrize("has_owner", [True, False])
+@pytest.mark.parametrize(
+    "company",
+    [PluginInstallationPolicy.NOT_AVAILABLE, PluginInstallationPolicy.AVAILABLE],
+)
+def test_group_shared_integration_gives_its_members_a_share(
+    db_session: Session, has_owner: bool, company: PluginInstallationPolicy
+) -> None:
+    """The members of a removed group keep the integration through a user
+    share. The company setting does not change, so an integration that an
+    admin closed stays closed and none opens to the organization."""
+    try:
+        owner = _make_user(db_session, in_basic=True)
+        member = _make_user(db_session, in_basic=True)
+        group = _make_group(db_session, [member])
+        integration = _group_shared_integration(
+            db_session, group, owner if has_owner else None
+        )
+        integration.installation_policy = company
+        db_session.flush()
+
+        remove_custom_user_groups__no_commit(db_session)
+
+        db_session.refresh(integration)
+        assert integration.installation_policy == company
+        assert _user_shares(db_session, integration) == {member.id}
+    finally:
+        db_session.rollback()
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_group_setting_gives_its_members_a_share(db_session: Session) -> None:
+    """A group row with no share but an Available setting gave its members
+    access, so they keep it. A Not available setting gives none."""
+    try:
+        member = _make_user(db_session, in_basic=True)
+        open_group = _make_group(db_session, [member])
+        closed_member = _make_user(db_session, in_basic=True)
+        closed_group = _make_group(db_session, [closed_member])
+        integration = _group_shared_integration(db_session, open_group, None)
+        db_session.query(Integration__UserGroup).filter_by(
+            integration_id=integration.id
+        ).update(
+            {
+                "permission": None,
+                "installation_policy": PluginInstallationPolicy.AVAILABLE,
+            }
+        )
+        db_session.add(
+            Integration__UserGroup(
+                integration_id=integration.id,
+                user_group_id=closed_group.id,
+                installation_policy=PluginInstallationPolicy.NOT_AVAILABLE,
+            )
+        )
+        db_session.flush()
+
+        remove_custom_user_groups__no_commit(db_session)
+
+        assert _user_shares(db_session, integration) == {member.id}
     finally:
         db_session.rollback()
 
@@ -372,7 +473,6 @@ def test_downgrade_publishes_from_plugin_group_grants_only(
         shared = _make_skill(db_session, owner)
         setting_only = _make_skill(db_session, owner)
         not_available = _make_skill(db_session, owner)
-        legacy_only = _make_skill(db_session, owner)
         _share_with_group(db_session, shared, group)
         db_session.add_all(
             [
@@ -388,8 +488,6 @@ def test_downgrade_publishes_from_plugin_group_grants_only(
                     permission=SkillSharePermission.VIEWER,
                     installation_policy=PluginInstallationPolicy.NOT_AVAILABLE,
                 ),
-                # A legacy row with no plugin grant does not publish.
-                Skill__UserGroup(skill_id=legacy_only.id, user_group_id=group.id),
             ]
         )
         db_session.flush()
@@ -401,9 +499,7 @@ def test_downgrade_publishes_from_plugin_group_grants_only(
             db_session.scalars(
                 select(Plugin.id).where(
                     Plugin.marketplace_id == ORGANIZATION_LIBRARY_ID,
-                    Plugin.id.in_(
-                        [shared.id, setting_only.id, not_available.id, legacy_only.id]
-                    ),
+                    Plugin.id.in_([shared.id, setting_only.id, not_available.id]),
                 )
             )
         )
@@ -467,9 +563,9 @@ def test_group_shared_providers_servers_and_skills_become_public(
             db_session.refresh(row)
         assert providers[0].is_public
         assert servers[0].is_public
-        assert skills[0].public_permission == SkillSharePermission.VIEWER
+        assert skills[0].marketplace_id == ORGANIZATION_LIBRARY_ID
         assert not providers[1].is_public
         assert not servers[1].is_public
-        assert skills[1].public_permission is None
+        assert skills[1].marketplace_id != ORGANIZATION_LIBRARY_ID
     finally:
         db_session.rollback()

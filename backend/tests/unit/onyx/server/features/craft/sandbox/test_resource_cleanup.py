@@ -16,6 +16,7 @@ from onyx.server.features.build.sandbox.models import (
     SandboxResource,
     SandboxResourceKind,
 )
+from onyx.server.features.build.session import locks as session_locks
 from onyx.server.features.build.session import resource_cleanup as cleanup
 from onyx.server.features.build.session import sandbox_lifecycle as lifecycle
 from onyx.server.features.build.timeouts import (
@@ -79,9 +80,8 @@ def test_checkpoint_locks_survive_three_full_bulk_transfers(
     session_lock = MagicMock()
     session_lock.owned.side_effect = lambda: elapsed < session_expires_at
 
-    def renew_session(ttl: float, *, replace_ttl: bool) -> None:
+    def renew_session(ttl: float) -> None:
         nonlocal session_expires_at
-        assert replace_ttl
         assert session_lock.owned()
         session_expires_at = elapsed + ttl
 
@@ -310,7 +310,7 @@ def test_inventory_failure_preserves_existing_sweep_only_while_lease_owned(
     manager.list_resource_tenant_ids.return_value = {"tenant-a"}
     monkeypatch.setattr(cleanup, "get_sandbox_by_id", lambda *_args: None)
     monkeypatch.setattr(tasks, "get_all_tenant_ids", lambda: ["tenant-a"])
-    monkeypatch.setattr(tasks, "get_redis_client", lambda **_kwargs: redis)
+    monkeypatch.setattr(session_locks, "get_cache_backend", lambda **_kwargs: redis)
     monkeypatch.setattr(tasks, "get_cache_backend", lambda **_kwargs: cache)
     monkeypatch.setattr(tasks, "get_sandbox_manager", lambda: manager)
     monkeypatch.setattr(tasks, "get_session_with_current_tenant", MagicMock())
@@ -661,7 +661,7 @@ def test_reconciler_collects_orphans_with_no_running_database_rows(
     monkeypatch.setattr(cleanup, "get_sandbox_by_id", lambda *_args: None)
     monkeypatch.setattr(tasks, "get_all_tenant_ids", lambda: ["tenant-a"])
     monkeypatch.setattr(tasks, "get_cache_backend", lambda **_kwargs: cache)
-    monkeypatch.setattr(tasks, "get_redis_client", MagicMock())
+    monkeypatch.setattr(session_locks, "get_cache_backend", MagicMock())
     monkeypatch.setattr(tasks, "get_sandbox_manager", lambda: manager)
     monkeypatch.setattr(tasks, "get_session_with_current_tenant", MagicMock())
     monkeypatch.setattr(tasks, "get_running_sandboxes", lambda *_args, **_kwargs: [])
@@ -677,7 +677,7 @@ def test_per_tenant_sweep_does_not_inventory_runtimes(
 
     manager, cache = collector
     monkeypatch.setattr(tasks, "get_cache_backend", lambda **_kwargs: cache)
-    monkeypatch.setattr(tasks, "get_redis_client", MagicMock())
+    monkeypatch.setattr(session_locks, "get_cache_backend", MagicMock())
     monkeypatch.setattr(tasks, "get_sandbox_manager", lambda: manager)
     monkeypatch.setattr(tasks, "get_session_with_current_tenant", MagicMock())
     monkeypatch.setattr(tasks, "get_running_sandboxes", lambda *_args, **_kwargs: [])

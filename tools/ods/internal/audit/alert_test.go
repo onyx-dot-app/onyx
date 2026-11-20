@@ -526,7 +526,7 @@ func TestSync_failingListsEveryBlockingAlertWithItsImages(t *testing.T) {
 	}
 }
 
-func TestSyncCleanPackageCoverage(t *testing.T) {
+func TestSync_closesIssuesOfCleanScannedPackages(t *testing.T) {
 	for _, keepOpen := range []bool{false, true} {
 		t.Run(strconv.FormatBool(keepOpen), func(t *testing.T) {
 			bin := fakeBinDir(t)

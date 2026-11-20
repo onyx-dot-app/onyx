@@ -1,11 +1,15 @@
 """Tests for pruning-specific Prometheus metrics."""
 
+from unittest.mock import patch
+
 import pytest
 
+from onyx.server.metrics import pruning_metrics
 from onyx.server.metrics.pruning_metrics import (
     PRUNING_DIFF_DURATION,
     PRUNING_ENUMERATION_DURATION,
     PRUNING_RATE_LIMIT_ERRORS,
+    inc_pruning_failure,
     inc_pruning_rate_limit_error,
     observe_pruning_diff_duration,
     observe_pruning_enumeration_duration,
@@ -128,3 +132,27 @@ class TestIncPruningRateLimitError:
             lambda **_: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         inc_pruning_rate_limit_error("google_drive")
+
+
+class TestIncPruningFailure:
+    def test_increments_with_tenant_and_connector_type(self) -> None:
+        with patch.object(pruning_metrics, "PRUNING_FAILURES") as counter:
+            inc_pruning_failure("tenant_a", "s3")
+
+        counter.labels.assert_called_once_with(
+            tenant_id="tenant_a", connector_type="s3"
+        )
+        counter.labels.return_value.inc.assert_called_once_with()
+
+    def test_empty_connector_type_is_unknown(self) -> None:
+        with patch.object(pruning_metrics, "PRUNING_FAILURES") as counter:
+            inc_pruning_failure("tenant_a", "")
+
+        counter.labels.assert_called_once_with(
+            tenant_id="tenant_a", connector_type="unknown"
+        )
+
+    def test_does_not_raise_on_exception(self) -> None:
+        with patch.object(pruning_metrics, "PRUNING_FAILURES") as counter:
+            counter.labels.side_effect = RuntimeError("boom")
+            inc_pruning_failure("tenant_a", "s3")

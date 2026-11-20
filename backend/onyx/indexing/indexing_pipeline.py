@@ -1,13 +1,14 @@
 import time
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterator
-from contextlib import contextmanager, nullcontext
+from contextlib import ExitStack, contextmanager
 from typing import NamedTuple, Protocol
 
 import sentry_sdk
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from onyx.access.utils import build_ext_group_names_for_storage
 from onyx.configs.app_configs import (
     ENABLE_CONTEXTUAL_RAG,
     MAX_CHUNKS_PER_DOC_BATCH,
@@ -464,7 +465,9 @@ def get_docs_to_update(
             and (
                 doc.external_access.external_user_emails
                 != set(db_doc.external_user_emails or [])
-                or doc.external_access.external_user_group_ids
+                or build_ext_group_names_for_storage(
+                    doc.external_access.external_user_group_ids, doc.source
+                )
                 != set(db_doc.external_user_group_ids or [])
                 or doc.external_access.is_public != db_doc.is_public
             )
@@ -542,10 +545,20 @@ def index_doc_batch_with_handler(
     skip_spreadsheet_content: bool = False,
     written_search_settings_id: int,
     stamp_content_hash: bool = True,
+    on_indexable_batch: Callable[[], None] | None = None,
 ) -> IndexingPipelineResult:
     # Documents whose prepare() committed before the batch raised. Their change
     # gates would now see nothing to do, so a retry of them forces the update.
     prepared: set[str] = set()
+
+    def record_prepared(document_ids: set[str]) -> None:
+        first_prepare = not prepared and bool(document_ids)
+        prepared.update(document_ids)
+        if first_prepare and on_indexable_batch is not None:
+            try:
+                on_indexable_batch()
+            except Exception:
+                logger.exception("Could not start indexing trace")
 
     def _index(
         documents: list[Document], force_update: bool
@@ -570,7 +583,7 @@ def index_doc_batch_with_handler(
                 llm=llm,
                 force_update=force_update,
                 skip_document_row_writes=skip_document_row_writes,
-                on_prepared=prepared.update,
+                on_prepared=record_prepared,
                 skip_spreadsheet_content=skip_spreadsheet_content,
                 written_search_settings_id=written_search_settings_id,
                 stamp_content_hash=stamp_content_hash,
@@ -1568,27 +1581,16 @@ def index_doc_batch(
     second element is the number of chunks."""
 
     # Log connector info for debugging OOM issues
-    connector_id = getattr(adapter, "connector_id", None)  # ods: ignore[getattr]
-    credential_id = getattr(adapter, "credential_id", None)  # ods: ignore[getattr]
     logger.debug(
         "Starting index_doc_batch: connector_id=%s, credential_id=%s, tenant_id=%s, num_docs=%s",
-        connector_id,
-        credential_id,
+        adapter.connector_id,
+        adapter.credential_id,
         tenant_id,
         len(document_batch),
     )
 
-    # Pull the attempt id off the adapter (when present) so per-stage metrics
-    # can be attributed to the right ``IndexAttempt``. The protocol does not
-    # mandate an ``index_attempt_metadata`` field, so non-attempt callers
-    # (ingestion API, user file processing) get None and the
-    # ``*_if_set`` helpers no-op.
-    _attempt_metadata = getattr(  # ods: ignore[getattr]
-        adapter, "index_attempt_metadata", None
-    )
-    attempt_id: int | None = (
-        _attempt_metadata.attempt_id if _attempt_metadata is not None else None
-    )
+    attempt = adapter.index_attempt_metadata
+    attempt_id = attempt.attempt_id if attempt else None
 
     if skip_spreadsheet_content:
         document_batch = skip_tabular_content(document_batch)
@@ -1835,7 +1837,6 @@ def index_doc_batch(
 def run_indexing_pipeline(
     *,
     document_batch: list[Document],
-    request_id: str | None,
     embedder: IndexingEmbedder,
     document_index: DocumentIndex,
     db_session: Session | None = None,
@@ -1913,21 +1914,40 @@ def run_indexing_pipeline(
         # after every doc, update status in case there are a bunch of really long docs
     )
 
-    trace_context = (
-        ensure_trace(
-            INDEXING_PIPELINE_TRACE_NAME,
-            content_mode=TraceContentMode.METADATA_ONLY,
-        )
-        if llm_enrichment_configured
-        else nullcontext()
-    )
-    with trace_context:
+    attempt = adapter.index_attempt_metadata
+    with ExitStack() as trace_scope:
+
+        def start_enrichment_trace() -> None:
+            metadata = {"tenant_id": tenant_id}
+            if attempt:
+                metadata.update(
+                    attempt.model_dump(
+                        include={
+                            "request_id",
+                            "attempt_id",
+                            "batch_num",
+                            "connector_id",
+                        },
+                        exclude_none=True,
+                    )
+                )
+            trace_scope.enter_context(
+                ensure_trace(
+                    INDEXING_PIPELINE_TRACE_NAME,
+                    metadata=metadata,
+                    content_mode=TraceContentMode.METADATA_ONLY,
+                )
+            )
+
         return index_doc_batch_with_handler(
             chunker=chunker,
             embedder=embedder,
             document_index=document_index,
             document_batch=document_batch,
-            request_id=request_id,
+            request_id=attempt.request_id if attempt else None,
+            on_indexable_batch=start_enrichment_trace
+            if llm_enrichment_configured
+            else None,
             tenant_id=tenant_id,
             adapter=adapter,
             enable_contextual_rag=contextual_rag_configured,

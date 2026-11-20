@@ -12,7 +12,7 @@ need no separate cookie. ``is_mobile_sso`` / ``apply_mobile_state`` keep the
 state-key spelling private to this module — callers never touch the raw keys.
 """
 
-from typing import cast
+from typing import Any, cast
 
 from fastapi.responses import RedirectResponse
 from fastapi_users import models
@@ -38,7 +38,7 @@ _MOBILE_CLIENT_MARKER = "mobile"
 
 
 def apply_mobile_state(
-    state_data: dict[str, str],
+    state_data: dict[str, Any],
     mobile_redirect_uri: str | None,
     app_state: str | None,
     app_code_challenge: str | None,

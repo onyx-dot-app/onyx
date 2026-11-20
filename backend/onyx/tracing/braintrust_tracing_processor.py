@@ -255,7 +255,12 @@ class BraintrustTracingProcessor(TracingProcessor):
         )
         trace_metadata = self._trace_metadata.get(span.trace_id)
         if isinstance(span.span_data, GenerationSpanData):
-            span_name = _generation_span_name(span)
+            flow = (span.span_data.model_config or {}).get("flow")
+            if isinstance(flow, str) and flow.strip():
+                span_name = flow
+                trace_metadata = {**(trace_metadata or {}), "flow": flow}
+            else:
+                span_name = _span_name(span)
         else:
             span_name = _span_name(span)
         span_kwargs: Dict[str, Any] = {
@@ -304,14 +309,3 @@ class BraintrustTracingProcessor(TracingProcessor):
             self._logger.flush()
         else:
             braintrust.flush()
-
-
-def _generation_span_name(span: Span[SpanData]) -> str:
-    data = span.span_data
-    if isinstance(data, GenerationSpanData):
-        model_config = data.model_config
-        if isinstance(model_config, dict):
-            flow = model_config.get("flow")
-            if isinstance(flow, str) and flow.strip():
-                return flow
-    return _span_name(span)

@@ -119,12 +119,6 @@
       "addConnectors": {
         "label": "添加连接器"
       },
-      "authenticate": {
-        "label": "身份验证"
-      },
-      "codingAgentIncognito": {
-        "tooltip": "无痕模式下无法使用编码智能体"
-      },
       "configure": {
         "tooltip": "配置"
       },
@@ -147,61 +141,7 @@
         "tooltip": "{description}\n在此聊天中优先使用此工具。智能体也可能不使用该工具直接回答。"
       }
     },
-    "addMcpModal": {
-      "addHeader": {
-        "title": "添加 MCP 服务器"
-      },
-      "cancelButton": {
-        "label": "取消"
-      },
-      "description": {
-        "placeholder": "您的团队可以使用此服务器做什么？",
-        "suffix": "可选",
-        "title": "描述"
-      },
-      "name": {
-        "placeholder": "例如 Linear",
-        "required": "必须填写服务器名称",
-        "title": "服务器名称"
-      },
-      "serverUrl": {
-        "invalid": "必须是有效的 URL",
-        "title": "MCP 服务器 URL"
-      },
-      "submitButton": {
-        "saveLabel": "保存更改",
-        "savingLabel": "正在保存..."
-      },
-      "toasts": {
-        "updateFailed": "更新 MCP 服务器失败"
-      },
-      "access": {
-        "title": "访问控制",
-        "description": "选择谁可以使用此 MCP。",
-        "public": {
-          "label": "组织",
-          "description": "组织内的任何人都可以使用此 MCP"
-        },
-        "groups": {
-          "label": "用户组",
-          "description": "选定的用户组可以使用此 MCP。",
-          "placeholder": "添加用户组",
-          "required": "请选择至少一个用户组。"
-        },
-        "scoped": {
-          "description": "请选择至少一个您管理的用户组。"
-        },
-        "retainedUsers": "{count, plural, other {还直接共享给了 # 位用户。}}",
-        "planNote": "用户组访问需要 Business 套餐。"
-      },
-      "defaultChat": {
-        "title": "在默认 Onyx 聊天中可用"
-      }
-    },
     "addOpenApiModal": {
-      "addHeader": {
-        "title": "添加 OpenAPI 插件"
-      },
       "cancelButton": {
         "label": "取消"
       },
@@ -215,12 +155,6 @@
         "subDescription": "指定一个 OpenAPI 架构，用于定义您想作为此插件一部分开放的 API。您可以在架构的任意位置使用占位符 `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID` 和 `USER_EMAIL`（例如服务器 URL、路径、参数默认值），调用时它们会被替换为当前请求的值。详细了解 [OpenAPI 插件]({docsUrl})。",
         "title": "OpenAPI 架构定义"
       },
-      "editConfigsButton": {
-        "disabledTooltip": "只有该插件的创建者或管理员才能管理身份验证"
-      },
-      "editHeader": {
-        "title": "编辑 OpenAPI 插件"
-      },
       "empty": {
         "description": "提供 OpenAPI 架构后即可在此预览操作。",
         "title": "未找到操作"
@@ -231,18 +165,9 @@
       "method": {
         "noSummary": "未提供摘要"
       },
-      "submitButton": {
-        "addLabel": "添加插件",
-        "addingLabel": "正在添加...",
-        "saveLabel": "保存更改",
-        "savingLabel": "正在保存..."
-      },
       "toasts": {
         "actionCreated": "OpenAPI 插件创建成功",
-        "actionUpdated": "OpenAPI 插件更新成功",
-        "createFailed": "创建 OpenAPI 插件失败",
-        "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效",
-        "updateFailed": "更新 OpenAPI 插件失败"
+        "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效"
       },
       "humanDescription": {
         "title": "面向用户的描述",
@@ -290,429 +215,15 @@
         "title": "断开 *{name}* 的连接"
       }
     },
-    "mcpAuthModal": {
-      "additionalAuthParams": {
-        "label": "附加身份验证参数（JSON）"
-      },
-      "apiKey": {
-        "required": "必须填写 API token"
-      },
-      "apiKeyTabs": {
-        "admin": {
-          "label": "共享令牌"
-        },
-        "perUser": {
-          "label": "个人令牌"
-        }
-      },
-      "authPerformer": {
-        "label": "凭据",
-        "required": "选择个人凭据或共享凭据。"
-      },
-      "authType": {
-        "apiToken": {
-          "label": "API 密钥",
-          "description": "使用每位用户的独立 API 密钥，或组织范围的共享 API 密钥。"
-        },
-        "label": "身份验证方式",
-        "none": {
-          "label": "无需身份验证",
-          "description": "不推荐"
-        },
-        "oauth": {
-          "label": "OAuth",
-          "description": "每位用户需要使用各自的凭据通过 OAuth 验证身份。"
-        },
-        "placeholder": "选择方式",
-        "ptOauth": {
-          "label": "OAuth 透传",
-          "description": "转发用户用于验证 {appName} 身份的 OAuth 访问 token。"
-        },
-        "required": "必须选择身份验证类型"
-      },
-      "authorizationEndpoint": {
-        "label": "授权端点",
-        "required": "请输入提供商提供的授权端点。"
-      },
-      "cancelButton": {
-        "label": "取消"
-      },
-      "clientId": {
-        "label": "客户端 ID",
-        "required": "请输入您的 OAuth 客户端 ID。"
-      },
-      "clientSecret": {
-        "label": "客户端密钥"
-      },
-      "errors": {
-        "additionalParamsInvalid": "附加身份验证参数的 JSON 无效",
-        "additionalParamsInvalidWithReason": "附加身份验证参数的 JSON 无效：{reason}",
-        "additionalParamsNotObject": "附加身份验证参数必须是 JSON 对象",
-        "saveAuthFailed": "保存身份验证配置失败",
-        "saveConfigFailed": "保存服务器配置失败",
-        "saveStage": "无法保存连接设置",
-        "loadStage": "无法加载连接设置",
-        "clientRegistrationFailed": "自动注册客户端失败。请使用自己的 OAuth 客户端，或检查提供商的设置要求。",
-        "clientMetadataRejected": "提供方无法使用客户端元数据文档。如果此实例无法从公共互联网访问，请关闭“使用客户端元数据文档”后重新连接。",
-        "discoveryFailed": "未找到 OAuth 登录设置。请检查服务器 URL，或输入提供商提供的端点。",
-        "connectionFailed": "无法连接服务器。请检查服务器 URL 后重试。",
-        "oauthFailed": "OAuth 登录失败。请重试，或检查服务器的 OAuth 设置。",
-        "oauthInitFailed": "发起 OAuth 失败：{detail}"
-      },
-      "header": {
-        "defaultTitle": "配置身份验证",
-        "description": "配置 MCP 服务器身份验证",
-        "title": "配置 *{name}*"
-      },
-      "noAuthNotice": {
-        "description": "用户无需登录即可使用此服务器。已配置的自定义请求头仍会发送。",
-        "title": "无需身份验证"
-      },
-      "oauthInfo": {
-        "discovery": "每位用户使用自己的账号登录。",
-        "manualRegistration": "在提供商处注册此重定向 URI。",
-        "title": "OAuth 配置"
-      },
-      "passThroughNotice": {
-        "description": "{appName} 会将用户的 OAuth 访问 token 作为 Authorization 请求头直接转发给服务器。请确保该服务器支持使用同一提供方进行身份验证。",
-        "title": "对使用同一身份提供方的服务，请使用透传方式。"
-      },
-      "providerMode": {
-        "autoDiscovery": {
-          "description": "读取服务器公布的登录设置。",
-          "label": "自动查找登录端点"
-        },
-        "knownProvider": {
-          "description": "自行输入登录 URL 和令牌 URL。",
-          "label": "手动输入端点"
-        },
-        "label": "OAuth 端点",
-        "placeholder": "选择模式"
-      },
-      "redirectUri": {
-        "copyTooltip": "复制重定向 URI",
-        "label": "使用**重定向 URI**："
-      },
-      "scopesOverride": {
-        "label": "权限范围覆盖（以逗号分隔）"
-      },
-      "sharedApiKey": {
-        "description": "此密钥用于测试设置，并为所有有权访问的人建立连接。请使用工作区密钥，而非个人密钥。",
-        "label": "API 密钥",
-        "placeholder": "组织共享的 API 密钥"
-      },
-      "submitButton": {
-        "label": "保存更改",
-        "pendingLabel": "正在保存…"
-      },
-      "tokenEndpoint": {
-        "label": "Token 端点",
-        "required": "请输入提供商提供的令牌端点。"
-      },
-      "transport": {
-        "required": "必须选择传输方式",
-        "label": "连接传输方式",
-        "description": "除非服务器要求使用旧版 SSE，否则请使用 Streamable HTTP。此设置不会从服务器自动检测。",
-        "httpLabel": "Streamable HTTP",
-        "sseLabel": "SSE（旧版）"
-      },
-      "advancedSettings": {
-        "title": "高级设置"
-      },
-      "apiTokenInfo": {
-        "title": "API 密钥配置",
-        "description": "选择让每位用户使用个人令牌连接，还是让所有人使用共享令牌。"
-      },
-      "oauthSetup": {
-        "label": "OAuth 设置",
-        "automatic": {
-          "label": "自动设置",
-          "description": "让 {appName} 使用服务器公布的设置注册 OAuth 客户端。"
-        },
-        "ownClient": {
-          "label": "使用自己的 OAuth 客户端",
-          "description": "输入提供商提供的客户端 ID。仅在需要时添加密钥。"
-        }
-      },
-      "cimd": {
-        "label": "使用客户端元数据文档",
-        "description": "开启后，提供方会通过公共互联网获取 {appName} 的客户端元数据文档。如果此 {appName} 实例不对外公开，请关闭此选项。{appName} 将改用自动客户端注册。"
-      },
-      "discovery": {
-        "checking": "正在检查自动设置…",
-        "supported": "可以使用自动设置",
-        "requiresClient": "此服务器未声明支持自动注册客户端。建议您设置自己的 OAuth 客户端。您仍可尝试自动注册。",
-        "missing": "请检查服务器 URL，或输入提供商提供的登录端点和令牌端点。",
-        "unreachable": "服务器可能不可用，或阻止了发现请求。",
-        "retry": "重新检查",
-        "manual": "手动输入 OAuth 设置",
-        "useOwnClient": "使用自己的 OAuth 客户端",
-        "unreachableTitle": "无法确定是否可以使用自动设置",
-        "missingTitle": "未找到 OAuth 端点",
-        "requiresClientTitle": "可能无法使用自动设置"
-      },
-      "advanced": {
-        "description": "配置已知的 OAuth 提供方，明确指定授权端点和 token 端点，不使用自动发现。",
-        "title": "高级"
-      },
-      "knownProvider": {
-        "hint": "已知提供方模式需要配置端点。Google 参考端点：授权端点 {authorizationEndpoint}，token 端点 {tokenEndpoint}。"
-      }
-    },
-    "mcpCard": {
-      "deleteModal": {
-        "body": {
-          "confirmation": "确定要删除此 MCP 服务器吗？",
-          "description": "这会为组织内所有用户删除 <emphasis>{title}</emphasis> 及其所有工具。删除后无法恢复。"
-        },
-        "submitButton": {
-          "label": "删除"
-        },
-        "title": "删除 MCP 服务器"
-      }
-    },
-    "mcpOauthCallback": {
-      "autoRedirect": {
-        "text": "正在自动返回…"
-      },
-      "backToChatButton": {
-        "label": "返回聊天"
-      },
-      "cancelled": {
-        "description": "授权已被取消或拒绝，因此未建立连接。要重试，请从 MCP 服务器的身份验证设置中重新发起连接。",
-        "title": "授权已取消"
-      },
-      "continueButton": {
-        "label": "继续"
-      },
-      "genericError": {
-        "fallbackDetail": "无法完成授权",
-        "title": "出了点问题"
-      },
-      "invalidLink": {
-        "description": "此链接缺少必需的授权参数。请从 MCP 服务器的身份验证设置中重新发起连接。",
-        "title": "授权链接无效"
-      },
-      "processing": {
-        "description": "正在完成与您的 MCP 服务器的连接。这可能需要片刻…",
-        "title": "正在完成授权"
-      },
-      "serverNotFound": {
-        "description": "此授权所属的 MCP 服务器已不存在或不再配置。请重新创建或重新配置该服务器，然后重新连接。",
-        "title": "未找到 MCP 服务器"
-      },
-      "sessionExpired": {
-        "description": "此授权链接无效、已过期或已被使用。请从 MCP 服务器的身份验证设置中重新发起连接。",
-        "title": "授权会话已过期"
-      },
-      "success": {
-        "description": "授权已成功完成。您现在可以在聊天中使用此服务器的工具。",
-        "title": "已连接到 {serverName}"
-      },
-      "timedOut": {
-        "description": "MCP 服务器未及时确认授权。请重新尝试连接。如果问题持续出现，请检查服务器的 OAuth 配置。",
-        "title": "授权超时"
-      },
-      "tokenExchangeFailed": {
-        "description": "提供方已批准授权，但未能获取有效的访问令牌。请检查服务器的 OAuth 客户端凭据和端点，然后重新尝试连接。",
-        "title": "令牌交换失败"
-      }
-    },
-    "mcpPage": {
-      "addButton": {
-        "label": "添加 MCP 服务器"
-      },
-      "empty": {
-        "description": "连接 MCP 服务器以添加自定义操作。"
-      },
-      "errors": {
-        "unknown": "未知错误"
-      },
-      "toasts": {
-        "deleteFailed": "删除 MCP 服务器失败",
-        "disconnectFailed": "断开 MCP 服务器连接失败",
-        "fetchToolsFailed": "获取工具失败：{error}",
-        "reconnectFailed": "重新连接 MCP 服务器失败",
-        "serverDeleted": "MCP 服务器删除成功"
-      }
-    },
-    "openApiAuthModal": {
-      "authMethod": {
-        "customHeader": {
-          "description": "每次请求都发送自定义请求头。",
-          "label": "自定义 Authorization 请求头"
-        },
-        "label": "身份验证方式",
-        "oauth": {
-          "description": "每位用户使用各自的凭据通过 OAuth 验证身份。",
-          "label": "OAuth"
-        },
-        "placeholder": "选择方式",
-        "ptOauth": {
-          "description": "转发用户用于验证 {appName} 身份的 OAuth 访问 token。",
-          "label": "OAuth 透传"
-        },
-        "required": "必须选择身份验证方式"
-      },
-      "authorizationUrl": {
-        "label": "授权 URL",
-        "required": "必须填写授权 URL"
-      },
-      "cancelButton": {
-        "label": "取消"
-      },
-      "clientId": {
-        "description": "留空则保留当前的客户端 ID。",
-        "label": "OAuth 客户端 ID",
-        "required": "必须填写客户端 ID"
-      },
-      "clientSecret": {
-        "description": "留空则保留当前的客户端密钥。",
-        "label": "OAuth 客户端密钥",
-        "required": "必须填写客户端密钥"
-      },
-      "errors": {
-        "invalidUrl": "请输入有效的 URL",
-        "loadConfigFailed": "加载现有 OAuth 配置失败。请重新输入详细信息以更新配置。"
-      },
-      "header": {
-        "description": "验证连接身份后即可开始使用 OpenAPI 插件。"
-      },
-      "headers": {
-        "addButton": {
-          "label": "添加请求头"
-        },
-        "description": "为发送到此插件 API 端点的所有请求指定自定义请求头。",
-        "keyRequired": "必须填写请求头名称",
-        "keyTitle": "请求头",
-        "minRequired": "请至少添加一个身份验证请求头",
-        "title": "身份验证请求头",
-        "valueRequired": "必须填写请求头的值",
-        "valueTitle": "值"
-      },
-      "loading": {
-        "label": "正在加载现有配置..."
-      },
-      "passThroughNotice": {
-        "description": "{appName} 会将用户的 OAuth 访问 token 作为 Authorization 请求头直接转发给服务器。请确保该服务器支持使用同一提供方进行身份验证。",
-        "title": "对使用同一身份提供方的服务，请使用透传方式。"
-      },
-      "redirectUri": {
-        "copyTooltip": "复制重定向 URI",
-        "label": "使用<emphasis>重定向 URI</emphasis>："
-      },
-      "scopes": {
-        "description": "要请求的 OAuth 权限范围列表，以逗号分隔。",
-        "label": "权限范围 <optional>（可选）</optional>",
-        "placeholder": "例如 repo、user"
-      },
-      "submitButton": {
-        "label": "连接",
-        "pendingLabel": "正在连接..."
-      },
-      "tokenUrl": {
-        "label": "Token URL",
-        "required": "必须填写 token URL"
-      },
-      "pkce": {
-        "label": "使用 PKCE",
-        "description": "仅当 OAuth 提供商支持使用 S256 质询方法的 PKCE 时启用。"
-      },
-      "connectionCheck": {
-        "discovery": {
-          "idle": "请输入有效的 HTTPS 端点以检查 PKCE 支持情况。",
-          "checking": "正在检查提供商声明的 PKCE 支持情况…",
-          "supported": "提供商声明支持 S256 PKCE。",
-          "unsupported": "提供商未声明支持 S256 PKCE。",
-          "unknown": "无法验证 PKCE 支持情况。你仍可手动选择设置。"
-        },
-        "description": "测试这些尚未保存的设置，不会保存配置或令牌。在提供商处授权可能会允许此应用访问你的账户。",
-        "testing": "正在测试连接…",
-        "test": "测试连接",
-        "successPkce": "使用 PKCE 参数授权成功。这并不能证明提供商强制执行 PKCE。",
-        "success": "不使用 PKCE 的授权成功。",
-        "result": {
-          "blocked": "请允许弹出窗口并重试。",
-          "closed": "测试窗口已关闭或断开连接。请完成仍打开的测试，或重试。",
-          "stale": "设置已更改。请重新测试当前设置。",
-          "failed": "授权测试失败。请检查设置并重试。",
-          "denied": "提供商授权被拒绝或取消。",
-          "interrupted": "测试已过期或中断。请开始新的测试。"
-        },
-        "returnToSettings": "请返回设置窗口查看结果。",
-        "close": "关闭窗口"
-      }
-    },
-    "openApiCard": {
-      "card": {
-        "ariaLabel": "{name} OpenAPI 操作卡片"
-      },
-      "deleteModal": {
-        "body": {
-          "confirmation": "确定要删除此 OpenAPI 操作吗？",
-          "description": "此操作将永久删除 OpenAPI 操作 <emphasis>{name}</emphasis> 及其配置。"
-        },
-        "submitButton": {
-          "label": "删除"
-        },
-        "title": "删除 OpenAPI 插件"
-      },
-      "method": {
-        "noSummary": "未提供摘要"
-      },
-      "toolsList": {
-        "emptyMessage": "此 OpenAPI 架构未定义任何操作",
-        "emptySearchMessage": "没有与搜索匹配的操作"
-      }
-    },
-    "openApiPage": {
-      "addButton": {
-        "label": "添加 OpenAPI 操作"
-      },
-      "empty": {
-        "description": "通过 OpenAPI 架构添加自定义操作。"
-      },
-      "toasts": {
-        "authSaveFailed": "保存身份验证设置失败。",
-        "authSaved": "{name} 的身份验证保存成功。",
-        "deleteFailed": "删除工具失败。",
-        "disconnectFailed": "断开 OpenAPI 操作连接失败。",
-        "toolDeleted": "{name} 删除成功。"
-      }
-    },
-    "perUserAuth": {
-      "credentialField": {
-        "placeholder": "输入 {field}"
-      },
-      "credentials": {
-        "perUserDescription": "使用您的凭据测试此 MCP 并加载其工具。凭据仅保存到您的账号。",
-        "sharedDescription": "这些值将用于您组织中的每位用户。",
-        "perUserTitle": "仅用于您自己的账户",
-        "sharedTitle": "组织共享的值"
-      },
-      "headers": {
-        "addButton": {
-          "label": "添加请求头"
-        },
-        "error": {
-          "message": "至少要有一个请求头的值包含 {apiKey} 占位符。"
-        },
-        "keyTitle": "请求头名称",
-        "label": "自定义请求头",
-        "perUserDescription": "使用 <mono>{apiKey}</mono> 表示每位用户的 API 密钥。<mono>{userEmail}</mono> 会自动使用其电子邮箱。其他占位符会要求用户输入值。",
-        "sharedDescription": "设置随组织共享凭据一起发送的请求头格式。至少在一个请求头的值中使用 <mono>{apiKey}</mono> 这类占位符；它会被替换为您组织的共享密钥。",
-        "valueTitle": "请求头的值"
-      }
-    },
     "policyToggle": {
       "always": {
-        "label": "自动批准"
+        "label": "允许"
       },
       "ask": {
         "label": "询问"
       },
       "deny": {
-        "label": "已禁用"
+        "label": "已阻止"
       }
     },
     "switchList": {
@@ -726,27 +237,6 @@
     "toolItem": {
       "unavailable": {
         "label": "工具不可用"
-      }
-    },
-    "toolsList": {
-      "disableAllButton": {
-        "ariaLabel": "禁用所有工具",
-        "tooltip": "禁用所有工具"
-      },
-      "empty": {
-        "message": "没有可用的工具",
-        "searchMessage": "未找到工具"
-      },
-      "enableAllButton": {
-        "label": "全部启用"
-      },
-      "showAllButton": {
-        "ariaLabel": "显示所有工具",
-        "tooltip": "显示所有工具"
-      },
-      "showEnabledButton": {
-        "ariaLabel": "仅显示已启用的工具",
-        "tooltip": "仅显示已启用"
       }
     },
     "toolNames": {
@@ -773,9 +263,6 @@
       },
       "addMemory": {
         "label": "添加到记忆"
-      },
-      "codingAgent": {
-        "label": "编码智能体"
       }
     },
     "toolsPopover": {
@@ -787,7 +274,7 @@
           "tooltip": "配置图像生成"
         },
         "openapi": {
-          "tooltip": "管理 OpenAPI 插件"
+          "tooltip": "管理集成"
         },
         "webSearch": {
           "tooltip": "配置网络搜索"
@@ -831,9 +318,6 @@
         "askAdminSuffix": {
           "text": "请管理员进行配置。"
         },
-        "codingAgent": {
-          "description": "调查 GitHub 仓库并回答有关其代码的问题。"
-        },
         "configureSuffix": {
           "text": "按设置齿轮以启用。"
         },
@@ -864,404 +348,26 @@
       }
     },
     "placeholders": {
-      "oauthAuthorizationUrl": "https://example.com/oauth/authorize",
-      "oauthTokenUrl": "https://example.com/oauth/access_token",
-      "oauthScope": "https://www.googleapis.com/auth/logging.read",
-      "mcpServerUrl": "https://mcp-fuwuqi.com/mcp"
-    },
-    "memberPlugins": {
-      "chat": {
-        "trigger": {
-          "label": "插件"
-        },
-        "search": {
-          "placeholder": "搜索插件"
-        },
-        "empty": {
-          "text": "此聊天中没有可用的插件。",
-          "searchText": "没有与搜索条件匹配的插件。"
-        },
-        "loading": {
-          "label": "正在加载插件"
-        },
-        "loadError": {
-          "text": "部分插件无法加载。请重试。"
-        },
-        "retry": {
-          "label": "重试"
-        },
-        "browse": {
-          "label": "浏览插件"
-        },
-        "toggle": {
-          "ariaLabel": "在此聊天中使用{name}"
-        },
-        "connect": {
-          "label": "连接"
-        },
-        "connection": {
-          "connected": "已连接",
-          "workspace": "工作区连接",
-          "session": "会话连接",
-          "none": "无需连接",
-          "oauth": "连接您的账户",
-          "credentials": "添加您的凭据",
-          "checking": "正在检查连接",
-          "unconfigured": "需要设置工作区",
-          "unavailable": "连接不可用"
-        },
-        "intent": {
-          "unavailable": "此聊天的智能体无法使用此插件。",
-          "invalid": "此插件链接无效。"
-        }
-      },
-      "oauthComplete": {
-        "success": {
-          "title": "插件已连接",
-          "description": "返回上一个标签页以继续。"
-        },
-        "error": {
-          "title": "连接未确认",
-          "description": "返回上一个标签页并重新尝试连接。"
-        },
-        "return": {
-          "label": "返回插件"
-        },
-        "close": {
-          "label": "关闭标签页"
-        }
-      },
-      "title": "插件",
-      "description": "连接你的账户以使用工作区插件。",
-      "manageWorkspace": "管理工作区插件",
-      "search": "搜索插件",
-      "kind": {
-        "mcp": "MCP",
-        "openapi": "OpenAPI",
-        "external-app": "Craft 应用程序"
-      },
-      "row": {
-        "view": "查看{name}",
-        "connect": "连接{name}"
-      },
-      "status": {
-        "connected": "已连接",
-        "workspace": "工作区连接",
-        "session": "使用您已连接的账户",
-        "none": "可直接使用",
-        "oauth": "连接您的账户",
-        "credentials": "添加您的凭据",
-        "unconfigured": "需要设置工作区",
-        "checking": "正在检查连接",
-        "unavailable": "连接不可用"
-      },
-      "availability": {
-        "label": "{name} 的连接状态",
-        "chat": "主聊天",
-        "craft": "Craft",
-        "on": "开启",
-        "off": "关闭",
-        "unknown": "未知",
-        "disabledByAdmin": "已被管理员禁用",
-        "disabledByYou": "已被你禁用",
-        "agents": "自定义智能体",
-        "notAvailable": "不可用"
-      },
-      "state": {
-        "loading": "正在加载插件",
-        "serversError": "无法加载MCP插件。",
-        "toolsError": "无法加载插件工具。",
-        "oauthError": "无法加载账户连接。",
-        "retry": "重试",
-        "noResultsTitle": "没有匹配的插件",
-        "noResultsDescription": "请尝试其他名称或描述。",
-        "clearSearch": "查看所有插件",
-        "appsError": "无法加载 Craft 应用。",
-        "appsLoading": "正在加载 Craft 应用",
-        "emptyTitle": "未找到插件",
-        "emptyDescription": "请尝试其他连接筛选条件，或请工作区管理员添加插件。"
-      },
-      "detail": {
-        "issuesTitle": "问题",
-        "noAuthentication": "无需身份验证",
-        "connection": "连接",
-        "tools": "工具",
-        "toolCount": "{count, plural, other {#个工具}}",
-        "noTools": "此插件尚未保存可见的工具。",
-        "connect": "连接账户",
-        "useInChat": "在聊天中使用",
-        "disconnect": "断开连接",
-        "disconnectTitle": "断开{name}的连接？",
-        "disconnectDescription": "此操作将移除您的账户连接。工作区可用性保持不变。",
-        "oauthDisconnectWarning": "使用相同OAuth配置的所有插件和应用会共享此账户连接。断开连接将移除您与所有这些插件和应用的连接。",
-        "disconnecting": "正在断开连接...",
-        "disconnectFailed": "无法断开您的账户连接。请重试。",
-        "cancel": "取消",
-        "close": "完成",
-        "openInCraft": "在 Craft 中打开"
-      },
-      "connection": {
-        "title": "连接{name}",
-        "description": "您的工作区已配置此插件。请连接账户后使用。",
-        "credentialsDescription": "输入此插件的凭据。您的账户连接与其他成员的账户连接分开管理。",
-        "oauthDescription": "继续并登录您的账户。服务提供方会显示请求的访问权限。",
-        "continue": "继续前往{name}",
-        "connect": "连接",
-        "connecting": "正在连接...",
-        "cancel": "取消",
-        "done": "完成",
-        "workspaceDescription": "您的工作区提供此连接。您无需连接账户。",
-        "sessionDescription": "此插件使用您当前的登录信息。",
-        "noneDescription": "此插件无需连接账户。",
-        "connectedDescription": "您的账户已连接。",
-        "unconfiguredDescription": "工作区管理员需要完成此插件的设置，您才能连接。",
-        "checkingDescription": "您的连接状态仍在加载中。请在加载完成后重试。",
-        "unavailableDescription": "无法加载您的连接状态。请从插件页面重试。",
-        "errors": {
-          "popup_blocked": "您的浏览器拦截了登录窗口。请允许弹出式窗口后重试。",
-          "cancelled": "登录已取消。您可以重试。",
-          "timed_out": "登录耗时过长。请重试。",
-          "credentials_required": "请输入所有必需的凭据。",
-          "unconfigured": "工作区管理员需要完成此插件的设置。",
-          "not_connected": "无法确认您的账户连接。请重试。",
-          "request_failed": "连接失败。请重试。"
-        }
-      },
-      "filters": {
-        "label": "连接状态",
-        "all": "全部",
-        "connected": "已连接",
-        "needsSignIn": "需要登录",
-        "showAll": "查看所有插件"
-      },
-      "defaults": {
-        "chat": "在默认聊天中启用",
-        "craft": "在 Craft 中启用",
-        "chatDescription": "在您未使用自定义智能体的聊天中提供此插件。",
-        "craftDescription": "在您的 Craft 会话和计划任务中提供此插件。您组织的工具权限仍然适用。",
-        "unavailable": "管理员已在 {surface} 中禁用此插件。",
-        "saveFailed": "无法保存你的插件默认设置。请重试。",
-        "chatUnavailable": "管理员已在 {surface} 中禁用此插件。配置了此插件的自定义智能体仍可能使用它。"
-      },
-      "openapi": {
-        "chatOnly": "仅限 Chat",
-        "chatOnlyDescription": "此插件可用于 Chat，不能用于 Craft。"
-      },
-      "appSkills": {
-        "preview": "预览",
-        "search": "搜索技能",
-        "count": "{count, plural, one {# 个技能} other {# 个技能}}",
-        "empty": "此应用没有关联的技能。",
-        "noMatches": "没有与搜索匹配的技能。",
-        "error": "无法加载技能。",
-        "enabled": "已启用",
-        "disabled": "已禁用",
-        "loading": "正在加载技能…"
-      },
-      "externalApp": {
-        "description": "在 Craft 中使用你的账号。",
-        "craftOnly": "仅限 Craft",
-        "craftOnlyDescription": "此应用可在 Craft 中使用。主聊天暂不支持。",
-        "craftDisabledDescription": "此应用在 Craft 中已禁用。主聊天不支持此应用。"
-      }
-    },
-    "plugins": {
-      "availability": {
-        "mainChat": "主聊天",
-        "craft": "Craft",
-        "on": "开启",
-        "off": "关闭",
-        "unknown": "未知",
-        "enabled": "已启用",
-        "disabled": "已禁用",
-        "chatEnabled": "Chat 已开启",
-        "chatDisabled": "Chat 已关闭",
-        "chatUnknown": "Chat 状态未知",
-        "craftEnabled": "Craft 已开启",
-        "craftDisabled": "Craft 已关闭"
-      },
-      "controls": {
-        "disconnect": "为工作区启用或禁用",
-        "enable": "为工作区启用",
-        "disable": "为工作区禁用",
-        "manageAvailability": "管理工作区可用性",
-        "more": "更多操作",
-        "disableChat": "在主聊天中禁用",
-        "enableChat": "在默认聊天中启用",
-        "disableCraft": "在 Craft 中禁用",
-        "enableCraft": "在 Craft 中启用",
-        "chatDescription": "在未选择自定义智能体的聊天中提供此插件。访问控制仍然适用。",
-        "defaultChatAdminOnly": "只有工作区管理员可以更改默认聊天中的可用性。",
-        "mcpCraftDescription": "在 Craft 中提供此插件。访问控制和工具权限仍然适用。",
-        "craftAppDescription": "在 Craft 中提供此应用。连接和审批要求仍然适用。",
-        "workspaceDescription": "允许在 Chat 和自定义智能体中使用此插件。访问控制和身份验证要求仍然适用。"
-      },
-      "craftApp": {
-        "tabs": {
-          "configuration": "配置",
-          "permissions": "权限",
-          "skills": "技能"
-        }
-      },
-      "disableConfirmation": {
-        "workspaceTitle": "为工作区禁用 {name}？",
-        "workspaceDescription": "这将为工作区中的所有人禁用 {name}，包括自定义智能体。已保存的设置和凭据将被保留。您可以再次启用。",
-        "scope": "组织内的所有用户",
-        "chatTitle": "要为主聊天禁用 {name} 吗？",
-        "chatDescription": "这会从组织内所有用户的默认聊天中移除 {name}。自定义智能体不受影响。你可以重新启用它。",
-        "craftTitle": "要为 Craft 禁用 {name} 吗？",
-        "craftDescription": "这会使组织内所有用户都无法在 Craft 中使用 {name}。主聊天不受影响。你可以重新启用它。"
-      },
-      "openapi": {
-        "schemaPreview": {
-          "detected": "{count, plural, one {检测到 # 个工具} other {检测到 # 个工具}}",
-          "viewTools": "查看工具",
-          "saveToUpdate": "保存更改以更新工具。"
-        },
-        "createTitle": "添加 OpenAPI 插件",
-        "detailDescription": "管理此 API 和智能体可用的工具。",
-        "detailsTitle": "配置",
-        "schemaTitle": "OpenAPI 架构",
-        "notFound": "未找到插件",
-        "loadFailed": "无法加载此插件",
-        "unavailable": "此插件可能已被删除，或你没有访问权限。",
-        "readOnly": "你可以查看此插件，但你的账户无法更改其设置。",
-        "deleteDescription": "这会永久删除 OpenAPI 插件及其配置。"
-      },
-      "title": "插件",
-      "description": "将工具和应用连接到你的工作区。",
-      "search": {
-        "placeholder": "搜索插件"
-      },
-      "add": {
-        "label": "添加",
-        "mcp": "添加自定义 MCP 服务器",
-        "openapi": "添加 OpenAPI 插件"
-      },
-      "catalog": {
-        "linear": {
-          "summary": "管理问题、项目和团队",
-          "description": "管理问题、项目和团队。"
-        },
-        "notion": {
-          "summary": "搜索和更新 Notion 工作区",
-          "description": "搜索和更新 Notion 工作区。"
-        },
-        "sentry": {
-          "summary": "调查错误和性能问题",
-          "description": "调查错误和性能问题。"
-        },
-        "atlassian": {
-          "summary": "使用 Jira 和 Confluence",
-          "description": "使用 Jira 和 Confluence。",
-          "approvalNote": "你的 Atlassian 组织可能需要管理员批准。"
-        },
-        "setupGuide": "设置指南",
-        "add": {
-          "label": "添加 {name}"
-        }
-      },
-      "row": {
-        "externalAppKind": "Craft 应用",
-        "manage": {
-          "label": "管理 {name}"
-        },
-        "view": {
-          "label": "查看 {name}"
-        }
-      },
-      "kind": {
-        "mcp": "MCP",
-        "openapi": "OpenAPI",
-        "external-app": "Craft 应用"
-      },
-      "filters": {
-        "label": "插件类型",
-        "all": "全部",
-        "apps": "Craft 应用"
-      },
-      "state": {
-        "mcpError": "无法加载 MCP 服务器。",
-        "listErrorDescription": "无法加载此插件列表。请稍后重试。",
-        "openapiError": "无法加载 OpenAPI 插件。",
-        "retry": {
-          "label": "重试"
-        },
-        "loading": "正在加载插件",
-        "empty": {
-          "title": "未安装插件",
-          "description": "向工作区添加插件。",
-          "explore": {
-            "label": "探索插件"
-          }
-        },
-        "noResults": {
-          "title": "未找到插件",
-          "description": "请尝试其他名称、描述或服务器 URL。",
-          "clear": {
-            "label": "查看所有插件"
-          }
-        },
-        "externalAppsError": "无法加载应用"
-      }
+      "oauthScope": "https://www.googleapis.com/auth/logging.read"
     },
     "mcpSetup": {
-      "connectTo": "连接到 {name}",
       "contactingServer": "正在连接服务器",
       "detectingAuthentication": "正在检测身份验证",
-      "stagePending": "进行中",
-      "stageSuccess": "已完成",
-      "stageError": "失败",
       "stageWaiting": "等待中",
       "progress": "设置进度",
       "serverStep": "服务器",
       "connectionStep": "连接",
-      "permissionDenied": "你没有添加 MCP 服务器的权限。",
-      "reviewSettings": "连接前请检查服务器设置。",
-      "urlDescription": "输入服务器 URL 以检测连接和身份验证设置。",
       "detectedTransport": "传输方式：{transport}",
-      "retry": "重新检查",
       "authenticationUndetected": "在下一页选择身份验证方式。",
-      "configureManually": "手动配置",
       "details": "详细信息",
       "checking": "正在检查服务器…",
-      "unreachable": "无法连接到此 MCP 服务器",
-      "retryCheck": "请检查 URL 和服务器状态，然后重试。",
-      "blocked": "您的出站安全设置阻止了此 URL。",
-      "publicDetected": "无需身份验证",
-      "oauthDetected": "已检测到 OAuth",
-      "clientMetadata": "客户端元数据文档",
-      "clientMetadataSupported": "支持",
-      "clientMetadataUnsupported": "不支持",
-      "clientMetadataUnknown": "未检查",
-      "manualRequired": "手动选择身份验证",
-      "chooseAuthentication": "无法确定此服务器的身份验证方式。请在下方选择一种方式。",
-      "connect": "连接",
-      "publicDetails": "可用工具：{count}",
       "serverDetails": "服务器详情",
       "authentication": "身份验证",
       "continue": "继续",
       "back": "返回"
     },
-    "mcpTools": {
-      "title": "工具",
-      "enabledTab": "可用工具",
-      "policiesTab": "审批设置",
-      "refresh": "刷新工具",
-      "loadError": "无法加载工具",
-      "saveError": "无法保存工具设置",
-      "refreshError": "无法刷新工具",
-      "search": "搜索工具",
-      "enabledCount": "已启用工具：{enabled} / {total}"
-    },
-    "mcpDetail": {
-      "configuration": "配置",
-      "authentication": "身份验证",
-      "loadError": "无法加载 MCP 服务器",
-      "notFound": "未找到 MCP 服务器",
-      "unavailable": "此服务器可能已被删除，或者您没有访问权限。",
-      "retry": "重试",
-      "availabilitySaved": "可用范围已更新"
+    "policyEditor": {
+      "toolCount": "{count, plural, other {#个操作}}"
     }
   },
   "admin": {
@@ -1770,7 +876,6 @@
           "title": "加载使用报告失败。"
         },
         "pendingRow": {
-          "description": "{range} · 通常在一分钟内完成",
           "slowDescription": "仍在处理。您可以离开此页面，报告完成后会显示在这里。",
           "title": "正在准备报告…"
         },
@@ -1808,8 +913,11 @@
         "toasts": {
           "ready": "使用报告已就绪。",
           "startFailed": "启动报告生成失败：{message}",
-          "timedOut": "报告生成用时过长。请重试，或稍后再来查看。",
           "unknownError": "未知错误"
+        },
+        "failedRow": {
+          "title": "报告生成失败",
+          "description": "请求时间：{time}。请生成新报告以重试。"
         }
       },
       "slackChannelChart": {
@@ -2264,10 +1372,6 @@
       "advanced": {
         "title": "高级选项"
       },
-      "anonymousUsers": {
-        "description": "允许任何人**无需登录**即可开始聊天。他们看不到其他聊天，也无法创建智能体或更改设置。",
-        "title": "允许匿名用户"
-      },
       "autoDetectFilters": {
         "description": "自动应用从搜索查询中推断出的来源和时间过滤条件。",
         "title": "自动识别搜索过滤条件"
@@ -2339,48 +1443,6 @@
         "description": "允许多个模型在对话中并行生成回复。",
         "title": "多模型生成"
       },
-      "queryHistory": {
-        "anonymized": {
-          "description": "查询对管理员可见，但已移除用户身份信息",
-          "label": "匿名化"
-        },
-        "description": "控制组织的完整对话历史在管理面板中的显示方式。",
-        "disabled": {
-          "description": "查询历史报告已禁用。",
-          "label": "隐藏"
-        },
-        "normal": {
-          "description": "所有查询对管理员可见，并关联到具体用户。",
-          "label": "显示并附带用户信息"
-        },
-        "title": "查询历史可见性"
-      },
-      "retention": {
-        "custom": {
-          "invalidError": "请输入 1 到 {max} 之间的整数天数。",
-          "label": "自定义保留期",
-          "moreTooltip": "更多",
-          "placeholder": "以天为单位",
-          "restoreTooltip": "恢复默认"
-        },
-        "description": "指定 {appName} 在您的组织中保留对话的时长。",
-        "forever": {
-          "label": "永久"
-        },
-        "presets": {
-          "days30": "30 天",
-          "days60": "60 天",
-          "days7": "7 天",
-          "days90": "90 天",
-          "year1": "1 年"
-        },
-        "reduceModal": {
-          "confirmLabel": "缩短保留期",
-          "message": "超过 {days, plural, one {# 天} other {# 天}} 没有活动的对话将被永久删除。此操作无法撤销。",
-          "title": "缩短对话保留期？"
-        },
-        "title": "保留对话历史"
-      },
       "searchMode": {
         "description": "用于在组织内快速搜索文档的界面模式。",
         "noConnectorsTooltip": "设置连接器后才能使用搜索模式",
@@ -2439,12 +1501,8 @@
           "description": "生成并运行代码。",
           "title": "代码解释器"
         },
-        "codingAgent": {
-          "description": "调查 GitHub 仓库并回答有关其代码的问题。",
-          "title": "编程智能体"
-        },
         "description": "对话可以使用的工具和能力。此项不适用于智能体。",
-        "pluginsNote": "在[插件]({url})中配置默认聊天使用的 MCP 服务器和 OpenAPI 插件。",
+        "pluginsNote": "在[集成]({url})中管理 MCP 服务器和 OpenAPI 应用。",
         "imageGeneration": {
           "description": "使用 AI 工具生成和处理图像。",
           "disabledTooltip": "图像生成需要已配置的模型。请在“配置 > 图像生成”中设置一个，或联系管理员。",
@@ -3110,7 +2168,15 @@
           "close": "关闭",
           "count": "({count})"
         },
-        "showing": "显示第 <mono>{from}</mono>~<mono>{to}</mono> 条，共 <mono>{total}</mono> 条"
+        "showing": "显示第 <mono>{from}</mono>~<mono>{to}</mono> 条，共 <mono>{total}</mono> 条",
+        "progress": {
+          "listed": "已列出",
+          "converted": "已转换",
+          "indexed": "已索引",
+          "listedSoFar": "{count, plural, other {目前已列出 # 个文档}}",
+          "skipped": "{count, plural, other {已跳过 # 个未更改的文档}}",
+          "eta": "大约还需 {duration}"
+        }
       },
       "activity": {
         "search": {
@@ -5224,10 +4290,20 @@
           "description": "只有管理员可以将技能发布到组织。"
         },
         "saveSuccess": {
-          "message": "已保存发布设置。"
+          "message": "设置已保存。"
         },
         "saveError": {
-          "message": "无法保存发布设置。"
+          "message": "无法保存设置。"
+        },
+        "defaultAccess": {
+          "title": "默认访问权限",
+          "description": "适用于每个没有自身设置的已发布技能，包括以后发布的技能。",
+          "loadFailed": "无法加载默认访问权限。",
+          "retry": "重试"
+        },
+        "sharing": {
+          "title": "共享",
+          "description": "成员可以与他人和群组共享技能。技能管理员始终可以共享。"
         }
       }
     },
@@ -6007,15 +5083,13 @@
         },
         "deleteModal": {
           "description": "此操作会为整个组织删除该应用：包括它的配置、每位成员的连接，以及所有由提供商管理的技能。",
-          "retainedSkills": "{count, plural, =0 {不会删除任何关联的自定义技能。} one {将保留 # 个关联的自定义技能，解除与此应用的关联，并对所有人禁用。} other {将保留 # 个关联的自定义技能，解除与此应用的关联，并对所有人禁用。}}",
           "submit": {
             "label": "删除应用"
           },
           "title": "删除“{name}”？"
         },
         "toasts": {
-          "deleteFailed": "删除“{name}”失败",
-          "enableFailed": "启用“{name}”失败"
+          "deleteFailed": "删除“{name}”失败"
         }
       },
       "loading": {
@@ -6032,9 +5106,6 @@
       },
       "page": {
         "description": "设置组织的 Craft 智能体可以使用的应用。每位成员在 Craft 的“应用”页面连接自己的账户。"
-      },
-      "warnings": {
-        "providerUnavailable": "提供商不可用"
       }
     },
     "federated": {
@@ -8664,6 +7735,48 @@
         "section": {
           "title": "管理员控制"
         },
+        "queryHistory": {
+          "anonymized": {
+            "description": "查询对管理员可见，但已移除用户身份信息",
+            "label": "匿名化"
+          },
+          "description": "控制组织的完整对话历史在管理面板中的显示方式。",
+          "disabled": {
+            "description": "查询历史报告已禁用。",
+            "label": "隐藏"
+          },
+          "normal": {
+            "description": "所有查询对管理员可见，并关联到具体用户。",
+            "label": "显示并附带用户信息"
+          },
+          "title": "查询历史可见性"
+        },
+        "retention": {
+          "custom": {
+            "invalidError": "请输入 1 到 {max} 之间的整数天数。",
+            "label": "自定义保留期",
+            "moreTooltip": "更多",
+            "placeholder": "以天为单位",
+            "restoreTooltip": "恢复默认"
+          },
+          "description": "指定 {appName} 在您的组织中保留对话的时长。",
+          "forever": {
+            "label": "永久"
+          },
+          "presets": {
+            "days30": "30 天",
+            "days60": "60 天",
+            "days7": "7 天",
+            "days90": "90 天",
+            "year1": "1 年"
+          },
+          "reduceModal": {
+            "confirmLabel": "缩短保留期",
+            "message": "超过 {days, plural, one {# 天} other {# 天}} 没有活动的对话将被永久删除。此操作无法撤销。",
+            "title": "缩短对话保留期？"
+          },
+          "title": "保留对话历史"
+        },
         "userDirectory": {
           "adminsOnly": {
             "description": "仅管理员可以查看完整用户列表。",
@@ -8682,6 +7795,10 @@
           "placeholder": "添加域名（例如 onyx.app）",
           "subDescription": "新用户只能使用此域名列表中的邮箱注册新账户。",
           "title": "允许的邮箱域名"
+        },
+        "anonymousUsers": {
+          "description": "允许任何人**无需登录**即可开始聊天。他们看不到其他聊天，也无法创建智能体或更改设置。",
+          "title": "允许匿名用户"
         },
         "emailDomains": {
           "description": "将新用户注册限制为特定的邮箱域名。",
@@ -10176,7 +9293,18 @@
         },
         "title": "删除用户",
         "toasts": {
+          "blockedBySkills": "无法删除此用户",
+          "openSkills": "打开技能以转移",
+          "renamed": "新所有者已有同名技能，因此移动的技能已重命名",
           "success": "用户已删除"
+        },
+        "transfer": {
+          "description": "<strong>{email}</strong> 拥有 {count, plural, other {# 个私有技能}}。将所有权转移给其他用户后，该账户将被删除。",
+          "submit": {
+            "label": "全部转移并删除"
+          },
+          "ownersLoadFailed": "无法加载可以接收技能的用户。",
+          "retry": "重试"
         }
       },
       "editModal": {
@@ -11116,7 +10244,6 @@
         "kind": {
           "placeholder": "选择限额类型"
         },
-        "field": {},
         "new": {
           "title": "新建群组限额",
           "pool": {
@@ -11254,6 +10381,327 @@
           "tooltip": "编辑"
         }
       }
+    },
+    "integrations": {
+      "title": "集成",
+      "description": "连接 MCP 服务器和应用。每个集成都有所有者、安装设置和自己的共享。",
+      "search": "搜索集成",
+      "open": "打开 {name}",
+      "loadFailed": "无法加载集成。",
+      "add": {
+        "label": "添加",
+        "title": "添加集成",
+        "description": "连接服务，以便人们在对话和 Craft 中使用它。",
+        "created": "已添加 {name}。",
+        "createFailed": "无法添加集成。",
+        "openapi": {
+          "title": "添加 OpenAPI 应用",
+          "schema": {
+            "title": "架构",
+            "description": "添加定义操作的 OpenAPI 架构。",
+            "added": "{count, plural, other {该架构有 # 个路径。}}",
+            "required": "请添加架构。",
+            "add": "添加架构",
+            "edit": "编辑架构"
+          }
+        },
+        "preset": {
+          "title": "起点",
+          "loadFailed": "无法加载预设。",
+          "instructions": "设置说明",
+          "credentialRequired": "请填写此值。",
+          "description": "预设会填写内置应用的名称和登录方式。选择“自定义应用”可设置任意 HTTP 服务。",
+          "custom": "自定义应用"
+        },
+        "name": {
+          "title": "名称",
+          "placeholder": "添加名称",
+          "required": "请添加名称。"
+        },
+        "descriptionField": {
+          "title": "描述",
+          "placeholder": "添加描述"
+        },
+        "custom": {
+          "patterns": {
+            "title": "URL 模式",
+            "description": "每行填写一个 URL 模式，例如 https://api.example.com/*。",
+            "placeholder": "https://api.example.com/*",
+            "required": "请至少添加一个 URL 模式。"
+          }
+        },
+        "mcp": {
+          "url": {
+            "title": "服务器 URL",
+            "placeholder": "https://example.com/mcp",
+            "error": "请输入有效的服务器 URL。"
+          },
+          "probe": {
+            "checking": "正在检查服务器…",
+            "public": "找到 {count, plural, one {# 个工具} other {# 个工具}}。该服务器无需登录。",
+            "oauth": "该服务器使用 OAuth 登录。",
+            "authUnknown": "该服务器需要登录。请添加 API 密钥请求头或 OAuth。",
+            "unreachable": "Onyx 无法访问此服务器。请检查 URL。"
+          },
+          "transport": {
+            "title": "传输方式",
+            "streamableHttp": "可流式 HTTP",
+            "sse": "服务器发送事件 (SSE)"
+          },
+          "suggested": "推荐的服务器"
+        },
+        "owner": {
+          "title": "所有者",
+          "personal": "仅供我使用",
+          "organization": "供组织使用",
+          "personalDescription": "只有你可以使用此集成。你可以稍后共享它。",
+          "organizationDescription": "组织中的每个用户都可以开启此集成。"
+        },
+        "submit": "添加",
+        "adding": "正在添加…",
+        "cancel": "取消",
+        "type": {
+          "title": "类型",
+          "description": "选择 Onyx 连接该服务的方式。",
+          "mcp_server": {
+            "title": "MCP 服务器",
+            "description": "通过 URL 连接远程 MCP 服务器。"
+          },
+          "openapi": {
+            "title": "OpenAPI 应用",
+            "description": "根据 OpenAPI 架构创建操作。"
+          },
+          "app": {
+            "title": "应用",
+            "description": "从 GitHub 等预设或自定义应用开始。"
+          }
+        },
+        "details": {
+          "title": "详细信息"
+        },
+        "signIn": {
+          "title": "登录"
+        }
+      },
+      "filters": {
+        "label": "集成类型",
+        "all": "所有类型",
+        "mcp": "MCP 服务器",
+        "api": "应用"
+      },
+      "columns": {
+        "name": "名称",
+        "type": "类型",
+        "signIn": "登录",
+        "status": "状态",
+        "installation": "安装设置"
+      },
+      "empty": {
+        "title": "没有集成",
+        "description": "添加 MCP 服务器或应用，为智能体提供新的操作。",
+        "noResults": "未找到集成",
+        "noResultsDescription": "请尝试其他名称或类型。"
+      },
+      "shape": {
+        "mcp_server": "MCP 服务器",
+        "openapi": "OpenAPI 应用",
+        "preset": "应用",
+        "custom": "自定义应用"
+      },
+      "signInSummary": "{mode, select, none {无需登录} shared {{method, select, oauth2 {组织账户 (OAuth)} api_key {组织 API 密钥} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {组织账户}}} individual {{method, select, oauth2 {每个用户 (OAuth)} api_key {每个用户 (API 密钥)} onyx_login {Onyx 登录} managed {由 Onyx 管理} other {每个用户}}} other {未知}}",
+      "status": {
+        "needsSetup": "需要设置",
+        "off": "已关闭",
+        "needsReconnect": "需要重新连接",
+        "ready": "就绪"
+      },
+      "signIn": {
+        "mode": {
+          "title": "登录模式",
+          "description": "选择由谁登录该服务。",
+          "none": "无需登录",
+          "shared": "组织共用一个账户",
+          "individual": "每个用户各自登录"
+        },
+        "method": {
+          "title": "登录方式",
+          "oauth2": "OAuth",
+          "apiKey": "API 密钥",
+          "onyxLogin": "Onyx 登录",
+          "managed": "由 Onyx 管理"
+        },
+        "header": {
+          "name": {
+            "title": "请求头名称",
+            "placeholder": "添加请求头名称",
+            "error": "请添加请求头名称。",
+            "duplicate": "每个请求头名称只能使用一次。"
+          },
+          "value": {
+            "title": "请求头值",
+            "description": "将每个凭据放在花括号中，例如 {example}。每个占位符都会成为一个凭据字段。",
+            "placeholder": "例如：{example}",
+            "error": "请至少添加一个占位符，例如 {example}。"
+          },
+          "add": "添加请求头",
+          "remove": "删除请求头 {name}"
+        },
+        "oauth": {
+          "providerMode": {
+            "title": "OAuth 客户端",
+            "manual": "输入客户端详细信息",
+            "discovery": "自动注册客户端",
+            "preset": "使用预设的客户端"
+          },
+          "authorizationUrl": "授权 URL",
+          "tokenUrl": "令牌 URL",
+          "urlPlaceholder": "https://",
+          "urlError": "请输入有效的 URL。",
+          "clientId": "客户端 ID",
+          "clientIdPlaceholder": "添加客户端 ID",
+          "clientIdError": "请添加客户端 ID。",
+          "clientSecret": "客户端密钥",
+          "clientSecretPlaceholder": "添加客户端密钥",
+          "clientSecretSaved": "已保存。输入新密钥可替换它。",
+          "scopes": {
+            "title": "权限范围",
+            "description": "用空格分隔各个权限范围。",
+            "placeholder": "例如：read write"
+          }
+        }
+      },
+      "detail": {
+        "title": "集成",
+        "back": "所有集成",
+        "notFound": "此集成不存在，或者您无权查看。",
+        "loadFailed": "无法加载此集成。",
+        "tabs": {
+          "overview": "概览",
+          "configuration": "配置",
+          "actions": "操作"
+        },
+        "overview": {
+          "readOnly": "您可以查看此集成，但无法更改。",
+          "noDescription": "无描述",
+          "type": "类型",
+          "signIn": "登录",
+          "createdBy": "添加者",
+          "needsSetup": "需要设置",
+          "needsSetupDefault": "请在“配置”选项卡中完成登录设置。",
+          "enabled": {
+            "title": "已启用",
+            "description": "关闭后，任何智能体或用户都无法使用此集成。"
+          },
+          "delete": {
+            "label": "删除",
+            "confirmTitle": "删除 {name}？",
+            "confirmDescription": "Onyx 会删除该集成及其连接和操作设置，并将其从每个智能体和任务中移除。此操作无法撤销。",
+            "confirm": "删除"
+          },
+          "deleted": "已删除 {name}。",
+          "deleteFailed": "无法删除集成。",
+          "saveFailed": "无法保存更改。",
+          "details": {
+            "name": "名称",
+            "nameRequired": "请为集成命名。",
+            "description": "描述",
+            "save": "保存",
+            "saved": "已保存名称和描述。",
+            "edit": "编辑详细信息",
+            "title": "编辑详细信息",
+            "cancel": "取消",
+            "saveFailed": "无法保存名称和描述。"
+          },
+          "description": "描述",
+          "menu": "更多操作",
+          "owner": "所有者"
+        },
+        "configuration": {
+          "readOnly": "您可以查看此集成，但无法更改。",
+          "connection": {
+            "title": "连接",
+            "serverUrl": "服务器 URL",
+            "serverUrlError": "请输入有效的服务器 URL。",
+            "urlPatterns": "URL 模式",
+            "urlPatternsDescription": "每行填写一个 URL 模式。",
+            "schema": "OpenAPI 架构",
+            "schemaDescription": "保存修改后的架构时，Onyx 会重新同步操作。",
+            "schemaError": "请以 JSON 对象的形式输入架构。"
+          },
+          "signIn": {
+            "title": "登录",
+            "description": "如果更改登录方式、客户端、URL 或权限范围，每个用户都必须重新连接。"
+          },
+          "alwaysAllow": {
+            "title": "用户可保存“始终允许”",
+            "description": "允许每个用户跳过设为“询问”的操作的批准提示。"
+          },
+          "save": "保存",
+          "saving": "正在保存…",
+          "saved": "已保存配置。",
+          "saveFailed": "无法保存配置。",
+          "organization": {
+            "title": "组织连接",
+            "description": "每个用户都使用此账户执行操作。",
+            "connect": "连接",
+            "disconnect": "断开连接",
+            "connected": "已连接组织账户。",
+            "disconnected": "已断开组织账户。",
+            "failed": "无法更改组织连接。"
+          },
+          "preset": {
+            "title": "账户设置",
+            "description": "输入新值以替换已保存的账户设置和 OAuth 客户端。留空则保留现有值。",
+            "credentialRequired": "请填写每个字段以替换账户设置。"
+          }
+        },
+        "actions": {
+          "loadFailed": "无法加载操作。",
+          "retry": "重试",
+          "search": "搜索操作",
+          "refresh": "刷新",
+          "refreshed": "已刷新操作。",
+          "refreshFailed": "无法刷新操作。",
+          "save": "保存",
+          "saving": "正在保存…",
+          "saved": "已保存操作设置。",
+          "saveFailed": "无法保存操作设置。",
+          "default": {
+            "title": "新操作的默认值",
+            "description": "没有单独设置的操作会使用此值。集成以后添加的操作也会使用此值。",
+            "unset": "未设置。每个操作使用自己的默认值。",
+            "clear": "清除"
+          },
+          "usesDefault": "使用默认值",
+          "setByAdmin": "由管理员设置",
+          "alwaysAsks": "对于不匹配任何其他操作的每个请求，Craft 都会先询问。您无法设置为允许。",
+          "useDefaults": "使用默认值",
+          "readOnly": "只读操作 ({count})",
+          "write": "写入操作 ({count})",
+          "other": "其他操作 ({count})",
+          "empty": "此集成没有操作。",
+          "connectFirst": {
+            "title": "请先连接服务器",
+            "description": "MCP 服务器连接后，Onyx 才会加载其操作。",
+            "open": "打开配置",
+            "individualDescription": "每个用户都需登录此服务器。请在集成页面连接你自己的账户，然后点击“刷新”。",
+            "openIntegration": "打开集成"
+          }
+        }
+      },
+      "installation": {
+        "select": "{name} 的安装设置",
+        "saved": "{name} 现在为 {policy}。",
+        "saveFailed": "无法保存安装设置。",
+        "title": "安装设置",
+        "description": "谁可以使用此集成。不可用会使其保持私有：只有所有者、共享对象以及拥有自身设置的群组可以使用。要将其限制为所有者和共享对象，请移除这些群组设置。",
+        "notAvailable": "私有。只有所有者、共享对象以及拥有自身设置的群组可以使用。"
+      },
+      "ownedBy": "所有者：{owner}",
+      "groupAccess": {
+        "saved": "已保存 {name} 的群组设置。",
+        "saveFailed": "无法保存群组设置。"
+      }
     }
   },
   "agents": {
@@ -11288,10 +10736,6 @@
         "codeInterpreter": {
           "description": "生成并运行代码。",
           "title": "代码解释器"
-        },
-        "codingAgent": {
-          "description": "调查 GitHub 仓库并回答有关其代码的问题。",
-          "title": "编码智能体"
         },
         "description": "此智能体可使用的工具和能力。",
         "imageGeneration": {
@@ -11372,14 +10816,6 @@
         "editTitle": "编辑智能体",
         "save": {
           "label": "保存"
-        }
-      },
-      "mcp": {
-        "noAccess": {
-          "tooltip": "您不再拥有此 MCP 服务器的访问权限。其现有工具将被保留。"
-        },
-        "searchTools": {
-          "placeholder": "搜索工具..."
         }
       },
       "page": {
@@ -11476,6 +10912,51 @@
       },
       "warnings": {
         "openUrl": "没有打开 URL 能力的网络搜索可能会导致网络结果明显变差。"
+      },
+      "integrations": {
+        "askHint": "要在不询问的情况下运行，请更改智能体设置，或由管理员在集成中将其设为允许，或每位用户选择始终允许。",
+        "askHintAdminOnly": "要在不询问的情况下运行，管理员需在集成中将其设为允许。",
+        "askHintAgent": "要在无需确认的情况下运行，请更改智能体设置，或由每个用户选择始终允许。",
+        "askHintAgentOnly": "要在无需确认的情况下运行，请更改智能体设置。",
+        "choice": {
+          "inherit": "使用集成设置",
+          "agentDefault": "使用智能体默认设置"
+        },
+        "default": {
+          "description": "适用于没有自身设置的每个操作，也适用于集成以后添加的操作。",
+          "title": "其他操作的默认设置"
+        },
+        "description": "为智能体添加集成。除非你选择其他设置，否则每个操作都使用集成的设置。",
+        "effective": "{policy, select, allow {允许} ask {询问} other {已阻止}}（{source, select, integration {集成设置} agentDefault {智能体默认设置} other {智能体设置}}）",
+        "empty": "没有可供你使用的集成。",
+        "loadFailed": "无法加载集成。",
+        "lock": {
+          "adminBlocked": "无法选择允许：管理员已阻止此操作。",
+          "alwaysAsks": "无法使用允许：Craft 会为每个此类请求请求批准。",
+          "adminFinal": "无法选择允许：此集成的管理员设置为最终设置。"
+        },
+        "noActions": "此集成还没有操作。",
+        "notVisible": "你无法查看此集成的操作。其设置保持不变。",
+        "title": "集成",
+        "add": {
+          "placeholder": "添加集成"
+        },
+        "remove": {
+          "ariaLabel": "移除 {integration}"
+        },
+        "retry": {
+          "label": "重试"
+        },
+        "actionSetting": {
+          "label": "{action} 的设置"
+        },
+        "defaultSetting": {
+          "label": "{integration} 的默认设置"
+        },
+        "openIntegration": {
+          "label": "打开 {integration} 的操作"
+        },
+        "sharedWider": "部分可以使用此智能体的人无法使用 {integration}。他们的对话将在没有该集成的情况下运行。与他们共享 {integration} 以授予访问权限。"
       }
     },
     "filters": {
@@ -11616,7 +11097,8 @@
           "empty": {
             "title": "无操作"
           },
-          "title": "操作与工具"
+          "title": "操作与工具",
+          "noAccess": "你无法使用此集成。与此智能体的对话将在没有它的情况下运行。"
         },
         "conversationStarters": {
           "title": "对话开场白"
@@ -11640,14 +11122,6 @@
         "knowledgeCutoff": {
           "description": "最后更新日期早于此日期的文档将被忽略。",
           "title": "知识截止日期"
-        },
-        "mcpCard": {
-          "expand": {
-            "label": "展开"
-          },
-          "fold": {
-            "label": "折叠"
-          }
         },
         "moreInfo": {
           "title": "更多信息"
@@ -11813,9 +11287,17 @@
         "loginBadCredentials": "此账户无法登录，可能已被停用。请联系您的工作区管理员。",
         "loginRequired": "您需要先通过身份提供方登录。",
         "oauthUserAlreadyExists": "使用此邮箱的账户已通过其他登录方式存在。请使用您首次使用的方式登录，或请管理员关联此提供方。",
+        "playgroundActiveTenant": "您公司的团队已经在试用 Onyx。加入您的团队，还是创建新团队？",
+        "playgroundAskAdmin": "请让您的管理员邀请您。",
+        "playgroundCheckFailed": "我们无法核验您的注册。请稍后重试。",
+        "playgroundEmailUsed": "您已使用过 playground 访问权限。",
+        "playgroundLimitReached": "贵公司已使用过 playground 访问权限。",
         "serverError": "您的身份提供方遇到错误。请重试。",
         "staleSignIn": "此登录链接已过期或已失效。请重新登录。",
         "temporarilyUnavailable": "您的身份提供方暂时不可用。请稍后重试。"
+      },
+      "contactSalesButton": {
+        "label": "联系销售"
       },
       "credentialsIssue": {
         "description": "登录凭据不正确或已过期"
@@ -11823,6 +11305,12 @@
       "heading": {
         "description": "您的登录尝试出现问题。",
         "title": "身份验证错误"
+      },
+      "joinTeamButton": {
+        "label": "加入我的团队"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "可能的原因："
@@ -11832,6 +11320,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "如果问题持续存在，请联系您的系统管理员寻求帮助。"
+      },
+      "startNewTeamButton": {
+        "label": "创建新团队"
       },
       "systemDisruptionIssue": {
         "description": "身份验证系统临时中断"
@@ -12154,106 +11645,15 @@
       }
     },
     "skill": {
-      "dependency": {
-        "appDisabled": "应用“{app}”已禁用",
-        "connectToEnable": "连接应用“{app}”以启用",
-        "connectToUse": "连接应用“{app}”以使用",
-        "nameConflict": "已启用另一个同名技能",
-        "usesApp": "使用应用“{app}”"
-      },
-      "edit": {
-        "tooltip": "编辑技能"
-      },
-      "invalid": {
-        "description": "删除此无效技能，然后创建一个新技能。"
-      },
       "tags": {
-        "appSkill": {
-          "label": "应用技能"
-        },
-        "builtin": {
-          "label": "内置"
-        },
-        "invalid": {
-          "label": "无效"
-        },
-        "personal": {
-          "label": "个人"
-        },
-        "required": {
-          "tooltip": "你的组织管理员要求你拥有此技能。"
-        },
-        "unavailable": {
-          "label": "不可用 - 点击了解更多"
-        },
-        "shared": {
-          "label": "共享"
-        },
-        "organization": {
-          "label": "组织"
-        },
         "unpublished": {
           "label": "未发布的更改",
           "tooltip": "组织仍在使用版本 {number}。"
         }
-      },
-      "toggle": {
-        "disable": {
-          "ariaLabel": "禁用 {name}"
-        },
-        "disableForApp": {
-          "ariaLabel": "为 {app} 禁用 {name}"
-        },
-        "enable": {
-          "ariaLabel": "启用 {name}"
-        },
-        "enableForApp": {
-          "ariaLabel": "为 {app} 启用 {name}"
-        }
-      },
-      "tooltips": {
-        "appDisabled": "应用“{app}”已被管理员禁用。",
-        "connectApp": "请在“应用”页面连接应用“{app}”，以使用此技能。",
-        "invalid": "此技能无效。请删除它并创建新技能。",
-        "unavailable": "技能当前不可用。点击查看详情。"
       }
     }
   },
   "chat": {
-    "mcpConnections": {
-      "trigger": {
-        "label": "工具需要凭据（{count}）",
-        "tooltip": "连接你的账户或添加凭据后，才能使用某些工具。"
-      },
-      "modal": {
-        "title": "连接工具",
-        "description": "添加你的凭据，即可在 Onyx 中使用这些工具。",
-        "hint": "你可以在不连接这些工具的情况下继续聊天，但智能体的功能可能会受到限制。"
-      },
-      "connect": {
-        "label": "连接",
-        "accessibleLabel": "连接 {server}"
-      },
-      "reconnect": {
-        "label": "重新连接",
-        "accessibleLabel": "重新连接 {server}"
-      },
-      "connecting": {
-        "label": "正在连接…"
-      },
-      "connected": {
-        "label": "已连接"
-      },
-      "required": {
-        "label": "需要凭据"
-      },
-      "done": {
-        "label": "完成"
-      },
-      "error": {
-        "description": "无法连接。请重试。"
-      }
-    },
     "app": {
       "createSessionFailed": {
         "toast": "无法开始新聊天。请重试。"
@@ -12532,7 +11932,8 @@
         },
         "stopSubagentsButton": {
           "label": "停止子代理"
-        }
+        },
+        "questionAttachmentsHint": "回答智能体的问题时不能包含文件。请移除文件后再回答。"
       },
       "baseInputBar": {
         "input": {
@@ -12586,6 +11987,9 @@
         },
         "skillsGroup": {
           "label": "技能"
+        },
+        "manageSkills": {
+          "label": "管理技能"
         }
       },
       "inputChip": {
@@ -12680,91 +12084,12 @@
       },
       "pendingToolApproval": {
         "toast": "请先批准或拒绝待处理的工具调用。"
-      }
-    },
-    "mcpApiKey": {
-      "apiKeyField": {
-        "label": "API 密钥",
-        "placeholder": "输入您的 API 密钥"
       },
-      "apiKeyVisibilityButton": {
-        "hideAriaLabel": "隐藏 API 密钥",
-        "showAriaLabel": "显示 API 密钥"
+      "pendingToolQuestion": {
+        "toast": "请先回答智能体的问题。"
       },
-      "cancelButton": {
-        "label": "取消"
-      },
-      "credentialField": {
-        "placeholder": "输入您的 {field}"
-      },
-      "credentialVisibilityButton": {
-        "hideAriaLabel": "隐藏凭据",
-        "showAriaLabel": "显示凭据"
-      },
-      "header": {
-        "enterApiKey": {
-          "title": "输入 API 密钥"
-        },
-        "enterCredentials": {
-          "title": "输入凭据"
-        },
-        "manageApiKey": {
-          "title": "管理 API 密钥"
-        },
-        "manageCredentials": {
-          "title": "管理凭据"
-        }
-      },
-      "intro": {
-        "enterApiKey": {
-          "text": "输入 {server} 的 API 密钥以启用身份验证。"
-        },
-        "enterCredentials": {
-          "text": "输入 {server} 的凭据以启用身份验证。"
-        },
-        "updateApiKey": {
-          "text": "更新 {server} 的 API 密钥。"
-        },
-        "updateCredentials": {
-          "text": "更新 {server} 的凭据。"
-        }
-      },
-      "saveApiKeyError": {
-        "message": "保存 API 密钥失败"
-      },
-      "saveCredentialsError": {
-        "message": "保存凭据失败"
-      },
-      "submitButton": {
-        "saveApiKey": {
-          "label": "保存 API 密钥"
-        },
-        "saveCredentials": {
-          "label": "保存凭据"
-        },
-        "saving": {
-          "label": "正在保存..."
-        },
-        "updateApiKey": {
-          "label": "更新 API 密钥"
-        },
-        "updateCredentials": {
-          "label": "更新凭据"
-        }
-      },
-      "validationNote": {
-        "apiKey": {
-          "text": "您的 API 密钥将由服务器验证，并安全存储。"
-        },
-        "authenticated": {
-          "text": "更改在保存前将由服务器验证。"
-        },
-        "credentials": {
-          "text": "您的凭据将由服务器验证，并安全存储。"
-        }
-      },
-      "backButton": {
-        "label": "返回工具列表"
+      "pendingUserInput": {
+        "toast": "请先处理待处理的批准请求或问题。"
       }
     },
     "messages": {
@@ -12915,9 +12240,6 @@
         "emptyState": {
           "text": "未生成图片"
         },
-        "failedStatus": {
-          "text": "图片生成失败"
-        },
         "generatedStatus": {
           "text": "{count, plural, one {已生成 # 张图片} other {已生成 # 张图片}}"
         },
@@ -12926,6 +12248,11 @@
         },
         "stoppedStatus": {
           "text": "图片生成已停止"
+        }
+      },
+      "markdownTable": {
+        "copyButton": {
+          "label": "复制表格"
         }
       },
       "memoizedLink": {
@@ -13009,41 +12336,6 @@
         }
       },
       "timeline": {
-        "codingAgent": {
-          "bashExit": {
-            "header": "Bash · 退出码 {exitCode}"
-          },
-          "bashFailed": {
-            "header": "Bash · 失败"
-          },
-          "bashRequest": {
-            "label": "请求"
-          },
-          "bashResponse": {
-            "label": "响应"
-          },
-          "bashRunning": {
-            "header": "Bash · 运行中…"
-          },
-          "bashTimedOut": {
-            "header": "Bash · 已超时"
-          },
-          "noOutput": {
-            "text": "无输出"
-          },
-          "response": {
-            "header": "响应"
-          },
-          "task": {
-            "header": "编码任务"
-          },
-          "taskWithRepo": {
-            "text": "{query}\n\n仓库：{repo}"
-          },
-          "thinking": {
-            "header": "思考"
-          }
-        },
         "collapseButton": {
           "ariaLabel": "收起时间线"
         },
@@ -13058,21 +12350,18 @@
             "status": "正在生成计划"
           }
         },
-        "doneStep": {
-          "header": "完成"
-        },
         "expandButton": {
           "ariaLabel": "展开时间线"
         },
         "fetch": {
           "reading": {
             "status": "正在读取"
+          },
+          "read": {
+            "status": "已读取"
           }
         },
         "fileReader": {
-          "charRange": {
-            "label": "第 {start, number}–{end, number} 个字符，共 {total, number} 个"
-          },
           "read": {
             "status": "已读取 {fileName}（第 {start, number}–{end, number} 个字符，共 {total, number} 个）"
           },
@@ -13098,6 +12387,9 @@
           },
           "generatingPlan": {
             "label": "正在生成计划"
+          },
+          "queryingKnowledgeBase": {
+            "label": "正在查询知识库"
           },
           "reading": {
             "label": "正在读取"
@@ -13125,6 +12417,18 @@
           },
           "waitingForApproval": {
             "label": "正在等待你的批准"
+          },
+          "waitingForAnswer": {
+            "label": "正在等待你的回答"
+          },
+          "runningCommand": {
+            "label": "正在运行命令"
+          },
+          "editingFiles": {
+            "label": "正在编辑文件"
+          },
+          "publishingFiles": {
+            "label": "正在发布文件"
           }
         },
         "internalSearch": {
@@ -13134,9 +12438,14 @@
           "reading": {
             "status": "正在读取"
           },
+          "read": {
+            "label": "已读取"
+          },
           "header": {
             "default": "正在搜索内部文档",
+            "doneDefault": "已搜索内部文档",
             "sources": "正在搜索 {sources}",
+            "doneSources": "已搜索 {sources}",
             "sourcesOverflow": "{sources} 及另外 {count} 个",
             "withTimeWindow": "{header}({timeWindow})"
           },
@@ -13159,6 +12468,9 @@
           "updating": {
             "status": "正在更新记忆"
           },
+          "updated": {
+            "status": "已更新记忆"
+          },
           "viewMemoriesButton": {
             "tooltip": "查看记忆"
           }
@@ -13171,21 +12483,60 @@
             "label": "已更新记忆"
           }
         },
+        "postgres": {
+          "queried": {
+            "status": "已查询知识库"
+          },
+          "querying": {
+            "status": "正在查询知识库"
+          },
+          "listed": {
+            "label": "{count, plural, one {已列出 # 个文档} other {已列出 # 个文档}}"
+          },
+          "query": {
+            "table": {
+              "document": "文档",
+              "hierarchy_node": "文件夹",
+              "chat_session": "聊天会话",
+              "chat_message": "聊天消息",
+              "search_doc": "引用的文档"
+            },
+            "count": "数量",
+            "countBy": {
+              "source": "按来源统计",
+              "owner": "按所有者统计",
+              "month": "按月统计"
+            },
+            "titleContains": "标题包含“{text}”",
+            "nameContains": "名称包含“{text}”",
+            "textContains": "正文包含“{text}”",
+            "updated": {
+              "since": "{date} 以来更新",
+              "before": "{date} 之前更新",
+              "between": "{start} – {end} 更新"
+            },
+            "created": {
+              "since": "{date} 以来创建",
+              "before": "{date} 之前创建",
+              "between": "{start} – {end} 创建"
+            },
+            "sent": {
+              "since": "{date} 以来发送",
+              "before": "{date} 之前发送",
+              "between": "{start} – {end} 发送"
+            },
+            "owner": "所有者：{owner}",
+            "folder": "在文件夹 {id} 中",
+            "nodeType": "类型：{type}",
+            "author": "发送者：{author}",
+            "message": "消息 {id}",
+            "allRetrieved": "所有检索到的",
+            "nextPage": "下一页"
+          }
+        },
         "python": {
-          "completed": {
-            "status": "Python 执行完成"
-          },
-          "default": {
-            "status": "Python 执行"
-          },
           "error": {
             "label": "错误："
-          },
-          "executing": {
-            "status": "正在执行 Python 代码..."
-          },
-          "failed": {
-            "status": "Python 执行失败"
           },
           "generatedFiles": {
             "label": "{count, plural, one {已生成 # 个文件} other {已生成 # 个文件}}"
@@ -13196,6 +12547,12 @@
           "output": {
             "label": "输出："
           },
+          "running": {
+            "status": "正在运行 Python"
+          },
+          "ran": {
+            "status": "已运行 Python"
+          },
           "runningCode": {
             "label": "正在运行代码..."
           },
@@ -13204,11 +12561,11 @@
           }
         },
         "reasoning": {
-          "fullText": {
-            "title": "完整文本"
-          },
           "thinking": {
             "status": "思考中"
+          },
+          "thought": {
+            "status": "已思考"
           }
         },
         "researchAgent": {
@@ -13230,9 +12587,6 @@
         "stepsButton": {
           "label": "{count, plural, one {# 个步骤} other {# 个步骤}}"
         },
-        "stoppedStep": {
-          "header": "已停止"
-        },
         "thoughtDuration": {
           "label": "思考了 {duration}"
         },
@@ -13244,26 +12598,105 @@
         },
         "toolNames": {
           "codeInterpreter": "代码解释器",
-          "codingAgent": "编码智能体",
           "customTool": "自定义工具",
           "generateImage": "生成图片",
           "generatePlan": "生成计划",
           "internalSearch": "内部搜索",
+          "knowledgeBaseQuery": "知识库查询",
           "memory": "记忆",
           "openUrls": "打开 URL",
           "researchAgent": "研究智能体",
           "thinking": "思考",
           "tool": "工具",
-          "webSearch": "网页搜索"
+          "webSearch": "网页搜索",
+          "terminal": "终端",
+          "applyPatch": "应用补丁",
+          "editFile": "编辑文件",
+          "writeFile": "写入文件",
+          "publishFiles": "发布文件"
         },
         "webSearch": {
           "searching": {
             "status": "正在搜索网页"
+          },
+          "searched": {
+            "status": "已搜索网络"
+          }
+        },
+        "sandbox": {
+          "exec": {
+            "status": "{phase, select, running {正在运行命令} started {已启动命令} failed {命令失败} canceled {已取消} done {已运行命令} other {已运行命令}}",
+            "workdir": {
+              "label": "位于 {workdir}"
+            }
+          },
+          "stdin": {
+            "status": "{kind, select, send {{phase, select, running {正在向会话 {sessionId} 发送输入} failed {无法向会话 {sessionId} 发送输入} canceled {已取消} done {已向会话 {sessionId} 发送输入} other {已向会话 {sessionId} 发送输入}}} check {{phase, select, running {正在检查会话 {sessionId}} failed {无法检查会话 {sessionId}} canceled {已取消} done {已检查会话 {sessionId}} other {已检查会话 {sessionId}}}} other {会话 {sessionId}}}"
+          },
+          "output": {
+            "title": "输出"
+          },
+          "exitCode": {
+            "label": "退出代码 {exitCode}"
+          },
+          "completion": {
+            "label": "{completion, select, signaled {已被信号停止} canceled {已取消} deadline_exceeded {已达到时间限制而停止} other {已结束}}"
+          },
+          "stillRunning": {
+            "label": "仍在运行（会话 {sessionId}）"
+          },
+          "truncated": {
+            "label": "输出已截断"
+          },
+          "noOutput": {
+            "text": "无输出"
+          },
+          "patch": {
+            "edited": {
+              "status": "{count, plural, one {已编辑 # 个文件} other {已编辑 # 个文件}}"
+            },
+            "failed": {
+              "status": "编辑失败"
+            },
+            "title": "补丁"
+          },
+          "stopped": {
+            "status": "已停止"
+          },
+          "publish": {
+            "published": {
+              "status": "{count, plural, other {已发布 # 个文件}}"
+            },
+            "failed": {
+              "status": "发布失败"
+            }
           }
         }
       },
       "toolApproval": {
         "agentRequest": "{agent} 想要运行 {tool}"
+      },
+      "toolQuestion": {
+        "header": "{count, plural, one {智能体有一个问题} other {智能体有 # 个问题}}",
+        "other": {
+          "placeholder": "其他：输入您自己的答案",
+          "ariaLabel": "{header} 的其他答案"
+        },
+        "submit": "提交",
+        "page": {
+          "progress": "第 {current} 个问题，共 {total} 个",
+          "next": "下一步",
+          "unanswered": "{count, plural, one {请回答问题 {numbers} 后提交。} other {请回答问题 {numbers} 后提交。}}"
+        },
+        "submitError": "无法发送你的答案。请重试。",
+        "record": {
+          "answered": "已回答",
+          "answeredInChat": "已在聊天中回答",
+          "cancelled": "未回答",
+          "closed": "不再等待",
+          "answer": "{header}：{answer}",
+          "optionAndNote": "{option}（{note}）"
+        }
       },
       "toolbar": {
         "dislikeButton": {
@@ -13878,6 +13311,16 @@
     "readiness": {
       "stopFailed": "无法停止回复。请重试。",
       "checkFailed": "无法确认回复是否已完成。请再次检查后再发送消息。"
+    },
+    "publishedFiles": {
+      "card": {
+        "updated": {
+          "description": "更新版本 · {details}"
+        },
+        "preview": {
+          "ariaLabel": "预览 {name}"
+        }
+      }
     }
   },
   "common": {
@@ -14544,224 +13987,7 @@
         "ariaLabel": "切换代理"
       }
     },
-    "apps": {
-      "addCatalog": {
-        "addButton": "添加",
-        "createButton": "创建",
-        "customApp": {
-          "description": "为您自己的集成提供凭据和网络访问。",
-          "title": "自定义应用"
-        },
-        "mcpHint": {
-          "label": "需要 MCP 服务器？请先在“操作”中连接它，然后在此处为 Craft 启用。",
-          "openActionsButton": "打开操作"
-        },
-        "modal": {
-          "description": "让整个组织都可以使用某个集成。内置提供商附带可教 Craft 智能体使用方法的操作；已配置的提供商不会列出。",
-          "title": "添加应用"
-        }
-      },
-      "associatedSkills": {
-        "associateButton": "关联现有技能",
-        "create": {
-          "github": {
-            "description": "如果您的技能在 GitHub 中，请先在技能页面导入，然后再将其与此应用关联。",
-            "label": "从 GitHub 导入"
-          },
-          "scratch": {
-            "description": "编写说明并添加辅助文件。",
-            "label": "从头开始"
-          },
-          "upload": {
-            "description": "导入 SKILL.md 文件、ZIP 文件或技能文件夹。",
-            "label": "上传技能"
-          }
-        },
-        "createSkillButton": "创建技能",
-        "description": "技能为 Craft 提供使用此应用的说明。技能在整个组织范围内生效；用户可能需要全部启用才能让应用正常工作。",
-        "editButton": "编辑",
-        "empty": {
-          "label": "未找到可编辑的技能。"
-        },
-        "invalidTag": "无效",
-        "loading": {
-          "label": "正在加载技能…"
-        },
-        "noneAssociated": {
-          "label": "尚未关联任何技能。没有技能也可以保存并使用此应用。"
-        },
-        "promote": {
-          "cancelButton": "取消",
-          "confirmButton": "设为组织范围可用",
-          "description": "与应用关联的技能必须对所有人可用。保存应用时，该技能会发布到组织。发布后无法撤销。",
-          "title": "将“{name}”设为组织范围可用？"
-        },
-        "search": {
-          "placeholder": "搜索可编辑的技能..."
-        },
-        "title": "关联的技能",
-        "unavailable": {
-          "duplicateName": "名为“{name}”的技能已关联。",
-          "invalid": "技能无效。请先修复再关联。",
-          "otherApp": "已与应用“{name}”关联。"
-        },
-        "unlink": {
-          "button": "解除关联",
-          "cancelButton": "取消",
-          "confirm": "将“{name}”与此应用解除关联？"
-        },
-        "unlinkAriaLabel": "解除关联 {name}",
-        "viewButton": "查看"
-      },
-      "configureProvider": {
-        "addButton": "添加",
-        "addTitle": "添加 {name}",
-        "editTitle": "编辑 {name}",
-        "emptyPolicies": "此提供商没有可配置的操作。",
-        "fields": {
-          "name": {
-            "description": "此连接的标签。添加同一提供商的多个实例时，请使用不同的名称（例如“{name} — 工程部”）。",
-            "label": "名称"
-          }
-        },
-        "managedDescription": "由 Onyx 提供，请配置智能体可以执行的操作。",
-        "managedNote": "Onyx 管理凭据。在“权限”中设置操作策略。成员可从“插件”连接。",
-        "saveButton": "保存"
-      },
-      "customApp": {
-        "cancelButton": "取消",
-        "createButton": "创建",
-        "createDescription": "配置出站代理如何访问此应用并进行身份验证。技能不是必需的。",
-        "createTitle": "创建自定义应用",
-        "creatingButton": "正在创建…",
-        "disabled": {
-          "nameMissing": "创建此自定义应用前请输入名称。",
-          "patternMissing": "请至少添加一个上游 URL 模式。输入模式后按回车键。",
-          "pristine": "请先进行更改再保存。",
-          "saving": "保存已在进行中。"
-        },
-        "editDescription": "更新网关设置并管理关联的技能。",
-        "editTitle": "编辑 {name}",
-        "errors": {
-          "saveFailedTitle": "无法保存"
-        },
-        "fields": {
-          "headers": {
-            "addButton": "添加标头",
-            "description": "可选。注入到出站请求中的标头。使用 '{placeholder}' 表示由用户（或下方的组织）提供的值，例如 \"Bearer '{api_key}'\"。留空则仅将上游模式加入允许列表而不注入凭据。",
-            "keyTitle": "标头",
-            "label": "标头凭据模式",
-            "valueTitle": "值"
-          },
-          "name": {
-            "label": "名称",
-            "placeholder": "我的自定义应用"
-          },
-          "orgCredentials": {
-            "addButton": "添加凭据",
-            "description": "可选。组织为每个用户预填的值。若每个用户自行提供凭据，请留空。",
-            "keyTitle": "凭据键",
-            "label": "组织凭据",
-            "valueTitle": "值"
-          },
-          "upstreamPatterns": {
-            "description": "代理可注入凭据的出站 URL。使用 * 匹配任意字符（例如 https://api.example.com/* 覆盖该主机上的所有路径）。主机名必须是字面值，第一个斜杠之前不能使用通配符。输入模式后按回车键。",
-            "label": "上游 URL 模式"
-          }
-        },
-        "saveButton": "保存",
-        "savingButton": "正在保存…",
-        "placeholders": {
-          "allowedUrl": "https://api.example.com/*"
-        }
-      },
-      "errors": {
-        "duplicateSkillName": "应用“{appName}”已有名为“{skillName}”的关联技能。请上传其他名称的技能。"
-      },
-      "mcpPolicy": {
-        "description": "选择在聊天和 Craft 中哪些工具自动运行、请求批准或被禁用。",
-        "emptyPolicies": "此服务器上没有已启用的工具。请先在 MCP 操作页面启用工具。",
-        "saveButton": "保存",
-        "title": "编辑 {name}"
-      },
-      "oauthCallback": {
-        "backButton": "返回我的应用",
-        "description": "正在完成 OAuth 握手…",
-        "errors": {
-          "cancelled": "OAuth 已被取消或拒绝：{reason}",
-          "failed": "连接失败。",
-          "missingParams": "回调 URL 中缺少 code 或 state。"
-        },
-        "exchanging": {
-          "label": "正在交换授权码…"
-        },
-        "success": {
-          "label": "已连接。正在返回您的应用…"
-        },
-        "title": "正在连接您的应用"
-      },
-      "page": {
-        "empty": {
-          "description": "您的组织尚未配置任何应用或 MCP 服务器。",
-          "title": "暂无可连接的内容"
-        },
-        "header": {
-          "description": "连接 Onyx Craft 在工作时可用作上下文的工具。",
-          "title": "应用"
-        },
-        "loading": {
-          "label": "正在加载…"
-        },
-        "reviewSkillsButton": "查看技能",
-        "status": {
-          "connected": "已连接",
-          "connectedNeedsSkills": "已连接 · 并非所有关联技能都已启用",
-          "notAvailable": "您的账户不可用，请咨询管理员",
-          "skillWarningAriaLabel": "需要设置技能",
-          "skillWarningTooltip": "并非所有关联技能都已启用。此应用可能无法正常工作。",
-          "skillWarningSummary": "并非所有关联技能都已启用。"
-        }
-      },
-      "policyEditor": {
-        "cancelButton": "取消",
-        "loading": {
-          "label": "正在加载…"
-        },
-        "permissions": {
-          "askOption": "询问",
-          "autoApproveOption": "自动批准",
-          "customOption": "自定义",
-          "defaultOption": "默认",
-          "description": "选择智能体可以执行的操作。“询问”会在每个操作前请求批准；“自动批准”则无需提示即可运行。",
-          "title": "权限"
-        },
-        "savingButton": "正在保存…",
-        "advanced": {
-          "description": "为每个操作单独设置策略。",
-          "title": "高级"
-        }
-      },
-      "skillsStep": {
-        "description": "可选。关联现有技能或为此应用创建一个技能。",
-        "errors": {
-          "saveFailedTitle": "无法保存"
-        },
-        "saveButton": "保存技能",
-        "savingButton": "正在保存…",
-        "skipButton": "暂时跳过",
-        "title": "为 {name} 添加技能"
-      },
-      "userCredentials": {
-        "cancelButton": "取消",
-        "connectButton": "连接",
-        "connectingButton": "正在连接…",
-        "description": "输入您的凭据，为您的账户授权此应用。",
-        "errors": {
-          "connectFailedTitle": "无法连接"
-        },
-        "title": "连接 {name}"
-      }
-    },
+    "apps": {},
     "artifactsTab": {
       "download": {
         "button": "下载"
@@ -15043,6 +14269,11 @@
         "label": "仅显示推荐模型"
       }
     },
+    "messageList": {
+      "turnFailed": {
+        "message": "本轮失败。"
+      }
+    },
     "onboarding": {
       "livingMap": {
         "examplePrompts": {
@@ -15283,7 +14514,6 @@
       "error": {
         "generic": "出了点问题。请重试。",
         "notConfigurable": "无法从此处设置该应用。",
-        "popupBlocked": "无法打开设置窗口。请允许弹出窗口后重试。",
         "startFailed": "无法开始设置"
       },
       "loading": {
@@ -15356,15 +14586,12 @@
         "empty": "开始构建吧！会话历史将显示在这里。",
         "title": "会话"
       },
-      "skills": {
-        "label": "技能"
-      },
       "toast": {
         "deleteFailed": "删除会话失败",
         "deleted": "已删除\"{title}\"。"
       },
-      "plugins": {
-        "label": "插件"
+      "customize": {
+        "label": "自定义"
       }
     },
     "skillsStale": {
@@ -15592,9 +14819,6 @@
         }
       },
       "group": {
-        "calls": {
-          "tag": "{count, plural, one {# 次调用} other {# 次调用}}"
-        },
         "working": {
           "label": "处理中"
         }
@@ -15877,44 +15101,52 @@
       "appTitle": "{name} 审批设置",
       "title": "审批设置",
       "personalDescription": "这些设置决定 Craft 对话、新任务和聊天中的 MCP 工具调用是自动运行还是需要批准；现有任务保留各自的设置。",
-      "taskDescription": "选择此任务可使用的插件，并管理哪些操作可自动执行。更改仅适用于此任务。",
-      "newTaskDescription": "启用插件后，将以您当前的操作设置为初始设置。",
-      "workspace_disabled": "工作区已禁用",
-      "workspace_managed": "由工作区管理",
+      "taskDescription": "选择此任务可以使用的集成，然后管理哪些操作自动运行。更改仅适用于此任务。",
       "userManagement": "允许用户管理审批设置",
       "userManagementDescription": "用户可以更改可用操作的审批设置。",
       "loading": "正在加载审批设置…",
       "loadError": "无法加载审批设置。",
       "retry": "重试",
-      "save": "保存",
       "saving": "正在保存…",
       "cancel": "取消",
-      "saveError": "无法保存审批设置。",
       "emptyActions": "没有已知操作。未知操作需要审批。",
-      "emptyApps": "没有可用应用。",
       "agentPermissionRequired": "某项操作需要审批，因此本次运行已停止。请检查权限，然后重新运行任务。",
       "enableForTask": "为此任务启用",
       "enableAppForTask": "为此任务启用 {app}",
       "enabledForTask": "已为此任务启用",
       "disabledForTask": "已为此任务禁用",
-      "externalApp": "应用",
-      "mcpServer": "MCP 服务器",
-      "taskAppsTitle": "插件",
-      "taskAccessTitle": "插件访问权限",
-      "noEnabledApps": "此任务未启用任何插件。",
+      "taskAppsTitle": "集成",
+      "taskAccessTitle": "集成访问",
+      "noEnabledApps": "此任务未开启任何集成。",
       "actionPolicies": "审批设置",
-      "policyCounts": "自动批准 {auto} · 询问 {ask} · 已禁用 {disabled}",
       "manageActions": "管理操作",
       "taskModalDescription": "更改将在保存任务时生效。工作区限制始终适用。",
       "searchActions": "搜索操作",
       "setPermissions": "设置权限",
       "applyMatching": "{count} 个匹配的可编辑操作",
-      "noMatchingActions": "没有与搜索条件匹配的操作。",
       "close": "关闭",
       "saveChanges": "保存更改",
       "resetDefaults": "全部重置为默认值",
       "resetAll": "全部重置为工作区默认值",
-      "workspaceDisabledTooltip": "管理员已在工作区中禁用此操作。"
+      "needsSignIn": "{name} 需要登录。",
+      "taskPolicyCounts": "允许 {allow} · 询问 {ask} · 已阻止 {blocked}",
+      "actionSetting": "{action} 的设置",
+      "lockedAllow": "此操作适用工作区设置，因此“允许”无效。",
+      "value": {
+        "inherit": "使用集成设置（{policy}）",
+        "allow": "允许",
+        "ask": "询问",
+        "blocked": "已阻止"
+      },
+      "newTaskIntegrationsDescription": "开启此任务可以使用的集成。在你更改之前，每个操作都使用其集成的设置。",
+      "emptyIntegrations": "没有可用的集成。",
+      "notRunnable": "Craft 目前无法运行 {name}，因此任务会跳过它。"
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, other {# 个技能未加载}}",
+      "description": "此会话无法使用 {names}。你的技能必须在 {maxSize} 和 {maxFiles, number} 个文件以内。关闭不需要的技能以腾出空间。",
+      "manage": "管理技能",
+      "dismiss": "关闭"
     }
   },
   "knowledge": {
@@ -16339,7 +15571,9 @@
       "sort": "排序",
       "sortBy": "排序依据",
       "sortingOrder": "排序方向",
-      "viewSelected": "查看已选"
+      "viewSelected": "查看已选",
+      "selectAll": "全选",
+      "selectRow": "选择行"
     },
     "tabs": {
       "scrollLeft": "向左滚动标签",
@@ -16857,9 +16091,6 @@
         "customAnalytics": {
           "label": "自定义分析"
         },
-        "discordIntegration": {
-          "label": "Discord 集成"
-        },
         "documentSets": {
           "label": "文档集"
         },
@@ -16890,15 +16121,6 @@
         "llmGateway": {
           "label": "LLM 网关"
         },
-        "plugins": {
-          "label": "插件"
-        },
-        "mcpActions": {
-          "label": "MCP 操作"
-        },
-        "openapiActions": {
-          "label": "OpenAPI 操作"
-        },
         "plansAndBilling": {
           "label": "套餐与账单"
         },
@@ -16913,9 +16135,6 @@
         },
         "serviceAccounts": {
           "label": "服务账号"
-        },
-        "slackIntegration": {
-          "label": "Slack 集成"
         },
         "ssoProviders": {
           "label": "SSO 提供商"
@@ -16943,20 +16162,23 @@
         },
         "spendingLimits": {
           "label": "支出上限"
+        },
+        "integrations": {
+          "label": "集成"
+        },
+        "slackBot": {
+          "label": "Slack 机器人"
+        },
+        "discordBot": {
+          "label": "Discord 机器人"
         }
       },
       "sections": {
-        "agentsAndActions": {
-          "label": "智能体与操作"
-        },
         "craft": {
           "label": "Craft"
         },
         "documentsAndKnowledge": {
           "label": "文档与知识"
-        },
-        "integrations": {
-          "label": "集成"
         },
         "organization": {
           "label": "组织"
@@ -16966,6 +16188,12 @@
         },
         "usage": {
           "label": "用量"
+        },
+        "agentsAndPlugins": {
+          "label": "智能体与插件"
+        },
+        "channels": {
+          "label": "频道"
         }
       }
     },
@@ -17018,8 +16246,8 @@
       "searchChats": {
         "label": "搜索对话"
       },
-      "plugins": {
-        "label": "插件"
+      "customize": {
+        "label": "自定义"
       }
     },
     "chatButton": {
@@ -17135,21 +16363,12 @@
   },
   "skills": {
     "editor": {
-      "appConflict": {
-        "description": "应用“{appName}”已有名为“{skillName}”的关联技能。",
-        "title": "请选择其他技能名称"
-      },
       "confirmUpload": {
         "importBody": "此上传包含 SKILL.md。继续操作会用上传的包替换当前的名称、描述、说明和文件。",
         "importSubmit": {
           "label": "导入技能"
         },
-        "importTitle": "导入此技能？",
-        "replaceBody": "此上传必须使用相同的技能名称。继续操作会用上传的包替换描述、说明和文件。",
-        "replaceSubmit": {
-          "label": "替换内容"
-        },
-        "replaceTitle": "替换技能内容？"
+        "importTitle": "导入此技能？"
       },
       "delete": {
         "button": {
@@ -17163,70 +16382,21 @@
         "label": "删除",
         "pendingLabel": "正在删除..."
       },
-      "details": {
-        "description": "定义 Craft 应在何时以及如何使用此技能。",
-        "descriptionField": {
-          "description": "描述何时应使用此技能。",
-          "placeholder": "此技能有什么用途？",
-          "title": "描述"
-        },
-        "name": {
-          "createDescription": "使用小写字母、数字和单个连字符。",
-          "lockedDescription": "技能名称创建后无法更改。",
-          "placeholder": "为您的技能命名",
-          "title": "名称"
-        },
-        "title": "详情"
-      },
       "files": {
-        "busyLabel": "正在上传...",
-        "description": "添加此技能使用的参考资料、脚本、资源或其他文件。ZIP 文件会自动解压。",
-        "input": {
-          "ariaLabel": "添加支持文件"
-        },
-        "pendingUpload": {
-          "emptyMessage": "此上传的文件将在您创建技能后显示。"
-        },
-        "title": "支持文件"
-      },
-      "filesTooltip": {
-        "noPermission": "您没有更新此技能文件的权限。",
-        "saveFirst": "更新技能文件前请先保存详情更改。",
-        "updating": "正在更新技能文件..."
+        "addedOnCreate": "“创建”会将此文件添加到技能中。"
       },
       "header": {
-        "appFallbackName": "外部应用",
         "createDescription": "构建个人技能",
-        "createForAppDescription": "为应用“{appName}”添加组织技能",
         "createTitle": "创建技能",
-        "editDescription": "更新技能详情和文件",
         "editTitle": "编辑技能",
         "save": {
-          "label": "保存",
-          "pendingLabel": "正在保存..."
-        }
-      },
-      "import": {
-        "busyLabel": "正在导入...",
-        "button": {
-          "label": "导入技能"
+          "label": "创建",
+          "pendingLabel": "正在创建..."
         },
-        "description": "导入 SKILL.md、ZIP 或技能文件夹以预填表单并包含其文件。",
-        "input": {
-          "ariaLabel": "导入现有技能"
-        },
-        "prompt": "选择 SKILL.md 或 ZIP，或将技能文件夹拖放到此处。",
-        "title": "已有技能？"
-      },
-      "instructions": {
-        "description": "编写此技能为 Craft 添加的行为和工作流程。",
-        "emptyFallback": "暂无说明。",
-        "placeholder": "编写技能说明。",
-        "title": "说明"
+        "cancel": "取消"
       },
       "loadError": {
-        "description": "此技能可能不存在、是内置技能，或您的账户无法编辑。",
-        "title": "技能不可用"
+        "description": "此技能可能不存在、是内置技能，或您的账户无法编辑。"
       },
       "management": {
         "sharing": {
@@ -17236,12 +16406,9 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "保存前请添加描述。",
         "missingInstructions": "保存前请添加说明。",
         "missingName": "保存前请添加名称。",
         "noChanges": "尚未进行任何更改。",
-        "noPermission": "您没有编辑此技能详情的权限。",
-        "savingChanges": "正在保存更改...",
         "savingSkill": "正在保存技能..."
       },
       "staleVersion": {
@@ -17255,14 +16422,10 @@
         "created": "已创建“{name}”",
         "deleteFailed": "删除技能失败",
         "deleted": "已删除“{name}”",
-        "fileRemoveFailed": "移除技能文件失败",
-        "fileRemoved": "已移除“{path}”",
-        "filesUpdateFailed": "更新技能文件失败",
-        "filesUpdated": "已更新“{name}”的文件",
-        "importMissingSkillMd": "请导入 SKILL.md、ZIP 或包含 SKILL.md 的文件夹。",
         "inspectFailed": "检查技能包失败",
         "saveFailed": "保存技能失败",
-        "saved": "已保存“{name}”"
+        "saved": "已保存“{name}”",
+        "mergeLimit": "{limit, select, files {一个技能最多可包含 {max, number} 个文件。请移除部分文件，然后选择“创建”。} other {一个技能的文件最多可达 {max, number} MB。请移除部分文件，然后选择“创建”。}}"
       },
       "creationAccess": {
         "title": "访问权限"
@@ -17418,17 +16581,12 @@
         "metadata": {
           "createdBy": {
             "label": "创建者"
-          },
-          "externalApp": {
-            "label": "外部应用"
           }
         },
         "noInstructions": {
           "message": "未找到指令。"
         },
         "unavailable": {
-          "appDisabled": "应用“{appName}”已被管理员禁用。",
-          "appNotConnected": "请在“应用”页面连接应用“{appName}”，才能使用此技能。",
           "title": "技能不可用"
         }
       },
@@ -17443,7 +16601,6 @@
         "doneButton": {
           "label": "完成"
         },
-        "externalAppNotice": "只要此技能与应用“{appName}”关联，就必须开放全组织的查看权限。",
         "header": {
           "transferTitle": "转移 *{name}*"
         },
@@ -17478,12 +16635,6 @@
         },
         "installation": {
           "title": "安装",
-          "available": "可供安装",
-          "default": "默认安装",
-          "required": "必需",
-          "availableDescription": "用户可以随时安装或卸载。",
-          "defaultDescription": "自动安装。用户可以随时禁用或卸载。",
-          "requiredDescription": "自动安装。用户无法禁用或卸载。",
           "description": "选择此技能对所有有访问权限的用户的安装方式。"
         },
         "description": "选择谁可以使用此技能及其安装方式。",
@@ -17507,6 +16658,19 @@
         "publishOff": {
           "title": "发布已关闭",
           "description": "管理员已关闭向组织发布。请让管理员发布此技能。"
+        },
+        "sharingOff": {
+          "title": "共享已关闭",
+          "description": "管理员已关闭与他人和群组共享。请让技能管理员共享此技能。"
+        },
+        "groupAccess": {
+          "title": "群组访问",
+          "description": "默认情况下，每个群组都使用组织设置。群组设置会为该群组的成员替换组织设置，即使它更严格。",
+          "add": "添加群组",
+          "select": "{name} 的设置",
+          "remove": "移除 {name}",
+          "shared": "已与此群组共享",
+          "settingOnly": "仅群组设置"
         }
       },
       "placeholders": {
@@ -17535,11 +16699,7 @@
           "ariaLabel": "恢复版本 {number}",
           "successToast": "已将版本 {number} 恢复为版本 {newNumber}。",
           "unchangedToast": "版本 {number} 的文件与当前版本相同。",
-          "failedToast": "无法恢复此版本。",
-          "unsavedChanges": {
-            "title": "请先保存更改",
-            "description": "在恢复版本之前，请保存或放弃编辑器中的更改。"
-          }
+          "failedToast": "无法恢复此版本。"
         },
         "loadError": {
           "title": "无法加载版本",
@@ -17565,12 +16725,6 @@
       }
     },
     "page": {
-      "browse": {
-        "title": "选择技能"
-      },
-      "countSeparator": {
-        "label": "{count, plural, one {技能} other {技能}}"
-      },
       "createMenu": {
         "github": {
           "description": "从仓库导入一个或多个技能。",
@@ -17591,22 +16745,15 @@
       "empty": {
         "noMatches": {
           "description": "请尝试其他搜索。",
-          "title": "没有匹配的技能"
+          "title": "没有匹配的技能",
+          "groupDescription": "此群组中没有匹配的技能。请尝试其他群组或搜索。"
         },
         "noSkills": {
           "title": "暂无自定义技能",
           "description": "创建或导入技能，将其添加到技能库。"
         }
       },
-      "focusedApp": {
-        "description": "启用与应用“{appName}”关联的所有技能。缺少这些技能时应用可能无法正常工作。如果已启用同名的其他技能，启用应用关联技能会为您停用另一个技能。",
-        "showAll": {
-          "label": "显示全部技能"
-        },
-        "title": "应用“{appName}”的技能"
-      },
       "header": {
-        "description": "您的 Craft 智能体可调用的能力包。此页面显示内置技能、与您共享的技能以及您的个人技能。",
         "title": "技能"
       },
       "loadError": {
@@ -17631,10 +16778,8 @@
       "toasts": {
         "disableFailed": "停用 {name} 失败",
         "enableFailed": "启用 {name} 失败",
-        "refreshFailed": "{name} 已更新，但技能列表无法刷新。"
-      },
-      "builtins": {
-        "title": "内置技能（{count, number}）"
+        "refreshFailed": "{name} 已更新，但技能列表无法刷新。",
+        "listRefreshFailed": "技能列表无法刷新。请重新加载页面以查看更改。"
       }
     },
     "sections": {
@@ -17652,26 +16797,12 @@
           "label": "拖放文件或点击上传"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "暂无支持文件。"
-        },
-        "remove": {
-          "label": "移除 {name}"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "添加文件"
-        },
         "input": {
           "ariaLabel": "添加技能文件"
         },
         "preparing": {
           "label": "正在准备…"
-        },
-        "prompt": {
-          "description": "选择文件或 ZIP，也可以将文件夹拖放到这里。"
         }
       },
       "instructionsToggle": {
@@ -17698,13 +16829,11 @@
     },
     "bulk": {
       "adminDescription": "管理整个组织的技能和访问权限。",
-      "selectAll": "选择所有可见的自定义技能",
       "selected": "{count, plural, one {已选择 # 项} other {已选择 # 项}}",
       "share": "分享",
       "enable": "为我启用",
       "disable": "为我禁用",
       "delete": "删除",
-      "selectSkill": "选择 {name}",
       "updated": "{count, plural, one {已更新 # 个技能} other {已更新 # 个技能}}",
       "failed": "无法更新技能。请重试。",
       "partialFailure": "{count, plural, one {# 个技能未能更新} other {# 个技能未能更新}}",
@@ -17748,7 +16877,70 @@
       "version": {
         "firstPublish": "v{number} · 首次发布",
         "update": "v{number} · 从 v{published} 更新"
+      },
+      "banner": {
+        "title": "{count, plural, other {# 个技能等待发布}}",
+        "review": "审核"
       }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "必需",
+        "description": "已安装且始终开启。成员无法关闭。"
+      },
+      "DEFAULT": {
+        "label": "已安装",
+        "description": "为每位成员安装。成员可以关闭。"
+      },
+      "AVAILABLE": {
+        "label": "可用",
+        "description": "成员可以找到它，并按需开启。"
+      },
+      "NOT_AVAILABLE": {
+        "label": "不可用",
+        "description": "已隐藏。成员无法找到或开启。"
+      },
+      "inherit": {
+        "label": "{scope, select, group {组织设置} other {默认访问权限}}",
+        "labelWithPolicy": "{scope, select, group {组织设置（{policy}）} other {默认访问权限（{policy}）}}",
+        "description": "{scope, select, group {没有群组设置。群组使用组织设置。} other {没有自己的设置。即使管理员更改了默认访问，技能也会使用它。}}"
+      }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "按群组筛选",
+        "all": "所有群组"
+      },
+      "card": "群组：{groups}",
+      "entry": "{name}：{policy}"
+    },
+    "limit": {
+      "refused": "此更改会使你超出 {maxSize} 或 {maxFiles, number} 个文件的技能上限。关闭不使用的技能，然后重试。",
+      "banner": {
+        "title": "{count, plural, other {# 位用户超出技能上限}}",
+        "description": "群组设置和共享可能使用户的技能超过 {maxSize} 或 {maxFiles, number} 个文件。此时其部分技能可能无法加载。请更改群组设置，或请用户关闭技能。",
+        "user": "{email}：{size}，{files, plural, other {# 个文件}}，{notLoaded, plural, other {# 个技能未加载}}",
+        "more": "另有 {count, number} 人。"
+      }
+    },
+    "adminTable": {
+      "label": "自定义技能",
+      "columns": {
+        "name": "名称",
+        "source": "来源",
+        "version": "版本",
+        "audience": "受众"
+      },
+      "organizationLibrary": "组织库",
+      "noOwner": "无所有者",
+      "version": "v{current}{published, select, none {} other { · v{published} 已上线}}",
+      "private": "仅所有者",
+      "shared": "与用户或群组共享",
+      "open": "打开 {name}",
+      "menu": "{name} 的更多操作",
+      "share": "共享",
+      "delete": "删除",
+      "select": "选择 {name}"
     }
   },
   "opensearchHealth": {
@@ -17763,5 +16955,397 @@
     "jvmMemoryTitle": "JVM 内存",
     "vectorMemoryTitle": "向量内存",
     "viewDetails": "查看详情"
+  },
+  "plugins": {
+    "member": {
+      "sections": {
+        "organization": "组织库",
+        "mine": "我的上传",
+        "shared": "与你共享"
+      },
+      "detail": {
+        "title": "插件",
+        "notFound": "你无法使用此插件。",
+        "loadFailed": "无法加载插件。",
+        "tabs": {
+          "overview": "概览",
+          "skills": "技能",
+          "versions": "版本"
+        },
+        "overview": {
+          "noDescription": "无描述。",
+          "location": "位置",
+          "owner": "所有者",
+          "skills": "技能",
+          "description": "描述"
+        },
+        "skills": {
+          "off": "已关闭",
+          "invalid": "无效"
+        },
+        "switch": {
+          "title": "使用此插件",
+          "description": "开启后，默认智能体可以使用此插件。",
+          "label": "使用 {name}",
+          "required": "管理员已将此插件设为必需。你无法将其关闭。",
+          "unavailable": "你无法开启或关闭此插件。",
+          "failed": "无法更改插件。"
+        }
+      },
+      "connection": {
+        "askAdmin": "请询问管理员",
+        "connected": "已连接 {name}。",
+        "disconnected": "已断开 {name}。",
+        "failed": "无法连接。请重试。",
+        "disconnectFailed": "无法断开连接。请重试。",
+        "connect": {
+          "label": "连接",
+          "ariaLabel": "连接 {name}"
+        },
+        "reconnect": {
+          "label": "重新连接",
+          "ariaLabel": "重新连接 {name}"
+        },
+        "disconnect": {
+          "label": "断开连接",
+          "ariaLabel": "断开 {name}"
+        }
+      },
+      "credentials": {
+        "title": "连接 {name}",
+        "description": "输入你的凭据。只有你会使用它们。",
+        "required": "请填写此值。",
+        "failed": "无法保存你的凭据。请重试。",
+        "submit": {
+          "label": "连接",
+          "pendingLabel": "正在连接…"
+        },
+        "cancel": {
+          "label": "取消"
+        }
+      },
+      "alwaysAllow": {
+        "title": "始终允许",
+        "description": "无需确认即可运行需要审批的操作。",
+        "loadFailed": "无法加载操作。",
+        "saveFailed": "无法保存。请重试。",
+        "alwaysAsks": "Craft 会为每个此类请求请求批准。",
+        "switch": {
+          "label": "始终允许 {name}"
+        },
+        "retry": {
+          "label": "重试"
+        },
+        "readOnlyTitle": "操作",
+        "readOnlyDescription": "管理员设置每个操作的运行方式。"
+      },
+      "oauthCallback": {
+        "processing": "正在连接你的账户…",
+        "successTitle": "账户已连接",
+        "successDescription": "Onyx 正在带你返回。",
+        "errorTitle": "无法连接",
+        "cancelled": "登录已取消。",
+        "invalidLink": "此登录链接无效。请重新开始登录。",
+        "failed": "登录未完成。请重试。",
+        "back": {
+          "label": "返回集成"
+        }
+      }
+    },
+    "chat": {
+      "popover": {
+        "empty": "此智能体没有集成。",
+        "searchEmpty": "没有与搜索匹配的集成。",
+        "loading": "正在加载集成",
+        "loadError": "部分集成无法加载。请重试。",
+        "trigger": {
+          "label": "集成"
+        },
+        "retry": {
+          "label": "重试"
+        },
+        "browse": {
+          "label": "浏览集成"
+        },
+        "toggle": {
+          "label": "在此智能体中使用 {name}"
+        },
+        "search": {
+          "placeholder": "搜索集成"
+        }
+      },
+      "connectPrompt": {
+        "tooltip": "在你连接账户之前，智能体无法使用这些集成。",
+        "title": "连接集成",
+        "description": "登录后即可在此聊天中使用这些集成。",
+        "hint": "你可以继续聊天。在你连接集成之前，智能体不会使用它。",
+        "trigger": {
+          "label": "{count, plural, other {# 个集成需要登录}}"
+        },
+        "done": {
+          "label": "完成"
+        }
+      }
+    }
+  },
+  "integrations": {
+    "connectionState": "{state, select, connected {已连接} not_connected {未连接} needs_reconnect {需要重新连接} not_set_up {未设置} other {未知}}",
+    "share": {
+      "title": "共享 {name}",
+      "description": "授予特定人员使用此集成的权限。共享仅授予使用权限。",
+      "sharedSignIn": "{name} 使用一个账户。有访问权限的人使用你连接的账户。",
+      "loadFailed": "无法加载有访问权限的用户。",
+      "empty": "只有你有访问权限。",
+      "remove": {
+        "label": "移除 {name}"
+      },
+      "cancel": {
+        "label": "取消"
+      },
+      "submit": {
+        "label": "保存",
+        "pendingLabel": "正在保存..."
+      },
+      "saved": "已保存 {name} 的访问权限。",
+      "failed": "无法保存访问权限。"
+    },
+    "memberState": {
+      "on": {
+        "label": "已开启"
+      },
+      "turn_on": {
+        "label": "开启"
+      },
+      "sign_in": {
+        "label": "登录"
+      },
+      "no_access": {
+        "label": "无访问权限",
+        "reason": "无访问权限：此集成未与你共享。",
+        "reasonOwner": "无访问权限：{owner} 未与你共享。"
+      },
+      "turned_off": {
+        "label": "已关闭",
+        "reason": "已被管理员关闭。"
+      },
+      "switch": {
+        "label": "使用 {name}",
+        "required": "管理员已将此集成设为必需。你无法将其关闭。",
+        "failed": "无法更改集成。"
+      }
+    },
+    "menu": {
+      "label": "{name} 的更多操作",
+      "share": "共享",
+      "publish": {
+        "label": "发布到组织",
+        "blocked": "只有拥有组织范围“管理操作”权限的用户才能发布集成。",
+        "confirmTitle": "将 {name} 发布到组织？",
+        "confirmMessage": "之后组织中的每个用户都可以开启它。管理员设置其安装设置。你共享过的人保留访问权限。",
+        "done": "{name} 现已对组织可用。",
+        "failed": "无法发布集成。"
+      }
+    }
+  },
+  "customize": {
+    "title": "自定义",
+    "tabs": {
+      "label": "自定义分区",
+      "skills": "技能",
+      "integrations": "集成",
+      "plugins": "插件"
+    },
+    "skills": {
+      "loadFailed": "无法加载你的技能。",
+      "filter": {
+        "label": "筛选",
+        "all": "所有技能",
+        "on": "已开启",
+        "off": "已关闭"
+      },
+      "sort": {
+        "label": "排序",
+        "updated": "最近更新",
+        "name": "名称"
+      },
+      "add": {
+        "label": "添加",
+        "upload": "上传技能",
+        "create": "创建技能",
+        "github": "从 GitHub 导入"
+      },
+      "groups": {
+        "mine": "由你创建",
+        "organization": "来自你的组织",
+        "shared": "与你共享",
+        "builtin": "内置"
+      },
+      "source": {
+        "mine": "由你",
+        "organization": "来自你的组织",
+        "sharedBy": "由 {email} 共享",
+        "shared": "与你共享",
+        "builtin": "内置"
+      },
+      "subtitle": "{source} · {description}",
+      "tag": {
+        "off": "已停用",
+        "required": "必需",
+        "pending": "待审核",
+        "invalid": "无效"
+      },
+      "open": "打开 {name}",
+      "menu": {
+        "label": "{name} 的更多操作",
+        "turnOn": "开启",
+        "turnOff": "关闭",
+        "share": "共享",
+        "remove": "移除"
+      },
+      "empty": {
+        "title": "还没有技能",
+        "description": "创建或上传技能，教助手完成一项任务。"
+      },
+      "noMatches": {
+        "title": "没有匹配的技能",
+        "description": "请尝试其他搜索或筛选条件。",
+        "clear": "显示所有技能"
+      }
+    },
+    "integrations": {
+      "title": "集成",
+      "loadFailed": "无法加载你的集成。",
+      "columns": {
+        "name": "集成",
+        "type": "类型",
+        "authorization": "授权",
+        "status": "状态"
+      },
+      "status": {
+        "connected": "已连接"
+      },
+      "add": {
+        "label": "添加",
+        "integration": "添加集成",
+        "manage": "管理集成"
+      },
+      "open": "打开 {name}",
+      "empty": {
+        "title": "还没有集成",
+        "description": "请让管理员添加集成。"
+      },
+      "noMatches": {
+        "title": "没有匹配的集成",
+        "description": "请尝试其他搜索。"
+      }
+    },
+    "plugins": {
+      "contents": "{skills, plural, one {1 个技能} other {{skills} 个技能}}",
+      "loadFailed": "无法加载你的插件。",
+      "filter": {
+        "all": "所有插件"
+      },
+      "empty": {
+        "title": "还没有插件",
+        "description": "创建技能。每个技能都是一个插件。"
+      },
+      "noMatches": {
+        "title": "没有匹配的插件",
+        "clear": "显示所有插件"
+      },
+      "intro": "插件将你一起开启的技能打包在一起。你添加的每个技能都有自己的插件。集成位于“集成”标签页。"
+    },
+    "skillPage": {
+      "title": "技能",
+      "back": "技能",
+      "meta": "{owner} · v{version}{published, select, none {} other { · v{published} 已对你的组织上线}} · 更新于 {updated}",
+      "ownerYou": "由你",
+      "ownerEmail": "由 {email}",
+      "ownerYouTitle": "你",
+      "fromOrganization": "来自组织库",
+      "copyLink": "复制链接",
+      "share": "共享",
+      "menu": "更多",
+      "edit": "编辑",
+      "remove": "移除",
+      "add": "添加",
+      "switch": "使用 {name}",
+      "loadFailed": "你无法使用此技能。",
+      "tabs": {
+        "overview": "概览",
+        "contents": "内容",
+        "versions": "版本",
+        "contentsCount": "内容 · {count}"
+      },
+      "overview": {
+        "description": "描述",
+        "noDescription": "没有描述。",
+        "createdBy": "创建者",
+        "access": "访问权限",
+        "accessValue": "{access, select, personal {仅你} private {仅所有者} shared {与用户或群组共享} other {组织库}}",
+        "tools": "集成和操作",
+        "instructionsOnly": "仅为代理添加说明"
+      },
+      "backAdmin": "技能清单",
+      "contents": {
+        "version": "{name} v{version} · 当前",
+        "edit": "编辑",
+        "cancel": "取消",
+        "saveVersion": "保存版本",
+        "saving": "正在保存…",
+        "addFile": "添加文件",
+        "removeFile": "移除 {name}",
+        "editorLabel": "SKILL.md",
+        "noPreview": "Onyx 仅显示 SKILL.md 的文本。此文件是技能的一部分。",
+        "addedFile": "“保存版本”会将此文件添加到技能中。",
+        "errors": {
+          "frontmatter": "SKILL.md 必须以包含名称和描述的 --- 块开头。",
+          "description": "请在 SKILL.md 的 --- 块中添加描述。",
+          "name": "名称必须保持为“{name}”。",
+          "skillMd": "请在编辑器中编辑 SKILL.md。此处仅添加支持文件。"
+        },
+        "loadFailed": "无法加载此技能的内容。",
+        "retry": "重试",
+        "reloadFailed": "无法加载最新版本。你的更改已保留。请再次尝试重新加载。"
+      },
+      "required": {
+        "label": "必需",
+        "tooltip": "你的管理员要求使用此技能，因此你无法将其关闭。"
+      }
+    },
+    "integrationPage": {
+      "title": "集成",
+      "back": "集成",
+      "loadFailed": "你无法使用此集成。",
+      "tabs": {
+        "overview": "概览",
+        "configuration": "配置",
+        "actions": "操作"
+      },
+      "overview": {
+        "description": "描述",
+        "noDescription": "没有描述。",
+        "type": "类型",
+        "signIn": "登录",
+        "url": "服务器 URL",
+        "owner": "所有者",
+        "organization": "组织",
+        "status": "状态",
+        "switch": {
+          "title": "使用此集成",
+          "description": "开启后，你可以在对话和 Craft 中使用它。",
+          "required": "管理员已将此集成设为必需。你无法将其关闭。"
+        }
+      },
+      "configuration": {
+        "description": "{mode, select, individual {你与此集成的连接。只有你使用它。} shared {此集成的账户。所有有权访问的人都使用它。} other {此集成无需登录。}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "技能 · {count}"
+      }
+    },
+    "search": "搜索"
   }
 }

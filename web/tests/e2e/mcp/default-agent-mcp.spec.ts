@@ -1,20 +1,16 @@
 import { test, expect } from "@playwright/test";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { loginAs, apiLogin } from "@tests/e2e/utils/auth";
-import {
-  grantAddAgents,
-  deleteGrantGroups,
-} from "@tests/e2e/utils/grantPermissions";
 import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import {
   startMcpApiKeyServer,
   McpServerProcess,
 } from "@tests/e2e/utils/mcpServer";
-import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
-import { ChatPreferencesPage } from "@tests/e2e/pages/ChatPreferencesPage";
-import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
-import { AgentEditorPage } from "@tests/e2e/pages/AgentEditorPage";
+import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
+import { AdminIntegrationDetailPage } from "@tests/e2e/pages/AdminIntegrationDetailPage";
+import { ChatIntegrationsPopover } from "@tests/e2e/pages/ChatIntegrationsPopover";
+import { CustomizePage } from "@tests/e2e/pages/CustomizePage";
+import { CustomizeIntegrationPage } from "@tests/e2e/pages/CustomizeIntegrationPage";
 import {
   expectMcpToolInvoked,
   expectMcpToolNotInvoked,
@@ -22,267 +18,191 @@ import {
 } from "@tests/e2e/mcp/mcpToolInvocation";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
-const DEFAULT_PORT = Number(process.env.MCP_API_KEY_TEST_PORT || "8005");
+const PORT = process.env.MCP_API_KEY_TEST_PORT
+  ? Number(process.env.MCP_API_KEY_TEST_PORT)
+  : undefined;
 const MCP_API_KEY_TEST_URL = process.env.MCP_API_KEY_TEST_URL;
 const MCP_ASSERTED_TOOL_NAME = "tool_0";
 
 /**
- * Default-agent MCP integration for an admin-shared (API key) server.
- *
- * Setup (the MCP server + its tools) is provisioned once via the API in
- * `beforeAll`; tests then drive only the UI surface under test. One UI
- * "create-flow" test is retained to keep the Add-Server + auth modal covered.
+ * An MCP server with one organization API key, available to the
+ * organization. A member turns it on once; the default agent then uses it,
+ * and the chat tools popover switches it for each agent.
  */
 test.describe("Default Agent MCP Integration", () => {
   test.describe.configure({ mode: "serial" });
 
   let serverProcess: McpServerProcess | null = null;
-  let serverId: number;
+  let integrationId: number;
   let serverName: string;
   let serverUrl: string;
   let basicUserEmail: string;
-  const grantGroupIds: number[] = [];
   let basicUserPassword: string;
   let createdProviderId: number | null = null;
-  let assertedToolId: number;
-  // A throwaway server created by the UI create-flow test; cleaned up in afterAll.
-  let uiServerId: number | null = null;
+  let agentId: number | null = null;
+  let uiIntegrationId: number | null = null;
 
   test.beforeAll(async ({ browser }) => {
     if (MCP_API_KEY_TEST_URL) {
       serverUrl = MCP_API_KEY_TEST_URL;
     } else {
       serverProcess = await startMcpApiKeyServer({
-        port: DEFAULT_PORT,
+        port: PORT,
         apiKey: API_KEY,
       });
       serverUrl = `http://${serverProcess.address.host}:${serverProcess.address.port}/mcp`;
     }
-
-    serverName = `PW API Key Server ${Date.now()}`;
+    serverName = `PW API Key ${Date.now()}`;
 
     const adminContext = await browser.newContext({
       storageState: "admin_auth.json",
     });
     const adminClient = new OnyxApiClient(adminContext.request);
-
     createdProviderId = await adminClient.ensurePublicProvider();
 
-    // Remove any stale servers pointing at the same mock URL.
-    try {
-      const existingServers = await adminClient.listMcpServers();
-      for (const server of existingServers) {
-        if (server.server_url === serverUrl) {
-          await adminClient.deleteMcpServer(server.id);
-        }
-      }
-    } catch (error) {
-      console.warn("Failed to cleanup existing MCP servers", error);
-    }
-
-    // Provision the shared server + tools via API (replaces UI-driven setup).
-    serverId = await adminClient.createMcpServerWithAuth({
+    const created = await adminClient.createIntegration({
+      for_organization: true,
       name: serverName,
       description: "Shared API key MCP server (e2e)",
-      server_url: serverUrl,
-      auth_type: "API_TOKEN",
-      auth_performer: "ADMIN",
-      api_token: API_KEY,
+      auth_mode: "shared",
+      auth_method: "api_key",
+      credential_fields: [{ key: "api_key", label: "API Key", secret: true }],
+      header_template: { Authorization: "Bearer {api_key}" },
+      oauth_client: null,
+      config: {
+        shape: "mcp_server",
+        server_url: serverUrl,
+        transport: "STREAMABLE_HTTP",
+      },
     });
-    await adminClient.discoverMcpTools(serverId);
-    assertedToolId = await adminClient.findMcpToolId(
-      serverId,
-      MCP_ASSERTED_TOOL_NAME
+    integrationId = created.id;
+    const connect = await adminContext.request.put(
+      `/api/admin/integrations/${integrationId}/organization-connection`,
+      { data: { fields: { api_key: API_KEY } } }
     );
+    expect(connect.ok(), await connect.text()).toBeTruthy();
+    await adminClient.refreshIntegrationActions(integrationId);
     // These tests cover invocation, not approval (mcp_tool_approval.spec.ts).
-    await adminClient.setMcpActionPolicies(serverId, {
-      [MCP_ASSERTED_TOOL_NAME]: "ALWAYS",
+    await adminClient.setIntegrationActionPolicies(integrationId, {
+      [MCP_ASSERTED_TOOL_NAME]: "allow",
     });
+    agentId = await adminClient.createAgentWithIntegrations(
+      `PW MCP Agent ${Date.now()}`,
+      [integrationId],
+      { isPublic: true }
+    );
 
     basicUserEmail = `pw-basic-user-${Date.now()}@example.com`;
     basicUserPassword = "BasicUserPass123!";
     await adminClient.registerUser(basicUserEmail, basicUserPassword);
-
     await adminContext.close();
-
-    // this user creates an agent through the UI, which EE gates on ADD_AGENTS
-    grantGroupIds.push(await grantAddAgents(browser, basicUserEmail));
   });
 
   test.afterAll(async ({ browser }) => {
-    await deleteGrantGroups(browser, grantGroupIds);
-    grantGroupIds.length = 0;
-
     const adminContext = await browser.newContext({
       storageState: "admin_auth.json",
     });
     const adminClient = new OnyxApiClient(adminContext.request);
-
-    if (createdProviderId !== null) {
+    if (agentId !== null) await adminClient.deleteAgent(agentId);
+    if (uiIntegrationId !== null)
+      await adminClient.deleteIntegration(uiIntegrationId);
+    if (integrationId) await adminClient.deleteIntegration(integrationId);
+    if (createdProviderId !== null)
       await adminClient.deleteProvider(createdProviderId);
-    }
-    if (uiServerId) {
-      await adminClient.deleteMcpServer(uiServerId);
-    }
-    if (serverId) {
-      await adminClient.deleteMcpServer(serverId);
-    }
     await adminContext.close();
-
-    if (serverProcess) {
-      await serverProcess.stop();
-    }
+    if (serverProcess) await serverProcess.stop();
   });
 
-  test("Admin can create an API key MCP server through the UI", async ({
+  test("Admin adds an MCP server through the integration pages", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
-
-    const adminMcp = new AdminMcpServersPage(page);
-    await adminMcp.goto();
-
-    const uiServerName = `${serverName} (UI)`;
-    await adminMcp.openAddServerModal();
-    await adminMcp.enterServerUrlAndContinue(serverUrl);
-    await adminMcp.selectAuthMethod("API Key");
-    await adminMcp.selectApiKeyCredentials("admin");
-    await adminMcp.fillApiToken(API_KEY);
-    await adminMcp.fillServerDetails({
-      name: uiServerName,
-    });
-    uiServerId = await adminMcp.connectAndWaitForCreation();
-
-    await adminMcp.expectServerDetail(uiServerName);
-    await adminMcp.refreshTools();
-
-    // Exercise global tool availability: disable then re-enable a tool.
-    await adminMcp.setToolEnabled(MCP_ASSERTED_TOOL_NAME, false);
-    await adminMcp.setToolEnabled(MCP_ASSERTED_TOOL_NAME, true);
+    const integrations = new AdminIntegrationsPage(page);
+    const detail = new AdminIntegrationDetailPage(page);
+    const uiName = `${serverName} (UI)`;
+    await integrations.goto();
+    await integrations.openAdd("MCP server");
+    await integrations.fillMcpServer({ name: uiName, url: serverUrl });
+    await integrations.selectSignIn(
+      "One account for the organization",
+      "API key"
+    );
+    await integrations.chooseOwner("For the organization");
+    uiIntegrationId = await integrations.submit();
+    await detail.connectOrganization({ "api key": API_KEY });
+    await detail.expectLoaded(uiName);
+    await detail.openTab("Actions");
+    await detail.refreshActions();
   });
 
-  test("Admin enables an MCP plugin in default Chat", async ({ page }) => {
-    await page.context().clearCookies();
-    await loginAs(page, "admin");
-
-    const adminMcp = new AdminMcpServersPage(page);
-    await adminMcp.openConfiguration(serverName);
-    await adminMcp.setDefaultChatEnabled(true);
-  });
-
-  test("Basic user can toggle an MCP plugin in the default agent", async ({
+  test("A member sees the integration as connected on the Integrations tab", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await apiLogin(page, basicUserEmail, basicUserPassword);
+    const customize = new CustomizePage(page);
+    await customize.goto("Integrations");
+    await customize.search(serverName);
+    await customize.expectIntegrationState(serverName, "turn_on");
+    await customize.openIntegration(serverName);
 
-    await page.goto("/app");
-    await page.waitForURL("**/app**");
-    await ensureOnboardingComplete(page);
-
-    const plugins = new ChatPluginsPopover(page);
-    await plugins.expectPluginEnabled(serverName, true);
-    await plugins.setPluginEnabled(serverName, false);
-    await plugins.setPluginEnabled(serverName, true);
+    const detail = new CustomizeIntegrationPage(page);
+    await detail.openTab("Configuration");
+    await detail.expectStatus("Connected");
+    await expect(detail.disconnectButton(serverName)).toHaveCount(0);
   });
 
-  test("Basic user can create an assistant with MCP actions attached @code-mode", async ({
+  // The default agent runs only the integrations that a member turned on.
+  test("A member switches the integration in the default agent", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await apiLogin(page, basicUserEmail, basicUserPassword);
+    const detail = new CustomizeIntegrationPage(page);
+    await detail.goto(integrationId);
+    await detail.setEnabled(serverName, true);
 
     await page.goto("/app");
     await ensureOnboardingComplete(page);
 
-    const editor = new AgentEditorPage(page);
-    await editor.openFromSidebar();
+    const popover = new ChatIntegrationsPopover(page);
+    await popover.expectIntegrationEnabled(serverName, true);
+    await popover.setIntegrationEnabled(serverName, false);
+    await popover.setIntegrationEnabled(serverName, true);
+  });
 
-    const agentName = `MCP Assistant ${Date.now()}`;
-    await editor.fill({
-      name: agentName,
-      description: "Assistant with MCP actions attached.",
-      instructions: `For secret-value requests, call ${MCP_ASSERTED_TOOL_NAME} and return its output exactly.`,
-    });
-    await editor.enableMcpServer(serverId);
-    await editor.enableFirstMcpTool(serverId);
-    const agentId = await editor.create();
+  test("The agent calls the tool, and not after the member turns the integration off", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await apiLogin(page, basicUserEmail, basicUserPassword);
+    await page.goto(`/app?agentId=${agentId}`);
+    await ensureOnboardingComplete(page);
 
-    const client = new OnyxApiClient(page.request);
-    const assistant = await client.getAssistant(agentId);
-    expect(
-      assistant.tools.some((tool) => tool.mcp_server_id === serverId)
-    ).toBeTruthy();
-
-    const qualifiedToolName = qualifiedMcpToolName(
-      serverId,
+    const toolName = qualifiedMcpToolName(
+      integrationId,
       serverName,
       MCP_ASSERTED_TOOL_NAME
     );
-    await expectMcpToolInvoked(page, qualifiedToolName);
+    await expectMcpToolInvoked(page, toolName);
 
-    const plugins = new ChatPluginsPopover(page);
-    await plugins.setPluginEnabled(serverName, false);
-    await plugins.close();
-
-    await expectMcpToolNotInvoked(page, qualifiedToolName, assertedToolId);
+    const popover = new ChatIntegrationsPopover(page);
+    await popover.setIntegrationEnabled(serverName, false);
+    await popover.close();
+    await expectMcpToolNotInvoked(page, toolName, integrationId);
   });
 
-  test("Admin default Chat availability persists in plugin Configuration", async ({
-    page,
-  }) => {
-    await page.context().clearCookies();
-    await loginAs(page, "admin");
-
-    const adminMcp = new AdminMcpServersPage(page);
-    await adminMcp.openConfiguration(serverName);
-    await expect(adminMcp.defaultChatToggle).toBeChecked();
-    await adminMcp.setDefaultChatEnabled(false);
-
-    await adminMcp.openConfiguration(serverName);
-    await expect(adminMcp.defaultChatToggle).not.toBeChecked();
-    await adminMcp.setDefaultChatEnabled(true);
-
-    await adminMcp.openConfiguration(serverName);
-    await expect(adminMcp.defaultChatToggle).toBeChecked();
-  });
-
-  test("Default agent instructions persist when saved via chat preferences", async ({
-    page,
-  }) => {
-    await page.context().clearCookies();
-    await loginAs(page, "admin");
-
-    const chatPrefs = new ChatPreferencesPage(page);
-    await chatPrefs.goto();
-
-    const testInstructions = `Test instructions for MCP - ${Date.now()}`;
-    await chatPrefs.openModifyPrompt();
-    await chatPrefs.fillSystemPrompt(testInstructions);
-    await chatPrefs.saveSystemPrompt();
-
-    // Reload and confirm the value persisted.
-    await page.reload();
-    await page.waitForLoadState("networkidle");
-    await page.waitForURL(`**${ADMIN_ROUTES.CHAT_PREFERENCES.path}**`);
-
-    await chatPrefs.openModifyPrompt();
-    await chatPrefs.expectSystemPromptValue(testInstructions);
-    await chatPrefs.cancelModifyPrompt();
-  });
-
-  test("MCP plugin selection appears in a basic user's composer", async ({
+  test("The member's choice for the agent persists in a new chat", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await apiLogin(page, basicUserEmail, basicUserPassword);
+    await page.goto(`/app?agentId=${agentId}`);
+    await ensureOnboardingComplete(page);
 
-    await page.goto("/app");
-    await page.waitForURL("**/app**");
-
-    const plugins = new ChatPluginsPopover(page);
-    await plugins.expectPluginVisible(serverName);
-    await expect(plugins.pluginSwitch(serverName)).toBeEnabled();
+    const popover = new ChatIntegrationsPopover(page);
+    await popover.expectIntegrationEnabled(serverName, false);
+    await popover.setIntegrationEnabled(serverName, true);
   });
 });

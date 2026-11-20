@@ -213,7 +213,7 @@ generation spans -> user_usage                       [[observability]]
   `handle_stream_message_objects` in its own process, so it skips the route's
   `Depends` checks. It calls `check_token_rate_limits` itself, but no API-call
   cap applies ([[slack-bot]]). The Discord bot, the widget and API callers
-  use the HTTP route. Deep research and the research and coding sub-agents run
+  use the HTTP route. Deep research and its research subagents run
   on the same shared runtime ([[agent-runtime]]). The acting user for each
   caller is in [CROSS-CUTTING.md](CROSS-CUTTING.md).
 - **Budgets lag.** Usage reaches `user_usage` from tracing spans in batches, so

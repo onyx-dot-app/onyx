@@ -20,8 +20,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
-	"github.com/onyx-dot-app/onyx/microvm/internal/fcapi/client/operations"
-	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/testcerts"
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/hostagent/v1"
@@ -167,11 +165,7 @@ func TestMemAdmissionKVM(t *testing.T) {
 		t.Fatalf("build: %v\n%s", err, containerLogs(agentName))
 	}
 	tpl := br.GetTemplate()
-	t.Logf("template %s balloon=%v managed_slots=%d built=%v build_ms=%d", tpl.GetVersion(), tpl.GetBalloon(),
-		tpl.GetManagedSlots(), br.GetBuilt(), br.GetBuildMs())
-	if !tpl.GetBalloon() {
-		t.Fatal("the template has no balloon")
-	}
+	t.Logf("template %s managed_slots=%d built=%v build_ms=%d", tpl.GetVersion(), tpl.GetManagedSlots(), br.GetBuilt(), br.GetBuildMs())
 
 	var all []*memVM
 	create := func() (*memVM, error) {
@@ -219,24 +213,13 @@ func TestMemAdmissionKVM(t *testing.T) {
 		}
 	})
 
-	// 1. A restore from the layout 4 template has the balloon, the guest
-	// reports at order 0, and the scope has the limits.
+	// 1. The guest daemon reports free pages at order 0 (TestCoreKVM checks
+	// the balloon itself), and the scope has the limits.
 	v0 := mustCreate()
-	api := fcvm.APIClient(filepath.Join(e.DataDir, "jail", "firecracker", v0.id, "root", jailer.APISock))
-	bc, err := api.DescribeBalloonConfigContext(ctx, &operations.DescribeBalloonConfigParams{})
-	if err != nil {
-		t.Fatalf("GET /balloon on a restored VM: %v", err)
-	}
-	b := bc.Payload
-	t.Logf("restored VM balloon: amount_mib=%d deflate_on_oom=%v free_page_reporting=%v free_page_hinting=%v stats_s=%d",
-		*b.AmountMib, *b.DeflateOnOom, b.FreePageReporting, b.FreePageHinting, b.StatsPollingIntervals)
-	if !b.FreePageReporting || b.FreePageHinting || *b.AmountMib != 0 {
-		t.Errorf("balloon %+v", b)
-	}
-	r := run(v0, "cat /sys/module/page_reporting/parameters/page_reporting_order; zcat /proc/config.gz | grep -E '^CONFIG_(VIRTIO_BALLOON|PAGE_REPORTING|BALLOON_COMPACTION|COMPACTION)='; uname -r")
+	r := run(v0, "cat /sys/module/page_reporting/parameters/page_reporting_order; zcat /proc/config.gz | grep -E '^CONFIG_(BALLOON_COMPACTION|COMPACTION)='; uname -r")
 	t.Logf("guest: %s", strings.ReplaceAll(strings.TrimSpace(r.stdout), "\n", " | "))
-	if !strings.HasPrefix(r.stdout, "0\n") || !strings.Contains(r.stdout, "CONFIG_PAGE_REPORTING=y") {
-		t.Errorf("guest page reporting: %q %q", r.stdout, r.stderr)
+	if !strings.HasPrefix(r.stdout, "0\n") {
+		t.Errorf("guest page reporting order: %q %q", r.stdout, r.stderr)
 	}
 	memMax, cpuMax := readFileTrim(filepath.Join(scopeDir(v0.id), "memory.max")), readFileTrim(filepath.Join(scopeDir(v0.id), "cpu.max"))
 	t.Logf("scope %s: memory.max=%s cpu.max=%s", jailer.ScopeUnit(v0.id), memMax, cpuMax)

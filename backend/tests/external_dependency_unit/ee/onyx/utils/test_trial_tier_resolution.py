@@ -24,6 +24,7 @@ from ee.onyx.server.tenants.tier_management import (
     update_tenant_tier,
 )
 from ee.onyx.utils import tier as tier_module
+from onyx.cache.factory import get_cache_backend
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.models import Tier
 
@@ -33,14 +34,19 @@ TEST_TENANT_ID = "tenant-tier-test"
 @pytest.fixture(autouse=True)
 def _clean_tier_cache(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     """Wipe the tier cache before and after each test so runs are isolated."""
+    # Read from the primary: a replica can lag behind the write under test.
     monkeypatch.setattr(
-        "ee.onyx.server.tenants.tier_management.get_redis_replica_client",
-        get_redis_client,
+        "ee.onyx.server.tenants.tier_management.get_cache_backend",
+        lambda *, tenant_id, replica=False: get_cache_backend(  # noqa: ARG005
+            tenant_id=tenant_id
+        ),
     )
-    redis_client = get_redis_client(tenant_id=TEST_TENANT_ID)
-    redis_client.delete(TENANT_TIER_KEY, TENANT_TIER_MISS_KEY)
+    cache = get_cache_backend(tenant_id=TEST_TENANT_ID)
+    for key in (TENANT_TIER_KEY, TENANT_TIER_MISS_KEY):
+        cache.delete(key)
     yield
-    redis_client.delete(TENANT_TIER_KEY, TENANT_TIER_MISS_KEY)
+    for key in (TENANT_TIER_KEY, TENANT_TIER_MISS_KEY):
+        cache.delete(key)
 
 
 @pytest.fixture(autouse=True)

@@ -48,6 +48,7 @@ import {
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { fetchLibraryTree } from "@/app/craft/services/apiServices";
 import type { QueuedMessage } from "@/app/app/types";
+import { customizeTabHref } from "@/lib/customize/paths";
 
 export interface CraftInputBarHandle {
   reset: () => void;
@@ -150,7 +151,7 @@ const CraftInputBar = memo(
       const { data: appsData } = useUserExternalApps();
       const { data: craftMcpData } = useCraftMcpServers();
       const pickerSections = useMemo(
-        () => toPickerSections(skillsData, appsData, craftMcpData?.mcp_servers),
+        () => toPickerSections(skillsData, appsData, craftMcpData),
         [skillsData, appsData, craftMcpData]
       );
 
@@ -303,7 +304,7 @@ const CraftInputBar = memo(
             {
               onAttachFiles: () => fileInputRef.current?.click(),
               onSelectEntry: addEntry,
-              onBrowseSkills: () => navigation.go("/craft/v1/skills"),
+              onBrowseSkills: () => navigation.go(customizeTabHref("skills")),
               onBrowseApps: () => navigation.go("/craft/v1/apps"),
               libraryFiles,
               // Defer the modal until the + popover finishes closing, else it paints over it.

@@ -298,7 +298,8 @@ def format_slack_message(message: str | None, render_links: bool = True) -> str:
     )
     result = md(normalized_message)
     # With HTMLRenderer, result is always str (not AST list)
-    assert isinstance(result, str)
+    if not isinstance(result, str):
+        raise TypeError("Markdown renderer did not return a str.")
     return result.rstrip("\n")
 
 

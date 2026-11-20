@@ -98,7 +98,7 @@ func runCoverageGate(g coverageGate) int {
 }
 
 func writeBaseline(g coverageGate) int {
-	baseline := coverage.NewBaseline(g.Profile)
+	baseline := coverage.NewBaseline(g.Profile, g.Kind)
 	if err := baseline.Save(g.BaselinePath, g.Kind); err != nil {
 		log.Errorf("Failed to write the baseline: %v", err)
 		return 1

@@ -4,8 +4,6 @@ from ee.onyx.external_permissions.confluence.constants import (
     REQUEST_PAGINATION_LIMIT,
 )
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.source_operations import (
     ConfluenceSourceOperations,
     ConfluenceSpacePermissionsVariant,
@@ -163,7 +161,6 @@ def get_space_permission(
     source_operations: ConfluenceSourceOperations,
     space_key: str,
     is_cloud: bool,
-    add_prefix: bool = False,
 ) -> ExternalAccess:
     if is_cloud:
         space_permissions = _get_cloud_space_permissions(source_operations, space_key)
@@ -184,32 +181,14 @@ def get_space_permission(
             space_key,
         )
 
-    # Prefix group IDs with source type if requested (for indexing path)
-    if add_prefix and space_permissions.external_user_group_ids:
-        prefixed_groups = {
-            build_ext_group_name_for_onyx(g, DocumentSource.CONFLUENCE)
-            for g in space_permissions.external_user_group_ids
-        }
-        return ExternalAccess(
-            external_user_emails=space_permissions.external_user_emails,
-            external_user_group_ids=prefixed_groups,
-            is_public=space_permissions.is_public,
-        )
-
     return space_permissions
 
 
 def get_all_space_permissions(
     source_operations: ConfluenceSourceOperations,
     is_cloud: bool,
-    add_prefix: bool = False,
 ) -> dict[str, ExternalAccess]:
-    """
-    Get access permissions for all spaces in Confluence.
-
-    add_prefix: When True, prefix group IDs with source type (for indexing path).
-               When False (default), leave unprefixed (for permission sync path).
-    """
+    """Get access permissions for all spaces in Confluence."""
     logger.debug("Getting space permissions")
     # Gets all the spaces in the Confluence instance
     all_space_keys = [
@@ -222,9 +201,7 @@ def get_all_space_permissions(
     logger.debug("Got %s spaces from confluence", len(all_space_keys))
     space_permissions_by_space_key: dict[str, ExternalAccess] = {}
     for space_key in all_space_keys:
-        space_permissions = get_space_permission(
-            source_operations, space_key, is_cloud, add_prefix
-        )
+        space_permissions = get_space_permission(source_operations, space_key, is_cloud)
 
         # Stores the permissions for each space
         space_permissions_by_space_key[space_key] = space_permissions

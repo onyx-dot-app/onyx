@@ -11,19 +11,22 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from onyx.db.action_policy import get_or_create_gated_app_id
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import (
-    GatedAppKind,
+    PluginInstallationPolicy,
     ScheduledTaskRunStatus,
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
 )
-from onyx.db.mcp import create_mcp_server__no_commit, update_mcp_server__no_commit
-from onyx.db.models import ScheduledTask, ScheduledTaskRun, Tool
+from onyx.db.models import ScheduledTask, ScheduledTaskRun
 from onyx.db.scheduled_task import insert_run, mark_run_status
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    give_access,
+    make_mcp_integration,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
@@ -55,7 +58,7 @@ def _create_task(
     editor_payload: dict[str, Any] | None = None,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
     run_immediately: bool = False,
-    action_policies: list[dict[str, Any]] | None = None,
+    integrations: list[dict[str, Any]] | None = None,
 ) -> httpx.Response:
     body: dict[str, Any] = {
         "name": name or f"task-{uuid4().hex[:8]}",
@@ -65,8 +68,8 @@ def _create_task(
         "status": status.value,
         "run_immediately": run_immediately,
     }
-    if action_policies is not None:
-        body["action_policies"] = action_policies
+    if integrations is not None:
+        body["integrations"] = integrations
     return client.post(
         _url(),
         json=body,
@@ -145,29 +148,28 @@ def _get_runs_for_task(task_id: UUID) -> list[ScheduledTaskRun]:
         )
 
 
-def _create_mcp_server(owner: str, *, available_in_craft: bool) -> int:
+@pytest.fixture
+def task_integration() -> Generator[int, None, None]:
+    """An MCP integration with one action that each user has on."""
     with get_session_with_current_tenant() as db_session:
-        server = create_mcp_server__no_commit(
-            owner_email=owner,
-            name=f"scheduled-task-mcp-{uuid4().hex[:8]}",
-            description=None,
-            server_url="https://example.com/mcp",
-            auth_type=None,
-            transport=None,
-            auth_performer=None,
-            db_session=db_session,
-            is_public=True,
+        integration, _ = make_mcp_integration(
+            db_session,
+            server_url=f"https://{uuid4().hex[:8]}.example.com/mcp",
+            name=f"task-mcp-{uuid4().hex[:6]}",
+            tools=("send_report",),
         )
-        update_mcp_server__no_commit(
-            server_id=server.id,
-            db_session=db_session,
-            available_in_craft=available_in_craft,
+        give_access(
+            db_session,
+            [integration],
+            published=True,
+            installation_policy=PluginInstallationPolicy.DEFAULT,
         )
-        db_session.add(
-            Tool(name="send_report", description="Send report", mcp_server_id=server.id)
-        )
-        db_session.commit()
-        return server.id
+        integration_id = integration.id
+    try:
+        yield integration_id
+    finally:
+        with get_session_with_current_tenant() as db_session:
+            delete_integrations(db_session, [integration_id])
 
 
 def test_create_task_compiles_cron(admin_user: DATestUser) -> None:
@@ -187,70 +189,53 @@ def test_create_task_compiles_cron(admin_user: DATestUser) -> None:
     assert row.cron_expression == cron
 
 
-def _mcp_settings(server_id: int, policy: str | None) -> dict[str, Any]:
-    with get_session_with_current_tenant() as db_session:
-        app_id = get_or_create_gated_app_id(
-            db_session, GatedAppKind.MCP_SERVER, server_id
-        )
-        db_session.commit()
-    return {
-        "gated_app_id": app_id,
-        "enabled": policy is not None,
-        "action_policies": {"send_report": policy} if policy else {},
+def test_create_and_patch_task_integrations(
+    admin_user: DATestUser, task_integration: int
+) -> None:
+    link = {
+        "integration_id": task_integration,
+        "action_settings": {"default": "inherit", "actions": {"send_report": "allow"}},
     }
-
-
-def test_create_and_patch_mcp_action_policies(admin_user: DATestUser) -> None:
-    server_a = _create_mcp_server(admin_user.email, available_in_craft=True)
-    server_b = _create_mcp_server(admin_user.email, available_in_craft=True)
-    unavailable = _create_mcp_server(admin_user.email, available_in_craft=False)
-    first = _mcp_settings(server_a, "ALWAYS")
-    second = _mcp_settings(server_b, "ALWAYS")
-    response = _create_task(admin_user, action_policies=[first, second])
+    response = _create_task(admin_user, integrations=[link])
     response.raise_for_status()
     task_id = UUID(response.json()["id"])
-    assert len(response.json()["action_policies"]) == 2
-    response = _patch_task(
-        admin_user, task_id, {"action_policies": [{**second, "enabled": False}]}
+    assert response.json()["integrations"] == [link]
+
+    response = client.get(
+        _url(str(task_id), "action-policies"),
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
     )
     response.raise_for_status()
-    saved = {
-        setting["gated_app_id"]: setting
-        for setting in response.json()["action_policies"]
+    view = next(row for row in response.json() if row["id"] == task_integration)
+    assert view["enabled"] is True
+    assert view["runnable"] is True
+    assert view["action_settings"] == link["action_settings"]
+    action = view["actions"][0]
+    assert action["key"] == "send_report"
+    assert action["integration_policy"] == "ask"
+    assert action["locked"] is False
+
+    response = _patch_task(admin_user, task_id, {"name": "Renamed"})
+    response.raise_for_status()
+    assert response.json()["integrations"] == [link]
+    response = _patch_task(admin_user, task_id, {"integrations": []})
+    response.raise_for_status()
+    assert response.json()["integrations"] == []
+
+
+def test_task_integrations_reject_unknown_integrations_and_actions(
+    admin_user: DATestUser, task_integration: int
+) -> None:
+    unknown_action = {
+        "integration_id": task_integration,
+        "action_settings": {"actions": {"not_an_action": "allow"}},
     }
-    assert saved[first["gated_app_id"]]["enabled"] is True
-    assert saved[second["gated_app_id"]]["enabled"] is False
-    assert saved[second["gated_app_id"]]["action_policies"] == second["action_policies"]
-    # Clearing the submitted map removes dormant choices as well.
-    response = _patch_task(
-        admin_user, task_id, {"action_policies": [_mcp_settings(server_b, None)]}
+    assert _create_task(admin_user, integrations=[unknown_action]).status_code == 400
+    unknown_integration = {"integration_id": -1, "action_settings": {}}
+    assert (
+        _create_task(admin_user, integrations=[unknown_integration]).status_code == 404
     )
-    response.raise_for_status()
-    assert response.json()["action_policies"] == [first]
-    response = _patch_task(
-        admin_user,
-        task_id,
-        {"action_policies": [_mcp_settings(unavailable, "ALWAYS")]},
-    )
-    assert response.status_code == 404
-
-
-def test_patch_preserves_unavailable_mcp_choices(admin_user: DATestUser) -> None:
-    server_id = _create_mcp_server(admin_user.email, available_in_craft=True)
-    settings = _mcp_settings(server_id, "ALWAYS")
-    response = _create_task(admin_user, action_policies=[settings])
-    response.raise_for_status()
-    task_id = UUID(response.json()["id"])
-    with get_session_with_current_tenant() as db_session:
-        update_mcp_server__no_commit(
-            server_id=server_id, db_session=db_session, available_in_craft=False
-        )
-        db_session.commit()
-    response = _patch_task(admin_user, task_id, {"name": "Updated task"})
-    response.raise_for_status()
-    assert response.json()["action_policies"] == [settings]
-    response = _patch_task(admin_user, task_id, {"action_policies": [settings]})
-    assert response.status_code == 404
 
 
 def test_create_task_interval_days_requires_time_of_day(admin_user: DATestUser) -> None:

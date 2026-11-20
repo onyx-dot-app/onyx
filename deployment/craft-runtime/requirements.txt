@@ -692,6 +692,7 @@ lxml==6.1.1 \
     # via
     #   -c deployment/craft-runtime/requirements.txt
     #   -r deployment/craft-runtime/requirements.in
+    #   power-pptx
     #   python-docx
     #   python-pptx
 matplotlib==3.11.0 \
@@ -988,7 +989,12 @@ pillow==13.0.0 \
     #   -r deployment/craft-runtime/requirements.in
     #   matplotlib
     #   pdfplumber
+    #   power-pptx
     #   python-pptx
+power-pptx==2.15.0 \
+    --hash=sha256:81ef8e5bdcad9c6f5a0a61211dc5093fcc2a51a942d5a8632fd910e3d4a75924 \
+    --hash=sha256:a59b2ab08ce3dfe55e2631cd594523cb01da4a64f078f6e1ca7cba9d7a774712
+    # via -r deployment/craft-runtime/requirements.in
 pycparser==3.0 \
     --hash=sha256:600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29 \
     --hash=sha256:b727414169a36b7d524c1c3e31839a521725078d7b2ff038656844266160a992
@@ -1063,6 +1069,7 @@ typing-extensions==4.15.0 \
     --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548
     # via
     #   -c deployment/craft-runtime/requirements.txt
+    #   power-pptx
     #   python-docx
     #   python-pptx
 urllib3==2.8.0 \
@@ -1076,4 +1083,5 @@ xlsxwriter==3.2.9 \
     --hash=sha256:9a5db42bc5dff014806c58a20b9eae7322a134abb6fce3c92c181bfb275ec5b3
     # via
     #   -c deployment/craft-runtime/requirements.txt
+    #   power-pptx
     #   python-pptx

@@ -10,12 +10,12 @@ import json
 from collections.abc import Generator
 from threading import Event, Lock
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi import BackgroundTasks, Request
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -36,13 +36,12 @@ from onyx.db.chat import (
     delete_messages_and_files_from_chat_session,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.mcp import create_mcp_server__no_commit
+from onyx.db.enums import PluginInstallationPolicy
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
     ChatResponseCheckpoint,
     ChatSession,
-    MCPServer,
     User,
 )
 from onyx.llm.cancellation import CancellationSignal
@@ -67,25 +66,41 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    AWAITING_APPROVAL,
+    AWAITING_USER,
     OverallStop,
     Packet,
     ToolApprovalRequest,
 )
-from onyx.tools.models import ChatToolSelection
+from onyx.tools.models import CapabilityEntry, ToolOptions
 from onyx.tools.tool_constructor import SearchToolConfig
-from tests.external_dependency_unit.chat.test_parked_agent_handoff import _gated
+from tests.external_dependency_unit.chat.test_parked_agent_handoff import (
+    ACTION,
+    _gated,
+)
 from tests.external_dependency_unit.chat.test_wait_agents import (
     ScriptedLLM,
     _wait_until,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    give_access,
+    make_mcp_integration,
+)
 from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool
 
 # A status request without pass-through headers.
 _NO_HEADERS = Request({"type": "http", "headers": []})
 # Two models of one turn; the patched model factory serves both.
 _TWO_MODELS = [LLMOverride(model_version="a"), LLMOverride(model_version="b")]
+
+
+@pytest.fixture(autouse=True)
+def direct_tools() -> Generator[None, None, None]:
+    """The scripted model calls the gated tool directly, so code mode is off;
+    see the `code_mode` fixture in tests/external_dependency_unit/conftest.py."""
+    with patch("onyx.chat.agent.CODE_MODE_ENABLED", False):
+        yield
 
 
 class Script:
@@ -125,13 +140,13 @@ class ApprovalTurns:
     waits for approval. Reads and decisions use their own sessions, since
     turns read the user on their threads."""
 
-    def __init__(self, user: User, chat_session_id: UUID, server_id: int) -> None:
+    def __init__(self, user: User, chat_session_id: UUID, integration_id: int) -> None:
         self.user = user
         self.chat_session_id = chat_session_id
         self.sent: list[str] = []
-        self.tool = _gated(server_id, self.sent)
+        self.tool = _gated(integration_id, self.sent)
         # The tool limits and search filters that each turn built its tools with.
-        self.tool_limits: list[tuple[list[int] | None, BaseFilters | None]] = []
+        self.tool_limits: list[tuple[ToolOptions | None, BaseFilters | None]] = []
 
     def start(
         self,
@@ -139,23 +154,23 @@ class ApprovalTurns:
         script: Script,
         *,
         models: list[LLMOverride] | None = None,
-        selection: ChatToolSelection | None = None,
+        options: ToolOptions | None = None,
         additional_context: str | None = None,
     ) -> list[OverallStop]:
-        """Send a message, to several `models` if given, limited to the tools
-        and search filters of `selection` and with the request-only
+        """Send a message, to several `models` if given, limited to the tool
+        `options` and with the request-only
         `additional_context`; returns the stops of the turn."""
 
         def construct_tools(
             *,
-            allowed_tool_ids: list[int] | None,
+            tool_options: ToolOptions | None,
             search_tool_config: SearchToolConfig,
             **_kwargs: object,
-        ) -> dict[int, list[FakeMCPTool]]:
+        ) -> list[FakeMCPTool]:
             self.tool_limits.append(
-                (allowed_tool_ids, search_tool_config.user_selected_filters)
+                (tool_options, search_tool_config.user_selected_filters)
             )
-            return {self.tool.id: [self.tool]}
+            return [self.tool]
 
         monkeypatch.setattr("onyx.chat.execution.construct_tools", construct_tools)
         model = ScriptedLLM(script.generate)
@@ -166,7 +181,7 @@ class ApprovalTurns:
             message="Email the team",
             chat_session_id=self.chat_session_id,
             additional_context=additional_context,
-            **(selection.model_dump() if selection else {}),
+            tool_options=options,
         )
         return [
             packet.obj
@@ -216,15 +231,14 @@ def turns(
     db_session: Session, make_test_user: MakeTestUser
 ) -> Generator[ApprovalTurns, None, None]:
     user = make_test_user("approval_continuations")
-    server = create_mcp_server__no_commit(
-        owner_email=user.email,
-        name=f"continuations_{uuid4().hex[:8]}",
-        description=None,
+    integration, _ = make_mcp_integration(
+        db_session,
         server_url="https://example.com/mcp",
-        auth_type=None,
-        transport=None,
-        auth_performer=None,
-        db_session=db_session,
+        name=f"continuations_{uuid4().hex[:8]}",
+        tools=[ACTION],
+    )
+    give_access(
+        db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
     )
     chat = ChatSession(
         id=uuid4(),
@@ -234,25 +248,23 @@ def turns(
     )
     db_session.add(chat)
     db_session.commit()
-    chat_id, server_id = chat.id, server.id
+    chat_id, integration_id = chat.id, integration.id
     try:
-        yield ApprovalTurns(user, chat_id, server_id)
+        yield ApprovalTurns(user, chat_id, integration_id)
     finally:
         try:
             assert chat_turn_work.wait_idle(timeout=30)
         finally:
             db_session.rollback()
             delete_messages_and_files_from_chat_session(chat_id, db_session)
-            # Cascades to the server's app identity and requests.
-            db_session.execute(delete(MCPServer).where(MCPServer.id == server_id))
-            db_session.commit()
+            delete_integrations(db_session, [integration_id])
 
 
 def _park_both(
     turns: ApprovalTurns, monkeypatch: pytest.MonkeyPatch, script: Script
 ) -> list[ApprovalRequest]:
     stops = turns.start(monkeypatch, script, models=_TWO_MODELS)
-    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL] * 2
+    assert [stop.stop_reason for stop in stops] == [AWAITING_USER] * 2
     requests = turns.requests()
     assert len(requests) == 2
     return requests
@@ -318,7 +330,7 @@ def test_a_continuation_that_fails_to_start_for_a_moment_retries_alone(
     until then."""
     script = Script(turns.tool)
     stops = turns.start(monkeypatch, script)
-    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
+    assert [stop.stop_reason for stop in stops] == [AWAITING_USER]
     [request] = turns.requests()
     failures = [OperationalError("SELECT 1", {}, Exception("connection lost"))]
     prepare = process_message.prepare_chat_turn
@@ -365,12 +377,12 @@ def test_a_continuation_keeps_the_tools_and_search_filters_of_its_request(
     """A request limits its turn to some tools and search filters that the
     chat does not save. Its response parks for approval and continues after
     the decision with the same limits, not with every tool of the agent."""
-    selection = ChatToolSelection(
-        allowed_tool_ids=[turns.tool.id],
+    options = ToolOptions(
+        allowed=[CapabilityEntry(tool_id=1)],
         internal_search_filters=BaseFilters(source_type=[DocumentSource.WEB]),
     )
-    stops = turns.start(monkeypatch, Script(turns.tool), selection=selection)
-    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
+    stops = turns.start(monkeypatch, Script(turns.tool), options=options)
+    assert [stop.stop_reason for stop in stops] == [AWAITING_USER]
     [request] = turns.requests()
 
     turns.decide(request)
@@ -380,7 +392,7 @@ def test_a_continuation_keeps_the_tools_and_search_filters_of_its_request(
         "the response completes",
     )
     assert turns.sent == ["team"]
-    limits = (selection.allowed_tool_ids, selection.internal_search_filters)
+    limits = (options, options.internal_search_filters)
     assert turns.tool_limits == [limits, limits]
 
 
@@ -392,7 +404,7 @@ def test_a_parked_response_saves_no_request_context(
     continues after the decision."""
     context = f"open tab {uuid4().hex}"
     stops = turns.start(monkeypatch, Script(turns.tool), additional_context=context)
-    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
+    assert [stop.stop_reason for stop in stops] == [AWAITING_USER]
     [request] = turns.requests()
     with get_session_with_current_tenant() as session:
         checkpoint = session.get_one(ChatResponseCheckpoint, request.chat_message_id)
@@ -415,7 +427,7 @@ def test_the_latest_page_reaches_back_to_a_waiting_reply(
     so a client that loads only that page shows its waiting card. An older
     page keeps its own limit."""
     stops = turns.start(monkeypatch, Script(turns.tool))
-    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
+    assert [stop.stop_reason for stop in stops] == [AWAITING_USER]
     [request] = turns.requests()
     with get_session_with_current_tenant() as session:
         last = session.get_one(ChatMessage, request.chat_message_id)

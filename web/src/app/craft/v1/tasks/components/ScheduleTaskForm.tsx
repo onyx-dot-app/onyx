@@ -16,7 +16,6 @@ import { SettingsLayouts, InputVertical, toast, Section } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
 import TaskActionPolicies from "@/app/craft/v1/tasks/components/TaskActionPolicies";
-import type { TaskAppActionPolicies } from "@/lib/plugins/types";
 import {
   compileLocalPayloadToUtcCron,
   localPayloadToUtcPayload,
@@ -41,6 +40,7 @@ import type {
   ScheduledTaskCreateBody,
   ScheduledTaskDetail,
   ScheduledTaskPatchBody,
+  TaskIntegrationLink,
 } from "@/app/craft/v1/tasks/types";
 import {
   createScheduledTask,
@@ -85,8 +85,8 @@ export default function ScheduleTaskForm({
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
   const [payload, setPayload] = useState<EditorPayload>(initial.payload);
-  const [actionPolicies, setActionPolicies] = useState<
-    TaskAppActionPolicies[] | null
+  const [integrations, setIntegrations] = useState<
+    TaskIntegrationLink[] | null
   >(null);
   const [saving, setSaving] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
@@ -97,8 +97,7 @@ export default function ScheduleTaskForm({
   const { data: externalAppsData } = useUserExternalApps();
   const { data: craftMcpData } = useCraftMcpServers();
   const pickerSections = useMemo(
-    () =>
-      toPickerSections(skillsData, externalAppsData, craftMcpData?.mcp_servers),
+    () => toPickerSections(skillsData, externalAppsData, craftMcpData),
     [skillsData, externalAppsData, craftMcpData]
   );
   const pickPromptEntry = useCallback(
@@ -155,7 +154,7 @@ export default function ScheduleTaskForm({
     !promptError &&
     !scheduleError &&
     !saving &&
-    actionPolicies !== null;
+    integrations !== null;
 
   // Reason a submit button is blocked, surfaced via the `Disabled` wrapper's
   // tooltip. A natively-disabled <button> is inert and never fires hover
@@ -165,11 +164,11 @@ export default function ScheduleTaskForm({
     : (nameError ??
       promptError ??
       scheduleError ??
-      (actionPolicies === null ? tActionPolicies("loading") : undefined));
+      (integrations === null ? tActionPolicies("loading") : undefined));
 
   const submit = useCallback(
     async (runImmediately: boolean) => {
-      if (!compiled.ok || actionPolicies === null) return; // validation should already block, but typescript needs this
+      if (!compiled.ok || integrations === null) return; // validation should already block, but typescript needs this
       setSaving(true);
       try {
         const storagePayload = localPayloadToUtcPayload(mode, payload);
@@ -179,7 +178,7 @@ export default function ScheduleTaskForm({
             prompt: trimmedPrompt,
             editor_mode: mode,
             editor_payload: storagePayload,
-            action_policies: actionPolicies,
+            integrations,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
@@ -199,7 +198,7 @@ export default function ScheduleTaskForm({
             editor_mode: mode,
             editor_payload: storagePayload,
             run_immediately: runImmediately,
-            action_policies: actionPolicies,
+            integrations,
           };
           await createScheduledTask(body);
           await mutate(SWR_KEYS.scheduledTasks);
@@ -223,7 +222,7 @@ export default function ScheduleTaskForm({
       mode,
       mutate,
       payload,
-      actionPolicies,
+      integrations,
       navigation,
       trimmedName,
       trimmedPrompt,
@@ -356,8 +355,8 @@ export default function ScheduleTaskForm({
         <Section alignItems="stretch">
           <TaskActionPolicies
             taskId={initial.taskId}
-            value={actionPolicies}
-            onChange={setActionPolicies}
+            value={integrations}
+            onChange={setIntegrations}
           />
         </Section>
       </SettingsLayouts.Body>

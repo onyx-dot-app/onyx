@@ -58,14 +58,6 @@ const isCodeInterpreterTool = (tool: ToolSnapshot): boolean => {
   );
 };
 
-const isCodingAgentTool = (tool: ToolSnapshot): boolean => {
-  return (
-    tool.in_code_tool_id === "CodingAgentTool" ||
-    tool.name === "coding_agent" ||
-    tool.display_name?.toLowerCase().includes("coding agent")
-  );
-};
-
 export function getIconForAction(
   action: ToolSnapshot
 ): (props: IconProps) => JSX.Element {
@@ -75,7 +67,6 @@ export function getIconForAction(
   if (isKnowledgeGraphTool(action)) return SvgServer;
   if (isOpenUrlTool(action)) return SvgLink;
   if (isCodeInterpreterTool(action)) return SvgTerminal;
-  if (isCodingAgentTool(action)) return SvgCpu;
   return SvgCpu;
 }
 

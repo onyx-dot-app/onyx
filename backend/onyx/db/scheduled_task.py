@@ -19,26 +19,28 @@ from uuid import UUID
 from sqlalchemy import and_, case, desc, func, literal, select, update
 from sqlalchemy.orm import Session, selectinload
 
-from onyx.db.action_policy import replace_task_action_policies
 from onyx.db.enums import (
     ScheduledTaskErrorClass,
     ScheduledTaskRunStatus,
     ScheduledTaskSkipReason,
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
+    SessionOrigin,
 )
 from onyx.db.models import (
+    BuildSession,
     ScheduledTask,
     ScheduledTaskRun,
     User,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.models import TaskAppActionPolicies
+from onyx.integrations.craft import replace_task_integrations__no_commit
 from onyx.server.features.build.scheduled_tasks.schedule import (
     EditorMode,
     compute_next_run_at,
 )
+from onyx.tools.models import IntegrationLinkConfiguration
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -58,7 +60,7 @@ def create_scheduled_task(
     cron_expression: str,
     editor_mode: EditorMode,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
-    action_policies: list[TaskAppActionPolicies] | None = None,
+    integrations: list[IntegrationLinkConfiguration] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Insert a new ``ScheduledTask``.
@@ -88,9 +90,65 @@ def create_scheduled_task(
     user = db_session.get(User, user_id)
     if user is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
-    if action_policies is not None:
-        replace_task_action_policies(db_session, user, task, action_policies)
+    if integrations is not None:
+        replace_task_integrations__no_commit(db_session, user, task.id, integrations)
     return task
+
+
+def get_running_task_id(
+    db_session: Session, session_id: UUID, user_id: UUID
+) -> UUID | None:
+    return db_session.scalar(
+        select(ScheduledTaskRun.task_id)
+        .join(BuildSession, BuildSession.id == ScheduledTaskRun.session_id)
+        .where(
+            BuildSession.id == session_id,
+            BuildSession.user_id == user_id,
+            ScheduledTaskRun.status == ScheduledTaskRunStatus.RUNNING,
+        )
+        .limit(1)
+    )
+
+
+def get_scheduled_task_id_for_session(
+    db_session: Session, session_id: UUID
+) -> UUID | None:
+    """The task of the run that made the session; None for another session."""
+    return db_session.scalar(
+        select(ScheduledTaskRun.task_id).where(
+            ScheduledTaskRun.session_id == session_id
+        )
+    )
+
+
+def get_active_scheduled_task_context(
+    db_session: Session, session_id: UUID
+) -> tuple[UUID, UUID] | None:
+    """Return running task authority; reject inactive scheduled sessions.
+
+    Only interactive and Slack sessions can return None and use personal policies.
+    """
+    row = db_session.execute(
+        select(
+            BuildSession.origin,
+            ScheduledTaskRun.id,
+            ScheduledTaskRun.task_id,
+            ScheduledTaskRun.status,
+        )
+        .outerjoin(ScheduledTaskRun, ScheduledTaskRun.session_id == BuildSession.id)
+        .where(BuildSession.id == session_id)
+    ).first()
+    if row is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session no longer exists")
+    origin, run_id, task_id, status = row
+    if run_id is not None and status == ScheduledTaskRunStatus.RUNNING:
+        return run_id, task_id
+    if run_id is not None or origin == SessionOrigin.SCHEDULED:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Scheduled execution is no longer active",
+        )
+    return None
 
 
 def get_scheduled_task(
@@ -147,7 +205,7 @@ def update_scheduled_task(
     cron_expression: str | None = None,
     editor_mode: EditorMode | None = None,
     status: ScheduledTaskStatus | None = None,
-    action_policies: list[TaskAppActionPolicies] | None = None,
+    integrations: list[IntegrationLinkConfiguration] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Apply a partial update to a scheduled task.
@@ -189,11 +247,11 @@ def update_scheduled_task(
     elif schedule_changed and task.status == ScheduledTaskStatus.ACTIVE:
         task.next_run_at = compute_next_run_at(task.cron_expression, now)
 
-    if action_policies is not None:
+    if integrations is not None:
         user = db_session.get(User, user_id)
         if user is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
-        replace_task_action_policies(db_session, user, task, action_policies)
+        replace_task_integrations__no_commit(db_session, user, task.id, integrations)
     db_session.flush()
     return task
 

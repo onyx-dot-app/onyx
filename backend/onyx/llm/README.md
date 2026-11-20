@@ -69,7 +69,7 @@ All content events identify their block through `content_index`.
 During streaming, the caller retains unfinished arguments in `ToolCall.raw_arguments`.
 Parsed `arguments` are available after the tool-call end event. Incomplete calls must not execute.
 Consumers that display arguments as they arrive can decode the raw fragments with `parse_partial_object`.
-Chat does this for Python code and think-tool reasoning; other tools need no partial parsing.
+Chat does this for Python code.
 
 Thinking deltas retain provider replay blocks. Generation lifecycle events carry status and usage, without message content.
 A successful stream ends with `done`. Build the complete message by applying the content events.
@@ -91,7 +91,9 @@ from contextlib import closing
 from onyx.llm.cancellation import CancellationSignal
 
 signal = CancellationSignal()
-with closing(client.stream(request, GenerationContext(flow=flow, cancellation=signal))) as events:
+with closing(
+    client.stream(request, GenerationContext(flow=flow, cancellation=signal))
+) as events:
     for event in events:
         if event.type == "text_delta":
             print(event.text, end="")

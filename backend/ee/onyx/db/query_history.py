@@ -7,8 +7,7 @@ from sqlalchemy.orm import Session, contains_eager, joinedload
 from sqlalchemy.sql import case, func, select
 from sqlalchemy.sql.expression import UnaryExpression, literal
 
-from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
-from onyx.configs.constants import QAFeedbackType
+from onyx.configs.constants import QUERY_HISTORY_TASK_NAME_PREFIX, QAFeedbackType
 from onyx.db.chat import (
     content_persisting_sessions_filter,
     visible_chat_messages_filter,

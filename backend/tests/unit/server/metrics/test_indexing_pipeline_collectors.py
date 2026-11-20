@@ -207,6 +207,7 @@ class TestQueueDepthCollector:
         assert unacked_family.name == "onyx_queue_unacked"
         unacked_labels = {s.labels["queue"] for s in unacked_family.samples}
         assert "docfetching" in unacked_labels
+        assert "docconversion" in unacked_labels
         assert "docprocessing" in unacked_labels
 
         assert age_family.name == "onyx_queue_oldest_task_age_seconds"

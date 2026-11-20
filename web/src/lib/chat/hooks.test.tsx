@@ -4,8 +4,14 @@ import {
   PacketType,
   ToolApprovalRequest,
 } from "@/app/app/services/streamingModels";
-import { useChatSessionQueue, useToolApprovals } from "@/lib/chat/hooks";
-import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
+import {
+  useChatSessionQueue,
+  useSendChatMessageFromURL,
+  useToolRequests,
+} from "@/lib/chat/hooks";
+import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { refreshChatSession } from "@/lib/chat/settleChatSession";
 
@@ -13,6 +19,27 @@ jest.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 jest.mock("@/lib/chat/settleChatSession", () => ({
   ...jest.requireActual("@/lib/chat/settleChatSession"),
   refreshChatSession: jest.fn(async () => {}),
+}));
+jest.mock("@opal/navigation", () => ({
+  ...jest.requireActual("@opal/navigation"),
+  useNavigation: () => ({ go: jest.fn() }),
+  useSearchParams: () =>
+    new URLSearchParams({
+      "user-prompt": "hello",
+      "send-on-load": "true",
+      tags: "eng",
+    }),
+}));
+jest.mock("@/lib/projects/providers", () => ({
+  useProjectsContext: () => ({ currentMessageFiles: [] }),
+}));
+jest.mock("@/lib/connectors/hooks", () => ({
+  useAvailableSources: () => ({
+    availableSources: [],
+    isLoading: false,
+    settled: true,
+    error: undefined,
+  }),
 }));
 
 function request(
@@ -45,6 +72,28 @@ function resolved(approvalId: string, turnIndex: number): Packet {
   };
 }
 
+function question(questionRequestId: string, turnIndex: number): Packet {
+  return {
+    placement: { turn_index: turnIndex, tab_index: 0 },
+    obj: {
+      type: PacketType.TOOL_QUESTION_REQUEST,
+      question_request_id: questionRequestId,
+      tool_call_id: `call-${questionRequestId}`,
+      questions: [
+        {
+          id: "scope",
+          header: "Scope",
+          question: "Which scope?",
+          options: [
+            { label: "All", description: "Every file." },
+            { label: "Some", description: "Some files." },
+          ],
+        },
+      ],
+    },
+  };
+}
+
 function requestObj(packet: Packet): ToolApprovalRequest {
   if (packet.obj.type !== PacketType.TOOL_APPROVAL_REQUEST) {
     throw new Error("not a request");
@@ -53,27 +102,36 @@ function requestObj(packet: Packet): ToolApprovalRequest {
 }
 
 beforeEach(() =>
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null })
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  })
 );
 
-describe("useToolApprovals", () => {
+describe("useToolRequests", () => {
   it("keeps records of decided requests and leaves waiting ones out", () => {
     const first = request("first", 1);
     const packets = [first, request("second", 2), resolved("first", 1)];
 
-    const { result } = renderHook(() => useToolApprovals(packets));
+    const { result } = renderHook(() => useToolRequests(packets));
 
     expect(result.current).toEqual({
       records: [
-        { turnIndex: 1, request: requestObj(first), status: "approved" },
+        {
+          kind: "approval",
+          turnIndex: 1,
+          request: requestObj(first),
+          status: "approved",
+        },
       ],
-      awaitingApproval: true,
+      awaiting: "approval",
     });
   });
 
   it("follows packets appended to the same array", () => {
     const packets: Packet[] = [request("first", 1)];
-    const { result, rerender } = renderHook(() => useToolApprovals(packets));
+    const { result, rerender } = renderHook(() => useToolRequests(packets));
     expect(result.current.records).toEqual([]);
 
     // Streams append to the array they already passed.
@@ -81,15 +139,47 @@ describe("useToolApprovals", () => {
     rerender();
 
     expect(result.current.records[0]?.status).toBe("approved");
-    expect(result.current.awaitingApproval).toBe(false);
+    expect(result.current.awaiting).toBeNull();
   });
 
   it("does not wait on a background agent's request", () => {
     const packets = [request("agent", 1, "Researcher")];
 
-    const { result } = renderHook(() => useToolApprovals(packets));
+    const { result } = renderHook(() => useToolRequests(packets));
 
-    expect(result.current).toEqual({ records: [], awaitingApproval: false });
+    expect(result.current).toEqual({ records: [], awaiting: null });
+  });
+
+  it("waits for answers, then records how the user answered", () => {
+    const packets: Packet[] = [question("q", 1)];
+    const { result, rerender } = renderHook(() => useToolRequests(packets));
+    expect(result.current).toEqual({ records: [], awaiting: "answer" });
+
+    packets.push({
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: PacketType.TOOL_QUESTION_RESOLVED,
+        question_request_id: "q",
+        outcome: "answered",
+        answered_via: "message",
+        answers: null,
+        message: "Only the docs folder",
+      },
+    });
+    rerender();
+
+    expect(result.current.awaiting).toBeNull();
+    expect(result.current.records).toMatchObject([
+      {
+        kind: "question",
+        turnIndex: 1,
+        status: {
+          kind: "answered",
+          answers: null,
+          message: "Only the docs folder",
+        },
+      },
+    ]);
   });
 });
 
@@ -186,5 +276,60 @@ describe("useChatSessionQueue", () => {
     expect(
       fetchMock.mock.calls.every(([input]) => String(input).endsWith("/status"))
     ).toBe(true);
+  });
+});
+
+describe("useSendChatMessageFromURL", () => {
+  const toolConfiguration: ToolConfigurationHandle = {
+    stateOf: () => null,
+    setToolState: jest.fn(),
+    toggleToolState: jest.fn(),
+    clearPreferredTool: jest.fn(),
+    preferredToolId: null,
+    preferredAction: null,
+    disabledToolIds: [],
+    isIntegrationEnabled: () => true,
+    setIntegrationEnabled: jest.fn(),
+    allowed: null,
+    ready: true,
+    optionsLoaded: true,
+    filters: {
+      selectedSources: null,
+      documentSets: [],
+      tags: [],
+      timeRange: null,
+    },
+    setFilters: jest.fn(),
+    handOffTo: jest.fn(),
+    handOffToNewChatWith: jest.fn(),
+  };
+
+  test("a send-on-load query naming tags waits for them and applies them", async () => {
+    const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+      const body =
+        String(input) === SWR_KEYS.tags
+          ? { tags: [{ tag_key: "team", tag_value: "eng", source: "web" }] }
+          : [];
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    global.fetch = fetchMock;
+    const onSubmit = jest.fn();
+
+    renderHook(() =>
+      useSendChatMessageFromURL({
+        onSubmit,
+        deepResearch: false,
+        toolConfiguration,
+      })
+    );
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    const requested = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(requested).toContain(SWR_KEYS.tags);
+    expect(requested).not.toContain(SWR_KEYS.documentSets);
+    const update = jest.mocked(toolConfiguration.setFilters).mock.calls[0]![0];
+    expect(
+      update(toolConfiguration.filters).tags.map((tag) => tag.tag_value)
+    ).toEqual(["eng"]);
   });
 });

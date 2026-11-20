@@ -3,16 +3,32 @@ Base validator with common validation logic for document files.
 """
 
 import re
+import tempfile
+import zipfile
+from functools import cache
 from pathlib import Path
 
-import defusedxml.minidom
 import lxml.etree
 
 
+@cache
+def _load_schema(schema_path: Path) -> lxml.etree.XMLSchema:
+    xsd_doc = lxml.etree.parse(str(schema_path), base_url=str(schema_path))
+    return lxml.etree.XMLSchema(xsd_doc)
+
+
 class BaseSchemaValidator:
+    # Regular expressions for schema messages that are not errors. PowerPoint
+    # writes buSzPct in thousandths of a percent (25000-400000) and pitchFamily
+    # values from 0 to 127 that are not in the schema's list; the bundled
+    # ISO/IEC 29500 schemas reject both. Other values stay errors.
     IGNORED_VALIDATION_ERRORS = [
-        "hyphenationZone",
-        "purl.org/dc/terms",
+        r"hyphenationZone",
+        r"purl\.org/dc/terms",
+        r"buSzPct', attribute 'val': \[facet 'pattern'\] The value "
+        r"'(2[5-9]\d{3}|[3-9]\d{4}|[1-3]\d{5}|400000)' ",
+        r"attribute 'pitchFamily': \[facet 'enumeration'\] The value "
+        r"'(\d|[1-9]\d|1[01]\d|12[0-7])' ",
     ]
 
     UNIQUE_ID_REQUIREMENTS = {
@@ -72,6 +88,9 @@ class BaseSchemaValidator:
 
     MAIN_CONTENT_FOLDERS = {"word", "ppt", "xl"}
 
+    # Subfolders whose parts use a main content schema, e.g. ppt/slides/slide1.xml.
+    PART_FOLDER_SCHEMAS: dict[str, str] = {}
+
     OOXML_NAMESPACES = {
         "http://schemas.openxmlformats.org/officeDocument/2006/math",
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
@@ -96,6 +115,8 @@ class BaseSchemaValidator:
         self.verbose = verbose
 
         self.schemas_dir = Path(__file__).parent.parent / "schemas"
+        self._original_dir: tempfile.TemporaryDirectory[str] | None = None
+        self._original_errors: dict[Path, set[str]] = {}
 
         patterns = ["*.xml", "*.rels"]
         self.xml_files = [
@@ -109,43 +130,7 @@ class BaseSchemaValidator:
         raise NotImplementedError("Subclasses must implement the validate method")
 
     def repair(self) -> int:
-        return self.repair_whitespace_preservation()
-
-    def repair_whitespace_preservation(self) -> int:
-        repairs = 0
-
-        for xml_file in self.xml_files:
-            try:
-                content = xml_file.read_text(encoding="utf-8")
-                dom = defusedxml.minidom.parseString(content)
-                modified = False
-
-                for elem in dom.getElementsByTagName("*"):
-                    if elem.tagName.endswith(":t") and elem.firstChild:
-                        text = elem.firstChild.nodeValue
-                        if text and (
-                            text.startswith((" ", "\t")) or text.endswith((" ", "\t"))
-                        ):
-                            if elem.getAttribute("xml:space") != "preserve":
-                                elem.setAttribute("xml:space", "preserve")
-                                text_preview = (
-                                    repr(text[:30]) + "..."
-                                    if len(text) > 30
-                                    else repr(text)
-                                )
-                                print(
-                                    f"  Repaired: {xml_file.name}: Added xml:space='preserve' to {elem.tagName}: {text_preview}"
-                                )
-                                repairs += 1
-                                modified = True
-
-                if modified:
-                    xml_file.write_bytes(dom.toxml(encoding="UTF-8"))
-
-            except Exception:
-                pass
-
-        return repairs
+        return 0
 
     def validate_xml(self):
         errors = []
@@ -329,6 +314,8 @@ class BaseSchemaValidator:
                     ".//ns:Relationship",
                     namespaces={"ns": self.PACKAGE_RELATIONSHIPS_NAMESPACE},
                 ):
+                    if rel.get("TargetMode") == "External":
+                        continue
                     target = rel.get("Target")
                     if target and not target.startswith(("http", "mailto:")):
                         if target.startswith("/"):
@@ -622,7 +609,9 @@ class BaseSchemaValidator:
         new_errors = {
             e
             for e in new_errors
-            if not any(pattern in e for pattern in self.IGNORED_VALIDATION_ERRORS)
+            if not any(
+                re.search(pattern, e) for pattern in self.IGNORED_VALIDATION_ERRORS
+            )
         }
 
         if new_errors:
@@ -705,6 +694,9 @@ class BaseSchemaValidator:
         if xml_file.parent.name in self.MAIN_CONTENT_FOLDERS:
             return self.schemas_dir / self.SCHEMA_MAPPINGS[xml_file.parent.name]
 
+        if xml_file.parent.name in self.PART_FOLDER_SCHEMAS:
+            return self.schemas_dir / self.PART_FOLDER_SCHEMAS[xml_file.parent.name]
+
         return None
 
     def _clean_ignorable_namespaces(self, xml_doc):
@@ -760,12 +752,7 @@ class BaseSchemaValidator:
             return None, None
 
         try:
-            with open(schema_path, "rb") as xsd_file:
-                parser = lxml.etree.XMLParser()
-                xsd_doc = lxml.etree.parse(
-                    xsd_file, parser=parser, base_url=str(schema_path)
-                )
-                schema = lxml.etree.XMLSchema(xsd_doc)
+            schema = _load_schema(schema_path)
 
             with open(xml_file, "r") as f:
                 xml_doc = lxml.etree.parse(f)
@@ -795,28 +782,35 @@ class BaseSchemaValidator:
         if self.original_file is None:
             return set()
 
-        import tempfile
-        import zipfile
-
-        xml_file = Path(xml_file).resolve()
-        unpacked_dir = self.unpacked_dir.resolve()
-        relative_path = xml_file.relative_to(unpacked_dir)
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-
+        relative_path = Path(xml_file).resolve().relative_to(self.unpacked_dir)
+        if self._original_dir is None:
+            self._original_dir = tempfile.TemporaryDirectory()
             with zipfile.ZipFile(self.original_file, "r") as zip_ref:
-                zip_ref.extractall(temp_path)
+                zip_ref.extractall(
+                    self._original_dir.name,
+                    [n for n in zip_ref.namelist() if n.endswith((".xml", ".rels"))],
+                )
+        original_root = Path(self._original_dir.name)
 
-            original_xml_file = temp_path / relative_path
-
-            if not original_xml_file.exists():
-                return set()
-
-            is_valid, errors = self._validate_single_file_xsd(
-                original_xml_file, temp_path
-            )
-            return errors or set()
+        original_xml_file = original_root / relative_path
+        # Slides, layouts, masters, and notes are added, removed, and renamed
+        # while editing, so they are compared with every original part in their
+        # folder. Other parts are compared with the original of the same name.
+        if relative_path.parent.name in self.PART_FOLDER_SCHEMAS:
+            candidates = sorted(original_xml_file.parent.glob("*.xml"))
+        elif original_xml_file.exists():
+            candidates = [original_xml_file]
+        else:
+            candidates = []
+        errors: set[str] = set()
+        for candidate in candidates:
+            if candidate not in self._original_errors:
+                _, file_errors = self._validate_single_file_xsd(
+                    candidate, original_root
+                )
+                self._original_errors[candidate] = file_errors or set()
+            errors |= self._original_errors[candidate]
+        return errors
 
     def _remove_template_tags_from_text_nodes(self, xml_doc):
         warnings = []

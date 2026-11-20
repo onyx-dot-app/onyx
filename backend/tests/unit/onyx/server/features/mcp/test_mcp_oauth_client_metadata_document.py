@@ -1,9 +1,18 @@
+from unittest.mock import MagicMock
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from mcp.client.auth import TokenStorage
+from mcp.client.auth.utils import should_use_client_metadata_url
+from mcp.shared.auth import OAuthMetadata
+from pydantic import AnyHttpUrl
 
+from onyx.db.enums import MCPOAuthProviderMode
 from onyx.server.auth_check import PUBLIC_ENDPOINT_SPECS, is_route_in_spec_list
 from onyx.server.features.mcp import client_metadata
+from onyx.server.features.mcp import oauth as mcp_oauth
+from onyx.server.features.mcp.models import MCPServerConnection
 
 TEST_WEB_DOMAIN = "https://onyx.example.com"
 METADATA_ROUTE = "/mcp/oauth/client-metadata"
@@ -76,3 +85,39 @@ def test_mcp_oauth_cimd_client_id_is_recognized_by_shape(
     client_id: str | None, expected: bool
 ) -> None:
     assert client_metadata.is_mcp_oauth_cimd_client_id(client_id) is expected
+
+
+@pytest.mark.parametrize("cimd_enabled", [True, False])
+def test_a_server_with_cimd_off_registers_through_dcr(
+    monkeypatch: pytest.MonkeyPatch, cimd_enabled: bool
+) -> None:
+    metadata_url = f"{TEST_WEB_DOMAIN}/api/mcp/oauth/client-metadata"
+    monkeypatch.setattr(
+        mcp_oauth, "validated_mcp_oauth_client_metadata_url", lambda: metadata_url
+    )
+    provider = mcp_oauth.make_oauth_provider_with_storage(
+        MCPServerConnection(
+            id=1,
+            name="CIMD server",
+            server_url="https://mcp.example.com/mcp",
+            transport=None,
+            oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+            oauth_cimd_enabled=cimd_enabled,
+            oauth_authorization_endpoint=None,
+            oauth_token_endpoint=None,
+        ),
+        MagicMock(spec=TokenStorage),
+    )
+    advertises_cimd = OAuthMetadata(
+        issuer=AnyHttpUrl("https://auth.example.com"),
+        authorization_endpoint=AnyHttpUrl("https://auth.example.com/authorize"),
+        token_endpoint=AnyHttpUrl("https://auth.example.com/token"),
+        client_id_metadata_document_supported=True,
+    )
+
+    assert (
+        should_use_client_metadata_url(
+            advertises_cimd, provider.context.client_metadata_url
+        )
+        is cimd_enabled
+    )

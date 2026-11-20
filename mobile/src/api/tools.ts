@@ -4,10 +4,9 @@ import { apiFetch } from "@/api/client";
 import { QUERY_KEYS } from "@/api/query-keys";
 import { useSession } from "@/state/session";
 
-// The endpoint actually returns full ToolSnapshot objects; this only types the field callers
-// need — the id, to test membership.
-interface AvailableTool {
+export interface AvailableTool {
   id: number;
+  plugin_ids?: string[];
 }
 
 const EMPTY_TOOLS: AvailableTool[] = [];

@@ -29,7 +29,10 @@ import { timelineTokens } from "@/components/chat/timeline/primitives/timelineTo
 import { TimelineHeaderRow } from "@/components/chat/timeline/primitives/TimelineHeaderRow";
 import { TimelineRoot } from "@/components/chat/timeline/primitives/TimelineRoot";
 import { useTimelineExpansion } from "@/hooks/timeline/useTimelineExpansion";
-import { useTimelineHeader } from "@/hooks/timeline/useTimelineHeader";
+import {
+  AwaitingUser,
+  useTimelineHeader,
+} from "@/hooks/timeline/useTimelineHeader";
 import { useTimelineMetrics } from "@/hooks/timeline/useTimelineMetrics";
 import {
   TimelineUIState,
@@ -59,8 +62,8 @@ export interface AgentTimelineProps {
   streamingStartTime?: number;
   // A code mode program works between tool calls; it has no step.
   codeModeWorking?: boolean;
-  // A tool call waits for the user's decision.
-  awaitingApproval?: boolean;
+  // A tool call waits for the user's decision or answers.
+  awaitingUser?: AwaitingUser | null;
 }
 
 function TimelineContainer({
@@ -102,7 +105,7 @@ function areAgentTimelinePropsEqual(
     prev.toolProcessingDuration === next.toolProcessingDuration &&
     prev.streamingStartTime === next.streamingStartTime &&
     prev.codeModeWorking === next.codeModeWorking &&
-    prev.awaitingApproval === next.awaitingApproval
+    prev.awaitingUser === next.awaitingUser
   );
 }
 
@@ -120,13 +123,13 @@ export const AgentTimeline = memo(function AgentTimeline({
   toolProcessingDuration,
   streamingStartTime,
   codeModeWorking = false,
-  awaitingApproval = false,
+  awaitingUser = null,
 }: AgentTimelineProps) {
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason,
     codeModeWorking,
-    awaitingApproval,
+    awaitingUser,
   );
 
   const {
@@ -135,7 +138,6 @@ export const AgentTimeline = memo(function AgentTimeline({
     lastTurnGroup,
     lastStep,
     lastStepIsResearchAgent,
-    lastStepIsCodingAgent,
     lastStepSupportsCollapsedStreaming,
   } = useTimelineMetrics(turnGroups, userStopped);
 
@@ -205,7 +207,7 @@ export const AgentTimeline = memo(function AgentTimeline({
       parallelActiveStepHasCollapsedContent,
       finalAnswerComing,
       codeModeWorking,
-      awaitingApproval,
+      awaitingUser: awaitingUser !== null,
     }),
     [
       stopPacketSeen,
@@ -222,7 +224,7 @@ export const AgentTimeline = memo(function AgentTimeline({
       parallelActiveStepHasCollapsedContent,
       finalAnswerComing,
       codeModeWorking,
-      awaitingApproval,
+      awaitingUser,
     ],
   );
 
@@ -240,10 +242,9 @@ export const AgentTimeline = memo(function AgentTimeline({
 
   const collapsedRenderTypeOverride = useMemo(() => {
     if (lastStepIsResearchAgent) return RenderType.HIGHLIGHT;
-    if (lastStepIsCodingAgent) return RenderType.HIGHLIGHT;
     if (lastStepIsSearchTool) return RenderType.INLINE;
     return RenderType.COMPACT;
-  }, [lastStepIsResearchAgent, lastStepIsCodingAgent, lastStepIsSearchTool]);
+  }, [lastStepIsResearchAgent, lastStepIsSearchTool]);
 
   if (uiState === TimelineUIState.EMPTY) {
     return (

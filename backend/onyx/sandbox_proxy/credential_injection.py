@@ -101,6 +101,7 @@ class CredentialInjectionDispatcher:
 
         for name, value in headers.items():
             flow.request.headers[name] = value
+        _pin_host_header(flow.request)
         # Header NAMES only — never log the injected secret values.
         logger.debug(
             "credential_injected resolver=%s host=%s header_count=%s header_names=%s",
@@ -126,3 +127,15 @@ class CredentialInjectionDispatcher:
                     request.host,
                 )
         return None
+
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def _pin_host_header(request: http.Request) -> None:
+    """The sandbox sets the Host header, and an upstream can route on it. A
+    credential goes only to the host that the gate matched."""
+    host = f"[{request.host}]" if ":" in request.host else request.host
+    if _DEFAULT_PORTS.get(request.scheme) != request.port:
+        host = f"{host}:{request.port}"
+    request.host_header = host

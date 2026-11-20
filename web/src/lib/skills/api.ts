@@ -6,9 +6,12 @@
  * them to `toast.error` directly.
  */
 
+import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
 import type {
   CustomSkill,
   GitHubSkillsImportResult,
+  OrganizationLibraryDefaultAccess,
+  OrganizationLibraryDefaultPolicy,
   GitHubSkillsPreview,
   Skill,
   SkillBundleContents,
@@ -20,9 +23,11 @@ import type {
 async function handle<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let errorCode: string | undefined;
+    let info: ErrorResponseBody | null = null;
     let detail = `Request failed (${res.status})`;
     try {
       const body = await res.json();
+      info = body;
       if (typeof body?.error_code === "string") errorCode = body.error_code;
       if (typeof body?.detail === "string") detail = body.detail;
       else if (Array.isArray(body?.detail) && body.detail[0]?.msg) {
@@ -31,11 +36,9 @@ async function handle<T>(res: Response): Promise<T> {
     } catch {
       // Use the generic status message.
     }
-    const error = new Error(detail) as Error & {
-      errorCode: string | undefined;
-    };
-    error.errorCode = errorCode;
-    throw error;
+    throw Object.assign(new FetchError(detail, res.status, info), {
+      errorCode,
+    });
   }
   if (res.status === 204) {
     return undefined as T;
@@ -133,7 +136,6 @@ export interface CreateCustomSkillInput {
   description: string;
   instructions_markdown: string;
   auto_enable?: boolean;
-  external_app_id?: number;
   sharing?: SkillShareUpdatePayload;
 }
 
@@ -146,9 +148,6 @@ export async function createCustomSkillFromEditor(
   form.append("description", input.description);
   form.append("instructions_markdown", input.instructions_markdown);
   form.append("auto_enable", String(input.auto_enable ?? true));
-  if (input.external_app_id !== undefined) {
-    form.append("external_app_id", String(input.external_app_id));
-  }
   if (input.sharing) form.append("sharing", JSON.stringify(input.sharing));
   if (upload) form.append("upload", upload);
 
@@ -196,8 +195,15 @@ export async function setSkillEnabled(
   return handle<Skill>(res);
 }
 
+export interface SkillGroupSettingPayload {
+  group_id: number;
+  /** Null: the group uses the organization setting. */
+  installation_policy: SkillInstallationPolicy | null;
+}
+
 export interface SkillShareUpdatePayload {
-  installation_policy?: SkillInstallationPolicy;
+  /** Null: no own setting, so Default access applies. */
+  installation_policy?: SkillInstallationPolicy | null;
   user_shares?: {
     user_id: string;
     permission: SkillSharePermission;
@@ -207,6 +213,7 @@ export interface SkillShareUpdatePayload {
     permission: SkillSharePermission;
   }[];
   public_permission?: SkillSharePermission | null;
+  group_settings?: SkillGroupSettingPayload[];
 }
 
 export async function uploadUserSkillFiles(
@@ -333,4 +340,16 @@ export async function deleteUserSkill(skillId: string): Promise<void> {
     method: "DELETE",
   });
   await handle<void>(res);
+}
+
+/** Set the install setting of every published skill with no own setting. */
+export async function setOrganizationLibraryDefaultAccess(
+  policy: OrganizationLibraryDefaultPolicy
+): Promise<OrganizationLibraryDefaultAccess> {
+  const res = await fetch("/api/skills/organization-library/default-access", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ installation_policy: policy }),
+  });
+  return handle<OrganizationLibraryDefaultAccess>(res);
 }

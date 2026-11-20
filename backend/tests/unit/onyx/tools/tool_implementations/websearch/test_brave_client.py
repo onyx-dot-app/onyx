@@ -4,9 +4,9 @@ from typing import Any, cast
 
 import pytest
 import requests
-from fastapi import HTTPException
 
 import onyx.tools.tool_implementations.web_search.clients.brave_client as brave_module
+from onyx.error_handling.exceptions import OnyxError
 from onyx.tools.tool_implementations.web_search.clients.brave_client import BraveClient
 
 
@@ -175,7 +175,7 @@ def test_test_connection_maps_invalid_key_errors() -> None:
 
     client.search = _mock_search  # ty: ignore[invalid-assignment]
 
-    with pytest.raises(HTTPException, match="Invalid Brave API key"):
+    with pytest.raises(OnyxError, match="Invalid Brave API key"):
         client.test_connection()
 
 
@@ -187,7 +187,7 @@ def test_test_connection_maps_rate_limit_errors() -> None:
 
     client.search = _mock_search  # ty: ignore[invalid-assignment]
 
-    with pytest.raises(HTTPException, match="rate limit exceeded"):
+    with pytest.raises(OnyxError, match="rate limit exceeded"):
         client.test_connection()
 
 

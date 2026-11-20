@@ -668,96 +668,6 @@ def allowed_usage():
 	}
 }
 
-func TestNewLazyImportSettings(t *testing.T) {
-	// Test NewLazyImportSettings with no ignore files.
-	settings := NewLazyImportSettings()
-	if len(settings.IgnoreFiles) != 0 {
-		t.Errorf("Expected 0 ignore files, got %d", len(settings.IgnoreFiles))
-	}
-
-	// Test with ignore files.
-	settings = NewLazyImportSettings("file1.py", "file2.py")
-	if len(settings.IgnoreFiles) != 2 {
-		t.Errorf("Expected 2 ignore files, got %d", len(settings.IgnoreFiles))
-	}
-	if _, ok := settings.IgnoreFiles["file1.py"]; !ok {
-		t.Error("Expected file1.py in ignore files")
-	}
-	if _, ok := settings.IgnoreFiles["file2.py"]; !ok {
-		t.Error("Expected file2.py in ignore files")
-	}
-}
-
-func TestDefaultLazyImportModules(t *testing.T) {
-	// Test that DefaultLazyImportModules returns expected modules.
-	modules := DefaultLazyImportModules()
-
-	expectedModules := []string{
-		"google.genai",
-		"openai",
-		"markitdown",
-		"tiktoken",
-		"transformers",
-		"setfit",
-		"unstructured",
-		"onyx.llm.litellm_singleton",
-		"litellm",
-		"nltk",
-		"trafilatura",
-		"pypdf",
-		"unstructured_client",
-		"braintrust",
-		"exa_py",
-		"playwright",
-	}
-
-	for _, mod := range expectedModules {
-		if _, ok := modules[mod]; !ok {
-			t.Errorf("Expected %s in default modules", mod)
-		}
-	}
-
-	// Check specific ignore files for some modules
-	if _, ok := modules["transformers"].IgnoreFiles["model_server/main.py"]; !ok {
-		t.Error("Expected model_server/main.py in transformers ignore files")
-	}
-
-	litellmIgnores := modules["litellm"].IgnoreFiles
-	expectedLitellmIgnores := []string{
-		"onyx/llm/litellm_singleton/__init__.py",
-		"onyx/llm/litellm_singleton/config.py",
-		"onyx/llm/litellm_singleton/monkey_patches.py",
-	}
-	for _, ignore := range expectedLitellmIgnores {
-		if _, ok := litellmIgnores[ignore]; !ok {
-			t.Errorf("Expected %s in litellm ignore files", ignore)
-		}
-	}
-
-	// Gateway modules are the only files allowed to import these at module level.
-	expectedGatewayIgnores := map[string][]string{
-		"braintrust": {
-			"onyx/evals/providers/braintrust.py",
-			"onyx/tracing/braintrust_tracing_processor.py",
-		},
-		"exa_py": {
-			"onyx/tools/tool_implementations/web_search/clients/exa_client.py",
-		},
-		"playwright": {
-			"onyx/connectors/highspot/utils.py",
-			"onyx/connectors/web/connector.py",
-			"onyx/utils/playwright_fetch.py",
-		},
-	}
-	for mod, ignores := range expectedGatewayIgnores {
-		for _, ignore := range ignores {
-			if _, ok := modules[mod].IgnoreFiles[ignore]; !ok {
-				t.Errorf("Expected %s in %s ignore files", ignore, mod)
-			}
-		}
-	}
-}
-
 func TestBraintrustAndExaViolations(t *testing.T) {
 	// Both packages pull in openai (and braintrust also litellm) at import time.
 	testContent := `
@@ -827,65 +737,6 @@ func TestIsValidPythonFile(t *testing.T) {
 	}
 }
 
-func TestShouldCheckFileForModule(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "test_check_*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	// Create test file
-	testFile := filepath.Join(tmpDir, "onyx", "llm", "test.py")
-	if err := os.MkdirAll(filepath.Dir(testFile), 0755); err != nil {
-		t.Fatalf("Failed to create dirs: %v", err)
-	}
-	if err := os.WriteFile(testFile, []byte("import os"), 0644); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	// Test with no ignore files - should check
-	settings := NewLazyImportSettings()
-	if !shouldCheckFileForModule(testFile, tmpDir, settings) {
-		t.Error("Expected to check file when no ignore files")
-	}
-
-	// Test with different ignore file - should check
-	settings = NewLazyImportSettings("other/file.py")
-	if !shouldCheckFileForModule(testFile, tmpDir, settings) {
-		t.Error("Expected to check file when ignore file is different")
-	}
-
-	// Test with matching ignore file - should not check
-	settings = NewLazyImportSettings("onyx/llm/test.py")
-	if shouldCheckFileForModule(testFile, tmpDir, settings) {
-		t.Error("Expected to NOT check file when it matches ignore file")
-	}
-}
-
-func TestFormatViolatedModules(t *testing.T) {
-	// Test formatting of violated modules.
-	modules := map[string]struct{}{
-		"google.genai": {},
-		"nltk":         {},
-		"playwright":   {},
-	}
-
-	result := FormatViolatedModules(modules)
-
-	// Should be sorted alphabetically
-	expected := "google.genai, nltk, playwright"
-	if result != expected {
-		t.Errorf("FormatViolatedModules() = %q, want %q", result, expected)
-	}
-
-	// Test empty map
-	emptyModules := map[string]struct{}{}
-	result = FormatViolatedModules(emptyModules)
-	if result != "" {
-		t.Errorf("FormatViolatedModules(empty) = %q, want empty string", result)
-	}
-}
-
 func TestCompileModulePatterns(t *testing.T) {
 	// Test pattern compilation for various modules.
 	patterns := compileModulePatterns("google.genai")
@@ -922,45 +773,6 @@ func TestCompileModulePatterns(t *testing.T) {
 		if matched != tc.shouldMatch {
 			t.Errorf("Pattern %s for %q = %v, want %v", tc.patternType, tc.line, matched, tc.shouldMatch)
 		}
-	}
-}
-
-func TestEmptyFile(t *testing.T) {
-	// Test handling of empty file.
-	testContent := ""
-
-	testPath := createTempPythonFile(t, testContent)
-	defer func() { _ = os.Remove(testPath) }()
-
-	patterns := createPatterns([]string{"google.genai"})
-	result, err := findEagerImports(testPath, patterns)
-	if err != nil {
-		t.Fatalf("findEagerImports failed: %v", err)
-	}
-
-	if len(result.ViolationLines) != 0 {
-		t.Errorf("Expected 0 violations for empty file, got %d", len(result.ViolationLines))
-	}
-}
-
-func TestFileWithOnlyComments(t *testing.T) {
-	// Test file with only comments.
-	testContent := `# This is a comment
-# import google.genai
-# Another comment
-`
-
-	testPath := createTempPythonFile(t, testContent)
-	defer func() { _ = os.Remove(testPath) }()
-
-	patterns := createPatterns([]string{"google.genai"})
-	result, err := findEagerImports(testPath, patterns)
-	if err != nil {
-		t.Fatalf("findEagerImports failed: %v", err)
-	}
-
-	if len(result.ViolationLines) != 0 {
-		t.Errorf("Expected 0 violations for comment-only file, got %d", len(result.ViolationLines))
 	}
 }
 

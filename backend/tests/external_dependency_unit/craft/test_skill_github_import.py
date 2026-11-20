@@ -8,7 +8,14 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.models import Skill, User, UserSkillPreference
+from onyx.db.models import (
+    Plugin,
+    PluginSkill,
+    PluginVersion,
+    User,
+    UserPluginPreference,
+)
+from onyx.db.skill import is_published, set_skill_enabled_for_user
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.api import import_github_skills
 from onyx.server.features.skill.models import GitHubSkillsImportRequest
@@ -34,14 +41,28 @@ def _bundle(name: str) -> bytes:
     return output.getvalue()
 
 
-def _delete_bundles(db_session: Session, name: str) -> list[Skill]:
-    """Drop the stored blobs of every skill with this name; returns the rows."""
-    rows = list(db_session.scalars(select(Skill).where(Skill.name == name)))
+def _plugins_named(db_session: Session, name: str) -> list[Plugin]:
+    return list(
+        db_session.scalars(
+            select(Plugin)
+            .join(
+                PluginSkill, PluginSkill.plugin_version_id == Plugin.current_version_id
+            )
+            .where(PluginSkill.frontmatter["name"].astext == name)
+        )
+    )
+
+
+def _delete_bundles(db_session: Session, plugin_ids: list[UUID]) -> None:
+    """Drop the stored blobs of every version of these plugins."""
     file_store = get_default_file_store()
-    for row in rows:
-        if row.bundle_file_id is not None:
-            file_store.delete_file(row.bundle_file_id, error_on_missing=False)
-    return rows
+    for file_id in db_session.scalars(
+        select(PluginVersion.bundle_file_id).where(
+            PluginVersion.plugin_id.in_(plugin_ids)
+        )
+    ):
+        if file_id is not None:
+            file_store.delete_file(file_id, error_on_missing=False)
 
 
 def test_import_creates_conflicting_skills_disabled_without_blocking_others(
@@ -59,12 +80,8 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
         name=conflict_name,
         author_user_id=test_user.id,
     )
-    db_session.add(
-        UserSkillPreference(
-            user_id=test_user.id,
-            skill_id=existing.id,
-            name=existing.name,
-        )
+    set_skill_enabled_for_user(
+        skill_id=existing.id, enabled=True, user=test_user, db_session=db_session
     )
     db_session.commit()
     discovered = [
@@ -105,7 +122,7 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
     )
     pushed_user_ids: list[set[UUID]] = []
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users",
+        "onyx.skills.push.push_skills_for_users",
         lambda user_ids, _db: pushed_user_ids.append(user_ids),
     )
 
@@ -135,22 +152,22 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
 
     created_ids = [result.skill.id for result in response.imported]
     created_rows = list(
-        db_session.scalars(select(Skill).where(Skill.id.in_(created_ids)))
+        db_session.scalars(select(Plugin).where(Plugin.id.in_(created_ids)))
     )
-    enabled_names = set(
+    enabled_ids = set(
         db_session.scalars(
-            select(UserSkillPreference.name).where(
-                UserSkillPreference.user_id == test_user.id
+            select(UserPluginPreference.plugin_id).where(
+                UserPluginPreference.user_id == test_user.id,
+                UserPluginPreference.plugin_id.in_([existing.id, *created_ids]),
+                UserPluginPreference.enabled.is_(True),
             )
         )
     )
-    assert enabled_names == {conflict_name, unique_name}
+    assert enabled_ids == {existing.id, imported_by_name[unique_name].skill.id}
+    assert len(created_rows) == 2
     assert all(row.author_user_id == test_user.id for row in created_rows)
 
-    file_store = get_default_file_store()
-    for row in created_rows:
-        if row.bundle_file_id is not None:
-            file_store.delete_file(row.bundle_file_id, error_on_missing=False)
+    _delete_bundles(db_session, created_ids)
 
 
 def test_import_enables_only_first_new_skill_with_each_name(
@@ -191,7 +208,7 @@ def test_import_enables_only_first_new_skill_with_each_name(
         lambda *_args: None,
     )
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users",
+        "onyx.skills.push.push_skills_for_users",
         lambda *_args: None,
     )
 
@@ -209,11 +226,7 @@ def test_import_enables_only_first_new_skill_with_each_name(
     assert response.imported[1].disabled_reason is not None
     assert response.not_imported == []
 
-    file_store = get_default_file_store()
-    for result in response.imported:
-        row = db_session.get(Skill, result.skill.id)
-        if row is not None and row.bundle_file_id is not None:
-            file_store.delete_file(row.bundle_file_id, error_on_missing=False)
+    _delete_bundles(db_session, [result.skill.id for result in response.imported])
 
 
 def test_import_applies_shared_access_before_publication(
@@ -242,15 +255,13 @@ def test_import_applies_shared_access_before_publication(
         "onyx.server.features.skill.api._github_authorization_header",
         lambda *_args: None,
     )
-    published: list[SkillSharePermission | None] = []
+    published: list[bool] = []
 
     def record_publication(_user_ids: set[UUID], session: Session) -> None:
-        skill = session.scalar(select(Skill).where(Skill.name == name))
-        published.append(skill.public_permission if skill else None)
+        plugins = _plugins_named(session, name)
+        published.append(bool(plugins) and is_published(plugins[0], session))
 
-    monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users", record_publication
-    )
+    monkeypatch.setattr("onyx.skills.push.push_skills_for_users", record_publication)
     result = import_github_skills(
         GitHubSkillsImportRequest(
             repository="owner/repository",
@@ -264,66 +275,8 @@ def test_import_applies_shared_access_before_publication(
     try:
         assert result.not_imported == []
         assert len(result.imported) == 1
-        assert published == [SkillSharePermission.VIEWER]
+        assert published == [True]
     finally:
-        _delete_bundles(db_session, name)
-
-
-def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
-    db_session: Session,
-    test_user: User,
-    initialize_file_store: None,  # noqa: ARG001
-    tenant_context: None,  # noqa: ARG001
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from onyx.db.enums import SkillInstallationPolicy
-    from onyx.server.features.skill.models import SkillShareRequest
-
-    name = f"policy-dup-{uuid4().hex[:8]}"
-    paths = [f"first/{name}", f"second/{name}"]
-    monkeypatch.setattr(
-        "onyx.server.features.skill.api.fetch_github_skill_bundles",
-        lambda *_args, **_kwargs: (
-            GitHubRepository(owner="owner", repo="repository", revision=_REVISION),
-            [
-                GitHubSkillBundle(
-                    path=path, name=name, description=path, bundle_bytes=_bundle(name)
-                )
-                for path in paths
-            ],
-        ),
-    )
-    monkeypatch.setattr(
-        "onyx.server.features.skill.api._github_authorization_header",
-        lambda *_args: None,
-    )
-    monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users", lambda *_args: None
-    )
-    monkeypatch.setattr(
-        "onyx.db.plugin.has_global_permission",
-        lambda *_args, **_kwargs: True,
-    )
-
-    response = import_github_skills(
-        GitHubSkillsImportRequest(
-            repository="owner/repository",
-            revision=_REVISION,
-            paths=paths,
-            sharing=SkillShareRequest(
-                installation_policy=SkillInstallationPolicy.DEFAULT
-            ),
-        ),
-        user=test_user,
-        db_session=db_session,
-    )
-
-    try:
-        assert [result.skill.name for result in response.imported] == [name]
-        assert response.imported[0].skill.installation_policy == (
-            SkillInstallationPolicy.DEFAULT
+        _delete_bundles(
+            db_session, [plugin.id for plugin in _plugins_named(db_session, name)]
         )
-        assert [item.path for item in response.not_imported] == [paths[1]]
-        assert len(_delete_bundles(db_session, name)) == 1
-    finally:
-        _delete_bundles(db_session, name)

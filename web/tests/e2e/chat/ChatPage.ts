@@ -95,6 +95,49 @@ export class ChatPage {
     });
   }
 
+  /** The download cards of the files that an AI message published. */
+  publishedFileCards(index = 0): Locator {
+    return this.aiMessage(index).getByRole("button", { name: /^Preview / });
+  }
+
+  /** A published file's card, by the title it shows (else its file name). */
+  publishedFileCard(title: string, index = 0): Locator {
+    return this.publishedFileCards(index).filter({ hasText: title });
+  }
+
+  /** Checks a published file's card: its details and download link. */
+  async expectPublishedFile(
+    title: string,
+    {
+      fileName,
+      details,
+      href,
+    }: { fileName: string; details: RegExp; href: string },
+    index = 0
+  ): Promise<void> {
+    const card = this.publishedFileCard(title, index);
+    await expect(card).toBeVisible();
+    await expect(card).toHaveAccessibleName(`Preview ${fileName}`);
+    await expect(card).toContainText(details);
+    const download = card.getByRole("link", { name: "Download" });
+    await expect(download).toHaveAttribute("href", href);
+    await expect(download).toHaveAttribute("download", fileName);
+  }
+
+  /** Opens a published file's preview and checks that it shows the text. */
+  async expectPublishedFilePreview(
+    title: string,
+    text: string,
+    index = 0
+  ): Promise<void> {
+    await this.publishedFileCard(title, index).click();
+    const preview = this.page.getByRole("dialog");
+    await expect(preview).toContainText(text);
+    await expect(preview.getByRole("link", { name: "Download" })).toBeVisible();
+    await this.page.keyboard.press("Escape");
+    await expect(preview).toBeHidden();
+  }
+
   answerText(text: string, index = 0): Locator {
     return this.aiMessage(index).getByText(text, { exact: true });
   }
@@ -188,6 +231,59 @@ export class ChatPage {
     const table = this.aiMessage().getByRole("table");
     await expect(table.getByRole("columnheader")).toHaveText(headers);
     await expect(table.getByRole("row")).toHaveCount(rows);
+  }
+
+  /**
+   * Where answer table `index` sits: whether its scroll container (the
+   * table's parent) overflows, whether that container stays inside the
+   * answer, and whether the table's last cell wraps onto several lines.
+   */
+  private answerTableLayout(index: number) {
+    return this.aiMessage()
+      .getByRole("table")
+      .nth(index)
+      .evaluate((table) => {
+        const scroller = table.parentElement!;
+        const answer = table.closest("[data-testid='onyx-ai-message']")!;
+        const cell = table.querySelector("tbody td:last-child")!;
+        return {
+          overflows: scroller.scrollWidth > scroller.clientWidth,
+          insideAnswer:
+            scroller.getBoundingClientRect().right <=
+            answer.getBoundingClientRect().right,
+          cellWraps:
+            cell.getBoundingClientRect().height >
+            parseFloat(getComputedStyle(cell).lineHeight) * 1.5,
+        };
+      });
+  }
+
+  /** The table fits the answer column, and its last cell wraps. */
+  async expectAnswerTableWraps(index: number): Promise<void> {
+    await expect
+      .poll(() => this.answerTableLayout(index))
+      .toEqual({ overflows: false, insideAnswer: true, cellWraps: true });
+  }
+
+  /** The table scrolls sideways inside the answer instead of widening it. */
+  async expectAnswerTableScrolls(index: number): Promise<void> {
+    await expect
+      .poll(() => this.answerTableLayout(index))
+      .toMatchObject({ overflows: true, insideAnswer: true });
+  }
+
+  /** Hovers the answer table and clicks its copy button. */
+  async copyAnswerTable(): Promise<void> {
+    const message = this.aiMessage();
+    await message.locator(".markdown-table-card").hover();
+    await message.getByTestId("markdown-table-copy-button").click();
+  }
+
+  /** Needs the clipboard-read permission. */
+  async expectClipboardText(text: string): Promise<void> {
+    await expect
+      .poll(() => this.page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(text);
   }
 
   async expectAnswerListItem(text: string): Promise<void> {
@@ -324,24 +420,23 @@ export class ChatPage {
     await expect(this.inputBar.sendButton).toBeDisabled();
   }
 
-  /** Expands the timeline and checks one completed step of the tool that
-   * shows `output`. A JSON response renders as a `code` block; a text
-   * response renders as an inline code span. */
+  /** Opens the run card and checks one completed step of the tool that
+   * shows `output`. The step's body is a code panel with the request and
+   * the response, so the output is matched as text. */
   async expectCustomToolResult(name: string, output: string): Promise<void> {
-    await this.page
-      .getByRole("button", { name: "Expand timeline", exact: true })
-      .click();
+    // A run card folds by a button named for its step count.
+    const fold = this.scrollContainer
+      .getByRole("button", { name: /^\d+ steps?$/ })
+      .first();
+    if ((await fold.getAttribute("aria-expanded")) === "false") {
+      await fold.click();
+    }
     const status = this.scrollContainer.getByText(`${name} completed`, {
       exact: true,
     });
     await expect(status).toBeVisible();
     await status.click();
-    await expect(
-      this.scrollContainer
-        .getByRole("code")
-        .or(this.scrollContainer.getByTestId("code-block"))
-        .filter({ hasText: output })
-    ).toBeVisible();
+    await expect(this.scrollContainer.getByText(output).first()).toBeVisible();
   }
 
   async startIncognito(): Promise<void> {
@@ -444,10 +539,10 @@ export class ChatPage {
     return modelName;
   }
 
-  /** Replaces the first pill's model through its switch list. */
-  async switchModel(modelName: string): Promise<void> {
+  /** Replaces the first pill's model through its switch list and returns the pill's display name. */
+  async switchModel(modelName: string): Promise<string> {
     await this.openModelList(modelName);
-    await this.chooseModelOption(this.modelOption(modelName).first());
+    return this.chooseModelOption(this.modelOption(modelName).first());
   }
 
   async maximizeModelTemperature(modelName: string): Promise<void> {
@@ -485,6 +580,16 @@ export class ChatPage {
 
   async expectHumanMessage(text: string, index = 0): Promise<void> {
     await expect(this.humanMessage(index)).toContainText(text);
+  }
+
+  /** A bubble of the user's message that holds `text`, at any position. */
+  async expectHumanMessageBubble(
+    text: string,
+    timeout?: number
+  ): Promise<void> {
+    await expect(
+      this.humanMessageBubbles.filter({ hasText: text })
+    ).toBeVisible({ timeout });
   }
 
   /** The skill chips of question bubble `index`, counting the bubbles of

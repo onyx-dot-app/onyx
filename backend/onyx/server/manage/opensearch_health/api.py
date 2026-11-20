@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends
 
 from onyx.auth.permissions import require_permission
+from onyx.cache.factory import get_cache_backend
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.document_index.opensearch.models import ResourceHealth
 from onyx.document_index.opensearch.resource_health import get_resource_health
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.opensearch_health.models import ResourcePopupResponse
 
 router: APIRouter = APIRouter(prefix="/manage/admin/opensearch-health")
@@ -28,10 +28,9 @@ def claim_resource_popup(
     show_popup: bool = bool(
         health.issues
         and not health.stale
-        and get_redis_client().set(
+        and get_cache_backend().set_if_absent(
             f"{POPUP_KEY_PREFIX}:{user.id}",
             "1",
-            nx=True,
             ex=POPUP_INTERVAL_SECONDS,
         )
     )

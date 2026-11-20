@@ -26,7 +26,6 @@ import asyncio
 import httpx
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ValidationError
-from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.license import get_license, get_used_seats
@@ -59,6 +58,8 @@ from ee.onyx.server.billing.service import update_seat_count as update_seat_serv
 from ee.onyx.utils.license import clear_claim_cooldown
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import User
+from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.configs.app_configs import (
     STRIPE_PUBLISHABLE_KEY_OVERRIDE,
     STRIPE_PUBLISHABLE_KEY_URL,
@@ -68,8 +69,6 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_redis_client, get_shared_redis_client
-from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -101,8 +100,8 @@ def _is_billing_circuit_open() -> bool:
     if MULTI_TENANT:
         return False
     try:
-        redis_client = get_shared_redis_client()
-        is_open = bool(redis_client.exists(BILLING_CIRCUIT_BREAKER_KEY))
+        cache = get_shared_cache_backend()
+        is_open = bool(cache.exists(BILLING_CIRCUIT_BREAKER_KEY))
         logger.debug(
             "Circuit breaker check: key=%s, is_open=%s",
             BILLING_CIRCUIT_BREAKER_KEY,
@@ -119,14 +118,14 @@ def _open_billing_circuit() -> None:
     if MULTI_TENANT:
         return
     try:
-        redis_client = get_shared_redis_client()
-        redis_client.set(
+        cache = get_shared_cache_backend()
+        cache.set(
             BILLING_CIRCUIT_BREAKER_KEY,
             "1",
             ex=BILLING_CIRCUIT_BREAKER_TTL_SECONDS,
         )
         # Verify it was set
-        exists = redis_client.exists(BILLING_CIRCUIT_BREAKER_KEY)
+        exists = cache.exists(BILLING_CIRCUIT_BREAKER_KEY)
         logger.warning(
             "Billing circuit breaker opened (TTL=%ss, verified=%s). Stripe billing requests are disabled until manually reset.",
             BILLING_CIRCUIT_BREAKER_TTL_SECONDS,
@@ -141,8 +140,8 @@ def _close_billing_circuit() -> None:
     if MULTI_TENANT:
         return
     try:
-        redis_client = get_shared_redis_client()
-        redis_client.delete(BILLING_CIRCUIT_BREAKER_KEY)
+        cache = get_shared_cache_backend()
+        cache.delete(BILLING_CIRCUIT_BREAKER_KEY)
         logger.info(
             "Billing circuit breaker closed. Stripe billing requests re-enabled."
         )
@@ -155,7 +154,11 @@ def _get_license_data(db_session: Session) -> str | None:
     if MULTI_TENANT:
         return None
     license_record = get_license(db_session)
-    return license_record.license_data if license_record else None
+    license_data = license_record.license_data if license_record else None
+    # Return the connection to the pool. The handlers do no more database work,
+    # and with the PostgreSQL cache their cache calls need a connection too.
+    db_session.close()
+    return license_data
 
 
 def _get_tenant_id() -> str | None:
@@ -242,19 +245,19 @@ async def create_customer_portal_session(
     )
 
 
-def _billing_cache_client() -> TenantRedisClient | None:
-    """Best-effort Redis client for the billing-info cache.
+def _billing_cache_client() -> CacheBackend | None:
+    """Best-effort cache backend for the billing-info cache.
 
-    Cloud uses the tenant-prefixed client so cache entries are isolated per
-    tenant. Self-hosted is single-tenant; the shared client is fine.
+    Cloud uses the tenant-prefixed backend so cache entries are isolated per
+    tenant. Self-hosted is single-tenant; the shared backend is fine.
     Returns None on any failure so the caller falls through to a live
     fetch — matches the broad guard used by ``_is_billing_circuit_open``
     in this same file.
     """
     try:
         if MULTI_TENANT:
-            return get_redis_client(tenant_id=get_current_tenant_id())
-        return get_shared_redis_client()
+            return get_cache_backend(tenant_id=get_current_tenant_id())
+        return get_shared_cache_backend()
     except Exception as exc:
         logger.warning("Billing info cache client unavailable: %s", exc)
         return None
@@ -268,11 +271,11 @@ def invalidate_billing_info_cache() -> None:
     ``cached_is_tenant_on_trial``. Without this a trial→paid conversion keeps
     usage limits on stale trial status for up to a full TTL.
     """
-    redis_client = _billing_cache_client()
-    if redis_client is not None:
+    cache = _billing_cache_client()
+    if cache is not None:
         try:
-            redis_client.delete(BILLING_INFO_CACHE_KEY)
-        except RedisError as exc:
+            cache.delete(BILLING_INFO_CACHE_KEY)
+        except CACHE_TRANSIENT_ERRORS as exc:
             logger.warning("Billing info cache invalidation failed: %s", exc)
 
     if MULTI_TENANT:
@@ -308,11 +311,11 @@ async def get_billing_information(
             "Stripe connection temporarily disabled. Click 'Connect to Stripe' to retry.",
         )
 
-    redis_client = _billing_cache_client()
-    if redis_client is not None:
+    cache = _billing_cache_client()
+    if cache is not None:
         try:
-            cached = redis_client.get(BILLING_INFO_CACHE_KEY)
-        except RedisError as exc:
+            cached = cache.get(BILLING_INFO_CACHE_KEY)
+        except CACHE_TRANSIENT_ERRORS as exc:
             logger.warning("Billing info cache read failed: %s", exc)
             cached = None
         if cached is not None:
@@ -341,14 +344,14 @@ async def get_billing_information(
             _open_billing_circuit()
         raise
 
-    if redis_client is not None:
+    if cache is not None:
         try:
-            redis_client.set(
+            cache.set(
                 BILLING_INFO_CACHE_KEY,
                 result.model_dump_json(),
                 ex=BILLING_INFO_CACHE_TTL_SECONDS,
             )
-        except RedisError as exc:
+        except CACHE_TRANSIENT_ERRORS as exc:
             logger.warning("Billing info cache write failed: %s", exc)
 
     return result

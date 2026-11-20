@@ -3,7 +3,16 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, and_, delete, null, or_, select, update
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    and_,
+    delete,
+    null,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -15,7 +24,6 @@ from onyx.db.enums import (
     Permission,
     PersonaSharePermission,
     PluginInstallationPolicy,
-    SkillSharePermission,
 )
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -25,6 +33,8 @@ from onyx.db.models import (
     DocumentSet__UserGroup,
     HierarchyNode,
     Hook,
+    Integration__User,
+    Integration__UserGroup,
     LLMProvider,
     LLMProvider__UserGroup,
     MCPServer,
@@ -37,7 +47,6 @@ from onyx.db.models import (
     Plugin__UserGroup,
     PublicExternalUserGroup,
     ScimToken,
-    Skill,
     StandardAnswer,
     TokenRateLimit,
     User,
@@ -51,7 +60,6 @@ from onyx.db.models import (
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.plugin import (
     get_or_create_organization_library__no_commit,
-    lock_skill_plugin__no_commit,
     publish_plugin__no_commit,
 )
 from onyx.db.users import (
@@ -234,38 +242,67 @@ def _make_group_shared_resources_public__no_commit(
             != PluginInstallationPolicy.NOT_AVAILABLE,
         ),
     )
-    # Skill rows first, then their plugin rows in id order.
-    skills: Sequence[Skill] = db_session.scalars(
-        select(Skill)
-        .where(
-            Skill.id.in_(
-                select(Plugin.id).where(
-                    Plugin.id.in_(shared_plugin_ids),
-                    Plugin.marketplace_id != library_id,
-                )
-            ),
-            Skill.built_in_skill_id.is_(None),
-        )
-        .order_by(Skill.id)
+    plugin_ids: Sequence[UUID] = db_session.scalars(
+        select(Plugin.id)
+        .where(Plugin.id.in_(shared_plugin_ids), Plugin.marketplace_id != library_id)
+        .order_by(Plugin.id)
         .with_for_update()
     ).all()
-    plugin_ids = [
-        lock_skill_plugin__no_commit(skill, db_session).id for skill in skills
-    ]
-    for skill in skills:
-        skill.public_permission = SkillSharePermission.VIEWER
-    db_session.flush()
-    for skill, plugin_id in zip(skills, plugin_ids, strict=True):
+    for plugin_id in plugin_ids:
         publish_plugin__no_commit(plugin_id, "rename", db_session)
         published_name = db_session.scalar(
             select(Plugin.name).where(Plugin.id == plugin_id)
         )
         logger.info(
-            "Community downgrade published skill %s (%s) to the organization as '%s'",
-            skill.name,
+            "Community downgrade published plugin %s to the organization as '%s'",
             plugin_id,
             published_name,
         )
+    # Each member of a group that has access to an integration (a share, or a
+    # group setting above NOT_AVAILABLE) gets a user share, so the members keep
+    # it. The integration keeps its company setting: one that an admin closed
+    # stays closed, and none opens to the whole organization.
+    not_available = PluginInstallationPolicy.NOT_AVAILABLE
+    granted = (
+        select(
+            Integration__UserGroup.integration_id,
+            User__UserGroup.user_id,
+        )
+        .join(
+            User__UserGroup,
+            User__UserGroup.user_group_id == Integration__UserGroup.user_group_id,
+        )
+        .where(
+            Integration__UserGroup.user_group_id.in_(group_ids),
+            User__UserGroup.user_id.is_not(None),
+            or_(
+                and_(
+                    Integration__UserGroup.permission.is_not(None),
+                    or_(
+                        Integration__UserGroup.installation_policy.is_(None),
+                        Integration__UserGroup.installation_policy != not_available,
+                    ),
+                ),
+                and_(
+                    Integration__UserGroup.permission.is_(None),
+                    Integration__UserGroup.installation_policy.is_not(None),
+                    Integration__UserGroup.installation_policy != not_available,
+                ),
+            ),
+        )
+        .distinct()
+    )
+    shared = db_session.execute(
+        pg_insert(Integration__User)
+        .from_select(["integration_id", "user_id"], granted)
+        .on_conflict_do_nothing()
+        .returning(Integration__User.integration_id)
+    ).all()
+    logger.info(
+        "Community downgrade gave %d integration shares to the members of "
+        "removed groups",
+        len(shared),
+    )
 
 
 def _add_to_default_group__no_commit(

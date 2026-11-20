@@ -24,6 +24,8 @@ from urllib.error import URLError
 from urllib.request import Request
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# no-direct-redis: allow retry delay shared with Celery; use_redis=False opts out
 from redis.lock import Lock as RedisLock
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError as SlackApiError  # Re-export, see below.
@@ -47,7 +49,11 @@ from onyx.connectors.source_operations import (
     SourceOperations,
     source_operation,
 )
+
+# no-direct-redis: allow retry delay shared with Celery; use_redis=False opts out
 from onyx.redis.redis_pool import get_redis_client
+
+# no-direct-redis: allow retry delay shared with Celery; use_redis=False opts out
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
@@ -632,7 +638,11 @@ class SlackSourceOperations(SourceOperations):
             raise ValueError("tenant_id cannot be None!")
         prefix = make_credential_prefix(self.credentials_provider.get_provider_key())
         return make_slack_web_client(
-            prefix, token, _MAX_RETRIES, get_redis_client(tenant_id=tenant_id)
+            prefix,
+            token,
+            _MAX_RETRIES,
+            # no-direct-redis: allow retry delay shared with Celery; use_redis=False opts out
+            get_redis_client(tenant_id=tenant_id),
         )
 
     def _client_for(self, fast: bool) -> WebClient:

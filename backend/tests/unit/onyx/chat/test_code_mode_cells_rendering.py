@@ -36,7 +36,6 @@ from onyx.llm.models import (
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.tools.constants import CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME
 from onyx.tools.tool_implementations.code_mode.models import (
-    UNFINISHED_CALL_MESSAGE,
     CellClosing,
     CodeModeCall,
     CodeModeExecutionResult,
@@ -317,7 +316,9 @@ def test_closing_record_reports_how_the_program_ended(
     )
 
 
-def test_a_call_left_unfinished_renders_as_failed() -> None:
+def test_a_call_left_unfinished_renders_as_stopped() -> None:
+    """Its program ended first: the call has no result, as a stopped
+    top-level call has none."""
     live: list[packets.Packet] = []
     presenter = ResponsePresenter(Emitter(live.append))
     closing = CellClosing(
@@ -340,9 +341,6 @@ def test_a_call_left_unfinished_renders_as_failed() -> None:
             ),
         )
     )
-    errors = [
-        (p.placement.sub_turn_index, str(p.obj.exception))
-        for p in live
-        if isinstance(p.obj, packets.PacketException)
-    ]
-    assert errors == [(0, UNFINISHED_CALL_MESSAGE)]
+    child = [p.obj for p in live if p.placement.sub_turn_index == 0]
+    assert not [obj for obj in child if isinstance(obj, packets.PacketException)]
+    assert isinstance(child[-1], packets.SectionEnd)

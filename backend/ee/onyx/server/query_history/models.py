@@ -265,15 +265,14 @@ class QueryHistoryExport(BaseModel):
         )
         start, end = start_end.split("_")
 
-        if not task_queue_state.start_time:
-            raise RuntimeError("The start time of the task must always be present")
-
         return cls(
             task_id=task_queue_state.task_id,
             status=task_queue_state.status,
             start=datetime.fromisoformat(start),
             end=datetime.fromisoformat(end),
-            start_time=task_queue_state.start_time,
+            # start_time moves when the job starts or fails. The request time
+            # is the register time.
+            start_time=task_queue_state.register_time,
         )
 
     @classmethod

@@ -6,10 +6,9 @@ import pytest
 from fastapi_users.jwt import generate_jwt
 from starlette.requests import Request
 
-from onyx.auth.schemas import AuthBackend
 from onyx.auth.users import SingleTenantJWTStrategy
 from onyx.configs import app_configs
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME, AuthBackend
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError

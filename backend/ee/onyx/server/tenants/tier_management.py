@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import NamedTuple, cast
 
 from ee.onyx.server.license.models import CustomerTier
-from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
+from onyx.cache.factory import get_cache_backend
 from onyx.utils.logger import setup_logger
 
 # Per-tenant cached CustomerTier; TTL bounds upgrade-visible delay if push is missed.
@@ -54,32 +54,29 @@ def update_tenant_tier(
     customer_tier: CustomerTier,
     trial_end: datetime | None = None,
 ) -> None:
-    redis_client = get_redis_client(tenant_id=tenant_id)
+    cache = get_cache_backend(tenant_id=tenant_id)
     payload = json.dumps(
         {
             "customer_tier": customer_tier.value,
             "trial_end": trial_end.isoformat() if trial_end is not None else None,
         }
     )
-    pipeline = redis_client.pipeline(transaction=True)
-    pipeline.set(TENANT_TIER_KEY, payload, ex=TENANT_TIER_CACHE_TTL_SECONDS)
-    pipeline.delete(TENANT_TIER_MISS_KEY)
-    pipeline.execute()
+    # Tier first: a reader checks the miss marker only when it finds no tier.
+    cache.set(TENANT_TIER_KEY, payload, ex=TENANT_TIER_CACHE_TTL_SECONDS)
+    cache.delete(TENANT_TIER_MISS_KEY)
 
 
 def mark_tenant_tier_miss(tenant_id: str) -> None:
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    redis_client.set(TENANT_TIER_MISS_KEY, "1", ex=TENANT_TIER_MISS_TTL_SECONDS)
+    cache = get_cache_backend(tenant_id=tenant_id)
+    cache.set(TENANT_TIER_MISS_KEY, "1", ex=TENANT_TIER_MISS_TTL_SECONDS)
 
 
 def has_recent_tenant_tier_miss(tenant_id: str) -> bool:
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    return bool(redis_client.exists(TENANT_TIER_MISS_KEY))
+    return get_cache_backend(tenant_id=tenant_id).exists(TENANT_TIER_MISS_KEY)
 
 
 def get_cached_tier(tenant_id: str) -> CachedTier | None:
-    redis_client = get_redis_replica_client(tenant_id=tenant_id)
-    raw = redis_client.get(TENANT_TIER_KEY)
+    raw = get_cache_backend(tenant_id=tenant_id, replica=True).get(TENANT_TIER_KEY)
     if raw is None:
         return None
 

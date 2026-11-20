@@ -4,14 +4,21 @@ built-in, external-app or invalid skills."""
 import io
 import zipfile
 from collections.abc import Iterator
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
+from onyx.db.enums import (
+    PluginInstallationPolicy,
+    SkillSharePermission,
+)
 from onyx.db.models import Plugin, User
+from onyx.db.plugin import (
+    get_visible_versions_skill_md,
+    set_plugin_preferences__no_commit,
+)
 from onyx.db.skill import (
     SkillSharingChange,
     create_custom_skill__no_commit,
@@ -27,11 +34,13 @@ from onyx.skills.content import read_versions_skill_md
 from onyx.skills.ingest import delete_bundle_blob, ingest_skill_bundle
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.craft.db_helpers import (
+    add_user_to_group,
     make_external_app,
+    make_group,
     make_skill,
     make_user,
-    make_user_credential,
     set_current_version_validity,
+    share_plugin_with_group,
 )
 
 
@@ -106,7 +115,7 @@ def test_chat_skills_use_the_version_each_user_runs(
             set_public_permission=True,
         ),
     )
-    set_skill_installation_policy(skill, SkillInstallationPolicy.DEFAULT, db_session)
+    set_skill_installation_policy(skill, PluginInstallationPolicy.DEFAULT, db_session)
     plugin = db_session.get(Plugin, skill.id)
     assert plugin is not None
     first_version_id: UUID = plugin.current_version_id
@@ -158,25 +167,21 @@ def test_chat_skills_use_the_version_each_user_runs(
     built_in_names = {
         runtime.name
         for runtime in list_runtime_skills_for_user(db_session=db_session, user=author)
-        if runtime.skill.built_in_skill_id is not None
+        if runtime.built_in_skill_id is not None
     }
     assert built_in_names
     assert not built_in_names & set(author_skills)
 
 
-def test_chat_skills_leave_out_external_app_and_invalid_skills(
+def test_chat_skills_keep_app_skills_and_leave_out_invalid_skills(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     users: tuple[User, User],
 ) -> None:
     user, _ = users
+    # The app's plugin holds the skill; the user has not connected the app.
     app_skill = make_skill(db_session, is_public=True)
-    app = make_external_app(
-        db_session, skill=app_skill, auth_template={"token": "{token}"}
-    )
-    make_user_credential(
-        db_session, app=app, user=user, user_credentials={"token": "t"}
-    )
+    make_external_app(db_session, skill=app_skill, auth_template={"token": "{token}"})
     invalid_skill = make_skill(db_session, is_public=True)
     valid_skill = make_skill(db_session, is_public=True)
     for skill in (app_skill, invalid_skill, valid_skill):
@@ -193,5 +198,68 @@ def test_chat_skills_leave_out_external_app_and_invalid_skills(
 
     assert {app_skill.name, valid_skill.name} <= runtime_names
     assert invalid_skill.name not in runtime_names
-    assert valid_skill.name in chat_names
-    assert not {app_skill.name, invalid_skill.name} & chat_names
+    assert {app_skill.name, valid_skill.name} <= chat_names
+    assert invalid_skill.name not in chat_names
+
+
+def test_chat_skills_follow_install_settings_and_the_name_order(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User],
+) -> None:
+    """Chat gets the custom skills the sandbox loads: a group's Not available
+    hides a skill and its SKILL.md, Required turns a skill on, and one skill
+    keeps each name."""
+    user, other = users
+    group = make_group(db_session)
+    add_user_to_group(db_session, user, group)
+    hidden = make_skill(db_session, is_public=True)
+    required = make_skill(db_session, is_public=True)
+    name = f"chat-order-{uuid4().hex[:8]}"
+    published = make_skill(db_session, name=name, is_public=True)
+    own = make_skill(db_session, name=name, author_user_id=user.id)
+    for skill in (hidden, required, published, own):
+        set_current_version_validity(db_session, skill.id, True)
+    for skill, policy in (
+        (hidden, PluginInstallationPolicy.DEFAULT),
+        (published, PluginInstallationPolicy.DEFAULT),
+        (required, None),
+    ):
+        set_skill_installation_policy(skill, policy, db_session)
+    share_plugin_with_group(
+        db_session, hidden.id, group.id, None, PluginInstallationPolicy.NOT_AVAILABLE
+    )
+    share_plugin_with_group(
+        db_session, required.id, group.id, None, PluginInstallationPolicy.REQUIRED
+    )
+    set_plugin_preferences__no_commit(user.id, [own.id], True, db_session)
+    db_session.commit()
+
+    chat = {skill.name: skill for skill in list_chat_skills(db_session, user)}
+    runtime = {
+        runtime.name: runtime.version.id
+        for runtime in list_runtime_skills_for_user(db_session=db_session, user=user)
+        if runtime.version is not None
+    }
+
+    assert hidden.name not in chat
+    assert required.name in chat
+    assert hidden.name in {skill.name for skill in list_chat_skills(db_session, other)}
+    assert required.name not in {
+        skill.name for skill in list_chat_skills(db_session, other)
+    }
+    # One skill keeps the name: the published one beats the user's own, as in
+    # the sandbox.
+    assert [skill.name for skill in list_chat_skills(db_session, user)].count(name) == 1
+    assert {skill.name: skill.version_id for skill in chat.values()} == runtime
+    published_plugin = db_session.get(Plugin, published.id)
+    hidden_plugin = db_session.get(Plugin, hidden.id)
+    assert published_plugin is not None and hidden_plugin is not None
+    assert chat[name].version_id == published_plugin.current_version_id
+    # A picked skill's SKILL.md is read only for a skill the user can see.
+    assert not get_visible_versions_skill_md(
+        [hidden_plugin.current_version_id], user.id, db_session
+    )
+    assert get_visible_versions_skill_md(
+        [hidden_plugin.current_version_id], other.id, db_session
+    )

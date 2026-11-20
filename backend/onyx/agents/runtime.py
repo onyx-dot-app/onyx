@@ -2,7 +2,7 @@
 
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import Future
 from contextlib import ExitStack, closing
 from contextvars import copy_context
@@ -17,6 +17,7 @@ from pydantic import BaseModel, JsonValue, TypeAdapter
 from onyx.agents.compaction import (
     CheckpointMismatchError,
     ContextLimitError,
+    cached_request_tokens,
     compact_history,
     context_budget,
     count_tokens,
@@ -118,7 +119,7 @@ from onyx.llm.models import (
     UserMessage,
     apply_generation_event,
 )
-from onyx.llm.token_budget import resolve_token_budget
+from onyx.llm.token_budget import TokenBudget, resolve_token_budget
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 
@@ -147,6 +148,10 @@ class RunNotTransferable(RuntimeError):
 
 class RunReleased(RuntimeError):
     """Local execution ended at a saved checkpoint; use its run ID to resume."""
+
+
+class InputNotWaiting(ValueError):
+    """The run no longer waits for the request that an answer names."""
 
 
 class AgentBusy(RuntimeError):
@@ -263,6 +268,7 @@ class Agent:
         | None = None,
         on_finish: ReleaseHook | None = None,
         on_suspend: ReleaseHook | None = None,
+        on_drained: Callable[[], None] | None = None,
         agent_id: str | None = None,
         previous_run_id: str | None = None,
         restoration: "RestorableFeature | None" = None,
@@ -296,6 +302,11 @@ class Agent:
         self.on_finish = on_finish
         # Called when the run suspends, before its state is captured.
         self.on_suspend = on_suspend
+        # Called after each finish or suspension, once the run's work (its tool
+        # threads and the work of its foreground children) has drained, on the
+        # thread that ended that work, so it must be short. Errors, including
+        # AgentCancelled, are logged and do not stop the run's cleanup.
+        self.on_drained = on_drained
         self._restoration = restoration
         self._state = (state or AgentState()).snapshot()
         for message in self._state.messages:
@@ -365,6 +376,8 @@ class Agent:
         """Start a worker, or execute here until suspension or completion with background=False.
 
         At `deadline_at` the run is cancelled and records a `DEADLINE` failure.
+        `max_steps` bounds the steps, with one exception; see "Preparing and
+        completing steps" in the agents README.
         """
         AgentStep(index=0, limit=max_steps)
         with self._lock:
@@ -551,11 +564,9 @@ class Run:
         # Reserve execution through cleanup, even after output becomes terminal.
         self._execution_active = True
         self._execution_request = ExecutionRequest.NONE
+        # Set by `notify_tool_activity` until the tool phase's next cycle.
+        self._tool_activity = False
         self._watched_children: dict[str, Future[RunState]] = {}
-        # Open requests of calls that tools make for the model, by request ID,
-        # until a NestedInputWait saves them; see NestedCallGate. They are not
-        # saved, so the run withdraws those still open when it suspends or ends.
-        self._open_nested: dict[str, NestedInputRequest] = {}
         self._llm: LLM | None = None
         self._defaults = PreparedStep()
         self._configured_tools: tuple[AgentTool, ...] = ()
@@ -574,9 +585,10 @@ class Run:
         ) = None
         self._on_finish: ReleaseHook | None = None
         self._on_suspend: ReleaseHook | None = None
+        self._on_drained: Callable[[], None] | None = None
         self._restoration: RestorableFeature | None = None
         self._step_tools: list[AgentTool] | None = None
-        self.work = ExecutionWork()
+        self.work = ExecutionWork(self._execution_condition, self.notify_tool_activity)
         self.coordination: RunCoordination | None = None
         self._thread_context = copy_context()
         self._cancellation_link = ExitStack()
@@ -616,9 +628,13 @@ class Run:
         """Copy unanswered tool requests without copying execution history."""
         with self.execution_lock:
             progress = self._state.progress
-            saved = progress.input_requests if progress is not None else ()
-            opened = (nested.request for nested in self._open_nested.values())
-            return [request.model_copy(deep=True) for request in (*saved, *opened)]
+            if progress is None:
+                return []
+            return [
+                request.model_copy(deep=True)
+                for request in progress.input_requests
+                if request.request_id not in progress.human_tool_answers
+            ]
 
     @property
     def approvals(self) -> "ToolApprovals | None":
@@ -675,16 +691,13 @@ class Run:
             if progress is None:
                 raise ValueError("Run has no input state")
             existing = progress.human_tool_answers.get(answer.request_id)
-            if existing is not None and existing != answer:
-                raise ValueError("Conflicting answer for request")
             if self._state.status.is_terminal:
                 if existing is None:
-                    raise ValueError("Run is not accepting input")
+                    raise InputNotWaiting("Run is not accepting input")
+                if _conflicts(existing, answer):
+                    raise ValueError("Conflicting answer for request")
                 return
-            # A request that a tool opened takes its answer before a
-            # NestedInputWait saves it.
-            opened = (nested.request for nested in self._open_nested.values())
-            if _record_answer(progress, answer, [*progress.input_requests, *opened]):
+            if _record_answer(progress, answer, progress.input_requests):
                 self._state.revision += 1
             self._wake_execution(resume=True)
 
@@ -727,10 +740,6 @@ class Run:
         """Call once owned work finishes; callbacks must not block."""
         self._idle.add_done_callback(lambda _future: callback())
 
-    def add_done_callback(self, callback: Callable[[], None]) -> None:
-        """Notify after terminal output or release; cleanup can still be running."""
-        self._completed.add_done_callback(lambda _future: callback())
-
     @property
     def is_done(self) -> bool:
         """Whether execution has completed or released ownership."""
@@ -740,13 +749,28 @@ class Run:
         """Wait for terminal handling without copying output or waiting for cleanup."""
         self._completed.result(timeout=timeout)
 
+    @property
+    def idle(self) -> Future[None]:
+        """Resolves when the current execution's work has drained."""
+        return self._idle
+
     def track_child_work(self, child: "Run") -> None:
         """Keep this execution busy until the child's current workers drain."""
-        self.work.track_operation(child._idle)
+        self.work.track_operation(child.idle)
 
     def notify_tool_activity(self) -> None:
+        """Wake the tool phase for another cycle: a call or held work ended,
+        or the run was cancelled."""
         with self._execution_condition:
+            self._tool_activity = True
             self._execution_condition.notify_all()
+
+    @property
+    def tool_phase_idle(self) -> bool:
+        """Whether no held work runs and none ended since the tool phase's
+        cycle began; read under the lock that `self.work` ends held jobs in."""
+        with self._execution_condition:
+            return self.work.held.idle and not self._tool_activity
 
     @property
     def suspension_requested(self) -> bool:
@@ -828,7 +852,10 @@ class Run:
                     raise ValueError("Input request IDs must be unique within a run")
                 for nested in pending.requests:
                     # A request that the gate opened is already shown.
-                    if self._open_nested.pop(nested.request.request_id, None) is None:
+                    if (
+                        self._progress.open_inputs.pop(nested.request.request_id, None)
+                        is None
+                    ):
                         self._check_new_request_id(nested.request.request_id)
                         shown.append(nested)
             self._progress.pending_tool_calls[call.id] = pending.model_copy(deep=True)
@@ -843,12 +870,8 @@ class Run:
         """Reject a request ID that an open, saved or answered request of this
         run already uses. Call under the execution lock."""
         progress = self._progress
-        if (
-            request_id in self._open_nested
-            or request_id in progress.human_tool_answers
-            or any(
-                request.request_id == request_id for request in progress.input_requests
-            )
+        if request_id in progress.human_tool_answers or any(
+            request.request_id == request_id for request in progress.input_requests
         ):
             raise ValueError("Input request IDs must be unique within a run")
 
@@ -858,9 +881,10 @@ class Run:
         with self.execution_lock:
             self.cancellation_signal.check()
             self._check_new_request_id(request.request.request_id)
-            self._open_nested[request.request.request_id] = request.model_copy(
+            self._progress.open_inputs[request.request.request_id] = request.model_copy(
                 deep=True
             )
+            self._state.revision += 1
             self.publish_event(
                 InputRequiredEvent(**self.event_context, **dict(request))
             )
@@ -868,12 +892,23 @@ class Run:
     def withdraw_nested_input(self, request: NestedInputRequest) -> None:
         """End an open request whose call stopped waiting, for example because
         its program ended, with the answer that the run recorded for it, if
-        any; no-op once a NestedInputWait saved it or it ended."""
+        any; no-op once a NestedInputWait saved it or it ended.
+
+        The end event goes out under the lock that removes the request, so
+        either this call or the run's end reports it, exactly once."""
         request_id = request.request.request_id
         with self.execution_lock:
-            if self._open_nested.pop(request_id, None) is None:
+            if self._progress.open_inputs.pop(request_id, None) is None:
                 return
-            answer = self._progress.human_tool_answers.get(request_id)
+            self._state.revision += 1
+            if self.event_delivery:
+                self.event_delivery.publish(
+                    InputEndedEvent(
+                        **self.event_context,
+                        **dict(request),
+                        answer=self._progress.human_tool_answers.get(request_id),
+                    )
+                )
         approvals = self.approvals
         if request.request.approval and approvals is not None:
             try:
@@ -884,9 +919,6 @@ class Run:
                 logger.exception(
                     "Run %s could not withdraw approval request %s", self.id, request_id
                 )
-        self.publish_event(
-            InputEndedEvent(**self.event_context, **dict(request), answer=answer)
-        )
 
     def _input_waits(
         self, call: ToolCall, pending: PendingToolInput | ChildRunWait | NestedInputWait
@@ -914,9 +946,9 @@ class Run:
     def _withdraw_pending_inputs(self) -> None:
         """Report the requests that end with the run: saved ones and those that
         tools opened, with the answers that the run recorded, such as the
-        user's rejection when the user stopped it. A direct call that an answer
-        denies keeps the denial as its result, so later runs see it. Call under
-        the execution lock."""
+        user's rejection when the user stopped it. A direct call whose answer
+        denies it or supplies its result keeps that result, so later runs see
+        it. Call under the execution lock."""
         ended: list[NestedInputRequest] = []
         progress = self._state.progress
         answers = progress.human_tool_answers if progress is not None else {}
@@ -933,7 +965,7 @@ class Run:
                     if isinstance(pending, PendingToolInput)
                     else None
                 )
-                if answer is None or answer.decision != InputDecision.DENY:
+                if answer is None or answer.decision == InputDecision.APPROVE:
                     continue
                 result = answer.result or ToolResult(
                     content=DENIED_CALL_MESSAGE, is_error=True
@@ -949,8 +981,9 @@ class Run:
                     if result.is_error
                     else ExecutionStatus.COMPLETE
                 )
-        ended.extend(self._open_nested.values())
-        self._open_nested.clear()
+        if progress is not None:
+            ended.extend(progress.open_inputs.values())
+            progress.open_inputs.clear()
         if self.event_delivery:
             for wait in ended:
                 self.event_delivery.publish(
@@ -973,6 +1006,24 @@ class Run:
                         **self.event_context,
                         **dict(wait),
                         answer=progress.human_tool_answers.get(wait.request.request_id),
+                    )
+                )
+
+    def resolve_open_inputs(self, request_ids: Collection[str]) -> None:
+        """End open requests whose tool took their answers
+        (`AgentTool.continue_open_input`)."""
+        with self.execution_lock:
+            progress = self._progress
+            for request_id in request_ids:
+                request = progress.open_inputs.pop(request_id, None)
+                if request is None:
+                    continue
+                self._state.revision += 1
+                self.publish_event(
+                    InputEndedEvent(
+                        **self.event_context,
+                        **dict(request),
+                        answer=progress.human_tool_answers.get(request_id),
                     )
                 )
 
@@ -1105,6 +1156,7 @@ class Run:
             self.after_tool_call = agent.after_tool_call
             self._on_finish = agent.on_finish
             self._on_suspend = agent.on_suspend
+            self._on_drained = agent.on_drained
             self._restoration = agent._restoration
             self._thread_context = copy_context()
             if coordinator is not None:
@@ -1151,7 +1203,9 @@ class Run:
             if resuming:
                 self._idle = Future()
                 self._settled = Future()
-                self.work = ExecutionWork()
+                self.work = ExecutionWork(
+                    self._execution_condition, self.notify_tool_activity
+                )
             self._execution_active = True
             self._state.status = RunStatus.RUNNING
             if self.event_delivery is not None:
@@ -1194,18 +1248,20 @@ class Run:
         """Acknowledge pending wakeups and return whether new work may start."""
         with self.execution_lock:
             self.cancellation_signal.check()
+            self._tool_activity = False
             if self._execution_request == ExecutionRequest.SUSPEND:
                 return False
             self._execution_request = ExecutionRequest.NONE
             return True
 
-    def wait_for_tool_activity(self, completed: Callable[[], bool]) -> None:
+    def wait_for_tool_activity(self) -> None:
+        """Wait for `notify_tool_activity`, an accepted input, or cancellation."""
         with self._execution_condition:
             ready = self._execution_condition.wait_for(
                 lambda: (
                     self.cancellation_signal.cancelled
                     or self._execution_request == ExecutionRequest.WAKE
-                    or completed()
+                    or self._tool_activity
                 ),
                 OPERATION_TIMEOUT_SECONDS,
             )
@@ -1290,10 +1346,6 @@ class Run:
         if failure is not None:
             # The run fails instead of suspending.
             raise failure
-        with self.execution_lock:
-            unsaved = list(self._open_nested.values())
-        for request in unsaved:
-            self.withdraw_nested_input(request)
         if self._restoration is not None:
             feature_state = _FEATURE_STATE.validate_python(
                 self._restoration.capture_state().model_dump(mode="json")
@@ -1325,6 +1377,14 @@ class Run:
                 self._wake_execution()
 
         def drained() -> None:
+            # The hook runs only when no foreground child waits or works;
+            # otherwise the run's later end runs it, after their work drains.
+            coordination = self.coordination
+            if coordination is None or (
+                not coordination.pending_children()
+                and coordination.coordinator.children_idle(list(coordination.children))
+            ):
+                self._work_drained()
             with self.execution_lock:
                 self._state.status = RunStatus.SUSPENDED
             self.publish_event(AgentSuspendedEvent(**self.event_context))
@@ -1511,6 +1571,23 @@ class Run:
             if amended_ids.intersection(covered):
                 self._state.checkpoint = None
 
+    def _work_drained(self) -> None:
+        """Call the agent's on_drained hook; the run's work has drained."""
+        hook = self._on_drained
+        if hook is None:
+            return
+        # Cleanup goes on whatever the hook raises: the run must still become
+        # idle and reusable.
+        try:
+            hook()
+        except AgentCancelled:
+            logger.info(
+                "Run on_drained hook stopped for cancellation: %s",
+                self.id,
+            )
+        except Exception:
+            logger.exception("Run on_drained hook failed: %s", self.id)
+
     def _clear_execution_config(self) -> None:
         self._token_counts.clear()
         self._llm = None
@@ -1526,6 +1603,7 @@ class Run:
         self.after_tool_call = None
         self._on_finish = None
         self._on_suspend = None
+        self._on_drained = None
         self._restoration = None
 
     def _drain_workers(self) -> None:
@@ -1538,6 +1616,7 @@ class Run:
         self._execution_active = False
 
         def finish_cleanup() -> None:
+            self._work_drained()
             try:
                 if self.coordination is not None:
                     self.coordination.coordinator.finish(self)
@@ -1636,8 +1715,9 @@ def _advance_loop(
     run: Run, llm: LLM
 ) -> Literal[RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.SUSPENDED]:
     cancellation_signal = run.cancellation_signal
-    max_steps = run._progress.step_limit
-    while run._progress.step_index < max_steps:
+    # _complete_step can raise or lower the limit so that an extra step is the
+    # run's last step.
+    while run._progress.step_index < run._progress.step_limit:
         cancellation_signal.check()
         progress = run._progress
         if progress.action == RunAction.FINISH:
@@ -1662,7 +1742,7 @@ def _advance_loop(
         if progress.action == RunAction.PREPARE:
             if not run.begin_work_cycle():
                 return RunStatus.SUSPENDED
-            step = AgentStep(index=progress.step_index, limit=max_steps)
+            step = AgentStep(index=progress.step_index, limit=progress.step_limit)
             prepare = run._prepare_step
             prepared = run._defaults
             ownership = (
@@ -1977,9 +2057,21 @@ def _compact_context(
     request = prepared.generation_request(messages, tools=tools)
     cancellation_signal.check()
     budget = context_budget(llm)
-    original_size = request_tokens(request, run._token_counts)
+    output = resolve_token_budget(llm)
+    if not force and not run._token_counts:
+        # Each cl100k token consumes at least one byte. UTF-8 uses at most
+        # four bytes per character, and one for ASCII.
+        upper_bound = request_tokens(
+            request, lambda text: len(text) * (1 if text.isascii() else 4)
+        )
+        if (
+            upper_bound <= budget.trigger
+            and output.output_allowance(upper_bound) == output.max_output_tokens
+        ):
+            return _limit_output(output, request, upper_bound)
+    original_size = cached_request_tokens(request, run._token_counts)
     if not force and original_size <= budget.trigger:
-        return _limit_output(llm, request, original_size)
+        return _limit_output(output, request, original_size)
 
     selected_checkpoint = None
     try:
@@ -1999,7 +2091,7 @@ def _compact_context(
                 "Proactive compaction failed while request still fits",
                 exc_info=True,
             )
-            return _limit_output(llm, request, original_size)
+            return _limit_output(output, request, original_size)
         logger.warning("Compaction failed; truncating older turns", exc_info=True)
 
     candidate_request = request
@@ -2011,7 +2103,7 @@ def _compact_context(
             tools=tools,
         )
         cancellation_signal.check()
-        candidate_size = request_tokens(candidate_request, run._token_counts)
+        candidate_size = cached_request_tokens(candidate_request, run._token_counts)
 
     if selected_checkpoint is None or candidate_size > budget.input_limit:
         selected_checkpoint, candidate_request, candidate_size = _truncate_context(
@@ -2028,7 +2120,7 @@ def _compact_context(
     with run.execution_lock:
         cancellation_signal.check()
         run._state.checkpoint = selected_checkpoint
-    return _limit_output(llm, candidate_request, candidate_size)
+    return _limit_output(output, candidate_request, candidate_size)
 
 
 def _truncate_context(
@@ -2059,7 +2151,7 @@ def _truncate_context(
             messages_after_compaction(source, index, summary=""), tools=tools
         )
         cancellation_signal.check()
-        candidate_size = request_tokens(candidate_request, token_counts)
+        candidate_size = cached_request_tokens(candidate_request, token_counts)
         if candidate_size <= input_limit and candidate_size < original_size:
             return checkpoint, candidate_request, candidate_size
     raise ContextLimitError(
@@ -2068,9 +2160,9 @@ def _truncate_context(
 
 
 def _limit_output(
-    llm: LLM, request: GenerationRequest, input_tokens: int
+    budget: TokenBudget, request: GenerationRequest, input_tokens: int
 ) -> GenerationRequest:
-    allowance = resolve_token_budget(llm).output_allowance(input_tokens)
+    allowance = budget.output_allowance(input_tokens)
     if allowance is not None:
         request.options.max_tokens = (
             min(request.options.max_tokens, allowance)
@@ -2150,18 +2242,43 @@ def _complete_step(run: Run) -> None:
         if after_step is not None
         else bool(calls)
     ) and not terminated
+    step_limit = progress.step_limit
+    # A step that declares tools but lets none run; the rule is in "Preparing
+    # and completing steps" in the agents README.
+    if (
+        progress.tools
+        and progress.options is not None
+        and progress.options.tool_choice == ToolChoiceOptions.NONE
+    ):
+        previous = (
+            run._state.steps[progress.step_index - 1] if progress.step_index else None
+        )
+        took_extra_step = (
+            previous is not None
+            and progress.previous_options is not None
+            and progress.previous_options.tool_choice == ToolChoiceOptions.NONE
+            and bool(previous.message.tool_calls)
+        )
+        should_continue = bool(calls) and not took_extra_step
+        if should_continue:
+            step_limit = progress.step_index + 2
+        elif not step.message.text.strip():
+            raise RuntimeError(
+                "The model did not return a final answer after tool execution."
+            )
     cancellation_signal.check()
     has_delegated_work = run.coordination is not None and bool(
         run.coordination.delegated_runs()
     )
     # Collect delegated results before accepting an early answer or using the last step.
     wait_for_children = has_delegated_work and (
-        not should_continue or progress.step_index + 2 >= progress.step_limit
+        not should_continue or progress.step_index + 2 >= step_limit
     )
     should_continue = should_continue or has_delegated_work
     ownership = run.coordination.coordinator.ownership if run.coordination else None
     with run.execution_lock:
         progress.previous_options = progress.options
+        progress.step_limit = step_limit
         can_continue = progress.step_index + 1 < progress.step_limit
         if (
             not should_continue
@@ -2234,18 +2351,30 @@ def _record_answer(
     requests: Sequence[PendingToolInput],
 ) -> bool:
     """Record an answer to one of `requests`; False when it repeats the
-    recorded answer. Raises ValueError for a conflicting or unmatched answer."""
+    recorded answer. An answer that only makes the recorded one standing,
+    such as an approval that the user later approves for the chat, replaces
+    it; one that only drops `standing` repeats it. Raises ValueError for a
+    conflicting or unmatched answer."""
     existing = progress.human_tool_answers.get(answer.request_id)
     if existing is not None:
-        if existing != answer:
+        if _conflicts(existing, answer):
             raise ValueError("Conflicting answer for request")
-        return False
+        if existing.standing or not answer.standing:
+            return False
+        progress.human_tool_answers[answer.request_id] = answer.model_copy(deep=True)
+        return True
     request = next(
         (item for item in requests if item.request_id == answer.request_id), None
     )
     if request is None:
-        raise ValueError("Unknown input request")
+        raise InputNotWaiting("Unknown input request")
     if (request.mode == InputMode.RESULT) != (answer.decision == InputDecision.RESULT):
         raise ValueError("Answer does not match the request mode")
     progress.human_tool_answers[answer.request_id] = answer.model_copy(deep=True)
     return True
+
+
+def _conflicts(recorded: HumanToolAnswer, answer: HumanToolAnswer) -> bool:
+    """Whether `answer` differs from the recorded answer in more than
+    `standing`."""
+    return recorded.model_copy(update={"standing": answer.standing}) != answer

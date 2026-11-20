@@ -1,5 +1,5 @@
-# Generated from microvm/proto/hostagent/v1/hostagent.proto (blob cfd8bbf6c3def47bf70d4606eab935ae2bc6fbf2)
-# at commit 379a92a6cb by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/hostagent/v1/hostagent.proto (blob 3f767080aa7f5e729cbf9f81c604a083d41917a3)
+# at commit acf98e8375 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
@@ -459,7 +459,7 @@ class SetDrainResponse(_message.Message):
     def __init__(self, drain: _Optional[_Union[DrainStatus, _Mapping]] = ...) -> None: ...
 
 class TemplateInfo(_message.Message):
-    __slots__ = ("version", "vcpus", "mem_mib", "scratch_gib", "guest_kernel", "firecracker_version", "image_ref", "image_digest", "rootfs_sha256", "key_sha256", "ca_fingerprint", "built_at", "compatible", "managed_slots", "balloon", "managed_mounts")
+    __slots__ = ("version", "vcpus", "mem_mib", "scratch_gib", "guest_kernel", "firecracker_version", "image_ref", "image_digest", "rootfs_sha256", "key_sha256", "ca_fingerprint", "built_at", "compatible", "managed_slots", "managed_mounts")
     VERSION_FIELD_NUMBER: _ClassVar[int]
     VCPUS_FIELD_NUMBER: _ClassVar[int]
     MEM_MIB_FIELD_NUMBER: _ClassVar[int]
@@ -474,7 +474,6 @@ class TemplateInfo(_message.Message):
     BUILT_AT_FIELD_NUMBER: _ClassVar[int]
     COMPATIBLE_FIELD_NUMBER: _ClassVar[int]
     MANAGED_SLOTS_FIELD_NUMBER: _ClassVar[int]
-    BALLOON_FIELD_NUMBER: _ClassVar[int]
     MANAGED_MOUNTS_FIELD_NUMBER: _ClassVar[int]
     version: str
     vcpus: int
@@ -490,9 +489,8 @@ class TemplateInfo(_message.Message):
     built_at: _timestamp_pb2.Timestamp
     compatible: bool
     managed_slots: int
-    balloon: bool
     managed_mounts: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, version: _Optional[str] = ..., vcpus: _Optional[int] = ..., mem_mib: _Optional[int] = ..., scratch_gib: _Optional[int] = ..., guest_kernel: _Optional[str] = ..., firecracker_version: _Optional[str] = ..., image_ref: _Optional[str] = ..., image_digest: _Optional[str] = ..., rootfs_sha256: _Optional[str] = ..., key_sha256: _Optional[str] = ..., ca_fingerprint: _Optional[str] = ..., built_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., compatible: bool = ..., managed_slots: _Optional[int] = ..., balloon: bool = ..., managed_mounts: _Optional[_Iterable[str]] = ...) -> None: ...
+    def __init__(self, version: _Optional[str] = ..., vcpus: _Optional[int] = ..., mem_mib: _Optional[int] = ..., scratch_gib: _Optional[int] = ..., guest_kernel: _Optional[str] = ..., firecracker_version: _Optional[str] = ..., image_ref: _Optional[str] = ..., image_digest: _Optional[str] = ..., rootfs_sha256: _Optional[str] = ..., key_sha256: _Optional[str] = ..., ca_fingerprint: _Optional[str] = ..., built_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., compatible: bool = ..., managed_slots: _Optional[int] = ..., managed_mounts: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class BuildTemplateRequest(_message.Message):
     __slots__ = ()

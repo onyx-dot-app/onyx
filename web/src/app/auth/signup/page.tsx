@@ -2,6 +2,7 @@ import { redirect } from "@opal/navigation";
 import { User } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
+import { START_NEW_TEAM_PARAM } from "@/lib/auth/paths";
 import { AuthTypeMetadata } from "@/lib/auth/types";
 import { EmailPasswordForm, SignInButton } from "@/lib/auth/components";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
@@ -24,6 +25,9 @@ const Page = async (props: {
   const defaultEmail = Array.isArray(searchParams?.email)
     ? searchParams?.email[0]
     : searchParams?.email || null;
+
+  // Playground: set by the "start a new team" choice on /auth/error.
+  const startNewTeam = searchParams?.[START_NEW_TEAM_PARAM] === "true";
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
@@ -60,7 +64,11 @@ const Page = async (props: {
 
   let authUrl: string | null = null;
   if (cloud && authTypeMetadata) {
-    authUrl = await getAuthUrlSS(authTypeMetadata.multiTenant, null);
+    authUrl = await getAuthUrlSS(
+      authTypeMetadata.multiTenant,
+      null,
+      startNewTeam
+    );
   }
   const appName = await fetchAppName();
 

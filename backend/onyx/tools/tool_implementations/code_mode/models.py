@@ -9,19 +9,23 @@ from typing import Annotated, Literal, Self, get_args
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
 from pydantic_monty import FunctionSnapshot, FutureSnapshot
 
-from onyx.agents.tools import ToolInvocation
+from onyx.agents.tools import NestedInputRequest, ToolInvocation
 from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.models import Message, ToolResultMessage
 from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
-    LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.sandbox.models import (
+    ApplyPatchResult,
+    PublishedFiles,
+    SandboxExecResult,
+)
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
 
 # Durable details of the tools that programs can call.
@@ -30,10 +34,12 @@ CodeModeCallDetails = Annotated[
     | CustomToolCallSummary
     | FinalImageGenerationResponse
     | FileReadResult
-    | LlmBashExecutionResult
     | LlmPythonExecutionResult
     | MemoryUpdated
-    | ToolExecutionError,
+    | ToolExecutionError
+    | SandboxExecResult
+    | ApplyPatchResult
+    | PublishedFiles,
     Field(discriminator="type"),
 ]
 CODE_MODE_CALL_DETAIL_TYPES: tuple[type[BaseModel], ...] = get_args(
@@ -556,8 +562,13 @@ class SearchableFunction(BaseModel):
     description: str
     # The function's stub with the declarations of its result types.
     stub: str
-    # Text that the search matches: the name (weighted), namespace and description.
+    # Text that the search matches: the name (weighted), namespace and
+    # description.
     text: str
+    # The argument schema's property names and descriptions; scored apart from
+    # `text`, so a large schema does not dilute it, and weighted lower
+    # (tool_search.py:PARAMETER_WEIGHT).
+    parameter_text: str
 
 
 class CellCallRecord(BaseModel):
@@ -606,9 +617,18 @@ class ObservationCut(BaseModel):
     elided_chars: int
 
 
+class SavedObserver(BaseModel):
+    """The observation of a saved cell that waits for the user's input: its
+    call, number and output budget."""
+
+    call_id: str
+    number: int
+    max_tokens: int
+
+
 class SavedCodeCell(BaseModel):
-    """A cell whose program parked while an observation of it waits for the
-    user's input, saved with the suspended run (`CodeCells.saved`)."""
+    """A cell whose program parked for the user's input, saved with the
+    suspended run (`CodeCells.saved`)."""
 
     cell_id: int
     # The execute_code call that started the cell; nested call ids use it.
@@ -617,13 +637,12 @@ class SavedCodeCell(BaseModel):
     limits: SandboxLimits
     observations: int
     window: int
-    # The observation that waits: its call, number and output budget.
-    observer_call_id: str
-    observer_number: int
-    observer_max_tokens: int
+    # None for a program that waits in the background, which no observation
+    # waits for.
+    observer: SavedObserver | None
     calls: list[CellCallRecord]
     # The input request that each waiting call waits for, by call index.
-    requests: dict[int, str]
+    requests: dict[int, NestedInputRequest]
     saved_chars: int
     # The printed text of the current window.
     stdout: str

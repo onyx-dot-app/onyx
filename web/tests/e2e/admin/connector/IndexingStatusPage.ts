@@ -19,6 +19,7 @@ export class IndexingStatusPage {
   readonly addConnectorLink: Locator;
   /** The counts card over the graph card. */
   readonly overview: Locator;
+  readonly searchInput: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -28,6 +29,14 @@ export class IndexingStatusPage {
       exact: true,
     });
     this.overview = page.getByTestId("indexing-overview");
+    this.searchInput = page.getByRole("searchbox", {
+      name: "Search connectors…",
+    });
+  }
+
+  /** Source groups page their rows, so find a connector by name first. */
+  async search(connectorName: string) {
+    await this.searchInput.fill(connectorName);
   }
 
   /**

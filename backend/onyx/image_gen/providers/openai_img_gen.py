@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from onyx.image_gen.exceptions import ImageProviderCredentialsError
 from onyx.image_gen.interfaces import (
     ImageGenerationProvider,
     ImageGenerationProviderCredentials,
@@ -38,7 +39,10 @@ class OpenAIImageGenerationProvider(ImageGenerationProvider):
         cls,
         credentials: ImageGenerationProviderCredentials,
     ) -> OpenAIImageGenerationProvider:
-        assert credentials.api_key
+        if not credentials.api_key:
+            raise ImageProviderCredentialsError(
+                "OpenAI image generation needs an API key"
+            )
 
         return cls(
             api_key=credentials.api_key,

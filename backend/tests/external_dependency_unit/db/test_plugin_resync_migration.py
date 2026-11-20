@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -18,17 +19,25 @@ from uuid import UUID, uuid4
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import Engine, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Engine,
+    Integer,
+    String,
+    Text,
+    column,
+    delete,
+    insert,
+    table,
+    text,
+    update,
+)
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import SkillInstallationPolicy, SkillSharePermission
-from onyx.db.models import (
-    Skill,
-    Skill__User,
-    Skill__UserGroup,
-    User,
-    UserSkillPreference,
-)
+from onyx.db.enums import SkillSharePermission
+from onyx.db.models import Plugin, User
 from onyx.db.skill import replace_skill_bundle
 from onyx.skills.ingest import IngestedBundle
 from onyx.skills.models import (
@@ -47,6 +56,50 @@ _VERSIONS = Path(__file__).parents[3] / "alembic/versions"
 _T0 = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
 _BACKFILL = "cdec9dd9ca3d_add_plugin_tables_and_backfill.py"
 _RESYNC = "55bf66dd54dd_resync_plugin_tables_before_access_reads.py"
+
+# The legacy skill storage that old code writes. The ORM no longer maps it.
+_skill = table(
+    "skill",
+    column("id", PGUUID(as_uuid=True)),
+    column("name", String),
+    column("description", Text),
+    column("bundle_file_id", String),
+    column("bundle_sha256", String),
+    column("is_valid", Boolean),
+    column("author_user_id", PGUUID(as_uuid=True)),
+    column("public_permission", String),
+    column("installation_policy", String),
+    column("created_at", DateTime(timezone=True)),
+    column("updated_at", DateTime(timezone=True)),
+)
+_skill__user = table(
+    "skill__user",
+    column("skill_id", PGUUID(as_uuid=True)),
+    column("user_id", PGUUID(as_uuid=True)),
+    column("permission", String),
+)
+_skill__user_group = table(
+    "skill__user_group",
+    column("skill_id", PGUUID(as_uuid=True)),
+    column("user_group_id", Integer),
+    column("permission", String),
+)
+_user_skill_preference = table(
+    "user_skill_preference",
+    column("user_id", PGUUID(as_uuid=True)),
+    column("skill_id", PGUUID(as_uuid=True)),
+    column("name", String),
+    column("enabled", Boolean),
+)
+_VIEWER = SkillSharePermission.VIEWER.value
+_EDITOR = SkillSharePermission.EDITOR.value
+
+
+@dataclass(frozen=True)
+class _LegacySkill:
+    id: UUID
+    name: str
+    description: str
 
 
 def _load(filename: str) -> ModuleType:
@@ -83,23 +136,64 @@ def _add_skill(
     author: User | None,
     public: bool = False,
     is_valid: bool | None = True,
-) -> Skill:
+) -> _LegacySkill:
     created_at = _T0 + datetime.timedelta(minutes=minutes)
-    skill = Skill(
-        id=uuid4(),
-        name=name,
-        description=f"description of {name}",
-        bundle_file_id=f"bundle-{uuid4().hex[:8]}",
-        bundle_sha256=uuid4().hex + uuid4().hex,
-        is_valid=is_valid,
-        author_user_id=author.id if author else None,
-        public_permission=SkillSharePermission.VIEWER if public else None,
-        created_at=created_at,
-        updated_at=created_at + datetime.timedelta(hours=1),
+    skill = _LegacySkill(id=uuid4(), name=name, description=f"description of {name}")
+    db_session.execute(
+        insert(_skill).values(
+            id=skill.id,
+            name=skill.name,
+            description=skill.description,
+            bundle_file_id=f"bundle-{uuid4().hex[:8]}",
+            bundle_sha256=uuid4().hex + uuid4().hex,
+            is_valid=is_valid,
+            author_user_id=author.id if author else None,
+            public_permission=_VIEWER if public else None,
+            installation_policy="AVAILABLE",
+            created_at=created_at,
+            updated_at=created_at + datetime.timedelta(hours=1),
+        )
     )
-    db_session.add(skill)
-    db_session.flush()
     return skill
+
+
+def _old_code_update(db_session: Session, skill_id: UUID, **values: Any) -> None:
+    """A change old code makes to the skill row only."""
+    db_session.execute(update(_skill).where(_skill.c.id == skill_id).values(**values))
+
+
+def _save_with_dual_write(
+    db_session: Session,
+    skill: _LegacySkill,
+    owner: User,
+    bundle_file_id: str,
+) -> None:
+    """A save by code that wrote both models (phases 1 to 3): a new plugin
+    version, and the same bundle on the skill row."""
+    plugin = db_session.get(Plugin, skill.id)
+    assert plugin is not None
+    replace_skill_bundle(
+        skill=plugin,
+        ingested=IngestedBundle(
+            canonical_name=skill.name,
+            bundle_file_id=bundle_file_id,
+            bundle_sha256="a" * 64,
+            description="written by new code",
+            content=_content(skill.name, bundle_file_id),
+        ),
+        base_version_id=None,
+        user=owner,
+        skip_if_unchanged=False,
+        db_session=db_session,
+    )
+    _old_code_update(
+        db_session,
+        skill.id,
+        bundle_file_id=bundle_file_id,
+        bundle_sha256="a" * 64,
+        description="written by new code",
+        is_valid=True,
+    )
 
 
 def _plugin_rows(db_session: Session, skill_ids: list[UUID]) -> dict[str, Any]:
@@ -224,29 +318,23 @@ def test_resync_fixes_version_drift_from_old_code(
         author=owner,
         is_valid=None,
     )
-    migration_session.add_all(
+    migration_session.execute(
+        insert(_skill__user),
         [
-            Skill__User(
-                skill_id=shared.id,
-                user_id=viewer.id,
-                permission=SkillSharePermission.VIEWER,
-            ),
-            Skill__User(
-                skill_id=shared.id,
-                user_id=editor.id,
-                permission=SkillSharePermission.VIEWER,
-            ),
-            Skill__UserGroup(
-                skill_id=shared.id,
-                user_group_id=group.id,
-                permission=SkillSharePermission.VIEWER,
-            ),
-            UserSkillPreference(
-                user_id=viewer.id, skill_id=shared.id, name=shared.name, enabled=True
-            ),
-        ]
+            {"skill_id": shared.id, "user_id": viewer.id, "permission": _VIEWER},
+            {"skill_id": shared.id, "user_id": editor.id, "permission": _VIEWER},
+        ],
     )
-    migration_session.flush()
+    migration_session.execute(
+        insert(_skill__user_group).values(
+            skill_id=shared.id, user_group_id=group.id, permission=_VIEWER
+        )
+    )
+    migration_session.execute(
+        insert(_user_skill_preference).values(
+            user_id=viewer.id, skill_id=shared.id, name=shared.name, enabled=True
+        )
+    )
     with _migration_ops(migration_session):
         backfill.backfill_plugins_from_skills()
 
@@ -254,29 +342,22 @@ def test_resync_fixes_version_drift_from_old_code(
     assert _plugin(migration_session, clash.id).name == clash.name
 
     # New code adds a version with a file list. The re-sync must keep it.
-    replace_skill_bundle(
-        skill=new_code,
-        ingested=IngestedBundle(
-            canonical_name=new_code.name,
-            bundle_file_id=f"bundle-new-{tag}",
-            bundle_sha256="a" * 64,
-            description="written by new code",
-            content=_content(new_code.name, f"bundle-new-{tag}"),
-        ),
-        base_version_id=None,
-        user=owner,
-        skip_if_unchanged=False,
-        db_session=migration_session,
-    )
+    _save_with_dual_write(migration_session, new_code, owner, f"bundle-new-{tag}")
 
     # Old code then changes only the skill rows.
     fresh = _add_skill(migration_session, name=f"fresh-{tag}", minutes=9, author=owner)
-    migration_session.delete(gone)
-    classified.is_valid = False
-    edited.bundle_file_id = f"bundle-edited-{tag}"
-    edited.bundle_sha256 = "c" * 64
-    edited.description = "edited by old code"
-    edited.updated_at = _T0 + datetime.timedelta(days=3)
+    migration_session.execute(delete(_skill).where(_skill.c.id == gone.id))
+    _old_code_update(migration_session, classified.id, is_valid=False)
+    edited_description = "edited by old code"
+    edited_updated_at = _T0 + datetime.timedelta(days=3)
+    _old_code_update(
+        migration_session,
+        edited.id,
+        bundle_file_id=f"bundle-edited-{tag}",
+        bundle_sha256="c" * 64,
+        description=edited_description,
+        updated_at=edited_updated_at,
+    )
     migration_session.execute(
         text("DELETE FROM skill__user WHERE skill_id = :s AND user_id = :u"),
         {"s": shared.id, "u": viewer.id},
@@ -291,11 +372,9 @@ def test_resync_fixes_version_drift_from_old_code(
     migration_session.execute(
         text("DELETE FROM skill__user_group WHERE skill_id = :s"), {"s": shared.id}
     )
-    migration_session.add(
-        Skill__UserGroup(
-            skill_id=shared.id,
-            user_group_id=other_group.id,
-            permission=SkillSharePermission.EDITOR,
+    migration_session.execute(
+        insert(_skill__user_group).values(
+            skill_id=shared.id, user_group_id=other_group.id, permission=_EDITOR
         )
     )
     migration_session.execute(
@@ -305,16 +384,19 @@ def test_resync_fixes_version_drift_from_old_code(
         ),
         {"s": shared.id, "u": viewer.id},
     )
-    migration_session.add(
-        UserSkillPreference(
+    migration_session.execute(
+        insert(_user_skill_preference).values(
             user_id=editor.id, skill_id=shared.id, name=shared.name, enabled=True
         )
     )
-    published.public_permission = SkillSharePermission.VIEWER
-    published.installation_policy = SkillInstallationPolicy.DEFAULT
-    unpublished.public_permission = None
-    moved.author_user_id = new_owner.id
-    migration_session.flush()
+    _old_code_update(
+        migration_session,
+        published.id,
+        public_permission=_VIEWER,
+        installation_policy="DEFAULT",
+    )
+    _old_code_update(migration_session, unpublished.id, public_permission=None)
+    _old_code_update(migration_session, moved.id, author_user_id=new_owner.id)
 
     with _migration_ops(migration_session):
         resync.upgrade()
@@ -331,7 +413,7 @@ def test_resync_fixes_version_drift_from_old_code(
     new_version_id = _resync_version_id(edited.id, f"bundle-edited-{tag}")
     assert edited_plugin.current_version_id == new_version_id
     assert edited_plugin.published_version_id == new_version_id
-    assert edited_plugin.description == "edited by old code"
+    assert edited_plugin.description == edited_description
     version = migration_session.execute(
         text(
             "SELECT version_number, bundle_file_id, bundle_sha256, file_manifest, "
@@ -344,12 +426,12 @@ def test_resync_fixes_version_drift_from_old_code(
         f"bundle-edited-{tag}",
         "c" * 64,
         None,
-        edited.updated_at,
+        edited_updated_at,
     )
     assert migration_session.execute(
         text("SELECT frontmatter FROM plugin_skill WHERE plugin_version_id = :id"),
         {"id": new_version_id},
-    ).scalar_one() == {"name": edited.name, "description": edited.description}
+    ).scalar_one() == {"name": edited.name, "description": edited_description}
 
     # A version from new code stays current: its bundle is the skill bundle.
     new_code_plugin = _plugin(migration_session, new_code.id)
@@ -447,57 +529,40 @@ def test_resync_fixes_access_drift_from_old_code(
     moved = _add_skill(db_session, name=f"moved-{tag}", minutes=4, author=owner)
     gone = _add_skill(db_session, name=f"gone-{tag}", minutes=5, author=owner)
     edited = _add_skill(db_session, name=f"edited-{tag}", minutes=6, author=owner)
-    db_session.flush()
     with _migration_ops(db_session):
         backfill.backfill_plugins_from_skills()
 
     # New code adds a version. The re-sync keeps it.
-    replace_skill_bundle(
-        skill=edited,
-        ingested=IngestedBundle(
-            canonical_name=edited.name,
-            bundle_file_id=f"bundle-new-{tag}",
-            bundle_sha256="a" * 64,
-            description="written by new code",
-            content=_content(edited.name, f"bundle-new-{tag}"),
-        ),
-        base_version_id=None,
-        user=owner,
-        skip_if_unchanged=False,
-        db_session=db_session,
-    )
+    _save_with_dual_write(db_session, edited, owner, f"bundle-new-{tag}")
 
     # Old code then changes only the skill rows: shares, choices, publish,
     # unpublish, an install setting, a transfer, a new skill from an old pod
     # and a delete.
-    db_session.add_all(
-        [
-            Skill__User(
-                skill_id=shared.id,
-                user_id=viewer.id,
-                permission=SkillSharePermission.EDITOR,
-            ),
-            Skill__UserGroup(
-                skill_id=shared.id,
-                user_group_id=group.id,
-                permission=SkillSharePermission.VIEWER,
-            ),
-            UserSkillPreference(
-                user_id=viewer.id, skill_id=shared.id, name=shared.name, enabled=False
-            ),
-        ]
-    )
-    published.public_permission = SkillSharePermission.VIEWER
-    published.installation_policy = SkillInstallationPolicy.REQUIRED
-    unpublished.public_permission = None
-    moved.author_user_id = new_owner.id
-    fresh = _add_skill(db_session, name=f"fresh-{tag}", minutes=7, author=owner)
     db_session.execute(
-        text("DELETE FROM skill WHERE id = :id"),
-        {"id": gone.id},
+        insert(_skill__user).values(
+            skill_id=shared.id, user_id=viewer.id, permission=_EDITOR
+        )
     )
-    db_session.expunge(gone)
-    db_session.flush()
+    db_session.execute(
+        insert(_skill__user_group).values(
+            skill_id=shared.id, user_group_id=group.id, permission=_VIEWER
+        )
+    )
+    db_session.execute(
+        insert(_user_skill_preference).values(
+            user_id=viewer.id, skill_id=shared.id, name=shared.name, enabled=False
+        )
+    )
+    _old_code_update(
+        db_session,
+        published.id,
+        public_permission=_VIEWER,
+        installation_policy="REQUIRED",
+    )
+    _old_code_update(db_session, unpublished.id, public_permission=None)
+    _old_code_update(db_session, moved.id, author_user_id=new_owner.id)
+    fresh = _add_skill(db_session, name=f"fresh-{tag}", minutes=7, author=owner)
+    db_session.execute(delete(_skill).where(_skill.c.id == gone.id))
     ids = [
         shared.id,
         published.id,
@@ -541,26 +606,12 @@ def test_rerun_keeps_drafts_and_publishes_old_code_edits(
     drafted = _add_skill(
         db_session, name=f"drafted-{tag}", minutes=0, author=owner, public=True
     )
-    db_session.flush()
     with _migration_ops(db_session):
         backfill.backfill_plugins_from_skills()
         resync.upgrade()
     published_v1 = _plugin(db_session, drafted.id).published_version_id
 
-    replace_skill_bundle(
-        skill=drafted,
-        ingested=IngestedBundle(
-            canonical_name=drafted.name,
-            bundle_file_id=f"bundle-draft-{tag}",
-            bundle_sha256="a" * 64,
-            description="written by new code",
-            content=_content(drafted.name, f"bundle-draft-{tag}"),
-        ),
-        base_version_id=None,
-        user=owner,
-        skip_if_unchanged=False,
-        db_session=db_session,
-    )
+    _save_with_dual_write(db_session, drafted, owner, f"bundle-draft-{tag}")
     draft = _plugin(db_session, drafted.id)
     assert draft.current_version_id != published_v1
     assert draft.published_version_id == published_v1
@@ -572,8 +623,7 @@ def test_rerun_keeps_drafts_and_publishes_old_code_edits(
     assert rerun.published_version_id == published_v1
 
     old_code_bundle = f"bundle-old-{tag}"
-    drafted.bundle_file_id = old_code_bundle
-    db_session.flush()
+    _old_code_update(db_session, drafted.id, bundle_file_id=old_code_bundle)
     with _migration_ops(db_session):
         resync.upgrade()
     edited = _plugin(db_session, drafted.id)

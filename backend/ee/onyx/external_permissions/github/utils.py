@@ -6,8 +6,6 @@ from pydantic import BaseModel, Field
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.github.models import GitHubOrganizationRef, GitHubRepository
 from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_exception
 from onyx.connectors.github.source_operations import (
@@ -197,19 +195,10 @@ def get_repository_visibility(repo: GitHubRepository) -> GitHubVisibility:
         return GitHubVisibility.PRIVATE
 
 
-def get_external_access_permission(
-    repo: GitHubRepository,
-    add_prefix: bool = False,
-) -> ExternalAccess:
+def get_external_access_permission(repo: GitHubRepository) -> ExternalAccess:
     """
     Get the external access permission for a repository.
     Uses group-based permissions for efficiency and scalability.
-
-    add_prefix: When this method is called during the initial permission sync via the connector,
-                the group ID isn't prefixed with the source while inserting the document record.
-                So in that case, set add_prefix to True, allowing the method itself to handle
-                prefixing. However, when the same method is invoked from doc_sync, our system
-                already adds the prefix to the group ID while processing the ExternalAccess object.
     """
     repo_visibility = get_repository_visibility(repo)
     logger.info(
@@ -232,13 +221,7 @@ def get_external_access_permission(
             "Repository %s is private - setting up restricted access", repo.full_name
         )
 
-        collaborators_group_id = form_collaborators_group_id(repo.id)
-        if add_prefix:
-            collaborators_group_id = build_ext_group_name_for_onyx(
-                source=DocumentSource.GITHUB,
-                ext_group_name=collaborators_group_id,
-            )
-        group_ids = {collaborators_group_id}
+        group_ids = {form_collaborators_group_id(repo.id)}
 
         logger.info("ExternalAccess groups for %s: %s", repo.full_name, group_ids)
         return ExternalAccess(
@@ -253,13 +236,7 @@ def get_external_access_permission(
         organization = repo.organization
         if organization is None:
             raise ValueError(f"Repository {repo.full_name} has no organization")
-        org_group_id = form_organization_group_id(organization.id)
-        if add_prefix:
-            org_group_id = build_ext_group_name_for_onyx(
-                source=DocumentSource.GITHUB,
-                ext_group_name=org_group_id,
-            )
-        group_ids = {org_group_id}
+        group_ids = {form_organization_group_id(organization.id)}
         logger.info("ExternalAccess groups for %s: %s", repo.full_name, group_ids)
         return ExternalAccess(
             external_user_emails=set(),

@@ -1,5 +1,5 @@
 import { DocumentInfoPacket, StreamStopInfo } from "@/lib/search/types";
-import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
+import type { ChatToolOptions } from "@/lib/tools/types";
 import { mutate } from "swr";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -180,12 +180,11 @@ export interface SendMessageParams {
   mentions?: ComposedMention[];
   parentMessageId: number | null;
   chatSessionId: string;
-  filters: SearchFiltersRequest | null;
+  // The tools, plugins and search filters of this request. A preferred tool
+  // is a preference; invocation is not guaranteed.
+  toolOptions: ChatToolOptions;
   signal?: AbortSignal;
   deepResearch?: boolean;
-  enabledToolIds?: number[];
-  // Preferred tool for this request; invocation is not guaranteed
-  preferredToolId?: number | null;
   // LLM override parameters
   modelProvider?: string;
   modelVersion?: string;
@@ -202,7 +201,7 @@ export interface SendMessageParams {
 
 export class ChatSendRejectedError extends Error {}
 
-/** The chat waits for a tool approval; the server saved nothing. */
+/** The chat waits for a tool approval or answers; the server saved nothing. */
 export class ApprovalPendingError extends ChatSendRejectedError {}
 
 export async function* sendMessage({
@@ -211,11 +210,9 @@ export async function* sendMessage({
   mentions,
   parentMessageId,
   chatSessionId,
-  filters,
+  toolOptions,
   signal,
   deepResearch,
-  enabledToolIds,
-  preferredToolId,
   modelProvider,
   modelVersion,
   modelConfigurationId,
@@ -231,10 +228,8 @@ export async function* sendMessage({
     parent_message_id: parentMessageId,
     file_descriptors: fileDescriptors,
     mentions: requestMentions(mentions ?? []),
-    internal_search_filters: filters,
+    tool_options: toolOptions,
     deep_research: deepResearch ?? false,
-    allowed_tool_ids: enabledToolIds,
-    preferred_tool_id: preferredToolId ?? null,
     llm_override:
       temperature || modelVersion || modelConfigurationId != null
         ? {
@@ -483,24 +478,6 @@ export async function deleteAllChatSessions() {
     },
   });
   return response;
-}
-
-export async function getAvailableContextTokens(
-  chatSessionId: string,
-  modelConfigurationId?: number | null
-): Promise<number | null> {
-  const params =
-    modelConfigurationId != null
-      ? `?model_configuration_id=${modelConfigurationId}`
-      : "";
-  const response = await fetch(
-    `/api/chat/available-context-tokens/${chatSessionId}${params}`
-  );
-  if (!response.ok) {
-    return null;
-  }
-  const data: { available_tokens: number } = await response.json();
-  return data?.available_tokens ?? null;
 }
 
 export function processRawChatHistory(

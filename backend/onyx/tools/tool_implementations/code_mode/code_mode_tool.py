@@ -2,6 +2,7 @@
 other tools, run as cells of the response (code_mode/cells.py)."""
 
 from collections.abc import Callable
+from functools import partial
 
 from pydantic import BaseModel, Field
 
@@ -18,7 +19,12 @@ from onyx.tools.interface import (
     parse_tool_arguments,
     tool_definition_from_arguments,
 )
-from onyx.tools.models import CodeModeExposure, ToolCallException, ToolContext
+from onyx.tools.models import (
+    CodeModeExposure,
+    ToolCallException,
+    ToolContext,
+    ToolPreference,
+)
 from onyx.tools.tool_implementations.code_mode.cells import (
     DEFAULT_MAX_OUTPUT_TOKENS,
     CodeCells,
@@ -29,10 +35,12 @@ from onyx.tools.tool_implementations.code_mode.models import (
     SandboxLimits,
 )
 from onyx.tools.tool_implementations.code_mode.prompt import (
+    INNER_CALL_MESSAGE,
     WAIT_CODE_DESCRIPTION,
     code_mode_description,
     program_function_operation,
 )
+from onyx.tools.tool_implementations.code_mode.sandbox import TOOLS_NAMESPACE
 from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
 
 # How long a call waits for the cell before it returns the output so far.
@@ -127,12 +135,16 @@ class CodeModeTool(Tool):
         self._limits = limits
         self._stubs = build_tool_stubs(self._inner_tools)
         # Calls to a sequential tool run one at a time, as they do outside programs.
+        sequences: dict[str, SequentialCalls] = {}
         self._sequential_calls = {
-            tool.name: SequentialCalls()
+            tool.name: sequences.setdefault(
+                tool.sequence_group or tool.name, SequentialCalls()
+            )
             for tool in self._inner_tools
             if tool.execution_mode == ToolExecutionMode.SEQUENTIAL
         }
         self.resume_with_input = self._resume_with_input
+        self.continue_open_input = partial(cells.continue_open, programs=self.program)
 
     def program(self, code: str, limits: SandboxLimits) -> Program:
         """A program that calls this tool's functions."""
@@ -147,12 +159,54 @@ class CodeModeTool(Tool):
     def inner_tools(self) -> list[Tool]:
         return self._inner_tools
 
-    def operation_names(self, tool_id: int) -> list[str]:
+    def operation_names(self, preference: ToolPreference) -> list[str]:
         return [
-            program_function_operation(name, deferred=function.deferred)
-            for name, function in self._stubs.functions.items()
-            if function.tool.id == tool_id
+            program_function_operation(function.called_name, deferred=function.deferred)
+            for function in self._stubs.functions.values()
+            if function.tool.matches(preference)
         ]
+
+    def called_name(self, tool_name: str) -> str:
+        """The name that the model calls the tool named `tool_name` by:
+        `tools.<function>` for a function of this tool's programs, else the
+        tool's own name."""
+        function = next(
+            (
+                function
+                for function in self._stubs.functions.values()
+                if function.tool.name == tool_name
+            ),
+            None,
+        )
+        return tool_name if function is None else function.called_name
+
+    def inner_call_hint(self, name: str) -> str | None:
+        """`name` is a function name, as the description lists it, or the
+        name of its tool, also after `tools.` or `tools_`."""
+        candidates = [
+            name,
+            name.removeprefix(f"{TOOLS_NAMESPACE}."),
+            name.removeprefix(f"{TOOLS_NAMESPACE}_"),
+        ]
+        function = next(
+            (
+                function
+                for candidate in candidates
+                for function in self._stubs.functions.values()
+                if candidate in (function.function_name, function.tool.name)
+            ),
+            None,
+        )
+        if function is None:
+            return None
+        return INNER_CALL_MESSAGE.format(
+            name=name,
+            called_name=function.called_name,
+            arguments=", ".join(
+                f"{argument}=..." for argument in sorted(function.required_arguments)
+            )
+            or "...",
+        )
 
     @property
     def id(self) -> None:
@@ -229,6 +283,7 @@ class WaitCodeTool(Tool):
         # Builds a saved cell's program with the current tools.
         self._programs = programs
         self.resume_with_input = self._resume_with_input
+        self.continue_open_input = partial(cells.continue_open, programs=programs)
 
     @property
     def id(self) -> None:
@@ -265,6 +320,7 @@ class WaitCodeTool(Tool):
             arguments.cell_id,
             invocation,
             context,
+            programs=self._programs,
             yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_WAIT_YIELD_MS),
             max_tokens=output_tokens(arguments.max_output_tokens),
             terminate=arguments.terminate,
@@ -290,7 +346,7 @@ def with_code_mode(tools: list[Tool]) -> tuple[list[Tool], CodeCells | None]:
     """Offer each tool as its `code_mode_exposure` declares: DIRECT tools stay
     direct, the others become Python functions inside `execute_code`.
 
-    `execute_code` and `wait_code` share the returned cells of one response; None
+    `execute_code` and `wait_code` share the returned cells of each run; None
     when no tool is a function. Raises ValueError for a tool that waits for child
     runs but is not DIRECT, since a program cannot wait for them.
     """

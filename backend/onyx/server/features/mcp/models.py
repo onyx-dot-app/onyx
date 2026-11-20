@@ -1,18 +1,12 @@
 import datetime
 import re
 from enum import Enum
-from typing import Annotated, Any, List, Literal, NotRequired, Optional, TypedDict
+from typing import Annotated, Any, Literal, NotRequired, TypedDict
 from uuid import UUID
 
-from mcp.shared.auth import (
-    OAuthMetadata,
-    ProtectedResourceMetadata,
-)
-from mcp.types import Tool as MCPLibTool
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, AnyUrl, BaseModel, ConfigDict, Field
 
 from onyx.db.enums import (
-    ActionPolicy,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -20,51 +14,8 @@ from onyx.db.enums import (
     MCPTransport,
 )
 from onyx.oauth.models import (
-    OAuthConfigurationFingerprint,
     PKCECodeVerifier,
-    SafeOAuthReturnPath,
 )
-from onyx.oauth.protocol import validate_authorization_params
-
-# Matches `{placeholder_name}` inside header value templates.
-_PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
-# RFC 9110 field-name syntax: a non-empty sequence of HTTP token characters.
-_HTTP_FIELD_NAME_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
-
-
-def _build_auto_substitution_map(*, user_email: str) -> dict[str, str]:
-    """Single source of truth for placeholders the backend fills in
-    automatically when rendering an ``MCPAuthTemplate`` into final headers.
-
-    Both the substitution call site (``apply_auto_substitutions``) and the
-    "which fields must the user supply" derivation
-    (``MCPAuthTemplate.derive_required_fields``) read from this map, so adding
-    a new auto-filled placeholder is a one-line change here.
-    """
-    return {"user_email": user_email}
-
-
-# Names of placeholders the backend auto-substitutes; never surfaced to the
-# user as fields they must fill in. Derived from the substitution map so the
-# two can never drift.
-AUTO_SUBSTITUTED_PLACEHOLDER_KEYS: frozenset[str] = frozenset(
-    _build_auto_substitution_map(user_email="").keys()
-)
-
-
-def apply_auto_substitutions(value: str, *, user_email: str) -> str:
-    """Substitute every backend-managed placeholder in ``value`` (e.g.
-    ``{user_email}``). User-provided substitutions are handled separately at
-    the call site that has access to the user's credential map."""
-    subst = _build_auto_substitution_map(user_email=user_email)
-    for key, replacement in subst.items():
-        value = value.replace(f"{{{key}}}", replacement)
-    return value
-
-
-def contains_mcp_placeholder(value: str) -> bool:
-    return _PLACEHOLDER_RE.search(value) is not None
-
 
 # Headers that must never be sourced from stored MCP credentials or request
 # templates. Host is particularly critical — it can be used for Host Header
@@ -72,6 +23,25 @@ def contains_mcp_placeholder(value: str) -> bool:
 DENYLISTED_MCP_HEADERS = {
     "host",
 }
+_HTTP_FIELD_NAME_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
+
+
+def _check_header_names(headers: dict[str, str]) -> dict[str, str]:
+    seen: set[str] = set()
+    for name in headers:
+        lowered = name.lower()
+        if _HTTP_FIELD_NAME_RE.fullmatch(name) is None:
+            raise ValueError(f"Invalid header name: {name!r}")
+        if lowered in DENYLISTED_MCP_HEADERS:
+            raise ValueError(f"Header {name!r} is not allowed")
+        if lowered in seen:
+            raise ValueError(f"Duplicate header name: {name!r}")
+        seen.add(lowered)
+    return headers
+
+
+# A header template that an admin saves.
+HeaderTemplate = Annotated[dict[str, str], AfterValidator(_check_header_names)]
 
 
 def merge_mcp_headers(*sources: dict[str, str]) -> dict[str, str]:
@@ -98,12 +68,6 @@ class MCPOAuthKeys(str, Enum):
     # Absolute unix expiry for the stored token. `OAuthToken` only carries the
     # relative `expires_in`, which is meaningless once reloaded from storage.
     TOKEN_EXPIRES_AT = "token_expires_at"
-
-
-class MCPConnectionStatus(str, Enum):
-    NOT_CONNECTED = "not_connected"
-    CONNECTED = "connected"
-    REAUTH_REQUIRED = "reauth_required"
 
 
 class MCPConnectionData(TypedDict):
@@ -139,406 +103,6 @@ class MCPConnectionData(TypedDict):
 
     # the actual models are defined in mcp.shared.auth
     # from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
-
-
-class MCPAuthTemplate(BaseModel):
-    """Header template shared by every MCP authentication type."""
-
-    headers: dict[str, str] = Field(
-        default_factory=dict,
-        description="Map of header names to templates with placeholders",
-    )
-    # request_body_params: List[dict[str, str]] = Field(
-    #     default_factory=list,
-    #     description="List of request body parameter templates with path/value pairs",
-    # ) # not used yet
-    required_fields: List[str] = Field(
-        default_factory=list,
-        description="List of required field names that users must provide",
-    )
-
-    @model_validator(mode="after")
-    def validate_headers(self) -> "MCPAuthTemplate":
-        seen: set[str] = set()
-        for name in self.headers:
-            lowered = name.lower()
-            if _HTTP_FIELD_NAME_RE.fullmatch(name) is None:
-                raise ValueError(f"Invalid MCP header name: {name!r}")
-            if lowered in DENYLISTED_MCP_HEADERS:
-                raise ValueError(f"MCP header {name!r} is not allowed")
-            if lowered in seen:
-                raise ValueError(f"Duplicate MCP header name: {name!r}")
-            seen.add(lowered)
-
-        derived_fields = self.derive_required_fields(self.headers)
-        if self.headers or not self.required_fields:
-            self.required_fields = derived_fields
-        return self
-
-    @staticmethod
-    def derive_required_fields(headers: dict[str, str]) -> list[str]:
-        """Extract the set of `{placeholder}` field names referenced by
-        ``headers`` values, excluding placeholders the backend fills in
-        automatically (see ``AUTO_SUBSTITUTED_PLACEHOLDER_KEYS``).
-        """
-        seen: set[str] = set()
-        for value in headers.values():
-            for match in _PLACEHOLDER_RE.findall(value):
-                if match in AUTO_SUBSTITUTED_PLACEHOLDER_KEYS:
-                    continue
-                seen.add(match)
-        return sorted(seen)
-
-    def render(
-        self, substitutions: dict[str, str], *, user_email: str
-    ) -> dict[str, str]:
-        missing = [
-            field for field in self.required_fields if not substitutions.get(field)
-        ]
-        if missing:
-            raise ValueError(
-                f"Missing MCP header substitutions: {', '.join(sorted(missing))}"
-            )
-
-        headers: dict[str, str] = {}
-        for name, template in self.headers.items():
-            value = template
-            for key, replacement in substitutions.items():
-                if key in AUTO_SUBSTITUTED_PLACEHOLDER_KEYS:
-                    continue
-                value = value.replace(f"{{{key}}}", replacement)
-            headers[name] = apply_auto_substitutions(value, user_email=user_email)
-        return headers
-
-
-class MCPToolCreateRequest(BaseModel):
-    name: str = Field(..., description="Name of the MCP tool")
-    description: Optional[str] = Field(None, description="Description of the MCP tool")
-    server_url: str = Field(..., description="URL of the MCP server")
-    auth_type: MCPAuthenticationType = Field(..., description="Authentication type")
-    auth_performer: MCPAuthenticationPerformer = Field(
-        ..., description="Who performs authentication"
-    )
-    api_token: Optional[str] = Field(
-        None, description="API token for api_token auth type"
-    )
-    api_token_changed: bool = Field(
-        default=False,
-        description=(
-            "True if the shared API token was edited. When False on an update, "
-            "the stored token is reused instead of the masked request value."
-        ),
-    )
-    oauth_setup_mode: Literal["automatic", "own_client"] | None = None
-    oauth_client_id: Optional[str] = Field(None, description="OAuth client ID")
-    oauth_client_secret: Optional[str] = Field(None, description="OAuth client secret")
-    oauth_provider_mode: MCPOAuthProviderMode = Field(
-        default=MCPOAuthProviderMode.AUTO_DISCOVERY,
-        description=(
-            "OAuth provider bootstrap mode. AUTO_DISCOVERY uses SDK challenge/"
-            "metadata discovery; KNOWN_PROVIDER uses admin-configured endpoints."
-        ),
-    )
-    oauth_cimd_enabled: bool = Field(
-        default=True,
-        description=(
-            "Let auto-discovery identify Onyx by its Client ID Metadata Document. "
-            "False registers through Dynamic Client Registration instead, for "
-            "deployments the authorization server cannot reach."
-        ),
-    )
-    oauth_authorization_endpoint: Optional[str] = Field(
-        None, description="Known-provider OAuth authorization endpoint URL"
-    )
-    oauth_token_endpoint: Optional[str] = Field(
-        None, description="Known-provider OAuth token endpoint URL"
-    )
-    oauth_scopes_override: Optional[list[str]] = Field(
-        None, description="Optional scope override for known-provider OAuth"
-    )
-    oauth_additional_auth_params: Optional[dict[str, str]] = Field(
-        None, description="Optional extra query parameters for the authorization URL"
-    )
-    oauth_client_id_changed: bool = Field(
-        default=False,
-        description=(
-            "True if `oauth_client_id` was edited by the user. When False on an "
-            "update of an existing server, the stored value is reused and the "
-            "request value is ignored. Defaults to False for backward "
-            "compatibility with older clients that don't send the flag."
-        ),
-    )
-    oauth_client_secret_changed: bool = Field(
-        default=False,
-        description=(
-            "True if `oauth_client_secret` was edited by the user. When False on "
-            "an update of an existing server, the stored value is reused and the "
-            "request value is ignored."
-        ),
-    )
-    transport: MCPTransport | None = Field(
-        None, description="MCP transport type (STREAMABLE_HTTP or SSE)"
-    )
-    auth_template: Optional[MCPAuthTemplate] = Field(
-        None,
-        description=(
-            "Headers sent to the MCP server. Values may contain placeholders "
-            "supplied per user."
-        ),
-    )
-    auth_template_headers_changed: dict[str, bool] = Field(
-        default_factory=dict,
-        description="Per-header flags marking edited template values.",
-    )
-    admin_credentials: Optional[dict[str, str]] = Field(
-        None,
-        description="Admin's credential key-value pairs for template substitution and storage",
-    )
-    admin_credentials_changed: dict[str, bool] = Field(
-        default_factory=dict,
-        description=(
-            "Per-field flags marking which `admin_credentials` were edited"
-        ),  # True = use value from request, False = use stored value
-    )
-    existing_server_id: Optional[int] = Field(
-        None, description="ID of existing server to update (for editing)"
-    )
-    # Access fields are optional on this auth-configuration path: `None` leaves
-    # the server's existing access untouched (the create/edit form owns access).
-    is_public: Optional[bool] = Field(
-        default=None,
-        description=(
-            "If True, any user may add this server's tools to their agents. "
-            "If False, access is limited to `users` / `groups`. None leaves "
-            "existing access unchanged."
-        ),
-    )
-    groups: Optional[list[int]] = Field(
-        default=None,
-        description="User group IDs allowed to use this server when not public",
-    )
-    users: Optional[list[UUID]] = Field(
-        default=None,
-        description="User IDs allowed to use this server when not public",
-    )
-
-    @model_validator(mode="after")
-    def validate_auth_configuration(self) -> "MCPToolCreateRequest":
-        if (
-            self.auth_type == MCPAuthenticationType.OAUTH
-            and self.auth_performer != MCPAuthenticationPerformer.PER_USER
-        ):
-            raise ValueError("OAuth authentication must be performed per user")
-
-        # A shared API token is required to create an admin-managed server.
-        # On update (`existing_server_id` set) it may be omitted: the upsert
-        # path reuses the stored token, so requiring it here would reject
-        # legitimate template-only edits from clients that don't replay it.
-        if (
-            self.auth_type == MCPAuthenticationType.API_TOKEN
-            and self.auth_performer == MCPAuthenticationPerformer.ADMIN
-            and self.existing_server_id is None
-            and not self.api_token
-        ):
-            raise ValueError(
-                "api_token is required when auth_type is 'api_token' and auth_performer is 'admin'"
-            )
-
-        if (
-            self.auth_type == MCPAuthenticationType.API_TOKEN
-            and self.auth_performer == MCPAuthenticationPerformer.ADMIN
-        ):
-            # An omitted template is resolved against the existing server
-            # configuration during an update, or defaults to Bearer when a
-            # server is created. Do not materialize that default here, since
-            # doing so makes an omitted template look like an explicit edit.
-            if self.auth_template is not None:
-                if not any(
-                    "{api_key}" in value
-                    for value in self.auth_template.headers.values()
-                ):
-                    raise ValueError(
-                        "Shared API-token header templates must include the {api_key} placeholder"
-                    )
-        # Validate that API token is not provided for per-user auth
-        if (
-            self.auth_type == MCPAuthenticationType.API_TOKEN
-            and self.auth_performer == MCPAuthenticationPerformer.PER_USER
-            and self.api_token
-            and self.api_token.strip()
-        ):
-            raise ValueError(
-                "api_token should not be provided when auth_performer is 'per_user'. Users will provide their own credentials."
-            )
-
-        # Validate that auth_template is provided for per-user auth
-        if (
-            self.auth_type == MCPAuthenticationType.API_TOKEN
-            and self.auth_performer == MCPAuthenticationPerformer.PER_USER
-        ):
-            if not self.auth_template:
-                raise ValueError(
-                    "auth_template is required when auth_performer is 'per_user'"
-                )
-            if self.auth_template.required_fields and not self.admin_credentials:
-                raise ValueError(
-                    "admin_credentials is required when auth_performer is 'per_user'"
-                )
-
-        # OAuth client ID/secret are optional. Without them, auto-discovery
-        # attempts CIMD before falling back to dynamic client registration.
-        if self.auth_type != MCPAuthenticationType.OAUTH:
-            self.oauth_provider_mode = MCPOAuthProviderMode.AUTO_DISCOVERY
-            self.oauth_cimd_enabled = True
-            self.oauth_authorization_endpoint = None
-            self.oauth_token_endpoint = None
-            self.oauth_scopes_override = None
-            self.oauth_additional_auth_params = None
-            return self
-
-        if self.oauth_provider_mode == MCPOAuthProviderMode.KNOWN_PROVIDER:
-            if not self.oauth_authorization_endpoint:
-                raise ValueError(
-                    "oauth_authorization_endpoint is required for known-provider OAuth mode"
-                )
-            if not self.oauth_token_endpoint:
-                raise ValueError(
-                    "oauth_token_endpoint is required for known-provider OAuth mode"
-                )
-            validate_authorization_params(
-                self.oauth_authorization_endpoint,
-                self.oauth_additional_auth_params,
-                owns_resource=True,
-            )
-        else:
-            # AUTO_DISCOVERY: clear fields that only apply to KNOWN_PROVIDER
-            self.oauth_authorization_endpoint = None
-            self.oauth_token_endpoint = None
-            self.oauth_scopes_override = None
-            self.oauth_additional_auth_params = None
-
-        return self
-
-
-class MCPSetupRequest(MCPToolCreateRequest):
-    """Connection settings validated before a new or edited server is saved."""
-
-    available_in_craft: bool | None = None
-    enable_chat: bool | None = None
-    users_can_manage_policies: bool | None = None
-    action_policies: dict[str, ActionPolicy] | None = None
-
-
-class MCPToolUpdateRequest(BaseModel):
-    server_id: int = Field(..., description="ID of the MCP server")
-    name: Optional[str] = Field(None, description="Updated name of the MCP server")
-    description: Optional[str] = Field(
-        None, description="Updated description of the MCP server"
-    )
-    selected_tools: Optional[List[str]] = Field(
-        None, description="List of selected tool names to create"
-    )
-
-
-class MCPServerSimpleCreateRequest(BaseModel):
-    available_in_craft: bool = Field(
-        default=False, description="Whether the Craft agent may use this server"
-    )
-    name: str = Field(..., description="Name of the MCP server")
-    description: Optional[str] = Field(
-        None, description="Description of the MCP server"
-    )
-    server_url: str = Field(..., description="URL of the MCP server")
-    is_public: bool = Field(
-        default=True,
-        description=(
-            "If True, any user may add this server's tools to their agents. "
-            "If False, access is limited to `users` / `groups`."
-        ),
-    )
-    groups: list[int] = Field(
-        default_factory=list,
-        description="User group IDs allowed to use this server when not public",
-    )
-    users: list[UUID] = Field(
-        default_factory=list,
-        description="User IDs allowed to use this server when not public",
-    )
-
-
-class MCPServerSimpleUpdateRequest(BaseModel):
-    users_can_manage_policies: bool | None = Field(
-        default=None,
-        description="Whether users may manage action policies. None leaves this unchanged.",
-    )
-    name: Optional[str] = Field(None, description="Name of the MCP server")
-    description: Optional[str] = Field(
-        None, description="Description of the MCP server"
-    )
-    server_url: Optional[str] = Field(None, description="URL of the MCP server")
-    action_policies: Optional[dict[str, ActionPolicy]] = Field(
-        default=None,
-        description=(
-            "Sparse per-tool approval overrides for chat and Craft keyed by tool name; "
-            "replaces the stored set. Unlisted tools use their default: ALWAYS "
-            "when the server marks them read-only, else ASK. "
-            "None leaves existing overrides unchanged."
-        ),
-    )
-    # None leaves the server's existing access unchanged.
-    is_public: Optional[bool] = Field(
-        default=None,
-        description=(
-            "If True, any user may add this server's tools to their agents. "
-            "If False, access is limited to `users` / `groups`. None leaves "
-            "existing access unchanged."
-        ),
-    )
-    groups: Optional[list[int]] = Field(
-        default=None,
-        description="User group IDs allowed to use this server when not public",
-    )
-    users: Optional[list[UUID]] = Field(
-        default=None,
-        description="User IDs allowed to use this server when not public",
-    )
-    available_in_craft: Optional[bool] = Field(
-        None, description="Whether the Craft agent may use this server"
-    )
-
-
-class MCPToolResponse(BaseModel):
-    id: int
-    name: str
-    display_name: str
-    description: str
-    definition: Optional[dict] = None  # MCP tools don't use OpenAPI definitions
-    custom_headers: List[dict] = []
-    in_code_tool_id: Optional[str] = None
-    passthrough_auth: bool = False
-    # MCP-specific fields
-    server_url: str
-    auth_type: str
-    auth_performer: Optional[str] = None
-    connection_status: MCPConnectionStatus
-
-
-class MCPOAuthConnectRequest(BaseModel):
-    name: str = Field(..., description="Name of the MCP tool")
-    description: Optional[str] = Field(None, description="Description of the MCP tool")
-    server_url: str = Field(..., description="URL of the MCP server")
-    selected_tools: Optional[List[str]] = Field(
-        None, description="List of selected tool names to create"
-    )
-    existing_server_id: Optional[int] = Field(
-        None, description="ID of existing server to update (for editing)"
-    )
-
-
-class MCPOAuthConnectResponse(BaseModel):
-    oauth_url: str = Field(..., description="OAuth URL to redirect user to")
-    state: str = Field(..., description="OAuth state parameter")
-    pending_tool: dict = Field(..., description="Pending tool configuration")
 
 
 class MCPOAuthDiscoveryRequest(BaseModel):
@@ -589,59 +153,6 @@ MCPSetupProbeResult = Annotated[
 ]
 
 
-class MCPUserOAuthConnectRequest(BaseModel):
-    server_id: int = Field(..., description="ID of the MCP server")
-    return_path: SafeOAuthReturnPath = Field(
-        ..., description="Path to redirect to after callback"
-    )
-    include_resource_param: bool = Field(..., description="Include resource parameter")
-    force_reauthentication: bool = Field(
-        default=False,
-        description="Ignore stored OAuth tokens and start a fresh authorization flow",
-    )
-    oauth_client_id: str | None = Field(
-        None, description="OAuth client ID (optional for CIMD or DCR)"
-    )
-    oauth_client_secret: str | None = Field(
-        None, description="OAuth client secret (optional for CIMD or DCR)"
-    )
-    oauth_client_id_changed: bool = Field(
-        default=False,
-        description=(
-            "True if `oauth_client_id` was edited by the user. When False, "
-            "the stored value is reused and the request value is ignored. "
-            "Defaults to False for backward compatibility."
-        ),
-    )
-    oauth_client_secret_changed: bool = Field(
-        default=False,
-        description=(
-            "True if `oauth_client_secret` was edited by the user. When False, "
-            "the stored value is reused and the request value is ignored."
-        ),
-    )
-
-
-class MCPUserOAuthConnectResponse(BaseModel):
-    server_id: int
-    status: Literal["authorization_required", "already_authenticated"]
-    authorization_url: str | None = None
-    redirect_url: str
-
-    @model_validator(mode="after")
-    def validate_outcome(self) -> "MCPUserOAuthConnectResponse":
-        if self.status == "authorization_required" and not self.authorization_url:
-            raise ValueError("authorization_required needs an authorization_url")
-        if (
-            self.status == "already_authenticated"
-            and self.authorization_url is not None
-        ):
-            raise ValueError(
-                "already_authenticated cannot include an authorization_url"
-            )
-        return self
-
-
 class MCPPendingOAuthAuthorization(BaseModel):
     authorization_url: str
     state: str
@@ -656,60 +167,11 @@ class MCPServerConnection(BaseModel):
     id: int
     name: str
     server_url: str
-    auth_type: MCPAuthenticationType | None
     transport: MCPTransport | None
     oauth_provider_mode: MCPOAuthProviderMode
     oauth_cimd_enabled: bool
     oauth_authorization_endpoint: str | None
     oauth_token_endpoint: str | None
-
-
-class MCPOAuthServerSnapshot(BaseModel):
-    server_url: str
-    auth_type: MCPAuthenticationType
-    auth_performer: MCPAuthenticationPerformer
-    provider_mode: MCPOAuthProviderMode
-    # Defaulted so attempts persisted before this field existed still complete.
-    cimd_enabled: bool = True
-    transport: MCPTransport | None
-    authorization_endpoint: str | None
-    token_endpoint: str | None
-    scopes: list[str] | None
-    additional_authorization_parameters: dict[str, Any] | None
-
-
-class MCPOAuthFlowState(BaseModel):
-    server_id: int
-    connection_config_id: int
-    return_path: SafeOAuthReturnPath
-    code_verifier: PKCECodeVerifier
-    redirect_uri: AnyUrl
-    server_snapshot: MCPOAuthServerSnapshot
-    connection_headers_fingerprint: OAuthConfigurationFingerprint
-    client_information_fingerprint: OAuthConfigurationFingerprint
-    protected_resource_metadata: ProtectedResourceMetadata | None = None
-    oauth_metadata: OAuthMetadata | None = None
-    authorization_server_url: str | None = None
-    protocol_version: str | None = None
-    scope: str | None = None
-    resource: AnyUrl | None = None
-
-
-class MCPOAuthCallbackRequest(BaseModel):
-    """Request payload for completing OAuth flow (authorization code exchange)."""
-
-    code: str = Field(..., description="Authorization code returned by the IdP")
-    state: Optional[str] = Field(
-        None, description="State parameter for CSRF protection"
-    )
-
-
-class MCPOAuthCallbackResponse(BaseModel):
-    success: bool
-    message: str
-    server_id: int
-    server_name: str
-    redirect_url: str
 
 
 class MCPOAuthClientMetadataDocument(BaseModel):
@@ -721,186 +183,78 @@ class MCPOAuthClientMetadataDocument(BaseModel):
     token_endpoint_auth_method: Literal["none"]
 
 
-class MCPDynamicClientRegistrationRequest(BaseModel):
-    """Request for dynamic client registration per RFC 7591"""
-
-    server_id: int = Field(..., description="MCP server ID")
-    authorization_server_url: str = Field(
-        ...,
-        description="Authorization server URL discovered from WWW-Authenticate or metadata",
-    )
+# The admin MCP server routes of the public API (the Terraform provider uses
+# them). They keep the shapes of the release before integrations.
 
 
-class MCPDynamicClientRegistrationResponse(BaseModel):
-    """Response from dynamic client registration"""
-
-    client_id: str = Field(..., description="Registered client ID")
-    client_secret: Optional[str] = Field(
-        None, description="Client secret if confidential client"
-    )
-    registration_access_token: Optional[str] = Field(
-        None, description="Token for managing this client registration"
-    )
-    registration_client_uri: Optional[str] = Field(
-        None, description="URI for managing this client registration"
-    )
+class MCPAuthTemplate(BaseModel):
+    headers: HeaderTemplate = Field(default_factory=dict)
+    # Derived from the placeholders of ``headers``.
+    required_fields: list[str] = Field(default_factory=list)
 
 
-class MCPApiKeyRequest(BaseModel):
-    server_id: int = Field(..., description="ID of the MCP server")
-    api_key: str = Field(..., description="API key to store")
-    transport: str = Field(..., description="Transport type")
-
-
-class MCPUserCredentialsRequest(BaseModel):
-    """Enhanced request for template-based user credentials"""
-
-    server_id: int = Field(..., description="ID of the MCP server")
-    credentials: dict[str, str] = Field(
-        ..., description="User-provided credentials (api_key, custom_token, etc.)"
-    )
-    transport: str = Field(..., description="Transport type")
-
-
-class MCPApiKeyResponse(BaseModel):
-    success: bool
-    message: str
-    server_id: int
-    server_name: str
-    authenticated: bool
-    validation_tested: bool = Field(
-        default=False, description="Whether credentials were tested against MCP server"
-    )
-
-
-class MCPUserPreferencesUpdateRequest(BaseModel):
-    enabled_in_chat: bool | None = None
-    enabled_in_craft: bool | None = None
-
-    @model_validator(mode="after")
-    def validate_preferences(self) -> "MCPUserPreferencesUpdateRequest":
-        if self.enabled_in_chat is None and self.enabled_in_craft is None:
-            raise ValueError("At least one preference is required")
-        if any(value is None for value in self.model_dump(exclude_unset=True).values()):
-            raise ValueError("Preferences must be booleans")
-        return self
-
-
-class MCPUserPreferencesResponse(BaseModel):
-    enabled_in_chat: bool
-    enabled_in_craft: bool
-
-
-class MCPServer(BaseModel):
-    id: int
+class MCPToolCreateRequest(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     server_url: str
-    owner: str
-    transport: Optional[MCPTransport] = None
-    auth_type: Optional[MCPAuthenticationType] = None
-    auth_performer: Optional[MCPAuthenticationPerformer] = None
-    oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY
-    oauth_setup_mode: Literal["automatic", "own_client"] | None = None
-    oauth_cimd_enabled: bool = True
-    oauth_authorization_endpoint: Optional[str] = None
-    oauth_token_endpoint: Optional[str] = None
-    oauth_scopes_override: Optional[list[str]] = None
-    oauth_additional_auth_params: Optional[dict[str, str]] = None
-    # Local credential state. None when there is no user context.
-    connection_status: MCPConnectionStatus | None
-    status: MCPServerStatus
-    is_public: bool = True
-    groups: list[int] = Field(default_factory=list)
-    users: list[UUID] = Field(default_factory=list)
-    available_in_craft: bool = False
-    users_can_manage_policies: bool = True
-    user_enabled_in_chat: bool = True
-    user_enabled_in_craft: bool = True
-    default_chat_enabled: bool | None = Field(
-        None,
-        description=(
-            "Whether any server tool is selected for the default assistant. "
-            "Computed by member and admin listings, independently of credentials and tool enablement."
-        ),
-    )
-    action_policies: Optional[dict[str, ActionPolicy]] = Field(
-        None,
-        description=(
-            "Stored per-tool approval overrides for chat and Craft (sparse; unlisted "
-            "tools use their default: ALWAYS when read-only, else ASK). "
-            "Owner/admin views only."
-        ),
-    )
-    last_refreshed_at: Optional[datetime.datetime] = None
-    tool_count: int = Field(
-        default=0, description="Number of tools associated with this server"
-    )
-    auth_template: Optional[MCPAuthTemplate] = Field(
-        None, description="Authentication template for per-user auth"
-    )
-    user_credentials: Optional[dict[str, str]] = Field(
-        None, description="User's existing credentials for pre-filling forms"
-    )
-    admin_credentials: Optional[dict[str, str]] = Field(
-        None,
-        description="Admin's credential key-value pairs for template substitution and storage",
-    )
-    # Server-stamped affordance map; fail-closed empty (only the admin server list stamps it).
-    permissions: dict[str, bool] = Field(default_factory=dict)
-    craft_connected: Optional[bool] = Field(
-        None,
-        description=(
-            "Whether Craft can authenticate this user against the server. "
-            "None outside the Craft listing, the only one that computes it."
-        ),
-    )
-
-
-class MCPServersResponse(BaseModel):
-    assistant_id: str | None = None
-    mcp_servers: List[MCPServer]
+    auth_type: MCPAuthenticationType
+    auth_performer: MCPAuthenticationPerformer
+    api_token: str | None = None
+    # False on an update keeps the stored token.
+    api_token_changed: bool = False
+    transport: MCPTransport | None = None
+    # Omitted on an update keeps the stored template.
+    auth_template: MCPAuthTemplate | None = None
+    admin_credentials: dict[str, str] | None = None
+    # False for a key on an update keeps the stored value.
+    admin_credentials_changed: dict[str, bool] = Field(default_factory=dict)
+    existing_server_id: int | None = None
+    # None keeps the stored access.
+    is_public: bool | None = None
+    groups: list[int] | None = None
+    users: list[UUID] | None = None
 
 
 class MCPServerCreateResponse(BaseModel):
-    """Response for creating multiple MCP tools"""
-
     server_id: int
     server_name: str
     server_url: str
     auth_type: str
-    auth_performer: Optional[str]
-    oauth_provider_mode: MCPOAuthProviderMode = MCPOAuthProviderMode.AUTO_DISCOVERY
-    oauth_cimd_enabled: bool = True
-    oauth_authorization_endpoint: Optional[str] = None
-    oauth_token_endpoint: Optional[str] = None
-    oauth_scopes_override: Optional[list[str]] = None
-    oauth_additional_auth_params: Optional[dict[str, str]] = None
-    # True when the server needs no per-user auth (auth_type NONE or an admin
-    # supplies shared credentials), so it is usable right after creation.
+    auth_performer: str | None
     no_user_authentication_required: bool
 
 
-class MCPServerUpdateResponse(BaseModel):
-    """Response for updating multiple MCP tools"""
+class MCPServerSimpleUpdateRequest(BaseModel):
+    """Each field that is None stays as it is."""
 
-    server_id: int
-    server_name: str
-    updated_tools: int
+    name: str | None = None
+    description: str | None = None
+    server_url: str | None = None
+    is_public: bool | None = None
+    groups: list[int] | None = None
+    users: list[UUID] | None = None
+    available_in_craft: bool | None = None
 
 
-class MCPToolListResponse(BaseModel):
-    server_id: int
-    server_name: str
+class MCPServerAdminView(BaseModel):
+    id: int
+    name: str
+    description: str | None
     server_url: str
-    tools: list[MCPLibTool]
+    owner: str
+    transport: MCPTransport | None
+    auth_type: MCPAuthenticationType
+    auth_performer: MCPAuthenticationPerformer
+    status: MCPServerStatus
+    is_public: bool
+    groups: list[int]
+    users: list[UUID]
+    available_in_craft: bool
+    integration_id: int
+    last_refreshed_at: datetime.datetime | None
+    tool_count: int
+    auth_template: MCPAuthTemplate | None
 
 
-class MCPSetupConnectedResponse(BaseModel):
-    status: Literal["connected"] = "connected"
-    server: MCPServer
-
-
-class MCPSetupAuthorizationResponse(BaseModel):
-    status: Literal["authorization_required"] = "authorization_required"
-    authorization_url: str
+class MCPServerDeleteResponse(BaseModel):
+    success: bool

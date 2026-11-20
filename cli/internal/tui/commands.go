@@ -99,7 +99,8 @@ func cmdNew(m Model) (Model, tea.Cmd) {
 	}
 	m.chatSessionID = nil
 	m.approvals = nil
-	m.resolvedApprovals = nil
+	m.questions = nil
+	m.resolvedRequests = nil
 	m.approvalsVersion = ""
 	m.approvalsLoadVersion = ""
 	parentID := -1

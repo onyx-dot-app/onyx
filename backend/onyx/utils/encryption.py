@@ -1,7 +1,11 @@
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
-from onyx.configs.app_configs import ENCRYPTION_KEY_SECRET
+from onyx.configs.app_configs import (
+    ENCRYPTION_KEY_SECRET,
+    ENCRYPTION_KEYS_JSON,
+    ENCRYPTION_WRITE_KEY_ID,
+)
 from onyx.configs.constants import MASK_CREDENTIAL_LONG_RE, MASK_CREDENTIAL_SHORT
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,
@@ -12,22 +16,33 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 logger = setup_logger()
 
 
+# The MIT edition stores secrets as plain text and ignores every key setting.
+_ENCRYPTION_CONFIGURED = bool(
+    ENCRYPTION_KEY_SECRET or ENCRYPTION_KEYS_JSON or ENCRYPTION_WRITE_KEY_ID
+)
+
+
 # IMPORTANT DO NOT DELETE, THIS IS USED BY fetch_versioned_implementation
-def _encrypt_string(input_str: str, key: str | None = None) -> bytes:
-    if ENCRYPTION_KEY_SECRET:
+def _encrypt_string(input_str: str) -> bytes:
+    if _ENCRYPTION_CONFIGURED:
         logger.warning("MIT version of Onyx does not support encryption of secrets.")
-    elif key is not None:
-        logger.debug("MIT encrypt called with explicit key — key ignored.")
     return input_str.encode()
 
 
 # IMPORTANT DO NOT DELETE, THIS IS USED BY fetch_versioned_implementation
-def _decrypt_bytes(input_bytes: bytes, key: str | None = None) -> str:
-    if ENCRYPTION_KEY_SECRET:
+def _decrypt_bytes(input_bytes: bytes) -> str:
+    if _ENCRYPTION_CONFIGURED:
         logger.warning("MIT version of Onyx does not support decryption of secrets.")
-    elif key is not None:
-        logger.debug("MIT decrypt called with explicit key — key ignored.")
     return input_bytes.decode()
+
+
+# IMPORTANT DO NOT DELETE, THIS IS USED BY fetch_versioned_implementation
+def _validate_encryption_configuration() -> None:
+    if _ENCRYPTION_CONFIGURED:
+        logger.warning(
+            "ENCRYPTION_KEY_SECRET, ENCRYPTION_KEYS or ENCRYPTION_WRITE_KEY_ID is set, "
+            "but the MIT version of Onyx stores secrets as plain text."
+        )
 
 
 def mask_string(sensitive_str: str) -> str:
@@ -266,15 +281,24 @@ def restore_masked_credentials(
     return restored
 
 
-def encrypt_string_to_bytes(intput_str: str, key: str | None = None) -> bytes:
+def encrypt_string_to_bytes(input_str: str) -> bytes:
     versioned_encryption_fn = fetch_versioned_implementation(
         "onyx.utils.encryption", "_encrypt_string"
     )
-    return versioned_encryption_fn(intput_str, key=key)
+    return versioned_encryption_fn(input_str)
 
 
-def decrypt_bytes_to_string(intput_bytes: bytes, key: str | None = None) -> str:
+def decrypt_bytes_to_string(input_bytes: bytes) -> str:
     versioned_decryption_fn = fetch_versioned_implementation(
         "onyx.utils.encryption", "_decrypt_bytes"
     )
-    return versioned_decryption_fn(intput_bytes, key=key)
+    return versioned_decryption_fn(input_bytes)
+
+
+def validate_encryption_configuration() -> None:
+    """Called once by every process at startup, after the edition is set, so a
+    process with unusable encryption settings stops before it serves anything."""
+    versioned_validate_fn = fetch_versioned_implementation(
+        "onyx.utils.encryption", "_validate_encryption_configuration"
+    )
+    versioned_validate_fn()

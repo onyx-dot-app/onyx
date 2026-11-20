@@ -40,36 +40,33 @@ func TestParseTunnelPorts(t *testing.T) {
 	}
 }
 
-func TestDevTunnel_forwardsThroughDockerExecOnLoopback(t *testing.T) {
-	root := t.TempDir()
-	calls := kubeFakeTools(t, map[string]string{
-		"git":    kubeGitScript(t, root, "main"),
-		"docker": "printf 'abc123\\n'\n",
-		"socat":  "exit 0\n",
-	})
+func TestDevTunnel_forwardsThroughDockerExec(t *testing.T) {
+	cases := []struct {
+		name   string
+		args   []string
+		listen string
+	}{
+		{"loopback by default", []string{"9000:8080"}, "TCP-LISTEN:9000,fork,reuseaddr,bind=127.0.0.1"},
+		{"bind-all listens on every interface", []string{"--bind-all", "8080"}, "TCP-LISTEN:8080,fork,reuseaddr"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := t.TempDir()
+			calls := kubeFakeTools(t, map[string]string{
+				"git":    kubeGitScript(t, root, "main"),
+				"docker": "printf 'abc123\\n'\n",
+				"socat":  "exit 0\n",
+			})
 
-	kubeExecute(t, newDevTunnelCommand(), "9000:8080")
+			kubeExecute(t, newDevTunnelCommand(), c.args...)
 
-	got := calls()
-	kubeAssertCalls(t, kubeCallsTo(got, "docker"), [][]string{
-		{"ps", "-q", "--filter", "label=devcontainer.local_folder=" + root},
-	})
-	kubeAssertCalls(t, kubeCallsTo(got, "socat"), [][]string{
-		{"TCP-LISTEN:9000,fork,reuseaddr,bind=127.0.0.1", `SYSTEM:docker exec -i abc123 socat - TCP\:127.0.0.1\:8080`},
-	})
-}
-
-func TestDevTunnel_bindAllListensOnEveryInterface(t *testing.T) {
-	root := t.TempDir()
-	calls := kubeFakeTools(t, map[string]string{
-		"git":    kubeGitScript(t, root, "main"),
-		"docker": "printf 'abc123\\n'\n",
-		"socat":  "exit 0\n",
-	})
-
-	kubeExecute(t, newDevTunnelCommand(), "--bind-all", "8080")
-
-	kubeAssertCalls(t, kubeCallsTo(calls(), "socat"), [][]string{
-		{"TCP-LISTEN:8080,fork,reuseaddr", `SYSTEM:docker exec -i abc123 socat - TCP\:127.0.0.1\:8080`},
-	})
+			got := calls()
+			kubeAssertCalls(t, kubeCallsTo(got, "docker"), [][]string{
+				{"ps", "-q", "--filter", "label=devcontainer.local_folder=" + root},
+			})
+			kubeAssertCalls(t, kubeCallsTo(got, "socat"), [][]string{
+				{c.listen, `SYSTEM:docker exec -i abc123 socat - TCP\:127.0.0.1\:8080`},
+			})
+		})
+	}
 }

@@ -184,7 +184,7 @@
   [data-disabled],
   [data-passive]
 ) {
-  @apply bg-background-tint-00;
+  @apply bg-transparent;
   --interactive-foreground: var(--text-04);
   --interactive-foreground-icon: var(--text-04);
 }
@@ -196,7 +196,7 @@
   [data-disabled],
   [data-passive]
 ) {
-  @apply bg-background-tint-00;
+  @apply bg-transparent;
   --interactive-foreground: var(--text-05);
   --interactive-foreground-icon: var(--text-05);
 }
@@ -344,7 +344,7 @@
   [data-disabled],
   [data-passive]
 ) {
-  @apply bg-background-tint-00;
+  @apply bg-transparent;
   --interactive-foreground: var(--action-selection-06);
   --interactive-foreground-icon: var(--action-selection-06);
 }
@@ -356,7 +356,7 @@
   [data-disabled],
   [data-passive]
 ) {
-  @apply bg-background-tint-01;
+  @apply bg-transparent;
   --interactive-foreground: var(--action-selection-06);
   --interactive-foreground-icon: var(--action-selection-06);
 }
@@ -504,7 +504,7 @@
   [data-disabled],
   [data-passive]
 ) {
-  @apply bg-background-tint-00;
+  @apply bg-transparent;
   --interactive-foreground: var(--action-danger-06);
   --interactive-foreground-icon: var(--action-danger-06);
 }
@@ -516,7 +516,7 @@
   [data-disabled],
   [data-passive]
 ) {
-  @apply bg-background-tint-01;
+  @apply bg-transparent;
   --interactive-foreground: var(--action-danger-06);
   --interactive-foreground-icon: var(--action-danger-06);
 }

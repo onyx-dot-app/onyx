@@ -22,6 +22,37 @@ A floating `latest` tag is risky:
 With a pinned tag, an upgrade occurs only when you change `global.version`. For release notes,
 see the [Changelog](/changelog).
 
+## Replace the bundled ingress controller
+
+Kubernetes [retired Ingress NGINX](https://kubernetes.io/blog/2026/03/30/kubernetes-v1-36-sneak-peek/).
+The bundled controller no longer receives security updates.
+Set up a supported ingress controller before you [turn off the bundled
+controller](/deployment/production/external_services#per-service-notes).
+
+Until you replace the bundled controller, keep HTTP/2 disabled to mitigate CVE-2026-123007 and CVE-2026-123633.
+Chart version 0.9.54 disables HTTP/2 by default. Set the value explicitly if you upgrade with `--reuse-values`:
+
+```yaml values.yaml
+nginx:
+  controller:
+    config:
+      use-http2: "false"
+```
+
+Disabling HTTP/2 does not update the controller image or fix other NGINX vulnerabilities.
+
+After the upgrade, check that the controller pods restarted.
+If `nginx.controller.updateStrategy.type` is `OnDelete` for a DaemonSet, delete the old controller pods one at a time.
+Wait for each replacement pod to be ready before you delete the next one.
+
+In all other cases, run this command if the pods did not restart:
+
+```bash
+kubectl rollout restart "deployment/<controller-name>" -n "<namespace>"
+```
+
+If `nginx.controller.kind` is `DaemonSet`, use `daemonset/<controller-name>` instead. Wait for the new pods to be ready.
+
 ## Credentials
 
 Every section under `auth` accepts `existingSecret`. The chart then reads from your Secret and does not create one.

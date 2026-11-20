@@ -57,7 +57,7 @@ jest.mock("@/hooks/useUserExternalApps", () => ({
   default: () => ({ data: mockExternalApps }),
 }));
 
-const mockCraftMcp = { data: { mcp_servers: [] } };
+const mockCraftMcp = { data: [] };
 jest.mock("@/lib/mcp/hooks", () => ({
   useCraftMcpServers: () => mockCraftMcp,
 }));
@@ -83,14 +83,12 @@ jest.mock("@/app/craft/v1/tasks/components/TaskActionPolicies", () => ({
     useEffect(() => {
       onChange([
         {
-          gated_app_id: 11,
-          enabled: true,
-          action_policies: { send: "ALWAYS" },
+          integration_id: 11,
+          action_settings: { default: "inherit", actions: { send: "allow" } },
         },
         {
-          gated_app_id: 22,
-          enabled: false,
-          action_policies: { read: "ASK" },
+          integration_id: 22,
+          action_settings: { default: "ask", actions: { read: "blocked" } },
         },
       ]);
     }, [onChange]);
@@ -228,7 +226,7 @@ describe("ScheduleTaskForm app picker", () => {
     await waitFor(() => expect(prompt).toHaveValue("make /pptx  now"));
   });
 
-  it("saves independent action choices for apps and MCP servers", async () => {
+  it("saves the integrations of the task with their action settings", async () => {
     const user = setupUser();
     renderForm();
 
@@ -239,16 +237,17 @@ describe("ScheduleTaskForm app picker", () => {
     await waitFor(() =>
       expect(mockCreateScheduledTask).toHaveBeenCalledWith(
         expect.objectContaining({
-          action_policies: [
+          integrations: [
             {
-              gated_app_id: 11,
-              enabled: true,
-              action_policies: { send: "ALWAYS" },
+              integration_id: 11,
+              action_settings: {
+                default: "inherit",
+                actions: { send: "allow" },
+              },
             },
             {
-              gated_app_id: 22,
-              enabled: false,
-              action_policies: { read: "ASK" },
+              integration_id: 22,
+              action_settings: { default: "ask", actions: { read: "blocked" } },
             },
           ],
         })
@@ -275,16 +274,17 @@ describe("ScheduleTaskForm app picker", () => {
       expect(mockUpdateScheduledTask).toHaveBeenCalledWith(
         "task-id",
         expect.objectContaining({
-          action_policies: [
+          integrations: [
             {
-              gated_app_id: 11,
-              enabled: true,
-              action_policies: { send: "ALWAYS" },
+              integration_id: 11,
+              action_settings: {
+                default: "inherit",
+                actions: { send: "allow" },
+              },
             },
             {
-              gated_app_id: 22,
-              enabled: false,
-              action_policies: { read: "ASK" },
+              integration_id: 22,
+              action_settings: { default: "ask", actions: { read: "blocked" } },
             },
           ],
         })

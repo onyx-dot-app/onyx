@@ -14,7 +14,7 @@
 
 - **An end user** sends a message. The assistant can think, run tools (search,
   web, code, images, custom tools) for several steps, and then streams an answer
-  with citations. On the last allowed step (`MAX_LLM_CYCLES`, default 6; when
+  with citations. On the last allowed step (`MAX_LLM_CYCLES`, default 30; when
   code mode applies, `CODE_MODE_MAX_LLM_CYCLES`, a safety cap of 100 or
   `MAX_LLM_CYCLES` when higher) the model must answer without tools.
 - **One message at a time.** While a turn runs, the session is busy. The client
@@ -40,11 +40,16 @@
   child-result delivery can check the same stop request. Anonymous users cannot
   stop ([[#anonymous-send]]).
 - **A tool call waits for approval.** When nothing but approval requests
-  remains, the turn stops with `awaiting_approval` and the session is idle;
+  remains, the turn stops with `awaiting_user` and the session is idle;
   the user can draft but not send. Once the user decides every request, the
   response continues in a new stream, on any server
   ([[mcp-and-custom-tools#chat-approval-durable-wait]]). A Stop of a live turn
   rejects its waiting requests.
+- **The agent asks the user a question.** The root agent's question tool
+  shows 1-3 multiple-choice questions and waits like an approval request. The
+  user answers on the card, or types a message, which the agent reads as the
+  answer to every waiting question of the response; a Stop of a live turn
+  cancels the questions ([[tools-framework]]).
 - **Leaving is not stopping.** If the user closes the tab, navigates away or loses
   the network, the run continues on the server and is saved. When the user returns
   while the run is live, the client resumes the stream ([[streaming-protocol]]).
@@ -86,7 +91,9 @@
 - **Bots.** The Slack bot runs the same turn in-process
   (`onyxbot/slack/handlers/handle_regular_answer.py`). The Discord bot calls the
   HTTP endpoint (`onyxbot/discord/api_client.py`). A change here reaches both.
-  Both run Ask tools without approval for now (`ChatTurnSetup.ask_for_approval`).
+  Neither has an approver (`ChatTurnSetup.approval_mode` is `NO_APPROVER`), so
+  an action that is still Ask is not offered
+  ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]).
 
 ---
 
@@ -141,14 +148,17 @@ Processing hook before it saves the user message, only for a new, non-blank
 message, and only when the incognito mode allows hooks
 (`IncognitoRecordMode.fires_hooks`), because the hook sends the query out
 ([[hooks]]). A rejection raises `QUERY_REJECTED`. A regeneration reuses the saved
-user message. A send never changes the chat's saved tools and search filters:
-`chat_session.tool_selection` (`allowed_tool_ids`, `preferred_tool_id`,
-`internal_search_filters`; NULL means the agent's tools) has one writer, the
-`PATCH /chat/chat-session/{session_id}/tool-selection` route
-(`db/chat.py:set_chat_session_tool_selection__no_commit`). It checks
+user message. A send never changes the chat's saved tool options:
+`chat_session.tool_options` (`tools/models.py:ToolOptions`: `allowed`
+capability and integration entries, `preferred`, `internal_search_filters`; NULL
+means the agent's tools) has one writer, the
+`PATCH /chat/chat-session/{session_id}/tool-options` route
+(`db/chat.py:set_chat_session_tool_options__no_commit`). It checks
 document-set access, saves only the fields the body sets, and stores nothing
 for a chat whose record mode keeps no content. The chat-session detail returns
-the selection to its owner. The chat's model is `current_alternate_model`,
+the options to their owner. The integration tables migration (`730bce2814a0`)
+filled `tool_options` from the old `chat_session.tool_selection` column and
+dropped that column. The chat's model is `current_alternate_model`,
 which the web writes through `PUT /chat/update-chat-session-model` on each
 send. A turn that resumes a suspended response, and an agent host that
 resumes parked agent runs, use the model, tools and search filters that the
@@ -180,9 +190,8 @@ suspended root resumes later on a runtime thread, so the control loop waits for
 a terminal, idle run, not for the response thread. Child agents and
 parallel tools use more threads ([[agent-runtime]]). Deep research
 (`deep_research/agent.py:DeepResearchAgent`) replaces `ChatAgent` for a
-single-model deep research request. The research step and the coding agent tool
-start child agents (`deep_research/research_agent.py:ResearchAgent`,
-`coding_agent/agent.py:CodingAgent`) through the runtime's child API.
+single-model deep research request. The research step starts a child agent
+(`deep_research/research_agent.py:ResearchAgent`) through the runtime's child API.
 
 **Delivery.** All responses share one `chat/stream_buffer.py:ChatDelivery`. One
 event-dispatch thread renders runtime events into packets
@@ -231,7 +240,7 @@ interrupted (`chat/run_store.py:interrupt_ownerless_responses`). It starts a res
 current session settings and fresh authorization checks. A queued turn whose
 owner lost `WRITE_CHAT`, or access to a saved document set, saves an error
 response, which pauses the queue. A turn the server starts uses the chat's
-saved `chat_session.tool_selection` (NULL means the agent's tools). A saved
+saved tool options (NULL means the agent's tools). A saved
 preferred tool that this turn cannot build is dropped, and the turn runs
 without it. Deep Research and the model are choices of each message: a queued
 or interrupting message stores `chat_input.deep_research` and
@@ -394,8 +403,8 @@ termination grace period is much shorter, so it ends running turns first
     (`chat/execution.py:host_agent_work`) when no running child remains.
 13. `shared-loop-pieces` **Shared runtime pieces have several callers.** A change
     to `agents/runtime.py`, to `chat/prompt_utils.py:prepare_prompt` or to
-    `Placement` handling also reaches deep research, the research agent and the
-    coding agent ([[context-assembly#history-builder-callers]]).
+    `Placement` handling also reaches deep research and its research agents
+    ([[context-assembly#history-builder-callers]]).
 14. `three-message-types` **Three message types exist.** `ChatMessage` is the DB
     row; `ChatResponseItem` holds the steps of a saved response.
     `llm/models.py:Message` is the SDK conversation type that agents and
@@ -409,11 +418,15 @@ termination grace period is much shorter, so it ends running turns first
     authentication (see Known issues).
 16. `stopping-tools` **The step cap disables tool execution.**
     `chat/agent.py:ChatAgent._prepare_step` uses `NONE` at the step cap.
-    Definitions remain where providers support this choice. Qwen, GLM, and
-    Bedrock omit definitions; Bedrock converts prior tool exchanges to text.
+    The request keeps the tool definitions of earlier steps
+    ([[llm-providers#none-tool-choice-keeps-tools]]). The runtime
+    (`agents/runtime.py:_complete_step`) denies a call on that step, and the run
+    takes one extra step for the answer; the full rule is in "Preparing and
+    completing steps" in `backend/onyx/agents/README.md`.
     Image generation does not remove tools, even when the image call fails.
-    The default cap is six cycles, including the final answer cycle; code mode
-    uses `CODE_MODE_MAX_LLM_CYCLES` instead.
+    The default cap is 30 cycles, including the final answer cycle, and the
+    extra step can make it 31; code mode uses `CODE_MODE_MAX_LLM_CYCLES`
+    instead.
 
 
 ---
@@ -432,12 +445,12 @@ termination grace period is much shorter, so it ends running turns first
 
 ## Known issues
 
-- **An unavailable preference fails the message.** `preferred_tool_id` selects an
-  Action from the tools built for this request. Disabled, unavailable, or excluded
+- **An unavailable preference fails the message.** `tool_options.preferred` selects a
+  built-in tool or a plugin action from the tools built for this request. Disabled, unavailable, or excluded
   Actions fail with `BAD_REQUEST` in `chat/execution.py:create_chat_agent`.
   When project context replaces retrieval, preparation omits an enabled, configured, and allowed Search preference
   for that request. Preferences do not grant access. Tool construction applies
-  `allowed_tool_ids` except to MemoryTool, which follows the user's memory setting.
+  `tool_options.allowed` except to MemoryTool, which follows the user's memory setting.
 - **Stop waits for blocked work.** Cancellation takes effect when a provider
   read returns or times out. Tools that honor `ToolInvocation.cancellation` can
   stop earlier; tools that ignore it keep running until they return.
