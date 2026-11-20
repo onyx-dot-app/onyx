@@ -27,6 +27,7 @@ from onyx.skills.models import (
     PluginNeed,
     PluginSkillContent,
     PluginUnusedPart,
+    strip_bidi_controls,
 )
 from onyx.utils.url import normalize_mcp_server_url
 
@@ -81,26 +82,28 @@ def _read_json(bundle_zip: zipfile.ZipFile, path: str) -> JsonValue:
     return value
 
 
+def _text(value: JsonValue) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return strip_bidi_controls(value).strip() or None
+
+
 def _optional_string(manifest: Mapping[str, JsonValue], key: str) -> str | None:
     value = manifest.get(key)
-    if isinstance(value, str) and value.strip():
-        return value.strip()
     if isinstance(value, dict):
-        url = value.get("url")
-        if isinstance(url, str) and url.strip():
-            return url.strip()
-    return None
+        return _text(value.get("url"))
+    return _text(value)
 
 
 def _author(value: JsonValue) -> PluginAuthor | None:
-    if isinstance(value, str) and value.strip():
-        return PluginAuthor(name=value.strip())
+    if (name := _text(value)) is not None:
+        return PluginAuthor(name=name)
     if isinstance(value, dict):
         author = PluginAuthor(
             **{
-                key: item.strip()
+                key: item
                 for key in ("name", "email", "url")
-                if isinstance(item := value.get(key), str) and item.strip()
+                if (item := _text(value.get(key))) is not None
             }
         )
         if author != PluginAuthor():
@@ -136,7 +139,7 @@ def _manifest(
         repository=_optional_string(raw, "repository"),
         license=_optional_string(raw, "license"),
         keywords=(
-            [item for item in keywords if isinstance(item, str)]
+            [text for item in keywords if (text := _text(item)) is not None]
             if isinstance(keywords, list)
             else []
         ),
@@ -287,6 +290,9 @@ def read_plugin_bundle(zip_bytes: bytes) -> PluginBundle:
         content=normalized.content,
         manifest=manifest,
         skills=skills,
-        needs=[mcp_need(name, servers[name]) for name in sorted(servers)],
+        needs=[
+            mcp_need(strip_bidi_controls(name), servers[name])
+            for name in sorted(servers)
+        ],
         warnings=warnings,
     )

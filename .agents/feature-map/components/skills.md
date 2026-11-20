@@ -192,6 +192,9 @@ When it fails:
   `.template` file is rejected with a message. A direct upload over a size or
   file count limit is rejected with a 413 that names the limit. Batch uploads
   list the Skill in `not_imported`, and a GitHub preview marks it unavailable.
+  A frontmatter field that Onyx does not read (`license`, `compatibility`,
+  `metadata`, `allowed-tools`) with a value it cannot read is kept as written
+  and does not block the skill. Messages name the field in plain words.
 - Turning on a skill whose name another enabled skill the user can see uses
   returns a name conflict. The client can retry with `replace_conflict` to
   switch skills. The kept choice of a skill the user can no longer see neither
