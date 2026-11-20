@@ -167,6 +167,7 @@ and context expansion.
 | `query` | string | Yes | The question or search query. |
 | `source_types` | string array | No | Connector identifiers, such as `github` or `google_drive`. |
 | `document_set_names` | string array | No | Names of accessible document sets. |
+| `tags` | object array | No | Metadata pairs, such as `{"tag_key": "assignee", "tag_value": "Jane Doe"}`. Keeps documents that match at least one pair. |
 | `time_cutoff` | string | No | ISO 8601 timestamp. Keeps documents updated on or after this time. Include a timezone. |
 | `skip_query_expansion` | boolean | No | Defaults to `false`. Set `true` to bypass query expansion. |
 | `agent` | string | No | Name of an accessible Onyx agent whose knowledge scope and model the search should use. |
@@ -187,8 +188,10 @@ or agents return an error with suggested or available values. Correct the filter
 Empty filter arrays do not restrict the search. Use a valid timestamp:
 an invalid `time_cutoff` can result in a search without a date restriction.
 
-The response has a `results` array. Each result includes `title`, `url`, `source_type`, `content`, and `updated_at`.
-Results are ordered by relevance. `content` contains retrieved document text,
+The response is one JSON text block with a `results` array. It has no separate structured copy.
+Each result includes `title`, `url`, `source_type`, `content`, and `updated_at`.
+A result also includes `metadata` when its source supplies fields, such as a Jira reporter or assignee.
+Use these keys and values in `tags`. Results are ordered by relevance. `content` contains retrieved document text,
 which can be a selected chunk rather than the entire document. There is no `limit` parameter for this tool.
 
 ### search_web
@@ -232,7 +235,7 @@ Clients that support MCP resources can read these JSON resources to discover sea
 
 | Resource | Response | Use |
 | --- | --- | --- |
-| `resource://indexed_sources` | Array of source identifiers. | Use identifiers in `source_types`. |
+| `resource://indexed_sources` | Array of source identifiers. It includes `ingestion_api` after documents are sent through the Ingestion API. | Use identifiers in `source_types`. |
 | `resource://document_sets` | Array of accessible document sets with `name` and `description`. | Use names in `document_set_names`. |
 | `resource://agents` | Array of accessible agents with `id`, `name`, and `description`. | Use names in `agent`. |
 
