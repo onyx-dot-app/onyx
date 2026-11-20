@@ -30,6 +30,7 @@ from tests.external_dependency_unit.craft.marketplace.helpers import (
     REPO,
     Connections,
     existing_files,
+    http_request,
     plugin_files,
     synced_plugins,
 )
@@ -73,6 +74,7 @@ def _create(
     **fields: Any,
 ) -> UUID:
     return api.create_marketplace(
+        http_request(),
         MarketplaceCreateRequest(repository=f"{OWNER}/{REPO}", scope=scope, **fields),
         BackgroundTasks(),
         _fresh(db_session, user),
@@ -217,7 +219,9 @@ def test_scope_and_owner_rules(
         MarketplaceScope.COMPANY,
         default_installation_policy=PluginInstallationPolicy.DEFAULT,
     )
-    detail = api.get_marketplace(personal_id, _fresh(db_session, owner), db_session)
+    detail = api.get_marketplace(
+        http_request(), personal_id, _fresh(db_session, owner), db_session
+    )
     assert detail.scope == MarketplaceScope.PERSONAL
     assert detail.name == "acme-tools"
     assert detail.repository == f"{OWNER}/{REPO}"
@@ -226,18 +230,28 @@ def test_scope_and_owner_rules(
     assert detail.login_user is not None and detail.login_user.id == owner.id
 
     with pytest.raises(OnyxError) as exc:
-        api.get_marketplace(personal_id, _fresh(db_session, other), db_session)
+        api.get_marketplace(
+            http_request(), personal_id, _fresh(db_session, other), db_session
+        )
     assert exc.value.error_code == OnyxErrorCode.NOT_FOUND
     with pytest.raises(OnyxError) as exc:
-        api.get_marketplace(personal_id, _fresh(db_session, manager), db_session)
+        api.get_marketplace(
+            http_request(), personal_id, _fresh(db_session, manager), db_session
+        )
     assert exc.value.error_code == OnyxErrorCode.NOT_FOUND
     with pytest.raises(OnyxError) as exc:
         api.sync_marketplace_now(
-            company_id, BackgroundTasks(), _fresh(db_session, owner), db_session
+            http_request(),
+            company_id,
+            BackgroundTasks(),
+            _fresh(db_session, owner),
+            db_session,
         )
     assert exc.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
-    owner_list = api.list_marketplaces(_fresh(db_session, owner), db_session)
+    owner_list = api.list_marketplaces(
+        http_request(), _fresh(db_session, owner), db_session
+    )
     assert [
         (item.id, item.can_manage, item.default_installation_policy)
         for item in owner_list.marketplaces
@@ -245,9 +259,13 @@ def test_scope_and_owner_rules(
         (personal_id, True, None),
         (company_id, False, PluginInstallationPolicy.DEFAULT),
     ]
-    member_view = api.get_marketplace(company_id, _fresh(db_session, other), db_session)
+    member_view = api.get_marketplace(
+        http_request(), company_id, _fresh(db_session, other), db_session
+    )
     assert not member_view.can_manage
-    manager_list = api.list_marketplaces(_fresh(db_session, manager), db_session)
+    manager_list = api.list_marketplaces(
+        http_request(), _fresh(db_session, manager), db_session
+    )
     assert [(item.id, item.can_manage) for item in manager_list.marketplaces] == [
         (company_id, True)
     ]
@@ -255,6 +273,7 @@ def test_scope_and_owner_rules(
     # The company already gets this source, in any letter case.
     with pytest.raises(OnyxError) as exc:
         api.create_marketplace(
+            http_request(),
             MarketplaceCreateRequest(
                 repository=f"https://github.com/{OWNER.upper()}/{REPO.title()}.git",
                 scope=MarketplaceScope.PERSONAL,
@@ -269,6 +288,7 @@ def test_scope_and_owner_rules(
 
     with pytest.raises(OnyxError):
         api.set_marketplace_default_access(
+            http_request(),
             personal_id,
             MarketplaceDefaultAccessRequest(
                 installation_policy=PluginInstallationPolicy.DEFAULT
@@ -278,6 +298,7 @@ def test_scope_and_owner_rules(
         )
     db_session.rollback()
     required = api.set_marketplace_default_access(
+        http_request(),
         company_id,
         MarketplaceDefaultAccessRequest(
             installation_policy=PluginInstallationPolicy.REQUIRED
@@ -287,6 +308,7 @@ def test_scope_and_owner_rules(
     )
     assert required.default_installation_policy == PluginInstallationPolicy.REQUIRED
     changed = api.set_marketplace_default_access(
+        http_request(),
         company_id,
         MarketplaceDefaultAccessRequest(
             installation_policy=PluginInstallationPolicy.NOT_AVAILABLE
@@ -315,27 +337,39 @@ def test_sync_replace_login_and_delete(
 
     fake_github.push(OWNER, REPO, plugin_files("tool-0"))
     api.sync_marketplace_now(
-        marketplace_id, BackgroundTasks(), _fresh(db_session, manager), db_session
+        http_request(),
+        marketplace_id,
+        BackgroundTasks(),
+        _fresh(db_session, manager),
+        db_session,
     )
     detail = api.get_marketplace(
-        marketplace_id, _fresh(db_session, manager), db_session
+        http_request(), marketplace_id, _fresh(db_session, manager), db_session
     )
     assert [plugin.name for plugin in detail.plugins] == ["tool-0"]
     assert set(synced_plugins(db_session, marketplace_id)) == {"tool-0"}
 
     connections.connected.add(manager.id)
     detail = api.replace_marketplace_login(
-        marketplace_id, BackgroundTasks(), _fresh(db_session, manager), db_session
+        http_request(),
+        marketplace_id,
+        BackgroundTasks(),
+        _fresh(db_session, manager),
+        db_session,
     )
     assert detail.login_user is not None and detail.login_user.id == manager.id
     assert (
         synced_plugins(db_session, marketplace_id)["tool-0"].id == plugin_ids["tool-0"]
     )
 
-    api.delete_marketplace(marketplace_id, _fresh(db_session, manager), db_session)
+    api.delete_marketplace(
+        http_request(), marketplace_id, _fresh(db_session, manager), db_session
+    )
     assert synced_plugins(db_session, marketplace_id) == {}
     with pytest.raises(OnyxError) as exc:
-        api.get_marketplace(marketplace_id, _fresh(db_session, manager), db_session)
+        api.get_marketplace(
+            http_request(), marketplace_id, _fresh(db_session, manager), db_session
+        )
     assert exc.value.error_code == OnyxErrorCode.NOT_FOUND
 
 
@@ -351,7 +385,9 @@ def test_delete_removes_bundle_files(
     fake_github.push(OWNER, REPO, plugin_files("alpha", "beta"))
     marketplace_id = _create(db_session, owner, MarketplaceScope.PERSONAL)
     assert len(existing_files(db_session, staged_file_ids)) == 2
-    api.delete_marketplace(marketplace_id, _fresh(db_session, owner), db_session)
+    api.delete_marketplace(
+        http_request(), marketplace_id, _fresh(db_session, owner), db_session
+    )
     assert existing_files(db_session, staged_file_ids) == set()
 
 
@@ -372,18 +408,26 @@ def test_replace_login_without_github_clears_a_gone_login(
     row.login_user_id = gone.id
     db_session.commit()
     api.sync_marketplace_now(
-        marketplace_id, BackgroundTasks(), _fresh(db_session, manager), db_session
+        http_request(),
+        marketplace_id,
+        BackgroundTasks(),
+        _fresh(db_session, manager),
+        db_session,
     )
     detail = api.get_marketplace(
-        marketplace_id, _fresh(db_session, manager), db_session
+        http_request(), marketplace_id, _fresh(db_session, manager), db_session
     )
     assert detail.last_error is not None
 
     api.replace_marketplace_login(
-        marketplace_id, BackgroundTasks(), _fresh(db_session, manager), db_session
+        http_request(),
+        marketplace_id,
+        BackgroundTasks(),
+        _fresh(db_session, manager),
+        db_session,
     )
     detail = api.get_marketplace(
-        marketplace_id, _fresh(db_session, manager), db_session
+        http_request(), marketplace_id, _fresh(db_session, manager), db_session
     )
     assert detail.login_user is not None and detail.login_user.id == manager.id
     assert detail.last_error is None
@@ -413,6 +457,7 @@ def test_required_default_wins_a_member_skill_name(
     company_id = _create(db_session, manager, MarketplaceScope.COMPANY)
     synced = synced_plugins(db_session, company_id)["alpha"]
     api.set_marketplace_default_access(
+        http_request(),
         company_id,
         MarketplaceDefaultAccessRequest(
             installation_policy=PluginInstallationPolicy.REQUIRED
@@ -430,3 +475,37 @@ def test_required_default_wins_a_member_skill_name(
     assert states[own.id] == SkillUserState(
         enabled=False, can_toggle=True, name_held_by=("alpha",)
     )
+
+
+def test_a_basic_token_cannot_manage_company_marketplaces(
+    db_session: Session,
+    manager: User,
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    enqueued: list[UUID],  # noqa: ARG001
+) -> None:
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    basic = http_request([Permission.BASIC_ACCESS])
+    with pytest.raises(OnyxError) as exc:
+        api.create_marketplace(
+            basic,
+            MarketplaceCreateRequest(
+                repository=f"{OWNER}/{REPO}", scope=MarketplaceScope.COMPANY
+            ),
+            BackgroundTasks(),
+            _fresh(db_session, manager),
+            db_session,
+        )
+    assert exc.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+    db_session.rollback()
+
+    company_id = _create(db_session, manager, MarketplaceScope.COMPANY)
+    view = api.get_marketplace(
+        basic, company_id, _fresh(db_session, manager), db_session
+    )
+    assert not view.can_manage
+    with pytest.raises(OnyxError) as exc:
+        api.delete_marketplace(
+            basic, company_id, _fresh(db_session, manager), db_session
+        )
+    assert exc.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS

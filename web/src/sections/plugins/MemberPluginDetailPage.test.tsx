@@ -437,3 +437,34 @@ test("a synced plugin names its marketplace and says that GitHub holds it", asyn
   ).toBeInTheDocument();
   expect(screen.queryByText("My uploads")).not.toBeInTheDocument();
 });
+
+test("a personal synced plugin offers neither Share nor Upload New Version", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    can_delete: false,
+    content_locked: true,
+    marketplace: {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "acme-tools",
+      kind: "github",
+      repository: "acme/plugins",
+      personal: true,
+    },
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText("Managed by the acme-tools marketplace")
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+});

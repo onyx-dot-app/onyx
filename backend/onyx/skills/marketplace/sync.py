@@ -355,8 +355,9 @@ def run_marketplace_sync(marketplace_id: UUID) -> None:
     if not lock.acquire(blocking=False):
         return
     try:
-        cache.delete(_queued_key(marketplace_id))
+        # Running before queued is cleared, so a request in between sees one.
         cache.set(_running_key(marketplace_id), b"1", ex=SYNC_LOCK_TIMEOUT_SECONDS)
+        cache.delete(_queued_key(marketplace_id))
         _sync_once(marketplace_id, lock)
     finally:
         # Only the lock owner clears the flag; a newer run may own it now.

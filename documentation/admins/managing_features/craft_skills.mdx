@@ -167,14 +167,15 @@ with no row menu.
 
 | Type | Who can add it | Who gets its plugins |
 | --- | --- | --- |
-| **Personal** | Any user | Only the user who adds it. Onyx turns each new plugin on for that user. Nobody can share these plugins, and plugin managers do not see them. |
+| **Personal** | Any user | Only the user who adds it. Each new plugin starts off until that user turns it on. Nobody can share these plugins, and plugin managers do not see them. |
 | **Company** | A user with the organization-wide `manage:plugins` permission | The organization, as with a published plugin, under the **Default Access** of the marketplace |
 
 The **Default Access** of a company marketplace is **Available**, **Installed**, **Required** or **Not available**.
 With **Required**, every member gets each plugin of the marketplace and cannot turn it off.
 A **Required** plugin keeps its skill names. A member's own plugin with the same skill name turns off,
 and its row says which plugin holds the name. Set the installation policy of one plugin to override the default.
-Only a user with the organization-wide `manage:plugins` permission sees and manages a company marketplace.
+Only a user with the organization-wide `manage:plugins` permission manages a company marketplace.
+Members see it read-only.
 
 Onyx reads the repository with the GitHub connection of the login, the user who added the marketplace.
 A public repository needs no connection. If the login loses access or leaves, the sync fails with the reason.
@@ -190,8 +191,9 @@ Blocked and not supported entries keep their plugins. A sync that cannot read th
 
 The content of a synced plugin changes only in GitHub. Onyx refuses edits, uploaded versions, restores, publishes,
 transfers and deletes of a synced plugin with **Change this plugin in GitHub**.
-Sharing and installation policies still change in Onyx. **Remove** deletes the marketplace and all its plugins.
-When you delete a user, Onyx also removes the user's personal marketplaces and their plugins.
+The sharing and installation policy of a company plugin still change in Onyx. A personal plugin has neither.
+**Remove** deletes the marketplace and all its plugins. When you delete a user,
+Onyx also removes the user's personal marketplaces and their plugins.
 See [Add a marketplace](/overview/core_features/plugins#add-a-marketplace).
 
 ## Review a Skill before publishing

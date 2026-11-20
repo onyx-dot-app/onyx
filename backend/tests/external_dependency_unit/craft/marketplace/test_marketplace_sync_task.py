@@ -21,6 +21,7 @@ from tests.external_dependency_unit.craft.marketplace.helpers import (
     REPO,
     Connections,
     existing_files,
+    http_request,
     make_marketplace,
     plugin_files,
     reload,
@@ -75,7 +76,7 @@ def test_sync_now_during_a_sync_does_nothing(
             # A newer commit lands, and the user clicks Sync now.
             fake_github.push(OWNER, REPO, plugin_files("alpha", "beta"))
             view = api.sync_marketplace_now(
-                marketplace_id, BackgroundTasks(), owner, db_session
+                http_request(), marketplace_id, BackgroundTasks(), owner, db_session
             )
             during.append(view.syncing)
         return result
@@ -86,7 +87,9 @@ def test_sync_now_during_a_sync_does_nothing(
     assert during == [True]
     assert send_task.call_args_list == []
     assert set(synced_plugins(db_session, marketplace.id)) == {"alpha"}
-    assert not api.get_marketplace(marketplace.id, owner, db_session).syncing
+    assert not api.get_marketplace(
+        http_request(), marketplace.id, owner, db_session
+    ).syncing
 
 
 def test_syncing_flag_lives_as_long_as_the_lock_lease(
@@ -129,7 +132,7 @@ def test_sync_now_sends_one_task_until_it_runs(
     )
     for _ in range(2):
         view = api.sync_marketplace_now(
-            marketplace.id, BackgroundTasks(), owner, db_session
+            http_request(), marketplace.id, BackgroundTasks(), owner, db_session
         )
         assert view.syncing
     assert [call.args for call in send_task.call_args_list] == [
@@ -150,12 +153,16 @@ def test_sync_now_after_a_failed_send_sends_again(
     )
     send_task.side_effect = ConnectionError("broker down")
     with pytest.raises(ConnectionError):
-        api.sync_marketplace_now(marketplace.id, BackgroundTasks(), owner, db_session)
-    assert not api.get_marketplace(marketplace.id, owner, db_session).syncing
+        api.sync_marketplace_now(
+            http_request(), marketplace.id, BackgroundTasks(), owner, db_session
+        )
+    assert not api.get_marketplace(
+        http_request(), marketplace.id, owner, db_session
+    ).syncing
 
     send_task.side_effect = None
     view = api.sync_marketplace_now(
-        marketplace.id, BackgroundTasks(), owner, db_session
+        http_request(), marketplace.id, BackgroundTasks(), owner, db_session
     )
     assert view.syncing
     assert send_task.call_count == 2

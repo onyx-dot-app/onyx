@@ -326,7 +326,11 @@ def _remote_source(source: Mapping[str, JsonValue]) -> GitHubRepoSource | str:
     """The GitHub repository of a remote entry, or why Onyx cannot get it."""
     kind = source.get("source")
     location = source.get("repo") if kind == "github" else source.get("url")
-    repository = _github_repository(location) if kind in _GIT_SOURCE_KINDS else None
+    repository = (
+        _github_repository(location)
+        if isinstance(kind, str) and kind in _GIT_SOURCE_KINDS
+        else None
+    )
     if repository is None:
         return _unsupported_reason(kind, location)
     raw_path = source.get("path") if kind == "git-subdir" else None

@@ -54,7 +54,10 @@ import {
 } from "@/lib/skills/hooks";
 import type { Skill } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { canChangeOrganizationAccess } from "@/lib/skills/sharing";
+import {
+  canChangeOrganizationAccess,
+  canShareSkill,
+} from "@/lib/skills/sharing";
 import { Permission } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
@@ -471,7 +474,8 @@ export default function MemberPluginDetailPage({
   }
 
   const menu: DropdownMenuItem[] = [
-    ...(canEdit && isPlugin
+    // GitHub holds a synced plugin's files: an upload would make another plugin.
+    ...(canEdit && isPlugin && !skill.content_locked
       ? [
           {
             kind: "action" as const,
@@ -543,7 +547,7 @@ export default function MemberPluginDetailPage({
       actions={
         entry
           ? [
-              ...(canEdit
+              ...(skill && canShareSkill(skill)
                 ? [
                     <Button
                       key="share"

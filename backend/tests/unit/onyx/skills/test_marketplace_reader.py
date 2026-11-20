@@ -278,6 +278,12 @@ def test_bad_entries_block_only_themselves() -> None:
     assert blocked.reason == "The plugin folder 'missing' is missing."
 
 
+def test_source_kind_that_is_not_text_is_not_supported() -> None:
+    files = {CLAUDE: catalog({"name": "odd", "source": {"source": []}})}
+    (entry,) = _complete(files).entries
+    assert isinstance(entry, UnsupportedPlugin)
+
+
 def test_plugin_with_only_commands_is_not_supported() -> None:
     files = {
         CLAUDE: catalog({"name": "commands-only", "source": "./commands-only"}),

@@ -3,10 +3,14 @@
 from collections.abc import Callable
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import has_global_permission, require_permission
+from onyx.auth.permissions import (
+    has_global_permission,
+    require_permission,
+    token_allows,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, PluginInstallationPolicy
 from onyx.db.marketplace import (
@@ -60,12 +64,15 @@ router = APIRouter(prefix="/marketplaces")
 _MARKETPLACE_CLEANUP = "marketplace delete cleanup"
 
 
-def _is_manager(user: User) -> bool:
-    return has_global_permission(user, Permission.MANAGE_PLUGINS)
+def _is_manager(user: User, http_request: Request) -> bool:
+    """An organization-wide plugin manager whose token also allows it."""
+    return has_global_permission(user, Permission.MANAGE_PLUGINS) and token_allows(
+        http_request, Permission.MANAGE_PLUGINS
+    )
 
 
-def _authorize_scope(scope: MarketplaceScope, user: User) -> None:
-    if scope == MarketplaceScope.COMPANY and not _is_manager(user):
+def _authorize_scope(scope: MarketplaceScope, manager: bool) -> None:
+    if scope == MarketplaceScope.COMPANY and not manager:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Only an organization-wide plugin manager can add a company marketplace.",
@@ -75,6 +82,7 @@ def _authorize_scope(scope: MarketplaceScope, user: User) -> None:
 def _authorized_marketplace(
     marketplace_id: UUID,
     user: User,
+    manager: bool,
     db_session: Session,
     *,
     read_only: bool = False,
@@ -84,7 +92,7 @@ def _authorized_marketplace(
         marketplace.owner_user_id is not None and marketplace.owner_user_id != user.id
     ):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
-    if marketplace.owner_user_id is None and not read_only and not _is_manager(user):
+    if marketplace.owner_user_id is None and not read_only and not manager:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Only an organization-wide plugin manager can manage a company marketplace.",
@@ -93,7 +101,7 @@ def _authorized_marketplace(
 
 
 def _summary(
-    marketplace: Marketplace, plugin_count: int, user: User, db_session: Session
+    marketplace: Marketplace, plugin_count: int, manager: bool, db_session: Session
 ) -> MarketplaceSummary:
     config = marketplace_config(marketplace)
     login = (
@@ -117,7 +125,7 @@ def _summary(
             if marketplace.owner_user_id is None
             else None
         ),
-        can_manage=marketplace.owner_user_id is not None or _is_manager(user),
+        can_manage=marketplace.owner_user_id is not None or manager,
         login_user=(
             MinimalUserSnapshot(id=login.id, email=login.email)
             if login is not None
@@ -133,7 +141,7 @@ def _summary(
 
 
 def _detail(
-    marketplace: Marketplace, user: User, db_session: Session
+    marketplace: Marketplace, manager: bool, db_session: Session
 ) -> MarketplaceDetail:
     plugins = {
         plugin.name: plugin
@@ -144,7 +152,7 @@ def _detail(
         for item in marketplace.last_sync_result or []
     ]
     return MarketplaceDetail(
-        **_summary(marketplace, len(plugins), user, db_session).model_dump(),
+        **_summary(marketplace, len(plugins), manager, db_session).model_dump(),
         entries=[
             MarketplaceEntryView(
                 key=entry.key,
@@ -243,12 +251,14 @@ def preview_marketplace(
 
 @router.post("")
 def create_marketplace(
+    http_request: Request,
     request: MarketplaceCreateRequest,
     background_tasks: BackgroundTasks,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MarketplaceDetail:
-    _authorize_scope(request.scope, user)
+    manager = _is_manager(user, http_request)
+    _authorize_scope(request.scope, manager)
     config = request.to_config(
         _tree_resolver(github_authorization_for(user.id, db_session))
     )
@@ -269,18 +279,22 @@ def create_marketplace(
     marketplace_id = marketplace.id
     _request_sync(marketplace_id, background_tasks, db_session)
     return _detail(
-        _authorized_marketplace(marketplace_id, user, db_session), user, db_session
+        _authorized_marketplace(marketplace_id, user, manager, db_session),
+        manager,
+        db_session,
     )
 
 
 @router.get("")
 def list_marketplaces(
+    http_request: Request,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MarketplaceList:
+    manager = _is_manager(user, http_request)
     return MarketplaceList(
         marketplaces=[
-            _summary(marketplace, plugin_count, user, db_session)
+            _summary(marketplace, plugin_count, manager, db_session)
             for marketplace, plugin_count in list_github_marketplaces(
                 user.id, db_session
             )
@@ -290,39 +304,49 @@ def list_marketplaces(
 
 @router.get("/{marketplace_id}")
 def get_marketplace(
+    http_request: Request,
     marketplace_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MarketplaceDetail:
+    manager = _is_manager(user, http_request)
     return _detail(
-        _authorized_marketplace(marketplace_id, user, db_session, read_only=True),
-        user,
+        _authorized_marketplace(
+            marketplace_id, user, manager, db_session, read_only=True
+        ),
+        manager,
         db_session,
     )
 
 
 @router.post("/{marketplace_id}/sync")
 def sync_marketplace_now(
+    http_request: Request,
     marketplace_id: UUID,
     background_tasks: BackgroundTasks,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MarketplaceDetail:
-    _authorized_marketplace(marketplace_id, user, db_session)
+    manager = _is_manager(user, http_request)
+    _authorized_marketplace(marketplace_id, user, manager, db_session)
     _request_sync(marketplace_id, background_tasks, db_session)
     return _detail(
-        _authorized_marketplace(marketplace_id, user, db_session), user, db_session
+        _authorized_marketplace(marketplace_id, user, manager, db_session),
+        manager,
+        db_session,
     )
 
 
 @router.put("/{marketplace_id}/default-access")
 def set_marketplace_default_access(
+    http_request: Request,
     marketplace_id: UUID,
     request: MarketplaceDefaultAccessRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MarketplaceDetail:
-    marketplace = _authorized_marketplace(marketplace_id, user, db_session)
+    manager = _is_manager(user, http_request)
+    marketplace = _authorized_marketplace(marketplace_id, user, manager, db_session)
     if marketplace.owner_user_id is not None:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -334,32 +358,40 @@ def set_marketplace_default_access(
     db_session.commit()
     push_skills_and_commit(affected, db_session)
     return _detail(
-        _authorized_marketplace(marketplace_id, user, db_session), user, db_session
+        _authorized_marketplace(marketplace_id, user, manager, db_session),
+        manager,
+        db_session,
     )
 
 
 @router.post("/{marketplace_id}/replace-login")
 def replace_marketplace_login(
+    http_request: Request,
     marketplace_id: UUID,
     background_tasks: BackgroundTasks,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MarketplaceDetail:
-    _authorized_marketplace(marketplace_id, user, db_session)
+    manager = _is_manager(user, http_request)
+    _authorized_marketplace(marketplace_id, user, manager, db_session)
     replace_marketplace_login__no_commit(marketplace_id, user.id, db_session)
     _request_sync(marketplace_id, background_tasks, db_session)
     return _detail(
-        _authorized_marketplace(marketplace_id, user, db_session), user, db_session
+        _authorized_marketplace(marketplace_id, user, manager, db_session),
+        manager,
+        db_session,
     )
 
 
 @router.delete("/{marketplace_id}")
 def delete_marketplace(
+    http_request: Request,
     marketplace_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    _authorized_marketplace(marketplace_id, user, db_session)
+    manager = _is_manager(user, http_request)
+    _authorized_marketplace(marketplace_id, user, manager, db_session)
     affected, file_ids = delete_github_marketplace__no_commit(
         marketplace_id, db_session
     )

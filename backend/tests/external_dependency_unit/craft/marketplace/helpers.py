@@ -4,8 +4,9 @@ from uuid import UUID
 from pydantic import JsonValue
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.requests import Request
 
-from onyx.db.enums import PluginInstallationPolicy
+from onyx.db.enums import Permission, PluginInstallationPolicy
 from onyx.db.marketplace import (
     create_github_marketplace__no_commit,
 )
@@ -99,3 +100,11 @@ def reload(db_session: Session, marketplace: Marketplace) -> Marketplace:
     if fresh is None:
         raise AssertionError("marketplace is gone")
     return fresh
+
+
+def http_request(token_scopes: list[Permission] | None = None) -> Request:
+    """A route request; ``token_scopes`` caps a token as the auth layer does."""
+    request = Request({"type": "http"})
+    if token_scopes is not None:
+        request.state.token_scopes = token_scopes
+    return request
