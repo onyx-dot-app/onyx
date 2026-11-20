@@ -407,15 +407,18 @@ def _parse_internaldate_line(line: str) -> tuple[str, float] | None:
     if month not in _IMAP_MONTHS:
         return None
     offset = timedelta(hours=int(tz_hour), minutes=int(tz_minute))
-    internal_date = datetime(
-        int(year),
-        _IMAP_MONTHS.index(month) + 1,
-        int(day),
-        int(hour),
-        int(minute),
-        int(second),
-        tzinfo=timezone(offset if sign == "+" else -offset),
-    )
+    try:
+        internal_date = datetime(
+            int(year),
+            _IMAP_MONTHS.index(month) + 1,
+            int(day),
+            int(hour),
+            int(minute),
+            int(second),
+            tzinfo=timezone(offset if sign == "+" else -offset),
+        )
+    except ValueError:
+        return None
     return seq, internal_date.timestamp()
 
 
@@ -425,10 +428,9 @@ def _fetch_email(mail_client: imaplib.IMAP4_SSL, email_id: str) -> Message | Non
         return None
 
     data = msg_data[0]
+    # Not a tuple when the message was expunged after the search.
     if not isinstance(data, tuple):
-        raise RuntimeError(
-            f"Message data should be a tuple; instead got a {type(data)=} {data=}"
-        )
+        return None
 
     _metadata, raw_email = data
     return email.message_from_bytes(raw_email)

@@ -145,3 +145,31 @@ def test_parse_internaldate_line_handles_space_padded_day() -> None:
         "7",
         _ts("2026-10-09T10:02:00+02:00"),
     )
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        '7 (INTERNALDATE "31-Feb-2026 10:02:00 +0000")',
+        '7 (INTERNALDATE "09-Oct-2026 10:02:00 +9900")',
+    ],
+)
+def test_invalid_internaldate_is_unknown_and_message_is_kept(line: str) -> None:
+    assert _parse_internaldate_line(line) is None
+
+    class _BadDateServer(_FakeImapServer):
+        def fetch(
+            self,
+            message_set: str,
+            message_parts: str,  # noqa: ARG002 - matches the fetch signature
+        ) -> tuple[str, list[bytes]]:
+            return "OK", [line.replace("7", message_set, 1).encode()]
+
+    ids = _fetch_email_ids_in_mailbox(
+        mail_client=_BadDateServer(["2026-10-09T10:02:00+00:00"]),  # ty: ignore[invalid-argument-type]
+        mailbox="INBOX",
+        start=_ts("2026-10-09T10:00:00+00:00"),
+        end=_ts("2026-10-09T10:05:00+00:00"),
+    )
+
+    assert ids == ["1"]

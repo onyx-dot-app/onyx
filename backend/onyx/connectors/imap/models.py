@@ -1,3 +1,4 @@
+import email.errors
 import email.header
 import email.utils
 import hashlib
@@ -24,10 +25,14 @@ def _decode_header(email_msg: Message, header: str) -> str | None:
     if not value:
         return None
 
-    decoded_value, encoding = email.header.decode_header(value)[0]
-    if isinstance(decoded_value, bytes):
-        return decoded_value.decode(encoding or "utf-8", errors="replace")
-    elif isinstance(decoded_value, str):
+    try:
+        decoded_value, encoding = email.header.decode_header(value)[0]
+        if isinstance(decoded_value, bytes):
+            return decoded_value.decode(encoding or "utf-8", errors="replace")
+    except (LookupError, ValueError, email.errors.HeaderParseError):
+        # Unknown charset or broken encoded-word: keep the raw header text.
+        return str(value)
+    if isinstance(decoded_value, str):
         return decoded_value
     return None
 

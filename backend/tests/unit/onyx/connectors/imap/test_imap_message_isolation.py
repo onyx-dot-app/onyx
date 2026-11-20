@@ -78,3 +78,21 @@ def test_one_bad_message_yields_failure_and_run_continues(
     assert failure.failed_document.document_id == "<bad@example.com>"
     assert isinstance(document, Document)
     assert document.id == "<good@example.com>"
+
+
+def test_undecodable_message_id_does_not_raise() -> None:
+    msg = email.message_from_string(
+        "From: a@example.com\nMessage-ID: =?x-bogus-charset?q?abc?=\n\nbody\n"
+    )
+
+    headers = EmailHeaders.from_email_msg(email_msg=msg)
+
+    assert headers.id == "=?x-bogus-charset?q?abc?="
+    assert message_document_id(msg) == headers.id
+
+
+def test_expunged_message_fetch_returns_none() -> None:
+    mail_client = MagicMock()
+    mail_client.fetch.return_value = ("OK", [None])
+
+    assert imap_connector._fetch_email(mail_client=mail_client, email_id="1") is None
