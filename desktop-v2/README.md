@@ -395,8 +395,13 @@ How the app differs from macOS:
   Screen `F11`) and **Help** (About). Other windows have no menu bar.
 - No auto-update: the update feed has macOS builds only, so the app does not check for updates
   and has no **Check for Updates…** item. Install a new version by hand.
-- The session cookie goes in through wry's cookie API. WebView2 and WebKitGTK show `alert()`,
-  `confirm()` and `prompt()` themselves; other native dialogs use `rfd`.
+- The session cookie goes in through wry's cookie API. Its domain has no leading dot, so
+  WebView2 and WebKitGTK keep it host-only, as macOS does. WebView2 and WebKitGTK show
+  `alert()`, `confirm()` and `prompt()` themselves; other native dialogs use `rfd`.
+- The web sign-in window (SAML, cloud workspaces, older servers) is titled "Onyx web sign-in"
+  and sends the web view's own user agent. On macOS it sends Safari's, because Google refuses
+  WKWebView's default one. The native sign-in window hides while the web sign-in window is open, and
+  shows again when you close that window or the sign-in fails.
 - Windows installers install for all users (NSIS `perMachine`, and MSI) into Program Files, so
   a standard user cannot replace the app's files. They need administrator rights. They contain the
   WebView2 offline installer, so they also work on a computer with no internet access. The

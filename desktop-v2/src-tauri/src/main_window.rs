@@ -278,6 +278,8 @@ fn session_cookie(server: &Url, name: &str, token: &str) -> Result<Cookie<'stati
         .host_str()
         .ok_or_else(|| "server URL has no host".to_string())?
         .to_string();
+    // A domain with no leading dot is a host-only cookie in libsoup and
+    // WebView2, so subdomains do not get the session.
     let mut cookie = Cookie::build((name.to_string(), token.to_string()))
         .domain(host)
         .path("/")
