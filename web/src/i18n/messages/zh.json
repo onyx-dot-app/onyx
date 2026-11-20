@@ -11672,28 +11672,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "删除"
-      },
-      "deleteModal": {
-        "description": "确定要删除此聊天吗？此操作无法撤销。",
-        "submitButton": {
-          "label": "删除"
-        },
-        "title": "删除聊天"
-      },
-      "exportAs": {
-        "label": "导出为…"
-      },
-      "exportFailed": {
-        "message": "导出聊天失败。请重试。"
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "纯文本"
-      },
       "incognitoExit": {
         "ariaLabel": "退出无痕聊天",
         "tooltip": "退出无痕聊天"
@@ -11720,14 +11698,14 @@
       "modeButton": {
         "ariaLabel": "更改应用模式"
       },
-      "moveToProject": {
-        "label": "移动到项目"
-      },
       "openSidebar": {
         "ariaLabel": "打开侧边栏"
       },
       "share": {
-        "label": "分享"
+        "label": "分享…"
+      },
+      "shareMenu": {
+        "label": "分享或导出"
       }
     },
     "banners": {
@@ -13292,6 +13270,26 @@
         "preview": {
           "ariaLabel": "预览 {name}"
         }
+      }
+    },
+    "export": {
+      "failed": {
+        "message": "导出聊天失败。请重试。"
+      },
+      "plaintext": {
+        "label": "纯文本"
+      },
+      "asMarkdown": {
+        "label": "导出为 Markdown"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "导出为纯文本"
+      },
+      "menu": {
+        "label": "导出为…"
       }
     }
   },

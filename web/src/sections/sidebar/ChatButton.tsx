@@ -44,6 +44,7 @@ import {
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
 import { usePinChatAgent } from "@/lib/agents/hooks";
+import { useChatExportMenu } from "@/lib/chat/hooks";
 
 export interface ChatButtonProps {
   chatSession: ChatSession;
@@ -76,6 +77,7 @@ const ChatButton = memo(
       createProject,
     } = useProjectsContext();
     const pinChatAgent = usePinChatAgent();
+    const { exportMenuItem } = useChatExportMenu(chatSession);
     const [menuOpen, setMenuOpen] = useState(false);
     const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
       number | null
@@ -208,6 +210,7 @@ const ChatButton = memo(
         title: t("chatButton.moveToProject.label"),
         onSelect: (views) => views.push("move"),
       },
+      exportMenuItem,
       ...(project
         ? [
             {
@@ -252,17 +255,24 @@ const ChatButton = memo(
 
     async function handleChatDelete() {
       try {
-        await deleteChatSession(chatSession.id);
+        const response = await deleteChatSession(chatSession.id);
+        if (!response.ok) {
+          throw new Error(`Failed to delete chat session: ${response.status}`);
+        }
         removeSession(chatSession.id);
+
+        // Never leave the user on the chat they deleted.
+        if (active) {
+          if (project) {
+            appPosition.openProject(project.id, { replace: true });
+          } else {
+            appPosition.openNewSession({ replace: true });
+          }
+        }
 
         if (project) {
           await fetchProjects();
           await refreshCurrentProjectDetails();
-
-          // Only route if the deleted chat is the currently opened chat session
-          if (appPosition.chat() === chatSession.id) {
-            appPosition.openProject(project.id);
-          }
         }
         await refreshChatSessions();
       } catch (error) {

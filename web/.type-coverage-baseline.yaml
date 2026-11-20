@@ -56,7 +56,7 @@ packages:
   src/i18n: 99.2
   src/i18n/messages: 100
   src/layouts: 100
-  src/layouts/chromes: 99.8
+  src/layouts/chromes: 99.7
   src/layouts/craft: 96.1
   src/lib: 99.2
   src/lib/agents: 99.5

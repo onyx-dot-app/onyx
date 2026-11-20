@@ -39,6 +39,7 @@ import type { IconFunctionComponent } from "@opal/types";
 import { noProp } from "@/lib/utils";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
+import { useChatExportMenu } from "@/lib/chat/hooks";
 
 const LS_HIDE_MOVE_CUSTOM_AGENT_MODAL_KEY = "onyx:hideMoveCustomAgentModal";
 
@@ -73,6 +74,7 @@ function ProjectChatItem({
 
   const { refreshChatSessions, removeSession } = useChatSessions();
   const { fetchProjects, projects } = useProjectsContext();
+  const { exportMenuItem } = useChatExportMenu(chat);
 
   const isChatUsingDefaultAgent = chat.persona_id === DEFAULT_AGENT_ID;
 
@@ -171,6 +173,7 @@ function ProjectChatItem({
       title: tSidebar("chatButton.moveToProject.label"),
       onSelect: (views) => views.push("move"),
     },
+    exportMenuItem,
     {
       kind: "action",
       id: "remove",

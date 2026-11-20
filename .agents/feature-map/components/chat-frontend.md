@@ -198,6 +198,17 @@
   names (`app/app/message/tableCopyUtils.ts`). A share link opens a
   read-only copy. The page needs a session, so a visitor with none goes to
   sign-in.
+- **A user shares or exports a chat.** The header's share button opens a menu
+  with **Share…** and the two exports. Each chat's menu in the sidebar and on
+  the project page has **Export As…** with the same formats
+  (`web/src/lib/chat/hooks.ts:useChatExportMenu`). An export downloads the
+  user and assistant turns as Markdown or plain text
+  (`web/src/lib/chat/exportChatSession.ts`). The header hides the share menu in
+  incognito.
+- **A user deletes a chat** from its menu in the sidebar or on the project
+  page; the header has no Delete. Deleting the open chat from the sidebar
+  opens its project, or a new session when it has none
+  (`web/src/sections/sidebar/ChatButton.tsx`).
 - **The incognito start button** appears only on the new chat page when
   incognito is available and unlocked.
 - **A user in incognito** cannot turn incognito on or off once the session

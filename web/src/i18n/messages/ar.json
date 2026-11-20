@@ -11672,28 +11672,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "حذف"
-      },
-      "deleteModal": {
-        "description": "هل أنت متأكد من رغبتك في حذف هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.",
-        "submitButton": {
-          "label": "حذف"
-        },
-        "title": "حذف المحادثة"
-      },
-      "exportAs": {
-        "label": "تصدير باسم…"
-      },
-      "exportFailed": {
-        "message": "فشل تصدير المحادثة. يرجى المحاولة مرة أخرى."
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "نص عادي"
-      },
       "incognitoExit": {
         "ariaLabel": "الخروج من محادثة التخفي",
         "tooltip": "الخروج من محادثة التخفي"
@@ -11720,14 +11698,14 @@
       "modeButton": {
         "ariaLabel": "تغيير وضع التطبيق"
       },
-      "moveToProject": {
-        "label": "نقل إلى مشروع"
-      },
       "openSidebar": {
         "ariaLabel": "فتح الشريط الجانبي"
       },
       "share": {
-        "label": "مشاركة"
+        "label": "مشاركة…"
+      },
+      "shareMenu": {
+        "label": "مشاركة أو تصدير"
       }
     },
     "banners": {
@@ -13292,6 +13270,26 @@
         "preview": {
           "ariaLabel": "معاينة {name}"
         }
+      }
+    },
+    "export": {
+      "failed": {
+        "message": "فشل تصدير المحادثة. يرجى المحاولة مرة أخرى."
+      },
+      "plaintext": {
+        "label": "نص عادي"
+      },
+      "asMarkdown": {
+        "label": "تصدير بتنسيق Markdown"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "تصدير كنص عادي"
+      },
+      "menu": {
+        "label": "تصدير باسم…"
       }
     }
   },

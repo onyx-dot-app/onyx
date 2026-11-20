@@ -1,4 +1,4 @@
-import { Locator, Page, expect } from "@playwright/test";
+import { Download, Locator, Page, expect } from "@playwright/test";
 
 /**
  * The Projects popover that the app sidebar shows in place of the projects tree
@@ -132,6 +132,28 @@ export class SidebarChatRow {
   async startRename(): Promise<void> {
     await this.openOptions();
     await this.optionsPopover.getByRole("menuitem", { name: "Rename" }).click();
+  }
+
+  /** Opens "Export As…" in the options popover and returns the download. */
+  async exportAs(format: "Markdown" | "Plain Text"): Promise<Download> {
+    await this.openOptions();
+    await this.optionsPopover
+      .getByRole("menuitem", { name: "Export As…" })
+      .click();
+    const download = this.page.waitForEvent("download");
+    await this.optionsPopover
+      .getByRole("menuitem", { name: format, exact: true })
+      .click();
+    return download;
+  }
+
+  /** Deletes the chat through the options popover and its confirmation. */
+  async delete(): Promise<void> {
+    await this.openOptions();
+    await this.optionsPopover.getByRole("menuitem", { name: "Delete" }).click();
+    const confirmation = this.page.getByRole("dialog", { name: "Delete Chat" });
+    await confirmation.getByRole("button", { name: "Delete" }).click();
+    await expect(confirmation).toBeHidden();
   }
 
   /** Types a new name into the rename editor and submits it. */
