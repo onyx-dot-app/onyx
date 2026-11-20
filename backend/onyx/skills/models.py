@@ -3,7 +3,14 @@ from enum import Enum
 from typing import Annotated, Any, Final, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    computed_field,
+    field_validator,
+)
 
 SKILL_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SKILL_NAME_MAX_LENGTH: Final = 64
@@ -171,7 +178,11 @@ class PluginNeed(BaseModel):
     name: str
     url: str | None
     transport: str | None
-    supported: bool
+
+    @computed_field
+    @property
+    def supported(self) -> bool:
+        return self.url is not None and self.transport in MCP_URL_TRANSPORTS
 
 
 class PluginVersionContent(BaseModel):

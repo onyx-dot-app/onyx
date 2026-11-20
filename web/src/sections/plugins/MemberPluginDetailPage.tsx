@@ -234,15 +234,6 @@ export default function MemberPluginDetailPage({
     ? plugin.skills.length
     : (entry?.skills.length ?? 0);
   const needCount = plugin?.needs.length ?? 0;
-  const available: PluginPageTab[] = [
-    "overview",
-    ...(skillCount > 0 ? (["skills"] as const) : []),
-    ...(needCount > 0 ? (["integrations"] as const) : []),
-    ...(showVersions ? (["versions"] as const) : []),
-  ];
-  const requested = parsePluginPageTab(searchParams.get("tab"));
-  const tab = available.includes(requested) ? requested : "overview";
-
   async function refresh(): Promise<void> {
     await Promise.all([skills.refresh(), isPlugin ? detail.refresh() : null]);
   }
@@ -300,6 +291,10 @@ export default function MemberPluginDetailPage({
           : []),
       ]
     : null;
+  const requested = parsePluginPageTab(searchParams.get("tab"));
+  const tab = tabs?.some((item) => item.value === requested)
+    ? requested
+    : "overview";
 
   return (
     <CustomizeDetailLayout

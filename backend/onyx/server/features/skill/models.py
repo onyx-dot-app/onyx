@@ -24,7 +24,6 @@ from onyx.skills.marketplace.models import GitHubMarketplaceConfig
 from onyx.skills.models import (
     GITHUB_SKILL_MAX_COUNT,
     PluginManifest,
-    PluginUnusedPart,
     SkillBundleFile,
     UserPastWriteLimit,
 )
@@ -343,13 +342,9 @@ class PluginUploadTarget(BaseModel):
 
 
 class PluginUploadPreview(BaseModel):
-    name: str
-    version: str | None
-    description: str | None
     manifest: PluginManifest
     skills: list[PluginUploadSkill]
     needs: list[PluginNeedView]
-    unused_parts: list[PluginUnusedPart]
     warnings: list[str]
     target: PluginUploadTarget
 

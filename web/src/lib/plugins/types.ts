@@ -72,13 +72,9 @@ export type PluginUploadTarget =
   | (PluginUploadTargetBase & { kind: "new_plugin"; plugin_id: null });
 
 export interface PluginUploadPreview {
-  name: string;
-  version: string | null;
-  description: string | null;
   manifest: PluginManifest;
   skills: PluginUploadSkill[];
   needs: PluginNeed[];
-  unused_parts: PluginUnusedPart[];
   warnings: string[];
   target: PluginUploadTarget;
 }
