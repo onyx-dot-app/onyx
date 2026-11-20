@@ -524,6 +524,9 @@ async def query_metadata(
       `sent_after`, `sent_before`. `group_by`: `month`.
     - `search_doc`: `chat_message_id` (required), `cited_only` — the
       documents a past answer cited or retrieved.
+    The chat-history tables (`chat_session`, `chat_message`, `search_doc`)
+    need a token that allows `read:chat`; apps connected with only
+    `read:search` get an error for them.
 
     List filters match any of their values; different filters are all
     applied. Dates are ISO 8601 (`2026-06-01`); `*_before` bounds are

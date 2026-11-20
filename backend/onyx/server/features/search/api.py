@@ -16,11 +16,15 @@ import json
 from functools import partial
 from typing import cast
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from onyx.agents.tools import CancellationSignal, ToolInvocation
-from onyx.auth.permissions import has_global_permission, require_permission
+from onyx.auth.permissions import (
+    has_global_permission,
+    require_permission,
+    token_allows,
+)
 from onyx.configs.chat_configs import DISABLE_POSTGRES_QUERY_TOOL
 from onyx.configs.constants import PUBLIC_API_TAGS, MessageType
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo, TimeRange
@@ -68,6 +72,7 @@ from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.models import ChatMinimalTextMessage, ToolContext
+from onyx.tools.tool_implementations.postgres.models import CHAT_HISTORY_TABLES
 from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.postgres.scope import build_document_scope
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -250,6 +255,7 @@ def raw_search(
 )
 def postgres_query(
     request: PostgresQueryRequest,
+    http_request: Request,
     user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> PostgresQueryResponse:
@@ -259,10 +265,22 @@ def postgres_query(
     history. `arguments` are the chat tool's arguments, such as
     `{"table": "document", "source_type": ["jira"], "count": true}`. With
     `persona_id`, document queries stay inside that agent's knowledge, as for
-    search.
+    search. The chat-history tables also need `read:chat`.
     """
     if DISABLE_POSTGRES_QUERY_TOOL:
         raise OnyxError(OnyxErrorCode.FEATURE_DISABLED, "postgres_query is turned off.")
+    # Chat history is not search: a token scoped to read:search must not read it.
+    if request.arguments.get("table") in {
+        table.value for table in CHAT_HISTORY_TABLES
+    } and not (
+        has_global_permission(user, Permission.READ_CHAT)
+        and token_allows(http_request, Permission.READ_CHAT)
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Querying chat history needs the read:chat permission. Only the "
+            "'document' and 'hierarchy_node' tables are available.",
+        )
     _, persona_search_info = _load_persona(request.persona_id, user, db_session)
     tool = PostgresTool(
         user=user,

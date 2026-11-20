@@ -463,3 +463,29 @@ def test_mcp_query_metadata_counts_and_lists_documents(
     assert (
         "only to document listings" in _extract_tool_payload(rejected_result)["error"]
     )
+
+
+def test_mcp_query_metadata_needs_read_chat_for_chat_history(
+    admin_user: DATestUser,
+) -> None:
+    """A connected app holds read:search only: no chat history through it."""
+    headers = _auth_headers(
+        admin_user,
+        name="mcp-query-metadata-search-only",
+        scopes=[Permission.READ_SEARCH],
+    )
+
+    async def _action(session: ClientSession) -> list[CallToolResult]:
+        await session.initialize()
+        return [
+            await session.call_tool(
+                "query_metadata", {"table": "chat_session", "count": True}
+            ),
+            await session.call_tool(
+                "query_metadata", {"table": "document", "count": True}
+            ),
+        ]
+
+    chat_result, document_result = _run_with_mcp_session(headers, _action)
+    assert "read:chat" in _extract_tool_payload(chat_result)["error"]
+    assert "matching documents" in _extract_tool_payload(document_result)["result"]
