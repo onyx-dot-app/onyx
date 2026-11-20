@@ -108,14 +108,15 @@ interface TagsResponse {
  *
  * Tags are deduplicated for 60 s and not re-fetched on window focus.
  *
+ * @param enabled - `false` skips the request and reports not loading.
  * @returns tags - The array of available {@link Tag} objects (empty while loading).
- * @returns isLoading - `true` until the first successful fetch or an error.
+ * @returns isLoading - `true` while an enabled fetch has no data or error yet.
  * @returns error - The error object if the request failed.
  * @returns refresh - SWR mutate function to manually re-fetch.
  */
-export function useTags() {
+export function useTags(enabled: boolean = true) {
   const { data, error, mutate } = useSWR<TagsResponse>(
-    SWR_KEYS.tags,
+    enabled ? SWR_KEYS.tags : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
@@ -126,7 +127,7 @@ export function useTags() {
 
   return {
     tags: data?.tags ?? [],
-    isLoading: !error && !data,
+    isLoading: enabled && !error && !data,
     error,
     refresh: mutate,
   };
