@@ -17,6 +17,7 @@ import base64
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from onyx.connectors.microsoft_utils.drive_delta import DRIVE_ITEM_SHARED_PROPERTY
 from onyx.connectors.microsoft_utils.drive_items import (
     DRIVE_ITEM_SELECT_FIELDS,
     DriveItemData,
@@ -35,8 +36,9 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 CANVAS_LAYOUT_PROPERTY = "canvasLayout"
-# The fields of a file that the listing maps, with its download link.
-LISTING_SELECT_FIELDS = DRIVE_ITEM_SELECT_FIELDS
+# The fields of a file that the listing maps: its download link, and the
+# `shared` facet that marks a file with permissions of its own.
+LISTING_SELECT_FIELDS = f"{DRIVE_ITEM_SELECT_FIELDS},{DRIVE_ITEM_SHARED_PROPERTY}"
 # Graph's download links live about one hour. Conversion uses a stored link
 # only while it is younger than this, so a slow download still starts in time.
 DOWNLOAD_URL_MAX_AGE = timedelta(minutes=45)
@@ -89,6 +91,8 @@ def drive_item_stub(
     list_id: str | None,
     parent_hierarchy_raw_node_id: str,
     listing_run_id: str | None,
+    drive_web_url: str | None = None,
+    inherits_permissions: bool = False,
 ) -> SlimDocumentStub:
     encrypted_download_url = (
         _encrypt_download_url(item.download_url) if item.download_url else None
@@ -123,6 +127,8 @@ def drive_item_stub(
                 datetime.now(timezone.utc) if encrypted_download_url else None
             ),
             listing_run_id=listing_run_id,
+            drive_web_url=drive_web_url,
+            inherits_permissions=inherits_permissions,
         ),
     )
 

@@ -56,6 +56,21 @@ class SharepointPermissionCache(BaseModel):
     ) -> None:
         self.group_expansions[key] = expansion
 
+    # The access of a folder or a library, for the files in it that have no
+    # permissions of their own.
+    container_access: dict[str, ExternalAccess] = Field(default_factory=dict)
+
+    def get_container_access(self, key: str) -> ExternalAccess | None:
+        return self.container_access.get(key)
+
+    def set_container_access(self, key: str, access: ExternalAccess) -> None:
+        self.container_access[key] = access
+
+
+# The access of a folder or a library in Redis is used for this long. It is
+# short: a change to a folder's permissions must reach the files in it soon.
+CONTAINER_ACCESS_TTL_SECONDS = 600
+_CONTAINER_ACCESS_KEY_PREFIX = "sharepoint_container_access"
 
 # A group expansion in Redis lives this long. Each key is for one listing run,
 # so this only bounds the memory of a run that ends early.
@@ -167,3 +182,34 @@ def get_sharepoint_hierarchy_node_external_access(
         folder_server_relative_path=folder_server_relative_path,
         permission_cache=permission_cache,
     )
+
+    @staticmethod
+    def _container_key(key: str) -> str:
+        digest = hashlib.sha256(key.encode()).hexdigest()
+        return f"{_CONTAINER_ACCESS_KEY_PREFIX}:{digest}"
+
+    def get_container_access(self, key: str) -> ExternalAccess | None:
+        """From Redis only, so that the time limit holds in a long task."""
+        try:
+            # no-direct-redis: allow indexing shares the folder access between workers
+            raw = get_redis_client().get(self._container_key(key))
+        except RedisError:
+            return self.container_access.get(key)
+        if raw is None:
+            return None
+        try:
+            return ExternalAccess.model_validate_json(raw)
+        except ValueError:
+            return None
+
+    def set_container_access(self, key: str, access: ExternalAccess) -> None:
+        try:
+            # no-direct-redis: allow indexing shares the folder access between workers
+            get_redis_client().set(
+                self._container_key(key),
+                access.model_dump_json(),
+                ex=CONTAINER_ACCESS_TTL_SECONDS,
+            )
+        except RedisError:
+            # With no Redis, the access lives for this connector object.
+            self.container_access[key] = access
