@@ -4008,6 +4008,16 @@
               "description": "Especifica los buzones a indexar (p. ej., INBOX, Sent, Drafts). Déjalo vacío para indexar todos los buzones."
             }
           }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "RU por minuto",
+              "description": "La parte del límite de frecuencia del registro de aplicación de Microsoft que este conector puede usar, en unidades de recursos (RU) por minuto. Microsoft fija el límite de la aplicación según el nivel de licencias, de 1250 a 6250 RU por minuto. Déjelo vacío para que Onyx aprenda el límite. [Cómo encontrar su nivel](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "Otros conectores en este registro de aplicación: {connectors}. Total: {total} RU por minuto.",
+              "none": "Ningún otro conector de este registro de aplicación define RU por minuto."
+            }
+          }
         }
       }
     },

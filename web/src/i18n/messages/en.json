@@ -4008,6 +4008,16 @@
               "description": "Specify mailboxes to index (e.g., INBOX, Sent, Drafts). Leave empty to index all mailboxes."
             }
           }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "RU per Minute",
+              "description": "The share of your Microsoft app registration's rate limit that this connector can use, in resource units (RU) per minute. Microsoft sets the limit of the app by license tier, from 1,250 to 6,250 RU per minute. Leave empty to let Onyx learn the limit. [How to find your tier](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "Other connectors on this app registration: {connectors}. Total: {total} RU per minute.",
+              "none": "No other connector on this app registration sets RU per minute."
+            }
+          }
         }
       }
     },

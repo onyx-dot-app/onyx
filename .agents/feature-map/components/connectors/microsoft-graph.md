@@ -115,6 +115,25 @@ of the key, and counts
 `User-Agent: ISV|Onyx|Onyx/<version>`, also with the limiter off: Microsoft
 gives such traffic priority.
 
+**RU per minute.** `connectors/microsoft_utils/config.py:MicrosoftRateBudget`
+adds the optional `ru_per_minute` field to the four configs. It is COSMETIC, so
+an edit needs no re-index, and it is on the connector because a credential
+change runs the connector again. The connectors accept the argument and do not
+read it: `build_source_api_limiter` reads it from the stored config. With a
+value and a `cc_pair_id`, the connector gets a window of its own, keyed
+`microsoft:cc_pair:<id>`, at the full value from the start
+(`microsoft_connector_budgets`), and a budget for 24 hours of 960 times the
+value, which Redis counts by the hour (`backend/onyx/redis/redis_rate_window.py:try_take_from_day`).
+It still reads and sets the pause of the app, and a 429 still cuts its window.
+With no value, the connector shares the learned budget of the app.
+`GET /manage/admin/credential/{id}/microsoft-rate-budgets`
+(`server/documents/credential.py:list_microsoft_rate_budgets`, global
+`MANAGE_CONNECTORS` only) lists the connectors on the same app on any
+credential row (`backend/onyx/db/credentials.py:fetch_microsoft_app_cc_pairs`) with their
+values and the sum, and no credential field. The connector form shows them
+under the field
+(`web/src/views/admin/connectors/AddConnectorPage/form/MicrosoftRateBudgetNote.tsx`).
+
 ---
 
 ## Contracts and traps

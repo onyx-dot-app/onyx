@@ -704,6 +704,7 @@ def connector_pruning_generator_task(
                 InputType.SLIM_RETRIEVAL,
                 cc_pair.connector.connector_specific_config,
                 cc_pair.credential,
+                cc_pair_id=cc_pair.id,
             )
 
             # Read the indexed ids before the crawl, not after it. Indexing runs

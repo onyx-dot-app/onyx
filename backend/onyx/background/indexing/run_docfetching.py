@@ -255,6 +255,7 @@ def _get_connector_runner(
                 credential=attempt.connector_credential_pair.credential,
                 raw_file_callback=raw_file_callback,
                 should_stop=should_stop,
+                cc_pair_id=attempt.connector_credential_pair.id,
             )
 
             # The drain needs the pair and the attempt, which are the run's,

@@ -153,6 +153,7 @@ def _build_context(
             # Many conversion threads share the budget: their calls wait after
             # listing and permission sync.
             bulk_source_api_calls=True,
+            cc_pair_id=cc_pair_id,
         )
         # The same rules as docfetching, which makes these choices for the
         # documents it fetches itself.

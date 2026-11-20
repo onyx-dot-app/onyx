@@ -283,6 +283,7 @@ def process_targets_for_cc_pair(
         input_type=cc_pair.connector.input_type,
         connector_specific_config=cc_pair.connector.connector_specific_config,
         credential=cc_pair.credential,
+        cc_pair_id=cc_pair.id,
     )
     if not isinstance(connector, Resolver):
         logger.info(

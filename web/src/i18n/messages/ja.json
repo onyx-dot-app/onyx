@@ -4008,6 +4008,16 @@
               "description": "インデックスするメールボックスを指定します(例: INBOX、Sent、Drafts)。空欄の場合は、すべてのメールボックスをインデックスします。"
             }
           }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "1 分あたりの RU",
+              "description": "このコネクタが使用できる、Microsoft アプリ登録のレート制限の割り当てです。単位は 1 分あたりのリソース ユニット (RU) です。Microsoft はライセンス階層に応じて、アプリの制限を 1 分あたり 1,250〜6,250 RU に設定します。空欄にすると、Onyx が制限を学習します。[階層の確認方法](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "このアプリ登録を使用する他のコネクタ: {connectors}。合計: 1 分あたり {total} RU。",
+              "none": "このアプリ登録で 1 分あたりの RU を設定している他のコネクタはありません。"
+            }
+          }
         }
       }
     },
