@@ -105,6 +105,7 @@ from onyx.connectors.sharepoint.connector_utils import (
     tenant_domain_from_site_urls,
     validate_site_url_host,
 )
+from onyx.connectors.sharepoint.listing import LISTING_SELECT_FIELDS
 from onyx.connectors.sharepoint.models import (
     DriveChildrenPage,
     SharepointCredentials,
@@ -550,11 +551,12 @@ class SharepointSourceOperations(SourceOperations):
     def get_latest_delta_link(self, *, drive_id: str) -> str | None:
         """The delta cursor of the drive's state now. Graph answers
         ``token=latest`` with no items and the link. A later read of the
-        link returns the changes after this call."""
+        link returns the changes after this call, with the fields of this
+        call's ``$select``."""
         with raise_microsoft_errors():
             data: dict[str, Any] = self._get(
                 f"{self._base()}/drives/{drive_id}/root/delta",
-                {"token": "latest", "$select": DRIVE_ITEM_SELECT_FIELDS},
+                {"token": "latest", "$select": LISTING_SELECT_FIELDS},
             )
         link: object = data.get(ODATA_DELTA_LINK_PROPERTY)
         return link if isinstance(link, str) and link else None
@@ -593,7 +595,7 @@ class SharepointSourceOperations(SourceOperations):
             )
             params = {
                 "$top": str(DEFAULT_DRIVE_DELTA_PAGE_SIZE),
-                "$select": DRIVE_ITEM_SELECT_FIELDS,
+                "$select": LISTING_SELECT_FIELDS,
             }
         with raise_microsoft_errors():
             data: dict[str, Any] = self._get(url, params)
