@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.postgres_tool import (
@@ -23,6 +23,7 @@ from ee.onyx.db.postgres_tool import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import Tag, TimeRange
+from onyx.db import postgres_tool as postgres_tool_db
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, HierarchyNodeType
 from onyx.db.models import (
@@ -46,11 +47,12 @@ from onyx.db.postgres_tool import (
     query_documents_for_tool,
     query_hierarchy_nodes_for_tool,
     tool_transaction,
+    try_count_documents_for_tool,
 )
 from onyx.db.postgres_tool import (
     _hierarchy_node_access_filter as mit_hierarchy_filter,
 )
-from onyx.db.postgres_tool_models import DocumentScope
+from onyx.db.postgres_tool_models import DocumentOrder, DocumentScope
 from onyx.kg.models import KGStage
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
@@ -537,7 +539,8 @@ class PagingEnv:
 @pytest.fixture()
 def paging_env(db_session: Session) -> Generator[PagingEnv, None, None]:
     """101 public documents: 40 share one timestamp, 40 have distinct
-    timestamps and 21 have none, so pages cross ties and the NULL boundary."""
+    timestamps and 21 have none, so pages cross ties and the NULL boundary.
+    Creation times repeat every 10 documents, and the last 11 have none."""
     tag = uuid4().hex[:8]
     now = datetime.now(timezone.utc)
     cc_pair = make_cc_pair(db_session, source=DocumentSource.WEB)
@@ -556,6 +559,7 @@ def paging_env(db_session: Session) -> Generator[PagingEnv, None, None]:
             doc_id,
             f"Paged {tag} {i:03d}",
             doc_updated_at=updated_at,
+            doc_created_at=now - timedelta(days=i % 10) if i < 90 else None,
         )
         doc_ids.add(doc_id)
     db_session.commit()
@@ -568,12 +572,23 @@ def paging_env(db_session: Session) -> Generator[PagingEnv, None, None]:
     db_session.commit()
 
 
-def _walk_pages(db_session: Session, title: str, page_size: int) -> list[list[str]]:
+def _walk_pages(
+    db_session: Session,
+    title: str,
+    page_size: int,
+    order: DocumentOrder = DocumentOrder.UPDATED_DESC,
+) -> list[list[str]]:
     pages: list[list[str]] = []
     after = None
     while True:
         page = query_documents_for_tool(
-            db_session, None, [], title_contains=title, after=after, limit=page_size
+            db_session,
+            None,
+            [],
+            title_contains=title,
+            order=order,
+            after=after,
+            limit=page_size,
         )
         pages.append([doc.id for doc, _ in page.rows])
         if page.next_cursor is None:
@@ -594,6 +609,55 @@ def test_paging_returns_every_document_once_in_order(
     # The pages follow the single-listing order.
     in_one_listing = _walk_pages(db_session, title, page_size=100)
     assert walked == [doc_id for page in in_one_listing for doc_id in page]
+
+
+@pytest.mark.parametrize("order", list(DocumentOrder))
+def test_every_order_pages_through_each_document_once(
+    db_session: Session, paging_env: PagingEnv, order: DocumentOrder
+) -> None:
+    docs = (
+        db_session.query(DbDocument).filter(DbDocument.id.in_(paging_env.doc_ids)).all()
+    )
+    value_of = {
+        DocumentOrder.UPDATED_DESC: lambda d: d.doc_updated_at,
+        DocumentOrder.UPDATED_ASC: lambda d: d.doc_updated_at,
+        DocumentOrder.CREATED_DESC: lambda d: d.doc_created_at,
+        DocumentOrder.CREATED_ASC: lambda d: d.doc_created_at,
+        DocumentOrder.TITLE_ASC: lambda d: d.semantic_id,
+        DocumentOrder.TITLE_DESC: lambda d: d.semantic_id,
+    }[order]
+    # The ordered column, then the id, in one direction; no value sorts last.
+    dated = sorted(
+        (d for d in docs if value_of(d) is not None),
+        key=lambda d: (value_of(d), d.id),
+        reverse=order.is_descending,
+    )
+    undated = sorted(
+        (d for d in docs if value_of(d) is None),
+        key=lambda d: d.id,
+        reverse=order.is_descending,
+    )
+    expected = [d.id for d in dated + undated]
+
+    pages = _walk_pages(db_session, f"Paged {paging_env.tag}", 7, order)
+    assert [doc_id for page in pages for doc_id in page] == expected
+
+
+def test_optional_count_gives_up_and_keeps_the_session(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(postgres_tool_db, "_OPTIONAL_COUNT_TIMEOUT", "100ms")
+    monkeypatch.setattr(
+        postgres_tool_db,
+        "_count_documents_stmt",
+        lambda *_args, **_kwargs: select(func.pg_sleep(1)),
+    )
+    assert try_count_documents_for_tool(db_session, None, []) is None
+    # The cancel rolled back only the savepoint, with its shorter timeout.
+    assert db_session.execute(text("SELECT 1")).scalar_one() == 1
+    timeout = db_session.execute(text("SHOW statement_timeout")).scalar_one()
+    db_session.rollback()
+    assert timeout != "100ms"
 
 
 def test_paging_reads_timestamps_from_the_statement(
