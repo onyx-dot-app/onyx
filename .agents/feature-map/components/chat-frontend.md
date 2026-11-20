@@ -229,7 +229,8 @@
   Escape leaves full
   screen first, before a run's Escape stops the run; a narrow page has no
   full screen, so Escape skips that step. Then it closes the active file's
-  tab, back on its tile, then closes the panel. Multi-model turns have no sandbox, so they publish no files.
+  tab, back on its tile, or on the Files tab for a file without one, then
+  closes the panel. Multi-model turns have no sandbox, so they publish no files.
 - **A user rates, copies or shares an answer.** Copy turns markdown tables into
   tab-separated text so a spreadsheet keeps the columns. Each answer table
   also has its own copy button, which writes HTML with links and full source
@@ -432,7 +433,9 @@ Foreground subagent publishes stream nested in the root answer.
 files do not change, and the panel and its views are memoized, so a packet
 that changes no file or tab does not render the panel.
 `views/AppPage.tsx` puts a memoized `CurrentChatRightPanel` element in the
-app shell's right slot, as the shared view places `ChatRightPanel`. The
+app shell's right slot, as the shared view places `ChatRightPanel`. Both
+always mount it, so a card opens its file also when the list holds no files;
+closed, the panel takes no room. The
 element changes only with its inputs (open, the Sources view, whether
 Sources has content), so a packet, a search keystroke, a tab change or a
 resize renders the panel and not the app chrome. Names that the model or the
@@ -467,6 +470,9 @@ in the app shell's right slot.
 column; the open panel measures the row, so a width change renders the panel
 and nothing else, and a covering panel makes the page column inert. A closed
 panel does not watch the width; it measures again when it opens.
+`ChatSidePanel`'s `reserve` keeps the medium width in the row's flow, and the
+panel sits over the row's end at a pixel width, medium or full. A change of
+size moves only the panel's edge, never the page or the panel's position.
 In the panel, `sections/document-sidebar/DocumentsSidebar.tsx` gets no
 `closeSidebar` and draws no frame; NRF draws its frame. `sections/chat/ChatSidePanel.tsx` is
 the sliding panel frame: it returns focus to the opener on close. It records
