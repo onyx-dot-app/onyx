@@ -90,7 +90,7 @@ describe("preprocessLaTeX", () => {
       const processed = preprocessLaTeX(input);
 
       // Inline LaTeX delimiters should be converted
-      expect(processed).toContain("$c$");
+      expect(processed).toContain("$$c$$");
       expect(processed).not.toContain("\\(c\\)");
     });
   });
@@ -124,7 +124,7 @@ describe("preprocessLaTeX", () => {
       const processed = preprocessLaTeX(input);
 
       // LaTeX inline delimiters should be converted
-      expect(processed).toContain("equivalence, $E = mc^2$,");
+      expect(processed).toContain("equivalence, $$E = mc^2$$,");
       expect(processed).not.toContain("equivalence, \\(E = mc^2\\),");
 
       // LaTeX block delimiters should be converted

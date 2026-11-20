@@ -9,9 +9,14 @@ import type {
 } from "@/app/craft/types/streamingTypes";
 import type { TimelineEvent } from "@/lib/timeline/events";
 
-jest.mock("@/components/chat/MinimalMarkdown", () => ({
-  __esModule: true,
-  default: ({ content, cursor }: { content: string; cursor?: boolean }) => (
+jest.mock("@/lib/answerText/components", () => ({
+  AnswerMarkdown: ({
+    content,
+    cursor,
+  }: {
+    content: string;
+    cursor?: boolean;
+  }) => (
     <div>
       {content}
       {cursor && " (cursor)"}

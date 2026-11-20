@@ -125,15 +125,19 @@ export function ScrollableTable({
 /**
  * Processes content for markdown rendering by handling code blocks and LaTeX
  */
+/**
+ * Strips a citation link still arriving at the end of streaming content.
+ * During typewriter animation, [[N]](url) is revealed character by character,
+ * and ReactMarkdown can't parse an incomplete link: it would show as raw text.
+ */
+export const stripPartialCitations = (content: string): string =>
+  content
+    .replace(/\[\[\d+\]\]\([^)]*$/, "")
+    // A lone [[ or [[N] or [[N]] at the very end, before the URL arrives.
+    .replace(/\[\[(?:\d+\]?\]?)?$/, "");
+
 export const processContent = (content: string): string => {
-  // Strip incomplete citation links at the end of streaming content.
-  // During typewriter animation, [[N]](url) is revealed character by character.
-  // ReactMarkdown can't parse an incomplete link and renders it as raw text.
-  // This regex removes any trailing partial citation pattern so only complete
-  // links are passed to the markdown parser.
-  content = content.replace(/\[\[\d+\]\]\([^)]*$/, "");
-  // Also strip a lone [[ or [[N] or [[N]] at the very end (before the URL part arrives)
-  content = content.replace(/\[\[(?:\d+\]?\]?)?$/, "");
+  content = stripPartialCitations(content);
 
   // Escape a trailing unclosed `$$` so remark-math skips it mid-stream and
   // the user sees the LaTeX source streaming as plain text. The block swaps

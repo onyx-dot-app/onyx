@@ -1,7 +1,8 @@
 /**
  * Map a file path's extension to a highlight.js language id. Pure and
  * dependency-free (no highlight.js), so it's safe to import statically — the
- * heavy highlighter itself lives in `codeHighlight.ts` and is loaded lazily.
+ * heavy highlighter itself lives in `lib/codeHighlight/highlighter.ts` and is
+ * loaded lazily.
  */
 export function getLanguageFromPath(
   filePath: string | undefined

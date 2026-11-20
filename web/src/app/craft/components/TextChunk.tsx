@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, type ComponentPropsWithoutRef } from "react";
-import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
+import { AnswerMarkdown } from "@/lib/answerText/components";
 import { MemoizedLink } from "@/app/app/message/MemoizedTextComponents";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { buildArtifactUrl } from "@/app/craft/services/apiServices";
@@ -65,10 +65,9 @@ export default function TextChunk({
 
   return (
     <div className="py-1">
-      <MinimalMarkdown
+      <AnswerMarkdown
         content={visible}
-        className="text-text-05"
-        streaming={isStreaming}
+        streaming={isStreaming || visible.length < content.length}
         cursor={isStreaming}
         components={components}
       />
