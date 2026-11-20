@@ -191,7 +191,8 @@ an invalid `time_cutoff` can result in a search without a date restriction.
 The response is one JSON text block with a `results` array. It has no separate structured copy.
 Each result includes `title`, `url`, `source_type`, `content`, and `updated_at`.
 A result also includes `metadata` when its source supplies fields, such as a Jira reporter or assignee.
-Use these keys and values in `tags`. Results are ordered by relevance. `content` contains retrieved document text,
+Use these keys and values in `tags`. For a list value, such as `"labels": ["production", "urgent"]`,
+send one pair for each item. Results are ordered by relevance. `content` contains retrieved document text,
 which can be a selected chunk rather than the entire document. There is no `limit` parameter for this tool.
 
 ### search_web
@@ -235,7 +236,7 @@ Clients that support MCP resources can read these JSON resources to discover sea
 
 | Resource | Response | Use |
 | --- | --- | --- |
-| `resource://indexed_sources` | Array of source identifiers. It includes `ingestion_api` after documents are sent through the Ingestion API. | Use identifiers in `source_types`. |
+| `resource://indexed_sources` | Array of source identifiers. It includes `ingestion_api` after documents are sent through the Ingestion API. An ingested document that sets its own `source` is indexed under that source, and this list can leave that source out. | Use identifiers in `source_types`. |
 | `resource://document_sets` | Array of accessible document sets with `name` and `description`. | Use names in `document_set_names`. |
 | `resource://agents` | Array of accessible agents with `id`, `name`, and `description`. | Use names in `agent`. |
 
