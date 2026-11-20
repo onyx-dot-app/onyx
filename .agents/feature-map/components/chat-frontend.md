@@ -429,9 +429,11 @@ one that the list does not hold. A background
 subagent's files are not in the root stream; they appear at the next
 latest-page load, for example when the turn that its results start settles.
 Foreground subagent publishes stream nested in the root answer.
-`lib/chat/hooks.ts:useCurrentPublishedFiles` keeps the same array while the
-files do not change, and the panel and its views are memoized, so a packet
-that changes no file or tab does not render the panel.
+`lib/chat/hooks.ts:usePublishedFiles` builds a chat's files and publish
+index once per message tree and loads, for the open chat and the shared view.
+It keeps each the same while its content does, and the panel and its views
+are memoized, so a packet that changes no file or tab does not render the
+panel.
 `views/AppPage.tsx` puts a memoized `CurrentChatRightPanel` element in the
 app shell's right slot, as the shared view places `ChatRightPanel`. Both
 always mount it, so a card opens its file also when the list holds no files;

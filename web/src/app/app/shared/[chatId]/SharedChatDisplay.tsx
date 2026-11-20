@@ -25,10 +25,9 @@ import useOnMount from "@/hooks/useOnMount";
 import SharedAppInputBar from "@/sections/input/SharedAppInputBar";
 import {
   addLoadedPublishedFiles,
-  chatPublishedFiles,
   NO_LOADED_PUBLISHED_FILES,
-  publishOrder,
 } from "@/lib/chat/publishedFiles";
+import { usePublishedFiles } from "@/lib/chat/hooks";
 import { PublishedFilesButton } from "@/sections/chat/PublishedFileViews";
 import { ChatRightPanel } from "@/sections/chat/ChatRightPanel";
 import {
@@ -64,6 +63,24 @@ export default function SharedChatDisplay({
     INITIAL_RIGHT_PANEL
   );
 
+  // A shared chat has no live publishes: its load's list, or without one
+  // its packets, gives the files
+  const chat = useMemo(
+    () =>
+      chatSession && {
+        messageTree: processRawChatHistory(
+          chatSession.messages,
+          chatSession.packets
+        ),
+        loadedPublishedFiles: addLoadedPublishedFiles(
+          NO_LOADED_PUBLISHED_FILES,
+          chatSession
+        ),
+      },
+    [chatSession]
+  );
+  const { files: publishedFiles, publishIndex } = usePublishedFiles(chat);
+
   const isMounted = useOnMount();
   const appPosition = useAppPosition();
 
@@ -75,7 +92,7 @@ export default function SharedChatDisplay({
     [llmProviders]
   );
 
-  if (!chatSession) {
+  if (!chatSession || !chat) {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center">
         <Section flexDirection="column" alignItems="center" gap={4}>
@@ -92,20 +109,10 @@ export default function SharedChatDisplay({
     );
   }
 
-  const messageTree = processRawChatHistory(
-    chatSession.messages,
-    chatSession.packets
-  );
+  const { messageTree } = chat;
   const messages = getLatestMessageChain(messageTree);
 
   const firstMessage = messages[0];
-  // A shared chat has no live publishes: its load's list, or without one
-  // its packets, gives the files
-  const loadedPublishedFiles = addLoadedPublishedFiles(
-    NO_LOADED_PUBLISHED_FILES,
-    chatSession
-  );
-  const publishedFiles = chatPublishedFiles(loadedPublishedFiles, messageTree);
   const openPublishedFile = (file: PublishedFile) =>
     dispatchRightPanel({ type: "openFile", file });
 
@@ -146,7 +153,7 @@ export default function SharedChatDisplay({
           state={rightPanel}
           dispatch={dispatchRightPanel}
           files={publishedFiles}
-          publishIndex={publishOrder(loadedPublishedFiles, messageTree)}
+          publishIndex={publishIndex}
           sources={null}
           hasSources={false}
         />
