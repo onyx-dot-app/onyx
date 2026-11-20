@@ -1283,8 +1283,14 @@ class MockMicrosoftApi:
         show_sharing = "deltashowsharingchanges" in preferences
         value: list[dict[str, Any]] = []
         for item in items:
+            # A sequence cursor compares sequence numbers, a time cursor
+            # compares times.
             sharing_changed = bool(
                 cursor.since and item.sharing_changed_seq > cursor.since
+            ) or bool(
+                cursor.since_time
+                and item.sharing_changed_at
+                and item.sharing_changed_at > cursor.since_time
             )
             payload = self._item_json(
                 item, app, cursor.select, hierarchical, sharing_changed

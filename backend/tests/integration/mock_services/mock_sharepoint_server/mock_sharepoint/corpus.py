@@ -142,6 +142,8 @@ class MockItem(BaseModel):
     changed_at: datetime
     # The sequence number of the last permission change, 0 for none.
     sharing_changed_seq: int = 0
+    # The time of the last permission change, None for none.
+    sharing_changed_at: datetime | None = None
 
     @property
     def is_root(self) -> bool:
@@ -1117,6 +1119,7 @@ class Corpus:
         if isinstance(target, MockItem):
             self._changed(target, now)
             target.sharing_changed_seq = self.seq
+            target.sharing_changed_at = now
         return self.assignments_of(target)
 
     def assignments_of(
