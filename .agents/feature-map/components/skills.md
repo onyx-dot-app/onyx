@@ -940,7 +940,9 @@ the app from the same rule
     for its time budget or an error with the mark set starts one follow-up
     sync. The API reports a mark older than the lock timeout plus 5 minutes
     as not syncing (`sync_request_is_live`), so Sync now recovers a mark that
-    a dead worker left. The Celery task
+    a dead worker left. A marketplace with no finished sync that is older
+    than that limit reports the sync failed message, so a first sync that
+    died does not show as syncing. The Celery task
     `sync_marketplace` runs on the `sandbox` queue; Onyx Lite runs the sync
     in the API server after the response. Company plugins have no author and
     `published_version_id` follows each version;

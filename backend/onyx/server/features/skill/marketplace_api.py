@@ -55,6 +55,7 @@ from onyx.skills.marketplace.provider import (
     marketplace_config,
 )
 from onyx.skills.marketplace.sync import (
+    SYNC_FAILED_ERROR,
     enqueue_marketplace_sync,
     read_marketplace_repository,
     sync_request_is_live,
@@ -103,6 +104,12 @@ def _summary(
         if marketplace.login_user_id is not None
         else None
     )
+    sync_requested = sync_request_is_live(marketplace.sync_requested_at)
+    first_sync_died = (
+        marketplace.last_synced_at is None
+        and not sync_requested
+        and not sync_request_is_live(marketplace.created_at)
+    )
     return MarketplaceSummary(
         id=marketplace.id,
         name=marketplace.name,
@@ -123,8 +130,12 @@ def _summary(
         plugin_count=plugin_count,
         last_synced_at=marketplace.last_synced_at,
         last_synced_revision=marketplace.last_synced_revision,
-        last_error=marketplace.last_error,
-        sync_requested=sync_request_is_live(marketplace.sync_requested_at),
+        last_error=(
+            SYNC_FAILED_ERROR
+            if first_sync_died and marketplace.last_error is None
+            else marketplace.last_error
+        ),
+        sync_requested=sync_requested,
         needs_confirmation=marketplace.pending_delete_revision is not None,
         created_at=marketplace.created_at,
     )

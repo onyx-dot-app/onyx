@@ -202,3 +202,29 @@ def test_stale_sync_request_is_not_reported_as_syncing(
     assert sync_requested(now - timedelta(minutes=1))
     stale_age = timedelta(seconds=sync.SYNC_LOCK_TIMEOUT_SECONDS + 10 * 60)
     assert not sync_requested(now - stale_age)
+
+
+def test_first_sync_that_died_is_reported_as_failed(
+    db_session: Session,
+    users: tuple[User, User, User],
+    marketplace_ids: list[Any],
+) -> None:
+    owner = users[0]
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+
+    def summary(created_at: datetime) -> tuple[bool, str | None]:
+        row = reload(db_session, marketplace)
+        row.created_at = created_at
+        row.last_synced_at = None
+        row.last_error = None
+        row.sync_requested_at = None
+        db_session.commit()
+        view = api.get_marketplace(marketplace.id, owner, db_session)
+        return view.sync_requested, view.last_error
+
+    now = datetime.now(timezone.utc)
+    assert summary(now - timedelta(minutes=1)) == (False, None)
+    stale_age = timedelta(seconds=sync.SYNC_LOCK_TIMEOUT_SECONDS + 10 * 60)
+    assert summary(now - stale_age) == (False, sync.SYNC_FAILED_ERROR)
