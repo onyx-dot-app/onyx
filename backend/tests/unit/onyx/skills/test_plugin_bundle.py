@@ -175,6 +175,41 @@ def test_reads_servers_from_a_file_the_manifest_names() -> None:
     assert [need.name for need in bundle.needs] == ["docs"]
 
 
+def test_reads_servers_from_an_array_of_files_and_objects() -> None:
+    bundle = read_plugin_bundle(
+        _zip(
+            {
+                "plugin.json": json.dumps(
+                    {
+                        "name": "kit",
+                        "mcpServers": [
+                            "./config/servers.json",
+                            {"wiki": {"type": "sse", "url": "https://wiki.test/sse"}},
+                            {"docs": {"type": "http", "url": "https://other.test"}},
+                            ".mcp.json",
+                        ],
+                    }
+                ),
+                "config/servers.json": json.dumps(
+                    {"docs": {"type": "http", "url": "https://docs.test/mcp"}}
+                ),
+                ".mcp.json": json.dumps(
+                    {"mcpServers": {"tickets": {"command": "tickets"}}}
+                ),
+            }
+        )
+    )
+
+    assert [(need.name, need.url) for need in bundle.needs] == [
+        ("docs", "https://docs.test/mcp"),
+        ("tickets", None),
+        ("wiki", "https://wiki.test/sse"),
+    ]
+    assert bundle.warnings == [
+        "The MCP server 'docs' is defined twice. Onyx uses the first one."
+    ]
+
+
 @pytest.mark.parametrize(
     ("files", "detail"),
     [
@@ -214,6 +249,45 @@ def test_reads_servers_from_a_file_the_manifest_names() -> None:
                 "skills/b/SKILL.md": _skill_md("same"),
             },
             "skills/a and skills/b both hold the skill 'same'.",
+        ),
+        (
+            {"plugin.json": json.dumps({"name": "kit", "mcpServers": [["nested"]]})},
+            "The MCP servers in plugin.json must be a JSON object.",
+        ),
+        (
+            {
+                "plugin.json": json.dumps({"name": "kit", "description": "a\x00b"}),
+                "skills/a/SKILL.md": _skill_md("a"),
+            },
+            "plugin.json cannot contain a NUL character.",
+        ),
+        (
+            {
+                "plugin.json": '{"name": "kit", "x": '
+                + "[" * 600
+                + '"a\\u0000b"'
+                + "]" * 600
+                + "}",
+                "skills/a/SKILL.md": _skill_md("a"),
+            },
+            "plugin.json cannot contain a NUL character.",
+        ),
+        (
+            {
+                "plugin.json": json.dumps({"name": "kit"}),
+                ".mcp.json": json.dumps(
+                    {"mcpServers": {"do\x00cs": {"command": "docs"}}}
+                ),
+            },
+            ".mcp.json cannot contain a NUL character.",
+        ),
+        (
+            {
+                "plugin.json": json.dumps({"name": "kit"}),
+                "skills/a/SKILL.md": _skill_md("a", '"Does\\0 a thing."'),
+            },
+            "skills/a/SKILL.md: SKILL.md frontmatter field 'description' must not "
+            "contain a NUL character",
         ),
     ],
 )

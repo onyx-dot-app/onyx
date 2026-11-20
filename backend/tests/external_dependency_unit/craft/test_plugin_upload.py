@@ -38,6 +38,7 @@ from onyx.server.features.skill.models import (
     SkillEnableRequest,
     SkillVersionRestoreRequest,
 )
+from onyx.server.features.skill.response_helpers import skill_response_for_user
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.push import build_user_skills_payload
 from onyx.tools.tool_implementations.skills.skill_tools import (
@@ -563,6 +564,75 @@ def test_plugin_versions_preview_and_restore(
             author,
             db_session,
         )
+
+
+def test_a_shown_version_gives_the_detail_and_counts_of_that_version(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    author, _, _ = users
+    first = _save(
+        author,
+        _plugin_zip("shown-kit", ["kept"], servers={"main": _http()}),
+        db_session,
+    )
+    _save(author, _plugin_zip("shown-kit", ["kept", "added"]), db_session)
+    plugin = db_session.get_one(Plugin, first.plugin.id)
+    first_id = api.list_custom_skill_versions(plugin.id, author, db_session)[1].id
+
+    shown = skill_response_for_user(
+        plugin,
+        author,
+        db_session,
+        shown_version_id=first_id,
+        include_plugin_detail=True,
+    )
+
+    assert shown.current_version_id == first_id
+    assert shown.plugin is not None
+    assert [skill.name for skill in shown.plugin.skills] == ["kept"]
+    assert [need.name for need in shown.plugin.needs] == ["main"]
+    assert shown.needed_count == 1
+    current = skill_response_for_user(
+        plugin, author, db_session, include_plugin_detail=True
+    )
+    assert current.plugin is not None
+    assert [skill.name for skill in current.plugin.skills] == ["added", "kept"]
+    assert current.needed_count == 0
+
+
+def test_a_failed_push_state_commit_keeps_the_saved_version(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    author, _, _ = users
+    real_commit = db_session.commit
+
+    def fail_the_next_commit(*_args: object) -> None:
+        def failing_commit() -> None:
+            monkeypatch.setattr(db_session, "commit", real_commit)
+            raise RuntimeError("connection lost")
+
+        monkeypatch.setattr(db_session, "commit", failing_commit)
+
+    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", fail_the_next_commit)
+
+    first = _save(author, _plugin_zip("commit-kit", ["one"]), db_session)
+    second = _save(author, _plugin_zip("commit-kit", ["one", "two"]), db_session)
+    versions = api.list_custom_skill_versions(first.plugin.id, author, db_session)
+    restored = api.restore_custom_skill_version(
+        first.plugin.id,
+        versions[1].id,
+        SkillVersionRestoreRequest(base_version_id=versions[0].id),
+        author,
+        db_session,
+    )
+
+    assert second.target.version_number == 2
+    assert restored.current_version_number == 3
 
 
 def test_bulk_enable_turns_on_the_integrations_of_a_plugin(

@@ -23,6 +23,7 @@ interface IntegrationConnectButtonProps {
   /** Where the OAuth callback returns when no waiting tab closes it. */
   returnPath: string;
   allowDisconnect?: boolean;
+  onConnected?: () => void;
 }
 
 /** Connect, Reconnect, Disconnect or "Ask your admin" for one integration. */
@@ -30,6 +31,7 @@ export default function IntegrationConnectButton({
   integration,
   returnPath,
   allowDisconnect = false,
+  onConnected,
 }: IntegrationConnectButtonProps) {
   const t = useTranslations("plugins.member.connection");
   const { mutate } = useSWRConfig();
@@ -46,6 +48,7 @@ export default function IntegrationConnectButton({
   async function connected() {
     toast.success(t("connected", { name }));
     await refresh();
+    onConnected?.();
   }
 
   async function connect() {

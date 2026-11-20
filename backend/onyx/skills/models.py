@@ -48,6 +48,8 @@ class SkillMetadata(BaseModel):
             raise ValueError("must not be empty")
         if len(value) > 1024:
             raise ValueError("must be at most 1024 characters")
+        if "\x00" in value:
+            raise ValueError("must not contain a NUL character")
         return value
 
     @field_validator("compatibility")

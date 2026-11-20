@@ -141,6 +141,7 @@ from onyx.skills.models import (
 )
 from onyx.skills.plugin_bundle import read_plugin_bundle
 from onyx.skills.push import (
+    commit_push_state,
     push_skill_to_affected_sandboxes,
     push_skills_and_commit,
 )
@@ -339,7 +340,7 @@ def _replace_skill_bundle_from_editor(
         return _editable_skill_response(skill, user, db_session, base_version_id)
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
-    db_session.commit()
+    commit_push_state(db_session)
     return _editable_skill_response(skill, user, db_session, created_version_id)
 
 
@@ -550,7 +551,7 @@ def create_custom_skill(
 
     if auto_enable:
         push_skill_to_affected_sandboxes(skill, db_session)
-        db_session.commit()
+        commit_push_state(db_session)
 
     return skill_response_for_user(
         skill,
@@ -689,7 +690,7 @@ def save_plugin_upload(
 
     db_session.expire(plugin)
     push_skill_to_affected_sandboxes(plugin, db_session)
-    db_session.commit()
+    commit_push_state(db_session)
     if integrations_changed:
         reload_craft_sessions({user.id}, db_session)
     return PluginUploadResponse(
@@ -774,7 +775,7 @@ def create_custom_skill_from_editor(
 
     if auto_enable or share_request is not None:
         push_skill_to_affected_sandboxes(skill, db_session)
-        db_session.commit()
+        commit_push_state(db_session)
 
     return _editable_skill_response(skill, user, db_session)
 
@@ -962,7 +963,7 @@ def _restore_plugin_version(
         return _editable_skill_response(plugin, user, db_session, base_version_id)
     db_session.expire(plugin)
     push_skill_to_affected_sandboxes(plugin, db_session)
-    db_session.commit()
+    commit_push_state(db_session)
     return _editable_skill_response(plugin, user, db_session, created_version_id)
 
 
@@ -1050,7 +1051,7 @@ def replace_current_user_skill_bundle(
 
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
-    db_session.commit()
+    commit_push_state(db_session)
     return skill_response_for_user(
         skill,
         user,

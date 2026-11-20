@@ -94,7 +94,8 @@ export default function ScheduleTaskForm({
 
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: skillsData } = useUserSkills();
-  const { entries: chatSkills } = useChatSkills();
+  const { entries: chatSkills, onInputFocus: onChatSkillsFocus } =
+    useChatSkills();
   const { data: externalAppsData } = useUserExternalApps();
   const { data: craftMcpData } = useCraftMcpServers();
   const pickerSections = useMemo(
@@ -316,6 +317,7 @@ export default function ScheduleTaskForm({
                 setPrompt(e.target.value);
                 promptPicker.onInput(e);
               }}
+              onFocus={onChatSkillsFocus}
               onBlur={() => setPromptTouched(true)}
               placeholder={t("fields.prompt.placeholder")}
               rows={6}

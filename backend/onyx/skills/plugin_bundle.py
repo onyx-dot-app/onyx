@@ -65,9 +65,21 @@ def _read_json(bundle_zip: zipfile.ZipFile, path: str) -> JsonValue:
     if info.file_size > _JSON_MAX_BYTES:
         raise _invalid(f"{path} is larger than 1 MiB.")
     try:
-        return json.loads(bundle_zip.read(info))
-    except (ValueError, UnicodeDecodeError) as exc:
+        value = json.loads(bundle_zip.read(info))
+    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
         raise _invalid(f"{path} is not valid JSON: {exc}") from exc
+    pending: list[JsonValue] = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            if "\x00" in item:
+                raise _invalid(f"{path} cannot contain a NUL character.")
+        elif isinstance(item, list):
+            pending.extend(item)
+        elif isinstance(item, dict):
+            pending.extend(item.keys())
+            pending.extend(item.values())
+    return value
 
 
 def _optional_string(manifest: Mapping[str, JsonValue], key: str) -> str | None:
@@ -246,11 +258,15 @@ def read_plugin_bundle(zip_bytes: bytes) -> PluginBundle:
 
         servers: dict[str, JsonValue] = {}
         sources: list[tuple[JsonValue, str, bool]] = []
-        if "mcpServers" in raw_manifest:
-            sources.append((raw_manifest["mcpServers"], manifest_path, True))
-        if MCP_JSON_PATH in paths and raw_manifest.get("mcpServers") not in (
-            MCP_JSON_PATH,
-            f"./{MCP_JSON_PATH}",
+        declared = raw_manifest.get("mcpServers")
+        declared_entries: list[JsonValue] = []
+        if isinstance(declared, list):
+            declared_entries = declared
+        elif "mcpServers" in raw_manifest:
+            declared_entries = [declared]
+        sources.extend((entry, manifest_path, True) for entry in declared_entries)
+        if MCP_JSON_PATH in paths and not any(
+            entry in (MCP_JSON_PATH, f"./{MCP_JSON_PATH}") for entry in declared_entries
         ):
             sources.append(
                 (_read_json(bundle_zip, MCP_JSON_PATH), MCP_JSON_PATH, False)

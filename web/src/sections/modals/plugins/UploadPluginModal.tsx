@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -199,6 +199,14 @@ function UploadPluginModalContent({
   const [busy, setBusyState] = useState<"read" | "save" | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   function setBusy(next: "read" | "save" | null) {
     setBusyState(next);
@@ -289,7 +297,9 @@ function UploadPluginModalContent({
           allowPlugin
           busyLabel={busy === "read" ? t("reading") : undefined}
           onPreparingChange={setPreparing}
-          onChange={(next) => void read(next, false)}
+          onChange={(next) => {
+            if (mounted.current) void read(next, false);
+          }}
           onError={(message) => {
             setState({ step: "pick", bundle: null });
             setError(message);

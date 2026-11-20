@@ -77,6 +77,7 @@ function NeedActionControl({
         <IntegrationConnectButton
           integration={action.integration}
           returnPath={pathname}
+          onConnected={onChanged}
         />
       );
     case "add":

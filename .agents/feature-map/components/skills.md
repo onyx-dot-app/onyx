@@ -161,8 +161,8 @@
   description when it has one, else its description. A skill change in the
   library, the skill editor, a plugin's Skills tab or a Craft app connection
   fetches the list again (`lib/skills/cache.ts:refreshSkillLists`). Other
-  changes, such as one from another tab or user, show after the chat input
-  gains focus, unless a fetch of the list started in the last minute; a
+  changes, such as one from another tab or user, show after the chat input,
+  the Craft input or a scheduled task prompt gains focus, unless a fetch of the list started in the last minute; a
   window focus does not fetch the list. A message mentions at most 20 skills: at that
   limit, the picker offers only the skills already picked, and each request
   sends only the first 20 (`lib/chat/mentions.ts:requestMentions`). The query
@@ -1020,9 +1020,11 @@ the app from the same rule
   rendered bytes ([[#rendering-input-changes-hash]]).
 - `add-skill-mutation-route` **Add a skill mutation route.** Copy `share_current_user_skill` in
   `server/features/skill/api.py`: compute `affected_user_ids_for_plugins`
-  before the change, apply it, compute it again, commit, call
-  `push_skills_for_users` with the union, then commit again
-  ([[#affected-users-before-change]]).
+  before the change, apply it, compute it again, commit, then call
+  `skills/push.py:push_skills_and_commit` with the union
+  ([[#affected-users-before-change]]). Its second commit holds only the push
+  state: a failure there rolls back and logs, so the route still returns the
+  saved change. A plain `db_session.commit()` there makes a retry save twice.
 - `investigate-skill-missing` **Investigate "my skill is not in the sandbox".** Check the inputs of
   `list_runtime_skills_for_user` one at a time for that user: visibility,
   `load_user_plugin_states` (setting and choice), the name order

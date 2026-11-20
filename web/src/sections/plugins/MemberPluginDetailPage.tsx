@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { useSWRConfig } from "swr";
 import { Card, InputSwitch, Text } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { SvgBlocks } from "@opal/icons";
@@ -29,6 +30,7 @@ import {
   type SkillEnablement,
 } from "@/lib/skills/hooks";
 import type { Skill } from "@/lib/skills/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { canChangeOrganizationAccess } from "@/lib/skills/sharing";
 import { Permission } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
@@ -199,12 +201,16 @@ export default function MemberPluginDetailPage({
   const detail = usePluginDetail(isPlugin ? pluginId : null);
   const plugin = isPlugin ? (detail.data?.plugin ?? null) : null;
   const refreshLists = useRefreshSkillLists();
+  const { mutate } = useSWRConfig();
   const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
   const enablement = useSkillEnablement(
     skills.data?.customs ?? [],
     skills.refresh,
     (updated) => {
-      if (isPlugin) void detail.refresh();
+      if (isPlugin) {
+        void detail.refresh();
+        void mutate(SWR_KEYS.integrations);
+      }
       if (needsAttention(updated.plugin?.needs ?? [])) setTurnedOn(updated);
     }
   );

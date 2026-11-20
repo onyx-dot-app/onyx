@@ -151,10 +151,11 @@ def skill_response_for_user(
     include_plugin_detail: bool = False,
 ) -> SkillResponse:
     """``shown_version_id`` is the version whose files the response shows, and
-    so the edit base; by default the plugin's current version. ``needs`` are
-    the need views by version (``needs_of_versions``); read when not given.
-    ``include_plugin_detail`` adds the skills, needs and plugin.json fields
-    of the version the user runs."""
+    so the edit base; by default the plugin's current version. When given, the
+    counts and plugin detail also describe it, else the version the user
+    runs. ``needs`` are the need views by version (``needs_of_versions``);
+    read when not given. ``include_plugin_detail`` adds the skills, needs and
+    plugin.json fields."""
     if state is None:
         state = skill_user_states(user, [skill.id], db_session)[skill.id]
     if isinstance(skill, Skill):
@@ -178,15 +179,15 @@ def skill_response_for_user(
     if plugin_access is None:
         plugin_access = load_plugin_access([skill.id], user.id, db_session)
     access = _access_of(skill, plugin_access)
+    described = shown_version_id or access.version_user_runs
     if shown_version_id is None:
         shown_version_id = access.current_version_id
     user_permission = user_permission_for_skill(
         access, user, user_group_ids, skill.id in managed_scope_ids
     )
-    runs = access.version_user_runs
     if needs is None:
-        needs = needs_of_versions(user, [runs], db_session)
-    version_needs = needs.get(runs, [])
+        needs = needs_of_versions(user, [described], db_session)
+    version_needs = needs.get(described, [])
     return SkillResponse.from_custom(
         skill,
         access,
@@ -210,7 +211,7 @@ def skill_response_for_user(
         current_version_id=shown_version_id,
         counts=need_counts(version_needs),
         plugin_detail=(
-            plugin_version_detail(runs, version_needs, db_session)
+            plugin_version_detail(described, version_needs, db_session)
             if include_plugin_detail
             else None
         ),
