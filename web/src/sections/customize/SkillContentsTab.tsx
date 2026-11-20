@@ -33,6 +33,8 @@ interface SkillContentsTabProps {
   files: readonly SkillBundleFile[] | null;
   /** The editable skill; undefined for a user who may not edit it. */
   detail: SkillEditableDetail | undefined;
+  /** The skill syncs from GitHub: no edits, and the tab says why. */
+  locked?: boolean;
   editing: boolean;
   onEditingChange: (editing: boolean) => void;
   /** Tells the page whether there are unsaved edits, for its leave guard. */
@@ -74,6 +76,7 @@ export default function SkillContentsTab({
   instructions,
   files,
   detail,
+  locked = false,
   editing,
   onEditingChange,
   onDirtyChange,
@@ -82,6 +85,7 @@ export default function SkillContentsTab({
 }: SkillContentsTabProps) {
   const t = useTranslations("customize.skillPage.contents");
   const skillCopy = useTranslations("skills");
+  const versionsCopy = useTranslations("skills.modals.versions");
   const { describeError } = useSkillLimitCopy();
   // Unset: the source while editing, the rendered text otherwise.
   const [chosenMode, setMode] = useState<InstructionsDisplayMode | null>(null);
@@ -270,6 +274,7 @@ export default function SkillContentsTab({
             : t("version", { name, version: versionNumber })}
         </Text>
         {detail &&
+          !locked &&
           (editing ? (
             <Section
               flexDirection="row"
@@ -302,6 +307,12 @@ export default function SkillContentsTab({
             </Button>
           ))}
       </Section>
+
+      {locked && (
+        <Text as="p" font="secondary-body" color="text-03">
+          {versionsCopy("locked")}
+        </Text>
+      )}
 
       {stale && (
         <MessageCard

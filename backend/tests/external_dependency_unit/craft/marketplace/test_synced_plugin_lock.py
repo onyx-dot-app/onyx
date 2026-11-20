@@ -154,6 +154,9 @@ def test_sharing_still_works(
     )
     assert [share.user.id for share in response.user_shares] == [users[1].id]
     assert response.content_locked
+    # The owner may edit it, but the delete route refuses a synced plugin.
+    assert response.user_permission == "OWNER"
+    assert not response.can_delete
     assert response.marketplace is not None
     assert response.marketplace.repository == f"{OWNER}/{REPO}"
 

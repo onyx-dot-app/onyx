@@ -49,8 +49,11 @@
   (`sections/marketplaces/MarketplacesTable.tsx`): failed syncs and held
   deletes above it, a row menu (Sync now, Default Access, Replace login,
   Remove, which names the plugins it deletes) and a detail modal. The plugin
-  page shows "Synced from owner/repo" and the versions tab hides restore and
-  publish for `content_locked`.
+  page shows "Synced from owner/repo". For `content_locked` the web offers no
+  content change: no Edit on the skill page, no restore or publish on the
+  versions tab, and no organization access or ownership transfer in the share
+  dialog (`lib/skills/sharing.ts:canChangeOrganizationAccess`); each says
+  why. `can_delete` is false for a synced plugin.
 - **Plugin upload.** A user uploads a Claude Code or Codex plugin zip
   ([[#plugin-upload]]). `POST /skills/plugins/inspect` shows the skills, the
   MCP servers the plugin needs with their state for the user, the parts Onyx
@@ -942,7 +945,8 @@ the app from the same rule
     the owner unless the skill limit refuses it. `db/plugin.py:refuse_if_synced`
     refuses content edits, uploads, restores, publishing, ownership transfer
     and delete of a synced plugin with "Change this plugin in GitHub."; shares
-    and install settings still change. A personal marketplace blocks the delete
+    and install settings still change. `db/skill.py:may_delete_skill` takes
+    `synced`, so `SkillResponse.can_delete` is false for a synced plugin. A personal marketplace blocks the delete
     of its owner (`personal_marketplaces` in the 409). The routes are in
     `server/features/skill/marketplace_api.py`, under `/marketplaces`;
     they authorize before any GitHub call. The web client is

@@ -237,6 +237,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const canTransfer =
     props.mode === "edit" &&
     !!skill &&
+    !skill.content_locked &&
     sharingAllowed &&
     (skill.user_permission === "OWNER" || (isAdmin && skill.ownership_vacant));
   // With Sharing off, a member can remove a share but not change its level.
@@ -495,6 +496,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                 />
               }
             />
+          )}
+          {skill.content_locked && (
+            <Text as="p" font="secondary-body" color="text-03">
+              {t("versions.locked")}
+            </Text>
           )}
           {isPublishing && publishAction === "off" && (
             <MessageCard

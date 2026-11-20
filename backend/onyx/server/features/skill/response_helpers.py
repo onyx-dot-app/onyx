@@ -197,6 +197,7 @@ def skill_response_for_user(
         user_permission=user_permission,
         can_delete=user_permission in (SkillAccessLevel.OWNER, SkillAccessLevel.EDITOR)
         and may_delete_skill(
+            synced=access.synced,
             published=access.published,
             required_for_anyone=access.required_for_anyone,
             user=user,

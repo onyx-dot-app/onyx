@@ -85,6 +85,9 @@ export default function CustomizeSkillPage({
     !isPlugin &&
     (listed?.user_permission === "OWNER" ||
       listed?.user_permission === "EDITOR");
+  // A skill synced from GitHub changes only in GitHub.
+  const locked = listed?.content_locked === true;
+  const canChangeContent = canEdit && !locked;
   const detail = useSWR<SkillEditableDetail>(
     canEdit ? SWR_KEYS.editableSkill(skillId) : null,
     errorHandlingFetcher
@@ -105,7 +108,7 @@ export default function CustomizeSkillPage({
   const instructions =
     detail.data?.instructions_markdown ?? preview.data?.instructions_markdown;
   const files = detail.data?.files ?? preview.data?.files ?? null;
-  const editing = canEdit && searchParams.get("edit") === "1";
+  const editing = canChangeContent && searchParams.get("edit") === "1";
   const unsaved = useUnsavedChangesGuard({ isDirty: editing && contentsDirty });
   const tab = editing ? "contents" : parseTab(searchParams.get("tab"));
   const listHref =
@@ -194,7 +197,7 @@ export default function CustomizeSkillPage({
 
   const menu: DropdownMenuItem[] = skill
     ? [
-        ...(canEdit
+        ...(canChangeContent
           ? [
               {
                 kind: "action" as const,
@@ -285,6 +288,7 @@ export default function CustomizeSkillPage({
               instructions={instructions}
               files={files}
               detail={detail.data}
+              locked={locked}
               editing={editing}
               onEditingChange={setEditing}
               onDirtyChange={setContentsDirty}

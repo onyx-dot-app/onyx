@@ -79,6 +79,7 @@ from onyx.db.plugin import (
     create_plugin__no_commit,
     get_plugin_version,
     is_skill_version,
+    is_synced,
     private_plugins_blocking_user_delete,
     publish_or_request_review__no_commit,
     refuse_if_synced,
@@ -1250,10 +1251,16 @@ def bulk_share_skills__no_commit(
     )
 
 
-def may_delete_skill(*, published: bool, required_for_anyone: bool, user: User) -> bool:
+def may_delete_skill(
+    *, synced: bool, published: bool, required_for_anyone: bool, user: User
+) -> bool:
     """A user who can edit a skill deletes it, except a published skill or one
-    REQUIRED for anyone, which needs organization-wide MANAGE_PLUGINS. The
-    delete route and ``SkillResponse.can_delete`` use this one rule."""
+    REQUIRED for anyone, which needs organization-wide MANAGE_PLUGINS. A
+    plugin synced from GitHub is not deleted here; removing its marketplace
+    deletes it. The delete route and ``SkillResponse.can_delete`` use this one
+    rule."""
+    if synced:
+        return False
     return not (published or required_for_anyone) or has_global_permission(
         user, Permission.MANAGE_PLUGINS
     )
@@ -1279,7 +1286,10 @@ def delete_skill_for_user__no_commit(
         )
     )
     if not may_delete_skill(
-        published=published, required_for_anyone=required_for_anyone, user=user
+        synced=is_synced(plugin),
+        published=published,
+        required_for_anyone=required_for_anyone,
+        user=user,
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,

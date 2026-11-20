@@ -23,14 +23,18 @@ export type SkillSharingDraft = Pick<
   | "group_shares"
   | "public_permission"
   | "installation_policy"
->;
+> &
+  Partial<Pick<CustomSkill, "content_locked">>;
 
 /** The author, or an organization-wide skill manager, changes organization
- * access: publish, and publish an update. An editor only saves versions. */
+ * access: publish, and publish an update. An editor only saves versions. A
+ * skill synced from GitHub takes neither. */
 export function canChangeOrganizationAccess(
-  skill: Pick<CustomSkill, "user_permission">,
+  skill: Pick<CustomSkill, "user_permission"> &
+    Partial<Pick<CustomSkill, "content_locked">>,
   isOrganizationManager: boolean
 ): boolean {
+  if (skill.content_locked) return false;
   return (
     skill.user_permission === "OWNER" ||
     (isOrganizationManager && skill.user_permission === "EDITOR")
