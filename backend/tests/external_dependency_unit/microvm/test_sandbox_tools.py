@@ -416,6 +416,7 @@ class SandboxChat(BaseModel):
 
     user: User
     chat_session_id: UUID
+    monkeypatch: pytest.MonkeyPatch
 
     def ref(self, db_session: Session) -> HarnessSandboxRef:
         return HarnessSandboxRef(
@@ -433,7 +434,9 @@ class SandboxChat(BaseModel):
         tool_ids: Sequence[int] = (),
     ) -> list[object]:
         """Send a message; the agent's tools in `tool_ids` join the sandbox
-        tools."""
+        tools. `code_mode` stays set until the test ends, so a resume after
+        the send restores the run with the same code mode."""
+        self.monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", code_mode)
         return list(
             send(
                 self.chat_session_id,
@@ -458,6 +461,7 @@ class SandboxChat(BaseModel):
 
 @pytest.fixture
 def chat(
+    monkeypatch: pytest.MonkeyPatch,
     db_session: Session,
     user: User,
     sandbox: FirecrackerHarnessSandbox,  # noqa: ARG001
@@ -465,7 +469,9 @@ def chat(
     chat_session = create_chat_session(
         db_session, "sandbox chat", user.id, persona_id=DEFAULT_PERSONA_ID
     )
-    return SandboxChat(user=user, chat_session_id=chat_session.id)
+    return SandboxChat(
+        user=user, chat_session_id=chat_session.id, monkeypatch=monkeypatch
+    )
 
 
 def _sandbox_packets(parts: Sequence[object]) -> list[packets.PacketObj]:
@@ -3189,6 +3195,7 @@ def test_a_chat_purge_deletes_only_its_own_spilled_results(
             chat_session_id=create_chat_session(
                 db_session, name, user.id, persona_id=DEFAULT_PERSONA_ID
             ).id,
+            monkeypatch=monkeypatch,
         )
         for name in ("deleted", "kept")
     ]
@@ -3230,6 +3237,7 @@ def test_the_oldest_spilled_results_of_any_chat_go_past_the_vm_limit(
             chat_session_id=create_chat_session(
                 db_session, name, user.id, persona_id=DEFAULT_PERSONA_ID
             ).id,
+            monkeypatch=monkeypatch,
         )
         for name in ("older", "newer")
     ]
