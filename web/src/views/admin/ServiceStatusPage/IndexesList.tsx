@@ -73,6 +73,7 @@ function IndexRows({ indexes }: IndexRowsProps) {
               >
                 <Section
                   flexDirection="row"
+                  justifyContent="start"
                   gap={0.5}
                   alignItems="center"
                   width="full"
