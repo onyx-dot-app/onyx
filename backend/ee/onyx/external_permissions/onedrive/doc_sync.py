@@ -4,7 +4,11 @@ from ee.onyx.external_permissions.perm_sync_types import (
     FetchAllDocumentsFunction,
     FetchAllDocumentsIdsFunction,
 )
-from ee.onyx.external_permissions.utils import credential_json, generic_doc_sync
+from ee.onyx.external_permissions.utils import (
+    credential_json,
+    generic_doc_sync,
+    set_shared_source_api_limiter,
+)
 from onyx.access.models import ElementExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import build_connector_kwargs
@@ -27,6 +31,7 @@ def onedrive_doc_sync(
         )
     )
     connector.load_credentials(credential_json(cc_pair))
+    set_shared_source_api_limiter(connector, cc_pair, callback)
     yield from generic_doc_sync(
         cc_pair=cc_pair,
         fetch_all_existing_docs_ids_fn=fetch_all_existing_docs_ids_fn,

@@ -4,7 +4,10 @@ from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.microsoft_utils.sharepoint_permissions import (
     get_sharepoint_external_groups,
 )
-from ee.onyx.external_permissions.utils import credential_json
+from ee.onyx.external_permissions.utils import (
+    credential_json,
+    set_shared_source_api_limiter,
+)
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.models import ConnectorCredentialPair
@@ -27,6 +30,7 @@ def sharepoint_group_sync(
         **build_connector_kwargs(cc_pair.connector.source, connector_config)
     )
     connector.load_credentials(credential_json(cc_pair))
+    set_shared_source_api_limiter(connector, cc_pair)
 
     # Get site descriptors from connector (either configured sites or all sites)
     site_descriptors = connector.site_descriptors or connector.fetch_sites()
