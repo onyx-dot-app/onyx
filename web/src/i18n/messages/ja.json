@@ -14734,7 +14734,7 @@
         "tabs": {
           "dailyWeekly": "毎日 / 毎週",
           "interval": "間隔",
-          "advanced": "Advanced"
+          "advanced": "詳細"
         },
         "weekdays": {
           "fri": "金",
@@ -14746,9 +14746,19 @@
           "wed": "水"
         },
         "advanced": {
-          "cronLabel": "Cron Expression",
-          "hint": "Five fields: minute, hour, day, month, weekday. The expression runs in UTC.",
-          "placeholder": "For example, 0 9 * * 1-5"
+          "cronLabel": "cron 式",
+          "hint": "5 つのフィールド: 分、時、日、月、曜日。式は UTC で実行されます。",
+          "placeholder": "例: 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "間隔は 1 以上の整数である必要があります。",
+          "minutesIntervalTooLong": "59 分を超える間隔には時間単位を使用してください。",
+          "hoursIntervalTooLong": "23 時間を超える間隔には毎日のスケジュールを使用してください。",
+          "dayIntervalTimeRequired": "日単位の間隔には時刻を選択してください。",
+          "timeRequired": "時刻を選択してください。",
+          "weekdayOutOfRange": "曜日の値は 0〜6（日〜土）である必要があります。",
+          "cronRequired": "cron 式を入力してください。",
+          "cronFieldCount": "cron はちょうど 5 つのフィールド（分 時 日 月 曜日）が必要です。"
         }
       },
       "unviewedResults": "新しい結果"
@@ -16216,7 +16226,7 @@
         "label": "カスタマイズ"
       },
       "scheduledTasks": {
-        "label": "Scheduled Tasks"
+        "label": "スケジュールされたタスク"
       }
     },
     "chatButton": {
@@ -17586,146 +17596,146 @@
     "search": "検索"
   },
   "scheduledTasks": {
-    "unviewedResults": "New results",
-    "runStatus": "{status, select, QUEUED {Queued} RUNNING {Running} AWAITING_APPROVAL {Awaiting approval} SUCCEEDED {Succeeded} FAILED {Failed} CANCELLED {Cancelled} SKIPPED {Skipped} other {Unknown}}",
-    "taskStatus": "{status, select, ACTIVE {Active} other {Paused}}",
+    "unviewedResults": "新しい結果",
+    "runStatus": "{status, select, QUEUED {待機中} RUNNING {実行中} AWAITING_APPROVAL {承認待ち} SUCCEEDED {成功} FAILED {失敗} CANCELLED {キャンセル済み} SKIPPED {スキップ} other {不明}}",
+    "taskStatus": "{status, select, ACTIVE {有効} other {一時停止中}}",
     "schedule": {
-      "cron": "Cron (UTC): {cron}",
-      "everyMinutes": "{count, plural, one {Every minute} other {Every # minutes}}",
-      "everyHours": "{count, plural, one {Every hour} other {Every # hours}}",
-      "everyDays": "{count, plural, one {Every day at {time}} other {Every # days at {time}}}",
-      "daily": "Every day at {time}",
-      "weekly": "{days} at {time}"
+      "cron": "cron (UTC): {cron}",
+      "everyMinutes": "{count, plural, other {# 分ごと}}",
+      "everyHours": "{count, plural, other {# 時間ごと}}",
+      "everyDays": "{count, plural, other {# 日ごとの {time}}}",
+      "daily": "毎日 {time}",
+      "weekly": "{days} の {time}"
     },
     "list": {
-      "title": "Scheduled Tasks",
-      "description": "Run a prompt on a schedule. Each run opens as a chat you can read and continue.",
-      "search": "Search tasks",
-      "new": "New Task",
-      "never": "Never",
-      "notScheduled": "Not scheduled",
-      "loadFailed": "Could not load your scheduled tasks.",
-      "open": "Open {name}",
+      "title": "スケジュールされたタスク",
+      "description": "スケジュールに従ってプロンプトを実行します。各実行は、読んで続けられるチャットとして開きます。",
+      "search": "タスクを検索",
+      "new": "新しいタスク",
+      "never": "なし",
+      "notScheduled": "未スケジュール",
+      "loadFailed": "スケジュールされたタスクを読み込めませんでした。",
+      "open": "{name} を開く",
       "columns": {
-        "name": "Name",
-        "schedule": "Schedule",
-        "lastRun": "Last Run",
-        "nextRun": "Next Run",
-        "status": "Status"
+        "name": "名前",
+        "schedule": "スケジュール",
+        "lastRun": "前回の実行",
+        "nextRun": "次回の実行",
+        "status": "ステータス"
       },
       "empty": {
-        "title": "No scheduled tasks yet",
-        "description": "Create a task to run a prompt on a schedule."
+        "title": "スケジュールされたタスクはまだありません",
+        "description": "タスクを作成して、スケジュールに従ってプロンプトを実行します。"
       },
       "noMatches": {
-        "title": "No matching tasks",
-        "description": "Try a different search."
+        "title": "一致するタスクはありません",
+        "description": "別の検索を試してください。"
       }
     },
     "actions": {
-      "runNow": "Run once",
-      "pause": "Pause",
-      "resume": "Resume",
-      "edit": "Edit",
-      "delete": "Delete",
-      "menu": "Actions for {name}",
+      "runNow": "1回実行",
+      "pause": "一時停止",
+      "resume": "再開",
+      "edit": "編集",
+      "delete": "削除",
+      "menu": "{name} の操作",
       "toasts": {
-        "runQueued": "Started a run of \"{name}\".",
-        "runFailed": "Could not start the run.",
-        "resumed": "Task resumed.",
-        "paused": "Task paused.",
-        "statusFailed": "Could not change the task status.",
-        "deleted": "Deleted \"{name}\".",
-        "deleteFailed": "Could not delete the task."
+        "runQueued": "「{name}」の実行を開始しました。",
+        "runFailed": "実行を開始できませんでした。",
+        "resumed": "タスクを再開しました。",
+        "paused": "タスクを一時停止しました。",
+        "statusFailed": "タスクのステータスを変更できませんでした。",
+        "deleted": "「{name}」を削除しました。",
+        "deleteFailed": "タスクを削除できませんでした。"
       },
       "confirmDelete": {
-        "title": "Delete \"{name}\"?",
-        "description": "The task stops running and its run history goes away.",
-        "submit": "Delete"
+        "title": "「{name}」を削除しますか？",
+        "description": "タスクの実行が停止し、実行履歴も削除されます。",
+        "submit": "削除"
       }
     },
     "runs": {
-      "label": "Run history",
-      "open": "Open the run from {time}",
-      "loading": "Loading runs…",
-      "loadFailed": "Could not load the run history.",
-      "loadMore": "Load more",
-      "markAllViewed": "Mark all viewed",
-      "markAllViewedFailed": "Could not mark the runs as viewed. Try again.",
-      "trigger": "{source, select, MANUAL_RUN_NOW {Run once} other {Schedule}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} other {Failed: {errorClass}}}",
+      "label": "実行履歴",
+      "open": "{time} の実行を開く",
+      "loading": "実行を読み込み中…",
+      "loadFailed": "実行履歴を読み込めませんでした。",
+      "loadMore": "さらに読み込む",
+      "markAllViewed": "すべて既読にする",
+      "markAllViewedFailed": "実行を既読にできませんでした。もう一度お試しください。",
+      "trigger": "{source, select, MANUAL_RUN_NOW {1回実行} other {スケジュール}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {キャンセル済み: 承認に誰も応答する前に次の実行が開始されました。} approval_timeout {キャンセル済み: 24 時間以内に誰も承認に応答しませんでした。} user_cancelled {あなたが停止しました。} agent_permission_required {操作に承認が必要でした。} other {失敗: {errorClass}}}",
       "columns": {
-        "started": "Started",
-        "status": "Status",
-        "duration": "Duration",
-        "trigger": "Trigger",
-        "detail": "Details"
+        "started": "開始",
+        "status": "ステータス",
+        "duration": "所要時間",
+        "trigger": "トリガー",
+        "detail": "詳細"
       },
       "closed": {
-        "queued": "This run has not started yet, so there is no chat to open.",
-        "skipped": "This run was skipped, so there is no chat to open.",
-        "craft": "This run is from before tasks ran in chat, so there is no chat to open."
+        "queued": "この実行はまだ開始されていないため、開くチャットはありません。",
+        "skipped": "この実行はスキップされたため、開くチャットはありません。",
+        "craft": "この実行はタスクがチャットで実行されるようになる前のものなので、開くチャットはありません。"
       },
       "empty": {
-        "title": "No runs yet",
-        "description": "The task adds a run each time it fires. Use Run once to start one now."
+        "title": "まだ実行はありません",
+        "description": "タスクは発火するたびに実行を追加します。今すぐ開始するには「1回実行」を使用してください。"
       }
     },
     "detail": {
-      "title": "Scheduled Task",
-      "back": "Scheduled Tasks",
-      "loadFailed": "Could not load this scheduled task.",
+      "title": "スケジュールされたタスク",
+      "back": "スケジュールされたタスク",
+      "loadFailed": "このスケジュールされたタスクを読み込めませんでした。",
       "tabs": {
-        "runs": "Runs",
-        "overview": "Overview"
+        "runs": "実行",
+        "overview": "概要"
       },
       "overview": {
-        "prompt": "Prompt",
-        "schedule": "Schedule",
-        "nextRun": "Next Run",
-        "notScheduled": "Not scheduled",
-        "lastRun": "Last Run",
-        "never": "Never"
+        "prompt": "プロンプト",
+        "schedule": "スケジュール",
+        "nextRun": "次回の実行",
+        "notScheduled": "未スケジュール",
+        "lastRun": "前回の実行",
+        "never": "なし"
       }
     },
     "editor": {
-      "newTitle": "New Scheduled Task",
-      "editTitle": "Edit Scheduled Task",
-      "description": "Each run sends the prompt to a new chat with the default agent.",
-      "back": "Back",
-      "loadFailed": "Could not load this scheduled task.",
-      "save": "Save",
-      "saveAndRun": "Save and run now",
+      "newTitle": "新しいスケジュールされたタスク",
+      "editTitle": "スケジュールされたタスクを編集",
+      "description": "各実行は、デフォルトのエージェントを使用する新しいチャットにプロンプトを送信します。",
+      "back": "戻る",
+      "loadFailed": "このスケジュールされたタスクを読み込めませんでした。",
+      "save": "保存",
+      "saveAndRun": "保存して今すぐ実行",
       "errors": {
-        "nameRequired": "Enter a name.",
-        "promptRequired": "Enter a prompt."
+        "nameRequired": "名前を入力してください。",
+        "promptRequired": "プロンプトを入力してください。"
       },
       "toasts": {
-        "created": "Scheduled task created.",
-        "createdAndRun": "Scheduled task created. The first run started.",
-        "updated": "Scheduled task updated.",
-        "saveFailed": "Could not save the scheduled task."
+        "created": "スケジュールされたタスクを作成しました。",
+        "createdAndRun": "スケジュールされたタスクを作成しました。最初の実行を開始しました。",
+        "updated": "スケジュールされたタスクを更新しました。",
+        "saveFailed": "スケジュールされたタスクを保存できませんでした。"
       },
       "fields": {
         "name": {
-          "label": "Name",
-          "placeholder": "For example, weekly customer escalations digest"
+          "label": "名前",
+          "placeholder": "例: 顧客エスカレーションの週次ダイジェスト"
         },
         "prompt": {
-          "label": "Prompt",
-          "description": "Each run sends this message to a new chat.",
-          "placeholder": "Describe what to do on each run"
+          "label": "プロンプト",
+          "description": "各実行は、このメッセージを新しいチャットに送信します。",
+          "placeholder": "各実行で行うことを説明してください"
         },
         "schedule": {
-          "label": "Schedule"
+          "label": "スケジュール"
         }
       }
     },
     "banner": {
-      "title": "Scheduled run of {task}",
-      "inFlight": "{status, select, AWAITING_APPROVAL {This run waits for your approval below.} other {This run is in progress.}}",
-      "startedAt": "Started {time}",
-      "viewTask": "View task"
+      "title": "{task} のスケジュール実行",
+      "inFlight": "{status, select, AWAITING_APPROVAL {この実行は下であなたの承認を待っています。} other {この実行は進行中です。}}",
+      "startedAt": "{time} に開始",
+      "viewTask": "タスクを表示"
     }
   }
 }

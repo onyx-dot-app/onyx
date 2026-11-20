@@ -18,7 +18,10 @@ import { useScreenSize } from "@opal/hooks";
 import { useNavigation } from "@opal/navigation";
 import UnseenMarker from "@/app/craft/components/UnseenMarker";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { useScheduledTaskFormat } from "@/lib/scheduledTasks/hooks";
+import {
+  TASK_REFRESH_INTERVAL_MS,
+  useScheduledTaskFormat,
+} from "@/lib/scheduledTasks/hooks";
 import {
   NEW_SCHEDULED_TASK_PATH,
   scheduledTaskHref,
@@ -45,7 +48,9 @@ export default function ScheduledTasksPage() {
   const [query, setQuery] = useState("");
   const { data, error, isLoading } = useSWR<ScheduledTaskListResponse>(
     SWR_KEYS.chatScheduledTasks,
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    // Runs end and next runs move in the background.
+    { refreshInterval: TASK_REFRESH_INTERVAL_MS }
   );
   const tasks = data?.items ?? [];
   const search = query.trim().toLocaleLowerCase(locale);

@@ -14,7 +14,10 @@ import {
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import TaskActionPoliciesSummary from "@/app/craft/v1/tasks/components/TaskActionPoliciesSummary";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { useScheduledTaskFormat } from "@/lib/scheduledTasks/hooks";
+import {
+  TASK_REFRESH_INTERVAL_MS,
+  useScheduledTaskFormat,
+} from "@/lib/scheduledTasks/hooks";
 import {
   editScheduledTaskHref,
   SCHEDULED_TASKS_PATH,
@@ -52,7 +55,9 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
     isLoading,
   } = useSWR<ScheduledTaskDetail>(
     SWR_KEYS.chatScheduledTask(taskId),
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    // Runs end and next runs move in the background.
+    { refreshInterval: TASK_REFRESH_INTERVAL_MS }
   );
   const actions = useScheduledTaskActions(task, () =>
     navigation.go(SCHEDULED_TASKS_PATH, { replace: true })

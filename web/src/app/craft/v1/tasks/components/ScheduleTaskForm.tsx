@@ -79,6 +79,7 @@ export default function ScheduleTaskForm({
 }: ScheduleTaskFormProps) {
   const t = useTranslations("craft.tasks.form");
   const tActionPolicies = useTranslations("craft.actionPolicies");
+  const tScheduleEditor = useTranslations("craft.tasks.scheduleEditor");
   const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const [name, setName] = useState(initial.name);
@@ -151,7 +152,9 @@ export default function ScheduleTaskForm({
   const nameError = trimmedName.length === 0 ? t("errors.nameRequired") : null;
   const promptError =
     trimmedPrompt.length === 0 ? t("errors.promptRequired") : null;
-  const scheduleError = !compiled.ok ? compiled.error : null;
+  const scheduleError = !compiled.ok
+    ? tScheduleEditor(`errors.${compiled.error}`)
+    : null;
 
   const shownNameError = nameTouched ? nameError : null;
   const shownPromptError = promptTouched ? promptError : null;

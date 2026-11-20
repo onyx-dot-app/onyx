@@ -46,6 +46,9 @@ export interface ScheduleEditorProps {
   error?: string | null;
   /** Show a third tab for a raw UTC cron expression. */
   allowAdvanced?: boolean;
+  /** The date whose UTC offset converts local times; the next run of the
+   * task, so a daylight-saving change before it does not shift the cron. */
+  referenceDate?: Date;
 }
 
 export default function ScheduleEditor({
@@ -55,6 +58,7 @@ export default function ScheduleEditor({
   onPayloadChange,
   error,
   allowAdvanced = false,
+  referenceDate,
 }: ScheduleEditorProps) {
   const t = useTranslations("craft.tasks.scheduleEditor");
   return (
@@ -65,7 +69,11 @@ export default function ScheduleEditor({
           gap={6}
           onValueChange={(next) => {
             if (next === "advanced" && allowAdvanced) {
-              const compiled = compileLocalPayloadToUtcCron(mode, payload);
+              const compiled = compileLocalPayloadToUtcCron(
+                mode,
+                payload,
+                referenceDate
+              );
               onModeChange(next);
               if (!("cron" in payload))
                 onPayloadChange({ cron: compiled.ok ? compiled.cron : "" });

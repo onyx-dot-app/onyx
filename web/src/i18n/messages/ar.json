@@ -14734,7 +14734,7 @@
         "tabs": {
           "dailyWeekly": "يومي / أسبوعي",
           "interval": "الفاصل الزمني",
-          "advanced": "Advanced"
+          "advanced": "متقدم"
         },
         "weekdays": {
           "fri": "الجمعة",
@@ -14746,9 +14746,19 @@
           "wed": "الأربعاء"
         },
         "advanced": {
-          "cronLabel": "Cron Expression",
-          "hint": "Five fields: minute, hour, day, month, weekday. The expression runs in UTC.",
-          "placeholder": "For example, 0 9 * * 1-5"
+          "cronLabel": "تعبير cron",
+          "hint": "خمسة حقول: الدقيقة، الساعة، اليوم، الشهر، يوم الأسبوع. يعمل التعبير بتوقيت UTC.",
+          "placeholder": "على سبيل المثال، 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "يجب أن يكون الفاصل الزمني عددًا صحيحًا لا يقل عن 1.",
+          "minutesIntervalTooLong": "استخدم الساعات للفواصل الزمنية التي تزيد على 59 دقيقة.",
+          "hoursIntervalTooLong": "استخدم جدولًا يوميًا للفواصل الزمنية التي تزيد على 23 ساعة.",
+          "dayIntervalTimeRequired": "اختر وقتًا من اليوم للفواصل الزمنية بالأيام.",
+          "timeRequired": "اختر وقتًا من اليوم.",
+          "weekdayOutOfRange": "يجب أن تكون قيم أيام الأسبوع بين 0 و6 (الأحد..السبت).",
+          "cronRequired": "أدخل تعبير cron.",
+          "cronFieldCount": "يجب أن يحتوي cron على 5 حقول بالضبط (الدقيقة الساعة اليوم الشهر يوم الأسبوع)."
         }
       },
       "unviewedResults": "نتائج جديدة"
@@ -16216,7 +16226,7 @@
         "label": "التخصيص"
       },
       "scheduledTasks": {
-        "label": "Scheduled Tasks"
+        "label": "المهام المجدولة"
       }
     },
     "chatButton": {
@@ -17586,146 +17596,146 @@
     "search": "بحث"
   },
   "scheduledTasks": {
-    "unviewedResults": "New results",
-    "runStatus": "{status, select, QUEUED {Queued} RUNNING {Running} AWAITING_APPROVAL {Awaiting approval} SUCCEEDED {Succeeded} FAILED {Failed} CANCELLED {Cancelled} SKIPPED {Skipped} other {Unknown}}",
-    "taskStatus": "{status, select, ACTIVE {Active} other {Paused}}",
+    "unviewedResults": "نتائج جديدة",
+    "runStatus": "{status, select, QUEUED {في قائمة الانتظار} RUNNING {قيد التشغيل} AWAITING_APPROVAL {بانتظار الموافقة} SUCCEEDED {نجح} FAILED {فشل} CANCELLED {أُلغي} SKIPPED {تم التخطي} other {غير معروف}}",
+    "taskStatus": "{status, select, ACTIVE {نشطة} other {متوقفة مؤقتًا}}",
     "schedule": {
       "cron": "Cron (UTC): {cron}",
-      "everyMinutes": "{count, plural, one {Every minute} other {Every # minutes}}",
-      "everyHours": "{count, plural, one {Every hour} other {Every # hours}}",
-      "everyDays": "{count, plural, one {Every day at {time}} other {Every # days at {time}}}",
-      "daily": "Every day at {time}",
-      "weekly": "{days} at {time}"
+      "everyMinutes": "{count, plural, one {كل دقيقة} other {كل # دقائق}}",
+      "everyHours": "{count, plural, one {كل ساعة} other {كل # ساعات}}",
+      "everyDays": "{count, plural, one {كل يوم في {time}} other {كل # أيام في {time}}}",
+      "daily": "كل يوم في {time}",
+      "weekly": "{days} في {time}"
     },
     "list": {
-      "title": "Scheduled Tasks",
-      "description": "Run a prompt on a schedule. Each run opens as a chat you can read and continue.",
-      "search": "Search tasks",
-      "new": "New Task",
-      "never": "Never",
-      "notScheduled": "Not scheduled",
-      "loadFailed": "Could not load your scheduled tasks.",
-      "open": "Open {name}",
+      "title": "المهام المجدولة",
+      "description": "شغّل موجّهًا وفق جدول زمني. يُفتح كل تشغيل كمحادثة يمكنك قراءتها ومتابعتها.",
+      "search": "البحث في المهام",
+      "new": "مهمة جديدة",
+      "never": "أبدًا",
+      "notScheduled": "غير مجدولة",
+      "loadFailed": "تعذّر تحميل مهامك المجدولة.",
+      "open": "فتح {name}",
       "columns": {
-        "name": "Name",
-        "schedule": "Schedule",
-        "lastRun": "Last Run",
-        "nextRun": "Next Run",
-        "status": "Status"
+        "name": "الاسم",
+        "schedule": "الجدول الزمني",
+        "lastRun": "آخر تشغيل",
+        "nextRun": "التشغيل التالي",
+        "status": "الحالة"
       },
       "empty": {
-        "title": "No scheduled tasks yet",
-        "description": "Create a task to run a prompt on a schedule."
+        "title": "لا توجد مهام مجدولة بعد",
+        "description": "أنشئ مهمة لتشغيل موجّه وفق جدول زمني."
       },
       "noMatches": {
-        "title": "No matching tasks",
-        "description": "Try a different search."
+        "title": "لا توجد مهام مطابقة",
+        "description": "جرّب بحثًا مختلفًا."
       }
     },
     "actions": {
-      "runNow": "Run once",
-      "pause": "Pause",
-      "resume": "Resume",
-      "edit": "Edit",
-      "delete": "Delete",
-      "menu": "Actions for {name}",
+      "runNow": "تشغيل مرة واحدة",
+      "pause": "إيقاف مؤقت",
+      "resume": "استئناف",
+      "edit": "تعديل",
+      "delete": "حذف",
+      "menu": "إجراءات {name}",
       "toasts": {
-        "runQueued": "Started a run of \"{name}\".",
-        "runFailed": "Could not start the run.",
-        "resumed": "Task resumed.",
-        "paused": "Task paused.",
-        "statusFailed": "Could not change the task status.",
-        "deleted": "Deleted \"{name}\".",
-        "deleteFailed": "Could not delete the task."
+        "runQueued": "بدأ تشغيل «{name}».",
+        "runFailed": "تعذّر بدء التشغيل.",
+        "resumed": "تم استئناف المهمة.",
+        "paused": "تم إيقاف المهمة مؤقتًا.",
+        "statusFailed": "تعذّر تغيير حالة المهمة.",
+        "deleted": "تم حذف «{name}».",
+        "deleteFailed": "تعذّر حذف المهمة."
       },
       "confirmDelete": {
-        "title": "Delete \"{name}\"?",
-        "description": "The task stops running and its run history goes away.",
-        "submit": "Delete"
+        "title": "حذف «{name}»؟",
+        "description": "تتوقف المهمة عن التشغيل ويُحذف سجل تشغيلها.",
+        "submit": "حذف"
       }
     },
     "runs": {
-      "label": "Run history",
-      "open": "Open the run from {time}",
-      "loading": "Loading runs…",
-      "loadFailed": "Could not load the run history.",
-      "loadMore": "Load more",
-      "markAllViewed": "Mark all viewed",
-      "markAllViewedFailed": "Could not mark the runs as viewed. Try again.",
-      "trigger": "{source, select, MANUAL_RUN_NOW {Run once} other {Schedule}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} other {Failed: {errorClass}}}",
+      "label": "سجل التشغيل",
+      "open": "فتح التشغيل من {time}",
+      "loading": "جارٍ تحميل عمليات التشغيل…",
+      "loadFailed": "تعذّر تحميل سجل التشغيل.",
+      "loadMore": "تحميل المزيد",
+      "markAllViewed": "وضع علامة مقروء على الكل",
+      "markAllViewedFailed": "تعذّر وضع علامة مقروء على عمليات التشغيل. حاول مرة أخرى.",
+      "trigger": "{source, select, MANUAL_RUN_NOW {تشغيل مرة واحدة} other {الجدول الزمني}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {أُلغي: بدأ التشغيل التالي قبل أن يرد أحد على طلب الموافقة.} approval_timeout {أُلغي: لم يرد أحد على طلب الموافقة خلال 24 ساعة.} user_cancelled {أوقفته أنت.} agent_permission_required {احتاج إجراء إلى موافقة.} other {فشل: {errorClass}}}",
       "columns": {
-        "started": "Started",
-        "status": "Status",
-        "duration": "Duration",
-        "trigger": "Trigger",
-        "detail": "Details"
+        "started": "البدء",
+        "status": "الحالة",
+        "duration": "المدة",
+        "trigger": "المشغّل",
+        "detail": "التفاصيل"
       },
       "closed": {
-        "queued": "This run has not started yet, so there is no chat to open.",
-        "skipped": "This run was skipped, so there is no chat to open.",
-        "craft": "This run is from before tasks ran in chat, so there is no chat to open."
+        "queued": "لم يبدأ هذا التشغيل بعد، لذا لا توجد محادثة لفتحها.",
+        "skipped": "تم تخطي هذا التشغيل، لذا لا توجد محادثة لفتحها.",
+        "craft": "هذا التشغيل من قبل أن تعمل المهام في المحادثة، لذا لا توجد محادثة لفتحها."
       },
       "empty": {
-        "title": "No runs yet",
-        "description": "The task adds a run each time it fires. Use Run once to start one now."
+        "title": "لا توجد عمليات تشغيل بعد",
+        "description": "تضيف المهمة تشغيلًا في كل مرة تنطلق فيها. استخدم «تشغيل مرة واحدة» لبدء تشغيل الآن."
       }
     },
     "detail": {
-      "title": "Scheduled Task",
-      "back": "Scheduled Tasks",
-      "loadFailed": "Could not load this scheduled task.",
+      "title": "مهمة مجدولة",
+      "back": "المهام المجدولة",
+      "loadFailed": "تعذّر تحميل هذه المهمة المجدولة.",
       "tabs": {
-        "runs": "Runs",
-        "overview": "Overview"
+        "runs": "عمليات التشغيل",
+        "overview": "نظرة عامة"
       },
       "overview": {
-        "prompt": "Prompt",
-        "schedule": "Schedule",
-        "nextRun": "Next Run",
-        "notScheduled": "Not scheduled",
-        "lastRun": "Last Run",
-        "never": "Never"
+        "prompt": "الموجّه",
+        "schedule": "الجدول الزمني",
+        "nextRun": "التشغيل التالي",
+        "notScheduled": "غير مجدولة",
+        "lastRun": "آخر تشغيل",
+        "never": "أبدًا"
       }
     },
     "editor": {
-      "newTitle": "New Scheduled Task",
-      "editTitle": "Edit Scheduled Task",
-      "description": "Each run sends the prompt to a new chat with the default agent.",
-      "back": "Back",
-      "loadFailed": "Could not load this scheduled task.",
-      "save": "Save",
-      "saveAndRun": "Save and run now",
+      "newTitle": "مهمة مجدولة جديدة",
+      "editTitle": "تعديل المهمة المجدولة",
+      "description": "يرسل كل تشغيل الموجّه إلى محادثة جديدة مع الوكيل الافتراضي.",
+      "back": "رجوع",
+      "loadFailed": "تعذّر تحميل هذه المهمة المجدولة.",
+      "save": "حفظ",
+      "saveAndRun": "حفظ وتشغيل الآن",
       "errors": {
-        "nameRequired": "Enter a name.",
-        "promptRequired": "Enter a prompt."
+        "nameRequired": "أدخل اسمًا.",
+        "promptRequired": "أدخل موجّهًا."
       },
       "toasts": {
-        "created": "Scheduled task created.",
-        "createdAndRun": "Scheduled task created. The first run started.",
-        "updated": "Scheduled task updated.",
-        "saveFailed": "Could not save the scheduled task."
+        "created": "تم إنشاء المهمة المجدولة.",
+        "createdAndRun": "تم إنشاء المهمة المجدولة. بدأ التشغيل الأول.",
+        "updated": "تم تحديث المهمة المجدولة.",
+        "saveFailed": "تعذّر حفظ المهمة المجدولة."
       },
       "fields": {
         "name": {
-          "label": "Name",
-          "placeholder": "For example, weekly customer escalations digest"
+          "label": "الاسم",
+          "placeholder": "على سبيل المثال، ملخص أسبوعي لتصعيدات العملاء"
         },
         "prompt": {
-          "label": "Prompt",
-          "description": "Each run sends this message to a new chat.",
-          "placeholder": "Describe what to do on each run"
+          "label": "الموجّه",
+          "description": "يرسل كل تشغيل هذه الرسالة إلى محادثة جديدة.",
+          "placeholder": "صف ما يجب فعله في كل تشغيل"
         },
         "schedule": {
-          "label": "Schedule"
+          "label": "الجدول الزمني"
         }
       }
     },
     "banner": {
-      "title": "Scheduled run of {task}",
-      "inFlight": "{status, select, AWAITING_APPROVAL {This run waits for your approval below.} other {This run is in progress.}}",
-      "startedAt": "Started {time}",
-      "viewTask": "View task"
+      "title": "تشغيل مجدول لـ {task}",
+      "inFlight": "{status, select, AWAITING_APPROVAL {ينتظر هذا التشغيل موافقتك أدناه.} other {هذا التشغيل قيد التنفيذ.}}",
+      "startedAt": "بدأ {time}",
+      "viewTask": "عرض المهمة"
     }
   }
 }

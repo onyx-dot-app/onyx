@@ -82,7 +82,7 @@ export default function ScheduledRunHistory({
   const unviewedSignature = useRef<string | null>(null);
 
   const { data, error, isLoading } = useSWR<ScheduledRunListResponse>(
-    `${SWR_KEYS.chatScheduledTaskRuns(taskId)}?limit=${RUNS_PAGE_SIZE}`,
+    SWR_KEYS.chatScheduledTaskRunsPage(taskId, RUNS_PAGE_SIZE),
     errorHandlingFetcher,
     {
       refreshInterval: REFRESH_INTERVAL_MS,

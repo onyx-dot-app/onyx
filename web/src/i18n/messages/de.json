@@ -14734,7 +14734,7 @@
         "tabs": {
           "dailyWeekly": "Täglich / Wöchentlich",
           "interval": "Intervall",
-          "advanced": "Advanced"
+          "advanced": "Erweitert"
         },
         "weekdays": {
           "fri": "Fr",
@@ -14746,9 +14746,19 @@
           "wed": "Mi"
         },
         "advanced": {
-          "cronLabel": "Cron Expression",
-          "hint": "Five fields: minute, hour, day, month, weekday. The expression runs in UTC.",
-          "placeholder": "For example, 0 9 * * 1-5"
+          "cronLabel": "Cron-Ausdruck",
+          "hint": "Fünf Felder: Minute, Stunde, Tag, Monat, Wochentag. Der Ausdruck läuft in UTC.",
+          "placeholder": "Zum Beispiel 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "Das Intervall muss eine ganze Zahl von mindestens 1 sein.",
+          "minutesIntervalTooLong": "Verwenden Sie Stunden für Intervalle über 59 Minuten.",
+          "hoursIntervalTooLong": "Verwenden Sie einen täglichen Zeitplan für Intervalle über 23 Stunden.",
+          "dayIntervalTimeRequired": "Wählen Sie eine Uhrzeit für Intervalle in Tagen.",
+          "timeRequired": "Wählen Sie eine Uhrzeit.",
+          "weekdayOutOfRange": "Wochentagswerte müssen zwischen 0 und 6 liegen (So..Sa).",
+          "cronRequired": "Geben Sie einen Cron-Ausdruck ein.",
+          "cronFieldCount": "Cron muss genau 5 Felder haben (Minute Stunde Tag Monat Wochentag)."
         }
       },
       "unviewedResults": "Neue Ergebnisse"
@@ -16216,7 +16226,7 @@
         "label": "Anpassen"
       },
       "scheduledTasks": {
-        "label": "Scheduled Tasks"
+        "label": "Geplante Aufgaben"
       }
     },
     "chatButton": {
@@ -17586,146 +17596,146 @@
     "search": "Suchen"
   },
   "scheduledTasks": {
-    "unviewedResults": "New results",
-    "runStatus": "{status, select, QUEUED {Queued} RUNNING {Running} AWAITING_APPROVAL {Awaiting approval} SUCCEEDED {Succeeded} FAILED {Failed} CANCELLED {Cancelled} SKIPPED {Skipped} other {Unknown}}",
-    "taskStatus": "{status, select, ACTIVE {Active} other {Paused}}",
+    "unviewedResults": "Neue Ergebnisse",
+    "runStatus": "{status, select, QUEUED {In Warteschlange} RUNNING {Läuft} AWAITING_APPROVAL {Wartet auf Genehmigung} SUCCEEDED {Erfolgreich} FAILED {Fehlgeschlagen} CANCELLED {Abgebrochen} SKIPPED {Übersprungen} other {Unbekannt}}",
+    "taskStatus": "{status, select, ACTIVE {Aktiv} other {Pausiert}}",
     "schedule": {
       "cron": "Cron (UTC): {cron}",
-      "everyMinutes": "{count, plural, one {Every minute} other {Every # minutes}}",
-      "everyHours": "{count, plural, one {Every hour} other {Every # hours}}",
-      "everyDays": "{count, plural, one {Every day at {time}} other {Every # days at {time}}}",
-      "daily": "Every day at {time}",
-      "weekly": "{days} at {time}"
+      "everyMinutes": "{count, plural, one {Jede Minute} other {Alle # Minuten}}",
+      "everyHours": "{count, plural, one {Jede Stunde} other {Alle # Stunden}}",
+      "everyDays": "{count, plural, one {Jeden Tag um {time}} other {Alle # Tage um {time}}}",
+      "daily": "Jeden Tag um {time}",
+      "weekly": "{days} um {time}"
     },
     "list": {
-      "title": "Scheduled Tasks",
-      "description": "Run a prompt on a schedule. Each run opens as a chat you can read and continue.",
-      "search": "Search tasks",
-      "new": "New Task",
-      "never": "Never",
-      "notScheduled": "Not scheduled",
-      "loadFailed": "Could not load your scheduled tasks.",
-      "open": "Open {name}",
+      "title": "Geplante Aufgaben",
+      "description": "Führen Sie einen Prompt nach Zeitplan aus. Jede Ausführung öffnet sich als Chat, den Sie lesen und fortsetzen können.",
+      "search": "Aufgaben durchsuchen",
+      "new": "Neue Aufgabe",
+      "never": "Nie",
+      "notScheduled": "Nicht geplant",
+      "loadFailed": "Ihre geplanten Aufgaben konnten nicht geladen werden.",
+      "open": "{name} öffnen",
       "columns": {
         "name": "Name",
-        "schedule": "Schedule",
-        "lastRun": "Last Run",
-        "nextRun": "Next Run",
+        "schedule": "Zeitplan",
+        "lastRun": "Letzte Ausführung",
+        "nextRun": "Nächste Ausführung",
         "status": "Status"
       },
       "empty": {
-        "title": "No scheduled tasks yet",
-        "description": "Create a task to run a prompt on a schedule."
+        "title": "Noch keine geplanten Aufgaben",
+        "description": "Erstellen Sie eine Aufgabe, um einen Prompt nach Zeitplan auszuführen."
       },
       "noMatches": {
-        "title": "No matching tasks",
-        "description": "Try a different search."
+        "title": "Keine passenden Aufgaben",
+        "description": "Versuchen Sie eine andere Suche."
       }
     },
     "actions": {
-      "runNow": "Run once",
-      "pause": "Pause",
-      "resume": "Resume",
-      "edit": "Edit",
-      "delete": "Delete",
-      "menu": "Actions for {name}",
+      "runNow": "Einmal ausführen",
+      "pause": "Pausieren",
+      "resume": "Fortsetzen",
+      "edit": "Bearbeiten",
+      "delete": "Löschen",
+      "menu": "Aktionen für {name}",
       "toasts": {
-        "runQueued": "Started a run of \"{name}\".",
-        "runFailed": "Could not start the run.",
-        "resumed": "Task resumed.",
-        "paused": "Task paused.",
-        "statusFailed": "Could not change the task status.",
-        "deleted": "Deleted \"{name}\".",
-        "deleteFailed": "Could not delete the task."
+        "runQueued": "Eine Ausführung von „{name}“ wurde gestartet.",
+        "runFailed": "Die Ausführung konnte nicht gestartet werden.",
+        "resumed": "Aufgabe fortgesetzt.",
+        "paused": "Aufgabe pausiert.",
+        "statusFailed": "Der Aufgabenstatus konnte nicht geändert werden.",
+        "deleted": "„{name}“ gelöscht.",
+        "deleteFailed": "Die Aufgabe konnte nicht gelöscht werden."
       },
       "confirmDelete": {
-        "title": "Delete \"{name}\"?",
-        "description": "The task stops running and its run history goes away.",
-        "submit": "Delete"
+        "title": "„{name}“ löschen?",
+        "description": "Die Aufgabe wird nicht mehr ausgeführt und ihr Ausführungsverlauf wird entfernt.",
+        "submit": "Löschen"
       }
     },
     "runs": {
-      "label": "Run history",
-      "open": "Open the run from {time}",
-      "loading": "Loading runs…",
-      "loadFailed": "Could not load the run history.",
-      "loadMore": "Load more",
-      "markAllViewed": "Mark all viewed",
-      "markAllViewedFailed": "Could not mark the runs as viewed. Try again.",
-      "trigger": "{source, select, MANUAL_RUN_NOW {Run once} other {Schedule}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} other {Failed: {errorClass}}}",
+      "label": "Ausführungsverlauf",
+      "open": "Ausführung von {time} öffnen",
+      "loading": "Ausführungen werden geladen…",
+      "loadFailed": "Der Ausführungsverlauf konnte nicht geladen werden.",
+      "loadMore": "Mehr laden",
+      "markAllViewed": "Alle als gesehen markieren",
+      "markAllViewedFailed": "Die Ausführungen konnten nicht als gesehen markiert werden. Versuchen Sie es erneut.",
+      "trigger": "{source, select, MANUAL_RUN_NOW {Einmal ausführen} other {Zeitplan}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Abgebrochen: Die nächste Ausführung begann, bevor jemand die Genehmigung beantwortet hat.} approval_timeout {Abgebrochen: Niemand hat die Genehmigung innerhalb von 24 Stunden beantwortet.} user_cancelled {Von Ihnen gestoppt.} agent_permission_required {Eine Aktion benötigte eine Genehmigung.} other {Fehlgeschlagen: {errorClass}}}",
       "columns": {
-        "started": "Started",
+        "started": "Gestartet",
         "status": "Status",
-        "duration": "Duration",
-        "trigger": "Trigger",
+        "duration": "Dauer",
+        "trigger": "Auslöser",
         "detail": "Details"
       },
       "closed": {
-        "queued": "This run has not started yet, so there is no chat to open.",
-        "skipped": "This run was skipped, so there is no chat to open.",
-        "craft": "This run is from before tasks ran in chat, so there is no chat to open."
+        "queued": "Diese Ausführung hat noch nicht begonnen, daher gibt es keinen Chat zum Öffnen.",
+        "skipped": "Diese Ausführung wurde übersprungen, daher gibt es keinen Chat zum Öffnen.",
+        "craft": "Diese Ausführung stammt aus der Zeit, bevor Aufgaben im Chat liefen, daher gibt es keinen Chat zum Öffnen."
       },
       "empty": {
-        "title": "No runs yet",
-        "description": "The task adds a run each time it fires. Use Run once to start one now."
+        "title": "Noch keine Ausführungen",
+        "description": "Die Aufgabe fügt bei jedem Auslösen eine Ausführung hinzu. Verwenden Sie „Einmal ausführen“, um jetzt eine zu starten."
       }
     },
     "detail": {
-      "title": "Scheduled Task",
-      "back": "Scheduled Tasks",
-      "loadFailed": "Could not load this scheduled task.",
+      "title": "Geplante Aufgabe",
+      "back": "Geplante Aufgaben",
+      "loadFailed": "Diese geplante Aufgabe konnte nicht geladen werden.",
       "tabs": {
-        "runs": "Runs",
-        "overview": "Overview"
+        "runs": "Ausführungen",
+        "overview": "Übersicht"
       },
       "overview": {
         "prompt": "Prompt",
-        "schedule": "Schedule",
-        "nextRun": "Next Run",
-        "notScheduled": "Not scheduled",
-        "lastRun": "Last Run",
-        "never": "Never"
+        "schedule": "Zeitplan",
+        "nextRun": "Nächste Ausführung",
+        "notScheduled": "Nicht geplant",
+        "lastRun": "Letzte Ausführung",
+        "never": "Nie"
       }
     },
     "editor": {
-      "newTitle": "New Scheduled Task",
-      "editTitle": "Edit Scheduled Task",
-      "description": "Each run sends the prompt to a new chat with the default agent.",
-      "back": "Back",
-      "loadFailed": "Could not load this scheduled task.",
-      "save": "Save",
-      "saveAndRun": "Save and run now",
+      "newTitle": "Neue geplante Aufgabe",
+      "editTitle": "Geplante Aufgabe bearbeiten",
+      "description": "Jede Ausführung sendet den Prompt an einen neuen Chat mit dem Standard-Agenten.",
+      "back": "Zurück",
+      "loadFailed": "Diese geplante Aufgabe konnte nicht geladen werden.",
+      "save": "Speichern",
+      "saveAndRun": "Speichern und jetzt ausführen",
       "errors": {
-        "nameRequired": "Enter a name.",
-        "promptRequired": "Enter a prompt."
+        "nameRequired": "Geben Sie einen Namen ein.",
+        "promptRequired": "Geben Sie einen Prompt ein."
       },
       "toasts": {
-        "created": "Scheduled task created.",
-        "createdAndRun": "Scheduled task created. The first run started.",
-        "updated": "Scheduled task updated.",
-        "saveFailed": "Could not save the scheduled task."
+        "created": "Geplante Aufgabe erstellt.",
+        "createdAndRun": "Geplante Aufgabe erstellt. Die erste Ausführung wurde gestartet.",
+        "updated": "Geplante Aufgabe aktualisiert.",
+        "saveFailed": "Die geplante Aufgabe konnte nicht gespeichert werden."
       },
       "fields": {
         "name": {
           "label": "Name",
-          "placeholder": "For example, weekly customer escalations digest"
+          "placeholder": "Zum Beispiel wöchentliche Übersicht der Kundeneskalationen"
         },
         "prompt": {
           "label": "Prompt",
-          "description": "Each run sends this message to a new chat.",
-          "placeholder": "Describe what to do on each run"
+          "description": "Jede Ausführung sendet diese Nachricht an einen neuen Chat.",
+          "placeholder": "Beschreiben Sie, was bei jeder Ausführung passieren soll"
         },
         "schedule": {
-          "label": "Schedule"
+          "label": "Zeitplan"
         }
       }
     },
     "banner": {
-      "title": "Scheduled run of {task}",
-      "inFlight": "{status, select, AWAITING_APPROVAL {This run waits for your approval below.} other {This run is in progress.}}",
-      "startedAt": "Started {time}",
-      "viewTask": "View task"
+      "title": "Geplante Ausführung von {task}",
+      "inFlight": "{status, select, AWAITING_APPROVAL {Diese Ausführung wartet unten auf Ihre Genehmigung.} other {Diese Ausführung läuft.}}",
+      "startedAt": "Gestartet {time}",
+      "viewTask": "Aufgabe anzeigen"
     }
   }
 }

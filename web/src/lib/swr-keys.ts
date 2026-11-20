@@ -559,6 +559,8 @@ export const SWR_KEYS = {
     `/api/scheduled-tasks/${taskId}/action-policies`,
   chatScheduledTaskRuns: (taskId: string) =>
     `/api/scheduled-tasks/${taskId}/runs`,
+  chatScheduledTaskRunsPage: (taskId: string, limit: number) =>
+    `/api/scheduled-tasks/${taskId}/runs?limit=${limit}`,
   chatScheduledTaskHasUnviewedRuns: (taskId: string) =>
     `/api/scheduled-tasks/${taskId}/runs?limit=1&unviewed=true`,
   chatScheduledRun: (chatSessionId: string) =>

@@ -14734,7 +14734,7 @@
         "tabs": {
           "dailyWeekly": "매일 / 매주",
           "interval": "간격",
-          "advanced": "Advanced"
+          "advanced": "고급"
         },
         "weekdays": {
           "fri": "금",
@@ -14746,9 +14746,19 @@
           "wed": "수"
         },
         "advanced": {
-          "cronLabel": "Cron Expression",
-          "hint": "Five fields: minute, hour, day, month, weekday. The expression runs in UTC.",
-          "placeholder": "For example, 0 9 * * 1-5"
+          "cronLabel": "Cron 표현식",
+          "hint": "다섯 개의 필드: 분, 시, 일, 월, 요일. 표현식은 UTC로 실행됩니다.",
+          "placeholder": "예: 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "간격은 1 이상의 정수여야 합니다.",
+          "minutesIntervalTooLong": "59분을 넘는 간격에는 시간 단위를 사용하세요.",
+          "hoursIntervalTooLong": "23시간을 넘는 간격에는 매일 일정을 사용하세요.",
+          "dayIntervalTimeRequired": "일 단위 간격에는 시간을 선택하세요.",
+          "timeRequired": "시간을 선택하세요.",
+          "weekdayOutOfRange": "요일 값은 0-6(일..토)이어야 합니다.",
+          "cronRequired": "Cron 표현식을 입력하세요.",
+          "cronFieldCount": "Cron에는 정확히 5개의 필드(분 시 일 월 요일)가 있어야 합니다."
         }
       },
       "unviewedResults": "새 결과"
@@ -16216,7 +16226,7 @@
         "label": "사용자 지정"
       },
       "scheduledTasks": {
-        "label": "Scheduled Tasks"
+        "label": "예약된 작업"
       }
     },
     "chatButton": {
@@ -17586,146 +17596,146 @@
     "search": "검색"
   },
   "scheduledTasks": {
-    "unviewedResults": "New results",
-    "runStatus": "{status, select, QUEUED {Queued} RUNNING {Running} AWAITING_APPROVAL {Awaiting approval} SUCCEEDED {Succeeded} FAILED {Failed} CANCELLED {Cancelled} SKIPPED {Skipped} other {Unknown}}",
-    "taskStatus": "{status, select, ACTIVE {Active} other {Paused}}",
+    "unviewedResults": "새 결과",
+    "runStatus": "{status, select, QUEUED {대기 중} RUNNING {실행 중} AWAITING_APPROVAL {승인 대기 중} SUCCEEDED {성공} FAILED {실패} CANCELLED {취소됨} SKIPPED {건너뜀} other {알 수 없음}}",
+    "taskStatus": "{status, select, ACTIVE {활성} other {일시 중지됨}}",
     "schedule": {
       "cron": "Cron (UTC): {cron}",
-      "everyMinutes": "{count, plural, one {Every minute} other {Every # minutes}}",
-      "everyHours": "{count, plural, one {Every hour} other {Every # hours}}",
-      "everyDays": "{count, plural, one {Every day at {time}} other {Every # days at {time}}}",
-      "daily": "Every day at {time}",
-      "weekly": "{days} at {time}"
+      "everyMinutes": "{count, plural, other {#분마다}}",
+      "everyHours": "{count, plural, other {#시간마다}}",
+      "everyDays": "{count, plural, other {#일마다 {time}}}",
+      "daily": "매일 {time}",
+      "weekly": "{days} {time}"
     },
     "list": {
-      "title": "Scheduled Tasks",
-      "description": "Run a prompt on a schedule. Each run opens as a chat you can read and continue.",
-      "search": "Search tasks",
-      "new": "New Task",
-      "never": "Never",
-      "notScheduled": "Not scheduled",
-      "loadFailed": "Could not load your scheduled tasks.",
-      "open": "Open {name}",
+      "title": "예약된 작업",
+      "description": "일정에 따라 프롬프트를 실행합니다. 각 실행은 읽고 이어갈 수 있는 채팅으로 열립니다.",
+      "search": "작업 검색",
+      "new": "새 작업",
+      "never": "없음",
+      "notScheduled": "예약되지 않음",
+      "loadFailed": "예약된 작업을 불러오지 못했습니다.",
+      "open": "{name} 열기",
       "columns": {
-        "name": "Name",
-        "schedule": "Schedule",
-        "lastRun": "Last Run",
-        "nextRun": "Next Run",
-        "status": "Status"
+        "name": "이름",
+        "schedule": "일정",
+        "lastRun": "마지막 실행",
+        "nextRun": "다음 실행",
+        "status": "상태"
       },
       "empty": {
-        "title": "No scheduled tasks yet",
-        "description": "Create a task to run a prompt on a schedule."
+        "title": "아직 예약된 작업이 없습니다",
+        "description": "작업을 만들어 일정에 따라 프롬프트를 실행하세요."
       },
       "noMatches": {
-        "title": "No matching tasks",
-        "description": "Try a different search."
+        "title": "일치하는 작업이 없습니다",
+        "description": "다른 검색어를 시도하세요."
       }
     },
     "actions": {
-      "runNow": "Run once",
-      "pause": "Pause",
-      "resume": "Resume",
-      "edit": "Edit",
-      "delete": "Delete",
-      "menu": "Actions for {name}",
+      "runNow": "한 번 실행",
+      "pause": "일시 중지",
+      "resume": "재개",
+      "edit": "편집",
+      "delete": "삭제",
+      "menu": "{name} 작업",
       "toasts": {
-        "runQueued": "Started a run of \"{name}\".",
-        "runFailed": "Could not start the run.",
-        "resumed": "Task resumed.",
-        "paused": "Task paused.",
-        "statusFailed": "Could not change the task status.",
-        "deleted": "Deleted \"{name}\".",
-        "deleteFailed": "Could not delete the task."
+        "runQueued": "\"{name}\" 실행을 시작했습니다.",
+        "runFailed": "실행을 시작하지 못했습니다.",
+        "resumed": "작업을 재개했습니다.",
+        "paused": "작업을 일시 중지했습니다.",
+        "statusFailed": "작업 상태를 변경하지 못했습니다.",
+        "deleted": "\"{name}\"을(를) 삭제했습니다.",
+        "deleteFailed": "작업을 삭제하지 못했습니다."
       },
       "confirmDelete": {
-        "title": "Delete \"{name}\"?",
-        "description": "The task stops running and its run history goes away.",
-        "submit": "Delete"
+        "title": "\"{name}\"을(를) 삭제할까요?",
+        "description": "작업 실행이 중지되고 실행 기록이 삭제됩니다.",
+        "submit": "삭제"
       }
     },
     "runs": {
-      "label": "Run history",
-      "open": "Open the run from {time}",
-      "loading": "Loading runs…",
-      "loadFailed": "Could not load the run history.",
-      "loadMore": "Load more",
-      "markAllViewed": "Mark all viewed",
-      "markAllViewedFailed": "Could not mark the runs as viewed. Try again.",
-      "trigger": "{source, select, MANUAL_RUN_NOW {Run once} other {Schedule}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} other {Failed: {errorClass}}}",
+      "label": "실행 기록",
+      "open": "{time} 실행 열기",
+      "loading": "실행을 불러오는 중…",
+      "loadFailed": "실행 기록을 불러오지 못했습니다.",
+      "loadMore": "더 보기",
+      "markAllViewed": "모두 확인함으로 표시",
+      "markAllViewedFailed": "실행을 확인함으로 표시하지 못했습니다. 다시 시도하세요.",
+      "trigger": "{source, select, MANUAL_RUN_NOW {한 번 실행} other {일정}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {취소됨: 누군가 승인에 응답하기 전에 다음 실행이 시작되었습니다.} approval_timeout {취소됨: 24시간 이내에 아무도 승인에 응답하지 않았습니다.} user_cancelled {사용자가 중지했습니다.} agent_permission_required {작업에 승인이 필요했습니다.} other {실패: {errorClass}}}",
       "columns": {
-        "started": "Started",
-        "status": "Status",
-        "duration": "Duration",
-        "trigger": "Trigger",
-        "detail": "Details"
+        "started": "시작",
+        "status": "상태",
+        "duration": "소요 시간",
+        "trigger": "트리거",
+        "detail": "세부 정보"
       },
       "closed": {
-        "queued": "This run has not started yet, so there is no chat to open.",
-        "skipped": "This run was skipped, so there is no chat to open.",
-        "craft": "This run is from before tasks ran in chat, so there is no chat to open."
+        "queued": "이 실행은 아직 시작되지 않아 열 채팅이 없습니다.",
+        "skipped": "이 실행은 건너뛰어 열 채팅이 없습니다.",
+        "craft": "이 실행은 작업이 채팅에서 실행되기 전의 것이어서 열 채팅이 없습니다."
       },
       "empty": {
-        "title": "No runs yet",
-        "description": "The task adds a run each time it fires. Use Run once to start one now."
+        "title": "아직 실행이 없습니다",
+        "description": "작업이 실행될 때마다 실행 기록이 추가됩니다. 지금 시작하려면 한 번 실행을 사용하세요."
       }
     },
     "detail": {
-      "title": "Scheduled Task",
-      "back": "Scheduled Tasks",
-      "loadFailed": "Could not load this scheduled task.",
+      "title": "예약된 작업",
+      "back": "예약된 작업",
+      "loadFailed": "이 예약된 작업을 불러오지 못했습니다.",
       "tabs": {
-        "runs": "Runs",
-        "overview": "Overview"
+        "runs": "실행",
+        "overview": "개요"
       },
       "overview": {
-        "prompt": "Prompt",
-        "schedule": "Schedule",
-        "nextRun": "Next Run",
-        "notScheduled": "Not scheduled",
-        "lastRun": "Last Run",
-        "never": "Never"
+        "prompt": "프롬프트",
+        "schedule": "일정",
+        "nextRun": "다음 실행",
+        "notScheduled": "예약되지 않음",
+        "lastRun": "마지막 실행",
+        "never": "없음"
       }
     },
     "editor": {
-      "newTitle": "New Scheduled Task",
-      "editTitle": "Edit Scheduled Task",
-      "description": "Each run sends the prompt to a new chat with the default agent.",
-      "back": "Back",
-      "loadFailed": "Could not load this scheduled task.",
-      "save": "Save",
-      "saveAndRun": "Save and run now",
+      "newTitle": "새 예약된 작업",
+      "editTitle": "예약된 작업 편집",
+      "description": "각 실행은 기본 에이전트와 함께 새 채팅으로 프롬프트를 보냅니다.",
+      "back": "뒤로",
+      "loadFailed": "이 예약된 작업을 불러오지 못했습니다.",
+      "save": "저장",
+      "saveAndRun": "저장하고 지금 실행",
       "errors": {
-        "nameRequired": "Enter a name.",
-        "promptRequired": "Enter a prompt."
+        "nameRequired": "이름을 입력하세요.",
+        "promptRequired": "프롬프트를 입력하세요."
       },
       "toasts": {
-        "created": "Scheduled task created.",
-        "createdAndRun": "Scheduled task created. The first run started.",
-        "updated": "Scheduled task updated.",
-        "saveFailed": "Could not save the scheduled task."
+        "created": "예약된 작업을 만들었습니다.",
+        "createdAndRun": "예약된 작업을 만들었습니다. 첫 번째 실행이 시작되었습니다.",
+        "updated": "예약된 작업을 업데이트했습니다.",
+        "saveFailed": "예약된 작업을 저장하지 못했습니다."
       },
       "fields": {
         "name": {
-          "label": "Name",
-          "placeholder": "For example, weekly customer escalations digest"
+          "label": "이름",
+          "placeholder": "예: 주간 고객 에스컬레이션 요약"
         },
         "prompt": {
-          "label": "Prompt",
-          "description": "Each run sends this message to a new chat.",
-          "placeholder": "Describe what to do on each run"
+          "label": "프롬프트",
+          "description": "각 실행은 이 메시지를 새 채팅으로 보냅니다.",
+          "placeholder": "각 실행에서 수행할 작업을 설명하세요"
         },
         "schedule": {
-          "label": "Schedule"
+          "label": "일정"
         }
       }
     },
     "banner": {
-      "title": "Scheduled run of {task}",
-      "inFlight": "{status, select, AWAITING_APPROVAL {This run waits for your approval below.} other {This run is in progress.}}",
-      "startedAt": "Started {time}",
-      "viewTask": "View task"
+      "title": "{task}의 예약 실행",
+      "inFlight": "{status, select, AWAITING_APPROVAL {이 실행은 아래에서 승인을 기다리고 있습니다.} other {이 실행은 진행 중입니다.}}",
+      "startedAt": "{time}에 시작됨",
+      "viewTask": "작업 보기"
     }
   }
 }

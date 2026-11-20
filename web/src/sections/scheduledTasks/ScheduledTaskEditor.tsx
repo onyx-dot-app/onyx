@@ -72,6 +72,7 @@ interface TaskFormProps {
 
 function TaskForm({ task }: TaskFormProps) {
   const t = useTranslations("scheduledTasks.editor");
+  const tScheduleEditor = useTranslations("craft.tasks.scheduleEditor");
   const navigation = useNavigation();
   // Daylight saving moves the local time of a stored UTC time. Read and
   // write it at the date of the next fire, so a save keeps the schedule.
@@ -225,8 +226,11 @@ function TaskForm({ task }: TaskFormProps) {
             onModeChange={setMode}
             payload={payload}
             onPayloadChange={setPayload}
-            error={compiled.ok ? null : compiled.error}
+            error={
+              compiled.ok ? null : tScheduleEditor(`errors.${compiled.error}`)
+            }
             allowAdvanced
+            referenceDate={referenceDate}
           />
         </InputVertical>
         <Divider paddingParallel={0} paddingPerpendicular={0} />

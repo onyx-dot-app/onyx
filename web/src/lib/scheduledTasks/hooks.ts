@@ -48,6 +48,10 @@ export async function revalidateScheduledRunViews(taskId: string) {
   ]);
 }
 
+/** How often task pages refetch a task, whose runs and next run move in
+ * the background. */
+export const TASK_REFRESH_INTERVAL_MS = 30_000;
+
 /** As `revalidateScheduledRunViews`, for the tasks that run in chat. */
 export async function revalidateChatScheduledRunViews(taskId: string) {
   const runsKey = SWR_KEYS.chatScheduledTaskRuns(taskId);
@@ -84,13 +88,16 @@ const SUNDAY = { year: 2024, month: 0, day: 7 };
 export function useScheduledTaskFormat() {
   const t = useTranslations("scheduledTasks.schedule");
   const format = useFormatter();
+  // Schedules decode to browser-local times; next-intl formats in the
+  // server's zone unless told otherwise.
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   function timeOfDay(value: string | null | undefined): string {
     const match = value ? TIME_RE.exec(value) : null;
     if (!match) return "";
     return format.dateTime(
       new Date(2024, 0, 1, Number(match[1]), Number(match[2])),
-      { timeStyle: "short" }
+      { timeStyle: "short", timeZone }
     );
   }
 
@@ -124,7 +131,7 @@ export function useScheduledTaskFormat() {
           days.map((day) =>
             format.dateTime(
               new Date(SUNDAY.year, SUNDAY.month, SUNDAY.day + day),
-              { weekday: "short" }
+              { weekday: "short", timeZone }
             )
           )
         ),
@@ -134,6 +141,7 @@ export function useScheduledTaskFormat() {
       return format.dateTime(new Date(iso), {
         dateStyle: "medium",
         timeStyle: "short",
+        timeZone,
       });
     },
     relative(iso: string): string {

@@ -14749,6 +14749,16 @@
           "cronLabel": "Cron Expression",
           "hint": "Five fields: minute, hour, day, month, weekday. The expression runs in UTC.",
           "placeholder": "For example, 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "Interval must be a whole number of at least 1.",
+          "minutesIntervalTooLong": "Use hours for intervals over 59 minutes.",
+          "hoursIntervalTooLong": "Use a daily schedule for intervals over 23 hours.",
+          "dayIntervalTimeRequired": "Pick a time of day for day-cadence intervals.",
+          "timeRequired": "Pick a time of day.",
+          "weekdayOutOfRange": "Weekday values must be 0-6 (Sun..Sat).",
+          "cronRequired": "Enter a cron expression.",
+          "cronFieldCount": "Cron must have exactly 5 fields (minute hour day month weekday)."
         }
       },
       "unviewedResults": "New results"
