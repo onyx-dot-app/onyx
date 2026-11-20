@@ -252,9 +252,11 @@ file, and every page, gets a read of its own, as before.
 9. `inheritance-fails-closed` **A file inherits only when the listing is
    certain.** `inherits_permissions` is False when Graph did not answer
    `Preference-Applied`, when the file came from `/children`, when the parent
-   cannot be read, and with `treat_sharing_link_as_public`. The file then gets
-   a permission read of its own. Keep `shared` in the `$select` of every delta
-   URL of such a listing, or every file looks as if it inherits.
+   cannot be read, and with `treat_sharing_link_as_public`. It is also False
+   on a delta that does not come from a start URL of the connector, which
+   asks for `shared` in its `$select`: the cursor of a full pass and the URL
+   of a 410 resync (`current_drive_delta_selects_sharing`). The file then gets
+   a permission read of its own.
 10. `sdk-client-prepared` **Build an office365 client through
    `prepare_sdk_client`.** A `GraphClient` or `ClientContext` built without it
    sends requests that take no cost from the limiter and carry no User-Agent.
