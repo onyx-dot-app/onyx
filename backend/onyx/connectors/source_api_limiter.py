@@ -28,7 +28,8 @@ cut does not hold up the other users of the process.
 
 A credential window keeps its share past a run (see redis_rate_window). A new
 run starts from the share that the source accepted before, or from a
-conservative start share, and not at the full budget.
+conservative start share, and not at the full budget. It grows slowly from
+either share.
 
 Each budget is for a period (a minute for Google), but the window that
 enforces it is shorter, with the same rate. A window of the whole period lets
