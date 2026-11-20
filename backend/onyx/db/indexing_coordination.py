@@ -429,6 +429,21 @@ class IndexingCoordination:
         db_session.commit()
 
     @staticmethod
+    def get_stub_batch_progress(
+        db_session: Session, index_attempt_id: int
+    ) -> tuple[int, int]:
+        """The attempt's stub batches stored by the listing and converted, in
+        that order. (0, 0) when the attempt does not exist."""
+        row = db_session.execute(
+            select(
+                IndexAttempt.stub_batches_stored, IndexAttempt.stub_batches_converted
+            ).where(IndexAttempt.id == index_attempt_id)
+        ).one_or_none()
+        if row is None:
+            return 0, 0
+        return row[0], row[1]
+
+    @staticmethod
     def _get_stub_batches_converted(db_session: Session, index_attempt_id: int) -> int:
         converted = db_session.scalar(
             select(IndexAttempt.stub_batches_converted).where(
