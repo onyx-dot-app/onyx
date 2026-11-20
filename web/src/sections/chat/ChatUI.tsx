@@ -444,6 +444,22 @@ const ChatUI = React.memo(
       return null;
     };
 
+    // Error banners belong to the latest turn, inside its height, so they
+    // sit under its reply and not a viewport below it.
+    const errorBanner = error ? (
+      <div className={cn("p-4 w-full self-center", msgWidth)}>
+        {/* A session error has no saved question to resend. */}
+        <ErrorBanner {...error} />
+      </div>
+    ) : loadError ? (
+      <div className={cn("p-4 w-full self-center", msgWidth)}>
+        <ErrorBanner
+          resubmit={chatState === "input" ? onResubmit : undefined}
+          error={loadError}
+        />
+      </div>
+    ) : null;
+
     // Each turn (a user message and its replies) is one group, so a row never
     // changes parent when a turn arrives. The latest turn fills the viewport
     // less the 1rem anchor offset and the list's 2rem bottom padding: at the
@@ -506,26 +522,14 @@ const ChatUI = React.memo(
                         !fullWidthChat && "px-3"
                       )}
                     />
+                    {errorBanner}
                   </>
                 )}
               </Section>
             );
           })}
 
-          {error && (
-            <div className={cn("p-4 w-full self-center", msgWidth)}>
-              {/* A session error has no saved question to resend. */}
-              <ErrorBanner {...error} />
-            </div>
-          )}
-          {!error && loadError && (
-            <div className={cn("p-4 w-full self-center", msgWidth)}>
-              <ErrorBanner
-                resubmit={chatState === "input" ? onResubmit : undefined}
-                error={loadError}
-              />
-            </div>
-          )}
+          {turns.length === 0 && errorBanner}
         </div>
       </>
     );
