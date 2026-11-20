@@ -518,19 +518,23 @@ def prepare_chat_file_inputs(
     descriptors: list[FileDescriptor], db_session: Session
 ) -> list[ChatFileInput]:
     """Capture processing status before reading attachment content."""
-    user_file_ids: list[UUID] = []
+    # The lookup uses the canonical UUID string; clients may send other forms.
+    canonical_ids: dict[str, str] = {}
     for descriptor in descriptors:
         raw_id = descriptor.get("user_file_id")
         if raw_id:
             try:
-                user_file_ids.append(UUID(raw_id))
+                canonical_ids[raw_id] = str(UUID(raw_id))
             except ValueError:
                 logger.warning("Invalid user-file ID: %s", raw_id)
-    metadata = get_user_file_processing_info(user_file_ids, db_session)
+    metadata = get_user_file_processing_info(
+        [UUID(canonical) for canonical in canonical_ids.values()], db_session
+    )
     inputs: list[ChatFileInput] = []
     for descriptor in descriptors:
         tokens, status = metadata.get(
-            descriptor.get("user_file_id") or "", (0, UserFileStatus.COMPLETED)
+            canonical_ids.get(descriptor.get("user_file_id") or "", ""),
+            (0, UserFileStatus.COMPLETED),
         )
         inputs.append(
             ChatFileInput(
