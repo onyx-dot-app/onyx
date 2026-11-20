@@ -28,23 +28,24 @@ class PostgresQueryArgs(BaseModel):
     # Document listings only.
     order_by: DocumentOrder = DocumentOrder.UPDATED_DESC
 
-    source_type: DocumentSource | None = None
-    title_contains: str | None = None
+    # Text and id filters hold any of several values; filters are ANDed.
+    source_type: list[DocumentSource] | None = None
+    title_contains: list[str] | None = None
     updated_after: datetime | None = None
     updated_before: datetime | None = None
-    owned_by: str | None = None
-    parent_hierarchy_node_id: int | None = None
+    owned_by: list[str] | None = None
+    parent_hierarchy_node_id: list[int] | None = None
 
-    name_contains: str | None = None
-    parent_id: int | None = None
-    node_type: HierarchyNodeType | None = None
+    name_contains: list[str] | None = None
+    parent_id: list[int] | None = None
+    node_type: list[HierarchyNodeType] | None = None
 
-    description_contains: str | None = None
+    description_contains: list[str] | None = None
     created_after: datetime | None = None
     created_before: datetime | None = None
 
-    chat_session_id: UUID | None = None
-    content_contains: str | None = None
+    chat_session_id: list[UUID] | None = None
+    content_contains: list[str] | None = None
     message_type: MessageType | None = None
     sent_after: datetime | None = None
     sent_before: datetime | None = None
