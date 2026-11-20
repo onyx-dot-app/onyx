@@ -198,6 +198,9 @@ _SEARCH_CONTEXT_MISSING_ERROR_TYPE = "search_context_missing"
 # Rejection by an index/cluster block, e.g. the read_only_allow_delete block
 # OpenSearch applies when disk usage crosses the flood-stage watermark.
 _CLUSTER_BLOCK_ERROR_TYPE = "cluster_block_exception"
+# Rejections of a query whose analyzed text exceeds indices.query.bool.max_clause_count.
+# The type appears only in a nested cause, under HTTP 400 or 500.
+_CLAUSE_LIMIT_ERROR_TYPES = frozenset({"too_many_clauses", "too_many_nested_clauses"})
 # Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
 # one page covers a batch; paging still protects against a pathological doc.
 _PIT_SCAN_PAGE_SIZE = 1000
@@ -218,6 +221,27 @@ def is_cluster_block_error(e: Exception) -> bool:
     """True when a request was rejected by an index/cluster block rather than a
     problem with the request itself."""
     return isinstance(e, TransportError) and _CLUSTER_BLOCK_ERROR_TYPE in str(e.error)
+
+
+def _contains_error_type(body: object, error_types: frozenset[str]) -> bool:
+    if isinstance(body, dict):
+        return body.get("type") in error_types or any(
+            _contains_error_type(value, error_types) for value in body.values()
+        )
+    if isinstance(body, list):
+        return any(_contains_error_type(item, error_types) for item in body)
+    return False
+
+
+def is_clause_limit_error(e: BaseException) -> bool:
+    """True when a search was rejected because its query has more clauses than
+    the cluster allows."""
+    # TransportError.info reads args[2], which a hand-built error may lack.
+    return (
+        isinstance(e, TransportError)
+        and len(e.args) > 2
+        and _contains_error_type(e.info, _CLAUSE_LIMIT_ERROR_TYPES)
+    )
 
 
 class OpenSearchIndexWriteBlockedError(Exception):
@@ -1968,7 +1992,12 @@ class OpenSearchIndexClient(OpenSearchClient):
                     observe_opensearch_search(search_type, client_duration_s, time_took)
             except Exception as e:
                 if self._emit_metrics:
-                    record_opensearch_search_error(search_type, e)
+                    record_opensearch_search_error(
+                        search_type,
+                        "too_many_clauses"
+                        if is_clause_limit_error(e)
+                        else type(e).__name__,
+                    )
                 raise
         return hits
 
@@ -2042,7 +2071,12 @@ class OpenSearchIndexClient(OpenSearchClient):
                     observe_opensearch_search(search_type, client_duration_s, time_took)
             except Exception as e:
                 if self._emit_metrics:
-                    record_opensearch_search_error(search_type, e)
+                    record_opensearch_search_error(
+                        search_type,
+                        "too_many_clauses"
+                        if is_clause_limit_error(e)
+                        else type(e).__name__,
+                    )
                 raise
 
         # TODO(andrei): Implement scroll/point in time for results so that we

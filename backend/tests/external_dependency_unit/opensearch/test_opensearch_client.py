@@ -2929,9 +2929,9 @@ class TestSearchFailureMetrics:
         # The timed-out search was recorded as an error and was NOT observed in
         # the latency histograms.
         assert record_error_mock.call_count == 1
-        recorded_search_type, recorded_exc = record_error_mock.call_args.args
+        recorded_search_type, recorded_error_type = record_error_mock.call_args.args
         assert recorded_search_type == OpenSearchSearchType.HYBRID
-        assert isinstance(recorded_exc, OpenSearchServerSideTimeout)
+        assert recorded_error_type == OpenSearchServerSideTimeout.__name__
         assert observe_mock.call_count == 0
 
     def test_search_for_document_ids_records_error_on_server_side_timeout(
@@ -2958,9 +2958,9 @@ class TestSearchFailureMetrics:
 
         # Postcondition.
         assert record_error_mock.call_count == 1
-        recorded_search_type, recorded_exc = record_error_mock.call_args.args
+        recorded_search_type, recorded_error_type = record_error_mock.call_args.args
         assert recorded_search_type == OpenSearchSearchType.KEYWORD
-        assert isinstance(recorded_exc, OpenSearchServerSideTimeout)
+        assert recorded_error_type == OpenSearchServerSideTimeout.__name__
         assert observe_mock.call_count == 0
 
     @staticmethod

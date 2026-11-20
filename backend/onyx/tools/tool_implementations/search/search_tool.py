@@ -88,6 +88,7 @@ from onyx.db.models import SearchSettings, User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.opensearch.client import is_clause_limit_error
 from onyx.error_handling.exceptions import OnyxError
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
@@ -129,6 +130,7 @@ from onyx.tools.models import (
     ChatMinimalTextMessage,
     CodeModeExposure,
     CodeModeResultSpec,
+    ToolCallException,
     ToolContext,
 )
 from onyx.tools.tool_implementations.search.constants import (
@@ -636,7 +638,7 @@ class SearchTool(Tool):
         embedding_model: EmbeddingModel,
         federated_retrieval_infos: list[FederatedRetrievalInfo],
         effective_filters: BaseFilters | None,
-    ) -> list[InferenceChunk]:
+    ) -> list[InferenceChunk] | None:
         """Run search pipeline for a single query using pre-fetched data.
 
         All DB data (ACL filters, embedding model, federated retrieval info)
@@ -653,27 +655,38 @@ class SearchTool(Tool):
                 scope already applied (computed once in run()).
 
         Returns:
-            List of InferenceChunk results
+            List of InferenceChunk results, or None when the index rejects the
+            query for exceeding its clause limit, so the other queries of the
+            call can still answer.
         """
-        return search_pipeline(
-            chunk_search_request=ChunkSearchRequest(
-                query=query,
-                hybrid_alpha=hybrid_alpha,
-                # Project-only searches ignore user-selected filters.
-                user_selected_filters=(
-                    effective_filters if not self._is_project_only_search else None
+        try:
+            return search_pipeline(
+                chunk_search_request=ChunkSearchRequest(
+                    query=query,
+                    hybrid_alpha=hybrid_alpha,
+                    # Project-only searches ignore user-selected filters.
+                    user_selected_filters=(
+                        effective_filters if not self._is_project_only_search else None
+                    ),
+                    limit=num_hits,
                 ),
-                limit=num_hits,
-            ),
-            project_id_filter=self.project_id_filter,
-            persona_id_filter=self.persona_id_filter,
-            document_index=self.document_index,
-            user=self.user,
-            persona_search_info=self.persona_search_info,
-            acl_filters=acl_filters,
-            embedding_model=embedding_model,
-            prefetched_federated_retrieval_infos=federated_retrieval_infos,
-        )
+                project_id_filter=self.project_id_filter,
+                persona_id_filter=self.persona_id_filter,
+                document_index=self.document_index,
+                user=self.user,
+                persona_search_info=self.persona_search_info,
+                acl_filters=acl_filters,
+                embedding_model=embedding_model,
+                prefetched_federated_retrieval_infos=federated_retrieval_infos,
+            )
+        except Exception as e:
+            if not is_clause_limit_error(e):
+                raise
+            logger.warning(
+                "Internal search - a %d-character query exceeded the index clause limit",
+                len(query),
+            )
+            return None
 
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
@@ -1300,15 +1313,37 @@ class SearchTool(Tool):
             search_weights.append(ORIGINAL_QUERY_WEIGHT)
 
         # Run all searches in parallel (index queries + Slack)
-        all_search_results = run_functions_tuples_in_parallel(search_functions)
-        if not all_search_results:
-            all_search_results = []
+        search_results: list[list[InferenceChunk] | None] = (
+            run_functions_tuples_in_parallel(search_functions)
+        )
+        successful_results = [
+            (results, weight)
+            for results, weight in zip(search_results, search_weights, strict=True)
+            if results is not None
+        ]
+        # Index lanes come first. The Slack lane returns [] when it fails, so
+        # only the index lanes show whether every query was rejected.
+        index_results = search_results[
+            : len(deduplicated_semantic_queries) + len(deduplicated_keyword_queries)
+        ]
+        if (
+            index_results
+            and all(results is None for results in index_results)
+            and not any(results for results, _ in successful_results)
+        ):
+            raise ToolCallException(
+                message="Every internal search query exceeded the index clause limit",
+                llm_facing_message=(
+                    "Every search query was too long for the search index. "
+                    "Search again with shorter, focused queries."
+                ),
+            )
 
         # Merge results using weighted Reciprocal Rank Fusion
         # This intelligently combines rankings from different queries
         top_chunks = weighted_reciprocal_rank_fusion(
-            ranked_results=all_search_results,
-            weights=search_weights,
+            ranked_results=[results for results, _ in successful_results],
+            weights=[weight for _, weight in successful_results],
             id_extractor=lambda chunk: f"{chunk.document_id}_{chunk.chunk_id}",
         )
 
