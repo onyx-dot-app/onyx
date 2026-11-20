@@ -16,7 +16,7 @@ export class MarketplacesPage {
   constructor(page: Page) {
     this.page = page;
     this.addDialog = page.getByRole("dialog", {
-      name: /^(Add|Confirm) Marketplace$/,
+      name: /^(Add|Confirm) Marketplace\b/,
     });
     this.table = page.getByRole("table", { name: "Marketplaces" });
   }
@@ -40,7 +40,7 @@ export class MarketplacesPage {
       .getByRole("button", { name: "Continue", exact: true })
       .click();
     await expect(
-      this.page.getByRole("dialog", { name: "Confirm Marketplace" })
+      this.page.getByRole("dialog", { name: /^Confirm Marketplace\b/ })
     ).toBeVisible();
   }
 

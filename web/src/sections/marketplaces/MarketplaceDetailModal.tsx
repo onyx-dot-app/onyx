@@ -32,7 +32,7 @@ interface DetailBodyProps {
 
 function DetailBody({ marketplace, busy, onConfirmDeletes }: DetailBodyProps) {
   const t = useTranslations("plugins.marketplaces");
-  const lastSync = useLastSyncCopy();
+  const lastSync = useLastSyncCopy(false);
   const policyCopy = useInstallationPolicyCopy();
   const revision = marketplace.pending_delete_revision;
   return (

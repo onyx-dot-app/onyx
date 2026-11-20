@@ -17,18 +17,20 @@ const STATE_COLOR = {
   synced: "success",
 } as const satisfies Record<MarketplaceSyncState, StatusColor>;
 
-export function useLastSyncCopy(): (marketplace: MarketplaceSummary) => string {
+/** The last sync time, or "Not synced yet". With `prefixed`, "Last sync …". */
+export function useLastSyncCopy(
+  prefixed = true
+): (marketplace: MarketplaceSummary) => string {
   const t = useTranslations("plugins.marketplaces.sync");
   const format = useFormatter();
-  return (marketplace) =>
-    marketplace.last_synced_at
-      ? t("lastSync", {
-          date: format.dateTime(new Date(marketplace.last_synced_at), {
-            dateStyle: "medium",
-            timeStyle: "short",
-          }),
-        })
-      : t("never");
+  return (marketplace) => {
+    if (!marketplace.last_synced_at) return t("never");
+    const date = format.dateTime(new Date(marketplace.last_synced_at), {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+    return prefixed ? t("lastSync", { date }) : date;
+  };
 }
 
 interface MarketplaceSyncStatusProps {
