@@ -14,6 +14,53 @@
 
 import type { Page } from "@playwright/test";
 
+type MockPacket = {
+  placement?: object;
+  obj?: { type: string; content?: string; reasoning?: string };
+  user_message_id?: number | null;
+};
+
+export function mockChatNotification(packet: MockPacket, sessionId: string) {
+  const obj = packet.obj;
+  if (obj?.type === "message_delta" || obj?.type === "reasoning_delta") {
+    const thought = obj.type === "reasoning_delta";
+    return {
+      jsonrpc: "2.0",
+      method: "session/update",
+      params: {
+        sessionId,
+        update: {
+          sessionUpdate: thought
+            ? "agent_thought_chunk"
+            : "agent_message_chunk",
+          content: {
+            type: "text",
+            text: thought ? obj.reasoning : obj.content,
+          },
+          _meta: { onyx: { placement: packet.placement } },
+        },
+      },
+    };
+  }
+  return {
+    jsonrpc: "2.0",
+    method: `_onyx/${obj?.type ?? "message_ids"}`,
+    params: { sessionId, packet },
+  };
+}
+
+export function mockChatNotifications(body: string, sessionId: string): string {
+  return (
+    body
+      .trimEnd()
+      .split("\n")
+      .map((line) =>
+        JSON.stringify(mockChatNotification(JSON.parse(line), sessionId))
+      )
+      .join("\n") + "\n"
+  );
+}
+
 let turnCounter = 0;
 
 export function resetTurnCounter(): void {
@@ -487,7 +534,10 @@ export async function mockChatEndpoint(
     await route.fulfill({
       status: 200,
       contentType: "text/plain",
-      body,
+      body: mockChatNotifications(
+        body,
+        route.request().postDataJSON().chat_session_id
+      ),
     });
   });
 }
@@ -509,7 +559,10 @@ export async function mockChatEndpointSequence(
     await route.fulfill({
       status: 200,
       contentType: "text/plain",
-      body: buildMockStream(content),
+      body: mockChatNotifications(
+        buildMockStream(content),
+        route.request().postDataJSON().chat_session_id
+      ),
     });
   });
 }

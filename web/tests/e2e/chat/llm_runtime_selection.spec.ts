@@ -1,3 +1,4 @@
+import { mockChatNotifications } from "@tests/e2e/utils/chatMock";
 import { expect, Page, test } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { loginAs, loginAsWorkerUser } from "@tests/e2e/utils/auth";
@@ -220,7 +221,10 @@ test.describe("LLM Runtime Selection", () => {
       await route.fulfill({
         status: 200,
         contentType: "text/plain",
-        body: buildMockStreamResponse(turn),
+        body: mockChatNotifications(
+          buildMockStreamResponse(turn),
+          route.request().postDataJSON().chat_session_id
+        ),
       });
     });
 
@@ -261,7 +265,10 @@ test.describe("LLM Runtime Selection", () => {
       await route.fulfill({
         status: 200,
         contentType: "text/plain",
-        body: buildMockStreamResponse(turn),
+        body: mockChatNotifications(
+          buildMockStreamResponse(turn),
+          route.request().postDataJSON().chat_session_id
+        ),
       });
     });
 
@@ -382,7 +389,10 @@ test.describe("LLM Runtime Selection", () => {
       await route.fulfill({
         status: 200,
         contentType: "text/plain",
-        body: buildMockStreamResponse(turn),
+        body: mockChatNotifications(
+          buildMockStreamResponse(turn),
+          route.request().postDataJSON().chat_session_id
+        ),
       });
     });
 

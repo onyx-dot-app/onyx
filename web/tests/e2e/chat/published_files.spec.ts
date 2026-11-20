@@ -5,6 +5,7 @@ import {
   buildMockPublishFilesStream,
   MockPublishedFile,
   mockChatEndpoint,
+  mockChatNotification,
   publishFilesPackets,
   resetTurnCounter,
 } from "@tests/e2e/utils/chatMock";
@@ -171,7 +172,9 @@ test.describe("Published files", () => {
                   })),
                 }),
               ],
-              packets: [replay],
+              packets: [
+                replay.map((packet) => mockChatNotification(packet, sessionId)),
+              ],
             },
           });
         }

@@ -1,3 +1,4 @@
+import { readChatHistory } from "@onyx-ai/shared/acp";
 import { BackendChatSession } from "@/app/app/types";
 import { PacketType, UserMessage } from "@/app/app/services/streamingModels";
 import { UNNAMED_CHAT } from "@/lib/constants";
@@ -79,11 +80,16 @@ export async function exportChatSession(
   chatName: string,
   format: ChatExportFormat
 ): Promise<void> {
-  const response = await fetch(`/api/chat/get-chat-session/${chatSessionId}`);
+  const response = await fetch(
+    `/api/chat/get-chat-session/${chatSessionId}?protocol_version=2`
+  );
   if (!response.ok) {
     throw new Error(`Failed to fetch chat session: ${response.status}`);
   }
-  const session: BackendChatSession = await response.json();
+  const session = readChatHistory<BackendChatSession>(
+    chatSessionId,
+    await response.json()
+  );
 
   const title = chatName.trim() || UNNAMED_CHAT;
   const base = sanitizeFilename(chatName);

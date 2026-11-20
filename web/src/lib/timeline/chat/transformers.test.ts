@@ -2,6 +2,7 @@ import {
   expandCodeModeSteps,
   groupStepsByTurn,
   transformPacketGroups,
+  toChatTimelineEntry,
 } from "@/lib/timeline/chat/transformers";
 import {
   createInitialState,
@@ -223,4 +224,33 @@ test("direct parallel calls render as separate steps, in tab order", () => {
     ["0-0"],
     ["0-1"],
   ]);
+});
+
+test("the latest SDK tool outcome takes precedence over stderr and section boundaries", () => {
+  const placement = at(0);
+  const toolCallId = "run/tool/python";
+  const packets: Packet[] = [
+    { placement, obj: { type: PacketType.PYTHON_TOOL_START, code: "warn()" } },
+    {
+      placement,
+      obj: {
+        type: PacketType.PYTHON_TOOL_DELTA,
+        stdout: "",
+        stderr: "warning",
+        file_ids: [],
+      },
+    },
+    {
+      placement,
+      obj: { type: PacketType.SECTION_END },
+      acpTool: { toolCallId, status: "completed" },
+    },
+  ];
+  expect(toChatTimelineEntry(stepsOf(packets)[0]!).status).toBe("done");
+  packets.push({
+    placement,
+    obj: { type: PacketType.SECTION_END },
+    acpTool: { toolCallId, status: "failed" },
+  });
+  expect(toChatTimelineEntry(stepsOf(packets)[0]!).status).toBe("error");
 });

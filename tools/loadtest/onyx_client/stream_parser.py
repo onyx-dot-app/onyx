@@ -108,6 +108,9 @@ class ChatStreamAnalyzer:
         if not isinstance(data, dict):
             return hit
 
+        if data.get("jsonrpc") == "2.0":
+            data = _notification_payload(data)
+
         # Reserved id rides at the top level of an early packet, alongside
         # (not inside) obj — capture it before the obj dispatch below.
         reserved_id = data.get("reserved_assistant_message_id")
@@ -244,6 +247,22 @@ class ChatStreamAnalyzer:
                 f"answer_chars={self.summary.answer_chars})"
             )
         return "unknown failure"
+
+
+def _notification_payload(frame: dict[str, Any]) -> dict[str, Any]:
+    params = frame["params"]
+    if frame["method"] != "session/update":
+        return params.get("packet", {})
+    update = params["update"]
+    meta = update.get("_meta", {}).get("onyx", {})
+    display = update.get("rawOutput", meta.get("packet"))
+    if isinstance(display, dict):
+        return {"obj": display, "placement": meta["placement"]}
+    if update["sessionUpdate"] == "agent_message_chunk":
+        return {"obj": {"type": MESSAGE_DELTA, "content": update["content"]["text"]}}
+    if update["sessionUpdate"] == "agent_thought_chunk":
+        return {"obj": {"type": "reasoning_delta"}}
+    return {}
 
 
 def _group(placement: dict[str, Any]) -> Group:

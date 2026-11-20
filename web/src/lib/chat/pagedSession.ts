@@ -1,3 +1,4 @@
+import { readChatHistory } from "@onyx-ai/shared/acp";
 import type { BackendChatSession, Message } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
@@ -79,7 +80,10 @@ export function chatPageUrl(
   sessionId: string,
   beforeMessageId?: number
 ): string {
-  const params = new URLSearchParams({ limit: String(CHAT_PAGE_SIZE) });
+  const params = new URLSearchParams({
+    limit: String(CHAT_PAGE_SIZE),
+    protocol_version: "2",
+  });
   if (beforeMessageId !== undefined) {
     params.set("before_message_id", String(beforeMessageId));
   }
@@ -105,7 +109,10 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
     if (!response.ok) {
       throw new Error(`Failed to load older messages: ${response.status}`);
     }
-    const page: BackendChatSession = await response.json();
+    const page = readChatHistory<BackendChatSession>(
+      sessionId,
+      await response.json()
+    );
 
     // The chat may have been dropped from the store meanwhile.
     const current = useChatSessionStore.getState().sessions.get(sessionId);
@@ -167,7 +174,10 @@ export async function reloadLatestChatPage(sessionId: string): Promise<void> {
     if (!response.ok) {
       throw new Error(`Failed to reload the chat: ${response.status}`);
     }
-    const page: BackendChatSession = await response.json();
+    const page = readChatHistory<BackendChatSession>(
+      sessionId,
+      await response.json()
+    );
     const store = useChatSessionStore.getState();
     // The latest message changed meanwhile (for example, a message was
     // sent): keep the chat. An older page merged above does not count.

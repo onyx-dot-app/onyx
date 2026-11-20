@@ -19,15 +19,6 @@ export const SearchType = {
 };
 export type SearchType = (typeof SearchType)[keyof typeof SearchType];
 
-export interface ToolResponse {
-  id?: string | null;
-  response?: any;
-}
-export interface ExtendedToolResponse extends ToolResponse {
-  level: number;
-  level_question_num: number;
-}
-
 export enum StreamStopReason {
   CONTEXT_LENGTH = "CONTEXT_LENGTH",
   CANCELLED = "CANCELLED",

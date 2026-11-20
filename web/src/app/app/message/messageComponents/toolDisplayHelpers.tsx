@@ -8,24 +8,8 @@ import {
   SearchToolPacket,
 } from "@/app/app/services/streamingModels";
 import { constructCurrentSearchState } from "@/lib/timeline/chat/renderers/search/searchStateUtils";
-import { isGroupEndPacket } from "@/lib/timeline/chat/packetHelpers";
 import { isDisplayPacket, isToolPacket } from "@/app/app/services/packetUtils";
 import { SvgXCircle } from "@opal/icons";
-
-/**
- * Check if a packet group contains an ERROR packet (tool failed)
- */
-export function hasToolError(packets: Packet[]): boolean {
-  return packets.some((p) => p.obj.type === PacketType.ERROR);
-}
-
-/**
- * Check if a tool group is complete: a parent-level SECTION_END or ERROR
- * arrived. Nested calls end with their own SECTION_END and do not count.
- */
-export function isToolComplete(packets: Packet[]): boolean {
-  return packets.some(isGroupEndPacket);
-}
 
 /**
  * Get an error icon for failed tools

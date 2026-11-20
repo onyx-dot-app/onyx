@@ -332,9 +332,10 @@ its background task end ([[#pure-asgi-middleware]]).
    `web/src/app/app/services/lib.tsx`. `web/src/app/app/services/lib.tsx:sendMessage`
    drops heartbeats with `withoutHeartbeats`.
    `web/src/app/app/services/lib.tsx:resumeStream` keeps them, because its
-   caller uses them as liveness ticks, and also yields `StreamCursor` lines. A
-   new consumer of `web/src/lib/search/streamingUtils.ts:handleSSEStream` sees
-   both. `mobile/src/api/chat/stream.ts:resumeChatMessage` sends `stream_id`
+   caller uses them as liveness ticks, and also yields stream cursors.
+   Web, mobile, and the widget read native ACP text and tool outcomes from
+   live, resumed, and saved output with `web/lib/shared/src/contracts/acp.ts`.
+   Tool-specific details remain available in `rawOutput` or `_meta.onyx.packet`. `mobile/src/api/chat/stream.ts:resumeChatMessage` sends `stream_id`
    and yields `StreamCursor` lines, which
    `mobile/src/hooks/useChatSessionController.ts:recoverChatSession` uses to
    commit packets and to reattach from the last cursor; only a 404 stops it

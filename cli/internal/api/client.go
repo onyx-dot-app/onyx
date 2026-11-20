@@ -324,7 +324,7 @@ func (c *Client) ListChatSessions(ctx context.Context) ([]models.ChatSessionDeta
 // GetChatSession returns full details for a session.
 func (c *Client) GetChatSession(ctx context.Context, sessionID string) (*models.ChatSessionDetailResponse, error) {
 	var resp models.ChatSessionDetailResponse
-	if err := c.doJSON(ctx, "GET", "/chat/get-chat-session/"+sessionID, nil, &resp); err != nil {
+	if err := c.doJSON(ctx, "GET", "/chat/get-chat-session/"+url.PathEscape(sessionID)+"?protocol_version=2", nil, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

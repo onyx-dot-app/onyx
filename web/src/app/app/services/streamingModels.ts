@@ -1,3 +1,4 @@
+import type { ChatToolUpdate } from "@onyx-ai/shared/acp";
 import { OnyxDocument } from "@/lib/search/types";
 import type { RecordedMention } from "@/lib/chat/types";
 
@@ -779,6 +780,7 @@ export interface Placement {
 
 // Packet wrapper for streaming objects
 export interface Packet {
+  acpTool?: ChatToolUpdate;
   placement: Placement;
   obj: ObjTypes;
 }

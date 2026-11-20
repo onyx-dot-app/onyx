@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": resolve(__dirname, "./src"),
+        "@onyx-acp": resolve(__dirname, "../web/lib/shared/src/contracts/acp.ts"),
       },
     },
     build: {

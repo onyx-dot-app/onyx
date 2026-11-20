@@ -31,6 +31,7 @@ func (c *Client) SendMessageStream(
 	llmOverride *models.LLMOverride,
 ) <-chan models.StreamEvent {
 	payload := models.SendMessagePayload{
+		ProtocolVersion:  2,
 		Message:          message,
 		LLMOverride:      llmOverride,
 		ParentMessageID:  parentMessageID,
@@ -69,7 +70,7 @@ func (c *Client) SendMessageStream(
 // StreamUnavailableEvent reports that the server has nothing to serve at the
 // cursor. Cancelling ctx stops streamID at once when it is known.
 func (c *Client) ResumeChatStream(ctx context.Context, sessionID string, streamID *int, cursor int) <-chan models.StreamEvent {
-	query := url.Values{"cursor": {strconv.Itoa(cursor)}}
+	query := url.Values{"cursor": {strconv.Itoa(cursor)}, "protocol_version": {"2"}}
 	if streamID != nil {
 		query.Set("stream_id", strconv.Itoa(*streamID))
 	}

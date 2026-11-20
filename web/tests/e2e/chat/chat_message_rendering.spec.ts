@@ -489,23 +489,20 @@ Key advantages include:
       }) => {
         await chat.goto();
 
-        await page.route("**/api/chat/send-chat-message", async (route) => {
-          await route.fulfill({
-            status: 200,
-            contentType: "text/plain",
-            body: buildMockSearchStream({
-              content: WEB_SEARCH_RESPONSE,
-              queries: ["Onyx enterprise search platform overview"],
-              documents: WEB_SEARCH_DOCUMENTS,
-              citations: {
-                1: "web-doc-1",
-                2: "web-doc-2",
-                3: "web-doc-3",
-              },
-              isInternetSearch: true,
-            }),
-          });
-        });
+        await mockChatEndpoint(
+          page,
+          buildMockSearchStream({
+            content: WEB_SEARCH_RESPONSE,
+            queries: ["Onyx enterprise search platform overview"],
+            documents: WEB_SEARCH_DOCUMENTS,
+            citations: {
+              1: "web-doc-1",
+              2: "web-doc-2",
+              3: "web-doc-3",
+            },
+            isInternetSearch: true,
+          })
+        );
 
         await sendMessage(page, "Search the web for information about Onyx");
 
@@ -557,22 +554,19 @@ The platform architecture document provides additional context on how these impr
 
         await chat.goto();
 
-        await page.route("**/api/chat/send-chat-message", async (route) => {
-          await route.fulfill({
-            status: 200,
-            contentType: "text/plain",
-            body: buildMockSearchStream({
-              content: internalResponse,
-              queries: ["Q3 engineering roadmap priorities"],
-              documents: internalDocs,
-              citations: {
-                1: "confluence-doc-1",
-                2: "gdrive-doc-1",
-              },
-              isInternetSearch: false,
-            }),
-          });
-        });
+        await mockChatEndpoint(
+          page,
+          buildMockSearchStream({
+            content: internalResponse,
+            queries: ["Q3 engineering roadmap priorities"],
+            documents: internalDocs,
+            citations: {
+              1: "confluence-doc-1",
+              2: "gdrive-doc-1",
+            },
+            isInternetSearch: false,
+          })
+        );
 
         await sendMessage(page, "What are our engineering priorities for Q3?");
 

@@ -1,9 +1,9 @@
 // The one place that bypasses apiFetch: only expo/fetch exposes a readable response.body on RN.
 import { fetch as expoFetch } from "expo/fetch";
+import { readChatNotifications } from "@onyx-ai/shared/acp";
 
 import { getBaseUrl } from "@/api/config";
 import { buildHeaders } from "@/api/client";
-import { createNdjsonBuffer } from "@/chat/ndjson";
 import { FileDescriptor } from "@/chat/interfaces";
 import { LlmOverride } from "@/chat/models";
 import { InternalSearchFilters } from "@/chat/sources";
@@ -64,7 +64,7 @@ export interface StreamCursor {
   replay_complete: boolean;
 }
 
-// The wire mixes wrapped packets ({placement, obj}) with root control objects; discriminate by field, not `type`.
+// The decoder yields placed display packets and session controls.
 export type StreamEvent =
   Packet | MessageResponseIDInfo | StreamingError | StreamCursor;
 
@@ -111,37 +111,6 @@ async function raiseForStatus(response: ExpoResponse): Promise<never> {
   throw new StreamHttpError(detail, response.status, code);
 }
 
-// resume keeps heartbeats as quiet-phase liveness ticks (to re-check focus/abort); send drops them
-async function* readNdjson(
-  response: ExpoResponse,
-  keepHeartbeats = false,
-): AsyncGenerator<StreamEvent> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error("Streaming is not supported on this device.");
-  }
-
-  const decoder = new TextDecoder();
-  const buffer = createNdjsonBuffer<StreamEvent>();
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      for (const event of buffer.pushChunk(
-        decoder.decode(value, { stream: true }),
-      )) {
-        if (keepHeartbeats || !isHeartbeat(event)) yield event;
-      }
-    }
-    for (const event of buffer.flush()) {
-      if (keepHeartbeats || !isHeartbeat(event)) yield event;
-    }
-  } finally {
-    // Release the reader on early-return/abort, or the connection leaks.
-    void reader.cancel().catch(() => {});
-  }
-}
-
 export async function* streamChatMessage(
   body: SendMessageBody,
   signal: AbortSignal,
@@ -149,12 +118,18 @@ export async function* streamChatMessage(
   const response = await expoFetch(`${getBaseUrl()}/chat/send-chat-message`, {
     method: "POST",
     headers: await buildHeaders({ signal }, true),
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, protocol_version: 2 }),
     signal,
   });
 
   if (!response.ok) await raiseForStatus(response);
-  yield* readNdjson(response);
+  for await (const item of readChatNotifications(
+    body.chat_session_id,
+    response.body,
+    signal,
+  )) {
+    if (!isHeartbeat(item)) yield item as StreamEvent;
+  }
 }
 
 // Replays stream `streamId` from `cursor` (0 = whole buffer), then tails it live. 404 when that
@@ -166,10 +141,16 @@ export async function* resumeChatMessage(
   signal: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
   const response = await expoFetch(
-    `${getBaseUrl()}/chat/chat-session/${sessionId}/resume-stream?stream_id=${streamId}&cursor=${cursor}`,
+    `${getBaseUrl()}/chat/chat-session/${sessionId}/resume-stream?stream_id=${streamId}&cursor=${cursor}&protocol_version=2`,
     { method: "GET", headers: await buildHeaders({ signal }, false), signal },
   );
 
   if (!response.ok) await raiseForStatus(response);
-  yield* readNdjson(response, true);
+  for await (const item of readChatNotifications(
+    sessionId,
+    response.body,
+    signal,
+  )) {
+    yield item as StreamEvent;
+  }
 }

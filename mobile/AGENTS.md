@@ -92,13 +92,9 @@ Web is different: web uses **Tailwind's default step scale**, where `p-6` = step
 
 - Holds cross-platform **design tokens** + neutral **contracts/types/utils**. `@onyx-ai/shared/native`
   is **RN-only** (NativeWind theme/vars/typography); cross-platform types go in `/contracts`, never `/native`.
-- Grow it **extract-on-proven-reuse**, not upfront. The mobile **chat** layer is written natively in
-  `mobile/src/chat/` (NOT shared) by decision. The NDJSON parser, message tree,
-  `processRawChatHistory`, and the chat/streaming/file contracts exist in both web and mobile, and
-  nothing chat-related goes into `@onyx-ai/shared`. Reason: sharing even the small parser needs a shared
-  util, a web re-point, a jest module mapper, and `dist` build coupling, which costs more than the
-  duplicated code. The backend NDJSON framing and message threading are stable, so drift risk is low;
-  extract again if drift occurs. Keep `@onyx-ai/shared` for design tokens and neutral contracts.
+- Share platform-neutral code when real callers need the same contract. Web, mobile, and the widget
+  use the shared ACP notification reader and tool status rules for live chat, resume, and history.
+  Mobile owns its message tree, packet types, and React Native renderers in `mobile/src/chat/`.
 - Editing the shared package requires rebuilding its `dist` (`bun run build` in `web/lib/shared`); the
   mobile `file:` dep consumes `dist`. Web jest resolves it from `src` via a `moduleNameMapper`.
 - Mobile's `preinstall` hook builds `web/lib/shared`'s `dist` (a git-ignored artifact) **before** bun

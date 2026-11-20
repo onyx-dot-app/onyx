@@ -18,7 +18,7 @@ import {
   renderApprovalCard,
 } from "../src/services/approval-card";
 import type { PendingWait } from "../src/services/questions";
-import { processPacket } from "../src/services/stream-parser";
+import { isStreamError, processPacket } from "../src/services/stream-parser";
 import type {
   ChatSessionDetail,
   ChatStream,
@@ -71,6 +71,15 @@ function streamingMessage(approvals: ApprovalEntry[]): ChatMessage {
     isStreaming: true,
     approvals,
   };
+}
+
+function historyResponse<T extends { packets: unknown[][] }>(page: T): Response {
+  return Response.json({
+    ...page,
+    packets: page.packets.map((row) => row.map((packet) => ({
+      jsonrpc: "2.0", method: "_onyx/replay", params: { sessionId: "session", packet },
+    }))),
+  });
 }
 
 describe("approval packets", () => {
@@ -384,14 +393,57 @@ describe("approval decisions", () => {
     await expect(api.submitApprovalDecision("a", "reject")).rejects.toThrow();
   });
 
+  const encodeChatPacket = (packet: unknown) =>
+    JSON.stringify({jsonrpc:"2.0", method:"_onyx/replay",params:{sessionId:"s",packet}});
+
+  it("continues the answer after a tool reports an error", async () => {
+    const placement = { turn_index: 0 };
+    const update = (body: object) => JSON.stringify({
+      jsonrpc: "2.0", method: "session/update", params: { sessionId: "s", update: body },
+    });
+    mockFetch(async () => new Response([
+      update({
+        sessionUpdate: "tool_call_update", toolCallId: "call", status: "failed",
+        _meta: { onyx: { placement, packet: { type: "error" } } },
+      }),
+      encodeChatPacket({ placement, obj: { type: "message_start" } }),
+      update({
+        sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Recovered" },
+        _meta: { onyx: { placement } },
+      }),
+    ].join("\n")));
+    const api = new ApiService("https://onyx.test/api", async () => "key");
+    let message: ChatMessage | null = null;
+    for await (const packet of api.resumeStream("s", new AbortController().signal)) {
+      if ("next_cursor" in packet) continue;
+      expect(isStreamError(packet)).toBe(false);
+      message = processPacket(packet, message).message;
+    }
+    expect(message?.content).toBe("Recovered");
+  });
+
+  it("preserves the backend error when replaying a failed stream", async () => {
+    mockFetch(async () => Response.json({
+      jsonrpc: "2.0",
+      method: "_onyx/error",
+      params: { sessionId: "s", packet: { error: "Model unavailable" } },
+    }));
+    const api = new ApiService("https://onyx.test/api", async () => "key");
+    for await (const packet of api.resumeStream("s", new AbortController().signal)) {
+      expect(packet).toEqual({ obj: { type: "error", exception: "Model unavailable" } });
+      return;
+    }
+    throw new Error("Missing stream failure");
+  });
+
   it("replays a running response with its cursors", async () => {
     const urls: string[] = [];
     mockFetch(async (input: RequestInfo | URL) => {
       urls.push(String(input));
       return new Response(
         [
-          JSON.stringify({ stream_id: 1, next_cursor: 2, replay_complete: true }),
-          JSON.stringify({ placement: { turn_index: 0 }, obj: request("a") }),
+          encodeChatPacket({ stream_id: 1, next_cursor: 2, replay_complete: true }),
+          encodeChatPacket({ placement: { turn_index: 0 }, obj: request("a") }),
           "",
         ].join("\n")
       );
@@ -411,8 +463,8 @@ describe("approval decisions", () => {
       // drained
     }
     expect(urls).toEqual([
-      "https://onyx.test/api/chat/chat-session/s/resume-stream?cursor=0",
-      "https://onyx.test/api/chat/chat-session/s/resume-stream?stream_id=1&cursor=2",
+      "https://onyx.test/api/chat/chat-session/s/resume-stream?cursor=0&protocol_version=2",
+      "https://onyx.test/api/chat/chat-session/s/resume-stream?stream_id=1&cursor=2&protocol_version=2",
     ]);
     expect(packets).toEqual([
       { stream_id: 1, next_cursor: 2, replay_complete: true },
@@ -425,12 +477,12 @@ describe("approval decisions", () => {
       async () =>
         new Response(
           [
-            JSON.stringify({ obj: request("a") }),
-            JSON.stringify({
+            encodeChatPacket({ obj: request("a") }),
+            encodeChatPacket({
               placement: { turn_index: 0 },
               obj: { type: "replay_end" },
             }),
-            JSON.stringify({ obj: { type: "message_start" } }),
+            encodeChatPacket({ obj: { type: "message_start" } }),
           ].join("\n")
         )
     );
@@ -1410,7 +1462,7 @@ describe("widget while a request waits", () => {
         return Response.json({ is_processing: false });
       if (url.includes("/get-chat-session/"))
         // Answer 2 has the abandoned question 3 and the selected question 5.
-        return Response.json({
+        return historyResponse({
           messages: [
             { message_id: 1, message_type: "user", latest_child_message: 2 },
             {
@@ -1598,7 +1650,7 @@ describe("widget while a request waits", () => {
           outcome: "approved",
         },
       };
-      return Response.json({
+      return historyResponse({
         messages: [
           { message_id: 6, message_type: "user", latest_child_message: 7 },
           { message_id: 7, message_type: "assistant", parent_message: 6 },
@@ -1778,7 +1830,7 @@ describe("widget while a request waits", () => {
       if (url.endsWith("/status"))
         return Response.json({ is_processing: false });
       if (url.includes("/get-chat-session/")) {
-        return Response.json({
+        return historyResponse({
           messages: [
             { message_id: 6, message_type: "user", latest_child_message: 7 },
             { message_id: 7, message_type: "assistant" },
@@ -1811,7 +1863,7 @@ describe("widget while a request waits", () => {
     }
 
     expect(urls.at(-1)).toBe(
-      "https://onyx.test/api/chat/get-chat-session/session"
+      "https://onyx.test/api/chat/get-chat-session/session?protocol_version=2"
     );
     expect(widget["isStreaming"]).toBe(false);
     expect(widget["messages"]).toHaveLength(1);
@@ -1835,7 +1887,7 @@ describe("widget while a request waits", () => {
       if (url.endsWith("/status"))
         return Response.json({ is_processing: false });
       if (url.includes("/get-chat-session/")) {
-        return Response.json({
+        return historyResponse({
           messages: [
             { message_id: 6, message_type: "user", latest_child_message: 7 },
             { message_id: 7, message_type: "assistant", parent_message: 6 },
@@ -1873,7 +1925,7 @@ describe("widget while a request waits", () => {
   });
 
   /** Restores a stored transcript whose last question has no answer. */
-  async function restoreUnanswered(session: unknown) {
+  async function restoreUnanswered<T extends { packets: unknown[][] }>(session: T) {
     const { stored, saved, restore } = fakeSessionStorage();
     const messages: ChatMessage[] = [
       { id: 1, role: "user", content: "first", timestamp: 0 },
@@ -1891,7 +1943,7 @@ describe("widget while a request waits", () => {
       const url = String(input);
       if (url.endsWith("/status"))
         return Response.json({ is_processing: false });
-      if (url.includes("/get-chat-session/")) return Response.json(session);
+      if (url.includes("/get-chat-session/")) return historyResponse(session);
       return new Response("none", { status: 404 });
     });
     const widget = restoredWidget();
@@ -1993,7 +2045,7 @@ describe("widget while a request waits", () => {
       if (url.endsWith("/status"))
         return Response.json({ is_processing: false });
       if (url.includes("/get-chat-session/"))
-        return Response.json({
+        return historyResponse({
           messages: [
             { message_id: 1, message_type: "user", latest_child_message: 2 },
             {

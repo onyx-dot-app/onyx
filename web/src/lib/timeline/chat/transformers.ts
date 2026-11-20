@@ -1,3 +1,4 @@
+import { latestToolStatus } from "@onyx-ai/shared/acp";
 import { GroupedPacket } from "@/lib/timeline/chat/hooks/packetProcessor";
 import {
   CodeModeProgram,
@@ -79,7 +80,11 @@ export function groupStepsByTurn(steps: TransformedStep[]): TurnGroup[] {
 }
 
 function chatStepStatus(step: TransformedStep): TimelineEntryStatus {
-  // An error packet fails a step, and so does Python output on stderr.
+  const status = latestToolStatus(step.packets);
+  if (status === "failed") return "error";
+  if (status === "completed") return "done";
+  if (status) return "streaming";
+  // Legacy rows carry display details only.
   const failed = step.packets.some(
     (packet) =>
       packet.obj.type === PacketType.ERROR ||

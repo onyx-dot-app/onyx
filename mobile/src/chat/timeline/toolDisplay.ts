@@ -1,3 +1,4 @@
+import { latestToolStatus } from "@onyx-ai/shared/acp";
 // Pure tool key/name/completion helpers. Port of web's toolDisplayHelpers (its JSX icon factory is
 // deferred to toolIcons.ts).
 
@@ -10,13 +11,18 @@ import {
 import { isGroupEndPacket } from "@/chat/timeline/packetHelpers";
 
 export function hasToolError(packets: Packet[]): boolean {
-  return packets.some((p) => p.obj.type === PacketType.ERROR);
+  const status = latestToolStatus(packets);
+  return status
+    ? status === "failed"
+    : packets.some((p) => p.obj.type === PacketType.ERROR);
 }
 
-// A group is complete once a parent-level SECTION_END or ERROR arrives. Nested calls end with
-// their own SECTION_END and do not count.
+// Legacy snapshots record completion with a parent section end or error.
 export function isToolComplete(packets: Packet[]): boolean {
-  return packets.some(isGroupEndPacket);
+  const status = latestToolStatus(packets);
+  return status
+    ? status === "completed" || status === "failed"
+    : packets.some(isGroupEndPacket);
 }
 
 export function getToolKey(turn_index: number, tab_index: number): string {

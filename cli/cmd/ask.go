@@ -448,6 +448,10 @@ func (r *askRun) render(event models.StreamEvent) error {
 		if progress {
 			fmt.Fprintf(ios.ErrOut, "\033[2mThinking...\033[0m\n")
 		}
+	case models.ToolStatusEvent:
+		if progress && e.Status == "failed" {
+			fmt.Fprintln(ios.ErrOut, "Tool call failed.")
+		}
 	case models.ToolStartEvent:
 		if progress && e.ToolName != "" {
 			fmt.Fprintf(ios.ErrOut, "\033[2mUsing %s...\033[0m\n", sanitize.Terminal(e.ToolName))

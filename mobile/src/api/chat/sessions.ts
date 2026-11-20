@@ -1,3 +1,4 @@
+import { readChatHistory, type WireChatHistory } from "@onyx-ai/shared/acp";
 import { useMemo } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 
@@ -35,12 +36,12 @@ function withResponseIds(stream: ChatStream | null | undefined) {
 export async function getChatSession(
   sessionId: string,
 ): Promise<BackendChatSession> {
-  const session = await apiFetch<BackendChatSession>(
-    `/chat/get-chat-session/${sessionId}`,
+  const session = await apiFetch<WireChatHistory<BackendChatSession>>(
+    `/chat/get-chat-session/${sessionId}?protocol_version=2`,
     { timeoutMs: SESSION_CONTROL_TIMEOUT_MS },
   );
   return {
-    ...session,
+    ...readChatHistory<BackendChatSession>(sessionId, session),
     current_stream: withResponseIds(session.current_stream),
   };
 }

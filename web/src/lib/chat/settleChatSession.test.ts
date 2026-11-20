@@ -1810,7 +1810,16 @@ describe("with a scripted fetch", () => {
               ];
               stream.enqueue(
                 new TextEncoder().encode(
-                  lines.map((line) => JSON.stringify(line) + "\n").join("")
+                  lines
+                    .map(
+                      (packet) =>
+                        JSON.stringify({
+                          jsonrpc: "2.0",
+                          method: "_onyx/replay",
+                          params: { sessionId: "session", packet },
+                        }) + "\n"
+                    )
+                    .join("")
                 )
               );
             },

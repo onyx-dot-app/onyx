@@ -111,17 +111,17 @@ func TestResumeReplaysTheRunningResponse(t *testing.T) {
 	var path string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path = r.URL.RequestURI()
-		fmt.Fprintln(w, `{"user_message_id":1,"reserved_assistant_message_id":2}`)
-		fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"tool_approval_request","approval_id":"a1","tool_name":"lookup"}}`)
-		fmt.Fprintln(w, `{"stream_id":2,"next_cursor":1,"replay_complete":true}`)
-		fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"stop"}}`)
-		fmt.Fprintln(w, `{"stream_id":2,"next_cursor":2,"replay_complete":true}`)
+		fmt.Fprintln(w, `{"jsonrpc":"2.0","method":"_onyx/message_ids","params":{"sessionId":"session-1","packet":{"user_message_id":1,"reserved_assistant_message_id":2}}}`)
+		fmt.Fprintln(w, `{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-1","update":{"_meta":{"onyx":{"placement":{"turn_index":0},"packet":{"type":"tool_approval_request","approval_id":"a1","tool_name":"lookup"}}},"sessionUpdate":"tool_call_update","toolCallId":"r/tool/c","status":"pending"}}}`)
+		fmt.Fprintln(w, `{"jsonrpc":"2.0","method":"_onyx/stream_cursor","params":{"sessionId":"session-1","packet":{"stream_id":2,"next_cursor":1,"replay_complete":true}}}`)
+		fmt.Fprintln(w, `{"jsonrpc":"2.0","method":"_onyx/stop","params":{"sessionId":"session-1","packet":{"placement":{"turn_index":0},"obj":{"type":"stop"}}}}`)
+		fmt.Fprintln(w, `{"jsonrpc":"2.0","method":"_onyx/stream_cursor","params":{"sessionId":"session-1","packet":{"stream_id":2,"next_cursor":2,"replay_complete":true}}}`)
 	}))
 	defer server.Close()
 
 	events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1", nil, 0))
 
-	if path != "/api/chat/chat-session/session-1/resume-stream?cursor=0" {
+	if path != "/api/chat/chat-session/session-1/resume-stream?cursor=0&protocol_version=2" {
 		t.Fatalf("path = %q", path)
 	}
 	if _, ok := events[1].(models.ToolApprovalRequestEvent); !ok {
@@ -136,17 +136,17 @@ func TestResumeFromCursorDropsTheCutBatch(t *testing.T) {
 	var path string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path = r.URL.RequestURI()
-		fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"message_delta","content":"kept"}}`)
-		fmt.Fprintln(w, `{"stream_id":7,"next_cursor":4,"replay_complete":true}`)
+		fmt.Fprintln(w, `{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-1","update":{"_meta":{"onyx":{"placement":{"turn_index":0}}},"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"kept"}}}}`)
+		fmt.Fprintln(w, `{"jsonrpc":"2.0","method":"_onyx/stream_cursor","params":{"sessionId":"session-1","packet":{"stream_id":7,"next_cursor":4,"replay_complete":true}}}`)
 		// The connection ends inside the next batch.
-		fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"message_delta","content":"cut"}}`)
+		fmt.Fprintln(w, `{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-1","update":{"_meta":{"onyx":{"placement":{"turn_index":0}}},"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"cut"}}}}`)
 	}))
 	defer server.Close()
 
 	streamID := 7
 	events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1", &streamID, 3))
 
-	if path != "/api/chat/chat-session/session-1/resume-stream?cursor=3&stream_id=7" {
+	if path != "/api/chat/chat-session/session-1/resume-stream?cursor=3&protocol_version=2&stream_id=7" {
 		t.Fatalf("path = %q", path)
 	}
 	if len(events) != 2 {

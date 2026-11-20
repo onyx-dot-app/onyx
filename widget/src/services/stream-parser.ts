@@ -299,8 +299,10 @@ export function processPacket(
       return { message: currentMessage };
 
     case "error":
-      // Error occurred during streaming - throw to fail fast
-      throw new StreamErrorPacket(`Stream error: ${obj.exception}`);
+      if (isStreamError(packet)) {
+        throw new StreamErrorPacket(`Stream error: ${obj.exception}`);
+      }
+      return { message: currentMessage, status: "Tool failed" };
 
     default:
       // Unknown packet type
@@ -332,5 +334,5 @@ export function isStreamComplete(packet: Packet): boolean {
  * Check if a packet is an error
  */
 export function isStreamError(packet: Packet): boolean {
-  return "type" in packet.obj && packet.obj.type === "error";
+  return !packet.acpTool && "type" in packet.obj && packet.obj.type === "error";
 }

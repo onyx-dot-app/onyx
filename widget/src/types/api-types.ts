@@ -2,7 +2,10 @@
  * API Types - Mirror backend streaming_models.py packet structure
  */
 
+import type { ChatToolUpdate } from "@onyx-acp";
+
 export interface Packet {
+  acpTool?: ChatToolUpdate;
   placement?: Record<string, any>;
   obj: PacketType;
 }
@@ -321,6 +324,7 @@ export interface ChatSessionStatus {
 }
 
 export interface SendMessageRequest {
+  protocol_version: 2;
   message: string;
   chat_session_id?: string;
   parent_message_id?: number | null;

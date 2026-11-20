@@ -51,7 +51,7 @@ export type AskEvent =
   // The text so far was narration before a tool step; the answer restarts.
   | { kind: "restart"; text: string }
   | { kind: "citations"; docs: Citation[] }
-  | { kind: "needsApproval"; tool: string | null }
+  | { kind: "needsInput"; tool: string | null }
   | { kind: "done" }
   // The server surely did not take the question; an error follows.
   | { kind: "notSent" }
