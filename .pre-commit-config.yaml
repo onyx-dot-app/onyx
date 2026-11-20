@@ -376,8 +376,9 @@ repos:
       - id: desktop-v2-update-feed
         name: every OS desktop-v2 builds has an update feed entry
         description: "Fail a desktop-v2 build OS with no latest.json platform entry in the release"
-        language: system
-        entry: python3 tools/desktop_v2/check_update_feed.py
+        language: python
+        entry: python tools/desktop_v2/check_update_feed.py
+        additional_dependencies: [PyYAML==6.0.3]
         pass_filenames: false
         files: ^(\.github/workflows/desktop-v2\.yml|tools/desktop_v2/.*)$
         stages: [pre-commit]
