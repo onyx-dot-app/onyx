@@ -587,11 +587,17 @@ export interface SlackBotTokens {
 }
 
 /* EE Only Types */
+/** A member as a user group lists it: identity and access, no preferences. */
+export type UserGroupMember = Pick<
+  User,
+  "id" | "email" | "is_active" | "is_superuser" | "is_verified" | "account_type"
+>;
+
 export interface UserGroup {
   id: number;
   name: string;
   // Empty when the list was fetched without members; use member_count.
-  users: User[];
+  users: UserGroupMember[];
   member_count: number;
   active_member_count: number;
   // ids of members who manage this group (drives the Make/Revoke Manager toggle)

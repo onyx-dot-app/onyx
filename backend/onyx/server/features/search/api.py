@@ -36,6 +36,7 @@ from onyx.db.models import Persona, User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_tools
+from onyx.db.user_preferences import fetch_user_preferences
 from onyx.document_index.factory import get_default_document_index
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -133,7 +134,9 @@ def search(
             ),
         )
     elif persona is not None:
-        llm = get_llm_for_persona(persona, user)
+        llm = get_llm_for_persona(
+            persona, user, fetch_user_preferences(user, db_session).chat_defaults
+        )
     else:
         llm = get_default_llm()
 

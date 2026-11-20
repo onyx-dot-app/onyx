@@ -56,6 +56,7 @@ def db_session() -> Generator[Session, None, None]:
                     "persona",
                     "user_group",
                     "user",
+                    "user_preferences",
                 )
             ],
         )
