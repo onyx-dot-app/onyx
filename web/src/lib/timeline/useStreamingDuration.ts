@@ -8,7 +8,8 @@ import { useState, useEffect, useRef } from "react";
  *
  * @param isStreaming - Whether streaming is currently active
  * @param startTime - Timestamp when streaming started (from Date.now())
- * @returns Elapsed seconds since streaming started; holds its value once streaming stops
+ * @returns Elapsed seconds since streaming started; once streaming stops, the
+ *   time at which it stopped
  */
 export function useStreamingDuration(
   isStreaming: boolean,
@@ -19,13 +20,17 @@ export function useStreamingDuration(
   const lastElapsedRef = useRef<number>(0);
 
   useEffect(() => {
-    if (!isStreaming || !startTime) {
-      // Don't reset when stopping - preserve last calculated value
-      // Only reset when explicitly given no start time
-      if (!startTime) {
-        setElapsedSeconds(0);
-        lastElapsedRef.current = 0;
-      }
+    if (!startTime) {
+      setElapsedSeconds(0);
+      lastElapsedRef.current = 0;
+      return;
+    }
+    if (!isStreaming) {
+      // Read the clock once more: a hidden tab pauses animation frames, so
+      // the last frame's count can be stale.
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      lastElapsedRef.current = elapsed;
+      setElapsedSeconds(elapsed);
       return;
     }
 

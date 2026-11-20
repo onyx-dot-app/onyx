@@ -113,9 +113,15 @@ export function RunCard<S extends RunCardStep>({
 
   // A run that works here is timed in the browser; a saved run shows the
   // server's duration.
-  const [startedAt] = useState<number | undefined>(() =>
+  const [startedAt, setStartedAt] = useState<number | undefined>(() =>
     isRunning ? (streamingStartTime ?? Date.now()) : undefined
   );
+  // A card that mounted settled starts its timer when its run starts here.
+  useEffect(() => {
+    if (isRunning && startedAt === undefined) {
+      setStartedAt(streamingStartTime ?? Date.now());
+    }
+  }, [isRunning, startedAt, streamingStartTime]);
   const elapsedSeconds = useStreamingDuration(isRunning, startedAt);
   const finishedSeconds =
     startedAt !== undefined ? Math.max(1, elapsedSeconds) : durationSeconds;
