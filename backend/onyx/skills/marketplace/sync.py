@@ -226,15 +226,15 @@ def sync_marketplace(
         )
     keep_alive()
     staged = _stage(entries, set(plan.create) | set(plan.add_version))
-    keep_alive()
     file_store = get_default_file_store()
-    if lock is not None and not lock.owned():
-        # The lock expired during a long read; a newer sync may have written.
-        logger.warning("Marketplace sync %s lost its lock", marketplace_id)
-        for content in staged.values():
-            delete_bundle_blob(file_store, content.bundle_file_id)
-        return MarketplaceSyncResult(status=MarketplaceSyncStatus.FAILED)
     try:
+        keep_alive()
+        if lock is not None and not lock.owned():
+            # The lock expired during a long read; a newer sync may have written.
+            logger.warning("Marketplace sync %s lost its lock", marketplace_id)
+            for content in staged.values():
+                delete_bundle_blob(file_store, content.bundle_file_id)
+            return MarketplaceSyncResult(status=MarketplaceSyncStatus.FAILED)
         with get_session_with_current_tenant() as db_session:
             login = fetch_user_by_id(db_session, login_user_id)
             result = apply_marketplace_sync__no_commit(

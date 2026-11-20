@@ -265,8 +265,8 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
   one user through `POST /manage/admin/transfer-private-plugins`, then
   deletes. Published plugins stay with no author ([[skills#plugin-tables]]).
   A personal GitHub marketplace of the user is removed with its plugins
-  (copies of the repository); `delete_user_from_db__no_commit` returns their
-  bundle files for the caller to delete after the commit
+  (copies of the repository); `delete_user_from_db__no_commit` returns a
+  `UserDeleteCleanup` that `finish_user_delete` runs after the commit
   ([[skills#github-marketplaces]]).
 - **Anonymous access can turn itself off.** `auth/users.py` reads
   `anonymous_user_enabled` from the same cache key as the settings store, and

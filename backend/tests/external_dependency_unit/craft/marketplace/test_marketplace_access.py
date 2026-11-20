@@ -1,4 +1,5 @@
 from typing import Any
+from unittest.mock import patch
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,6 +17,7 @@ from onyx.db.plugin_access import get_visible_plugin_ids
 from onyx.db.skill import list_chat_skills
 from onyx.db.users import delete_user_from_db
 from onyx.skills.marketplace import sync
+from tests.external_dependency_unit.craft.db_helpers import make_sandbox
 from tests.external_dependency_unit.craft.fake_github import FakeGitHub
 from tests.external_dependency_unit.craft.marketplace.helpers import (
     OWNER,
@@ -135,13 +137,27 @@ def test_user_delete_removes_their_personal_marketplace(
     connections: Connections,  # noqa: ARG001
     marketplace_ids: list[Any],
 ) -> None:
-    owner = users[0]
+    owner, shared, _ = users
     fake_github.push(OWNER, REPO, plugin_files("alpha"))
     marketplace = make_marketplace(
         db_session, marketplace_ids, login=owner, owner=owner
     )
     sync.sync_marketplace(marketplace.id)
     plugin = synced_plugins(db_session, marketplace.id)["alpha"]
+    apply_plugin_access_change__no_commit(
+        [plugin.id],
+        PluginAccessChange(
+            user_grants=(
+                PluginUserGrant(
+                    user_id=shared.id, permission=SkillSharePermission.VIEWER
+                ),
+            )
+        ),
+        None,
+        db_session,
+    ).raise_first_failure()
+    make_sandbox(db_session, shared)
+    db_session.commit()
     bundle_ids = [
         file_id
         for file_id in db_session.scalars(
@@ -156,10 +172,12 @@ def test_user_delete_removes_their_personal_marketplace(
     row = db_session.get(User, owner.id)
     assert row is not None
 
-    delete_user_from_db(row, db_session)
+    with patch("onyx.skills.push.push_skills_and_commit") as push:
+        delete_user_from_db(row, db_session)
 
     db_session.expire_all()
     assert db_session.get(User, owner.id) is None
     assert get_github_marketplace(marketplace.id, db_session) is None
     assert db_session.get(Plugin, plugin.id) is None
     assert existing_files(db_session, bundle_ids) == set()
+    assert [set(call.args[0]) for call in push.call_args_list] == [{shared.id}]

@@ -965,7 +965,9 @@ the app from the same rule
     and install settings still change. `db/skill.py:may_delete_skill` takes
     `synced`, so `SkillResponse.can_delete` is false for a synced plugin. A user delete removes the user's personal
     marketplaces and their plugins (`db/users.py:delete_user_from_db__no_commit`
-    returns their bundle files, which the caller deletes after the commit).
+    returns a `UserDeleteCleanup`; after the commit, `finish_user_delete`
+    deletes their bundle files and pushes skills to the users who could see
+    them).
     The routes are in
     `server/features/skill/marketplace_api.py`, under `/marketplaces`;
     they authorize before any GitHub call. The web client is

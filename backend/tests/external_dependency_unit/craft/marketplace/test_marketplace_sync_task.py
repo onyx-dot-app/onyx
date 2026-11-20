@@ -204,6 +204,38 @@ def test_a_sync_that_lost_its_lock_keeps_the_newer_syncing_key(
         get_cache_backend().delete(f"marketplace_syncing:{marketplace.id}")
 
 
+def test_a_failed_renewal_after_staging_deletes_the_staged_files(
+    db_session: Session,
+    users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    marketplace_ids: list[Any],
+    staged_file_ids: list[str],
+) -> None:
+    owner = users[0]
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+    lock = _hold_lock(marketplace.id)
+
+    def extend(_ttl: float) -> None:
+        if staged_file_ids:
+            raise ConnectionError("cache down")
+
+    try:
+        with (
+            patch.object(lock, "extend", side_effect=extend),
+            pytest.raises(ConnectionError),
+        ):
+            sync.sync_marketplace(marketplace.id, lock)
+    finally:
+        lock.release()
+    assert staged_file_ids
+    assert existing_files(db_session, staged_file_ids) == set()
+    assert synced_plugins(db_session, marketplace.id) == {}
+
+
 def test_deleted_marketplace_ends_the_task(
     db_session: Session,
     users: tuple[User, User, User],
