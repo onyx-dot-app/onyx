@@ -69,6 +69,32 @@ fn startup_failed(error: &str) -> ! {
     std::process::exit(1)
 }
 
+/// Writes `log` records to `onyx.log` in the app's log directory. The file
+/// rotates at 1 MB and four older files are kept. The app runs without a log
+/// file if the directory cannot be used.
+fn init_logging(app: &tauri::AppHandle) {
+    use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
+    let builder = tauri_plugin_log::Builder::new()
+        .clear_targets()
+        .target(Target::new(TargetKind::LogDir {
+            file_name: Some("onyx".into()),
+        }))
+        .level(log::LevelFilter::Info)
+        .max_file_size(1_000_000)
+        .rotation_strategy(RotationStrategy::KeepSome(4));
+    #[cfg(debug_assertions)]
+    let builder = builder.target(Target::new(TargetKind::Stderr));
+    // Only the logger: the plugin's commands stay unregistered.
+    match builder.split(app) {
+        Ok((_plugin, level, logger)) => {
+            if let Err(e) = tauri_plugin_log::attach_logger(level, logger) {
+                eprintln!("could not start logging: {e}");
+            }
+        }
+        Err(e) => eprintln!("could not open the log file: {e}"),
+    }
+}
+
 fn main() {
     let api = api::Api::new().unwrap_or_else(|e| startup_failed(&e));
     let builder = tauri::Builder::default()
@@ -96,6 +122,7 @@ fn main() {
     let builder = builder.plugin(tauri_plugin_autostart::Builder::new().build());
     let app = builder
         .setup(|app| {
+            init_logging(app.handle());
             let config_path = app.path().app_config_dir()?.join("config.json");
             app.manage(offline::Offline::default());
             let handle = app.handle();
