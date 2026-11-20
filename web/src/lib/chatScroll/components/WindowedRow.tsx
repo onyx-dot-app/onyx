@@ -32,6 +32,20 @@ export interface WindowedRowProps {
  * A row that holds focus stays mounted. Outside a ChatScrollContainer, the
  * row always renders its content.
  */
+// The rows of each list (keyed by its height cache) whose content is mounted.
+// A row that remounts, such as when an older page regroups the turns, starts
+// mounted again instead of showing its placeholder until it is observed.
+const mountedRowsByList = new WeakMap<Map<string, number>, Set<string>>();
+
+function mountedRows(heightCache: Map<string, number>): Set<string> {
+  let rows = mountedRowsByList.get(heightCache);
+  if (!rows) {
+    rows = new Set();
+    mountedRowsByList.set(heightCache, rows);
+  }
+  return rows;
+}
+
 export default function WindowedRow({
   id,
   className,
@@ -45,10 +59,19 @@ export default function WindowedRow({
   const observeNearViewport = scrollContainer?.observeNearViewport;
   const rowRef = useRef<HTMLDivElement>(null);
   const hasFocusRef = useRef(false);
-  const isIntersectingRef = useRef(initiallyMounted);
-  const [nearViewport, setNearViewport] = useState(initiallyMounted);
+  const [startsMounted] = useState(
+    () => initiallyMounted || mountedRows(heightCache).has(id)
+  );
+  const isIntersectingRef = useRef(startsMounted);
+  const [nearViewport, setNearViewport] = useState(startsMounted);
 
   const mounted = !scrollContainer || pinned || nearViewport;
+
+  // An unmount keeps the record, so the row's next mount starts mounted.
+  useEffect(() => {
+    if (mounted) mountedRows(heightCache).add(id);
+    else mountedRows(heightCache).delete(id);
+  }, [mounted, heightCache, id]);
 
   useEffect(() => {
     const row = rowRef.current;
