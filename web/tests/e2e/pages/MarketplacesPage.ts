@@ -49,6 +49,15 @@ export class MarketplacesPage {
       ).toBeVisible();
   }
 
+  async showUnusable(count: number): Promise<void> {
+    await this.addDialog
+      .getByRole("button", {
+        name: `Show ${count} ${count === 1 ? "entry" : "entries"} that Onyx cannot use`,
+        exact: true,
+      })
+      .click();
+  }
+
   async add(): Promise<void> {
     await this.addDialog
       .getByRole("button", { name: "Add marketplace", exact: true })

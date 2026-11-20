@@ -21,7 +21,13 @@ test.describe("GitHub marketplaces", () => {
       "main",
       "review-kit",
       "Will install",
-      "Not supported in Onyx.",
+      "1 Ready · 0 Cannot install · 1 Not supported",
+    ]);
+    await marketplaces.showUnusable(1);
+    await marketplaces.expectResolved([
+      "npm-kit",
+      "Not supported",
+      "Onyx cannot install a plugin from a 'npm' source.",
     ]);
     await marketplaces.add();
 
