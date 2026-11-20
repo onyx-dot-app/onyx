@@ -183,8 +183,11 @@ def notify_admins_of_cluster_issues() -> None:
                     dismiss_notifications_by_additional_data(
                         NotificationType.OPENSEARCH_CLUSTER_ISSUE, row, db_session
                     )
-        db_session.commit()
+        # The state first: if saving it fails, the dismissals roll back with
+        # the session. If the commit then fails, the rows stay open and the
+        # next successful read dismisses them.
         cache.set(STATE_KEY, state.model_dump_json(), ex=STATE_TTL_SECONDS)
+        db_session.commit()
 
         admin_ids = [admin.id for admin in get_active_admin_users(db_session)]
         for kind, issue in current.items():

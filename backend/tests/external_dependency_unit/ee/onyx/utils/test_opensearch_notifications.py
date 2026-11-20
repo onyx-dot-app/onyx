@@ -20,6 +20,7 @@ from ee.onyx.utils.opensearch_notifications import (
     notify_admins_of_cluster_issues,
 )
 from onyx.cache.factory import get_shared_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.enums import NotificationSeverity
 from onyx.db.models import Notification, User
@@ -300,3 +301,36 @@ def test_a_failed_dismissal_is_retried_on_the_next_check(
     _check()
     [red] = _notifications(db_session, admin.id)
     assert red.dismissed
+
+
+def test_a_failed_state_save_does_not_hide_a_returning_issue(
+    db_session: Session,
+    cluster: list[ClusterStatus | None],
+    make_user: Callable[[str, bool], User],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = make_user("os_notif_save_admin", True)
+    cluster.extend([_status(RED), _status(), _status(RED)])
+    _check()
+
+    cache_class = type(get_shared_cache_backend())
+    real_set = cache_class.set
+
+    def failing_set(
+        self: CacheBackend,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> None:
+        if key == STATE_KEY:
+            raise ConnectionError("cache unavailable")
+        real_set(self, key, value, ex)
+
+    monkeypatch.setattr(cache_class, "set", failing_set)
+    # The cluster recovers, but the state cannot be saved: nothing is dismissed.
+    with pytest.raises(ConnectionError):
+        _check()
+    monkeypatch.setattr(cache_class, "set", real_set)
+    # Red is back, and an admin still has an open alert for it.
+    _check()
+    assert [n for n in _notifications(db_session, admin.id) if not n.dismissed]
