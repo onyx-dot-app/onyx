@@ -725,7 +725,10 @@ up its own branding.
     (wheel, touch, scroll keys, a focus move into the view), or while a pointer
     is held on the view; each such move restarts the 600ms, so a fling stays the
     user's while it moves. Then the position sets the mode. A glide ignores
-    input from before it started. Any other move is layout (Firefox clamps the
+    input from before it started, and a send's glide stops at the user message
+    of a turn taller than the view, which then reads. A move that keeps the
+    distance from the end is native anchoring, not the user, even with a
+    pointer held. Any other move is layout (Firefox clamps the
     position while content briefly shrinks, anchoring adjusts, a glide runs),
     and only a `following` view reacts, by returning to the end. The one
     exception: with auto-scroll off while a reply runs, growth that leaves the
