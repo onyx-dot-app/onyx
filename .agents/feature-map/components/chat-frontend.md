@@ -436,7 +436,7 @@ no length. Text over 200,000 characters shows without highlighting, and
 markdown over it shows as source. Nothing makes an object URL. PDF.js loads only for a PDF, from
 the build's `/pdfjs/` assets, with `isEvalSupported` off. A Word file renders
 through `lib/docx/renderDocx.ts`, which sanitizes it, into a shadow root.
-Markdown renders without raw HTML. Craft's previewers read sandbox paths, not
+Markdown shows raw HTML as text. Craft's previewers read sandbox paths, not
 chat files. Published files belong to the chat, not to a branch.
 `lib/chat/publishedFiles.ts:chatPublishedFiles` owns the Files list: the
 latest load's `published_files`, then the files that packets published after
