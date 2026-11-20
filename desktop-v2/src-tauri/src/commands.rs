@@ -614,6 +614,13 @@ pub fn retry_connection(app: AppHandle) {
     crate::offline::retry_now(&app);
 }
 
+/// Windows and Linux: sizes a local window to its content's height, in
+/// logical pixels, inside the screen.
+#[tauri::command]
+pub fn fit_window(window: tauri::WebviewWindow, content_height: f64) -> Result<(), String> {
+    crate::windows::fit_to_content(&window, content_height)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{decode_component, selected_agent};
