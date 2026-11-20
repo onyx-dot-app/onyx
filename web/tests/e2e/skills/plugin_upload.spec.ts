@@ -143,11 +143,11 @@ test.describe("Plugin upload", () => {
         mcpServers: servers(),
       })
     );
-    await plugins.expectSaveLine(`Updates ${name} to v2`);
+    await plugins.expectSaveLine(`Updates ${name} to Onyx version 2`);
     await plugins.setSaveAsNew(true);
     await plugins.expectSaveLine(`New plugin: ${name}-2`);
     await plugins.setSaveAsNew(false);
-    await plugins.expectSaveLine(`Updates ${name} to v2`);
+    await plugins.expectSaveLine(`Updates ${name} to Onyx version 2`);
     expect(await plugins.saveUpload()).toBe(firstId);
     await plugins.expectTab("Skills · 1");
   });

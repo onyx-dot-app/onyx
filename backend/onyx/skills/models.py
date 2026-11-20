@@ -12,12 +12,25 @@ from pydantic import (
     field_validator,
 )
 
+from onyx.utils.url import McpUrlProblem
+
 SKILL_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SKILL_NAME_MAX_LENGTH: Final = 64
 SkillName = Annotated[
     str, Field(pattern=SKILL_NAME_PATTERN, max_length=SKILL_NAME_MAX_LENGTH)
 ]
 GITHUB_SKILL_MAX_COUNT: Final[int] = 500
+# Frontmatter fields Onyx does not read. A bad value is dropped, not refused.
+UNUSED_FRONTMATTER_FIELDS: Final = frozenset(
+    {"license", "compatibility", "metadata", "allowed-tools"}
+)
+_BIDI_CONTROLS: Final[re.Pattern[str]] = re.compile("[\u202a-\u202e\u2066-\u2069]")
+
+
+def strip_bidi_controls(value: str) -> str:
+    """Remove the bidi embedding, override and isolate characters, which can
+    make shown text read differently from what it holds."""
+    return _BIDI_CONTROLS.sub("", value)
 
 
 class SkillMetadata(BaseModel):
@@ -34,8 +47,10 @@ class SkillMetadata(BaseModel):
     description: str
     license: str | None = None
     compatibility: str | None = None
-    metadata: dict[str, str] | None = None
-    allowed_tools: str | None = Field(default=None, alias="allowed-tools")
+    # Onyx does not read these two. Claude Code accepts a list for
+    # allowed-tools and nested values in metadata.
+    metadata: dict[str, Any] | None = None
+    allowed_tools: str | list[str] | None = Field(default=None, alias="allowed-tools")
 
     @field_validator("name")
     @classmethod
@@ -51,6 +66,7 @@ class SkillMetadata(BaseModel):
     @field_validator("description")
     @classmethod
     def validate_description(cls, value: str) -> str:
+        value = strip_bidi_controls(value)
         if not value.strip():
             raise ValueError("must not be empty")
         if len(value) > 1024:
@@ -178,6 +194,8 @@ class PluginNeed(BaseModel):
     name: str
     url: str | None
     transport: str | None
+    # Why the plugin's URL was dropped. None when it had no URL.
+    url_problem: McpUrlProblem | None = None
 
     @computed_field
     @property

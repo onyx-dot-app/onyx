@@ -118,6 +118,14 @@ function PluginPreview({
           ) : undefined
         }
       />
+      {preview.name_conflicts.length > 0 && (
+        <MessageCard
+          variant="warning"
+          outerPadding={1}
+          innerPadding={1}
+          title={t("willBeOff", { names: preview.name_conflicts.join(", ") })}
+        />
+      )}
       {preview.skills.length > 0 && (
         <PreviewSection
           title={t("sections.skills", { count: preview.skills.length })}
@@ -148,7 +156,9 @@ function PluginPreview({
           title={t("sections.integrations", { count: preview.needs.length })}
         >
           <Text as="p" font="secondary-body" color="text-03">
-            {t("integrationsNote")}
+            {preview.will_enable
+              ? t("integrationsNote")
+              : t("integrationsNoteOff")}
           </Text>
           <PluginNeedList needs={preview.needs} interactive={false} />
         </PreviewSection>

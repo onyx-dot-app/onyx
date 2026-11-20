@@ -57,6 +57,8 @@ from onyx.db.skill import (
     restore_plugin_version__no_commit,
     set_skill_enabled_for_user,
     share_skill__no_commit,
+    skill_enabled_for_user,
+    skill_name_conflicts,
     transfer_skill_ownership,
 )
 from onyx.db.skill_limit import users_past_write_limit
@@ -636,6 +638,17 @@ def inspect_plugin_upload(
     db_session: Session = Depends(get_session),
 ) -> PluginUploadPreview:
     plugin_bundle = _read_plugin_upload(bundle)
+    target = _upload_target(plugin_bundle, save_as_new, user, db_session)
+    name_conflicts = (
+        []
+        if target.plugin_id is not None
+        else skill_name_conflicts(
+            [skill.content.name for skill in plugin_bundle.skills],
+            None,
+            user,
+            db_session,
+        )
+    )
     return PluginUploadPreview(
         manifest=plugin_bundle.manifest,
         skills=[
@@ -649,7 +662,13 @@ def inspect_plugin_upload(
         ],
         needs=need_views(plugin_bundle.needs, integrations_for_needs(user, db_session)),
         warnings=plugin_bundle.warnings,
-        target=_upload_target(plugin_bundle, save_as_new, user, db_session),
+        target=target,
+        will_enable=(
+            skill_enabled_for_user(target.plugin_id, user, db_session)
+            if target.plugin_id is not None
+            else not name_conflicts
+        ),
+        name_conflicts=name_conflicts,
     )
 
 
@@ -663,29 +682,45 @@ def save_plugin_upload(
 ) -> PluginUploadResponse:
     plugin_bundle = _read_plugin_upload(bundle)
     target = _upload_target(plugin_bundle, save_as_new, user, db_session)
-    enabled = False
-    integrations_changed = False
-    with stored_plugin_bundle(plugin_bundle, get_default_file_store()) as content:
+    file_store = get_default_file_store()
+    added = True
+    name_conflicts: list[str] = []
+    with stored_plugin_bundle(plugin_bundle, file_store) as content:
         if target.plugin_id is not None:
-            plugin, version = add_uploaded_plugin_version__no_commit(
+            plugin, version, added = add_uploaded_plugin_version__no_commit(
                 target.plugin_id, content, user, db_session
             )
             target = target.model_copy(
                 update={"version_number": version.version_number}
             )
+            enabled = skill_enabled_for_user(plugin.id, user, db_session)
         else:
             plugin, enabled = create_uploaded_plugin__no_commit(
                 content, auto_enable, user, db_session
             )
             target = target.model_copy(update={"plugin_name": plugin.name})
-            integrations_changed = enabled and turn_on_needed_integrations__no_commit(
+            if auto_enable and not enabled:
+                name_conflicts = skill_name_conflicts(
+                    [skill.content.name for skill in plugin_bundle.skills],
+                    plugin.id,
+                    user,
+                    db_session,
+                )
+        integrations_changed = (
+            added
+            and enabled
+            and turn_on_needed_integrations__no_commit(
                 user, content.needs or [], db_session
             )
+        )
         db_session.commit()
+    if not added:
+        delete_bundle_blob(file_store, content.bundle_file_id)
 
     db_session.expire(plugin)
-    push_skill_to_affected_sandboxes(plugin, db_session)
-    commit_push_state(db_session)
+    if added:
+        push_skill_to_affected_sandboxes(plugin, db_session)
+        commit_push_state(db_session)
     if integrations_changed:
         reload_craft_sessions({user.id}, db_session)
     return PluginUploadResponse(
@@ -698,6 +733,8 @@ def save_plugin_upload(
             include_plugin_detail=True,
         ),
         enabled=enabled,
+        unchanged=not added,
+        name_conflicts=name_conflicts,
     )
 
 

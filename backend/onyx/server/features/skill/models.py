@@ -343,12 +343,20 @@ class PluginUploadPreview(BaseModel):
     needs: list[PluginNeedView]
     warnings: list[str]
     target: PluginUploadTarget
+    # The plugin is on for the user after a save.
+    will_enable: bool
+    # The skills and plugins that keep a new plugin off: they hold one of
+    # its skill names.
+    name_conflicts: list[str]
 
 
 class PluginUploadResponse(BaseModel):
     target: PluginUploadTarget
     plugin: SkillResponse
     enabled: bool
+    # The files equal the current version's files, so no version was added.
+    unchanged: bool
+    name_conflicts: list[str]
 
 
 class SkillBundleInspectResponse(BaseModel):

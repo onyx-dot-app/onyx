@@ -17038,13 +17038,18 @@
         "failed": "Não foi possível ativar {name}."
       },
       "add": {
-        "label": "Adicionar para sua equipe",
-        "ariaLabel": "Adicionar {name} para sua equipe"
+        "label": "Adicionar integração",
+        "ariaLabel": "Adicionar a integração {name}"
+      },
+      "urlProblem": {
+        "variable": "A URL usa uma variável. O Onyx não preenche variáveis.",
+        "credential": "A URL contém uma credencial. O Onyx não a guarda.",
+        "invalid": "A URL não é uma URL http ou https válida."
       }
     },
     "upload": {
       "title": "Enviar Plugin",
-      "description": "Envie um plugin do Claude Code ou do Codex como arquivo .zip ou pasta.",
+      "description": "Envie um plugin do Claude Code ou Codex. Escolha um arquivo .zip ou arraste a pasta do plugin para cá.",
       "reading": "Lendo…",
       "requirements": {
         "title": "O Onyx usa estas partes de um plugin:",
@@ -17059,9 +17064,10 @@
       },
       "version": "v{version}",
       "target": {
-        "newVersion": "Atualiza {name} para v{version}",
+        "newVersion": "Atualiza {name} para a versão {version} do Onyx",
         "newPlugin": "Novo plugin: {name}"
       },
+      "willBeOff": "O plugin é salvo desativado. {names} já tem uma habilidade com o mesmo nome.",
       "saveAsNew": {
         "label": "Salvar como Novo Plugin",
         "description": "Mantém sem alterações o plugin que tem este nome."
@@ -17073,6 +17079,7 @@
         "warnings": "Avisos"
       },
       "integrationsNote": "Salvar ativa as integrações que você já pode usar. Um plugin nunca dá acesso a uma integração.",
+      "integrationsNoteOff": "O plugin fica desativado após salvar, então nenhuma integração é ativada.",
       "unusedParts": {
         "commands": "Comandos",
         "agents": "Agentes",
@@ -17090,7 +17097,9 @@
       "saveFailed": "Não foi possível salvar o plugin.",
       "saved": {
         "newPlugin": "{name} adicionado.",
-        "newVersion": "{name} atualizado para v{version}."
+        "newVersion": "{name} atualizado para a versão {version} do Onyx.",
+        "unchanged": "Nenhuma alteração. {name} já está na versão {version} do Onyx.",
+        "off": "{name} adicionado. Está desativado porque {names} já tem uma habilidade com o mesmo nome."
       }
     },
     "turnOn": {

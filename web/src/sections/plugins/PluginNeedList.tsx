@@ -155,7 +155,11 @@ export default function PluginNeedList({
               title={need.name}
               description={
                 need.url ??
-                (need.transport === "stdio" ? t("localServer") : t("noUrl"))
+                (need.url_problem
+                  ? t(`urlProblem.${need.url_problem}`)
+                  : need.transport === "stdio"
+                    ? t("localServer")
+                    : t("noUrl"))
               }
               badge={{
                 title: t(`state.${state}`),

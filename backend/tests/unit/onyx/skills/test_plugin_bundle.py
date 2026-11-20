@@ -101,6 +101,7 @@ def test_reads_a_wrapped_claude_plugin() -> None:
             "url": "https://mcp.linear.app/mcp",
             "transport": "http",
             "supported": True,
+            "url_problem": None,
         },
         {
             "kind": "mcp",
@@ -108,6 +109,7 @@ def test_reads_a_wrapped_claude_plugin() -> None:
             "url": None,
             "transport": "stdio",
             "supported": False,
+            "url_problem": None,
         },
         {
             "kind": "mcp",
@@ -115,6 +117,7 @@ def test_reads_a_wrapped_claude_plugin() -> None:
             "url": None,
             "transport": "sse",
             "supported": False,
+            "url_problem": "variable",
         },
         {
             "kind": "mcp",
@@ -122,6 +125,7 @@ def test_reads_a_wrapped_claude_plugin() -> None:
             "url": "https://untyped.test/mcp",
             "transport": None,
             "supported": False,
+            "url_problem": None,
         },
     ]
     assert bundle.warnings == []
@@ -165,6 +169,7 @@ def test_reads_a_codex_plugin_with_inline_servers() -> None:
             "url": "https://mcp.notion.com/mcp",
             "transport": "streamable-http",
             "supported": True,
+            "url_problem": None,
         },
     ]
     assert bundle.warnings == [
@@ -313,3 +318,60 @@ def test_refuses_an_invalid_plugin_with_the_reason(
 
     assert error.value.error_code == OnyxErrorCode.INVALID_INPUT
     assert error.value.detail == detail
+
+
+def test_reads_skill_fields_that_claude_code_accepts() -> None:
+    skill_md = (
+        "---\nname: access\ndescription: Does a thing.\n"
+        "allowed-tools:\n  - Read\n  - Bash(ls *)\n"
+        "metadata:\n  tags: [design, 3]\nlicense: [MIT]\n---\n\nSteps.\n"
+    )
+    bundle = read_plugin_bundle(
+        _zip(
+            {
+                ".claude-plugin/plugin.json": json.dumps({"name": "chat-kit"}),
+                "skills/access/SKILL.md": skill_md,
+            }
+        )
+    )
+    [skill] = bundle.skills
+    assert skill.content.name == "access"
+    assert skill.content.frontmatter["allowed-tools"] == ["Read", "Bash(ls *)"]
+    assert skill.content.frontmatter["license"] == ["MIT"]
+
+
+def test_a_bad_skill_field_gives_a_plain_message() -> None:
+    with pytest.raises(OnyxError) as exc_info:
+        read_plugin_bundle(
+            _zip(
+                {
+                    ".claude-plugin/plugin.json": json.dumps({"name": "chat-kit"}),
+                    "skills/access/SKILL.md": "---\nname: access\ndescription: 3\n---\n",
+                }
+            )
+        )
+    assert exc_info.value.detail == (
+        "skills/access/SKILL.md: SKILL.md frontmatter field 'description' must be text"
+    )
+
+
+def test_removes_bidi_controls_from_shown_text() -> None:
+    bundle = read_plugin_bundle(
+        _zip(
+            {
+                ".claude-plugin/plugin.json": json.dumps(
+                    {
+                        "name": "chat-kit",
+                        "description": "\u202egnp.exe safe",
+                        "author": {"name": "\u202eNIMDA"},
+                        "keywords": ["\u2066x\u2069"],
+                    }
+                ),
+                "skills/access/SKILL.md": _skill_md("access", "\u202etxt.exe"),
+            }
+        )
+    )
+    assert bundle.manifest.description == "gnp.exe safe"
+    assert bundle.manifest.author == PluginAuthor(name="NIMDA")
+    assert bundle.manifest.keywords == ["x"]
+    assert bundle.skills[0].content.description == "txt.exe"

@@ -720,3 +720,107 @@ def test_a_group_limited_integration_is_no_access_without_its_url(
         )
         db_session.execute(delete(UserGroup).where(UserGroup.id == group_id))
         db_session.commit()
+
+
+def test_an_editor_share_uploads_a_new_version_of_the_shared_plugin(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    author, editor, _ = users
+    plugin_id = _save(author, _plugin_zip("shared-kit", ["one"]), db_session).plugin.id
+    apply_plugin_access_change__no_commit(
+        [plugin_id],
+        PluginAccessChange(
+            user_grants=(
+                PluginUserGrant(
+                    user_id=editor.id, permission=SkillSharePermission.EDITOR
+                ),
+            )
+        ),
+        None,
+        db_session,
+    ).raise_first_failure()
+    db_session.commit()
+
+    saved = _save(editor, _plugin_zip("shared-kit", ["one", "two"]), db_session)
+
+    assert (saved.plugin.id, saved.target.kind, saved.target.version_number) == (
+        plugin_id,
+        "new_version",
+        2,
+    )
+
+
+def test_an_unchanged_upload_adds_no_version(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    author, _, _ = users
+    first = _save(author, _plugin_zip("same-files", ["one"]), db_session)
+    again = _save(author, _plugin_zip("same-files", ["one"]), db_session)
+
+    assert first.unchanged is False
+    assert (again.unchanged, again.target.kind, again.target.version_number) == (
+        True,
+        "new_version",
+        1,
+    )
+    assert again.plugin.id == first.plugin.id
+    assert (
+        db_session.scalar(
+            select(func.count()).where(PluginVersion.plugin_id == first.plugin.id)
+        )
+        == 1
+    )
+
+
+def test_a_skill_name_clash_is_shown_before_and_after_the_save(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    author, _, _ = users
+    _save(author, _plugin_zip("first-kit", ["clash"]), db_session)
+
+    preview = api.inspect_plugin_upload(
+        bundle=_plugin_zip("second-kit", ["clash", "other"]),
+        save_as_new=False,
+        user=author,
+        db_session=db_session,
+    )
+    saved = _save(author, _plugin_zip("second-kit", ["clash", "other"]), db_session)
+
+    assert (preview.will_enable, preview.name_conflicts) == (False, ["first-kit"])
+    assert (saved.enabled, saved.name_conflicts) == (False, ["first-kit"])
+
+
+def test_a_new_version_of_an_enabled_plugin_turns_on_its_new_integrations(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+    integration_ids: list[int],
+) -> None:
+    author, _, _ = users
+    integration, _ = make_mcp_integration(db_session, server_url=MCP_URL)
+    give_access(db_session, [integration])
+    integration_ids.append(integration.id)
+    integration_id = integration.id
+    plugin_id = _save(author, _plugin_zip("grow-kit", ["one"]), db_session).plugin.id
+
+    preview = api.inspect_plugin_upload(
+        bundle=_plugin_zip("grow-kit", ["one"], servers={"main": _http()}),
+        save_as_new=False,
+        user=author,
+        db_session=db_session,
+    )
+    saved = _save(
+        author, _plugin_zip("grow-kit", ["one"], servers={"main": _http()}), db_session
+    )
+
+    assert preview.will_enable is True
+    assert saved.enabled is True
+    assert _need_states(author, plugin_id, db_session) == [
+        ("main", PluginNeedState.ON, integration_id)
+    ]

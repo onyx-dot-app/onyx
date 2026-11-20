@@ -22,7 +22,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Select, and_, delete, func, or_, select, tuple_
+from sqlalchemy import Select, and_, case, delete, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -663,22 +663,28 @@ def create_synced_plugin__no_commit(
 
 
 def find_upload_target(name: str, user_id: UUID, db_session: Session) -> Plugin | None:
+    """The plugin an upload of ``name`` adds a version to: one the user can
+    edit, in the user's uploads, then in another user's uploads (an EDITOR
+    share), then in the organization library."""
     return db_session.scalars(
         select(Plugin)
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
         .where(
             Plugin.name == name,
-            or_(
-                and_(
-                    Marketplace.kind == MarketplaceKind.USER_UPLOADS,
-                    Marketplace.owner_user_id == user_id,
-                ),
-                Marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY,
+            Marketplace.kind.in_(
+                (MarketplaceKind.USER_UPLOADS, MarketplaceKind.ORGANIZATION_LIBRARY)
             ),
             plugin_editable_by_user(Plugin, user_id),
             ~holds_one_root_skill(Plugin.current_version_id.expression),
         )
-        .order_by((Marketplace.kind != MarketplaceKind.USER_UPLOADS).asc(), Plugin.id)
+        .order_by(
+            case(
+                (Marketplace.owner_user_id == user_id, 0),
+                (Marketplace.kind == MarketplaceKind.USER_UPLOADS, 1),
+                else_=2,
+            ),
+            Plugin.id,
+        )
         .limit(1)
     ).one_or_none()
 

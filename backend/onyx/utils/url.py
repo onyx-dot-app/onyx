@@ -2,9 +2,10 @@ import ipaddress
 import socket
 import unicodedata
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import (
     parse_qs,
+    parse_qsl,
     urlencode,
     urlparse,
     urlsplit,
@@ -623,21 +624,53 @@ def normalize_url(url: str) -> str:
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
-def normalize_mcp_server_url(url: str) -> str | None:
-    """None for user info: the key is shown to each viewer of the plugin, so it must not carry a credential."""
+McpUrlProblem = Literal["variable", "credential", "invalid"]
+
+_CREDENTIAL_QUERY_KEYS = frozenset(
+    {"key", "apikey", "token", "auth", "secret", "password", "sig", "signature"}
+)
+_CREDENTIAL_QUERY_SUFFIXES = ("_key", "_token", "_secret", "_password")
+
+
+def _is_credential_query_key(key: str) -> bool:
+    key = key.lower().replace("-", "_")
+    return key in _CREDENTIAL_QUERY_KEYS or key.endswith(_CREDENTIAL_QUERY_SUFFIXES)
+
+
+def mcp_server_url_problem(url: str) -> McpUrlProblem | None:
+    """Why an MCP server URL cannot be a match key. Each viewer of a plugin
+    sees the key, so a URL with a credential (user info or a query value such
+    as ``api_key``) is refused."""
     if "${" in url:
-        return None
+        return "variable"
     try:
         parts = urlsplit(url.strip())
-        port = parts.port
+        _ = parts.port
     except ValueError:
+        return "invalid"
+    if parts.scheme.lower() not in _DEFAULT_PORTS or not parts.hostname:
+        return "invalid"
+    if "@" in parts.netloc or any(
+        _is_credential_query_key(key)
+        for key, _ in parse_qsl(parts.query, keep_blank_values=True)
+    ):
+        return "credential"
+    return None
+
+
+def normalize_mcp_server_url(url: str) -> str | None:
+    """The match key of an MCP server URL, or None when
+    ``mcp_server_url_problem`` gives a problem."""
+    if mcp_server_url_problem(url) is not None:
         return None
+    parts = urlsplit(url.strip())
     scheme = parts.scheme.lower()
-    if scheme not in _DEFAULT_PORTS or not parts.hostname or "@" in parts.netloc:
-        return None
     host = parts.hostname
+    if host is None:
+        raise RuntimeError("Bug: a URL without a problem has a host.")
     if ":" in host:
         host = f"[{host}]"
+    port = parts.port
     if port is not None and port != _DEFAULT_PORTS[scheme]:
         host = f"{host}:{port}"
     return urlunsplit(

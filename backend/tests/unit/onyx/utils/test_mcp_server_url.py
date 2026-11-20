@@ -1,6 +1,6 @@
 import pytest
 
-from onyx.utils.url import normalize_mcp_server_url
+from onyx.utils.url import mcp_server_url_problem, normalize_mcp_server_url
 
 
 @pytest.mark.parametrize(
@@ -36,3 +36,25 @@ def test_normalizes_like_claude_code(url: str, expected: str) -> None:
 )
 def test_refuses_what_cannot_match(url: str) -> None:
     assert normalize_mcp_server_url(url) is None
+
+
+@pytest.mark.parametrize(
+    ("url", "problem"),
+    [
+        ("https://${HOST}/mcp", "variable"),
+        ("ftp://mcp.example.com/mcp", "invalid"),
+        ("https://mcp.example.com:99999/mcp", "invalid"),
+        ("https://user:secret@mcp.example.com/mcp", "credential"),
+        ("https://mcp.example.com/mcp?api_key=SECRET", "credential"),
+        ("https://mcp.example.com/mcp?team=a&Token=SECRET", "credential"),
+        ("https://mcp.example.com/mcp?access_token=SECRET", "credential"),
+        ("https://mcp.example.com/mcp?x-api-key=SECRET", "credential"),
+        ("https://mcp.example.com/mcp?key=", "credential"),
+        ("https://mcp.example.com/mcp?sig=abc", "credential"),
+        ("https://mcp.example.com/mcp?team=a", None),
+        ("https://mcp.example.com/mcp", None),
+    ],
+)
+def test_names_why_a_url_is_refused(url: str, problem: str | None) -> None:
+    assert mcp_server_url_problem(url) == problem
+    assert (normalize_mcp_server_url(url) is None) == (problem is not None)
