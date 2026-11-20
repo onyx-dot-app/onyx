@@ -200,8 +200,18 @@ def _plugin_files(
                 if path.startswith(prefix):
                     relative = path.removeprefix(prefix)
                     bundle_files[f"{SKILLS_DIR}/{name}/{relative}"] = content
-        if MCP_JSON_PATH in folder_files:
-            bundle_files[MCP_JSON_PATH] = folder_files[MCP_JSON_PATH]
+        declared_servers = manifest.get("mcpServers")
+        server_files = (
+            declared_servers
+            if isinstance(declared_servers, list)
+            else [declared_servers]
+        )
+        for server_file in [MCP_JSON_PATH, *server_files]:
+            if not isinstance(server_file, str):
+                continue
+            path = server_file.removeprefix("./")
+            if path in folder_files:
+                bundle_files[path] = folder_files[path]
     bundle_files[_BUILT_PLUGIN_JSON] = json.dumps(
         manifest, indent=2, sort_keys=True
     ).encode()

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.tasks.marketplace_sync.tasks import sync_marketplace_task
 from onyx.background.celery.versioned_apps.client import app as celery_app
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLock
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.models import User
 from onyx.server.features.skill import marketplace_api as api
@@ -19,6 +20,7 @@ from tests.external_dependency_unit.craft.marketplace.helpers import (
     OWNER,
     REPO,
     Connections,
+    existing_files,
     make_marketplace,
     plugin_files,
     reload,
@@ -51,10 +53,12 @@ def test_busy_lock_sets_the_mark_and_the_holder_syncs_again(
     real_sync = sync.sync_marketplace
     runs = 0
 
-    def sync_with_push_during_first_run(marketplace_id: Any) -> MarketplaceSyncResult:
+    def sync_with_push_during_first_run(
+        marketplace_id: Any, lock: CacheLock | None = None
+    ) -> MarketplaceSyncResult:
         nonlocal runs
         runs += 1
-        result = real_sync(marketplace_id)
+        result = real_sync(marketplace_id, lock)
         if runs == 1:
             fake_github.push(OWNER, REPO, plugin_files("alpha", "beta"))
             sync.run_marketplace_sync(marketplace_id)
@@ -86,16 +90,41 @@ def test_request_stays_live_while_the_sync_runs(
     real_sync = sync.sync_marketplace
     live_during_run: list[bool] = []
 
-    def recording_sync(marketplace_id: Any) -> MarketplaceSyncResult:
+    def recording_sync(
+        marketplace_id: Any, lock: CacheLock | None = None
+    ) -> MarketplaceSyncResult:
         live_during_run.append(
             sync.sync_request_is_live(reload(db_session, marketplace).sync_requested_at)
         )
-        return real_sync(marketplace_id)
+        return real_sync(marketplace_id, lock)
 
     with patch.object(sync, "sync_marketplace", recording_sync):
         sync.run_marketplace_sync(marketplace.id)
     assert live_during_run == [True]
     assert reload(db_session, marketplace).sync_requested_at is None
+
+
+def test_sync_that_lost_its_lock_writes_nothing(
+    db_session: Session,
+    users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    marketplace_ids: list[Any],
+    staged_file_ids: list[str],
+) -> None:
+    owner = users[0]
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+    expired = get_cache_backend().lock(f"marketplace_sync:{marketplace.id}", timeout=60)
+
+    sync.sync_marketplace(marketplace.id, expired)
+
+    assert synced_plugins(db_session, marketplace.id) == {}
+    assert reload(db_session, marketplace).last_synced_at is None
+    assert staged_file_ids
+    assert existing_files(db_session, staged_file_ids) == set()
 
 
 def test_deleted_marketplace_ends_the_task(
@@ -152,8 +181,10 @@ def test_time_budget_exit_with_a_new_request_starts_a_follow_up(
     )
     real_sync = sync.sync_marketplace
 
-    def sync_with_new_request(marketplace_id: Any) -> MarketplaceSyncResult:
-        result = real_sync(marketplace_id)
+    def sync_with_new_request(
+        marketplace_id: Any, lock: CacheLock | None = None
+    ) -> MarketplaceSyncResult:
+        result = real_sync(marketplace_id, lock)
         sync.run_marketplace_sync(marketplace_id)
         return result
 
@@ -183,7 +214,10 @@ def test_failed_sync_with_a_new_request_starts_one_follow_up(
         db_session, marketplace_ids, login=owner, owner=owner
     )
 
-    def failing_sync_with_new_request(marketplace_id: Any) -> MarketplaceSyncResult:
+    def failing_sync_with_new_request(
+        marketplace_id: Any,
+        _lock: CacheLock | None = None,
+    ) -> MarketplaceSyncResult:
         sync.run_marketplace_sync(marketplace_id)
         raise RuntimeError("boom")
 
@@ -195,7 +229,9 @@ def test_failed_sync_with_a_new_request_starts_one_follow_up(
     assert reload(db_session, marketplace).last_error == sync.SYNC_FAILED_ERROR
     assert _sent_marketplace_ids(send_task) == [str(marketplace.id)]
 
-    def failing_sync(_marketplace_id: Any) -> MarketplaceSyncResult:
+    def failing_sync(
+        _marketplace_id: Any, _lock: CacheLock | None = None
+    ) -> MarketplaceSyncResult:
         raise RuntimeError("boom")
 
     with (

@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import BackgroundTasks
 
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLock
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     OnyxCeleryPriority,
@@ -195,7 +196,9 @@ def _record_failure(marketplace_id: UUID, error: str) -> MarketplaceSyncResult:
     return MarketplaceSyncResult(status=MarketplaceSyncStatus.FAILED)
 
 
-def sync_marketplace(marketplace_id: UUID) -> MarketplaceSyncResult:
+def sync_marketplace(
+    marketplace_id: UUID, lock: CacheLock | None = None
+) -> MarketplaceSyncResult:
     with get_session_with_current_tenant() as db_session:
         marketplace = get_github_marketplace(marketplace_id, db_session)
         if marketplace is None:
@@ -238,6 +241,12 @@ def sync_marketplace(marketplace_id: UUID) -> MarketplaceSyncResult:
         else _stage(entries, set(plan.create) | set(plan.add_version))
     )
     file_store = get_default_file_store()
+    if lock is not None and not lock.owned():
+        # The lock expired during a long read; a newer sync may have written.
+        logger.warning("Marketplace sync %s lost its lock", marketplace_id)
+        for content in staged.values():
+            delete_bundle_blob(file_store, content.bundle_file_id)
+        return MarketplaceSyncResult(status=MarketplaceSyncStatus.FAILED)
     try:
         with get_session_with_current_tenant() as db_session:
             login = fetch_user_by_id(db_session, login_user_id)
@@ -283,14 +292,14 @@ def sync_request_is_live(sync_requested_at: datetime | None) -> bool:
     ) - sync_requested_at < timedelta(seconds=SYNC_REQUEST_STALE_SECONDS)
 
 
-def _sync_once(marketplace_id: UUID) -> bool:
+def _sync_once(marketplace_id: UUID, lock: CacheLock) -> bool:
     with get_session_with_current_tenant() as db_session:
         claimed_at = claim_marketplace_sync_request__no_commit(
             marketplace_id, db_session
         )
         db_session.commit()
     try:
-        sync_marketplace(marketplace_id)
+        sync_marketplace(marketplace_id, lock)
     except OnyxError as exc:
         if exc.error_code == OnyxErrorCode.NOT_FOUND:
             return False
@@ -337,7 +346,7 @@ def run_marketplace_sync(marketplace_id: UUID) -> None:
                 db_session.commit()
             return
         try:
-            exists = _sync_once(marketplace_id)
+            exists = _sync_once(marketplace_id, lock)
         except Exception:
             if lock.owned():
                 lock.release()

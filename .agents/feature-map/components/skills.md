@@ -922,7 +922,7 @@ the app from the same rule
     and builds one bundle per entry through
     `skills/plugin_bundle.py:read_plugin_bundle`: the folder's plugin.json
     over the entry fields, or the entry fields alone; an entry `skills` list
-    takes only those folders. A bad entry is blocked and the rest go on;
+    takes only those folders and the MCP files that the entry names. A bad entry is blocked and the rest go on;
     `github` and `git-subdir` sources on github.com are fetched from their
     repository (20 per sync, one repository in memory at a time); other
     sources are "Not supported in Onyx". `skills/marketplace/reader.py:BundleBudget` holds the
@@ -940,7 +940,8 @@ the app from the same rule
     marketplace (cache lock `marketplace_sync:{id}`). The holder restamps
     `sync_requested_at` when it starts and clears it at the end only if the
     stamp did not change, so the API shows the sync while it runs. A request
-    during a sync changes the stamp, and the holder syncs again. A holder that stops
+    during a sync changes the stamp, and the holder syncs again. A sync whose
+    lock expired during a long read writes nothing. A holder that stops
     for its time budget or an error with the mark set starts one follow-up
     sync. The API reports a mark older than the lock timeout plus 5 minutes
     as not syncing (`sync_request_is_live`), so Sync now recovers a mark that

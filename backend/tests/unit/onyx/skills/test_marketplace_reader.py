@@ -133,6 +133,27 @@ def test_skills_list_entry_takes_only_the_listed_folders() -> None:
     ]
 
 
+def test_skills_list_entry_keeps_the_mcp_file_that_the_entry_names() -> None:
+    files = {
+        CLAUDE: catalog(
+            {
+                "name": "tools",
+                "source": "./",
+                "strict": False,
+                "skills": ["./skills/xlsx"],
+                "mcpServers": "./config/mcp.json",
+            }
+        ),
+        "skills/xlsx/SKILL.md": skill_md("xlsx"),
+        "config/mcp.json": json.dumps(
+            {"mcpServers": {"main": {"type": "http", "url": "https://mcp.test/mcp"}}}
+        ).encode(),
+    }
+    entry = _ready(_complete(files), "tools")
+    assert "config/mcp.json" in _bundle_paths(entry)
+    assert [need.name for need in entry.bundle.needs] == ["main"]
+
+
 def test_mcp_entry_imports_with_a_need() -> None:
     files = {
         CLAUDE: catalog(
