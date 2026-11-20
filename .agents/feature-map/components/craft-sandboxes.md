@@ -88,7 +88,8 @@ same A/B slot mechanism); scripts run through interpreters. Each session has
 `/home/onyx/workspaces/<session-id>`, the default working directory of its
 commands; commands can still reach any path in the VM. The template boot
 makes `/tmp/onyx/{tool-results,search-files,artifacts}` on the `/tmp` tmpfs,
-owned by the sandbox user, and the template snapshot keeps them. A VM has
+owned by the sandbox user, and the template snapshot keeps them. Chat writes
+large tool results to `tool-results` ([[code-execution]]). A VM has
 8 GiB of guest memory by default; the host agent charges a starting VM half
 of it in memory admission (`--starting-mem-divisor`) and owns admission;
 placement only ranks nodes by free memory. Every VM has a Firecracker balloon
@@ -330,21 +331,25 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   stream); a call cancelled before its command starts or its input is
   written does neither. `read_file` / `write_file` (exact bytes, a mode;
   a write also takes a seekable file, for example a file store
-  `read_file(use_tempfile=True)`, and streams it whole from its start),
-  `write_onyx_file` (an
-  absolute path under `ONYX_VM_FILES_ROOT`, `/tmp/onyx`: wakes the VM but
-  restores no session; session saves never include it),
+  `read_file(use_tempfile=True)`, and streams it whole from its start, or
+  the bytes in parts; an optional transfer timeout), `delete_listed_files`
+  (lists the entries below a directory with size and modification time, up
+  to `max_entries`, `truncated` past it, and deletes the files that a
+  caller's function picks, on one VM lookup),
   `stat_files` (the guest daemon's typed `StatFiles` RPC over `os.Root`:
   each path's own entry and link target, and its target through the links
   inside the session with a device and inode identity, or why there is none:
   missing, escapes, loop; at most 8 links per path; up to 1,000 paths and
   1 MiB of path bytes per call; an older root drive fails with a message
   that it updates after a restart) and `delete_file` for apply_patch, and
-  busy signals (turn and parked-approval marks). `read_file` and
-  `write_onyx_file` also take an absolute path under `ONYX_VM_FILES_ROOT`
-  (`/tmp/onyx`, `server/features/build/sandbox/harness_base.py:onyx_vm_path`), which the daemon confines
-  to its onyx root with no session; `read_file` refuses every other path
-  outside the session directory. `publish_files` reads through it.
+  busy signals (turn and parked-approval marks). `read_file`, `write_file`,
+  `delete_file` and `delete_listed_files` also take an absolute path under
+  `ONYX_VM_FILES_ROOT` (`/tmp/onyx`,
+  `server/features/build/sandbox/harness_base.py:onyx_vm_path`), which the
+  daemon confines to its onyx root with no session: the call wakes the VM but
+  restores no session, and session saves never include the path. They refuse
+  every other path outside the session directory. `publish_files` reads
+  through `read_file`.
   Each chat session works in `SESSION_WORKSPACE_ROOT/<session_id>`
   (`/home/onyx/workspaces`); file calls take paths by
   `session_relative_path`. For a missing file, `read_file` raises
@@ -416,11 +421,14 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   exec records. A user's chat delete, hard or soft
   (`backend/onyx/server/query_and_chat/chat_backend.py:delete_chat_session_by_id`;
   `delete_all_chat_sessions` purges in a background thread) does the same for
-  the chat session: no one can restore a soft-deleted chat. The API routes
+  the chat session: no one can restore a soft-deleted chat. A chat purge
+  also deletes the chat's tool results directory, by the purge rule at
+  `backend/onyx/server/features/build/sandbox/harness_base.py:TOOL_RESULTS_ROOT`
+  ([[code-execution]]). The API routes
   purge, not `db/chat.py`: a VM purge needs the host agent client
   certificates, which the light worker that runs chat retention lacks. A
   session the harness has no record of (save, instance mark or exec record)
-  costs only cache reads. A user delete (`delete_user_from_db`
+  costs only cache reads and, while the VM runs, that one delete. A user delete (`delete_user_from_db`
   in a background thread, `UserManager.delete`) and the last-admin tenant
   delete stop the VM and delete every save and record of the
   sandbox. At the end of each chat retention chain

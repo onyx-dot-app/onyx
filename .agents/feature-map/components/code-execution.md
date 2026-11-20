@@ -168,10 +168,11 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         a sentence that names where its saved results
                                         hold its end (tools/tool_implementations/code_mode/prompt.py:closed_cell_text)
   each observation                      taken under the cell lock, formatted after it:
-                                        prompt.py:format_content (model text, cut once in the
-                                        middle to max_output_tokens, 10,000 by
-                                        default) and CodeModeExecutionResult (each part cut to
-                                        about 4 characters per budget token): a CellWindow
+                                        prompt.py:format_content (model text, cut once
+                                        in the middle to max_output_chars, 40,000 by
+                                        default, at most 160,000) and
+                                        CodeModeExecutionResult (each part cut to the
+                                        same budget): a CellWindow
                                         (stdout, calls, commit at the program's end,
                                         tool_call_count) with cell_id, observation and status
                                         (running while the cell runs)
@@ -300,6 +301,52 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         and files of one name are versions of one file.
                                         save_chat_turn adds the files to the response's
                                         ChatMessage.files ([[chat-persistence]])
+  Agent.prepare_tool_result (ChatAgent) sandbox/spill.py:spill_large_result, in a chat whose
+                                        configured tools hold a SandboxTool. A result
+                                        with ToolResult.full_value always spills: the tool
+                                        sets it only when its cut leaves something out.
+                                        Any other result spills when it is over
+                                        RESULT_MAX_CHARS or past the step's
+                                        STEP_MAX_CHARS, and its preview leaves out more
+                                        than SPILL_MIN_DROPPED_CHARS (PREVIEW_HEAD_CHARS +
+                                        PREVIEW_TAIL_CHARS). Exempt
+                                        from those two limits (_OWN_LIMITS): the cells,
+                                        exec_command, write_stdin, read_file, skills_read
+                                        and CITEABLE_TOOLS_NAMES. A cell's closing record
+                                        sets the recorded result and its own output uncut
+                                        as the full value. Where:
+                                        the full value or the content, at most
+                                        SPILL_MAX_BYTES (a lone surrogate becomes "?"), to
+                                        /tmp/onyx/tool-results/<chat session>/<message>_<call>.txt
+                                        (_amended for a release hook's amendment) with
+                                        HarnessSandbox.write_file, which wakes the VM. No
+                                        write starts after a Stop. The run's _result_lock
+                                        covers prepare_tool_result, so the parallel calls
+                                        of one step spill one after another.
+                                        Lifetime: a file lasts while the VM runs, until
+                                        the chat's purge (the purge rule at
+                                        harness_base.py:TOOL_RESULTS_ROOT), or until
+                                        eviction deletes it. Eviction runs after each
+                                        write, outside its wait, on one VM lookup
+                                        (delete_listed_files, LIST_MAX_ENTRIES): it
+                                        deletes the oldest files of any chat, files with
+                                        no modification time last, while all of them hold
+                                        more than TOOL_RESULTS_MAX_BYTES, or half of it
+                                        when the listing is truncated.
+                                        The model and the saved row get the tool's content
+                                        with a <persisted-output> note (path, size, how to
+                                        read it, and that a missing file means a restart
+                                        or eviction), or a preview in that note. The card
+                                        shows the head and tail with
+                                        renderer.SPILLED_OUTPUT_NOTE
+                                        (CustomToolCallSummary.spilled,
+                                        CodeModeExecutionResult.spilled), live and on
+                                        replay. A failed write or a write past
+                                        SPILL_WRITE_TIMEOUT_SECONDS gives the bounded view
+                                        with SPILL_FAILED_NOTE; a Stop ends the wait with
+                                        AgentCancelled. Calls inside a program skip the
+                                        hook; the program gets the full value
+                                        (stubs.py:program_value)
   Agent.on_drained (root ChatAgent)     SandboxTurn.end: create_chat_agent passes it to the
                                         root chat agent only (bind_run_store: also to a
                                         restored root), not to subagents or deep research

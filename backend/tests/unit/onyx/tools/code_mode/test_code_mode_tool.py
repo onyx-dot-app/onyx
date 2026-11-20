@@ -6,7 +6,6 @@ import time
 import pytest
 from pydantic import BaseModel, JsonValue
 
-from onyx.agents.compaction import count_tokens
 from onyx.agents.concurrency import ExecutionWork
 from onyx.agents.tools import (
     ChildRunWait,
@@ -33,10 +32,8 @@ from onyx.tools.models import (
     ToolContext,
     ToolExecutionError,
 )
+from onyx.tools.tool_implementations import utils as tool_utils
 from onyx.tools.tool_implementations.code_mode import cells
-from onyx.tools.tool_implementations.code_mode import (
-    code_mode_tool as code_mode_tool_module,
-)
 from onyx.tools.tool_implementations.code_mode.cells import (
     CELL_SPAN_NAME,
     MAX_SAVED_CALL_CHARS,
@@ -49,14 +46,17 @@ from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
 )
 from onyx.tools.tool_implementations.code_mode.models import (
     UNFINISHED_CALL_MESSAGE,
+    CellWindow,
     CodeModeCallFinished,
     CodeModeCallProgress,
     CodeModeCallStarted,
     CodeModeExecutionResult,
+    CodeModeStatus,
     CodeModeStdout,
     SandboxLimits,
     json_text,
 )
+from onyx.tools.tool_implementations.code_mode.prompt import format_content
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
 from onyx.tracing.framework import set_trace_processors
 from onyx.tracing.framework.create import trace
@@ -357,48 +357,96 @@ def test_cancellation_stops_calls_and_raises() -> None:
     assert isinstance(invocation.events[-1], CodeModeCallFinished)
 
 
-def test_output_is_cut_to_the_token_budget_in_the_middle() -> None:
+def test_output_is_cut_to_the_character_budget_in_the_middle() -> None:
     invocation = Invocation("for i in range(500):\n    print('line', i)\n")
-    invocation.invocation.arguments["max_output_tokens"] = 200
+    invocation.invocation.arguments["max_output_chars"] = 800
     result = _make_tool().run(invocation.invocation, ToolContext())
     assert isinstance(result, ToolResult)
     content = result.content
-    assert content.startswith("Warning: truncated output (original token count: ")
+    assert content.startswith("Warning: truncated output (original character count: ")
     assert "\nTotal output lines: " in content
-    assert "tokens truncated…" in content
+    assert "characters omitted] ...\n" in content
     assert "Execution completed" in content
     assert content.rstrip().endswith("line 499")
-    assert count_tokens(content) < 260
+    assert len(content) < 1_000
 
 
 def test_a_requested_budget_over_the_maximum_is_capped(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(code_mode_tool_module, "MAX_OUTPUT_TOKENS", 200)
+    monkeypatch.setattr(tool_utils, "MAX_OUTPUT_CHARS", 800)
     invocation = Invocation("for i in range(500):\n    print('line', i)\n")
-    invocation.invocation.arguments["max_output_tokens"] = 1_000_000
+    invocation.invocation.arguments["max_output_chars"] = 1_000_000
     result = _make_tool().run(invocation.invocation, ToolContext())
     assert isinstance(result, ToolResult)
     assert result.content.startswith("Warning: truncated output")
-    assert count_tokens(result.content) < 260
+    assert len(result.content) < 1_000
 
 
 def test_output_and_result_over_the_budget_are_cut_once_with_the_true_count() -> None:
     invocation = Invocation(
         "for i in range(150):\n    print('line', i)\n' '.join(['word'] * 300)\n"
     )
-    invocation.invocation.arguments["max_output_tokens"] = 200
+    invocation.invocation.arguments["max_output_chars"] = 800
     result = _make_tool().run(invocation.invocation, ToolContext())
     assert isinstance(result, ToolResult)
     content = result.content
     assert content.count("Warning: truncated output") == 1
-    match = re.search(r"original token count: (\d+)", content)
+    match = re.search(r"original character count: (\d+)", content)
     assert match is not None
-    # Both parts are within the character cap and over the token budget.
+    # Both parts are within the collector's cap and over the budget.
     printed = "".join(f"line {i}\n" for i in range(150))
     result_text = repr(" ".join(["word"] * 300))
-    assert int(match.group(1)) >= count_tokens(printed) + count_tokens(result_text)
-    assert count_tokens(content) < 260
+    assert int(match.group(1)) >= len(printed) + len(result_text)
+    assert len(content) < 1_000
+
+
+def _window_content(
+    window: CellWindow, *, status: CodeModeStatus, max_chars: int
+) -> tuple[str, str | None]:
+    content = format_content(
+        window,
+        heading="Cell 1 heading",
+        status=status,
+        cell_id=1,
+        cell_calls=[],
+        max_chars=max_chars,
+        end=None,
+        discarded=None,
+        elided_chars=0,
+    )
+    return content.text, content.full_value
+
+
+@pytest.mark.parametrize(
+    ("window", "status", "max_chars"),
+    [
+        # The notes of a running cell use the whole budget and it has no output.
+        (CellWindow(), "running", 100),
+        # The cut drops only heading text and keeps the output whole.
+        (CellWindow(stdout="ab"), "completed", 24),
+    ],
+)
+def test_a_cut_that_keeps_every_section_gives_no_full_value(
+    window: CellWindow, status: CodeModeStatus, max_chars: int
+) -> None:
+    text, full_value = _window_content(window, status=status, max_chars=max_chars)
+    assert text.startswith("Warning: truncated output")
+    assert full_value is None
+
+
+def test_a_cell_at_exactly_its_budget_gives_no_full_value() -> None:
+    window = CellWindow(stdout="x" * 50)
+    whole, _ = _window_content(window, status="completed", max_chars=10_000)
+
+    text, full_value = _window_content(window, status="completed", max_chars=len(whole))
+    assert (text, full_value) == (whole, None)
+
+    text, full_value = _window_content(
+        window, status="completed", max_chars=len(whole) - 1
+    )
+    assert text.startswith("Warning: truncated output")
+    assert full_value == "Output:\n" + "x" * 50
 
 
 def test_cell_and_nested_tool_spans_carry_code_mode_attributes() -> None:
@@ -455,11 +503,12 @@ def test_description_lists_stubs() -> None:
 
 
 def test_parameters_come_from_arguments() -> None:
-    max_output_tokens: JsonValue = {
+    max_output_chars: JsonValue = {
         "type": "integer",
-        "default": 10000,
-        "description": "Token budget for the output this call returns; longer "
-        "output is cut in the middle. Defaults to 10000 tokens, at most 40000.",
+        "default": 40000,
+        "description": "Character budget for the output this call returns; longer "
+        "output is cut in the middle. Defaults to 40000 characters, at most "
+        "160000.",
     }
     assert _make_tool().tool_definition().parameters == {
         "type": "object",
@@ -472,7 +521,7 @@ def test_parameters_come_from_arguments() -> None:
                 "its output so far while it keeps running. Defaults to 30000 ms, at "
                 "most 120000 ms.",
             },
-            "max_output_tokens": max_output_tokens,
+            "max_output_chars": max_output_chars,
         },
         "required": ["code"],
     }
@@ -491,7 +540,7 @@ def test_parameters_come_from_arguments() -> None:
                 "description": "How long to wait for more output before returning. "
                 "Defaults to 15000 ms, at most 300000 ms.",
             },
-            "max_output_tokens": max_output_tokens,
+            "max_output_chars": max_output_chars,
             "terminate": {
                 "type": "boolean",
                 "default": False,

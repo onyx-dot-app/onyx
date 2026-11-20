@@ -41,7 +41,7 @@ from onyx.llm.models import (
     ToolCall,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
-    ToolResult,
+    ToolResultFields,
 )
 from onyx.server.features.build.sandbox.models import (
     ExecOutputDelta as SandboxOutputDelta,
@@ -92,6 +92,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchResult,
     PublishedFiles,
     SandboxExecResult,
+    SpilledOutput,
     WriteStdinArguments,
 )
 from onyx.tools.tool_implementations.sandbox.patch import display_patch
@@ -115,6 +116,8 @@ HIDDEN_TOOLS = frozenset(
     }
 )
 
+# The card's note between the head and the tail of a spilled result.
+SPILLED_OUTPUT_NOTE = "Large output: the full result was saved to the sandbox."
 # Tools whose code argument streams to the browser while the model writes it.
 CODE_ARGUMENT_TOOLS = frozenset({PythonTool.NAME, CODE_MODE_TOOL_NAME})
 # Tools whose calls observe a code mode cell; each call renders as one code mode card.
@@ -129,6 +132,12 @@ _OPTIONAL_STRING = TypeAdapter(str | None)
 _INT = TypeAdapter(int)
 _STRINGS = TypeAdapter(list[str])
 logger = setup_logger()
+
+
+def _spilled_card_text(spilled: SpilledOutput) -> str:
+    """What the user's card shows of a spilled result: the head, a plain
+    note, and the tail; never the model's instructions."""
+    return f"{spilled.head}\n\n[{SPILLED_OUTPUT_NOTE}]\n\n{spilled.tail}"
 
 
 class ResponseLayout:
@@ -831,11 +840,12 @@ class ToolRenderer:
                 if isinstance(details.tool_result, CustomToolUserFileSnapshot)
                 else None
             )
-            data: JsonValue = (
-                None
-                if isinstance(details.tool_result, CustomToolUserFileSnapshot)
-                else details.tool_result
-            )
+            spilled = details.spilled
+            data: JsonValue = None
+            if spilled is not None:
+                data = _spilled_card_text(spilled)
+            elif not isinstance(details.tool_result, CustomToolUserFileSnapshot):
+                data = details.tool_result
             error = details.error
             objects.append(
                 packets.CustomToolDelta(
@@ -916,7 +926,7 @@ class ToolRenderer:
             )
         return [packets.Packet(placement=self.placement, obj=obj)]
 
-    def complete(self, result: ToolResult | None) -> list[packets.Packet]:
+    def complete(self, result: ToolResultFields | None) -> list[packets.Packet]:
         """Render the result and end the call's section.
 
         The part of the result that an amendment added follows the section end,
@@ -943,7 +953,7 @@ class ToolRenderer:
             output.extend(self._amendment_packets(result))
         return output
 
-    def _result_packets(self, result: ToolResult | None) -> list[packets.Packet]:
+    def _result_packets(self, result: ToolResultFields | None) -> list[packets.Packet]:
         """The packets of a final result of the call, before its section end."""
         if (
             result is not None
@@ -979,7 +989,7 @@ class ToolRenderer:
             )
         return []
 
-    def amend(self, result: ToolResult) -> list[packets.Packet]:
+    def amend(self, result: ToolResultFields) -> list[packets.Packet]:
         """Render the result that a release hook set for the call.
 
         An ended call renders only what the amendment added. Any other call
@@ -989,7 +999,7 @@ class ToolRenderer:
             return self.complete(result)
         return self._amendment_packets(result)
 
-    def _amendment_packets(self, result: ToolResult) -> list[packets.Packet]:  # noqa: ARG002
+    def _amendment_packets(self, result: ToolResultFields) -> list[packets.Packet]:  # noqa: ARG002
         """What a release hook added to the result after the call ended.
 
         The generic display cannot tell an amendment apart from the result it
@@ -1039,7 +1049,7 @@ class QuestionToolRenderer(ToolRenderer):
         return []
 
     @override
-    def complete(self, result: ToolResult | None) -> list[packets.Packet]:
+    def complete(self, result: ToolResultFields | None) -> list[packets.Packet]:
         if self._finished:
             return []
         self._finished = True
@@ -1143,7 +1153,7 @@ class CodeModeRenderer(ToolRenderer):
             for packet in self._children[index].complete(None)
         ]
 
-    def _result_packets(self, result: ToolResult | None) -> list[packets.Packet]:
+    def _result_packets(self, result: ToolResultFields | None) -> list[packets.Packet]:
         """Close nested calls, then send the program output and the final status.
 
         Replay has no progress events, so the saved calls render here.
@@ -1183,12 +1193,17 @@ class CodeModeRenderer(ToolRenderer):
         )
         # Live output stops at the output limit; the saved output keeps the start
         # and the end. The final delta makes live output match replay.
-        replace = bool(self._stdout) and self._stdout != execution.stdout
+        stdout = (
+            execution.stdout
+            if execution.spilled is None
+            else _spilled_card_text(execution.spilled)
+        )
+        replace = bool(self._stdout) and self._stdout != stdout
         output.append(
             packets.Packet(
                 placement=self.placement,
                 obj=packets.CodeModeDelta(
-                    stdout=execution.stdout if replace or not self._stdout else "",
+                    stdout=stdout if replace or not self._stdout else "",
                     replace_stdout=replace,
                     result=execution.result,
                     error=execution.error,
@@ -1204,7 +1219,7 @@ class CodeModeRenderer(ToolRenderer):
         return output
 
     @override
-    def _amendment_packets(self, result: ToolResult) -> list[packets.Packet]:
+    def _amendment_packets(self, result: ToolResultFields) -> list[packets.Packet]:
         """The cell's closing record: what the cell did after the observation, up
         to the end of the response."""
         details = result.details

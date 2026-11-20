@@ -23,6 +23,7 @@ from onyx.agents.models import (
     RunStatus,
     ToolCallContext,
     ToolResultAmendment,
+    ToolResultContext,
 )
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import (
@@ -34,7 +35,7 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
-from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal, check_cancelled
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
@@ -875,3 +876,111 @@ def test_the_on_drained_hook_of_a_suspension_waits_for_a_parked_child() -> None:
         assert drained == [True]
     finally:
         assert coordinator.close(3)
+
+
+def test_amended_and_recorded_results_go_through_prepare_tool_result() -> None:
+    prepared: list[tuple[str, bool, int]] = []
+
+    def prepare(context: ToolResultContext) -> ToolResult:
+        prepared.append(
+            (context.result.text, context.amended, len(context.step_results))
+        )
+        return context.result.model_copy(
+            update={"content": f"prepared {context.result.text}"}
+        )
+
+    agent = Agent(
+        FakeModelClient(_call_then(_answer)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="cell", description="", parameters={}),
+                execute=lambda _invocation: ToolResult(content="running"),
+            )
+        ],
+        on_finish=FinishHook(),
+        prepare_tool_result=prepare,
+    )
+    run, events, saved = _run(agent)
+
+    # Amendments do not count toward a step budget.
+    assert prepared == [("running", False, 0), ("closed", True, 0)]
+    amended = [event for event in events if isinstance(event, ToolResultAmendedEvent)]
+    assert [event.result.text for event in amended] == ["prepared closed"]
+    for state in (saved[0], run.snapshot()):
+        result = state.steps[0].tools[CALL_ID].result
+        assert result is not None and result.text == "prepared closed"
+
+
+@pytest.mark.parametrize("error", [AgentCancelled, RuntimeError])
+def test_an_amendment_whose_preparation_fails_applies_as_the_hook_made_it(
+    error: type[BaseException],
+) -> None:
+    def prepare(context: ToolResultContext) -> ToolResult:
+        if context.amended:
+            raise error()
+        return context.result
+
+    agent = Agent(
+        FakeModelClient(_call_then(_answer)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="cell", description="", parameters={}),
+                execute=lambda _invocation: ToolResult(content="running"),
+            )
+        ],
+        on_finish=FinishHook(),
+        prepare_tool_result=prepare,
+    )
+    run, events, saved = _run(agent)
+
+    assert run.status == RunStatus.COMPLETE
+    amended = [event for event in events if isinstance(event, ToolResultAmendedEvent)]
+    assert [event.result.text for event in amended] == ["closed"]
+    for state in (saved[-1], run.snapshot()):
+        result = state.steps[0].tools[CALL_ID].result
+        assert result is not None and result.text == "closed"
+
+
+def test_a_stopped_run_applies_its_amendments_without_preparing_them() -> None:
+    # A preparation that does slow work (a spill) checks the run's signal, so
+    # a Stop reaches it after the run's loop ended.
+    cancellation = CancellationSignal()
+
+    def prepare(context: ToolResultContext) -> ToolResult:
+        if context.amended:
+            check_cancelled()
+        return context.result.model_copy(
+            update={"content": f"prepared {context.result.text}"}
+        )
+
+    def reply(
+        request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        if request.messages and isinstance(request.messages[-1], ToolResultMessage):
+            cancellation.cancel()
+            signal.check()
+        return AssistantMessage(
+            content=[ToolCall(id=CALL_ID, name="cell", arguments={})]
+        )
+
+    agent = Agent(
+        FakeModelClient(reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="cell", description="", parameters={}),
+                execute=lambda _invocation: ToolResult(content="running"),
+            )
+        ],
+        on_finish=FinishHook(),
+        prepare_tool_result=prepare,
+    )
+    run, events, saved = _run(agent, cancellation=cancellation)
+
+    assert run.status == RunStatus.CANCELLED
+    amended = [event for event in events if isinstance(event, ToolResultAmendedEvent)]
+    assert [event.result.text for event in amended] == ["closed"]
+    result = saved[-1].steps[0].tools[CALL_ID].result
+    assert result is not None and result.text == "closed"

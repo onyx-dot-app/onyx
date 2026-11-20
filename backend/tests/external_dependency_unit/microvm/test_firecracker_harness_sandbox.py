@@ -33,6 +33,7 @@ from onyx.microvm.lifecycle import sandbox_daemon
 from onyx.microvm.models import (
     ExecCommand,
     ExecStarted,
+    FileListing,
     OutputStream,
     PlacedVm,
 )
@@ -54,6 +55,7 @@ from onyx.server.features.build.sandbox.firecracker.models import ExecSessionTab
 from onyx.server.features.build.sandbox.harness_base import (
     EXEC_DEFAULT_ENV,
     ONYX_VM_FILES_ROOT,
+    TOOL_RESULTS_ROOT,
     ExecCapReachedError,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
@@ -63,6 +65,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     SandboxPathError,
     collect_exec_result,
     session_relative_path,
+    session_tool_results,
     session_workspace,
 )
 from onyx.server.features.build.sandbox.models import (
@@ -860,7 +863,7 @@ def test_read_file_reads_the_session_and_the_onyx_root_and_only_regular_files(
     ref = new_ref()
     sandbox.write_file(ref, "out/report.csv", b"a,b\n")
     chart = f"{ONYX_VM_FILES_ROOT}/out/chart.svg"
-    sandbox.write_onyx_file(ref, chart, b"<svg/>")
+    sandbox.write_file(ref, chart, b"<svg/>")
     node.agent.files[(str(ref.sandbox_id), "", "/tmp/elsewhere.svg")] = b"<svg/>"
 
     assert sandbox.read_file(ref, chart, max_bytes=10) == b"<svg/>"
@@ -903,7 +906,7 @@ def test_file_store_files_stream_into_the_vm_and_its_sessions(
     vm_path = f"{ONYX_VM_FILES_ROOT}/search-files/{file_id}/big.bin"
     try:
         with store.read_file(file_id, use_tempfile=True) as content:
-            sandbox.write_onyx_file(ref, vm_path, content)
+            sandbox.write_file(ref, vm_path, content)
         with store.read_file(file_id, use_tempfile=True) as content:
             sandbox.write_file(ref, "attachments/big.bin", content)
     finally:
@@ -918,7 +921,8 @@ def test_file_store_files_stream_into_the_vm_and_its_sessions(
     assert node.agent.write_chunk_sizes[-2:] == [chunked, chunked]
 
 
-def test_write_onyx_file_sets_up_no_session(
+def test_onyx_root_file_calls_set_up_no_session(
+    monkeypatch: pytest.MonkeyPatch,
     sandbox: FirecrackerHarnessSandbox,
     node: RunningFakeAgent,
     new_ref: NewRef,
@@ -926,13 +930,56 @@ def test_write_onyx_file_sets_up_no_session(
 ) -> None:
     ref = new_ref()
     path = f"{ONYX_VM_FILES_ROOT}/tool-results/call-1.txt"
-    sandbox.write_onyx_file(ref, path, b"first")
+    sandbox.write_file(ref, path, b"first")
     # Idempotent: a second write replaces the file.
-    sandbox.write_onyx_file(
-        ref, f"{ONYX_VM_FILES_ROOT}/./tool-results/call-1.txt", b"x"
+    sandbox.write_file(ref, f"{ONYX_VM_FILES_ROOT}/./tool-results/call-1.txt", b"x")
+    sandbox.write_file(
+        ref, f"{ONYX_VM_FILES_ROOT}/tool-results/call-2.txt", [b"a", b"b"]
     )
 
     assert node.agent.files[(str(ref.sandbox_id), "", path)] == b"x"
+    listings: list[FileListing] = []
+
+    def pick(listing: FileListing) -> list[str]:
+        listings.append(listing)
+        return [entry.path for entry in listing.entries if entry.path == path]
+
+    sandbox.delete_listed_files(
+        ref, f"{ONYX_VM_FILES_ROOT}/tool-results", pick, max_entries=1
+    )
+    assert listings[-1].truncated and len(listings[-1].entries) == 1
+    sandbox.write_file(ref, path, b"x")
+    places = 0
+    place = sandbox._place
+
+    def counted_place(placed_ref: HarnessSandboxRef) -> PlacedVm:
+        nonlocal places
+        places += 1
+        return place(placed_ref)
+
+    monkeypatch.setattr(sandbox, "_place", counted_place)
+    sandbox.delete_listed_files(
+        ref, f"{ONYX_VM_FILES_ROOT}/tool-results", pick, max_entries=10
+    )
+    # One VM lookup for the listing and its deletes.
+    assert places == 1
+    assert not listings[-1].truncated
+    assert sorted((entry.path, entry.size) for entry in listings[-1].entries) == [
+        (path, 1),
+        (f"{ONYX_VM_FILES_ROOT}/tool-results/call-2.txt", 2),
+    ]
+    assert (str(ref.sandbox_id), "", path) not in node.agent.files
+    assert not sandbox.delete_file(ref, path)
+    outside = f"{ONYX_VM_FILES_ROOT}/keep.txt"
+    sandbox.write_file(ref, outside, b"keep")
+    # A selected path that the listing did not return stays.
+    sandbox.delete_listed_files(
+        ref, f"{ONYX_VM_FILES_ROOT}/tool-results", lambda _: [outside], max_entries=10
+    )
+    assert node.agent.files[(str(ref.sandbox_id), "", outside)] == b"keep"
+    sandbox.delete_listed_files(
+        ref, f"{ONYX_VM_FILES_ROOT}/missing", pick, max_entries=10
+    )
     placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
     assert placement is not None
     assert (
@@ -943,24 +990,116 @@ def test_write_onyx_file_sets_up_no_session(
     )
 
 
+def test_a_tool_result_written_after_its_session_purge_leaves_nothing(
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+    other = _session_ref(ref)
+    sandbox.write_file(other, f"{session_tool_results(other.session_id)}/a.txt", b"x")
+    sandbox.purge_session(
+        tenant_id=ref.tenant_id, sandbox_id=ref.sandbox_id, session_id=ref.session_id
+    )
+
+    # A write that the purge missed, for example one that was in flight.
+    with pytest.raises(HarnessSandboxError, match="was deleted"):
+        sandbox.write_file(
+            ref, f"{session_tool_results(ref.session_id)}/late.txt", b"late"
+        )
+
+    paths = [
+        path for (_, _, path) in node.agent.files if path.startswith(TOOL_RESULTS_ROOT)
+    ]
+    assert paths == [f"{session_tool_results(other.session_id)}/a.txt"]
+
+
+def _start_command_and_spill(
+    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, ref: HarnessSandboxRef
+) -> str:
+    """Start a command that keeps running and write a tool result in the
+    session; the exec session ID. The daemon's call log starts empty."""
+    _, started = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    assert started.session_id is not None
+    sandbox.write_file(ref, f"{session_tool_results(ref.session_id)}/a.txt", b"x")
+    node.agent.daemon_calls.clear()
+    return started.session_id
+
+
+def _purge_calls(
+    node: RunningFakeAgent, ref: HarnessSandboxRef
+) -> list[tuple[str, str]]:
+    """The daemon calls of a purge of a session with a running command: a
+    running command could write the tool results again, so it stops first."""
+    [execution_id] = node.agent.cancel_calls
+    return [
+        ("Cancel", execution_id),
+        ("DeleteFile", session_tool_results(ref.session_id)),
+        ("DeleteFile", session_workspace(ref.session_id)),
+    ]
+
+
+def test_a_purge_cancels_the_session_commands_before_it_deletes_its_tool_results(
+    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, new_ref: NewRef
+) -> None:
+    ref = new_ref()
+    _start_command_and_spill(sandbox, node, ref)
+
+    sandbox.purge_session(
+        tenant_id=ref.tenant_id, sandbox_id=ref.sandbox_id, session_id=ref.session_id
+    )
+
+    assert node.agent.daemon_calls == _purge_calls(node, ref)
+
+
+def test_a_failed_record_lookup_still_runs_every_purge_step(
+    monkeypatch: pytest.MonkeyPatch,
+    tenant_cache: CacheBackend,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+    session = _start_command_and_spill(sandbox, node, ref)
+
+    def lookup_fails(*_args: object) -> bool:
+        raise RuntimeError("cache down")
+
+    monkeypatch.setattr(harness_sandbox, "has_session_records", lookup_fails)
+
+    with pytest.raises(RuntimeError, match="cache down"):
+        sandbox.purge_session(
+            tenant_id=ref.tenant_id,
+            sandbox_id=ref.sandbox_id,
+            session_id=ref.session_id,
+        )
+
+    assert node.agent.daemon_calls == _purge_calls(node, ref)
+    assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session) is None
+
+
 @pytest.mark.parametrize(
     "path",
     [
         ONYX_VM_FILES_ROOT,
         f"{ONYX_VM_FILES_ROOT}x/a.txt",
         f"{ONYX_VM_FILES_ROOT}/../etc/passwd",
-        "tmp/onyx/a.txt",
         "/home/onyx/workspaces/s1/a.txt",
     ],
 )
-def test_write_onyx_file_refuses_paths_outside_the_onyx_root(
+def test_file_calls_refuse_paths_outside_the_session_and_the_onyx_root(
     sandbox: FirecrackerHarnessSandbox,
     node: RunningFakeAgent,
     new_ref: NewRef,
     path: str,
 ) -> None:
+    ref = new_ref()
     with pytest.raises(SandboxPathError):
-        sandbox.write_onyx_file(new_ref(), path, b"x")
+        sandbox.write_file(ref, path, b"x")
+    with pytest.raises(SandboxPathError):
+        sandbox.delete_file(ref, path)
+    with pytest.raises(SandboxPathError):
+        sandbox.delete_listed_files(ref, path, lambda _listing: [], max_entries=10)
     # Refused before the sandbox starts.
     assert node.agent.create_calls == 0
 

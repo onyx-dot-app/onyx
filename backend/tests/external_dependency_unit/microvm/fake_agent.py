@@ -155,6 +155,9 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.files: dict[tuple[str, str, str], bytes] = {}
         # Permission bits of a file in `files`; 0o644 when absent.
         self.file_modes: dict[tuple[str, str, str], int] = {}
+        # Each file's modification time in seconds since the epoch, set by a
+        # write; a file with none lists no modified_at.
+        self.file_times: dict[tuple[str, str, str], float] = {}
         # (sandbox_id, session_id, path) -> target of a symlink, as stored.
         self.links: dict[tuple[str, str, str], str] = {}
         # StatFiles facts of a path, as the guest daemon's os.Root reports
@@ -163,6 +166,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.path_stats: dict[tuple[str, str, str], sandboxd_pb2.PathStat] = {}
         # The data message sizes of each WriteFile, in order.
         self.write_chunk_sizes: list[list[int]] = []
+        # WriteFile fails with this reason.
+        self.write_file_error: SandboxDaemonErrorReason | None = None
         # ZipFiles fails with LIMIT_EXCEEDED over this many input bytes.
         self.zip_max_input_bytes: int | None = None
         # Spooled captures by ID, and "object storage" by presigned URL.
@@ -178,6 +183,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self._ids = itertools.count(1)
         # Execution IDs of every Cancel.
         self.cancel_calls: list[str] = []
+        # Cancel and DeleteFile calls in order: (method, execution ID or path).
+        self.daemon_calls: list[tuple[str, str]] = []
         # Cancel fails with this reason, and the execution goes on.
         self.cancel_error: SandboxDaemonErrorReason | None = None
         # Start and Run refuse with EXECUTION_CAP_REACHED at this many
@@ -401,6 +408,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         for key in [k for k in self.files if k[0] == sandbox_id]:
             del self.files[key]
             self.file_modes.pop(key, None)
+            self.file_times.pop(key, None)
         for key in [k for k in self.links if k[0] == sandbox_id]:
             del self.links[key]
 
@@ -1076,6 +1084,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         with self.agent.lock:
             execution = self._execution(context, request.execution_id)
             self.agent.cancel_calls.append(request.execution_id)
+            self.agent.daemon_calls.append(("Cancel", request.execution_id))
             if self.agent.cancel_error is not None:
                 abort_daemon(context, self.agent.cancel_error, "cancel failed")
             already_ended = execution.result is not None
@@ -1160,9 +1169,14 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
 
     @staticmethod
     def _info(
-        path: str, size: int, *, directory: bool = False, mode: int = 0o644
+        path: str,
+        size: int,
+        *,
+        directory: bool = False,
+        mode: int = 0o644,
+        modified_at: float | None = None,
     ) -> sandboxd_pb2.FileInfo:
-        return sandboxd_pb2.FileInfo(
+        info = sandboxd_pb2.FileInfo(
             path=path,
             name=path.rsplit("/", 1)[-1],
             type=sandboxd_pb2.FILE_TYPE_DIRECTORY
@@ -1171,6 +1185,9 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             size=size,
             mode=0o755 if directory else mode,
         )
+        if modified_at is not None:
+            info.modified_at.FromNanoseconds(int(modified_at * 1e9))
+        return info
 
     def _followed(
         self, context: grpc.ServicerContext, key: tuple[str, str, str]
@@ -1242,6 +1259,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         self.agent.links.pop(key, None)
         mode = header.mode if isinstance(header, sandboxd_pb2.WriteFileHeader) else 0
         self.agent.file_modes[key] = mode or 0o644
+        self.agent.file_times[key] = time.time()
         return hashlib.sha256(data).hexdigest()
 
     def WriteFile(  # noqa: N802
@@ -1264,6 +1282,8 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         with self.agent.lock:
             self.agent.write_chunk_sizes.append(sizes)
             sandbox_id = self._ready(context)
+            if self.agent.write_file_error is not None:
+                abort_daemon(context, self.agent.write_file_error, "write failed")
             key = self._file_key(context, sandbox_id, header.session_id, header.path)
             path = key[2]
             if key in self.agent.files and not header.overwrite:
@@ -1313,7 +1333,12 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     ) -> sandboxd_pb2.ListFilesResponse:
         with self.agent.lock:
             sandbox_id = self._ready(context)
-            base = self._check_path(context, request.path)
+            # With no session ID, an absolute path, as for the other calls.
+            base = (
+                self._check_path(context, request.path)
+                if request.session_id
+                else self._file_key(context, sandbox_id, "", request.path)[2]
+            )
             files = self._session_files(sandbox_id, request.session_id)
         prefix = f"{base}/" if base else ""
         under = {p: d for p, d in files.items() if p.startswith(prefix)}
@@ -1335,7 +1360,15 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             if len(parts) > max_depth:
                 depth_cut = depth_cut or request.recursive
                 continue
-            entries.append(self._info(path, len(data)))
+            entries.append(
+                self._info(
+                    path,
+                    len(data),
+                    modified_at=self.agent.file_times.get(
+                        (sandbox_id, request.session_id, path)
+                    ),
+                )
+            )
         listing = [self._info(d, 0, directory=True) for d in sorted(dirs)] + entries
         limit = request.max_entries or self.agent.list_max_entries or 10_000
         return sandboxd_pb2.ListFilesResponse(
@@ -1347,6 +1380,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     ) -> sandboxd_pb2.DeleteFileResponse:
         with self.agent.lock:
             sandbox_id = self._ready(context)
+            self.agent.daemon_calls.append(("DeleteFile", request.path))
             if not request.session_id and request.path.startswith(WORKSPACES + "/"):
                 # VM-wide delete of a whole session directory.
                 session = request.path.removeprefix(WORKSPACES + "/")

@@ -627,7 +627,9 @@ default agent, is Blocked.
     or a redirect, and flags only 401 and 403. Both put a
     `CustomToolCallSummary` in `details`, which the chat renderer draws:
     `CustomTool` fills its `error`, and `MCPTool` puts an `{"error": ...}`
-    object in `tool_result`. Other `CustomTool` exceptions reach `Tool.run`,
+    object in `tool_result`. In a chat with a sandbox, a large output goes to
+    the VM, and the summary keeps only its preview in `spilled`
+    ([[code-execution]]). Other `CustomTool` exceptions reach `Tool.run`,
     which gives the model "Tool failed with error: <exception text>" and the
     user no error detail ([[tools-framework#run-errors-become-results]]).
 12. `reauth-mark-if-current` **A rejected credential is marked only if it is

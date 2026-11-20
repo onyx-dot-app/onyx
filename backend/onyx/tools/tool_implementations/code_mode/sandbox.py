@@ -59,7 +59,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
     TypeDiagnostic,
 )
 from onyx.tools.tool_implementations.code_mode.store import json_value
-from onyx.tools.tool_implementations.utils import truncate_output, truncation_marker
+from onyx.tools.tool_implementations.utils import cut_middle, truncate_output
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import call_later, start_thread_future
 
@@ -317,20 +317,12 @@ class StdoutCollector:
     def cut(self, max_chars: int) -> str:
         """The collected text within `max_chars`, cut in the middle; the marker
         counts every character omitted, also those the collector dropped."""
-        head = "".join(self._head)
-        tail = "".join(self._tail)
-        if not self._dropped:
-            # Nothing dropped: head and tail are one contiguous text.
-            return truncate_output(
-                head + tail, max_chars, label="code mode output", keep_tail=True
-            )
-        kept_head = min(max_chars // 2, len(head))
-        kept_tail = min(max_chars - kept_head, len(tail))
-        omitted = self._dropped + len(head) - kept_head + len(tail) - kept_tail
-        return (
-            head[:kept_head]
-            + truncation_marker(omitted)
-            + (tail[len(tail) - kept_tail :] if kept_tail else "")
+        return cut_middle(
+            "".join(self._head),
+            "".join(self._tail),
+            max_chars,
+            omitted=self._dropped,
+            label="code mode output",
         )
 
 
