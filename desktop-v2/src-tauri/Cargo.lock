@@ -3097,6 +3097,7 @@ dependencies = [
  "tokio",
  "url",
  "webkit2gtk",
+ "webview2-com",
  "windows",
  "winreg",
 ]
