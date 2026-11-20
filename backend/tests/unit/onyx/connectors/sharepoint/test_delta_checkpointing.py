@@ -130,6 +130,7 @@ def _patch_delta_fetch(
         drive_id: str,
         page_url: str,
         allow_full_resync: bool,  # noqa: ARG001
+        select_fields: str,  # noqa: ARG001
     ) -> DriveDeltaFetchResult:
         items, next_url = fetch_page(None, page_url, drive_id)
         return _delta_result(items, next_url)
@@ -556,6 +557,7 @@ class TestDelta410GoneResync:
             drive_id: str,
             page_url: str,  # noqa: ARG001
             allow_full_resync: bool,
+            select_fields: str,  # noqa: ARG001
         ) -> DriveDeltaFetchResult:
             allow_attempts.append(allow_full_resync)
             full_url = (

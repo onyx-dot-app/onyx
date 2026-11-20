@@ -513,14 +513,21 @@ class SharepointSourceOperations(SourceOperations):
         consumes=OperationConsumes.CREDENTIAL,
     )
     def get_delta_page(
-        self, *, drive_id: str, page_url: str, allow_full_resync: bool
+        self,
+        *,
+        drive_id: str,
+        page_url: str,
+        allow_full_resync: bool,
+        select_fields: str = DRIVE_ITEM_SELECT_FIELDS,
     ) -> DriveDeltaFetchResult:
+        """One page of a drive's delta. ``select_fields`` is the ``$select`` of
+        the URL that a 410 resync starts."""
         with raise_microsoft_errors():
             return fetch_drive_delta_checkpoint_page(
                 self._graph_api(),
                 page_url=page_url,
                 drive_id=drive_id,
-                select_fields=DRIVE_ITEM_SELECT_FIELDS,
+                select_fields=select_fields,
                 allow_full_resync=allow_full_resync,
             )
 
