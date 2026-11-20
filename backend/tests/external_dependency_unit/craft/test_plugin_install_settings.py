@@ -544,3 +544,57 @@ def test_name_winners_that_fail_validation_give_the_name_to_the_next_skill(
     assert read_ids.count(_current_bundle_file_id(db_session, published)) == 1
     assert read_ids.count(_current_bundle_file_id(db_session, own)) == 1
     assert shared_bundle_file_id in read_ids
+
+
+# The enabled value of each setting for each choice ("none": no choice).
+_ENABLED_BY_CHOICE = {
+    REQUIRED: {"on": True, "off": True, "none": True},
+    DEFAULT: {"on": True, "off": False, "none": True},
+    AVAILABLE: {"on": True, "off": False, "none": False},
+}
+
+
+@pytest.mark.parametrize("path", ["owner", "user share", "group share", "company"])
+@pytest.mark.parametrize("choice", ["on", "off", "none"])
+@pytest.mark.parametrize("setting", [REQUIRED, DEFAULT, AVAILABLE, NOT_AVAILABLE])
+def test_each_row_of_the_truth_table(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    setting: PluginInstallationPolicy,
+    choice: str,
+    path: str,
+) -> None:
+    """The owner and a share get at least Available. The company path needs a
+    published plugin, and hides a Not available one."""
+    owner = make_user(db_session, standard_account=True)
+    member = make_user(db_session, standard_account=True)
+    skill = make_skill(db_session, author_user_id=owner.id, is_public=path == "company")
+    _set_company_setting(db_session, skill, setting)
+    user = owner if path == "owner" else member
+    if path == "user share":
+        share_plugin_with_user(
+            db_session, skill.id, member.id, SkillSharePermission.VIEWER
+        )
+    elif path == "group share":
+        group = make_group(db_session)
+        add_user_to_group(db_session, member, group)
+        share_plugin_with_group(
+            db_session, skill.id, group.id, SkillSharePermission.VIEWER
+        )
+    if choice != "none":
+        set_plugin_preferences__no_commit(
+            user.id, [skill.id], choice == "on", db_session
+        )
+    db_session.flush()
+
+    state = _states(db_session, [user], [skill]).get((user.id, skill.id))
+
+    if setting == NOT_AVAILABLE and path == "company":
+        assert state is None
+        return
+    expected = AVAILABLE if setting == NOT_AVAILABLE else setting
+    assert state is not None
+    assert (state.installation_policy, state.enabled) == (
+        expected,
+        _ENABLED_BY_CHOICE[expected][choice],
+    )

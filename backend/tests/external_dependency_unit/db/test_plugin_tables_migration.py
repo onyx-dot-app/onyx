@@ -516,6 +516,15 @@ def test_backfill_maps_each_custom_skill_to_one_plugin(
         _check_deferred_constraints(db_session)
         _assert_backfilled(db_session, expected, built_in_id, authors, seeded_ids)
         assert _skill_table_shape(db_session) == skill_shape
+        # Organization-wide edit becomes view only: the plugin is published
+        # and no share gives anyone edit access.
+        assert not db_session.execute(
+            text(
+                "SELECT 1 FROM plugin__user WHERE plugin_id = :id "
+                "UNION ALL SELECT 1 FROM plugin__user_group WHERE plugin_id = :id"
+            ),
+            {"id": public_deploy_carol.id},
+        ).all()
 
         with _migration_ops(db_session):
             migration.downgrade()
