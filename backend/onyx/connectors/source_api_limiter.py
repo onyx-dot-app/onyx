@@ -31,6 +31,12 @@ run starts from the share that the source accepted before, or from a
 conservative start share, and not at the full budget. It grows slowly from
 either share.
 
+A limiter can also have a pause, which several limiters can share. When the
+source answers with a wait time (Retry-After), the caller reports it, and
+every call of every worker that reads the pause waits until it ends. The
+Microsoft limiters use it: Microsoft asks that all the threads of an app stop
+for that time.
+
 Each budget is for a period (a minute for Google), but the window that
 enforces it is shorter, with the same rate. A window of the whole period lets
 the full budget go in one burst, and then lets requests in only as the burst
@@ -45,6 +51,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Callable
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel
@@ -59,8 +66,11 @@ from onyx.configs.app_configs import (
     GOOGLE_DRIVE_QUOTA_PER_USER,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credential_families import FAMILY_CREDENTIAL_CODECS
 from onyx.connectors.google_drive.quota import DriveQuotaApi
 from onyx.connectors.interfaces import SourceApiLimiter
+from onyx.connectors.microsoft_credential import MicrosoftCredential
+from onyx.connectors.microsoft_utils.request_pacer import GRAPH_LIMITER_API
 from onyx.connectors.models import ConnectorStopSignal
 
 # no-direct-redis: allow the budget is shared by every indexing and sync worker
@@ -81,6 +91,9 @@ from onyx.server.metrics.source_api_metrics import (
     record_late_refusals,
     record_limiter_cut,
     record_limiter_overdraft,
+    record_limiter_pause,
+    record_limiter_paused_seconds,
+    record_limiter_units,
     record_limiter_wait,
     set_project_budget,
     set_project_ceiling,
@@ -186,10 +199,15 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         *,
         source: DocumentSource,
         bulk: bool = False,
+        pause_key: str | None = None,
     ) -> None:
         self._source = source.value
         self._tenant_id = tenant_id
         self._prefix = f"{_KEY_PREFIX}:{credential_key}"
+        # The pause that this limiter reads and sets. None: it has none.
+        self._pause_key = (
+            f"{_KEY_PREFIX}:{pause_key}:blocked_until" if pause_key else None
+        )
         self._budgets = budgets
         self._should_stop = should_stop
         # Every call of a bulk worker, such as docconversion, waits after the
@@ -306,6 +324,9 @@ class RedisSourceApiLimiter(SourceApiLimiter):
                     "stored" if start == WindowStart.STORED else "cold start",
                 )
         if result.wait_seconds == 0:
+            record_limiter_units(
+                self._source, api, self._units(api, cost, request_count)
+            )
             epochs: dict[str, int] = vars(self._thread_epochs).setdefault("epochs", {})
             for window, epoch in zip(windows, result.epochs, strict=False):
                 epochs[window.key] = epoch
@@ -360,6 +381,7 @@ class RedisSourceApiLimiter(SourceApiLimiter):
     ) -> None:
         if api not in self._budgets:
             return
+        self._wait_for_pause(api)
         is_bulk = bulk or self._bulk
         gate = _gate(self._tenant_id, f"{self._prefix}:{api}", is_bulk)
         ticket = _Ticket()
@@ -418,6 +440,8 @@ class RedisSourceApiLimiter(SourceApiLimiter):
             # A stop during the last wait ends the call before its request.
             if waited_at_all:
                 self._check_stop()
+                # The source can ask for a pause while the call waits.
+                self._wait_for_pause(api)
         finally:
             gate.leave(ticket)
             add_local_waiters(self._source, api, -1)
@@ -429,6 +453,38 @@ class RedisSourceApiLimiter(SourceApiLimiter):
                 )
             if waited_at_all:
                 record_limiter_wait(self._source, api, time.monotonic() - started)
+
+    def _wait_for_pause(self, api: str) -> None:
+        """Waits until the pause that the source asked for ends."""
+        if self._pause_key is None:
+            return
+        waited = 0.0
+        try:
+            while True:
+                left = self._windows.pause_left(self._pause_key)
+                if left <= 0:
+                    return
+                self._check_stop()
+                started = time.monotonic()
+                self._sleep(left)
+                waited += time.monotonic() - started
+        finally:
+            record_limiter_paused_seconds(self._source, api, waited)
+
+    @override
+    def report_retry_after(self, api: str, seconds: float) -> None:
+        if self._pause_key is None or seconds <= 0 or api not in self._budgets:
+            return
+        left = self._windows.pause(self._pause_key, seconds)
+        record_limiter_pause(self._source, api)
+        logger.info(
+            "%s asked its callers to wait %.1fs (Retry-After); every call of "
+            "the shared pause %s waits %.1fs.",
+            api,
+            seconds,
+            self._pause_key,
+            left,
+        )
 
     def _check_stop(self) -> None:
         if self._should_stop is not None and self._should_stop():
@@ -531,18 +587,96 @@ GOOGLE_DRIVE_BUDGETS: dict[str, SourceApiBudget] = {
 }
 
 
+# Microsoft counts resource units (RU) for each app registration in a tenant,
+# for one minute. The limit depends on the tenant's licenses: 1,250 RU for the
+# smallest tier and 6,250 RU for the largest. The budget is the largest limit,
+# and a new window starts at the smallest one.
+MICROSOFT_GRAPH_RU_PER_MINUTE = 6_250
+_MICROSOFT_WINDOW_SECONDS = 10.0
+MICROSOFT_START_SHARE = 0.2
+MICROSOFT_GRAPH_BUDGETS: dict[str, SourceApiBudget] = {
+    GRAPH_LIMITER_API: SourceApiBudget(
+        per_credential=MICROSOFT_GRAPH_RU_PER_MINUTE,
+        window_seconds=_MICROSOFT_WINDOW_SECONDS,
+        start_share=MICROSOFT_START_SHARE,
+    ),
+}
+
+
+MICROSOFT_GRAPH_SOURCES: frozenset[DocumentSource] = frozenset(
+    {
+        DocumentSource.SHAREPOINT,
+        DocumentSource.ONEDRIVE,
+        DocumentSource.OUTLOOK,
+        DocumentSource.TEAMS,
+    }
+)
+
+
+def microsoft_app_key(
+    source: DocumentSource, credential_json: dict[str, Any]
+) -> str | None:
+    """The key of the app registration that a Microsoft credential uses: its
+    directory (tenant) id and client id. Microsoft limits each app in a
+    tenant, so every connector on the app shares this key. None when the
+    source is not a Microsoft Graph source or the credential has no app.
+    ``credential_json`` has the source's own keys. Only the two ids are read."""
+    codec = FAMILY_CREDENTIAL_CODECS.get(source)
+    if source not in MICROSOFT_GRAPH_SOURCES or codec is None:
+        return None
+    try:
+        credential = codec.to_family(credential_json)
+    except ValueError:
+        # A validation error can quote the credential's values.
+        logger.warning(
+            "The %s credential has no app registration ids; its calls are not limited.",
+            source.value,
+        )
+        return None
+    if not isinstance(credential, MicrosoftCredential):
+        return None
+    directory_id = credential.directory_id.strip().lower()
+    client_id = credential.client_id.strip().lower()
+    if not directory_id or not client_id:
+        return None
+    return f"microsoft:{directory_id}:{client_id}"
+
+
 def build_source_api_limiter(
     source: DocumentSource,
     credential_id: int,
     should_stop: Callable[[], bool] | None = None,
     bulk: bool = False,
+    load_credential_json: Callable[[], dict[str, Any]] | None = None,
 ) -> SourceApiLimiter | None:
     """The shared limiter for a connector of ``source`` that uses the
     credential, or None when the source has no budgets or the limiter is off.
     Connectors that share a credential share its budgets. A call that waits
     for its budget ends with ConnectorStopSignal when ``should_stop`` turns
-    true. With ``bulk``, every call waits after the calls of other workers."""
-    if not ENABLE_SOURCE_API_LIMITER or source != DocumentSource.GOOGLE_DRIVE:
+    true. With ``bulk``, every call waits after the calls of other workers.
+
+    A Microsoft Graph source needs ``load_credential_json``, which returns
+    the credential in the source's own keys. Its connectors share one budget
+    and one pause for each app registration in a tenant, whatever credential
+    row holds the app."""
+    if not ENABLE_SOURCE_API_LIMITER:
+        return None
+    if source in MICROSOFT_GRAPH_SOURCES:
+        if load_credential_json is None:
+            return None
+        app_key = microsoft_app_key(source, load_credential_json())
+        if app_key is None:
+            return None
+        return RedisSourceApiLimiter(
+            tenant_id=get_current_tenant_id(),
+            credential_key=app_key,
+            budgets=MICROSOFT_GRAPH_BUDGETS,
+            should_stop=should_stop,
+            source=source,
+            bulk=bulk,
+            pause_key=app_key,
+        )
+    if source != DocumentSource.GOOGLE_DRIVE:
         return None
     return RedisSourceApiLimiter(
         tenant_id=get_current_tenant_id(),

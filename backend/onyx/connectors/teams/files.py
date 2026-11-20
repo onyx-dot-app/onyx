@@ -29,6 +29,10 @@ from onyx.connectors.microsoft_utils.drive_items import (
     iter_drive_items_paged,
 )
 from onyx.connectors.microsoft_utils.graph_auth import acquire_token_for_rest
+from onyx.connectors.microsoft_utils.request_pacer import (
+    MicrosoftCall,
+    prepare_sdk_client,
+)
 from onyx.connectors.microsoft_utils.sharepoint_access import (
     SharepointPermissionCache,
     get_sharepoint_external_access,
@@ -248,8 +252,12 @@ class FileSource:
         msal_app = self._msal_app()
         tenant_domain = _tenant_domain(site_url)
         suffix = self._session.sharepoint_domain_suffix
-        context = ClientContext(site_url).with_access_token(
-            lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
+        context = prepare_sdk_client(
+            ClientContext(site_url).with_access_token(
+                lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
+            ),
+            lambda: self._session.request_pacer,
+            MicrosoftCall.REST,
         )
         by_site[site_url] = (context, time.monotonic())
         return context
@@ -319,6 +327,7 @@ class FileSource:
                 graph_api_base=self._session.graph_root,
                 access_token=self._session.access_token(),
                 raw_file_callback=self._raw_file_callback(),
+                pacer=self._session.request_pacer,
             )
         except DriveItemContentError as e:
             return ConnectorFailure(

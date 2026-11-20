@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 from onyx.connectors.microsoft_utils.graph_client import graph_api_get_json
+from onyx.connectors.microsoft_utils.request_pacer import MICROSOFT_USER_AGENT
 
 MODULE = "onyx.connectors.microsoft_utils.graph_client"
 
@@ -27,6 +28,7 @@ def test_preferences_ride_along_with_the_bearer_token() -> None:
     assert get.call_args.kwargs["headers"] == {
         "Prefer": "odata.maxpagesize=1",
         "Authorization": "Bearer tok",
+        "User-Agent": MICROSOFT_USER_AGENT,
     }
     assert get.call_args.kwargs["params"] == {"$top": "1"}
 

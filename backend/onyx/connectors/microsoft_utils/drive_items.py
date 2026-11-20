@@ -42,6 +42,12 @@ from onyx.connectors.microsoft_utils.graph_client import (
     log_and_raise_for_status,
     retry_wait,
 )
+from onyx.connectors.microsoft_utils.request_pacer import (
+    MICROSOFT_USER_AGENT,
+    USER_AGENT_HEADER,
+    MicrosoftCall,
+    MicrosoftRequestPacer,
+)
 from onyx.connectors.models import ImageSection, TabularSection, TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
@@ -377,6 +383,7 @@ def stream_response_to_buffer_with_cap(
     description: str,
     max_retries: int = STREAM_DOWNLOAD_MAX_RETRIES,
     retry_statuses: bool = True,
+    pacer: MicrosoftRequestPacer | None = None,
 ) -> bytes:
     """Stream a GET into memory under a byte cap, retrying transport drops
     (Graph closes a connection mid-body now and then) and, unless told
@@ -390,6 +397,8 @@ def stream_response_to_buffer_with_cap(
         cap: Maximum number of bytes to read before raising ``SizeCapExceeded``.
         description: Short label used in log messages.
         max_retries: Number of retries beyond the initial attempt.
+        pacer: Takes the cost of a download from the shared limiter before
+            each attempt, and reports a throttled answer.
 
     Raises:
         SizeCapExceeded: when ``cap`` is exceeded (never retried).
@@ -397,8 +406,14 @@ def stream_response_to_buffer_with_cap(
             HTTPError of a final throttled or 5xx answer.
     """
     for attempt in range(max_retries + 1):
+        if pacer is not None:
+            pacer.acquire(MicrosoftCall.DOWNLOAD)
         try:
             with request_factory() as resp:
+                if pacer is not None:
+                    pacer.report_response(
+                        resp.status_code, resp.headers.get("Retry-After")
+                    )
                 sleep_time: float | None = (
                     retry_wait(resp, attempt, max_retries) if retry_statuses else None
                 )
@@ -472,7 +487,9 @@ def _read_under_cap(resp: requests.Response, cap: int, description: str) -> byte
     return buf.getvalue()
 
 
-def download_with_cap(url: str, timeout: int, cap: int) -> bytes:
+def download_with_cap(
+    url: str, timeout: int, cap: int, pacer: MicrosoftRequestPacer | None = None
+) -> bytes:
     """Stream download content with an upper bound on bytes read.
 
     Behavior:
@@ -486,18 +503,28 @@ def download_with_cap(url: str, timeout: int, cap: int) -> bytes:
     """
 
     def _factory() -> requests.Response:
-        return requests.get(url, stream=True, timeout=timeout)
+        return requests.get(
+            url,
+            headers={USER_AGENT_HEADER: MICROSOFT_USER_AGENT},
+            stream=True,
+            timeout=timeout,
+        )
 
     return stream_response_to_buffer_with_cap(
         _factory,
         cap,
         description=f"downloadUrl:{redact_url_for_logging(url)}",
         retry_statuses=False,
+        pacer=pacer,
     )
 
 
 def download_graph_url_with_cap(
-    get_access_token: Callable[[], str], url: str, cap: int, description: str
+    get_access_token: Callable[[], str],
+    url: str,
+    cap: int,
+    description: str,
+    pacer: MicrosoftRequestPacer | None = None,
 ) -> bytes:
     """Stream the bytes a Graph URL serves, with a byte cap.
 
@@ -507,12 +534,17 @@ def download_graph_url_with_cap(
     """
 
     def _factory() -> requests.Response:
-        headers = {"Authorization": f"Bearer {get_access_token()}"}
+        headers = {
+            "Authorization": f"Bearer {get_access_token()}",
+            USER_AGENT_HEADER: MICROSOFT_USER_AGENT,
+        }
         return requests.get(
             url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
         )
 
-    return stream_response_to_buffer_with_cap(_factory, cap, description=description)
+    return stream_response_to_buffer_with_cap(
+        _factory, cap, description=description, pacer=pacer
+    )
 
 
 def download_via_graph_api(
@@ -521,6 +553,7 @@ def download_via_graph_api(
     item_id: str,
     cap: int,
     graph_api_base: str,
+    pacer: MicrosoftRequestPacer | None = None,
 ) -> bytes:
     """Download a drive item via the Graph API /content endpoint with a byte cap."""
     return download_graph_url_with_cap(
@@ -528,6 +561,7 @@ def download_via_graph_api(
         f"{graph_api_base}/drives/{drive_id}/items/{item_id}/content",
         cap,
         description=f"graph_api(drive={drive_id},item={item_id})",
+        pacer=pacer,
     )
 
 
@@ -537,6 +571,7 @@ def extract_drive_item_content(
     graph_api_base: str,
     access_token: str | None = None,
     raw_file_callback: RawFileCallback | None = None,
+    pacer: MicrosoftRequestPacer | None = None,
 ) -> DriveItemContent | None:
     """Download an item and extract it into Onyx sections.
 
@@ -580,6 +615,7 @@ def extract_drive_item_content(
                 download_url,
                 REQUEST_TIMEOUT_SECONDS,
                 size_threshold,
+                pacer,
             )
         except SizeCapExceeded as e:
             logger.warning(
@@ -604,6 +640,7 @@ def extract_drive_item_content(
                 driveitem.id,
                 size_threshold,
                 graph_api_base=graph_api_base,
+                pacer=pacer,
             )
         except SizeCapExceeded:
             logger.warning(
