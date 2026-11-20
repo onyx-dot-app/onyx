@@ -12,11 +12,9 @@ from onyx.db.enums import PluginInstallationPolicy
 from onyx.db.models import Integration, ScheduledTask, User
 from onyx.db.scheduled_task import create_scheduled_task, update_scheduled_task
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.craft import (
-    list_task_integration_views,
-    load_task_integrations,
-)
+from onyx.integrations.craft import list_task_integration_views
 from onyx.integrations.models import ActionSettings, LinkValue
+from onyx.server.features.build.models import TaskIntegrationView
 from onyx.tools.models import IntegrationLinkConfiguration
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
@@ -74,6 +72,15 @@ def _link(
     )
 
 
+def _views(
+    db_session: Session, owner: User, task_id: UUID
+) -> dict[int, TaskIntegrationView]:
+    return {
+        view.id: view
+        for view in list_task_integration_views(db_session, owner, task_id)
+    }
+
+
 def _create(
     db_session: Session, owner: User, links: list[IntegrationLinkConfiguration]
 ) -> UUID:
@@ -98,18 +105,12 @@ def test_a_task_stores_and_replaces_its_integrations(
     allow = {"send_report": LinkValue.ALLOW}
     task_id = _create(db_session, owner, [_link(first, allow)])
 
-    views = {
-        view.id: view
-        for view in list_task_integration_views(db_session, owner, task_id)
-    }
+    views = _views(db_session, owner, task_id)
     assert views[first.id].enabled is True
     assert views[first.id].action_settings == ActionSettings(actions=allow)
     # The catalog also has each integration that is on for the owner.
     assert views[second.id].enabled is False
     assert views[second.id].action_settings is None
-    task = load_task_integrations(db_session, task_id, owner.id)
-    assert task.link_settings(first.id) == ActionSettings(actions=allow)
-    assert task.link_settings(second.id) is None
 
     update_scheduled_task(
         db_session=db_session,
@@ -118,9 +119,9 @@ def test_a_task_stores_and_replaces_its_integrations(
         integrations=[_link(second, {})],
     )
     db_session.commit()
-    task = load_task_integrations(db_session, task_id, owner.id)
-    assert task.link_settings(first.id) is None
-    assert task.link_settings(second.id) == ActionSettings()
+    views = _views(db_session, owner, task_id)
+    assert views[first.id].action_settings is None
+    assert views[second.id].action_settings == ActionSettings()
 
 
 def test_a_task_refuses_an_integration_with_no_access_and_an_unknown_action(
@@ -145,16 +146,12 @@ def test_a_task_loses_an_integration_when_its_owner_loses_access(
 ) -> None:
     integration = _mcp(db_session, created, published=True)
     task_id = _create(db_session, owner, [_link(integration, {})])
-    assert load_task_integrations(db_session, task_id, owner.id).integrations() == [
-        integration
-    ]
+    assert _views(db_session, owner, task_id)[integration.id].enabled is True
 
     integration.installation_policy = PluginInstallationPolicy.NOT_AVAILABLE
     db_session.commit()
 
-    task = load_task_integrations(db_session, task_id, owner.id)
-    assert task.integrations() == []
-    assert task.link_settings(integration.id) is None
+    assert integration.id not in _views(db_session, owner, task_id)
 
 
 def test_a_save_keeps_a_link_the_owner_lost_access_to(
@@ -167,9 +164,7 @@ def test_a_save_keeps_a_link_the_owner_lost_access_to(
     integration.installation_policy = PluginInstallationPolicy.NOT_AVAILABLE
     db_session.commit()
     # The catalog leaves the link out, so the editor saves without it.
-    assert integration.id not in {
-        view.id for view in list_task_integration_views(db_session, owner, task_id)
-    }
+    assert integration.id not in _views(db_session, owner, task_id)
     update_scheduled_task(
         db_session=db_session, task_id=task_id, user_id=owner.id, integrations=[]
     )
@@ -177,6 +172,6 @@ def test_a_save_keeps_a_link_the_owner_lost_access_to(
 
     integration.installation_policy = PluginInstallationPolicy.DEFAULT
     db_session.commit()
-    assert load_task_integrations(db_session, task_id, owner.id).link_settings(
+    assert _views(db_session, owner, task_id)[
         integration.id
-    ) == ActionSettings(actions=allow)
+    ].action_settings == ActionSettings(actions=allow)

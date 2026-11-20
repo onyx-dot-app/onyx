@@ -76,8 +76,6 @@ Neighbours own the rest:
 - [[craft-frontend]]: the browser stores, the prompt queue, and transcript
   settlement.
 - [[craft-webapp-proxy]]: the preview of the session's web app and its port.
-- [[craft-scheduled-tasks]]: the scheduled executor, which reuses session
-  creation, persistence and output capture.
 - [[craft-admin]]: the Craft access gate and the Craft default model setting.
 
 ---
@@ -125,8 +123,8 @@ save-the-turn transaction.
 
 **Three locks at three scopes.**
 - `server/features/build/session/locks.py:session_creation_lock` (per user,
-  Redis): serializes create, restore, the interactive and scheduled runners'
-  wake paths, attachment upload and delete, and the idle sweep's checkpoint and
+  Redis): serializes create, restore, the interactive runner's
+  wake path, attachment upload and delete, and the idle sweep's checkpoint and
   cleanup ([[craft-sandboxes]]). The
   restore endpoint acquires without blocking and returns 409.
 - `SessionManager.prompt_slot` (per session, a renewable cache lease from

@@ -25,10 +25,6 @@ from onyx.db.enums import (
 )
 from onyx.db.integration import get_integration_by_id
 from onyx.db.notification import create_notification
-from onyx.db.scheduled_task import (
-    get_active_scheduled_task_context,
-    get_running_task_id,
-)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.matching.engine import (
@@ -37,11 +33,7 @@ from onyx.external_apps.matching.engine import (
     actions_requiring_approval,
 )
 from onyx.integrations.actions import integration_actions
-from onyx.integrations.craft import (
-    always_asks,
-    load_task_integrations,
-    resolve_craft_action_policies,
-)
+from onyx.integrations.craft import always_asks, resolve_craft_action_policies
 from onyx.integrations.models import EffectivePolicy
 from onyx.sandbox_proxy import approval_cache
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
@@ -72,7 +64,6 @@ from onyx.sandbox_proxy.models import (
     InjectionContext,
     InjectionOutcome,
     McpProtocolRequest,
-    RequestContext,
 )
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.sandbox_proxy.resolvers.integration import IntegrationResolver
@@ -117,7 +108,6 @@ def resolve_gate_policies(
     *,
     recognized_actions: AllMatchedActions,
     user_id: UUID,
-    task_id: UUID | None,
 ) -> dict[str, ActionPolicy]:
     """The stored policy of each recognized action, as the gate applies it."""
     integration = get_integration_by_id(
@@ -131,11 +121,6 @@ def resolve_gate_policies(
         actions=integration_actions(integration.id, db_session),
         action_keys={action.action_type for action in recognized_actions.actions},
         user_id=user_id,
-        task=(
-            load_task_integrations(db_session, task_id, user_id)
-            if task_id is not None
-            else None
-        ),
     )
     return {key: _GATE_POLICY[policy] for key, policy in resolved.items()}
 
@@ -501,14 +486,7 @@ class GateAddon:
                     *args,
                     credential_outcome_label(injection),
                 )
-        except Exception as error:
-            if (
-                isinstance(error, OnyxError)
-                and error.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
-            ):
-                logger.info("egress_block reason=inactive_scheduled_session")
-                flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
-                return
+        except Exception:
             logger.exception(
                 "approval_unhandled_error tenant=%s sandbox=%s session=%s "
                 "approval=%s app_name=%r action_type=%s session_id=%s approval_id=%s",
@@ -528,7 +506,7 @@ class GateAddon:
     def _recheck_approval(
         self,
         flow: http.HTTPFlow,
-        ctx: RequestContext,
+        ctx: SessionContext,
         matched_actions: AllMatchedActions,
         approval_id: UUID,
     ) -> AllMatchedActions | None:
@@ -537,7 +515,6 @@ class GateAddon:
             flow.request,
             ctx.tenant_id,
             ctx.user_id,
-            ctx.scheduled_context[1] if ctx.scheduled_context else None,
         )
         if (
             not isinstance(recognized, AllMatchedActions)
@@ -547,10 +524,7 @@ class GateAddon:
         ):
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
             return None
-        current_ctx, current_actions = self._resolve_request_policies(ctx, recognized)
-        if current_ctx.scheduled_context != ctx.scheduled_context:
-            flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
-            return None
+        current_actions = self._resolve_request_policies(ctx, recognized)
         if current_actions.governing_action.policy is ActionPolicy.DENY:
             flow.response = http_403(SandboxProxyError.POLICY_DENIED)
             return None
@@ -578,7 +552,7 @@ class GateAddon:
 
     async def _resolve_and_match(
         self, flow: http.HTTPFlow
-    ) -> tuple[RequestContext, AllMatchedActions] | None:
+    ) -> tuple[SessionContext, AllMatchedActions] | None:
         """Recognize actions, resolve execution identity, then apply live settings."""
         sandbox: ResolvedSandbox | None = self._resolve_sandbox(flow)
         if sandbox is None:
@@ -636,7 +610,6 @@ class GateAddon:
                 )
             return None
 
-        # Protocol traffic also needs context so task app restrictions always apply.
         action_label = (
             matched_actions.governing_action.action_type
             if isinstance(matched_actions, AllMatchedActions)
@@ -667,14 +640,6 @@ class GateAddon:
 
         if isinstance(matched_actions, McpProtocolRequest):
             try:
-                permitted = await asyncio.to_thread(
-                    self._task_can_use_app,
-                    sandbox.with_session(session_id),
-                    matched_actions.target,
-                )
-                if not permitted:
-                    flow.response = http_403(SandboxProxyError.POLICY_DENIED)
-                    return None
                 await asyncio.to_thread(
                     self._dispatch_injection_or_block,
                     flow,
@@ -682,34 +647,19 @@ class GateAddon:
                     matched_actions=None,
                     protocol_target=matched_actions.target,
                 )
-            except Exception as error:
-                if (
-                    isinstance(error, OnyxError)
-                    and error.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
-                ):
-                    logger.info("egress_block reason=inactive_scheduled_session")
-                    flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
-                    return
+            except Exception:
                 logger.exception(
                     "mcp_protocol_authorization_failed tenant=%s", sandbox.tenant_id
                 )
                 flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             return None
 
+        ctx = sandbox.with_session(session_id)
         try:
-            ctx, matched_actions = await asyncio.to_thread(
-                self._resolve_request_policies,
-                sandbox.with_session(session_id),
-                matched_actions,
+            matched_actions = await asyncio.to_thread(
+                self._resolve_request_policies, ctx, matched_actions
             )
-        except Exception as error:
-            if (
-                isinstance(error, OnyxError)
-                and error.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
-            ):
-                logger.info("egress_block reason=inactive_scheduled_session")
-                flow.response = http_403(SandboxProxyError.NO_ACTIVE_SESSION)
-                return None
+        except Exception:
             logger.exception("request_policy_failed tenant=%s", sandbox.tenant_id)
             flow.response = http_403(SandboxProxyError.INTERNAL_ERROR)
             return None
@@ -733,55 +683,19 @@ class GateAddon:
         self, flow: http.HTTPFlow, sandbox: ResolvedSandbox
     ) -> AllMatchedActions | McpProtocolRequest | None:
         return self._request_evaluator.evaluate(
-            flow.request,
-            sandbox.tenant_id,
-            sandbox.user_id,
-            self._running_task_id(flow, sandbox),
+            flow.request, sandbox.tenant_id, sandbox.user_id
         )
-
-    def _running_task_id(
-        self, flow: http.HTTPFlow, sandbox: ResolvedSandbox
-    ) -> UUID | None:
-        """Task id of the running run of the tagged session; None on any doubt."""
-        tag = self._extract_session_tag(flow, log=False)
-        if tag is None:
-            return None
-        try:
-            with get_session_with_tenant(tenant_id=sandbox.tenant_id) as db:
-                return get_running_task_id(db, UUID(tag), sandbox.user_id)
-        except Exception:
-            logger.warning(
-                "scheduled_run_lookup_failed tenant=%s host=%s",
-                sandbox.tenant_id,
-                flow.request.host,
-                exc_info=True,
-            )
-            return None
-
-    def _task_can_use_app(self, ctx: SessionContext, target: GatedTarget) -> bool:
-        """A scheduled run uses only the integrations of its task."""
-        with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
-            scheduled_context = get_active_scheduled_task_context(db, ctx.session_id)
-            return (
-                scheduled_context is None
-                or load_task_integrations(
-                    db, scheduled_context[1], ctx.user_id
-                ).link_settings(target.integration_id)
-                is not None
-            )
 
     def _resolve_request_policies(
         self, ctx: SessionContext, recognized_actions: AllMatchedActions
-    ) -> tuple[RequestContext, AllMatchedActions]:
-        """Read the integration policies without retaining execution authority."""
+    ) -> AllMatchedActions:
+        """Apply the current integration policies of the user."""
         target = recognized_actions.target
         with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
-            scheduled_context = get_active_scheduled_task_context(db, ctx.session_id)
             effective_policies = resolve_gate_policies(
                 db,
                 recognized_actions=recognized_actions,
                 user_id=ctx.user_id,
-                task_id=scheduled_context[1] if scheduled_context else None,
             )
         # These are recognition boundaries, not user-configurable actions.
         for action_key, policy in effective_policies.items():
@@ -789,7 +703,7 @@ class GateAddon:
                 effective_policies[action_key] = ActionPolicy.ASK
         if MCP_UNCLASSIFIABLE_ACTION_TYPE in effective_policies:
             effective_policies[MCP_UNCLASSIFIABLE_ACTION_TYPE] = ActionPolicy.DENY
-        authorized_actions = AllMatchedActions(
+        return AllMatchedActions(
             actions=tuple(
                 action.model_copy(
                     update={"policy": effective_policies[action.action_type]}
@@ -798,13 +712,6 @@ class GateAddon:
             ),
             target=target,
             payload=recognized_actions.payload,
-        )
-        return (
-            RequestContext(
-                **ctx.model_dump(exclude={"scheduled_context"}),
-                scheduled_context=scheduled_context,
-            ),
-            authorized_actions,
         )
 
     def _session_grant(
@@ -1427,9 +1334,7 @@ class GateAddon:
         )
         return exact
 
-    def _extract_session_tag(
-        self, flow: http.HTTPFlow, *, log: bool = True
-    ) -> str | None:
+    def _extract_session_tag(self, flow: http.HTTPFlow) -> str | None:
         """The originating session tag, or None.
 
         HTTPS: cached from the CONNECT in `http_connect`. HTTP: read off the
@@ -1453,9 +1358,6 @@ class GateAddon:
         # still blocked by the src-IP-pinned sandbox identity in resolve_sandbox.
         mcp_header = flow.request.headers.get(MCP_SESSION_TAG_HEADER)
         tag = mcp_header or cached or direct
-        if not log:
-            return tag
-
         logger.debug(
             "session_tag_resolved conn=%s host=%s cached=%s direct=%s "
             "proxy_auth_present=%s session=%s",

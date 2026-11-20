@@ -47,8 +47,7 @@ class IntegrationResolver(CredentialResolver):
         self, sandbox: ResolvedSandbox, scheme: str, host: str, port: int
     ) -> bool:
         """Allow an internal origin only for an MCP integration that the
-        user has access to. A scheduled run can use a task integration that
-        the user turned off; the gate matches each request."""
+        user has access to; the gate matches each request."""
         if scheme not in {"http", "https"}:
             return False
         accessible = self._usable.get(sandbox.tenant_id, sandbox.user_id).accessible

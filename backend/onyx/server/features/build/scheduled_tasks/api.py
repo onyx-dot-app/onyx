@@ -1,4 +1,4 @@
-"""FastAPI router for Craft Scheduled Tasks.
+"""FastAPI router for scheduled tasks.
 
 Thin HTTP layer over ``onyx.db.scheduled_task``. Every handler:
 
@@ -6,9 +6,9 @@ Thin HTTP layer over ``onyx.db.scheduled_task``. Every handler:
 2. Calls a DB op (which enforces ownership + raises ``OnyxError``).
 3. Optionally enqueues the executor task on the ``scheduled_tasks`` queue.
 
-The router is mounted under the existing ``/build`` prefix (see
-``backend/onyx/server/features/build/api.py``), which provides the
-``require_onyx_craft_enabled`` gate.
+The router is mounted twice: at ``/scheduled-tasks`` for the chat app, and
+under ``/build`` (``backend/onyx/server/features/build/api.py``) behind the
+Craft gate for the Craft pages.
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ from onyx.db.integration_policy import list_task_integration_links
 from onyx.db.models import ScheduledTask, ScheduledTaskRun, User
 from onyx.db.scheduled_task import (
     create_scheduled_task,
+    get_run_of_chat_session,
     get_scheduled_task,
     insert_run,
     list_runs_for_task,
@@ -168,7 +169,7 @@ class RunSummary(BaseModel):
     trigger_source: ScheduledTaskTriggerSource
     started_at: datetime
     finished_at: datetime | None
-    session_id: str | None
+    chat_session_id: str | None
     summary: str | None
     skip_reason: str | None
     error_class: str | None
@@ -183,10 +184,38 @@ class RunSummary(BaseModel):
             trigger_source=run.trigger_source,
             started_at=run.started_at,
             finished_at=run.finished_at,
-            session_id=str(run.session_id) if run.session_id is not None else None,
+            chat_session_id=(
+                str(run.chat_session_id) if run.chat_session_id is not None else None
+            ),
             summary=run.summary,
             skip_reason=run.skip_reason,
             error_class=run.error_class,
+            revision=run.version,
+            viewed_revision=run.viewed_revision,
+        )
+
+
+class ScheduledRunContextResponse(BaseModel):
+    """The run of a scheduled-run session, for the banner above its chat."""
+
+    run_id: str
+    task_id: str
+    task_name: str
+    status: ScheduledTaskRunStatus
+    started_at: datetime
+    finished_at: datetime | None
+    revision: int
+    viewed_revision: int | None
+
+    @classmethod
+    def from_run(cls, run: ScheduledTaskRun) -> "ScheduledRunContextResponse":
+        return cls(
+            run_id=str(run.id),
+            task_id=str(run.task_id),
+            task_name=run.task.name,
+            status=run.status,
+            started_at=run.started_at,
+            finished_at=run.finished_at,
             revision=run.version,
             viewed_revision=run.viewed_revision,
         )
@@ -403,6 +432,28 @@ def get_unviewed_task_count(
     """Number of the caller's tasks with run results they have not opened."""
     unviewed = unread_run_counts_for_user(db_session=db_session, user_id=user.id)
     return UnviewedTaskCountResponse(count=len(unviewed))
+
+
+# Declared before ``/{task_id}`` so the literal path wins.
+@router.get("/action-policies")
+def list_new_task_action_policies(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[TaskIntegrationView]:
+    """The catalog a new task starts from."""
+    return list_task_integration_views(db_session, user, None)
+
+
+@router.get("/chat-sessions/{chat_session_id}/run")
+def get_chat_session_run(
+    chat_session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ScheduledRunContextResponse | None:
+    """The run of a chat, for its banner. None: the chat is not a run. The
+    chat view asks on every open, so a normal chat is not an error."""
+    run = get_run_of_chat_session(db_session, chat_session_id, user.id)
+    return ScheduledRunContextResponse.from_run(run) if run is not None else None
 
 
 @router.post("")

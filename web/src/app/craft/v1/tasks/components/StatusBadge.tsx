@@ -91,6 +91,13 @@ function getRunStatusDisplay(status: ScheduledTaskRunStatus): RunStatusDisplay {
         className: "bg-background-tint-02",
         iconClassName: "text-text-03",
       };
+    case "CANCELLED":
+      return {
+        label: "Cancelled",
+        icon: SvgClock,
+        className: "bg-background-tint-02",
+        iconClassName: "text-text-03",
+      };
     case "SKIPPED":
       return {
         label: "Skipped",

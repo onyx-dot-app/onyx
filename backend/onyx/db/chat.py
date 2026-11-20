@@ -11,6 +11,7 @@ from sqlalchemy import (
     bindparam,
     delete,
     desc,
+    exists,
     func,
     literal,
     nullsfirst,
@@ -59,6 +60,7 @@ from onyx.db.models import (
     ChatSessionSharedStatus,
     FileRecord,
     Persona,
+    ScheduledTaskRun,
     ToolCall,
     User,
 )
@@ -220,6 +222,12 @@ def content_persisting_sessions_filter() -> ColumnElement[bool]:
 
 # Retrieves chat sessions by user
 # Chat sessions do not include onyxbot flows
+def not_a_scheduled_run_chat() -> ColumnElement[bool]:
+    """Excludes the hidden chat that a scheduled task run made. The history
+    list, chat search and delete-all leave those chats out."""
+    return ~exists().where(ScheduledTaskRun.chat_session_id == ChatSession.id)
+
+
 def get_chat_sessions_by_user(
     user_id: UUID | None,
     deleted: bool | None,
@@ -237,6 +245,7 @@ def get_chat_sessions_by_user(
         .where(ChatSession.user_id == user_id)
         .where(ChatSession.spawned_by_message_id.is_(None))
         .where(ChatSession.onyxbot_flow.is_(False))
+        .where(not_a_scheduled_run_chat())
         .order_by(desc(ChatSession.time_updated))
     )
 
@@ -363,7 +372,7 @@ def delete_messages_and_files_from_chat_session(
     delete_orphaned_search_docs(db_session)
 
 
-def create_chat_session(
+def create_chat_session__no_commit(
     db_session: Session,
     description: str | None,
     user_id: UUID | None,
@@ -376,6 +385,7 @@ def create_chat_session(
     incognito_record_mode: IncognitoRecordMode | None = None,
     session_id: UUID | None = None,
 ) -> ChatSession:
+    """A chat session flushed into the caller's transaction."""
     chat_session = ChatSession(
         # Caller-supplied only for incognito, where uploads name the session
         # before it exists so the server can verify them.
@@ -390,10 +400,38 @@ def create_chat_session(
         project_id=project_id,
         incognito_record_mode=incognito_record_mode,
     )
-
     db_session.add(chat_session)
-    db_session.commit()
+    db_session.flush()
+    return chat_session
 
+
+def create_chat_session(
+    db_session: Session,
+    description: str | None,
+    user_id: UUID | None,
+    persona_id: int | None,  # Can be none if temporary persona is used
+    llm_override: LLMOverride | None = None,
+    prompt_override: PromptOverride | None = None,
+    onyxbot_flow: bool = False,
+    slack_thread_id: str | None = None,
+    project_id: int | None = None,
+    incognito_record_mode: IncognitoRecordMode | None = None,
+    session_id: UUID | None = None,
+) -> ChatSession:
+    chat_session = create_chat_session__no_commit(
+        db_session,
+        description,
+        user_id,
+        persona_id,
+        llm_override=llm_override,
+        prompt_override=prompt_override,
+        onyxbot_flow=onyxbot_flow,
+        slack_thread_id=slack_thread_id,
+        project_id=project_id,
+        incognito_record_mode=incognito_record_mode,
+        session_id=session_id,
+    )
+    db_session.commit()
     return chat_session
 
 
@@ -492,6 +530,7 @@ def delete_all_chat_sessions_for_user(
         .filter(
             ChatSession.user_id == user_id,
             ChatSession.onyxbot_flow.is_(False),
+            not_a_scheduled_run_chat(),
             ChatSession.spawned_by_message_id.is_(None),
         )
         .all()

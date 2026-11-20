@@ -30,8 +30,6 @@ sends the same events as SSE, framed by `event_to_sse`.
 - Developers who call the public API send
   `POST /build/sessions/{id}/send-message`, which returns a `turn_id`, then
   attach. They keep [[#completion-is-turn-completed]] and [[#no-replay-buffer]].
-- The scheduled-run executor and viewer ([[craft-scheduled-tasks]]) use
-  `persist_sandbox_event` and `event_to_sse`.
 - Developers who add an event or packet type keep
   [[#new-packet-type-edits]].
 
@@ -101,9 +99,7 @@ runner calls `finish_turn`. Then it sends `turn_completed`
 If the record does not settle within `TURN_COMPLETION_WAIT_SECONDS`, or the
 subscription ends without a terminal packet, the stream closes without
 `turn_completed`. It also tries to restart a stalled runner, at most every few
-seconds. The scheduled-run stream
-(`server/features/build/session/api.py:get_session_scheduled_run_events`) uses
-the same framing but forwards the terminal packets.
+seconds.
 
 **Announces.** The egress proxy and the connect-app flow run outside the turn
 stream. `server/features/build/session/streaming.py:merge_events_with_announces`

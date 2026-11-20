@@ -20,7 +20,8 @@ export type ScheduledTaskRunStatus =
   | "SUCCEEDED"
   | "FAILED"
   | "SKIPPED"
-  | "AWAITING_APPROVAL";
+  | "AWAITING_APPROVAL"
+  | "CANCELLED";
 
 export type ScheduledTaskTriggerSource = "SCHEDULED" | "MANUAL_RUN_NOW";
 

@@ -105,8 +105,7 @@ attach finds that the turn is not active. `reconcileCompletedTranscript` needs
 a terminal outcome: the `turn_completed` packet, or `fetchKnownTurn` when the
 packet was missed. It then reads messages, checks for a successor turn
 (another tab), reads history again if one started during the read, starts an
-inventory read, and replaces the live stream items with saved history. A
-scheduled run settles on its saved run status instead.
+inventory read, and replaces the live stream items with saved history.
 
 **Live timeline.** The stream processor also turns each packet into ACP
 timeline events (`web/src/lib/timeline/craft/events.ts:craftPacketToEvents`)
@@ -175,8 +174,7 @@ uses chat's frame from `web/src/lib/chat/layout.ts` (`CHAT_GUTTER`,
    the queue.** `claimQueuedMessage` in
    `web/src/app/craft/hooks/useBuildSessionStore.ts` requires `turnSettlement.phase ===
    "ready"` for the current generation. A connection loss, a mounted
-   component, a status change or an approval pause must not grant it. A failed
-   or skipped scheduled run reloads history but never releases the queue.
+   component, a status change or an approval pause must not grant it.
 2. `atomic-queue-claim` **The claim is atomic.** It happens inside one `set`
    call, so repeated store events or two mounted hooks cannot send one prompt
    twice. Do not read the queue head and send it outside the claim.
@@ -266,9 +264,6 @@ uses chat's frame from `web/src/lib/chat/layout.ts` (`CHAT_GUTTER`,
 - **An expired turn record needs a page reload.** If the server forgot a
   turn before settlement read it, the session stays in recovery until the
   page reloads. Saved history stays.
-- **The store handles a run status that the backend never sets.**
-  The store and the task pages treat `AWAITING_APPROVAL` as in
-  flight, but no backend code writes it ([[craft-scheduled-tasks]]).
 
 ---
 
