@@ -146,9 +146,11 @@ yields a `SlimDocumentStub` for each file that the fetching path keeps
 nothing. The payload holds the drive id, the item id, the list ids, the site
 URL and the file fields, and never the `downloadUrl`. A site page is listed
 with no `canvasLayout`. The stub's time and size are those of the document, so
-`drop_unchanged_stubs` drops an unchanged file. The listing keeps the
-`@odata.deltaLink` of each drive in Redis (`store_drive_delta_link`); no code
-reads it yet, and a run still starts from a time token.
+`drop_unchanged_stubs` drops an unchanged file. The listing selects no
+`content.downloadUrl` (`LISTING_SELECT_FIELDS`). A run starts the delta of a
+drive from a time token, as the fetching path does. The listing does not keep
+the `@odata.deltaLink`: the walk drops items modified after the window end, so
+a run that continued from that link would miss them.
 
 ---
 
